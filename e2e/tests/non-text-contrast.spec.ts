@@ -270,12 +270,14 @@ test.describe('dark theme', () => {
 		expect(ring).toEqual({ outline: css.focus, style: 'solid', shadow: 'none' });
 	});
 
-	test('the help pictures are dimmed and framed on the dark page', async ({ page, owner }) => {
+	test('the help pictures show their dusk render on the dark page, not a filtered daylight one', async ({ page, owner }) => {
 		void owner;
 		await page.goto('/help');
 		const img = page.getByRole('img', { name: /An illustrated catchment/ });
 		await expect(img).toBeVisible();
-		expect(await img.evaluate((el) => getComputedStyle(el).filter)).toBe('brightness(0.82) contrast(1.05)');
+		// A dark-mode render, not a filter over the daylight image (issue #521 round 6; help.spec.ts checks every picture).
+		await expect.poll(() => img.evaluate((el) => (el as HTMLImageElement).currentSrc)).toMatch(/-dusk-\d+\.webp$/);
+		expect(await img.evaluate((el) => getComputedStyle(el).filter)).toBe('none');
 	});
 });
 
