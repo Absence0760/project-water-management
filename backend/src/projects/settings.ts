@@ -1,5 +1,6 @@
 import {
 	ACCUMULATION_MODES,
+	ALLOCATION_MODE_LABEL,
 	ALLOCATION_MODES,
 	CALIBRATION_BOUNDS,
 	CALIBRATION_FLOW_KINDS,
@@ -54,6 +55,8 @@ import {
 	QM_WET_DAY_MM_MAX,
 	QM_WET_DAY_MM_MIN,
 	ZERO_RAIN_MODES,
+	ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM,
+	zeroFlowMonthsError,
 	GAP_FILL_DONORS,
 	GAP_FILL_LIMITS,
 	sourceError,
@@ -334,6 +337,35 @@ export function dataQualityPatchError(settings: Pick<ProjectSettings, 'dataQuali
 	return dq.flatlineFlowMaxDays < dq.flatlineFlowMinDays
 		? `settings.dataQuality: the flow flat-line cap (${dq.flatlineFlowMaxDays} days) can't be below its floor (${dq.flatlineFlowMinDays} days)`
 		: null;
+}
+
+/**
+ * Licence data never drives the baseline (issue #507, docs/allocations.md §
+ * Allocation modes): a project's own settings compare registered volumes
+ * only. The engine's `cap` and `fullAllocation` modes stay, for scenarios
+ * (a `settings.set` op on `allocationMode`, docs/scenarios.md).
+ */
+export const BASELINE_ALLOCATION_MODE_ERROR =
+	"settings.allocationMode: the baseline only compares registered volumes ('none'); capping use at them or a full allocation is a scenario (settings.set allocationMode), since licence data never drives the baseline";
+
+/** A settings patch's refusal: any baseline allocation mode but 'none' (PATCH /projects/:id). */
+export function baselineAllocationModeError(patch: { allocationMode?: unknown } | undefined): string | null {
+	return patch?.allocationMode !== undefined && patch.allocationMode !== 'none' ? BASELINE_ALLOCATION_MODE_ERROR : null;
+}
+
+/**
+ * Settings arriving from outside a save (an import, a copy, a restore of an
+ * older revision or of a run's inputs, which may be a scenario's): a baseline
+ * allocation mode other than 'none' becomes 'none', and the returned note says
+ * so for the revision's reason. Null (nothing changed) otherwise. Mutates
+ * and returns nothing else: the caller stores `settings` as it was given.
+ */
+export function normaliseBaselineAllocationMode(settings: Record<string, unknown>): string | null {
+	const mode = settings.allocationMode;
+	if (mode === undefined || mode === null || mode === 'none') return null;
+	settings.allocationMode = 'none';
+	const label = (ALLOCATION_MODE_LABEL as Record<string, string>)[String(mode)] ?? String(mode);
+	return `Allocation mode “${label}” set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario).`;
 }
 
 /**
@@ -689,16 +721,30 @@ const QualityFlags = z
 		aboveRating: z.enum(ABOVE_RATING_USES),
 		belowRating: z.enum(FLAG_USES),
 		suspect: z.enum(FLAG_USES),
-		infilled: z.enum(FLAG_USES)
+		infilled: z.enum(FLAG_USES),
+		// Engine ≥ 1.81.0 (issue #507 item 2): the months the river is known to stop, 1–12 each once (zeroFlowMonthsError).
+		// Optional, so settings and fit records from before it still validate (absent = none).
+		zeroFlowMonths: z
+			.array(z.number())
+			.max(12)
+			.superRefine((v, ctx) => {
+				const err = zeroFlowMonthsError(v);
+				if (err) ctx.addIssue({ code: 'custom', message: err });
+			})
+			.optional()
 	})
 	.strict();
+/** settings.zeroRainRuns.fillAboveChirpsMm (engine ≥ 1.81.0, issue #507 item 3): mm, 0 to the engine's maximum. */
+const FillAboveChirpsMm = z.number().finite().min(0).max(ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM);
 const dayCount = z.number().int().min(0).max(1_000_000);
 /** A fit's quality-flag summary (engine DayQuality, CR-22), as the browser reports it. */
 const DayQuality = z
 	.object({
 		flowKind: z.enum(CALIBRATION_FLOW_KINDS),
 		rating: z.object({ gaugedMaxM3s: z.number().finite().nullable(), gaugedMinM3s: z.number().finite().nullable(), source: z.string().max(RATING_SOURCE_MAX) }).strict().nullable(),
-		use: QualityFlags.omit({ ratings: true }),
+		use: QualityFlags.omit({ ratings: true, zeroFlowMonths: true }),
+		// Engine ≥ 1.81.0: the river-stops months the flags read. Absent on an older record.
+		zeroFlowMonths: z.array(z.number().int().min(1).max(12)).max(12).optional(),
 		windowDays: dayCount,
 		flow: z.object(Object.fromEntries(FLOW_DAY_FLAGS.map((f) => [f, dayCount])) as Record<(typeof FLOW_DAY_FLAGS)[number], typeof dayCount>).strict(),
 		scoredDays: dayCount,
@@ -888,7 +934,9 @@ export const FitRecord = z
 						// Engine ≥ 0.20.0 (audit B4): multi-day accumulations. Optional, so a record made before them still validates.
 						accumulationMode: z.enum(ACCUMULATION_MODES).optional(),
 						keepReadings: periodList('keep-reading period').optional(),
-						addAccumulations: periodList('listed accumulation').optional()
+						addAccumulations: periodList('listed accumulation').optional(),
+						// Engine ≥ 1.81.0 (issue #507 item 3): the CHIRPS fill threshold. Optional, as above.
+						fillAboveChirpsMm: FillAboveChirpsMm.optional()
 					})
 					.strict()
 					.optional(),
@@ -1012,7 +1060,9 @@ export const SettingsPatch = z
 				// Multi-day accumulations (engine accumulation.ts, audit B4).
 				accumulationMode: z.enum(ACCUMULATION_MODES),
 				keepReadings: periodList('keep-reading period'),
-				addAccumulations: periodList('listed accumulation')
+				addAccumulations: periodList('listed accumulation'),
+				// Engine ≥ 1.81.0 (issue #507 item 3): fill a flagged run's day only where CHIRPS reads more than this, mm.
+				fillAboveChirpsMm: FillAboveChirpsMm
 			})
 			.partial()
 			.strict(),

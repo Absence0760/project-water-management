@@ -3,6 +3,7 @@
 // the bulk invite CSV and its outcomes. Kept free of Svelte so they can be
 // unit-tested.
 import { LANGUAGES } from '@water-management/engine/languages';
+import type { FileFormat } from '$lib/components/common/formatHelp';
 import type { BulkFarmerResult, BulkFarmerRow, FarmerEntry } from '$lib/api/types';
 
 export interface FarmOption {
@@ -134,6 +135,31 @@ export function inviteExampleCsv(farms: readonly Pick<FarmOption, 'name'>[]): st
 		.slice(0, 2);
 	const rows = (names.length ? names : ['Hydrological unit name']).map((n, i) => `farmer${i + 1}@example.com,${csvCell(n)},${LANGUAGES[i % LANGUAGES.length]!.code}`);
 	return ['email,farm,language', ...rows, ''].join('\r\n');
+}
+
+/**
+ * The farmer invite's Expected format (issue #456; the File formats help page,
+ * issue #477): its example names the project's own units (`farms`), the help
+ * page's none.
+ */
+export function inviteFormat(farms: readonly Pick<FarmOption, 'name'>[]): FileFormat {
+	const codes = LANGUAGES.map((l) => `\`${l.code}\``).join(', ');
+	const example = inviteExampleCsv(farms);
+	return {
+		id: 'farmer-invites',
+		title: 'Farmer invites',
+		where: 'Project → Farmers → Invite farmers → Several, from a CSV',
+		accepts: 'Paste the rows, or upload a .csv or .txt file, in UTF-8.',
+		lead: `One hydrological unit per row: \`email,farm,language\`. The \`farm\` column is the hydrological unit’s name on the Network tab (capitals don’t matter). A farmer with two hydrological units gets two rows and one email.`,
+		rules: [
+			'A header row is optional. With one, the columns may come in any order (`email` or `e-mail`, `farm` or `farm name`, `language`); without one they are read as email, farm, language.',
+			'Columns separated by commas, semicolons or tabs, as the first row has them. Quote a farm name that holds one (`"Smit, Oos"`).',
+			`Language: a code (${codes}) or the language’s name; English if left blank.`,
+			`At most ${BULK_MAX_ROWS} rows at a time. Blank lines are skipped. The preview lists every row by its line, with what will happen to it or what is wrong with it.`
+		],
+		example: example.trimEnd(),
+		files: [{ name: 'invite-farmers-example.csv', text: example }]
+	};
 }
 
 /** "3 added, 12 invited, 2 with errors" (only the parts that aren't zero). */

@@ -4,6 +4,7 @@
 // the Reserve rule tables' paste. What a value means (a %, hectares) and
 // whether it applies is the grid's business: components/network/nodePaste.ts
 // and components/crops/areaPaste.ts.
+import type { FileFormat } from '$lib/components/common/formatHelp';
 import { defuse } from '$lib/spreadsheet/export/names';
 import { blockCommas, DECIMAL_COMMA_NOTE, GROUPING_COMMA_NOTE, numberReader, readPastedBlock } from './read';
 
@@ -267,12 +268,34 @@ export interface PastePlan {
  * parser, whose tests feed the example file back through it.
  */
 export interface GridFormat {
+	/** Its anchor, heading and place on the File formats help page (FileFormat, issue #477). */
+	id: string;
+	title: string;
+	where: string;
 	/** The layout, a line each: the headings, the units, what a blank or 0 does. */
 	rules: readonly string[];
 	/** A few lines as they'd be typed or copied (comma-separated). */
 	example: string;
 	/** The example file's name ("transfers-example.csv"); its text is `example`. */
 	exampleName: string;
+}
+
+/** What every grid's paste box takes (GridPasteDialog). */
+export const GRID_PASTE_ACCEPTS = 'Cells copied from a spreadsheet, or a file: CSV (.csv), tab-separated (.tsv) or text (.txt).';
+/** How every grid's paste reads its numbers (./read.ts): the last line of each grid's Expected format. */
+export const GRID_NUMBER_RULE = 'Decimals with a point (12.5) or a comma (12,5); thousands separators (1,500,000) only in a block without decimal commas. A trailing % is allowed.';
+
+/** A grid's Expected format as the shared note shows it (FormatHelp, the File formats help page). */
+export function gridFileFormat(g: GridFormat): FileFormat {
+	return {
+		id: g.id,
+		title: g.title,
+		where: g.where,
+		accepts: GRID_PASTE_ACCEPTS,
+		rules: [...g.rules, GRID_NUMBER_RULE],
+		example: g.example,
+		files: [{ name: g.exampleName, text: g.example }]
+	};
 }
 
 /** Two display values are the same to the grid's precision (float noise from a % or ha conversion aside). */

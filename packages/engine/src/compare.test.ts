@@ -459,13 +459,13 @@ describe('diffInputs', () => {
 		const b = copyWithFreshIds(a);
 		const town = { ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'copy-g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200), userReturnPct: 0.6, userPriority: 'senior' as const };
 		b.model.nodes.push(town);
-		expect(texts(a, b)).toEqual(['Other water user "Town" added (senior, demand 1\u202f200 m³/day on average over the months, drains into Outlet)']);
+		expect(texts(a, b)).toEqual(['Other water user "Town" added (priority user, demand 1\u202f200 m³/day on average over the months, drains into Outlet)']);
 		const c = structuredClone(b);
 		const t = c.model.nodes.find((n) => n.name === 'Town')!;
 		t.userDemandM3Day![0] = 1500;
 		t.userReturnPct = 0.5;
 		t.userPriority = 'junior';
-		expect(texts(b, c)).toEqual(['Town: share returned 60% → 50%', 'Town: priority senior → junior', 'Town: demand Oct 1\u202f200 → 1\u202f500 m³/day']);
+		expect(texts(b, c)).toEqual(['Town: share returned 60% → 50%', 'Town: user class priority → non-priority', 'Town: demand Oct 1\u202f200 → 1\u202f500 m³/day']);
 		// A farm snapshot from before WP-1.33 (no user fields) diffs clean against one that has the defaults.
 		const d = structuredClone(a);
 		for (const n of d.model.nodes) Object.assign(n, { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
@@ -476,7 +476,7 @@ describe('diffInputs', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
 		b.model.nodes.push({ ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'copy-g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200), pumpCapacityM3Day: 900 });
-		expect(texts(a, b)).toEqual(['Other water user "Town" added (senior, demand 1\u202f200 m³/day on average over the months, pump 900 m³/day, drains into Outlet)']);
+		expect(texts(a, b)).toEqual(['Other water user "Town" added (priority user, demand 1\u202f200 m³/day on average over the months, pump 900 m³/day, drains into Outlet)']);
 		const c = structuredClone(b);
 		c.model.nodes.find((n) => n.name === 'Town')!.pumpCapacityM3Day = null;
 		expect(texts(b, c)).toEqual(['Town: river pump capacity 900 m³/day → no limit']);

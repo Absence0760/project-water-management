@@ -160,7 +160,7 @@ test('the help contents: groups under headings, the glossary one link per topic 
 	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
 	const names = (await topics.allTextContents()).map((t) => t.trim());
 	expect(names.length).toBeGreaterThan(5);
-	await expect(reference.getByRole('link')).toHaveText(['Glossary', ...names]);
+	await expect(reference.getByRole('link')).toHaveText(['Glossary', ...names, 'File formats']);
 	await expect(reference.getByRole('link', { name: 'Glossary', exact: true })).toHaveAttribute('aria-current', 'page');
 
 	// The search heads the page, above the text (not in the contents column, issue #17).

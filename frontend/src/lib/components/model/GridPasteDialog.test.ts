@@ -3,9 +3,11 @@
 // counting the rows it adds, and Apply named for an add alone. Rendered with
 // Svelte's server renderer; the browser flow is pinned by e2e (grid-paste.spec.ts).
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import GridPasteDialog from './GridPasteDialog.svelte';
 import type { PastePlan } from '$lib/spreadsheet/paste/grid';
+
+vi.mock('$app/paths', () => ({ base: '' }));
 
 const base = {
 	open: true,
@@ -26,7 +28,7 @@ const added = (changes: number): PastePlan => ({
 describe('GridPasteDialog (issue #477)', () => {
 	it('shows the Expected format, its rules, the shared decimal rule and the example file', () => {
 		const html = render(GridPasteDialog, {
-			props: { ...base, text: '', plan: () => added(1), format: { rules: ['A heading row: Crop, then Oct to Sep.'], example: 'Crop,Oct\r\nMaize,0.3\r\n', exampleName: 'crop-factors-example.csv' } }
+			props: { ...base, text: '', plan: () => added(1), format: { id: 'crop-factors', title: 'Crop factors', where: 'Crops & demand', rules: ['A heading row: Crop, then Oct to Sep.'], example: 'Crop,Oct\r\nMaize,0.3\r\n', exampleName: 'crop-factors-example.csv' } }
 		}).body;
 		expect(html).toContain('data-testid="format-help"');
 		expect(html).toContain('A heading row: Crop, then Oct to Sep.');

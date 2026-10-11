@@ -43,7 +43,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "High (catchments whose rain record has gaps exported as zeros)",
 		"title": "Missing catchment rain recorded as 0 runs the catchment dry",
-		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24; provisional decision 2026-10-01 keeps the default; which runs are real is pending the client's station records)"
+		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24; provisional decision 2026-10-01 keeps the default; which runs are real is pending the client's station records). Revised, engine 1.81.0 (issue #507 item 3, decided by the client's hydrologist 2026-10-10, below)"
 	},
 	{
 		"id": "B3",
@@ -65,13 +65,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"severity": "Medium (fits on records with suspect days, or a gauged range entered)",
 		"title": "Automatic calibration scored every observed day as recorded",
 		"status": "Fixed, engine 1.22.0 (issue #66; provisional decision 2026-10-01 keeps the defaults, the hydrologist's confirmation pending; zero-flow stretches changed in engine 1.62.0, C3)"
-	},
-	{
-		"id": "C3",
-		"source": "finding",
-		"severity": "Medium (fits on records of rivers that stop for 90 days or more)",
-		"title": "A long stretch of zero flow was suspect, so the fit never saw the river dry",
-		"status": "Fixed, engine 1.62.0 (provisional decision 2026-10-01, the client's hydrologist's confirmation pending; calibration-research.md § Provisional decisions)"
 	},
 	{
 		"id": "A1",
@@ -106,7 +99,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (sites with a low-flow requirement and floods in dry months)",
 		"title": "By default a low-flow requirement is judged on the month's total volume, so a flood month can pass its low flows while its base flow was short",
-		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending"
+		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; the filter's settings pending a check against the DRM's published method"
 	},
 	{
 		"id": "A6",
@@ -123,13 +116,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Decided (from the literature, engine 0.33.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
-		"id": "A8",
-		"source": "finding",
-		"severity": "Medium (projects whose daily outlet EWR comes from the DRM tables)",
-		"title": "A DRM table scaled to the model rests on choices the hydrologist hasn't confirmed",
-		"status": "Built (engine 1.77.0, issue #455), off by default (the pragmatic EWR); the hydrologist's confirmation of the scaling and the conventions pending"
-	},
-	{
 		"id": "U1",
 		"source": "finding",
 		"severity": "Medium (projects with runoff from each unit's own rain, settings.unitRain perUnit)",
@@ -139,8 +125,8 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 	{
 		"id": "L1",
 		"source": "finding",
-		"severity": "Medium (licence applications that insert a senior other water user on a reach)",
-		"title": "A new senior water user inserted above existing farms is classed as a changed assumption, not the applicant's proposal",
+		"severity": "Medium (licence applications that insert a priority other water user on a reach)",
+		"title": "A new priority water user inserted above existing farms is classed as a changed assumption, not the applicant's proposal",
 		"status": "Decided (conservative, engine 1.35.0; Needs hydrologist)"
 	},
 	{
@@ -198,27 +184,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"severity": null,
 		"title": "Threshold on the demand offset",
 		"status": "The larger issue, no carry-over, is N3: decided on a persona recommendation (engine 0.14.0, soil-water store), pending the hydrologist"
-	},
-	{
-		"id": "Q11",
-		"source": "quirk",
-		"severity": null,
-		"title": "Equitable target ignores the network",
-		"status": "Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist) — engine 0.17.0, labels only"
-	},
-	{
-		"id": "Q13",
-		"source": "quirk",
-		"severity": null,
-		"title": "EWR cut on a farm with no demand",
-		"status": "Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist) — engine 0.17.0"
-	},
-	{
-		"id": "Q17",
-		"source": "quirk",
-		"severity": null,
-		"title": "Incremental shortfalls don't add up",
-		"status": "Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist) — engine 0.17.0"
 	},
 	{
 		"id": "Q18",

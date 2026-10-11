@@ -8,11 +8,14 @@
 // then, once the owner allows it, the volumes but no names, and can't import. Axe-scanned, and on a
 // phone. Licence conditions entered in the sheet show in the list, and a run
 // capped at the registered volumes (settings.allocationMode, engine 1.18.0)
-// says so above its comparison (issue #72). The import sheet can't be closed
+// says so above its comparison (issue #72). Since issue #507 licence data
+// never drives the baseline: the Settings tab shows compare only, and the
+// capped run is a scenario's (settings.set allocationMode). The import sheet can't be closed
 // while the file is read or the import runs, and a file chosen while another
 // is read supersedes it (issue #384). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { grouped } from '../support/format.ts';
 
@@ -201,9 +204,20 @@ test('licence conditions entered by hand show with the volume, and a capped run 
 	await expect(change.getByLabel('Other conditions, one a line')).toHaveValue('No abstraction below 0.2 m³/s at the weir\nMeter and report monthly');
 	await change.getByRole('button', { name: 'Cancel' }).click();
 
-	// A run capped at the registered volumes: the comparison says what the cap did.
-	await updateSettings(page.request, project.id, { allocationMode: 'cap' });
-	const capped = await createRun(page.request, project.id, 'Capped');
+	// The baseline can't cap (issue #507): Settings shows compare only, with no choice.
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await expect(page.getByTestId('settings-allocation-mode')).toHaveText('Compare only');
+	await expect(page.getByTestId('settings-allocations').getByRole('combobox')).toHaveCount(0);
+
+	// A scenario capped at the registered volumes: the comparison says what the cap did.
+	const baseRun = await createRun(page.request, project.id, 'Baseline with the licence');
+	const sc = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: { name: 'Capped at the licences', baseRunId: baseRun, ops: [{ op: 'settings.set', path: 'allocationMode', value: 'cap' }] }
+	});
+	expect(sc.status()).toBe(201);
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${((await sc.json()) as { scenario: { id: string } }).scenario.id}/runs`, { data: {} });
+	expect(ran.status()).toBe(201);
+	const capped = ((await ran.json()) as { run: { id: string } }).run.id;
 	await page.goto(`/projects/${project.id}?tab=allocations&run=${capped}`);
 	await expect(page.getByTestId('allocation-mode-note')).toContainText('This run capped each unit’s use at its registered volume per water year');
 	// And, for the picked unit, on how many days each limit held its use back (engine 1.40.0): 1000 m³ is used up

@@ -152,7 +152,7 @@ export function handsOffPreview(n: Partial<HandsOffNode>): string {
 	const some = row !== null && row.some((v) => v > 0);
 	const ewr = n.handsOffEwr === true;
 	if (!some && !ewr)
-		return 'No hands-off flow: the river pump and River to dam leave in the river only what senior water users downstream need, not the EWR.';
+		return 'No hands-off flow: the river pump and River to dam leave in the river only what priority water users downstream need, not the EWR.';
 	const flow = some ? `${amountRange(row!, true)}${row!.some((v) => !(v > 0)) ? `; none in ${zeroMonths(row!)}` : ''}` : '';
 	const EWR = 'the EWR required here (this unit’s share and upstream shares)';
 	const keep = some && ewr ? `the larger of the set flow (${flow}) and ${EWR}` : some ? (flow.includes(';') ? `the set flow (${flow})` : flow) : EWR;

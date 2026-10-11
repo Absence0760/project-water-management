@@ -1989,7 +1989,7 @@ describe.skipIf(!clientCatchmentFixture)(
 			expect(bad.slice(0, 5)).toEqual([]);
 		});
 
-		it('B2: sets aside exactly the flagged zero runs, fills them from CHIRPS, and changes no other day', () => {
+		it('B2: sets aside exactly the flagged zero runs’ days CHIRPS reads more than 2 mm on (or has no reading), fills them from CHIRPS, and changes no other day', () => {
 			const recorded = prepareRun(modelInput);
 			// The default zero-run handling, with accumulations as recorded so B2 is judged alone (B4 below runs both).
 			const settings = { ...modelInput.settings, zeroRainRuns: { ...defaultProjectSettings().zeroRainRuns, accumulationMode: 'asRecorded' as const } };
@@ -1999,14 +1999,22 @@ describe.skipIf(!clientCatchmentFixture)(
 			const flagged = zeroRainRuns(catchmentSeries).runs;
 			expect(recorded.zeroRain!.infill.days).toBe(0);
 			expect(z.mode).toBe('missing');
-			// Every flagged run inside the run window is set aside whole, and nothing else.
+			// Every day of a flagged run inside the run window is set aside where CHIRPS reads more than the 2 mm threshold
+			// or nothing (engine ≥ 1.81.0, issue #507 item 3); every other day of it stays dry, and nothing else is touched.
 			const d0 = toEpochDay(filled.startDate);
 			const want = new Uint8Array(filled.days);
+			const chirps = modelInput.series.rain_chirps_mm;
+			const h0 = chirps ? toEpochDay(chirps.startDate) : 0;
+			let keptDry = 0;
 			for (const r of flagged) {
 				for (let day = toEpochDay(r.startDate); day <= toEpochDay(r.endDate); day++) {
-					if (day >= d0 && day < d0 + filled.days) want[day - d0] = 1;
+					if (day < d0 || day >= d0 + filled.days) continue;
+					const h = chirps?.values[day - h0];
+					if (h != null && Number.isFinite(h) && h >= 0 && h <= 2) keptDry++;
+					else want[day - d0] = 1;
 				}
 			}
+			expect(z.chirpsDryDays).toBe(keptDry);
 			expect(Array.from(filled.zeroRain!.mask)).toEqual(Array.from(want));
 			expect(z.periods.every((p) => p.source === 'flagged' && p.recordedMm === 0)).toBe(true);
 			const a = filled.aligned('rain_catchment_mm');

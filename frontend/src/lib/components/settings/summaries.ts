@@ -2,7 +2,7 @@
 // set to now (issue #468), so the page reads as a list of current values and a
 // panel needn't be scanned field by field to know whether it matters. They
 // follow the unsaved form. Pure: SettingsTab passes the derived figures in.
-import { ALLOCATION_MODE_LABEL, defaultDataQualitySettings, type ProjectSettings } from '@water-management/engine';
+import { ALLOCATION_MODE_LABEL, defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 import type { SettingsSectionId } from './sections';
@@ -91,7 +91,9 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 		'set-record': [
 			span ?? 'The whole flow record',
 			i.siteName ? `at ${i.siteName}` : 'at the outlet',
-			exclusions ? `${plural(exclusions, 'period')} left out` : null
+			exclusions ? `${plural(exclusions, 'period')} left out` : null,
+			// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
+			s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
 		]
 			.filter(Boolean)
 			.join(' · '),

@@ -20,7 +20,7 @@ import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { requireOwnSecondFactor, requireProjectStepUp } from '../auth/stepUp.js';
 import { checkCalibrationSite } from './calibrationSite.js';
-import { autoFitRecordError, dataQualityPatchError, ewrOutletTableError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
+import { autoFitRecordError, baselineAllocationModeError, dataQualityPatchError, ewrOutletTableError, mergeSettings, normaliseBaselineAllocationMode, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
 import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
@@ -351,6 +351,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// Turning it on: only someone signed in with a second factor, so it can't lock everyone out at once.
 			const mfaChange = body.requireMfa !== undefined && body.requireMfa !== current.require_mfa;
 			if (mfaChange && body.requireMfa) await requireOwnSecondFactor(db);
+			// Licence data never drives the baseline (issue #507): a cap or a full allocation is a scenario's.
+			const allocError = baselineAllocationModeError(body.settings);
+			if (allocError) throw new ApiError(400, allocError);
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
 			const dqError = settings && body.settings?.dataQuality ? dataQualityPatchError(settings) : null;
 			if (dqError) throw new ApiError(400, dqError);
@@ -483,10 +486,13 @@ export const projectRoutes = new Hono<AuthEnv>()
 			}
 			// Fresh node ids for the copy; settings that name a node (the EWR rule tables' sites) follow them.
 			const { model: copied, ids } = freshIds(await loadModel(db, srcId));
+			const copiedSettings = remapSettingNodeIds(src.settings ?? {}, ids) as Record<string, unknown>;
+			// A source stored before 213 may still cap or fully allocate its baseline: the copy compares only (issue #507).
+			const allocNote = normaliseBaselineAllocationMode(copiedSettings);
 			await db.query(
 				`INSERT INTO project (id, name, description, settings, created_by, team_id, time_zone)
 				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, $6)`,
-				[newId, body.name, src.description, JSON.stringify(remapSettingNodeIds(src.settings ?? {}, ids)), teamId, src.time_zone]
+				[newId, body.name, src.description, JSON.stringify(copiedSettings), teamId, src.time_zone]
 			);
 			await saveModel(db, newId, copied);
 			// A gauge record's site (084_gauge_records) follows its gauge to the copy's id; one whose
@@ -508,7 +514,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// as yourself, so keeping the author would mean bypassing it, and
 			// re-authoring as the copier would misattribute. The original keeps them.
 			// The copy's history starts with its first state; the original's stays with the original.
-			await recordModelRevision(db, newId, { source: 'copy', before: null, reason: `Copied from "${src.name}"`.slice(0, 500) });
+			await recordModelRevision(db, newId, { source: 'copy', before: null, reason: [`Copied from "${src.name}"`, allocNote].filter(Boolean).join('. ').slice(0, 500) });
 			return c.json({ project: full(await getProject(db, newId)) }, 201);
 		});
 	})

@@ -10,6 +10,7 @@ import {
 	DEMAND_OBJECT_CATEGORY_LABEL,
 	objectMonthlyM3Day,
 	supplyOrder,
+	USER_PRIORITY_LABEL,
 	type DemandObject,
 	type NetworkNode,
 	type ProjectModel
@@ -31,7 +32,7 @@ export interface DemandRow {
 	what: string;
 	/** Where it takes its water, in words. */
 	from: string;
-	/** Its place in the unit's supply order ("1 of 3"), a user's seniority; null when there is no order to tell. */
+	/** Its place in the unit's supply order ("1 of 3"), a user's priority (Priority / Non-priority); null when there is no order to tell. */
 	order: string | null;
 	/** false: an object kept on record but not modelled (out of the totals). */
 	enabled: boolean;
@@ -115,7 +116,7 @@ export function demandRows(model: ProjectModel, apanMm: readonly number[], febru
 				name: name(n),
 				what: 'Other water user',
 				from: 'river',
-				order: n.userPriority === 'junior' ? 'junior' : 'senior',
+				order: USER_PRIORITY_LABEL[n.userPriority === 'junior' ? 'junior' : 'senior'],
 				enabled: true,
 				external: false,
 				monthlyM3Day: monthly,

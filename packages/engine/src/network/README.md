@@ -59,7 +59,7 @@ day trace read.
 | L | `upstream_below_dam` | H − K — upstream inflow *below* the dam |
 | M | `runoff_to_dam` | I × `pctRunoffToDam` — own runoff into the dam |
 | N | `runoff_below_dam` | I − M — own runoff below the dam |
-| O | `diverted_to_dam` | MIN(`divertCapacityM3Day` (the month's `divertMonthlyM3Day` when set, engine ≥ 1.32.0), L + N) — diverted back into the dam; cut for the senior users (§2.7c) and the hands-off flow (§2.7h) |
+| O | `diverted_to_dam` | MIN(`divertCapacityM3Day` (the month's `divertMonthlyM3Day` when set, engine ≥ 1.32.0), L + N) — diverted back into the dam; cut for the priority users (§2.7c) and the hands-off flow (§2.7h) |
 | G | `supplied` | MIN(MAX(Qprev + rain on dam − evaporation − seepage + M + O + K + J − capacity × `damMinPct`, 0), D): only the storage above the minimum operating level (engine ≥ 0.16.0, audit Q5) |
 | – | `dam_area`, `rain_on_dam`, `dam_evaporation`, `dam_seepage` | the dam's surface, rain on it, evaporation and seepage before irrigation (engine ≥ 0.16.0, audit N2; docs/model.md §2.7a) |
 | – | `diverted_loss` | on a unit that can divert into its dam only (River to dam or a top-up off-take): the diverted share of yesterday's storage, fully mixed, × evaporation and the seepage that doesn't return; surface use in the allocation comparison and cap (engine ≥ 1.79.0, docs/model.md §2.12) |
@@ -86,13 +86,13 @@ Capacity is `damCapacityM3`; initial storage is `damInitialPct × capacity`
 (the workbook rounds both to whole m³).
 
 An **other water user** (node kind `user`, engine ≥ 0.22.0, WP-1.33;
-docs/model.md §2.7c) takes G = MIN(D, H) (senior) or MIN(D, MAX(0, H − Zs))
-(junior) from the river, returns T = r × G, and passes U = H − G + T. A senior
+docs/model.md §2.7c) takes G = MIN(D, H) (priority, stored `senior`) or MIN(D, MAX(0, H − Zs))
+(non-priority, `junior`) from the river, returns T = r × G, and passes U = H − G + T. A priority
 user's demand is fragmented to the farms upstream by flow share (`seniorClaim`,
 built in `../run.ts` `otherUsers`); each farm keeps MIN(Zs, H + I) below its
 dam (O cut first, then K and M pro rata; working column `passed_for_senior`),
 and Zs (`senior_requirement`) accumulates like Z and drops by D below the
-senior user. Users are EWR contributors in `attribution.ts` (e = H − U) and
+priority user. Users are EWR contributors in `attribution.ts` (e = H − U) and
 get their own curtailment rows (`curtailment.ts` `otherUserCurtailment`).
 
 **Boreholes** (engine ≥ 0.23.0, WP-1.34; docs/model.md §2.7d) on a farm or

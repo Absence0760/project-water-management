@@ -39,7 +39,7 @@ describe('demandRows', () => {
 			['Upper', 'Town', '1 of 3'],
 			['Upper', 'Crops', '2 of 3'],
 			['Upper', 'Cattle', '3 of 3'],
-			['Mine', 'Mine', 'junior']
+			['Mine', 'Mine', 'Non-priority']
 		]);
 	});
 

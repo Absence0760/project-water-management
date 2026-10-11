@@ -1,7 +1,7 @@
 // CHIRPS fallback bias correction (audit B1). All fixtures are synthetic.
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
-import { defaultDataQualitySettings, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind, type ZeroRainSettings } from './project';
+import { defaultDataQualitySettings, defaultZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind, type ZeroRainSettings } from './project';
 import {
 	applyChirpsCorrection,
 	CHIRPS_FACTOR_MAX,
@@ -467,6 +467,15 @@ const runDays = (() => {
 const RUN_FROM = dateAt(runDays[0]!);
 const RUN_TO = dateAt(runDays[runDays.length - 1]!);
 const RUN_N = runDays.length;
+/**
+ * The run's days a run sets aside by default (engine ≥ 1.81.0, issue #507
+ * item 3): those CHIRPS reads more than 2 mm on (the fixture's CHIRPS days,
+ * 10–12 mm in May–Aug). The fixture's CHIRPS reads 0 on the rest, so they
+ * stay dry, and rain used there is 0 mm either way.
+ */
+const FILL = runDays.filter((i) => chirps()[i]! > ZERO_RAIN_FILL_ABOVE_CHIRPS_MM);
+const FILL_N = FILL.length;
+const DRY_N = RUN_N - FILL_N;
 
 /** Catchment rain K × CHIRPS everywhere except a zero run; no blank days. */
 function zeroRunInput(over: ModelInput['settings'] = {}, edit?: (c: (number | null)[]) => void): ModelInput {
@@ -495,20 +504,28 @@ describe('zero-rain runs treated as missing (CR-20, B2)', () => {
 		const z = out.summary.zeroRainInfill!;
 		expect(z.mode).toBe('missing');
 		expect(z.periods).toEqual([
-			{ start: RUN_FROM, end: RUN_TO, source: 'flagged', reason: null, days: RUN_N, recordedMm: 0, filledMm: expect.any(Number), unfilledDays: 0 }
+			{ start: RUN_FROM, end: RUN_TO, source: 'flagged', reason: null, days: FILL_N, recordedMm: 0, filledMm: expect.any(Number), unfilledDays: 0 }
 		]);
 		const filled = runDays.reduce((a, i) => a + rain[i]!, 0);
 		expect(filled).toBeGreaterThan(100);
 		expect(z.filledMm).toBeCloseTo(filled, 9);
-		expect(z.days).toBe(RUN_N);
-		// The per-day flag marks exactly the run.
+		expect(z.days).toBe(FILL_N);
+		// Engine ≥ 1.81.0: the run's days CHIRPS reads at most 2 mm on stay dry, as recorded.
+		expect(DRY_N).toBeGreaterThan(0);
+		expect(z.fillAboveChirpsMm).toBe(2);
+		expect(z.chirpsDryDays).toBe(DRY_N);
+		// The per-day flag marks exactly the run's days CHIRPS reads more than 2 mm on.
+		const filledSet = new Set(FILL);
 		const col = get(out, null, ZERO_RAIN_COLUMN.key);
-		expect(col.filter((v, i) => (v === 1) !== inRun.has(i))).toEqual([]);
+		expect(col.filter((v, i) => (v === 1) !== filledSet.has(i))).toEqual([]);
 		// The run's water year stays out of the fit, so the factors are still the true ones.
 		expect(out.summary.chirpsCorrection!.excludedWaterYears).toEqual([2002]);
 		for (const m of out.summary.chirpsCorrection!.months) expect(m.factor).toBeCloseTo(K[m.month]!, 12);
 		expect(out.summary.warnings.find((w) => w.startsWith('Catchment rain treated as missing'))).toMatch(
-			new RegExp(`^Catchment rain treated as missing on ${RUN_N} days: ${RUN_FROM} to ${RUN_TO} \\(${RUN_N} days, flagged zero run\\)\\. CHIRPS \\(bias-corrected\\) then forecast rain stand in, ${Math.round(filled)} mm in all\\. The stored series is unchanged\\.`)
+			new RegExp(`^Catchment rain treated as missing on ${FILL_N} days: ${RUN_FROM} to ${RUN_TO} \\(${FILL_N} days, flagged zero run\\)\\. CHIRPS \\(bias-corrected\\) then forecast rain stand in, ${Math.round(filled)} mm in all\\. The stored series is unchanged\\.`)
+		);
+		expect(out.summary.warnings).toContain(
+			`Flagged zero runs kept as recorded (dry) on ${DRY_N} days where CHIRPS reads 2 mm or less: only days CHIRPS reads more on are treated as missing (Settings → Zero-rain runs).`
 		);
 	});
 
@@ -541,7 +558,7 @@ describe('zero-rain runs treated as missing (CR-20, B2)', () => {
 		for (const i of runDays.filter((i) => dateAt(i) > '2003-06-30')) expect(rain[i]).toBeCloseTo(h[i]! * K[monthAt(i)]!, 12);
 		const z = out.summary.zeroRainInfill!;
 		expect(z.keptDry).toEqual([{ ...keepDry[0], days: kept.length }]);
-		expect(z.days).toBe(RUN_N - kept.length);
+		expect(z.days).toBe(FILL.filter((i) => dateAt(i) > '2003-06-30').length);
 		expect(out.summary.warnings.find((w) => w.startsWith('Flagged zero runs kept as recorded'))).toBe(
 			`Flagged zero runs kept as recorded (dry) on ${kept.length} days, as Settings → Zero-rain runs says: 2003-04-01 to 2003-06-30 (${kept.length} days: hydrologist: real drought).`
 		);
@@ -609,21 +626,90 @@ describe('zero-rain runs treated as missing (CR-20, B2)', () => {
 	});
 });
 
+describe('a flagged zero run is filled only where CHIRPS reads more than the threshold (engine ≥ 1.81.0, issue #507 item 3, B2)', () => {
+	/** The run with CHIRPS on three of its fixture's dry days set: exactly 2 mm, just above it, and blank. */
+	const edgeInput = (over: ModelInput['settings'] = {}) => {
+		const input = zeroRunInput({ runoffModel: 'gr4j', ...over });
+		const h = input.series.rain_chirps_mm!.values;
+		const dryDays = runDays.filter((i) => h[i] === 0);
+		const [two, above, blank] = dryDays.slice(5, 8) as [number, number, number];
+		h[two] = 2;
+		h[above] = 2.001;
+		h[blank] = null;
+		return { input, two, above, blank };
+	};
+
+	it('keeps a day CHIRPS reads exactly 2 mm on dry, fills one just above it, and sets aside a day with no CHIRPS reading', () => {
+		const { input, two, above, blank } = edgeInput();
+		const out = runModel(input);
+		expect(checkInvariants(input, out)).toBeNull();
+		const rain = get(out, null, 'rain_used');
+		const col = get(out, null, ZERO_RAIN_COLUMN.key);
+		expect([rain[two], col[two]]).toEqual([0, 0]);
+		expect(rain[above]).toBeCloseTo(2.001 * K[monthAt(above)]!, 12);
+		expect(col[above]).toBe(1);
+		// No CHIRPS: set aside as before 1.81.0; nothing stands in, so it runs as 0 mm and is counted unfilled.
+		expect(col[blank]).toBe(1);
+		const z = out.summary.zeroRainInfill!;
+		expect(z.unfilledDays).toBe(1);
+		expect(z.days + z.chirpsDryDays!).toBe(RUN_N);
+		expect(z.days).toBe(FILL_N + 2);
+	});
+
+	it('reads the threshold setting: 0 mm still keeps the days CHIRPS reads 0 on dry; a high one keeps them all', () => {
+		const at = (fillAboveChirpsMm: number) => runModel(zeroRunInput({ zeroRainRuns: { ...defaultZeroRainSettings(), fillAboveChirpsMm } })).summary.zeroRainInfill!;
+		expect(at(0).days).toBe(FILL_N);
+		expect(at(12).days).toBe(0); // the fixture's May–Aug CHIRPS is 10–12 mm
+		expect(at(12).chirpsDryDays).toBe(RUN_N);
+		expect(at(9.99).days).toBe(FILL_N);
+	});
+
+	it('the threshold moves no CHIRPS factor: the fit leaves every flagged-run day out, kept dry or filled', () => {
+		const a = runModel(zeroRunInput({ zeroRainRuns: { ...defaultZeroRainSettings(), fillAboveChirpsMm: 0 } })).summary.chirpsCorrection!;
+		const b = runModel(zeroRunInput({ zeroRainRuns: { ...defaultZeroRainSettings(), fillAboveChirpsMm: 50 } })).summary.chirpsCorrection!;
+		expect(b.months.map((m) => m.factor)).toEqual(a.months.map((m) => m.factor));
+		expect(b.flaggedDaysLeftOut).toBe(a.flaggedDaysLeftOut);
+		for (const m of a.months) expect(m.factor).toBeCloseTo(K[m.month]!, 12);
+	});
+
+	it('a listed missing period is set aside whatever CHIRPS reads, and "asRecorded" ignores the threshold', () => {
+		const missing = [{ start: RUN_FROM, end: RUN_TO, reason: 'logger fault' }];
+		const listed = runModel(zeroRunInput({ zeroRainRuns: { ...defaultZeroRainSettings(), missing } })).summary.zeroRainInfill!;
+		// The flagged run claims its CHIRPS-wet days first; the listed period takes every other day, CHIRPS-dry ones included.
+		expect(listed.days).toBe(RUN_N);
+		const dry = runModel(zeroRunInput({ zeroRainRuns: { ...defaultZeroRainSettings(), mode: 'asRecorded' } })).summary.zeroRainInfill!;
+		expect(dry).toMatchObject({ days: 0, asRecordedDays: RUN_N });
+		expect(dry.chirpsDryDays).toBeUndefined();
+	});
+
+	it('resolveZeroRain: the default is 2 mm, also for settings saved before 1.81.0; an invalid value falls back with a warning', () => {
+		expect(resolveZeroRain(undefined, []).fillAboveChirpsMm).toBe(2);
+		expect(resolveZeroRain({ mode: 'missing', keepDry: [], missing: [] }, []).fillAboveChirpsMm).toBe(2);
+		expect(resolveZeroRain({ fillAboveChirpsMm: 0 }, []).fillAboveChirpsMm).toBe(0);
+		expect(resolveZeroRain({ fillAboveChirpsMm: 50 }, []).fillAboveChirpsMm).toBe(50);
+		for (const bad of [-1, 51, Number.NaN, '2']) {
+			const warnings: string[] = [];
+			expect(resolveZeroRain({ fillAboveChirpsMm: bad }, warnings).fillAboveChirpsMm).toBe(2);
+			expect(warnings).toEqual([expect.stringMatching(/fill threshold/)]);
+		}
+	});
+});
+
 describe('data-quality limits decide which zero runs a run fills (settings.dataQuality, engine 1.20.0, issue #66)', () => {
 	const dq = defaultDataQualitySettings();
 	const filledDays = (input: ModelInput) => runModel(input).summary.zeroRainInfill!.days;
 
 	it('a higher wet-season minimum leaves the run as recorded; the default fills it', () => {
 		const wet = zeroRainRuns(zeroRunInput().series.rain_catchment_mm!).runs[0]!.wetDays;
-		expect(filledDays(zeroRunInput())).toBe(RUN_N);
-		expect(filledDays(zeroRunInput({ dataQuality: { ...dq, zeroRunMinWetDays: wet } }))).toBe(RUN_N);
+		expect(filledDays(zeroRunInput())).toBe(FILL_N);
+		expect(filledDays(zeroRunInput({ dataQuality: { ...dq, zeroRunMinWetDays: wet } }))).toBe(FILL_N);
 		expect(filledDays(zeroRunInput({ dataQuality: { ...dq, zeroRunMinWetDays: wet + 1 } }))).toBe(0);
 	});
 
 	it('with the CHIRPS check on, fills a run CHIRPS saw rain over and keeps one CHIRPS reads as dry, saying why', () => {
 		const on = { dataQuality: { ...dq, zeroRunChirpsCheck: true } };
 		// The fixture's CHIRPS rains through the run: probably missing data, filled as before.
-		expect(filledDays(zeroRunInput(on))).toBe(RUN_N);
+		expect(filledDays(zeroRunInput(on))).toBe(FILL_N);
 		// CHIRPS dry over the run too: a dry spell that may be real, run as recorded.
 		const dry = zeroRunInput(on);
 		for (const i of runDays) dry.series.rain_chirps_mm!.values[i] = 0;
@@ -634,10 +720,11 @@ describe('data-quality limits decide which zero runs a run fills (settings.dataQ
 		const check = out.summary.dataQuality!.seriesChecks!.find((c) => c.check === 'zerorun')!;
 		expect(check.days).toBe(0);
 		expect(check.text).toMatch(/1 run CHIRPS also reads as dry .* is not flagged, a long dry spell that may be real/);
-		// Negative control: the same series with the check off fills the run, as today.
+		// Negative control: the same series with the check off flags the run; CHIRPS reads 0 on every day of it, so
+		// the fill threshold (engine ≥ 1.81.0) keeps each day dry rather than filling it.
 		const off = zeroRunInput();
 		for (const i of runDays) off.series.rain_chirps_mm!.values[i] = 0;
-		expect(runModel(off).summary.zeroRainInfill!.periods.find((p) => p.source === 'flagged')?.start).toBe(RUN_FROM);
+		expect(runModel(off).summary.zeroRainInfill).toMatchObject({ days: 0, chirpsDryDays: RUN_N });
 	});
 
 	it('the CHIRPS fit leaves out what the limits flag: the low-vs-CHIRPS ratio decides the years, the zero-run rule the days', () => {
@@ -658,12 +745,13 @@ describe('data-quality limits decide which zero runs a run fills (settings.dataQ
 describe('resolveZeroRain', () => {
 	it('defaults to treating flagged runs as missing, and drops what it cannot use with a warning', () => {
 		const w: string[] = [];
-		expect(resolveZeroRain(undefined, w)).toEqual({ ...ACC, mode: 'missing', keepDry: [], missing: [] });
+		expect(resolveZeroRain(undefined, w)).toEqual({ ...ACC, mode: 'missing', keepDry: [], missing: [], fillAboveChirpsMm: 2 });
 		expect(resolveZeroRain({ mode: 'sometimes', keepDry: [{ start: '2003-01-01', end: '2002-01-01', reason: 'x' }], missing: 'no' }, w)).toEqual({
 			...ACC,
 			mode: 'missing',
 			keepDry: [],
-			missing: []
+			missing: [],
+			fillAboveChirpsMm: 2
 		});
 		expect(w).toEqual([
 			'unknown zero-rain run mode "sometimes"; using missing',
@@ -674,7 +762,8 @@ describe('resolveZeroRain', () => {
 			...ACC,
 			mode: 'asRecorded',
 			keepDry: [],
-			missing: [{ waterYear: 2003, reason: 'gauge moved' }]
+			missing: [{ waterYear: 2003, reason: 'gauge moved' }],
+			fillAboveChirpsMm: 2
 		});
 	});
 

@@ -6,7 +6,7 @@
 //   1. Today: what it was supplied (I / H).
 //   2. EWR met: what is left once the EWR charge is met as well (U / H for a
 //      farm, bounded to 0–100 %, never below its basic-needs floor, engine ≥ 1.44.0; for another user, what it takes after its
-//      supply cut, or all of it for a senior user, which is not curtailed).
+//      supply cut, or all of it for a priority user, which is not curtailed).
 //
 // The equitable share (M / H = K_tot) is not a stage: it is the same fraction
 // for every farm and its total is always today's, so the board says it once,
@@ -114,7 +114,7 @@ function farmRow(f: CurtailmentFarm, names: Record<string, string>): BoardRow {
 	};
 }
 
-/** What an other water user takes once the EWR is met: after its supply cut (junior), or all of it (senior). */
+/** What an other water user takes once the EWR is met: after its supply cut (non-priority), or all of it (priority). */
 export function userLeftM3Day(u: CurtailmentUser): number {
 	return u.curtailed ? Math.max(u.suppliedM3Day + u.supplyCutM3Day, 0) : u.suppliedM3Day;
 }

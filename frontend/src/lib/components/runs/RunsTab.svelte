@@ -68,6 +68,8 @@
 	// this page links there.
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
 	const loadForecastPanel = () => import('$lib/components/forecast/ForecastPanel.svelte');
+	// A run judged by a DRM table: its tables × s, as it read them (issue #90 B1); its own chunk.
+	const loadRunScaledEwr = () => import('./RunScaledEwrTables.svelte');
 	// The preview of an all-farms download (Download menu → Preview): its own chunk, fetched on first use.
 	const loadTableDialog = () => import('$lib/components/export/DailyTableDialog.svelte');
 
@@ -684,6 +686,13 @@
 				</div>
 				<section id="res-summary" aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
+					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
+						<Lazy load={loadRunScaledEwr}>
+							{#snippet children(RunScaledEwrTables)}
+								<RunScaledEwrTables source={shownSettings.ewrDailySource!} info={summary.catchment.outletEwr!} />
+							{/snippet}
+						</Lazy>
+					{/if}
 				</section>
 			</section>
 			{#if summary.forecast}

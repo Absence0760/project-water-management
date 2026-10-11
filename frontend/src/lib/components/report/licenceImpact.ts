@@ -191,7 +191,7 @@ function boardOf(impact: LicenceImpact, ctx: { data: { a: BoardRun; b: BoardRun 
 	const notes = [...ctx.notes];
 	const background = `“${a.run.label || 'Untitled run'}”`;
 	const capitalised = application.charAt(0).toUpperCase() + application.slice(1);
-	// A full-allocation baseline (engine ≥ 1.18.0, settings.allocationMode, allocations.md) runs every holder at their registered volume: its use is existing *authorised* use.
+	// A full-allocation background run (engine ≥ 1.18.0, settings.allocationMode, allocations.md; since issue #507 a scenario's, never the project's baseline) runs every holder at their registered volume: its use is existing *authorised* use.
 	const mode = (r: typeof a) => r.run.summary.allocations?.mode ?? 'none';
 	const authorised = mode(a) === 'fullAllocation';
 	if (authorised && mode(b) !== 'fullAllocation')
@@ -228,7 +228,7 @@ function boardOf(impact: LicenceImpact, ctx: { data: { a: BoardRun; b: BoardRun 
 		columns,
 		existingNote: authorised
 			? `Existing authorised use is the use in the baseline ${background}, a full-allocation run: every holder at their full registered volume, irrigation and other water users, less what returns to the river.`
-			: `Existing use is the use in the baseline ${background} as that run modelled it: irrigation and other water users, less what returns to the river. For existing authorised use, compare with a baseline run at every holder’s full registered volume (Settings › Registered volumes › Allocation mode: full allocation, or a scenario that sets it).`,
+			: `Existing use is the use in the baseline ${background} as that run modelled it: irrigation and other water users, less what returns to the river. For existing authorised use, compare with a baseline run at every holder’s full registered volume (a scenario that sets the allocation mode to full allocation: licence data never drives the project’s own baseline).`,
 		notes
 	};
 }

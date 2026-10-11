@@ -1,6 +1,6 @@
 // The board's markup (issue #53 R3), rendered to HTML with Svelte's server
 // renderer: the two stages, the equal share in the intro, the footnote, a no-demand farm and the other
-// water users' senior / junior rows. The browser behaviour is pinned by
+// water users' priority / non-priority rows. The browser behaviour is pinned by
 // e2e/tests/share-the-pain.spec.ts.
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -149,10 +149,10 @@ describe('ShareThePainBoard', () => {
 		expect(text(body)).not.toMatch(/(^|\s)[-−]\d/);
 	});
 
-	it('lists the other water users on their own rows, senior or junior, outside the share', () => {
+	it('lists the other water users on their own rows, priority or non-priority, outside the share', () => {
 		expect(text(body)).toContain('Other water users (outside the equitable share)');
-		expect(row(body, 'Town')).toBe('Town senior, not curtailed 800 75% 600 m³/day 75% 600 m³/day not curtailed: its EWR charge of 50 m³/day stands');
-		expect(row(body, 'Mill')).toBe('Mill junior, curtailed 100 80% 80 m³/day 50% 50 m³/day');
+		expect(row(body, 'Town')).toBe('Town priority, not curtailed 800 75% 600 m³/day 75% 600 m³/day not curtailed: its EWR charge of 50 m³/day stands');
+		expect(row(body, 'Mill')).toBe('Mill non-priority, curtailed 100 80% 80 m³/day 50% 50 m³/day');
 		expect(row(body, 'All other users')).toBe('All other users 900 76% 680 m³/day 72% 650 m³/day');
 	});
 

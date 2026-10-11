@@ -33,7 +33,7 @@ describe('flowFlagLanes', () => {
 		expect(lanes.map((l) => l.text)).toEqual([
 			'Above the highest gauging: 3 days; Fit automatically: censored at the highest gauging',
 			'Below the lowest gauging: 1 day; Fit automatically: left out',
-			'Suspect (outlier or flat stretch): 1 day; Fit automatically: left out',
+			'Suspect (outlier, flat stretch or doubtful zero flow): 1 day; Fit automatically: left out',
 			'Infilled: 2 days; Fit automatically: scored as recorded'
 		]);
 		// Without settings (a run cached before it carried them) the key gives the days only.

@@ -46,6 +46,48 @@ export function scaleFactor(src: EwrDailySource, modelAreaKm2: number, lastRun: 
 }
 
 /**
+ * The scale factor s where the form can know it: the area ratio from the
+ * modelled and table areas, the MAR ratio from the last run's natural MAR
+ * (exact or estimated, as the factor line says); null when an input is
+ * missing (no table area or MAR, no area yet, no run yet).
+ */
+export function knownScale(src: EwrDailySource, modelAreaKm2: number, lastRun: LastRunScale | null): number | null {
+	if (src.scaling === 'area') return src.tableAreaKm2 && src.tableAreaKm2 > 0 && modelAreaKm2 > 0 ? modelAreaKm2 / src.tableAreaKm2 : null;
+	return src.tableMarMm3 && src.tableMarMm3 > 0 && lastRun ? lastRun.modelMarMm3 / src.tableMarMm3 : null;
+}
+
+/** A source's tables as the run reads them: each value × s (issue #90 B1 gap a); a blank stays blank. */
+export interface ScaledEwrTables {
+	method: 'tab' | 'percentile';
+	scale: number;
+	/** The TAB flows × s, m³/s, Oct … Sep ('tab'). */
+	tabM3s: (number | null)[] | null;
+	/** The natural flow percentile table × s, m³/s, 12 rows × the 10 points ('percentile'). */
+	naturalPctM3s: (number | null)[][] | null;
+	/** The total Reserve flow percentile table × s ('percentile'). */
+	reservePctM3s: (number | null)[][] | null;
+}
+
+const times = (v: number | null | undefined, s: number): number | null => (typeof v === 'number' && Number.isFinite(v) ? v * s : null);
+
+/**
+ * The method's tables × s, for showing beside the entered ones in Settings
+ * and with a run (its own settings snapshot and summary s). Null for the
+ * pragmatic EWR, an unknown or non-finite s, or a method whose tables
+ * haven't been entered. Only the tables the method reads: the TAB flows
+ * under 'tab', the two percentile tables under 'percentile'. The natural
+ * rows are the entered values × s; a rising row the run reads as its
+ * running minimum, which the run's warnings say (ewrDailySourceNotes).
+ */
+export function scaledEwrTables(src: EwrDailySource | null | undefined, scale: number | null | undefined): ScaledEwrTables | null {
+	if (!src || src.method === 'pragmatic' || typeof scale !== 'number' || !Number.isFinite(scale)) return null;
+	const grid = (g: number[][] | null) => (g ? g.map((row) => row.map((v) => times(v, scale))) : null);
+	if (src.method === 'tab') return src.tabM3s ? { method: 'tab', scale, tabM3s: src.tabM3s.map((v) => times(v, scale)), naturalPctM3s: null, reservePctM3s: null } : null;
+	if (!src.naturalPctM3s && !src.reservePctM3s) return null;
+	return { method: 'percentile', scale, tabM3s: null, naturalPctM3s: grid(src.naturalPctM3s), reservePctM3s: grid(src.reservePctM3s) };
+}
+
+/**
  * Twelve monthly flows pasted in a row (spaces, tabs, commas or semicolons
  * between them) or a column, optionally with month names before them; in a
  * tab- or semicolon-separated paste "1,25" is a decimal comma.

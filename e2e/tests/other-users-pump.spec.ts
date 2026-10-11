@@ -15,7 +15,7 @@ const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model 
 test('a town’s pump of 1 × 10 m³/h saves 240 m³/day, and the run shows what it pumped and left unmet', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Town with a pump');
-	// The town sits in-line below the lower farm, so the river reaches it (a senior user wanting 800 m³/day).
+	// The town sits in-line below the lower farm, so the river reaches it (a priority user wanting 800 m³/day).
 	const model = structuredClone(project.model);
 	const gauge = model.nodes.find((n) => n.kind === 'gauge')! as { id: string };
 	const town = node('Town', 'farm', gauge.id, 4, { kind: 'user', areaKm2: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, pctRunoffToDam: 0, userDemandM3Day: new Array(12).fill(800) });
@@ -44,7 +44,7 @@ test('a town’s pump of 1 × 10 m³/h saves 240 m³/day, and the run shows what
 	await openNodeTable(page);
 	const again = page.getByRole('region', { name: /^Other water users/ }).getByTestId(/^user-pump-/).first();
 	await expect(again.getByLabel('Pump capacity (m³/day)')).toHaveValue('240');
-	// A senior user (the default): the units upstream pass no more than the pump takes.
+	// A priority user (the default): the units upstream pass no more than the pump takes.
 	await expect(again.getByTestId('user-pump-note')).toHaveText('It takes at most 240 m³/day from the river; units upstream pass no more than that for it. Or enter the pumps and their rate to work it out.');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);

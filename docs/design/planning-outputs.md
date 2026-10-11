@@ -125,7 +125,7 @@ has the rules). Sweeps have no screen of their own: R4's outcome matrix (Runs ta
 Three stages side by side from the existing `CurtailmentSummary`:
 *today* (supply % of demand), *equitable share* (the fairness benchmark,
 with its footnote), *EWR met* (after the EWR charge, bounded). Other water
-users appear as their own rows, marked senior or junior. **(evidence →
+users appear as their own rows, marked priority or non-priority. **(evidence →
 judgement)** Because SA practice cuts per category (§2 finding 1), add a
 **category restriction** option: a % cut per category (domestic,
 irrigation, industry) instead of one equal share, labelled as a what-if

@@ -480,7 +480,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'allocation-mode',
 		term: 'Allocation mode',
-		short: 'What registered volumes do to a run: compare only (default), cap each unit’s yearly use at them, or scale its demand to them.',
+		short: 'What registered volumes do to a run. The baseline only compares use with them; a scenario may cap use at them or scale demand to them.',
 		category: 'results',
 		fields: ['settings.allocationMode']
 	},
@@ -537,8 +537,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'user-priority',
-		term: 'User priority (senior / junior)',
-		short: 'Senior (the default): hydrological units and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
+		term: 'User priority (Priority / Non-priority)',
+		short: 'Priority (the default): units and non-priority users upstream pass its demand first. Non-priority: it takes what reaches it after them.',
 		category: 'network',
 		fields: ['node.userPriority', 'run.passed_for_senior']
 	},
@@ -553,7 +553,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'user-pump',
 		term: 'Pump capacity (other user)',
-		short: 'The most an other water user takes from the river in a day. Blank is no limit; a senior user’s claim upstream is capped to it too.',
+		short: 'The most an other water user takes from the river in a day. Blank is no limit; a priority user’s claim upstream is capped to it too.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['run.pump_limited']
@@ -1434,7 +1434,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'low-flow-measure',
 		term: 'Low flows judged on',
-		short: 'The month’s total flow (default; provisional, not hydrologist-confirmed), or its base flow, so a flood can’t hide short low flows.',
+		short: 'The month’s total flow (default, the hydrologist’s choice), or its base flow (filter settings unconfirmed), so a flood can’t hide low flows.',
 		units: 'Mm³ per month or m³/s',
 		category: 'ewr',
 		fields: ['settings.lowFlowMeasure']

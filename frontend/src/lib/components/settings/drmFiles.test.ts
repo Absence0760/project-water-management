@@ -104,7 +104,8 @@ describe('parseRulFile', () => {
 		const p = ok(percentileTablesFromRul(r));
 		expect(p.naturalPctM3s![4]![0]).toBeCloseTo(mcmMonthToM3s(r.natural![4]![0]!, 4), 12);
 		expect(p.reservePctM3s![0]![9]).toBeCloseTo(mcmMonthToM3s(r.total[0]![9]!, 0), 12);
-		const src = { ...blankEwrDailySource(), method: 'percentile' as const, tableMarMm3: 50, ...p };
+		// A new source scales by area (issue #90 B2), so it needs the table's area.
+		const src = { ...blankEwrDailySource(), method: 'percentile' as const, tableAreaKm2: 50, ...p };
 		expect(ewrDailySourceIssues(src)).toEqual([]);
 	});
 });

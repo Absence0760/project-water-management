@@ -21,7 +21,6 @@
 	import {
 		applyPaste,
 		categoryFromText,
-		exampleGridCsv,
 		filledCells,
 		naturalComplete,
 		parseGrid,
@@ -162,12 +161,6 @@
 		};
 	}
 
-	// The CSV layouts the Expected format offers beside the DRM files (synthetic numbers, DRM style).
-	const csvFiles = [
-		{ name: 'ewr-total-example.csv', text: exampleGridCsv('total'), label: 'Example CSV (total-flow table)' },
-		{ name: 'ewr-low-flow-example.csv', text: exampleGridCsv('lowFlow'), label: 'Example CSV (low-flow table)' }
-	];
-
 	async function paste(i: number, which: GridKey) {
 		const g = parseGrid(pasteText[i] ?? '');
 		if ('error' in g) {
@@ -220,7 +213,7 @@
 					<span class="hint" id="{uid}-{i}-load-h">A .rul fills the grids, unit, % points and REC; a .tab the natural MAR and REC; a CSV goes into the paste box below the table.</span>
 				</div>
 				<p id="{uid}-{i}-file" class="small" class:err={fileNote[i] && !fileNote[i].ok} role="status" aria-label="File result">{fileNote[i]?.text ?? ''}</p>
-				<DrmFormatHelp target="ruleTable" {csvFiles} context="of a file for the rule table at {siteLabel(t.siteNodeId)}" />
+				<DrmFormatHelp target="ruleTable" context="of a file for the rule table at {siteLabel(t.siteNodeId)}" />
 			</div>
 		{/if}
 		<div class="fields">

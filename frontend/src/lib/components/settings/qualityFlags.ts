@@ -3,7 +3,7 @@
 // how the fit scores flagged days. The form's error mirrors the backend's
 // SettingsPatch (the engine's ratingError), so Save is blocked with a
 // readable message instead of a 400. QualityFlagsFields.svelte renders it.
-import { CALIBRATION_FLOW_KINDS, ratingError, type CalibrationFlowKind, type GaugeRating, type QualityFlagSettings } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, ratingError, zeroFlowMonthsError, type CalibrationFlowKind, type GaugeRating, type QualityFlagSettings } from '@water-management/engine';
 
 export const RECORD_NAME: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'Gauge record', flow_logger_m3s: 'Logger record' };
 
@@ -41,6 +41,8 @@ export function withRating(ratings: QualityFlagSettings['ratings'], kind: Calibr
 
 /** The first problem with the form's quality-flag settings, or null. */
 export function qualityFlagsError(q: QualityFlagSettings | null | undefined): string | null {
+	const monthsErr = q?.zeroFlowMonths === undefined ? null : zeroFlowMonthsError(q.zeroFlowMonths);
+	if (monthsErr) return `Months the river stops: ${monthsErr.charAt(0).toUpperCase()}${monthsErr.slice(1)}.`;
 	for (const k of CALIBRATION_FLOW_KINDS) {
 		const r = q?.ratings?.[k];
 		if (!r) continue;

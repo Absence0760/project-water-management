@@ -46,13 +46,20 @@
 // (unless settings.zeroRainRuns says 'asRecorded', or lists the run as
 // keep-dry) and on every period the settings list as missing, before rain used
 // is picked. Those days then take corrected CHIRPS, then forecast rain, like
-// any blank day. The stored series is never changed.
+// any blank day. The stored series is never changed. Engine ≥ 1.81.0 (issue
+// #507 item 3): a flagged run's day is set aside only where the stored CHIRPS
+// reads more than settings.zeroRainRuns.fillAboveChirpsMm (2 mm by default)
+// or has no reading; at or below it the gauge's zero stays, a dry day. The
+// CHIRPS factor fit still leaves every flagged-run day out (suspectRainDays),
+// so the factors don't move.
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
 import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX, exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
 import {
 	ACCUMULATION_MODES,
 	CHIRPS_FIT_PERIOD_MODES,
 	defaultZeroRainSettings,
+	ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM,
+	ZERO_RAIN_FILL_ABOVE_CHIRPS_MM,
 	ZERO_RAIN_MODES,
 	type AccumulationMode,
 	type ChirpsBiasMode,
@@ -1061,13 +1068,20 @@ export function resolveZeroRain(raw: unknown, warnings: string[]): ZeroRainSetti
 		if ((ACCUMULATION_MODES as readonly unknown[]).includes(o.accumulationMode)) accumulationMode = o.accumulationMode as AccumulationMode;
 		else warnings.push(`unknown accumulation mode "${String(o.accumulationMode)}"; using ${d.accumulationMode}`);
 	}
+	let fillAboveChirpsMm = ZERO_RAIN_FILL_ABOVE_CHIRPS_MM;
+	if (o.fillAboveChirpsMm != null) {
+		const v = o.fillAboveChirpsMm;
+		if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM) fillAboveChirpsMm = v;
+		else warnings.push(`zero-rain run fill threshold ${JSON.stringify(v)} is not a number of mm from 0 to ${ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM}; using ${ZERO_RAIN_FILL_ABOVE_CHIRPS_MM} mm`);
+	}
 	return {
 		mode,
 		keepDry: sanitizeExclusions(o.keepDry, warnings, 'keep-dry period'),
 		missing: sanitizeExclusions(o.missing, warnings, 'missing-rain period'),
 		accumulationMode,
 		keepReadings: sanitizeExclusions(o.keepReadings, warnings, 'keep-reading period'),
-		addAccumulations: sanitizeExclusions(o.addAccumulations, warnings, 'listed accumulation')
+		addAccumulations: sanitizeExclusions(o.addAccumulations, warnings, 'listed accumulation'),
+		fillAboveChirpsMm
 	};
 }
 
@@ -1108,6 +1122,13 @@ export interface ZeroRainInfill {
 	keptDry: ZeroRainKeptDry[];
 	/** Run days of flagged zero runs left as recorded because the mode is 'asRecorded'. */
 	asRecordedDays: number;
+	/**
+	 * 'missing' mode (engine ≥ 1.81.0, issue #507 item 3): the threshold, mm, and the run days of flagged zero
+	 * runs kept as recorded (dry) because the stored CHIRPS reads at most that much on them. Absent before 1.81.0,
+	 * when every day of a flagged run was set aside.
+	 */
+	fillAboveChirpsMm?: number;
+	chirpsDryDays?: number;
 	/** Totals over `periods`. */
 	days: number;
 	recordedMm: number;
@@ -1134,7 +1155,13 @@ export interface ZeroRainMask {
  * ./rainSourcePeriods.ts) is set aside by neither a flagged run nor a listed
  * missing period: the period's own series gives its rain. `checks` is
  * settings.dataQuality and the CHIRPS series (engine ≥ 1.20.0), which decide
- * which zero runs are flagged (quality.ts zeroRainRuns).
+ * which zero runs are flagged (quality.ts zeroRainRuns). In 'missing' mode a
+ * flagged run's day whose stored CHIRPS (checks.chirps) reads a value at or
+ * below zr.fillAboveChirpsMm is kept as the gauge recorded it, dry (engine ≥
+ * 1.81.0, issue #507 item 3): CHIRPS saw at most drizzle, and CHIRPS reports
+ * too many light-rain days (D7). A day with no CHIRPS reading is set aside
+ * as before (forecast rain, else nothing, stands in). Listed missing periods
+ * are set aside whatever CHIRPS reads.
  */
 export function zeroRainMask(
 	catchment: DailySeries | undefined,
@@ -1157,6 +1184,16 @@ export function zeroRainMask(
 	const keepDry = exclusionRanges(zr.keepDry);
 	const keptDry: ZeroRainKeptDry[] = keepDry.map((r) => ({ ...r, days: 0 }));
 	let asRecordedDays = 0;
+	// The per-day CHIRPS test (engine ≥ 1.81.0): a reading (finite, ≥ 0; a negative is the product's no-data code) at or below the threshold keeps the day dry.
+	const fillAbove = zr.fillAboveChirpsMm ?? ZERO_RAIN_FILL_ABOVE_CHIRPS_MM;
+	const ch = checks.chirps ?? null;
+	const h0 = ch ? toEpochDay(ch.startDate) : 0;
+	const chirpsDry = (day: number) => {
+		if (!ch) return false;
+		const h = ch.values[day - h0];
+		return isReading(h) && h <= fillAbove;
+	};
+	let chirpsDryDays = 0;
 	const inRun = (a: number, b: number): [number, number] | null => {
 		const from = Math.max(a, start);
 		const to = Math.min(b, start + days - 1);
@@ -1186,7 +1223,13 @@ export function zeroRainMask(
 			if (claimed(day)) return true;
 			const k = keepDry.findIndex((r) => day >= toEpochDay(r.start) && day <= toEpochDay(r.end));
 			if (k >= 0) keptDry[k]!.days++;
-			return k >= 0;
+			if (k >= 0) return true;
+			// claim() asks only about a day it would otherwise set aside (a reading, not replaced, not already masked).
+			if (chirpsDry(day)) {
+				chirpsDryDays++;
+				return true;
+			}
+			return false;
 		};
 		const period: ZeroRainPeriod = { start: run.startDate, end: run.endDate, source: 'flagged', reason: null, days: 0, recordedMm: 0, filledMm: 0, unfilledDays: 0 };
 		claim(period, span[0], span[1], keptBy);
@@ -1206,6 +1249,7 @@ export function zeroRainMask(
 			periods,
 			keptDry: keptDry.filter((k) => k.days > 0),
 			asRecordedDays,
+			...(zr.mode === 'missing' ? { fillAboveChirpsMm: fillAbove, chirpsDryDays } : {}),
 			days: sum('days'),
 			recordedMm: sum('recordedMm'),
 			filledMm: 0,
@@ -1261,6 +1305,12 @@ export function zeroRainWarnings(z: ZeroRainInfill | null): string[] {
 			`Flagged zero runs kept as recorded (dry) on ${z.keptDry.reduce((a, k) => a + k.days, 0)} days, as Settings → Zero-rain runs says: ` +
 				z.keptDry.map((k) => `${k.start} to ${k.end} (${k.days} days: ${k.reason})`).join('; ') +
 				'.'
+		);
+	}
+	if (z.chirpsDryDays) {
+		out.push(
+			`Flagged zero runs kept as recorded (dry) on ${z.chirpsDryDays} day${z.chirpsDryDays === 1 ? '' : 's'} where CHIRPS reads ${z.fillAboveChirpsMm} mm or less: ` +
+				'only days CHIRPS reads more on are treated as missing (Settings → Zero-rain runs).'
 		);
 	}
 	if (z.asRecordedDays > 0) {

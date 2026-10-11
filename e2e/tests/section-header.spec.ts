@@ -62,7 +62,7 @@ test.describe('desktop', () => {
 		await nav(page).getByRole('link', { name: 'Crops & demand' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
 		await expect(h.getByTestId('crops-summary')).toContainText(/crops? · /);
-		await expect(actions).toHaveText(['Load crop factors…', '+ Add crop', 'Add data', 'Run model']);
+		await expect(actions).toHaveText(['Load crop factors…', 'Import plantings…', '+ Add crop', 'Add data', 'Run model']);
 
 		// Data: Add data and Run model, after the tab's Preview all data. The context counts the series.
 		await nav(page).getByRole('link', { name: /^Data/ }).click();

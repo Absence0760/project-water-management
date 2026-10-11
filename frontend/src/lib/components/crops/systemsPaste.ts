@@ -61,6 +61,9 @@ export function systemsCsv(systems: readonly System[]): string {
 
 /** The Expected format of the systems' paste (issue #477). */
 export const SYSTEMS_FORMAT: GridFormat = {
+	id: 'irrigation-systems-grid',
+	title: 'Irrigation systems',
+	where: 'Crops & demand → Tables → Irrigation systems → Paste from a spreadsheet',
 	rules: [
 		'A heading row: System, Efficiency (%). A SABI range or Used by column may stay; the paste leaves it out.',
 		'A row per system, its name first. A name the project has updates its efficiency, and every crop on it follows; a new name adds a system of the scheme’s own.',

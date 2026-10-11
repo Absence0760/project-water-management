@@ -19,7 +19,7 @@ import { modelProblems } from '../model/validate.js';
 import { runLiveModel } from '../runs/execute.js';
 import { requireTeamRole } from '../teams/access.js';
 import { ProjectFile } from './document.js';
-import { importedAutoFitError, mergeSettings, remapSettingNodeIds } from './settings.js';
+import { importedAutoFitError, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds } from './settings.js';
 
 /**
  * Body cap for POST /projects/import: 5 MB, the same as the JSON export cap
@@ -99,12 +99,15 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	if (opts.teamId) await requireTeamRole(db, opts.teamId, 'member', 'team not found');
 	const { model, ids } = freshIds(data.model as ProjectModel);
 	const id = crypto.randomUUID();
+	const settings = importedSettings(data.settings, ids);
+	// Licence data never drives the baseline (issue #507): a file that caps or fully allocates it imports comparing only, and the import's revision says so.
+	const allocNote = normaliseBaselineAllocationMode(settings);
 	// Id generated here, not via RETURNING: RLS checks RETURNING rows against
 	// the SELECT policy before the AFTER trigger has made the importer owner.
 	await db.query(
 		`INSERT INTO project (id, name, description, settings, created_by, team_id, time_zone)
 		 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, $6)`,
-		[id, opts.name !== undefined ? projectName.parse(opts.name) : data.name, data.description, JSON.stringify(importedSettings(data.settings, ids)), opts.teamId ?? null, data.timeZone]
+		[id, opts.name !== undefined ? projectName.parse(opts.name) : data.name, data.description, JSON.stringify(settings), opts.teamId ?? null, data.timeZone]
 	);
 	await saveModel(db, id, model);
 	for (const s of data.series) {
@@ -138,7 +141,7 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 		);
 	}
 	// The project's history starts with the imported state (030_history.sql).
-	await recordModelRevision(db, id, { source: 'import', before: null });
+	await recordModelRevision(db, id, { source: 'import', before: null, ...(allocNote ? { reason: allocNote } : {}) });
 	return id;
 }
 

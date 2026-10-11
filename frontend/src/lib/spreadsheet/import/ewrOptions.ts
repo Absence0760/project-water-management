@@ -42,10 +42,11 @@ export function readEwrOptions(wb: B023Workbook, report: Report): EwrDailySource
 		method = 'pragmatic';
 	}
 	const rawScaling = wb.has('zEwrOpt_Scaling') ? clean(wb.cellNamed('zEwrOpt_Scaling')) : '';
-	let scaling = SCALINGS[rawScaling.toLowerCase() || 'mar ratio'];
+	// No scaling given: the area ratio, the default since 2026-10-10 (issue #90 B2; engine blankEwrDailySource).
+	let scaling = SCALINGS[rawScaling.toLowerCase() || 'area ratio'];
 	if (scaling === undefined) {
-		report.note('ewr-options-fallback', `WARNING: [EWR options] the scaling "${rawScaling}" is not MAR ratio or Area ratio: imported as MAR ratio`, { sheet: SHEET });
-		scaling = 'mar';
+		report.note('ewr-options-fallback', `WARNING: [EWR options] the scaling "${rawScaling}" is not MAR ratio or Area ratio: imported as Area ratio`, { sheet: SHEET });
+		scaling = 'area';
 	}
 	const tableMarMm3 = wb.has('zEwrOpt_TableMar') ? positive(wb.cellNamed('zEwrOpt_TableMar')) : null;
 	const tableAreaKm2 = wb.has('zEwrOpt_TableArea') ? positive(wb.cellNamed('zEwrOpt_TableArea')) : null;

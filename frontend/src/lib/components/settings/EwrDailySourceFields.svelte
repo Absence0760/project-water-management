@@ -29,7 +29,8 @@
 	import { parseGrid } from './ewrRules';
 	import { api } from '$lib/api';
 	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
-	import { dailySourceError, exampleDailyCsv, lastRunScale, parseMonthlyRow, rulLoad, scaleFactor, type LastRunScale } from './ewrDailySource';
+	import ScaledEwrTablesView from './ScaledEwrTablesView.svelte';
+	import { dailySourceError, knownScale, lastRunScale, parseMonthlyRow, rulLoad, scaledEwrTables, scaleFactor, type LastRunScale } from './ewrDailySource';
 
 	let {
 		value = $bindable(),
@@ -44,7 +45,7 @@
 		readonly?: boolean;
 		/** Show the problem as an alert (false: the parent's own alert announces it, so it isn't heard twice). */
 		announce?: boolean;
-		/** The units' areas summed, km² (the area ratio's numerator). */
+		/** The area the run's natural flow is made on, km² (the area ratio's numerator; engine resolveCatchmentAreaKm2). */
 		modelAreaKm2: number;
 		/** The project, to read its last run's natural MAR for the MAR ratio's factor (none: the factor waits for a run). */
 		projectId?: string | null;
@@ -76,6 +77,8 @@
 		})();
 	});
 	const factor = $derived(scaleFactor(src, modelAreaKm2, lastRun));
+	// The tables × s as the run reads them (issue #90 B1 gap a), once s is known.
+	const scaled = $derived(scaledEwrTables(src, knownScale(src, modelAreaKm2, lastRun)));
 
 	$effect(() => {
 		error = dailySourceError(value);
@@ -197,7 +200,6 @@
 	}
 
 	// The CSV layout the Expected format offers beside the DRM files (synthetic numbers).
-	const csvFiles = [{ name: 'ewr-example.csv', text: exampleDailyCsv(), label: 'Example CSV (percentile table, m³/s)' }];
 </script>
 
 <fieldset class="plain daily" data-testid="ewr-daily-source">
@@ -219,8 +221,8 @@
 			<div class="field">
 				<label for="{uid}-scaling">Scale the tables by</label>
 				<select id="{uid}-scaling" disabled={readonly} value={src.scaling} onchange={(e) => edit({ scaling: e.currentTarget.value as EwrDailySource['scaling'] })} aria-describedby="{uid}-s-h">
+					<option value="area">Area ratio: the modelled area ÷ the table’s (the default)</option>
 					<option value="mar">MAR ratio: the model’s natural MAR ÷ the table’s</option>
-					<option value="area">Area ratio: the modelled area ÷ the table’s</option>
 				</select>
 			</div>
 			<div class="field">
@@ -231,7 +233,7 @@
 			<div class="field">
 				<label for="{uid}-area">Table catchment area <span class="u">(km²)</span></label>
 				<NumberInput id="{uid}-area" min={0} nullable disabled={readonly} value={src.tableAreaKm2} onchange={(v) => edit({ tableAreaKm2: v })} aria-describedby="{uid}-area-h" />
-				<span class="hint" id="{uid}-area-h">Needed for the area ratio. The modelled area is {fmtNum(modelAreaKm2, 1)} km² (the units’ areas).</span>
+				<span class="hint" id="{uid}-area-h">Needed for the area ratio (the default). The modelled area is {fmtNum(modelAreaKm2, 1)} km², the area the natural flow is made on (the calibration catchment area when set, else the units’ areas).</span>
 			</div>
 			<p class="factor" id="{uid}-s-h" data-testid="ewr-scale-factor" aria-live="polite">{factor}</p>
 		{/if}
@@ -284,7 +286,7 @@
 						</div>
 					</div>
 				{/if}
-				<DrmFormatHelp target="dailyEwr" {csvFiles} context="of a file for the daily EWR at the outlet" />
+				<DrmFormatHelp target="dailyEwr" context="of a file for the daily EWR at the outlet" />
 			</div>
 		{/if}
 
@@ -335,6 +337,15 @@
 			{@render grid('naturalPctM3s', 'Natural flow percentile table')}
 			{@render grid('reservePctM3s', 'Total Reserve flow percentile table')}
 		{/if}
+
+		<details class="scaled-wrap" open data-testid="ewr-scaled">
+			<summary>The tables scaled to the model (each value × s)</summary>
+			{#if scaled}
+				<ScaledEwrTablesView tables={scaled} />
+			{:else}
+				<p class="small" data-testid="ewr-scaled-pending">The scaled tables show here once the tables and the scale factor are known (see the scale factor above).</p>
+			{/if}
+		</details>
 
 		{#if !readonly}
 			<div class="paste">
@@ -455,5 +466,16 @@
 	.err {
 		color: var(--danger);
 		font-size: 0.8rem;
+	}
+	.scaled-wrap {
+		margin-top: 0.75rem;
+	}
+	.scaled-wrap summary {
+		font-weight: 500;
+		font-size: 0.85rem;
+		cursor: pointer;
+	}
+	.scaled-wrap p {
+		margin: 0.35rem 0 0;
 	}
 </style>

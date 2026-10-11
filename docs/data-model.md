@@ -133,7 +133,7 @@ data](./api.md#model-data)).
 | `borehole_trigger_pct` | (none) | Drought rule: runs while the dam is below this fraction of capacity (0–1, default 0.3) |
 | `stream_depletion_frac` | (none) | Share d (0–1, default 0) of the pumping taken from the river at the node |
 | `stream_depletion_lag_days` | (none) | Lag time constant k (0–36 500 days, default 0 = same day) |
-| `user_priority` | (none) | Kind `user` only: `senior` (default) or `junior` (CHECK). The API refuses crop areas and transfers on a user node |
+| `user_priority` | (none) | Kind `user` only: `senior` (default) or `junior` (CHECK), shown as Priority / Non-priority (model.md §2.7c). The API refuses crop areas and transfers on a user node |
 | `supply_rule` | (none: b023 irrigates from the dam only) | Farms only (migration 060, engine ≥ 0.42.0, WP-3.8, [model.md §2.7e](./model.md)): `damFirst` (default, every existing row: the dam only), `riverFirst`, `trigger` or `runOfRiver` (CHECK). The API refuses a rule other than `damFirst` on a gauge or user, a pump capacity on a gauge, `trigger` without a dam and `runOfRiver` with one |
 | `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; on a farm inert under `damFirst`. On an other water user (engine ≥ 1.58.0, no migration: 060's column has no kind check) its own river pump, [model.md §2.7c](./model.md); the column comment from 060 still says farms only. Stored per day, not as pumps × m³/h (the form's calculator) |
 | `supply_trigger_pct` | (none) | `trigger` only: switch to the river below this fraction of dam capacity (0–1, default 0.4) |
@@ -144,7 +144,7 @@ data](./api.md#model-data)).
 | `crop_share_dam`, `crop_share_river`, `crop_share_remote` | (none: b023's crops draw on the dam) | Farms only (migration 202, engine ≥ 1.73.0, issue #408, [model.md §2.7k](./model.md)): the crop supply table, the share (0–1, CHECK) of the crop demand asked of the unit's dam side, the river (the crops' river abstraction, above) and another unit's dam. All three NULL (default, every existing row) = no table: the crops take `crop_water_source`. The API refuses shares not adding up to 100 % and a table off a farm (`modelRuleIssues`, `cropShareSum`, `cropShareKind`) |
 | `crop_remote_node_id` | (none) | FK → node, ON DELETE SET NULL, indexed, same project (the node's same-project trigger checks it with `downstream_node_id`): the unit whose dam gives `crop_share_remote`. The API refuses a remote share without another unit with a dam, or with one this unit drains into (`cropRemoteNode`, `cropRemoteDam`, `cropRemoteLoop`). The model store sets it with the topology, once every node exists |
 | `crop_remote_cap_m3_day` | (none) | The pipe or canal's capacity from that dam, m³/day (≥ 0, finite, CHECK); NULL = no limit (the run warns) |
-| `hands_off_m3_day` | (none: b023 leaves only senior users' demand) | Farms only (migration 114, engine ≥ 1.32.0, WP-3.8, issue #204, [model.md §2.7h](./model.md)): the hands-off flow, `float8[]` of 12 m³/day values by water-year month (Oct–Sep), left in the river before the river pump and River to dam take anything (on a farm with no dam, before what it irrigates straight from the river). NULL (default, every existing row) = none. CHECK 12 values, none NULL, none negative |
+| `hands_off_m3_day` | (none: b023 leaves only priority users' demand) | Farms only (migration 114, engine ≥ 1.32.0, WP-3.8, issue #204, [model.md §2.7h](./model.md)): the hands-off flow, `float8[]` of 12 m³/day values by water-year month (Oct–Sep), left in the river before the river pump and River to dam take anything (on a farm with no dam, before what it irrigates straight from the river). NULL (default, every existing row) = none. CHECK 12 values, none NULL, none negative |
 | `hands_off_ewr` | (none) | Farms only (migration 114): also leave the EWR required at the farm (its cumulative requirement) in the river, as a river off-take's `transfer.hands_off_ewr` does. `false` (default, every existing row). Keep = MAX(the month's hands-off amount, the EWR when ticked) |
 | `divert_monthly_m3_day` | (none: b023's one m³/s) | Farms only (migration 114): River to dam's capacity by water-year month, `float8[]` of 12 m³/day values; when set it replaces `divert_capacity_m3_day` (0 in a month = no diversion, a dam filled in winter only). NULL (default) = the one value all year. CHECK 12 values, none NULL, none negative. The API refuses any of the three off a farm (the engine's `modelRuleIssues`, `operatingKind`) |
 | `ewr_site` | (none: b023 checks the EWR at every gauge) | Gauges (migration 086, engine ≥ 1.5.0, [model.md §2.7b](./model.md)): whether the EWR is assessed here. `true` (default, every existing row); `false` only on a gauge (CHECK `node_ewr_site_gauge`), never the outlet (a model rule the API applies on save). False = the gauge charges nobody and a Reserve rule table there is skipped |
@@ -812,6 +812,9 @@ the result change?", and put back any earlier version.
   `calibration_rules.signed_off` / `calibration_rules.sign_off_withdrawn`
   (issue #153: the rules' revision and, when signed, the signer's typed name;
   the actor is the signing account),
+  `settings.allocation_mode_reset` (213, issue #507: a stored baseline that
+  capped or fully allocated was moved to compare only, `{ from, to }`; no
+  actor, written by the migration),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
   registration numbers, file name and hash, counts; never a holder's name;
   a viewer reads `allocation.created/changed/deleted` without the
@@ -3489,6 +3492,22 @@ later settings save fail: 187 sets each negative month in those two rows to 0
 (what the engine already runs) and leaves every other value, key and row as it
 was. Stored runs keep the inputs they ran with. A project file that still
 carries a negative month is refused on import, as the routes refuse it.
+
+### The baseline compares registered volumes only (213_baseline_allocation_compare_only.sql)
+
+Issue #507, the operator's principle (2026-10-10): licence data never drives
+the baseline. A project's own `settings.allocationMode` stays `'none'`
+(compare only); the engine's `'cap'` and `'fullAllocation'` are a scenario's
+(`settings.set` on `allocationMode`, [scenarios.md](./scenarios.md)). PATCH
+`/projects/:id` refuses another mode (400, [api.md](./api.md)), and settings
+arriving any other way come in comparing only, with a note in the revision's
+reason (`normaliseBaselineAllocationMode`, `projects/settings.ts`): a project
+file on import, a copy of a project, and a restore of an older revision or of
+an older run's inputs. 213 moves every stored project with another mode (any
+string but `'none'`) to `'none'` and records the move on its History as a
+`settings.allocation_mode_reset` audit event, `{ from, to }`, with no actor.
+Stored runs and model revisions keep the mode they ran or were saved with
+(records of the past); a capped run of before stays readable as one.
 
 ### Legacy runoff settings removed (064_remove_legacy_runoff.sql)
 

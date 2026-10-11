@@ -35,6 +35,8 @@ import {
 	parseUnitRainSeriesKey,
 	resolvePe,
 	SUPPLY_RULE_LABEL,
+	userPriorityWord,
+	type UserPriority,
 	OBSERVED_SERIES_LABEL,
 	parseGaugeSeriesKey,
 	upgradeLegacyModel,
@@ -1245,7 +1247,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['returnFlowFraction', 'return flow (share of water supplied)', pct],
 	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
 	['userReturnPct', 'share returned', pct],
-	['userPriority', 'priority', plain],
+	['userPriority', 'user class', (v) => userPriorityWord(v as UserPriority)],
 	// Boreholes (WP-1.34).
 	['boreholeCapacityM3Day', 'borehole capacity', withUnit('m³/day', 0)],
 	['boreholeRule', 'borehole rule', plain],
@@ -1351,7 +1353,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			subject: n.name,
 			text:
 				n.kind === 'user'
-					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${typeof n.pumpCapacityM3Day === 'number' ? `, pump ${fmtValue(n.pumpCapacityM3Day, 0)} m³/day` : ''}${into ? `, drains into ${into}` : ''})`
+					? `Other water user "${n.name}" added (${userPriorityWord(n.userPriority)} user, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${typeof n.pumpCapacityM3Day === 'number' ? `, pump ${fmtValue(n.pumpCapacityM3Day, 0)} m³/day` : ''}${into ? `, drains into ${into}` : ''})`
 					: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
 		});
 	}

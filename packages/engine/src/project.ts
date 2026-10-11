@@ -186,7 +186,23 @@ export interface ZeroRainSettings {
 	keepReadings: CalibrationExclusion[];
 	/** Accumulation windows listed by hand (the reading is the period's last day): spread like a detected one, in 'spread' mode. */
 	addAccumulations: CalibrationExclusion[];
+	/**
+	 * In 'missing' mode, each day of a flagged zero run is decided on its own
+	 * (engine ≥ 1.81.0, issue #507 item 3, audit B2): set aside and filled
+	 * only where the stored CHIRPS reads more than this, mm; at or below it
+	 * (CHIRPS saw at most drizzle) the gauge's zero is kept as a dry day. A
+	 * day with no CHIRPS reading is set aside as before. Default
+	 * ZERO_RAIN_FILL_ABOVE_CHIRPS_MM (2 mm). Absent on settings saved before
+	 * 1.81.0, which run with the default; before 1.81.0 every day of a
+	 * flagged run was set aside.
+	 */
+	fillAboveChirpsMm?: number;
 }
+
+/** settings.zeroRainRuns.fillAboveChirpsMm's default, mm (the hydrologist's 2 mm, issue #507 item 3, 2026-10-10). */
+export const ZERO_RAIN_FILL_ABOVE_CHIRPS_MM = 2;
+/** The largest threshold the settings accept, mm. */
+export const ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM = 50;
 
 export const defaultZeroRainSettings = (): ZeroRainSettings => ({
 	mode: 'missing',
@@ -194,7 +210,8 @@ export const defaultZeroRainSettings = (): ZeroRainSettings => ({
 	missing: [],
 	accumulationMode: 'spread',
 	keepReadings: [],
-	addAccumulations: []
+	addAccumulations: [],
+	fillAboveChirpsMm: ZERO_RAIN_FILL_ABOVE_CHIRPS_MM
 });
 
 /**
@@ -835,7 +852,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationExclusions: [],
 		// Off: no record is filled (./flowGapFill.ts defaultFlowGapFill).
 		flowGapFill: { flow_observed_m3s: null, flow_logger_m3s: null },
-		qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' },
+		qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [] },
 		calibrationRules: defaultCalibrationRules(),
 		fitRecord: null,
 		dataQuality: defaultDataQualitySettings(),
@@ -1233,6 +1250,14 @@ export type NodeKind = 'farm' | 'gauge' | 'user';
  */
 export const USER_PRIORITIES = ['senior', 'junior'] as const;
 export type UserPriority = (typeof USER_PRIORITIES)[number];
+/**
+ * The words the app shows for a priority (#507 item 4): stored as
+ * 'senior'/'junior', shown as Priority / Non-priority. "Non-priority" is our
+ * pick pending the client's hydrologist's confirmation (docs/model.md §2.7c).
+ */
+export const USER_PRIORITY_LABEL: Record<UserPriority, string> = { senior: 'Priority', junior: 'Non-priority' };
+/** A priority's word in running text: 'priority' / 'non-priority'. */
+export const userPriorityWord = (p: UserPriority | null | undefined): string => USER_PRIORITY_LABEL[p === 'junior' ? 'junior' : 'senior'].toLowerCase();
 
 /**
  * Time-series kinds a project can hold. Values are daily, starting at `startDate`.

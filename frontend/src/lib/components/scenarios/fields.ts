@@ -30,6 +30,7 @@ import {
 	WATER_SOURCES,
 	TRANSFER_SET_FIELDS,
 	USER_PRIORITIES,
+	USER_PRIORITY_LABEL,
 	ZERO_RAIN_MODES,
 	damCurveProblem,
 	isIsoDate,
@@ -171,7 +172,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	streamDepletionLagDays: { label: 'Stream depletion lag', spec: num('days') },
 	userDemandM3Day: { label: 'Demand by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	userReturnPct: { label: 'Share returned', spec: pct() },
-	userPriority: { label: 'Priority', spec: { t: 'enum', options: plain(USER_PRIORITIES) } },
+	userPriority: { label: 'Priority', spec: { t: 'enum', options: plain(USER_PRIORITIES, USER_PRIORITY_LABEL) } },
 	// Supply rule and river pump (WP-3.8, docs/model.md §2.7e): the rule's words are run comparison's (engine compare.ts).
 	supplyRule: {
 		label: 'Supply rule',

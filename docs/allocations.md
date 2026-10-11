@@ -38,7 +38,7 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 
 Licence conditions are recorded and shown (the list sums them up in one
 line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions"). The months and
-the maximum rate bind a run whose allocation mode is **cap** (engine 1.37.0,
+the maximum rate bind only a scenario run whose allocation mode is **cap**, never the baseline (issue #507; engine 1.37.0,
 [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)):
 the unit takes nothing of that source in a month outside the months of use,
 and at most the rate × 86 400 m³ a day. The comparison and a full-allocation
@@ -191,7 +191,7 @@ For a run, per farm or water user, per water source and per **water year**
   return. That water left the river and was never used, so it is added to
   the surface side (`diverted_loss`), beside the draws. Filling the dam isn't
   counted, and spill and releases go back to the river. Under a cap
-  (Settings › Registered volumes) the loss counts against the year's volume
+  (a scenario's allocation mode: the baseline only compares, issue #507) the loss counts against the year's volume
   before the day's draws, never against a licence's daily rate or months, and
   the cap can't stop it, so a year can read over its volume by losses alone.
   Runs from an older engine have no such series and read as before. Pending
@@ -222,13 +222,36 @@ For a run, per farm or water user, per water source and per **water year**
 
 ### The allocation mode (engine ≥ 1.18.0)
 
-Settings › Registered volumes › **Allocation mode** (`settings.allocationMode`)
-decides what the volumes do to a run
-([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)):
+`settings.allocationMode` decides what the volumes do to a run
+([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 
-- **Compare only** (the default): nothing; every run with volumes carries
-  the comparison's whole-year figures in its summary.
-- **Cap use at the registered volume**: each unit's surface-water use and
+**Licence data never drives the baseline** (the operator's principle,
+issue #507, 2026-10-10). The baseline's abstractions come from the
+hydrologist's inputs only: crops and areas, demand objects, pump and
+diversion capacities, boreholes. Registered and licensed volumes, their
+months of use and maximum rates are used only in separate outputs: this
+comparison (modelled use against the licensed volume) and the storage
+comparison (dam capacity against the licensed dam volume). So a project's
+own settings are always **Compare only**: Settings › Registered volumes shows
+the mode without a choice, `PATCH /projects/:id` refuses another one (400,
+[api.md](./api.md)), and a project file, a copy or a restore of an older
+revision or run comes in comparing only, with a note in the History
+revision's reason. 213 moved every stored project that capped or fully
+allocated to compare only, recorded on its History
+([data-model.md](./data-model.md)); runs made before keep the mode they ran
+with. **Cap** and **full allocation** stay in the engine for **scenarios**:
+"what if use were capped at the licences" or "what if every licence were
+taken in full" is a scenario that sets `allocationMode`
+(`settings.set allocationMode`, Change a setting › Allocation mode,
+[scenarios.md](./scenarios.md)), never the baseline. A guard test holds a
+compare-only run bit-identical with and without volumes
+(`packages/engine/src/allocations/baseline.test.ts`). The full authorised use
+impact base of an application's evidence report runs its own full-allocation
+pair beside the baseline (licensing build item 8), a separate analysis too.
+
+- **Compare only** (the baseline's mode, and the default): nothing; every run
+  with volumes carries the comparison's whole-year figures in its summary.
+- **Cap use at the registered volume** (a scenario's): each unit's surface-water use and
   groundwater use per water year stay within its volumes. The budget is the
   whole year's volume, so a unit may take it early; its boreholes cover what
   a capped surface can't, within the groundwater volume. A source with no
@@ -245,12 +268,11 @@ decides what the volumes do to a run
   force on (check the licence dates), and the Allocations tab says the run
   was capped. Both answers are provisional, pending the hydrologist
   ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72), §2.6a).
-- **Full allocation**: each unit's demand is scaled, year by year, to ask
+- **Full allocation** (a scenario's): each unit's demand is scaled, year by year, to ask
   for exactly its volumes, keeping its seasonal shape: the river if every
   registered or licensed volume were taken in full (a registration is not an
   entitlement), the background of a cumulative
-  assessment (WP-3.11). A scenario can switch it on for one run
-  (`settings.set allocationMode`, [scenarios.md](./scenarios.md)). A demand
+  assessment (WP-3.11). A demand
   level (an outlook's, a sweep's, a scenario's `demand.scale`, the
   abstraction sensitivity case) applies after the scaling, so 80 % asks for
   80 % of the volumes (engine ≥ 1.70.0, [model.md §2.12a](./model.md)). A

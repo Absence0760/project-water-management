@@ -112,6 +112,9 @@ export function cropFactorsCsv(crops: readonly FactorCrop[]): string {
 
 /** The Planted areas grid's Expected format (issue #477). */
 export const PLANTED_AREAS_FORMAT: GridFormat = {
+	id: 'planted-areas-grid',
+	title: 'Planted areas, a column per crop',
+	where: 'Crops & demand → Tables → Planted areas → Paste from a spreadsheet',
 	rules: [
 		'A heading row: Farm (or Hydrological unit), then a column per crop, named as the project names it (an "(ha)" after the name is fine).',
 		'A row per hydrological unit, its name first. A unit or crop the project doesn’t have is left out: add it first.',
@@ -123,6 +126,9 @@ export const PLANTED_AREAS_FORMAT: GridFormat = {
 
 /** The Crop factors grid's Expected format (issue #477): crop types and their monthly factors. */
 export const CROP_FACTORS_FORMAT: GridFormat = {
+	id: 'crop-factors-grid',
+	title: 'Crop factors',
+	where: 'Crops & demand → Tables → Crop factors → Paste from a spreadsheet',
 	rules: [
 		'A heading row: Crop, then the months Oct to Sep (or October to September), in any order.',
 		'A row per crop, its name first. A name the project doesn’t have adds that crop, on drip irrigation; a known name updates its factors.',

@@ -5,6 +5,8 @@
 // dialog applies the accepted changes to the ModelEditor, and the normal save
 // (with its reason) saves them.
 import { type CropDef, type ProjectModel } from '@water-management/engine';
+import type { FileFormat } from '$lib/components/common/formatHelp';
+import { WORKBOOK_MAX_MB } from '$lib/components/import/workbookFile';
 import { farmDemands } from './demand';
 
 /** Lower case, no accents or punctuation, a plural "s" dropped ("Pecans" ~ "pecan"; not "-ss", "-us": "Grass", "Citrus"). */
@@ -73,6 +75,33 @@ export const NODE_FACTORS_EXAMPLE = [
 	'Citrus    0.65  0.65  0.70  …   0.65  0.85',
 	'Pasture   0.80  0.85  0.90  …   0.80  0.75'
 ].join('\n');
+
+/** Load crop factors' Expected format for a b023 workbook (issue #456; the File formats help page, issue #477). */
+export const B023_FACTORS_FORMAT: FileFormat = {
+	id: 'crop-factors-b023',
+	title: 'Crop factors from a b023 workbook',
+	where: 'Crops & demand → Load crop factors → A b023 workbook',
+	accepts: `A b023 Water Balance Tool workbook (.xlsx or .xlsm), up to ${WORKBOOK_MAX_MB} MB.`,
+	rules: [
+		'The whole tool, with its named ranges: a workbook that lacks them is refused, and the message lists the ones missing.',
+		'The factors come from its [Crop demand] sheet: a row per crop under the month header, twelve A-pan crop factors from Oct to Sep.',
+		'Rows to check (a negative factor, a lone 0 or spike, a factor above 1.0, a row copied from another crop) are listed with the crop’s name; they load as they are.'
+	]
+};
+
+/** The same for a hydrological-unit-based workbook's [Crop_Factors] sheet. */
+export const NODE_FACTORS_FORMAT: FileFormat = {
+	id: 'crop-factors-node-workbook',
+	title: 'Crop factors from a hydrological-unit-based workbook',
+	where: 'Crops & demand → Load crop factors → A hydrological-unit-based workbook',
+	accepts: `A hydrological-unit-based workbook (.xlsx or .xlsm), up to ${WORKBOOK_MAX_MB} MB, with a sheet named Crop_Factors (or “Crop Factors”).`,
+	rules: [
+		'A header row with the twelve months in any order (Oct … Sep, Jan … Dec or the full names), the names’ column headed “Crop” or “Crops”, and optionally an “… efficiency” column just after the months (above 0, up to 1).',
+		'Then a row per crop: its name and twelve FAO-56 crop coefficients (Kc). The table ends at the first row without a name, or at a “Total” row.',
+		'A missing sheet or header is listed as a warning, and so is a cell it can’t read, by its address; a cell that isn’t a number counts as 0.'
+	],
+	example: NODE_FACTORS_EXAMPLE
+};
 
 export const shapeOf = (kind: SourceKind): FactorShape => SOURCE_KINDS.find((k) => k.id === kind)!.shape;
 

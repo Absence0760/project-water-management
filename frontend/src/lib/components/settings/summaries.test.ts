@@ -59,6 +59,7 @@ describe('settingsSummaries', () => {
 				calibrationStart: '2001-10-01',
 				calibrationEnd: null,
 				calibrationExclusions: [{ waterYear: 2004, reason: 'Gauge washed away' }] as never,
+				qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [2, 3, 4] },
 				autoRun: { enabled: true, debounceMinutes: 30, publish: 'never' }
 			}),
 			siteName: 'Melkhout Gauge'
@@ -67,7 +68,7 @@ describe('settingsSummaries', () => {
 		expect(s['set-rain']).toBe('Raw CHIRPS fills gaps · zero runs treated as missing');
 		expect(s['set-demand']).toMatch(/^A-pan 1\s?230 mm a year · effective rain/);
 		expect(s['set-share']).toBe('High/low MAP split, 60% / 40%');
-		expect(s['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out');
+		expect(s['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · river stops Feb, Mar, Apr');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 

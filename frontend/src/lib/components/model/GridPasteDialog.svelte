@@ -12,7 +12,7 @@
 	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
 	import { latestFileText } from '$lib/files/latest';
 	import { fmtNum } from '$lib/format/number';
-	import type { GridFormat, PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { gridFileFormat, type GridFormat, type PastePlan } from '$lib/spreadsheet/paste/grid';
 
 	let {
 		open = $bindable(false),
@@ -100,19 +100,7 @@
 <Dialog bind:open {title} wide>
 	<div class="paste">
 		<p class="small muted">{layout} A blank cell or a dash leaves a value as it is. Commas in numbers are read as the block shows them: 12,5 as a decimal comma, 1,500,000 as thousands.</p>
-		{#if format}
-			<FormatHelp
-				accepts="Cells copied from a spreadsheet, or a file: CSV (.csv), tab-separated (.tsv) or text (.txt)."
-				example={format.example}
-				exampleFile={{ name: format.exampleName, text: format.example }}
-				context={title}
-			>
-				<ul>
-					{#each format.rules as r (r)}<li>{r}</li>{/each}
-					<li>Decimals with a point (12.5) or a comma (12,5); thousands separators (1,500,000) only in a block without decimal commas. A trailing % is allowed.</li>
-				</ul>
-			</FormatHelp>
-		{/if}
+		{#if format}<FormatHelp format={gridFileFormat(format)} context={title} />{/if}
 		<p class="small" data-testid="paste-where">
 			{#if where}Pasted into <strong>{where}</strong>: a block without names or headings starts there.{:else}A block without names or headings starts at the table's first row and column.{/if}
 		</p>

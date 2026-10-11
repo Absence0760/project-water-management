@@ -35,7 +35,9 @@
 			title: 'Reference',
 			links: [
 				{ href: '/help/glossary', label: 'Glossary' },
-				...topics.map((c) => ({ href: topicPath(c), label: CATEGORY_TITLES[c] }))
+				...topics.map((c) => ({ href: topicPath(c), label: CATEGORY_TITLES[c] })),
+				// Every upload and paste box's Expected format (issue #477).
+				{ href: '/help/formats', label: 'File formats' }
 			]
 		}
 	];

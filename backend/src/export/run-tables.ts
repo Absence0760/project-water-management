@@ -2,6 +2,7 @@
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
 import {
 	CROPS_TAKE_KEY,
+	USER_PRIORITY_LABEL,
 	demandPctNote,
 	DOUBLE_MASS_MIN_DAYS,
 	DOUBLE_MASS_MIN_YEARS,
@@ -92,7 +93,7 @@ const CATCHMENT_ORDER = [
 // A farm's columns in FarmTemplate order (F … AB), intermediate ones included
 // (engine ≥ 0.12.0), so the file reads left to right like the formulas.
 const NODE_ORDER = FARM_DAILY_COLUMNS.map((c) => c.key);
-/** The series keys a farm can have, the optional ones included (land cover, boreholes, senior users): what the all-farms export (`farms.csv?key=`) accepts. */
+/** The series keys a farm can have, the optional ones included (land cover, boreholes, priority users): what the all-farms export (`farms.csv?key=`) accepts. */
 export const FARM_SERIES_KEYS: ReadonlySet<string> = new Set(NODE_ORDER);
 const rank = (keys: string[]) => new Map(keys.map((k, i) => [k, i]));
 const RANK = { catchment: rank(CATCHMENT_ORDER), node: rank(NODE_ORDER) };
@@ -1704,7 +1705,7 @@ export function* riverTakeLines(summary: RunSummary): Generator<string> {
 
 /**
  * Other water users (engine ≥ 0.22.0, WP-1.33): the whole-run means, then the
- * reporting window's EWR charge and whether it is curtailed (a senior user is
+ * reporting window's EWR charge and whether it is curtailed (a priority user is
  * not; docs/model.md §2.11). Only in runs that have users.
  */
 export function* otherUserLines(summary: RunSummary): Generator<string> {
@@ -1726,7 +1727,7 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 	for (const u of summary.users ?? []) {
 		yield csvRow([
 			u.name,
-			u.priority,
+			USER_PRIORITY_LABEL[u.priority],
 			u.avgDemandM3Day,
 			u.avgSuppliedM3Day,
 			u.avgDeficitM3Day,
@@ -1743,9 +1744,9 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 	yield csvRow(['Other water users: EWR charge and curtailment (reporting window)']);
 	yield csvRow(['User', 'Priority', 'Demand (m³/day)', 'Taken (m³/day)', 'Returned (m³/day)', 'EWR charge (m³/day charged)', 'Curtailed', 'Supply cut (m³/day)', 'Supply cut (l/s)', 'Charge not removed by a cut (m³/day charged)']);
 	for (const r of rows) {
-		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, charged(r.ewrChargeM3Day), r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, charged(r.uncurtailedChargeM3Day)]);
+		yield csvRow([r.name, USER_PRIORITY_LABEL[r.priority], r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, charged(r.ewrChargeM3Day), r.curtailed ? 'yes' : 'no (priority)', r.supplyCutM3Day, r.supplyCutLs, charged(r.uncurtailedChargeM3Day)]);
 	}
-	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
+	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A priority user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
 }
 
 /**

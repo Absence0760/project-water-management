@@ -115,6 +115,10 @@ describe('what an item says', () => {
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
 		expect(eventLine(ev('calibration_rules.sign_off_withdrawn', { revision: 3 }))).toBe('Withdrew the sign-off of the calibration rules (revision 3)');
+		// 213 (issue #507): no actor, the migration wrote it.
+		expect(eventLine(ev('settings.allocation_mode_reset', { from: 'cap', to: 'none' }))).toBe(
+			'The baseline’s allocation mode “Cap use at the registered volume” was set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario)'
+		);
 		expect(eventLine(ev('signoff.created', { fullName: 'Dr A. Hydrologist', registrationBody: 'SACNASP', registrationNo: '400999/20' }))).toBe(
 			'Signed off a run as Dr A. Hydrologist (SACNASP 400999/20)'
 		);

@@ -273,8 +273,9 @@ rows exist for this.
   engine version, so older results stay explainable.
 - ✅ Fill in the rest of the Shortfalls report (target volume, reduce/gain,
   volume left after balancing): the curtailment table (model.md §2.11). Q11
-  and Q13 are decided on a simulated assessor's recommendation (engine
-  0.17.0), pending the hydrologist.
+  and Q13 were decided on a simulated assessor's recommendation (engine
+  0.17.0) and confirmed by the client's hydrologist 2026-10-10 (issue #507
+  item 4).
 - 🚧 Export: CSV per series and per run is built ([api.md § Export](./api.md#export));
   an Excel download of a run (a sheet per farm, like the element sheets) is
   not.
@@ -537,9 +538,9 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >
 > **Decided 2026-09-25: calibrate and validate on the logger. The workbook's
 > gauge column is used only as a regional wet/dry index.** Question 1 below
-> was answered yes by the operator on the hydrologist's behalf (their
-> agreement assumed, not yet written down by them); if the hydrologist later
-> disagrees, reopen #1. This is what the
+> was answered yes by the operator on the hydrologist's behalf, and
+> **confirmed by the client's hydrologist 2026-10-10** (issue #507 item 4,
+> answer 6.1). This is what the
 > workbook and the imported settings already do. The research behind it
 > ([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)):
 > the workbook's gauge column isn't a suitable calibration record for the
@@ -550,7 +551,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 > 1. **Confirm:** the logger is the calibration and validation target, and the
 >    workbook's gauge is a regional wet/dry index only (ranking water years
 >    for the dry→wet test). **Yes (2026-09-25, assumed on the hydrologist's
->    behalf; see above).**
+>    behalf; confirmed by the client's hydrologist 2026-10-10).**
 > 2. **Rating (CR-18):** what is the highest field gauging at the logger, and
 >    which rating curve converts its stage to flow? Flows above that gauging
 >    are extrapolated, so peak days and wet-season volumes are uncertain; the
@@ -573,8 +574,8 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >
 > **Decided 2026-09-26: force the model with the #12 era treatment.** The
 > operator accepted the research's recommendation on the hydrologist's
-> behalf (their agreement assumed, not yet written down by them); if the
-> hydrologist later disagrees, reopen #12. The central configuration:
+> behalf, and it was **confirmed by the client's hydrologist 2026-10-10**
+> (issue #507 item 4, answer 6.2). The central configuration:
 > the station series as recorded where it is sound, with an uncertainty band
 > where it is less so; gaps filled from ERA5 × reference-era monthly factors
 > (the per-range fit period, #40); any era where the station record fails
@@ -597,8 +598,14 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >
 > **Decided 2026-09-26: keep the workbook's A-pan row, and set GR4J's PE at
 > the station-scaled ET₀ level.** The operator accepted the research's
-> recommendation on the hydrologist's behalf (their agreement assumed, not
-> yet written down by them); if the hydrologist later disagrees, reopen #13.
+> recommendation on the hydrologist's behalf; the client's hydrologist
+> **confirmed it 2026-10-10 for the runoff model's PE** (issue #507 item 4,
+> answer 6.3: GR4J's PE stays at the station-scaled level for now; an S-pan
+> PE for GR4J is parked, so no refit). **Changed for dam evaporation:**
+> A-pan is for crop demand only, and dam evaporation converts it to S-pan
+> with the "WR90 lake factors, Taljaard (2023) pan conversion" preset
+> (answer 6.3a; model.md §2.7a item 4), a project setting the operator
+> switches on the client project.
 > The A-pan row isn't switched, so irrigation demand and dam evaporation
 > don't move; GR4J's PE is set through its own monthly PE row with its
 > source (#39, engine 0.31.0), not the pan coefficient. It is settled jointly
@@ -661,6 +668,15 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    cases?
 10. **Zero observed flows.** The workbook skips days where observed flow is
     zero when scoring the fit; the app keeps them. Real readings or gaps?
+    *Answered by the client's hydrologist 2026-10-10 (issue #507 item 2):
+    the river does stop flowing in dry years in February, March and April,
+    and the logger has been known to fail. Engine 1.81.0: a zero stretch
+    wholly inside the months the river is known to stop (Settings →
+    Calibration record → Months the river stops; set Feb–Apr on the client
+    project) is scored as the river stopping; any other zero stretch, or
+    with no months one longer than 30 days, is suspect ("check with the
+    client") and left out of the fit by default; an exclusion period stays
+    the manual override ([model.md §2.10h](./model.md#210h-per-day-quality-flags-and-the-flag-aware-objective-engine--1220-calibration-research-cr-181922), engine-audit C3).*
 11. **Fit rating.** Moriasi thresholds were set for monthly flows. Rate daily
     fits against them, or also score monthly totals? *Decided (calibration
     research CR-6): daily fits carry no rating words; monthly scoring is the
@@ -674,7 +690,8 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     reach an upstream farm)? The column "Reduction of demand required (%)" is
     actually the share of demand *left* — which do you report? How does a cut
     apply to a farm with no irrigation? Should l/s truncate (hiding cuts under
-    0.1 l/s)? *Interim (engine 0.17.0, persona recommendation, to confirm):*
+    0.1 l/s)? *Engine 0.17.0, persona recommendation, confirmed by the
+    client's hydrologist 2026-10-10 (issue #507 item 4, Q11, Q13, Q17):*
     reduce/gain is shown as a fairness benchmark only; "Demand left %" is
     bounded 0–100 and blank under 1 m³/day; a farm with no demand gets no
     irrigation cut, its EWR charge shown as *store less / pass inflow*; the
@@ -688,6 +705,11 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     with bias-corrected CHIRPS by default. Are they missing data, or real
     dry spells? Are there other stretches (e.g. partial-record years that
     read far below CHIRPS) that should be treated as missing?
+    *Partly answered by the client's hydrologist 2026-10-10 (issue #507 item
+    3): inside a flagged run only days CHIRPS reads more than 2 mm on are
+    filled; at 2 mm or less the gauge's zero is kept as dry (a project
+    setting, default 2 mm; engine 1.81.0, engine-audit B2). Which runs are
+    wholly real dry spells still needs the station's records.*
 16. **Multi-day accumulations (issue #2).** Some readings look like several
     days' rain entered on the day the gauge was read, after days entered as
     0. From engine 0.20.0 the app
@@ -713,7 +735,10 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     (`settings.lowFlowMeasure`, Lyne–Hollick α 0.995, three passes, the volume
     by default; from engine 1.6.0 each month filtered over its own days and
     the two years before it, so later days never change a month's verdict;
-    model.md §2.9d).* Is ±15 % the right tolerance between the run's natural
+    model.md §2.9d). **Answered 2026-10-10 (the client's hydrologist, issue
+    #507 item 6):** judged on the simulated total flow (the default); the
+    base-flow option stays, marked "Filter settings unconfirmed" until its
+    passes and α are checked against Hughes, Hannart & Watkins (2003).* Is ±15 % the right tolerance between the run's natural
     MAR and the determination's before a run warns? For high flows (§2.9d):
     is an event found in daily flow as at least half its duration at or
     above half its peak, or should the level sit on the base flow? Should a
@@ -780,8 +805,11 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     its dam or irrigating, so adding one changes what the farms upstream get
     in the baseline, much as a dam release rule would. Should a new user start
     junior (it takes only what reaches it) unless its licence or allocation
-    ranks it above the farms upstream? *The default stays senior until the
-    hydrologist answers; the Priority field's note says what senior does.*
+    ranks it above the farms upstream? *Answered 2026-10-10 (#507 item 4):
+    the default is correct, a new user starts senior. The wording changed:
+    the app shows senior / junior as **Priority / Non-priority** (stored
+    values unchanged; "Non-priority" pending the hydrologist's confirmation,
+    model.md §2.7c).*
 
 ### Product
 

@@ -175,7 +175,12 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 		why: 'GridPasteDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed)',
 		in: ['lib/components/model/GridPasteDialog.svelte']
 	},
-	exampleUrl: { why: 'FormatHelp: exampleHref() = `data:<type>;charset=utf-8,` + encodeURIComponent(the example text), one per example file; the type is a literal at every caller (text/csv by default, application/geo+json, text/plain for the synthetic DRM .rul / .tab files of settings/drmFiles.ts drmExampleFiles), and the texts are built in code, never from user input', in: ['lib/components/common/FormatHelp.svelte'] },
+	currentHref: {
+		why: 'ImportPlantingsDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the project’s plantings as CSV, plantingsCsv, names defused by toCsv; empty while closed)',
+		in: ['lib/components/crops/ImportPlantingsDialog.svelte']
+	},
+	formatPath: { why: 'FormatHelp: {base} + "/help/formats#" + a format id, a literal in code (common/formatHelp.ts; fileFormats.test.ts checks each is a lowercase slug)', in: ['lib/components/common/FormatHelp.svelte'] },
+	exampleUrl: { why: 'FormatBody (FormatHelp and the File formats help page): exampleHref() = `data:<type>;charset=utf-8,` + encodeURIComponent(the example text), one per example file; the type is a literal at every caller (text/csv by default, application/geo+json, text/plain for the synthetic DRM .rul / .tab files of settings/drmFiles.ts drmExampleFiles), and the texts are built in code, never from user input', in: ['lib/components/common/FormatBody.svelte'] },
 	templateHref: { why: 'AllocationImport: `data:text/csv;charset=utf-8,` + encodeURIComponent(the template CSV)', in: ['lib/components/allocations/AllocationImport.svelte'] }
 };
 

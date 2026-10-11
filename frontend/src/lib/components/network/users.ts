@@ -1,6 +1,6 @@
 // Other water users (WP-1.33) in the Network tab: their monthly demand as
 // the form edits it, and the one-line description the users panel shows.
-import type { NetworkNode } from '@water-management/engine';
+import { userPriorityWord, type NetworkNode } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 /** A user's 12 monthly demands (m³/day, water-year months); zeros when it has none yet. */
@@ -9,11 +9,11 @@ export function userDemandOf(n: Pick<NetworkNode, 'userDemandM3Day'>): number[] 
 	return Array.from({ length: 12 }, (_, i) => (d && Number.isFinite(d[i]) ? d[i]! : 0));
 }
 
-/** "senior · 1 200 m³/day on average · 40 % returned · pump 800 m³/day", or a hint when it has no demand. */
+/** "priority · 1 200 m³/day on average · 40 % returned · pump 800 m³/day", or a hint when it has no demand. */
 export function describeUser(n: Pick<NetworkNode, 'userDemandM3Day' | 'userReturnPct' | 'userPriority'> & Partial<Pick<NetworkNode, 'pumpCapacityM3Day'>>): string {
 	const d = userDemandOf(n);
 	const mean = d.reduce((a, b) => a + b, 0) / 12;
-	const priority = n.userPriority ?? 'senior';
+	const priority = userPriorityWord(n.userPriority);
 	if (!(mean > 0)) return `${priority} · no demand yet: enter it by month`;
 	const ret = n.userReturnPct ?? 0;
 	// Its pump capacity (engine ≥ 1.58.0), when set.
@@ -23,7 +23,7 @@ export function describeUser(n: Pick<NetworkNode, 'userDemandM3Day' | 'userRetur
 
 /**
  * The line under an other water user's pump capacity (engine ≥ 1.58.0,
- * docs/model.md §2.7c): what blank, 0 and a capacity mean, and for a senior
+ * docs/model.md §2.7c): what blank, 0 and a capacity mean, and for a priority
  * user that the units upstream then pass only what the pump can take.
  */
 export function userPumpNote(n: Pick<NetworkNode, 'pumpCapacityM3Day' | 'userPriority'>, readonly = false): string {
@@ -37,10 +37,10 @@ export function userPumpNote(n: Pick<NetworkNode, 'pumpCapacityM3Day' | 'userPri
 
 /**
  * The line under an other water user's priority (docs/model.md §2.7c, issue
- * #507): a senior user, the default, is a claim on every hydrological unit
+ * #507): a priority user, the default, is a claim on every hydrological unit
  * upstream, so adding one changes what those farms get.
  */
 export function userPriorityNote(priority: NetworkNode['userPriority']): string {
 	if (priority === 'junior') return 'It takes only what reaches it; the hydrological units upstream are not held back for it.';
-	return 'Senior is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a senior user changes what the farms upstream get.';
+	return 'Priority is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a priority user changes what the farms upstream get.';
 }

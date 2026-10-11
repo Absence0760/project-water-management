@@ -2,8 +2,9 @@
 	Settings fields for settings.qualityFlags (engine ≥ 1.22.0, calibration
 	research CR-18/19): the gauged range of each calibration record (the
 	highest and lowest field gaugings behind its rating curve, with their
-	source), and how Fit automatically scores extrapolated, suspect and
-	infilled days. Bind the value; `error` is set while it is invalid, so the
+	source), how Fit automatically scores extrapolated, suspect and
+	infilled days, and (engine ≥ 1.81.0, issue #507 item 2) the months the
+	river is known to stop, which decide which zero-flow stretches are trusted. Bind the value; `error` is set while it is invalid, so the
 	parent form can block saving.
 -->
 <script lang="ts">
@@ -11,6 +12,8 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { ABOVE_OPTIONS, FLAG_OPTIONS, qualityFlagsError, ratedKinds, ratingField, ratingProblem, RECORD_NAME, withRating } from './qualityFlags';
+	import { ZERO_FLOW_TRUST_MAX_DAYS, zeroFlowMonthsText } from '@water-management/engine';
+	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
 
 	let {
 		value = $bindable(),
@@ -119,6 +122,22 @@
 			</select>
 		</div>
 	</div>
+	<!-- Engine ≥ 1.81.0 (issue #507 item 2): absent on settings saved before it, read as none. -->
+	<div class="months" data-testid="zero-flow-months">
+		<p class="months-title" aria-hidden="true">Months the river stops</p>
+		<p class="hint" id="{uid}-months-hint">
+			A broken or blocked logger also reads zero flow. A zero-flow stretch wholly inside the months ticked here is trusted as the river stopping and
+			scored. With months ticked, any other zero stretch is suspect; with none, only a stretch longer than {ZERO_FLOW_TRUST_MAX_DAYS} days is. Suspect days
+			follow “Suspect days” above: check them with the client, and record a logger failure as an exclusion period.
+		</p>
+		<!-- MonthPicker keeps each toggle a 24 px target, 44 px on a phone (WCAG 2.5.8). -->
+		<MonthPicker
+			bind:months={() => value.zeroFlowMonths ?? [], (v) => (value.zeroFlowMonths = v)}
+			label="Months the river stops"
+			summary={zeroFlowMonthsText(value.zeroFlowMonths) === 'none' ? 'None: a zero stretch is judged by its length alone' : zeroFlowMonthsText(value.zeroFlowMonths)}
+			disabled={readonly}
+		/>
+	</div>
 	<!-- A record not shown here (its series is gone) still blocks Save: say so. -->
 	{#if error && !kinds.some((k) => ratingProblem(value, k))}<p class="err">{error}</p>{/if}
 </fieldset>
@@ -159,6 +178,11 @@
 	.field :global(input),
 	.field select {
 		width: 100%;
+	}
+	.months-title {
+		font-weight: 500;
+		font-size: 0.85rem;
+		margin: 0.5rem 0 0.15rem;
 	}
 	.u {
 		color: var(--text-muted);

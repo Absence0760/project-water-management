@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "The daily EWR's DRM tables scaled to the model (issue #90 B1 gap a): ScaledEwrTablesView in the Settings daily-EWR chunk and RunScaledEwrTables, its own lazy chunk on Runs; measured 0.5 + 1.0 KB gzip new chunks plus the helpers"
+}

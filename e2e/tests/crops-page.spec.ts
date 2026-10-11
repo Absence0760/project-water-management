@@ -126,7 +126,7 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 	await closeModal(page);
 	await expect(page.getByTestId('crop-row')).toHaveCount(3);
 	// Nothing planted: last in the list.
-	await expect(page.getByTestId('crop-row').nth(2)).toContainText('Lucerne 0 ha · no crop factors yet');
+	await expect(page.getByTestId('crop-row').nth(2)).toContainText('Lucerne 0 ha · needs crop factors');
 
 	// Remove Vines (planted on a farm, so it asks first); the sheet closes with it.
 	const vines = await openCropSheet(page, 'Vines');
