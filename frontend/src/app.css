@@ -75,7 +75,11 @@
 
 	--series-1: #2a78d6;
 	--series-2: #eb6834;
-	--series-3: #1baf7a;
+	/* 3.6:1 on --surface, 3.2:1 on --surface-2: a line chart's series is a
+	   mark (WCAG 1.4.11); #1baf7a was 2.8:1 (issue #521, the canvas guard).
+	   Darkening it kept it apart from its palette neighbours --series-2 and
+	   --series-5 for colour-blind readers (no pair moved closer). */
+	--series-3: #15996b;
 	/* More categorical colours (the Crops page's crop set, crops/cards.ts
 	   CROP_PALETTE). --series-4 is the line charts' own violet (LineChart), so
 	   the set skips it. Validated with --series-1…3 as an ordered set: every

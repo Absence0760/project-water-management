@@ -885,6 +885,22 @@ section it belongs to, with the example that taught it.
   drawn "lighter" keeps a full-strength outline and fades only its fill
   (`fill-opacity`, never `opacity`), and its note says "outlined", not
   "faded". `e2e/support/contrast.ts` checks both (§ 5).
+  **Canvas charts too.** A uPlot line is a mark: the light theme's
+  `--series-3` (#1baf7a, 2.8:1) failed as the calibration check's upstream
+  demand and the comparison's B − A, so it is #15996b (3.6:1; no palette
+  neighbour moved closer for colour-blind readers), and the hydrograph's
+  quality-flag strips were drawn at 75 %, which put even the red under 3:1;
+  they are drawn at full strength, as keyed. A strip or line that is drawn
+  must not be fainter than its key. Axis labels drawn on the canvas are text
+  (4.5:1; axe can't read a canvas).
+  **Faint on purpose, and why that's allowed:** gridlines and ticks
+  (decoration, as in SVG); `LineChart`'s `shade` tint (`--warning` at 16 %)
+  and a `band`'s tint and hatching, each keyed in words under the plot with a
+  full-strength edge (the band's dashed `--series-4` start line is a mark and
+  passes); and, in the light theme only, the yellow and pink lane strips
+  (`--series-5`, `-6`, 2.1–2.7:1), which sit in their own keyed row with the
+  class named and its days counted. The spec passes those two lanes as an
+  explicit `except`; anything else faint fails.
 - **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
   the dark theme's accent into a mid teal that read as a live secondary
   button; `.btn-primary:disabled` is the plain surface, the strong border and
@@ -1816,9 +1832,19 @@ Interaction details that bit:
   at 3:1. Call it in both themes (`test.use({ colorScheme })`) on a screen
   that has loaded; `nonTextContrast` returns the failures with their
   colours. `non-text-contrast.spec.ts` runs it on Transfers, the node sheet
-  and the reserve chart, with a positive control. uPlot's canvas charts take
-  their colours from tokens, which the dark-mode audit measured once; the
-  helper doesn't see a canvas.
+  and the reserve chart, with a positive control. It checks uPlot's canvas
+  charts too (`canvas: false` turns that off): a series by the colour uPlot
+  was configured with, read from its legend swatch (uPlot paints the swatch
+  from the series' resolved stroke), and what the chart draws itself (lane
+  strips, the axis labels' `--chart-axis`) from the canvas pixels, at the
+  most opaque it is drawn. Pixels alone can't judge a series: one line over
+  another hides it (Supplied over an equal demand read 5 %), and a thin line
+  has no full-strength pixel at 1×. Run canvas checks at
+  `deviceScaleFactor: 2`, and wait for each `figure.chart`'s `data-ready`
+  (scroll it into view first: lower groups draw as they near the window).
+  The spec covers Runs & results, Data, River & reserve, Compare and
+  Hydrological units in both themes, with a real-chart control (a faint
+  token) and a drawn-canvas control (a strip at 40 %, an empty swatch).
 - **To test a loading state, hold the chunk by what it holds.** Production
   chunk names are bare hashes, so a route can't pick the Map's lazy chunk by
   name: fetch every `_app/immutable/**/*.js`, and hold the one whose body has
