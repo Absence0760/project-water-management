@@ -277,6 +277,13 @@ section it belongs to, with the example that taught it.
   strict locators and axe. Measure the column (`bind:clientWidth`) and
   render one or the other; keep container queries for restyling the same
   markup.
+- **One empty state per page, not one per region.** Runs & results with no
+  runs showed the rail's "No runs yet" card and, beside it (under it on a
+  phone), a large centred "Results appear here after a run…" card: two boxes
+  saying one thing, the second a screen of dead space on a phone. The Runs
+  card is now the page's one empty state, across its width with no results
+  column, its first line the old message (specs and help quote it) and a
+  second line saying what a run's results hold.
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
@@ -296,6 +303,17 @@ section it belongs to, with the example that taught it.
   1280 hid Priority, On and Remove off the right edge. Stacking From over To
   in one cell, letting the number headers wrap, and a short "On" header made
   every column fit; side by side only where the container is wide enough.
+  Wrapping headings is not always enough: the run's water balance (thirteen
+  columns of figures beside two rails at 1440) went from 1,230 px to 861 px
+  in a 695 px column once its headings wrapped, because the longest words
+  ("Consumptive", "evaporation") and its float-noise residuals ("1.75e-10")
+  set the widths. Two natural pairs then shared a column, one over the other
+  (each year's rain over its runoff coefficient, the balance's residual over
+  the runoff model's), the cells took a dense table's padding and the unit
+  column the wording rule's short "Unit runoff": it fits at 1440 and 1280. A
+  variant that can never fit (twenty-one columns with every optional term)
+  scrolls inside its box with the row header `position: sticky; left: 0`, so
+  every row stays named (`runs-page.spec.ts`).
   On a phone a wide edit grid becomes one card per row (the crop grids, the
   node table): restyle the same markup, so the inputs, names and tests stay
   one set, and give each field a visible label that names its group, since
@@ -839,6 +857,16 @@ Interaction details that bit:
   `--focus` ring was 1.67:1 on it in dark mode; its controls use the strip's
   text colour (16:1). Compute a ring's contrast against what it sits on, in
   both themes.
+- **Two pills on a phone share a row; the last one's words give.** The
+  Summary's Setup complete (~130 px) and the rain pill (~250 px) needed
+  ~385 px of a 358 px row, so the status row wrapped and each pill sat
+  alone on a half-empty line. The status row is `nowrap` now, the pills keep
+  their width and the last one shrinks, its words in one span wrapping
+  inside it (its date and its age each `nowrap`). A popover inside a pill
+  that no longer starts the row can't open from the pill's own left edge
+  without running off the screen: position it from the row (the row
+  `position: relative`, the pill `static`), as the rain pill's list does
+  (`overview.spec.ts`).
 - **A compact control in a header doesn't wrap.** The EN | AF pair wrapped
   at 320 px and doubled the sticky farm header to 93 px; the compact switch
   is `nowrap` now. Let a title or back link give instead.
@@ -880,6 +908,22 @@ Interaction details that bit:
   "2026-10-11 01:01 · 2021–2022" missed its line by a few px and broke
   after the dash, a third line on all twenty rows. Keep each part
   `nowrap` and use proportional figures where nothing lines up in a column.
+- **A minus is U+2212, and only a column gets tabular figures.** The same
+  `tnum` widening (Inter's hyphen goes from 942 to 1,328 units, a digit's
+  width, with the dash centred) made the KPI tiles read "- 2.26", "2021 - 10 -
+  01" and, in a tile's prose line, "under - estimates": `.stat dd` set tabular
+  figures on every line of a tile. The tiles now use proportional figures, and
+  `fmtNum` writes negatives with U+2212, which Inter draws to fill that width
+  (the farm pages already did; a dozen workspace call sites had been patching
+  it by hand). A display-format change reaches everything that reads its
+  output: grep for `startsWith('-')` and `replace('-'` on formatted strings
+  (the curtailment table's red and green classes keyed on it), make the
+  parser read both signs (`parseNum`, `readNumber`: a grouped field shows
+  `fmtNum`'s text and reads it back), and keep text that is saved or exported
+  in plain decimals (the quaternary lookup's source note, coordinates a GIS
+  reads). Dates a person reads are day first through `fmtDay`, `fmtStamp`
+  and `fmtWhen`; Runs & results showed "2026-10-11 01:13" beside the
+  Summary's "1 Oct 2021".
 - **Move a page's main actions to where they're seen.** Scenarios' Run sat
   under the changes, the form and a checkbox per node, off the first screen
   on a big network; it now sits in the scenario's head row. A section's
