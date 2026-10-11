@@ -217,9 +217,13 @@
 	$effect(() => {
 		// Closed (Done, Esc, the ✕): drop `edit` in place, so Back goes to where it was opened from.
 		if (!sheetOpen && untrack(() => editParam)) {
-			// The section a link opened it on (`section=`) goes with it.
+			// The section a link opened it on (`section=`) goes with it, and the pick (`node=`) when that
+			// node has gone (removed from the sheet): one navigation, since a second one started beside
+			// this from the same URL put back what the other took out.
 			const url = new URL(page.url);
 			url.searchParams.delete('section');
+			const picked = url.searchParams.get('node');
+			if (picked && !untrack(() => nodes.some((n) => n.id === picked))) url.searchParams.delete('node');
 			void goto(withoutParam(url, 'edit'), { replaceState: true, noScroll: true, keepFocus: true });
 		}
 	});
@@ -323,7 +327,8 @@
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
 		if (editParam === id) sheetOpen = false;
-		if (nodeParam === id) void goto(withoutParam(page.url, 'node'), { replaceState: true, noScroll: true, keepFocus: true });
+		// From the sheet, closing it drops `node=` too (above).
+		else if (nodeParam === id) void goto(withoutParam(page.url, 'node'), { replaceState: true, noScroll: true, keepFocus: true });
 		// The button that was pressed has gone (the row's ✕, or the sheet with its Remove and the
 		// card's Edit it would hand the focus back to): put the focus somewhere that still is.
 		await tick();
