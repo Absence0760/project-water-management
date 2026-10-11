@@ -14,7 +14,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, openNodeSection } from '../support/network.ts';
 import { seedShowcaseModel } from '../support/showcase.ts';
 
-const sheetOf = (page: Page) => page.getByRole('dialog', { name: /^Edit |: details$/ });
+const sheetOf = (page: Page) => page.getByRole('dialog', { name: /^(?:Edit .*|.*: details)$/ });
 const card = (sheet: Locator, title: string) => sheet.locator('details.sec').filter({ has: sheet.page().locator('summary > .sec-title', { hasText: new RegExp(`^${title}$`) }) });
 /** The section cards open now, by their headings. */
 const expectOpen = (sheet: Locator, titles: string[]) => expect(sheet.locator('details.sec[open] > summary > .sec-title')).toHaveText(titles);

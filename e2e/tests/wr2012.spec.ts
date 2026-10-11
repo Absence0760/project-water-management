@@ -5,7 +5,7 @@
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openFold, saveChanges, saveSettings } from '../support/settings.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
 import { answerConfirm } from '../support/confirm.ts';
 

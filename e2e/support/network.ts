@@ -26,7 +26,7 @@ export async function openNodeTable(page: Page) {
  * folded form itself.
  */
 export async function openNodeForm(page: Page, name?: string, opts: { folded?: boolean } = {}) {
-	const sheet = page.getByRole('dialog', { name: /^Edit |: details$/ });
+	const sheet = page.getByRole('dialog', { name: /^(?:Edit .*|.*: details)$/ });
 	// Already open (the sheet stays open after a save, and a reload keeps `edit=`): its picker moves it
 	// to another node. Wait for it rather than click the map behind it.
 	if (/[?&]edit=/.test(page.url())) await sheet.waitFor();
