@@ -86,7 +86,10 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 		trs.map((tr) => {
 			const heads = [...tr.closest('table')!.querySelectorAll('thead th')].map((th) => th.textContent!.trim());
 			const col = heads.findIndex((h) => h.startsWith('Modelled use'));
-			return tr.children[col]!.textContent!.trim();
+			// The figure alone: the notes under it (taken at the intake, dam losses) are its own lines.
+			const cell = tr.children[col]!.cloneNode(true) as Element;
+			cell.querySelectorAll('.sub').forEach((n) => n.remove());
+			return cell.textContent!.trim();
 		})
 	);
 	expect(barValues.map((v) => v.replace(/\s*m³$/, ''))).toEqual(tableModelled);
