@@ -58,6 +58,7 @@
 	import type { FitSession } from '$lib/calibration/fitSession.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { fmtNum } from '$lib/format/number';
 
 	let {
@@ -128,8 +129,7 @@
 	const climWarning = $derived(report ? climatologyWarning(columns, report.objective) : null);
 	const benchSource = $derived(report ? benchmarkSourceNote(columns) : null);
 	const anyInterval = $derived(columns.some((c) => c.intervals));
-	// The search fold, closed at first; its line says when a field inside needs fixing (app.css .fold).
-	let searchOpen = $state(false);
+	// The search is a Fold (closed at first; its line says when a field inside needs fixing).
 	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, session.runValidate, penalty, session.runStarts)) : 0);
 	// A report for another model than the form now shows can't be applied.
 
@@ -226,42 +226,34 @@
 			</fieldset>
 			{@render penaltyFields?.()}
 		</div>
-		<details class="fold" data-testid="fit-search" bind:open={searchOpen}>
-			<summary>
-				<span class="fold-name">Search:</span>
-				<span data-testid="fit-search-summary">{searchSummary({ bounds: session.bounds, budget: session.budget, starts: session.starts, seed: session.seed })}</span>
-				<span class="fold-problem">needs fixing</span>
-				<span class="fold-change" aria-hidden="true">{searchOpen ? 'Hide' : 'Change'}</span>
-			</summary>
-			<div class="fold-body">
-				<div class="field">
-					<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
-					<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
-						{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
-					</select>
-					<span class="hint" id="{uid}-bounds-h">{boundsHint(session.bounds)}</span>
-				</div>
-				<div class="field">
-					<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
-					<NumberInput id="{uid}-budget" grouped min={50} max={10_000} step={50} bind:value={session.budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
-					<span class="hint" id="{uid}-budget-h">Default 1 500.</span>
-				</div>
-				<div class="field">
-					<label for="{uid}-starts">Starts</label>
-					<NumberInput id="{uid}-starts" grouped min={1} max={MAX_STARTS} step={1} bind:value={session.starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
-					<span class="hint" class:explain={startsOk} id="{uid}-starts-h">
-						{startsOk
-							? `Separate searches of the whole record, each from its own seed; the best is kept. Nearly equal scores with scattered parameters mean the record can’t pin them down. Default ${DEFAULT_STARTS}.`
-							: `Starts must be a whole number from 1 to ${MAX_STARTS}.`}
-					</span>
-				</div>
-				<div class="field">
-					<label for="{uid}-seed">Seed</label>
-					<NumberInput id="{uid}-seed" grouped min={0} max={SEED_MAX} step={1} bind:value={session.seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
-					<span class="hint" class:explain={!seedProblem} id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
-				</div>
+		<Fold name="Search:" line={searchSummary({ bounds: session.bounds, budget: session.budget, starts: session.starts, seed: session.seed })} testid="fit-search" lineTestid="fit-search-summary">
+			<div class="field">
+				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
+				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
+					{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
+				</select>
+				<span class="hint" id="{uid}-bounds-h">{boundsHint(session.bounds)}</span>
 			</div>
-		</details>
+			<div class="field">
+				<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
+				<NumberInput id="{uid}-budget" grouped min={50} max={10_000} step={50} bind:value={session.budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
+				<span class="hint" id="{uid}-budget-h">Default 1 500.</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-starts">Starts</label>
+				<NumberInput id="{uid}-starts" grouped min={1} max={MAX_STARTS} step={1} bind:value={session.starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
+				<span class="hint" class:explain={startsOk} id="{uid}-starts-h">
+					{startsOk
+						? `Separate searches of the whole record, each from its own seed; the best is kept. Nearly equal scores with scattered parameters mean the record can’t pin them down. Default ${DEFAULT_STARTS}.`
+						: `Starts must be a whole number from 1 to ${MAX_STARTS}.`}
+				</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-seed">Seed</label>
+				<NumberInput id="{uid}-seed" grouped min={0} max={SEED_MAX} step={1} bind:value={session.seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
+				<span class="hint" class:explain={!seedProblem} id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
+			</div>
+		</Fold>
 		{#if penalty}
 			<p class="muted small">
 				The WR2012 MAR penalty is on (above), so the fit also runs once without it for comparison.

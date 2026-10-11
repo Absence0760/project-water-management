@@ -15,6 +15,7 @@
 	import { untrack } from 'svelte';
 	import { EWR_ASSURANCE_MIN_YEARS, EWR_NATURAL_MAR_TOLERANCE, type EwrRuleTable } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { latestFileText } from '$lib/files/latest';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -305,13 +306,7 @@
 		</div>
 
 		<!-- Rarely changed: folded into one line of their values (ui-playbook § 2); "needs fixing" shows while a field inside is invalid. -->
-		<details class="fold" data-testid="rule-settings" bind:open={foldOpen[i]}>
-			<summary>
-				<span class="fold-name">Table settings:</span>
-				<span data-testid="rule-settings-summary">{ruleSettingsSummary(t)}</span>
-				<span class="fold-problem">needs fixing</span>
-				<span class="fold-change" aria-hidden="true">{foldOpen[i] ? 'Hide' : 'Change'}</span>
-			</summary>
+		<Fold name="Table settings:" line={ruleSettingsSummary(t)} body="none" bind:open={foldOpen[i]} testid="rule-settings" lineTestid="rule-settings-summary">
 			<div class="fields fold-fields">
 				<div class="field">
 					<label for="{uid}-{i}-unit">Unit</label>
@@ -378,7 +373,7 @@
 					</span>
 				</div>
 			</div>
-		</details>
+		</Fold>
 
 		{#snippet grid(which: GridKey, label: string)}
 			{@const rows = which === 'ewr' ? t.ewr : which === 'lowFlow' ? t.lowFlow! : t.natural!}

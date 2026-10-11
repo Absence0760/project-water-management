@@ -28,6 +28,7 @@
 	import { detailCache } from '$lib/components/runs/cache';
 	import { fmtStamp } from '$lib/format/number';
 	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { explainSwitch } from '$lib/components/common/explain.svelte';
 	import ApplicationPanel from './ApplicationPanel.svelte';
 	import OpForm from './OpForm.svelte';
@@ -366,7 +367,7 @@
 	}
 </script>
 
-<section class="panel editor" class:explained={explainSwitch.on} aria-labelledby="scenario-h">
+<section class="panel editor explain-scope" class:explained={explainSwitch.on} aria-labelledby="scenario-h">
 	<!-- The scenario's name and status, with what to do with it on the right (issue #17): Run stays on the first
 	     screen however long the changes and the node list below get. -->
 	<div class="sc-head">
@@ -503,12 +504,7 @@
 	<section class="sub-card details-card" aria-labelledby="app-details-h" data-testid="application-details">
 		<h3 id="app-details-h">Application details</h3>
 		{#if showProposer}
-			<details class="fold" data-testid="proposer-fold" bind:open={proposerOpen}>
-				<summary
-					><span class="fold-name">Proposer:</span> <span data-testid="proposer-summary">{proposerLine}</span><span class="fold-change" aria-hidden="true"
-						>{proposerOpen ? 'Hide' : editable ? 'Change' : 'Show'}</span
-					></summary
-				>
+			<Fold name="Proposer:" line={proposerLine} change={editable ? 'Change' : 'Show'} problem={false} body="none" bind:open={proposerOpen} testid="proposer-fold" lineTestid="proposer-summary">
 				<fieldset class="owned">
 					<legend>The proposer's hydrological units{ownable.some((g) => g.legend !== 'Hydrological units') ? ' and users' : ''} <HelpTip key="change-class" label="About proposals and baseline assumptions" /></legend>
 					<p class="hint explain">
@@ -527,7 +523,7 @@
 						</div>
 					{/each}
 				</fieldset>
-			</details>
+			</Fold>
 		{/if}
 
 		<!-- Appendix C's fixed prompts (129_scenario_statement): changed on the description's terms, so not frozen by a submission. -->
@@ -536,57 +532,50 @@
 		{/key}
 
 		{#if editable && !isApplication && !overriding}
-			<details class="fold rebase" data-testid="rebase-fold" bind:open={rebaseOpen}>
-				<summary
-					><span class="fold-name">Based on</span> <span>{s.baseRun.label || 'Untitled run'}</span><span class="visually-hidden">: rebase onto another run</span><span
-						class="fold-change"
-						aria-hidden="true">{rebaseOpen ? 'Hide' : 'Rebase…'}</span
-					></summary
-				>
-				<div class="fold-stack">
-					<p class="hint">
-						<span class="explain">Rebase onto another run: apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say).</span>
-						<HelpTip key="base-run" label="About rebasing a scenario" />
-					</p>
-					{#if rebaseChoices.length}
-						<div class="form-row">
-							<div class="field">
-								<label for="rebase-run">New base run</label>
-								<select
-									id="rebase-run"
-									bind:value={rebaseTo}
-									onchange={() => {
-										rebaseCheck = null;
-									}}
-								>
-									<option value="" disabled>Pick a run</option>
-									{#each rebaseChoices as r (r.id)}<option value={r.id}>{runLabel(r)}</option>{/each}
-								</select>
-							</div>
-							<div class="field">
-								<button type="button" class="btn" disabled={!rebaseTo || rebasing} onclick={checkRebase}>Check</button>
-							</div>
+			<Fold name="Based on" line={s.baseRun.label || 'Untitled run'} change="Rebase…" problem={false} body="stack" class="rebase" bind:open={rebaseOpen} testid="rebase-fold">
+				{#snippet after()}<span class="visually-hidden">: rebase onto another run</span>{/snippet}
+				<p class="hint">
+					<span class="explain">Rebase onto another run: apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say).</span>
+					<HelpTip key="base-run" label="About rebasing a scenario" />
+				</p>
+				{#if rebaseChoices.length}
+					<div class="form-row">
+						<div class="field">
+							<label for="rebase-run">New base run</label>
+							<select
+								id="rebase-run"
+								bind:value={rebaseTo}
+								onchange={() => {
+									rebaseCheck = null;
+								}}
+							>
+								<option value="" disabled>Pick a run</option>
+								{#each rebaseChoices as r (r.id)}<option value={r.id}>{runLabel(r)}</option>{/each}
+							</select>
 						</div>
-						{#if rebaseCheck}
-							<div data-testid="rebase-check">
-								{#if rebaseCheck.problems.length}
-									<p class="warn">
-										{rebaseCheck.skipped === 1 ? "1 change doesn't" : `${rebaseCheck.skipped} changes don't`} apply to that run:
-									</p>
-									<ul class="warn">
-										{#each rebaseCheck.problems as p, i (i)}<li>{nameIds(p, names)}</li>{/each}
-									</ul>
-								{:else}
-									<p>Every change applies to that run.</p>
-								{/if}
-								<button type="button" class="btn btn-primary btn-sm" disabled={rebasing} onclick={rebase}>Rebase onto this run</button>
-							</div>
-						{/if}
-					{:else}
-						<p class="muted">There's no other run of the model to rebase onto.</p>
+						<div class="field">
+							<button type="button" class="btn" disabled={!rebaseTo || rebasing} onclick={checkRebase}>Check</button>
+						</div>
+					</div>
+					{#if rebaseCheck}
+						<div data-testid="rebase-check">
+							{#if rebaseCheck.problems.length}
+								<p class="warn">
+									{rebaseCheck.skipped === 1 ? "1 change doesn't" : `${rebaseCheck.skipped} changes don't`} apply to that run:
+								</p>
+								<ul class="warn">
+									{#each rebaseCheck.problems as p, i (i)}<li>{nameIds(p, names)}</li>{/each}
+								</ul>
+							{:else}
+								<p>Every change applies to that run.</p>
+							{/if}
+							<button type="button" class="btn btn-primary btn-sm" disabled={rebasing} onclick={rebase}>Rebase onto this run</button>
+						</div>
 					{/if}
-				</div>
-			</details>
+				{:else}
+					<p class="muted">There's no other run of the model to rebase onto.</p>
+				{/if}
+			</Fold>
 		{/if}
 	</section>
 
@@ -718,10 +707,6 @@
 	.explain-at {
 		margin-left: auto;
 	}
-	/* The explanations, hidden until the switch is on (still read where a field names them as its description). */
-	.editor:not(.explained) :global(.explain) {
-		display: none;
-	}
 	h3 {
 		margin: 0;
 		font-size: 1rem;
@@ -736,25 +721,9 @@
 	.details-card h3 {
 		margin-bottom: 0.4rem;
 	}
-	/* Its folds sit as one list of lines; each summary has a disclosure marker (the rebase line had none). */
+	/* Its folds sit as one list of lines (each with the app's fold chevron, app.css). */
 	.details-card :global(.fold + .fold) {
 		border-top: 0;
-	}
-	.details-card :global(.fold > summary::before) {
-		content: '';
-		flex: none;
-		width: 0.4rem;
-		height: 0.4rem;
-		margin: 0 0.35rem 0 0.1rem;
-		border-right: 2px solid currentColor;
-		border-bottom: 2px solid currentColor;
-		transform: rotate(-45deg);
-	}
-	.details-card :global(.fold[open] > summary::before) {
-		transform: rotate(45deg);
-	}
-	.fold-stack {
-		padding: 0.25rem 0 0.5rem;
 	}
 	.owned {
 		margin: 0;

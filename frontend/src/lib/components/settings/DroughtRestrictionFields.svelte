@@ -36,6 +36,7 @@
 		type DroughtRestrictionRule
 	} from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { api } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { monthName } from '$lib/format/months';
@@ -161,7 +162,6 @@
 	}
 	const words = $derived(rule ? describeDroughtRestriction(rule, nodeName) : null);
 	const short = $derived(rule ? restrictionShortSummary(rule) : null);
-	let wordsOpen = $state(false);
 </script>
 
 <div class="restrict" data-testid="drought-restriction">
@@ -185,14 +185,9 @@
 	{#if rule}
 		{#if words}
 			<!-- One line; the full wording (every level's cuts, the storage, units and EWR trigger) behind it (issue #521). -->
-			<details class="fold words" data-testid="restriction-rule-fold" bind:open={wordsOpen}>
-				<summary>
-					<span class="fold-name">The rule:</span>
-					<span data-testid="restriction-short">{short}</span>
-					<span class="fold-change" aria-hidden="true">{wordsOpen ? 'Hide' : 'In words'}</span>
-				</summary>
+			<Fold name="The rule:" line={short ?? ''} change="In words" problem={false} body="none" class="words" testid="restriction-rule-fold" lineTestid="restriction-short">
 				<p class="rule" data-testid="restriction-words">The rule: {words}.</p>
-			</details>
+			</Fold>
 		{/if}
 		{#if fromTemplate}
 			<p class="hint" data-testid="restriction-template">
@@ -429,7 +424,7 @@
 		gap: 0.35rem;
 		align-items: center;
 	}
-	.words .rule {
+	:global(.words) .rule {
 		padding: 0 0 0.4rem;
 	}
 	.levels-head {

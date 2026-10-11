@@ -16,6 +16,7 @@
 	import { leavesScenario } from './leaves';
 	import { answeredCount, statementPatch, storedAnswers } from './statement';
 	import { statementSummary } from './details';
+	import Fold from '$lib/components/common/Fold.svelte';
 
 	let {
 		scenarioName,
@@ -35,7 +36,6 @@
 	} = $props();
 
 	const uid = $props.id();
-	let open = $state(false);
 	let editing = $state(false);
 	let draft = $state<ApplicantPrompts>({ ...NO_PROMPTS });
 	const stored = $derived(storedAnswers(answers));
@@ -63,12 +63,7 @@
 	}
 </script>
 
-<details class="fold statement" data-testid="scenario-statement" bind:open>
-	<summary
-		><span class="fold-name">Statement:</span> <span data-testid="statement-count">{statementSummary(answered, APPLICANT_PROMPTS.length)}</span><span class="fold-change" aria-hidden="true"
-			>{open ? 'Hide' : canChange ? 'Change' : 'Show'}</span
-		></summary
-	>
+<Fold name="Statement:" line={statementSummary(answered, APPLICANT_PROMPTS.length)} change={canChange ? 'Change' : 'Show'} problem={false} body="none" class="statement" testid="scenario-statement" lineTestid="statement-count">
 	<section class="fold-stack" aria-labelledby="{uid}-h">
 		<div class="statement-head">
 			<h4 id="{uid}-h">Applicant’s statement</h4>
@@ -105,13 +100,9 @@
 			</dl>
 		{/if}
 	</section>
-</details>
+</Fold>
 
 <style>
-	/* The fold's body: the heading row, the hint and the answers or the form, stacked (not the fold's field grid). */
-	.fold-stack {
-		padding: 0.25rem 0 0.5rem;
-	}
 	.statement-head {
 		display: flex;
 		flex-wrap: wrap;

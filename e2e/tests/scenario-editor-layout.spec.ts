@@ -7,6 +7,7 @@ import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, layoutSettled, resizeTo } from '../support/reflow.ts';
 import { createScenario, openDetails } from '../support/scenarios.ts';
+import { expectFoldsNamed } from '../support/settings.ts';
 
 async function seed(page: Page, name: string) {
 	const project = await seedRunnableProject(page.request, name);
@@ -46,6 +47,8 @@ test('at 1440×900 Add change is on the first screen, and Application details is
 		expect((await summary.boundingBox())!.height).toBeLessThan(48);
 		expect(await summary.evaluate((el) => getComputedStyle(el, '::before').borderRightWidth)).toBe('2px');
 	}
+
+	expect(await expectFoldsNamed(details(page))).toBe(3);
 
 	// Each opens to its form.
 	await openDetails(page, 'proposer-fold');

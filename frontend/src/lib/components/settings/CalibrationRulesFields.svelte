@@ -32,6 +32,7 @@
 	import type { Snippet } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { BOUNDS_LABEL, searchSummary } from '$lib/calibration/fit';
 	import { pctToShare, rulesFieldsError, rulesStatusText, shareToPct, toggled } from './calibrationRules';
 	import { keptOr } from './kept';
@@ -62,7 +63,6 @@
 	});
 	const name = (o: ObjectiveId) => OBJECTIVE_LABELS[o];
 	let signBy = $state('');
-	let searchOpen = $state(false);
 	/** 20 % by default; ticked again, the share it was unticked with. */
 	function setExclusion(on: boolean) {
 		const share = value.exclusions.maxFlaggedShare;
@@ -236,13 +236,7 @@
 
 		<!-- Rarely changed: folded into its values, opened in place (a closed <details> keeps its fields in the page,
 		     so Find a setting still reaches them and opens it). -->
-		<details class="fold group" data-testid="rules-search" bind:open={searchOpen}>
-			<summary>
-				<span class="fold-name">Search budget per fit:</span>
-				<span data-testid="rules-search-summary">{searchSummary({ budget: value.run.budget, starts: value.run.starts, seed: value.run.seed })}</span>
-				<span class="fold-problem">needs fixing</span>
-				<span class="fold-change" aria-hidden="true">{searchOpen ? 'Hide' : 'Change'}</span>
-			</summary>
+		<Fold name="Search budget per fit:" line={searchSummary({ budget: value.run.budget, starts: value.run.starts, seed: value.run.seed })} body="none" class="group" testid="rules-search" lineTestid="rules-search-summary">
 			<fieldset class="plain">
 				<legend class="visually-hidden">Search budget</legend>
 				<div class="fold-body">
@@ -261,7 +255,7 @@
 				</div>
 				<p class="hint" data-testid="rules-search-note">The seed, starts and model runs are rules too: trying another seed after a result is a rule change, with its own revision.</p>
 			</fieldset>
-		</details>
+		</Fold>
 	</div>
 </fieldset>
 

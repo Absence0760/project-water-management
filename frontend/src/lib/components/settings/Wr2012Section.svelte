@@ -21,7 +21,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
-	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors, wr2012JudgingAtDefaults, wr2012JudgingLine, type MarBand, type Wr2012Draft } from './wr2012';
@@ -230,7 +230,7 @@
 		{#if err('monthlyMm3')}<p class="err" id="{uid}-monthly-e">{err('monthlyMm3')}</p>{/if}
 
 		<!-- How the check judges: rarely changed, so one line of its values that opens to edit them. -->
-		<DefaultsFold testid="wr2012-judging" name="How the check judges:" line={wr2012JudgingLine(value)} atDefaults={wr2012JudgingAtDefaults(value)} stack>
+		<Fold testid="wr2012-judging" name="How the check judges:" line={wr2012JudgingLine(value)} atDefaults={wr2012JudgingAtDefaults(value)} body="stack" spaced>
 		<div class="fields first">
 			<div class="field">
 				<label for="{uid}-scale">Scale the reference by <HelpTip key="wr2012-check" label="About scaling the reference" /></label>
@@ -284,7 +284,7 @@
 			</div>
 			<span class="hint explain">Shown as run warnings. Defaults 10, 25 (or 15 wetter) and 50 %.</span>
 		</fieldset>
-		</DefaultsFold>
+		</Fold>
 
 		<!-- The soft MAR penalty is switched on in Fit the parameters → Fit automatically (issue #521, operator's OK
 		     2026-10-11); its weight and band, which read this reference, stay here while it is on. -->

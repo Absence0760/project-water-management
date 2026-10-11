@@ -242,7 +242,7 @@
 					{#if shown.lines.length}<ul class="problems">{#each shown.lines as l, i (i)}<li>{l}</li>{/each}</ul>{/if}
 				{:else if report}
 					{#each report.warnings as w, i (i)}<p class="warn">{w}</p>{/each}
-					<p class="small explain">
+					<p class="small interaction-note">
 						<strong>Interaction</strong> is the change with every application together, less the changes each makes alone added up. Zero means
 						their effects simply add; a change shown as worse means together they do more harm than their separate effects suggest.
 					</p>
@@ -394,7 +394,7 @@
 	.table-wrap {
 		overflow-x: auto;
 	}
-	.explain {
+	.interaction-note {
 		margin: 0;
 	}
 	.warn {

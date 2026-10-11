@@ -174,13 +174,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'api.scenarios.participationCsvUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/projects/[id]/scenarios/[sid]/participation/+page.svelte'] },
 	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },
 	// data: URLs built in code, a synthetic CSV example with a `download` attribute (never user text, never HTML).
-	exampleHref: {
-		why: 'EwrHighFlowsEditor: `data:text/csv;charset=utf-8,` + encodeURIComponent(its synthetic high-flows CSV)',
-		in: ['lib/components/settings/EwrHighFlowsEditor.svelte']
-	},
-	csvHref: {
-		why: 'GridPasteDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed)',
-		in: ['lib/components/model/GridPasteDialog.svelte']
+	'download.href': {
+		why: 'PasteDialogFrame, from its two callers: GridPasteDialog `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed), and EwrHighFlowsEditor `data:text/csv;charset=utf-8,` + encodeURIComponent(its synthetic high-flows CSV)',
+		in: ['lib/components/model/PasteDialogFrame.svelte']
 	},
 	currentHref: {
 		why: 'ImportPlantingsDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the project’s plantings as CSV, plantingsCsv, names defused by toCsv; empty while closed)',

@@ -113,7 +113,7 @@
 	import { explainSwitch } from '$lib/components/common/explain.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
-	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
 	import { arealRainFormError, storedArealRain, withArealRain, type EditableArealRain } from './arealRain';
@@ -176,9 +176,7 @@
 	let panPreset = $state('');
 	/** GR4J's default warm-up (days): the warm-up fold starts closed at it. */
 	const GR4J_WARMUP_DEFAULT = 365;
-	// The pan row's fill tools, folded (app.css .fold) and closed at first; the warm-up and the quality flags are
-	// DefaultsFolds, closed while at their defaults.
-	let panToolsOpen = $state(false);
+	// The pan row's fill tools are a Fold, closed at first; the warm-up and the quality flags close while at their defaults.
 	// Automated calibration's panel: the rules card's head runs it (its start() and canRun()).
 	let autoFit = $state<{ start: () => void; canRun: () => boolean } | undefined>(undefined);
 	// The lake-factor preset picker (engine ≥ 1.49.0) fills lakeEvapFactorMonthly and its source note.
@@ -484,7 +482,7 @@
 <SectionNav groups={navGroups} label="Settings sections" find="Find a setting" elsewhere={SETTINGS_ELSEWHERE} railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
 <!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
-<div class="settings-form" class:explained={explainSwitch.on}>
+<div class="settings-form explain-scope" class:explained={explainSwitch.on}>
 
 	<!-- Judge results by (issue #444): first, as the client asked; it reads results and changes none. Not in the
 	     section menu, which starts right above it; River & reserve's "Change" links here (#set-judge). -->
@@ -556,7 +554,7 @@
 		     defaults (most projects) both are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
 		     are one line"). Always mounted, like the other sections that feed the Save blocker: a list left invalid
 		     after turning bias correction off must stay in the page, where the fold's line says it needs fixing. -->
-		<DefaultsFold testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} stack>
+		<Fold testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} body="stack" spaced>
 			<ChirpsFitPeriodSection
 				bind:value={s.chirpsFitPeriod}
 				bind:error={draft.errors.fitPeriod}
@@ -618,7 +616,7 @@
 				<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
 				<RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
 			</div>
-		</DefaultsFold>
+		</Fold>
 	</section>
 
 	<!-- Data quality (DataQualitySection: gauge vs logger, outliers, flat stretches, zero-rain runs, low vs CHIRPS) -->
@@ -978,14 +976,14 @@
 				<span class="hint explain" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
 				<FieldHistoryLine field="settings:gr4j.x2" />
 			</fieldset>
-			<DefaultsFold name="More:" line="warm-up {fmtNum(s.gr4j.warmupDays)} days" atDefaults={s.gr4j.warmupDays === GR4J_WARMUP_DEFAULT} testid="flow-more" lineTestid="flow-more-summary">
+			<Fold name="More:" line="warm-up {fmtNum(s.gr4j.warmupDays)} days" atDefaults={s.gr4j.warmupDays === GR4J_WARMUP_DEFAULT} spaced testid="flow-more" lineTestid="flow-more-summary">
 				<div class="field">
 					<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label><HelpTip key="settings.gr4j" label="About the warm-up" /></span>
 					<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
 					<span class="hint explain" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
 					<FieldHistoryLine field="settings:gr4j.warmupDays" />
 				</div>
-			</DefaultsFold>
+			</Fold>
 		</div>
 		<div class="sub-card" data-testid="flow-rain-card">
 			<h3 class="sub first">Rain into GR4J</h3>
@@ -1127,13 +1125,7 @@
 						{panOutOfRange.map((i) => WATER_YEAR_MONTHS[i]).join(', ')}: confirm against local humidity and wind.
 					</p>
 				{/if}
-				<details class="fold" data-testid="pan-tools" bind:open={panToolsOpen}>
-					<summary>
-						<span class="fold-name">Fill or edit the row:</span>
-						<span class="pan-tools-line" data-testid="pan-tools-summary">preset, FAO-56 helper, paste · source: {s.panCoefficientSource?.trim() || 'not given'}</span>
-						<span class="fold-problem">needs fixing</span>
-						<span class="fold-change" aria-hidden="true">{panToolsOpen ? 'Hide' : 'Change'}</span>
-					</summary>
+				<Fold name="Fill or edit the row:" line="preset, FAO-56 helper, paste · source: {s.panCoefficientSource?.trim() || 'not given'}" body="none" testid="pan-tools" lineTestid="pan-tools-summary" lineClass="pan-tools-line">
 					<div class="fold-body stack">
 						<div class="field pan-preset">
 							<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label><HelpTip key="settings.panCoefficient" label="About the pan-coefficient presets" /></span>
@@ -1177,7 +1169,7 @@
 							<span class="hint explain" id="st-pan-source-h">Optional: where the row comes from. A preset or the FAO-56 helper fills it; it is recorded with each fit and run, and changing it alone doesn't mark a fit's forcing as changed.</span>
 						</div>
 					</div>
-				</details>
+				</Fold>
 			{/if}
 		</div>
 		<div class="sub-card" data-testid="flow-evaporation-card">
@@ -1209,11 +1201,12 @@
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
 		<!-- Rarely changed: the gauged ranges, the day rules, the river-stop months and gap filling, folded into one line of
 		     their values (ui-playbook.md § 2, "Rarely changed settings fold into their values"). -->
-		<DefaultsFold
+		<Fold
 			name="Quality flags:"
 			line={qualityFlagsSummary(s.qualityFlags, s.flowGapFill, seriesKinds)}
 			atDefaults={qualityFlagsAtDefaults(s.qualityFlags, s.flowGapFill)}
-			stack
+			body="stack"
+			spaced
 			testid="record-flags"
 			lineTestid="record-flags-summary"
 		>
@@ -1227,7 +1220,7 @@
 					{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} bind:last={draft.kept.flowGapFill} {readonly} {seriesKinds} />{/snippet}
 				</Lazy>
 			{/if}
-		</DefaultsFold>
+		</Fold>
 	</section>
 
 	<section class="panel" id="set-fit" aria-labelledby="fit-h">
@@ -1447,7 +1440,7 @@
 	</p>
 {/if}
 <!-- The panels after the form follow the explain switch too (their field help is .explain, issue #521). -->
-<div class="settings-after" class:explained={explainSwitch.on}>
+<div class="settings-after explain-scope" class:explained={explainSwitch.on}>
 <!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
 <div id="set-feeds">
 	<Lazy load={loadDataFeeds}>
@@ -1483,11 +1476,6 @@
 		display: block;
 		font-size: 0.8rem;
 		max-width: 75ch;
-	}
-	/* The explanations (issue #468): shown by the switch at the top; hidden, they stay each field's
-	   description (aria-describedby reads hidden text). The panels in their own components mark theirs too. */
-	:is(.settings-form, .settings-after):not(.explained) :global(.explain) {
-		display: none;
 	}
 	.settings-form > :global(.explain-switch) {
 		margin: 0 0 0.75rem;
@@ -1542,7 +1530,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.pan-tools-line {
+	:global(.pan-tools-line) {
 		min-width: 0;
 		max-width: 60ch;
 		overflow: hidden;

@@ -3,9 +3,9 @@
 	freshets and floods, each a name, the months it may peak in, a peak
 	(m³/s), an event duration (days, rise to recession) and the events required per water year. Rows
 	are edited in place, or pasted from a spreadsheet or read from a CSV file in
-	a dialog (issue #521: it was an always-open box under the rows) that looks
-	like the shared grid paste dialog (model/GridPasteDialog.svelte) but
-	previews the rows the parser reads, since this is a list of rows, not a
+	a dialog (issue #521: it was an always-open box under the rows) in the
+	paste dialogs' shared frame (model/PasteDialogFrame.svelte, as
+	model/GridPasteDialog.svelte) that previews the rows the parser reads, since this is a list of rows, not a
 	grid of numbers: the same parser and result as the old Fill, and the
 	preview (with what it replaces) is the check before Fill, so it asks no
 	confirm. Part of EwrRuleTablesEditor.svelte's chunk; helpers in
@@ -17,10 +17,9 @@
 	import { EWR_HIGH_FLOWS_MAX, highFlowsIssue, type EwrHighFlowEvent } from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import PasteDialogFrame from '$lib/components/model/PasteDialogFrame.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
-	import { latestFileText } from '$lib/files/latest';
 	import { describeMonths } from '$lib/format/months';
 	import { blankHighFlow, EXAMPLE_HIGH_FLOWS_CSV, highFlowTyped, parseHighFlows, parseMonths } from './ewrRules';
 
@@ -43,7 +42,6 @@
 	let monthsBad = $state<Record<number, boolean>>({});
 	let paste = $state('');
 	let pasteOpen = $state(false);
-	let fileNote = $state('');
 	let note = $state<{ ok: boolean; text: string } | null>(null);
 	// The dialog's preview: the parser's rows, or its error.
 	const parsed = $derived(paste.trim() ? parseHighFlows(paste) : null);
@@ -101,32 +99,13 @@
 		resetText();
 	}
 
-	/** The dialog's Fill: the parser's rows replace the list, as the old Fill button did. */
+	/** The dialog's Fill: the parser's rows replace the list, as the old Fill button did (the frame then empties the box and closes). */
 	function fill() {
-		// Held before the box is cleared, which empties `rows`.
 		const filled = rows;
 		if (!filled) return;
 		value = filled;
 		resetText();
-		paste = '';
-		fileNote = '';
-		pasteOpen = false;
 		note = { ok: true, text: `Filled ${filled.length} high-flow component${filled.length === 1 ? '' : 's'}.` };
-	}
-
-	// The latest file only: a large file still read can't land over one picked after it, or in a closed dialog.
-	const fileText = latestFileText();
-	$effect(() => {
-		if (!pasteOpen) void fileText(null);
-	});
-	async function load(e: Event & { currentTarget: HTMLInputElement }) {
-		const f = e.currentTarget.files?.[0];
-		e.currentTarget.value = '';
-		if (!f) return;
-		const text = await fileText(f);
-		if (text === null) return;
-		paste = text;
-		fileNote = `Read ${f.name}.`;
 	}
 </script>
 
@@ -195,58 +174,52 @@
 </fieldset>
 
 {#if !readonly}
-	<Dialog bind:open={pasteOpen} title="Paste high flows at {siteLabel}" wide>
-		<div class="paste">
+	<PasteDialogFrame
+		bind:open={pasteOpen}
+		bind:text={paste}
+		title="Paste high flows at {siteLabel}"
+		textLabel="Rows copied from a spreadsheet"
+		describedby="{uid}-layout"
+		download={{ href: exampleHref, name: 'high-flows-example.csv', label: 'Example CSV (synthetic)' }}
+		{summary}
+		error={!!parsed && 'error' in parsed}
+		summaryTestid="high-flow-paste-summary"
+		tableLabel="Pasted high flows"
+		showTable={!!rows}
+		applyLabel={rows ? (typedNow ? `Replace with ${plural(rows.length)}` : `Fill ${plural(rows.length)}`) : 'Fill the high flows'}
+		canApply={!!rows}
+		onapply={fill}
+	>
+		{#snippet intro()}
 			<p class="small muted" id="{uid}-layout">One per row: name, months, daily-mean peak (m³/s), event days, events per year. A heading row is skipped. The rows replace the list.</p>
-			<label for="{uid}-paste">Rows copied from a spreadsheet</label>
-			<textarea id="{uid}-paste" rows="6" spellcheck="false" bind:value={paste} oninput={() => (fileNote = '')} aria-describedby="{uid}-layout"></textarea>
-			<div class="actions">
-				<label class="btn btn-sm file">
-					Load a CSV file
-					<input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onchange={load} />
-				</label>
-				<a class="btn btn-sm" href={exampleHref} download="high-flows-example.csv">Example CSV (synthetic)</a>
-				<span class="small muted" role="status">{fileNote}</span>
-			</div>
-		</div>
-		<section class="preview" aria-labelledby="{uid}-pv">
-			<h3 id="{uid}-pv">Preview</h3>
-			<!-- One status line that stays in the page, its text changing, so a screen reader reads each new result. -->
-			<p class="small" class:alert={!!parsed && 'error' in parsed} class:alert-error={!!parsed && 'error' in parsed} class:muted={!parsed} role="status" data-testid="high-flow-paste-summary">{summary}</p>
-			{#if rows}
-				<!-- Focusable, so the list scrolls from the keyboard too (axe scrollable-region-focusable). -->
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div class="table-wrap preview-rows" role="region" aria-label="Pasted high flows" tabindex="0">
-					<table class="data compact">
-						<thead>
-							<tr>
-								<th scope="col">Name</th>
-								<th scope="col">Peaks in</th>
-								<th scope="col" class="num">Daily-mean peak <span class="u">m³/s</span></th>
-								<th scope="col" class="num">Event days</th>
-								<th scope="col" class="num">Per year</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each rows as r, k (k)}
-								<tr>
-									<th scope="row">{r.label || `High flow ${k + 1}`}</th>
-									<td>{describeMonths(r.months)}</td>
-									<td class="num">{fmtNum(r.peakM3s, 4, true)}</td>
-									<td class="num">{r.durationDays}</td>
-									<td class="num">{r.perYear}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/if}
-		</section>
-		{#snippet actions()}
-			<button type="button" class="btn" onclick={() => (pasteOpen = false)}>Cancel</button>
-			<button type="button" class="btn btn-primary" disabled={!rows} onclick={fill}>{rows ? (typedNow ? `Replace with ${plural(rows.length)}` : `Fill ${plural(rows.length)}`) : 'Fill the high flows'}</button>
 		{/snippet}
-	</Dialog>
+		{#snippet table()}
+			{#if rows}
+				<table class="data compact">
+					<thead>
+						<tr>
+							<th scope="col">Name</th>
+							<th scope="col">Peaks in</th>
+							<th scope="col" class="num">Daily-mean peak <span class="u">m³/s</span></th>
+							<th scope="col" class="num">Event days</th>
+							<th scope="col" class="num">Per year</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each rows as r, k (k)}
+							<tr>
+								<th scope="row">{r.label || `High flow ${k + 1}`}</th>
+								<td>{describeMonths(r.months)}</td>
+								<td class="num">{fmtNum(r.peakM3s, 4, true)}</td>
+								<td class="num">{r.durationDays}</td>
+								<td class="num">{r.perYear}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		{/snippet}
+	</PasteDialogFrame>
 {/if}
 
 <style>
@@ -272,34 +245,6 @@
 	}
 	td input {
 		width: 100%;
-	}
-	/* The paste dialog, in the shared grid paste dialog's look. */
-	.paste {
-		display: grid;
-		gap: 0.4rem;
-	}
-	.paste p {
-		margin: 0;
-	}
-	.paste > label {
-		font-weight: 500;
-		font-size: 0.85rem;
-	}
-	.paste textarea {
-		width: 100%;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.8125rem;
-	}
-	.preview {
-		margin-top: 1rem;
-	}
-	.preview h3 {
-		margin: 0 0 0.4rem;
-		font-size: 0.9375rem;
-	}
-	.preview-rows {
-		max-height: 18rem;
-		overflow: auto;
 	}
 	.u {
 		color: var(--text-muted);

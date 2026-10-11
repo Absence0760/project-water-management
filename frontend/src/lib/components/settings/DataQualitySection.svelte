@@ -14,7 +14,7 @@
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
-	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { dataQualityAtDefaults, dataQualityLine, LOW_VS_CHIRPS_BASELINE_OPTIONS, LOW_VS_CHIRPS_MINIMUM_OPTIONS, ZERO_RUN_RULE_OPTIONS } from './dataQuality';
 
 	let {
@@ -40,7 +40,7 @@
 
 	<!-- At the defaults (most projects) the limits are one line of their values; Change the limits opens the three
 	     groups (ui-playbook.md § 2, "Settings at their defaults are one line"). -->
-	<DefaultsFold testid="quality-limits" name={atDefaults ? 'Default limits:' : 'Limits:'} line={dataQualityLine(value)} {atDefaults} change="Change the limits" stack>
+	<Fold testid="quality-limits" name={atDefaults ? 'Default limits:' : 'Limits:'} line={dataQualityLine(value)} {atDefaults} change="Change the limits" body="stack" spaced>
 	<h3 class="sub first">Gauge vs logger</h3>
 	<div class="fields">
 		<div class="field">
@@ -183,7 +183,7 @@
 		of the CHIRPS factor fit, and a fit made under other limits asks to be redone. The defaults are the rules runs used before these were
 		settings; the alternatives follow a hydrologist review and are still to be tested on a semi-arid record.
 	</p>
-	</DefaultsFold>
+	</Fold>
 	{#if error}<p class="err" role="alert">{error}</p>{/if}
 </section>
 

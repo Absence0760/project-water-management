@@ -12,6 +12,7 @@ import { addMember } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, openNodeSection } from '../support/network.ts';
+import { expectFoldsNamed } from '../support/settings.ts';
 import { seedShowcaseModel } from '../support/showcase.ts';
 
 const sheetOf = (page: Page) => page.getByRole('dialog', { name: /^(?:Edit .*|.*: details)$/ });
@@ -85,6 +86,8 @@ test('a unit’s sheet folds to its sections, opens the one the menu points at, 
 	await more.locator('summary').click();
 	await expect(seepage).toBeVisible();
 	await expect(seepage).toBeEditable();
+	// Every fold in the sheet is the app's one fold: its values, the chevron and a named action (common/Fold.svelte).
+	expect(await expectFoldsNamed(sheet)).toBeGreaterThan(0);
 
 	// A closed card never hides a problem: an initial storage that isn't a number marks the Dam's heading.
 	await expect(dam.locator(':scope > summary').getByText('needs fixing')).toBeHidden();

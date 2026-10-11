@@ -31,6 +31,7 @@
 	import RiverToDamFields from './RiverToDamFields.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { explainSwitch } from '$lib/components/common/explain.svelte';
 	import { ewrSiteIssue, unitMapProblem, withUnitMap } from '$lib/model/validate';
 
@@ -188,7 +189,7 @@
 	const divertByMonth = (f: NodeField) => f.key === 'divertCapacityM3Day' && byMonth; // gitleaks:allow (a field name, not a secret)
 </script>
 
-<div class="detail" class:explained={explainSwitch.on}>
+<div class="detail explain-scope" class:explained={explainSwitch.on}>
 	<div class="ident">
 		<div class="field">
 			<label for={id('name')}>Name</label>
@@ -463,35 +464,43 @@
 						{@const key = `more:${g}`}
 						{@const extra = g === 'groundwater' ? `GN 538 rate ${GA_RATE_TEXT(node.gaRateM3HaYear)}` : g === 'irrigation' ? `Abstraction starts ${node.abstractionFrom ?? 'with the run'}` : ''}
 						<!-- The rarely changed fields, folded into one line of their values (playbook § 2). -->
-						<details class="fold more" open={isOpen(key)} ontoggle={ontoggle(key)} data-testid="node-more-{g}">
-							<summary>
-								<span class="fold-name">More {MORE_NAME[g] ?? SECTION_TITLE[sec].toLowerCase()} settings:</span>
-								<span>{[fieldsLine(sp.more, node), extra].filter(Boolean).join(' · ')}</span>
-								<span class="fold-problem">needs fixing</span>
-								<span class="fold-change" aria-hidden="true">{isOpen(key) ? 'Hide' : 'Change'}</span>
-							</summary>
+						<Fold
+							name="More {MORE_NAME[g] ?? SECTION_TITLE[sec].toLowerCase()} settings:"
+							line={[fieldsLine(sp.more, node), extra].filter(Boolean).join(' · ')}
+							open={isOpen(key)}
+							ontoggle={ontoggle(key)}
+							body="none"
+							class="more"
+							testid="node-more-{g}"
+						>
 							<div class="grid">
 								{#each sp.more as f (f.key)}{@render numField(f, null)}{/each}
 								{#if g === 'groundwater'}{@render gaRate()}{/if}
 								{#if g === 'irrigation'}<DevelopmentFields {node} {readonly} part="abstraction" />{/if}
 							</div>
-						</details>
+						</Fold>
 					{/if}
 					{#each sp.unused as u (u.reason)}
 						{@const key = `unused:${g}:${u.reason}`}
 						{@const line = unusedLine(u.reason, method)}
 						{@const lineId = `nd-unused-${g}-${u.reason}-${node.id}`}
 						<!-- Fields this node or the flow-share method doesn't use: one line, not greyed-out cells; their values stay, shown read-only when opened. -->
-						<details class="fold unused" open={isOpen(key)} ontoggle={ontoggle(key)} data-testid="node-unused-{g}">
-							<summary>
-								<span id={lineId}>{line.why}: {u.fields.map((f) => f.label).join(', ')}.</span>
-								<span class="fold-change" aria-hidden="true">{isOpen(key) ? 'Hide' : 'Show'}</span>
-							</summary>
+						<Fold
+							line="{line.why}: {u.fields.map((f) => f.label).join(', ')}."
+							{lineId}
+							change="Show"
+							problem={false}
+							open={isOpen(key)}
+							ontoggle={ontoggle(key)}
+							body="none"
+							class="unused"
+							testid="node-unused-{g}"
+						>
 							{#if line.fix}<p class="hint fix">{line.fix}</p>{/if}
 							<div class="grid">
 								{#each u.fields as f (f.key)}{@render numField(f, lineId)}{/each}
 							</div>
-						</details>
+						</Fold>
 					{/each}
 				{/if}
 			</fieldset>
@@ -616,22 +625,18 @@
 	.user-card > legend + :global(*) {
 		clear: both;
 	}
-	.fold {
+	.sec :global(.fold) {
 		margin-top: 0.5rem;
 	}
-	.fold:last-child {
+	.sec :global(.fold:last-child) {
 		border-bottom: 0;
 	}
-	.fold .grid {
+	:global(.fold) .grid {
 		padding: 0.25rem 0 0.4rem;
 	}
 	.fix {
 		margin: 0.25rem 0 0.5rem;
 		font-size: 0.85rem;
-	}
-	/* The explanations under the fields, hidden until the switch is on (still each field's description). */
-	.detail:not(.explained) :global(.explain) {
-		display: none;
 	}
 	.tools {
 		display: flex;

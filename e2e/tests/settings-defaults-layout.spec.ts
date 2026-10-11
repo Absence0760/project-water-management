@@ -1,5 +1,5 @@
 // Settings → Rain gaps, Data quality and the WR2012 check (issue #521 sections 4, 8 and 9): a group that is at its
-// defaults is one line of its values that opens to edit them (common/DefaultsFold.svelte, ui-playbook.md § 2);
+// defaults is one line of its values that opens to edit them (common/Fold.svelte with `atDefaults`, ui-playbook.md § 2);
 // Rain gaps is two cards with each list's add actions in its own head row, under their own names; the CHIRPS check
 // heads its own group; WR2012's "Propose from the map" is in the panel's head and its judging folds. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
