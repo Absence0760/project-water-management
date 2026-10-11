@@ -1,23 +1,21 @@
-// The note for a run whose bound units are withheld from this reader (issue #523 finding I).
+// The note for a cap or full-allocation run read by a viewer kept from the volumes (issue #523 finding I).
 import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
-import { withheldUnits, withheldUnitsText } from './withheld';
+import { riverOutcomesOnly, riverOutcomesText } from './withheld';
 
-const run = (mode: 'none' | 'cap' | 'fullAllocation', withheld?: string[]) =>
-	({ allocations: { mode, tolerance: 0.1, used: 1, notMatched: 0, nodes: [], ...(withheld ? { withheldUnits: withheld } : {}) } }) as Pick<RunSummary, 'allocations'>;
+const run = (mode: 'none' | 'cap' | 'fullAllocation', river?: true) =>
+	({ allocations: { mode, tolerance: 0.1, used: 1, notMatched: 0, nodes: [], ...(river ? { riverOutcomesOnly: river } : {}) } }) as Pick<RunSummary, 'allocations'>;
 
-describe('withheld units', () => {
-	it('says how many units a cap or a full allocation left out, and why', () => {
-		expect(withheldUnitsText(run('cap', ['a']))).toBe(
-			'1 hydrological unit is left out of these results and their daily series: this run caps each one’s use at its registered water volume, and this project shows those volumes to its editors and owners only.'
-		);
-		expect(withheldUnitsText(run('fullAllocation', ['a', 'b']))).toMatch(/^2 hydrological units are left out .* scales each one’s demand to its registered water volume/);
+describe('river outcomes only', () => {
+	it('says why only the river outcomes are shown, by mode', () => {
+		expect(riverOutcomesText(run('cap', true))).toMatch(/^Only this run’s river outcomes are shown .* caps every unit’s use at its registered water volume/);
+		expect(riverOutcomesText(run('fullAllocation', true))).toMatch(/scales every unit’s demand to its registered water volume/);
 	});
 
-	it('says nothing when nothing is withheld: an editor, a compare-only run, a run without allocations', () => {
-		expect(withheldUnitsText(run('cap'))).toBeNull();
-		expect(withheldUnitsText(run('cap', []))).toBeNull();
-		expect(withheldUnitsText({ allocations: undefined })).toBeNull();
-		expect(withheldUnits(null)).toEqual([]);
+	it('says nothing for an editor’s copy of the same run, a compare-only run or a run without allocations', () => {
+		expect(riverOutcomesText(run('cap'))).toBeNull();
+		expect(riverOutcomesText(run('none'))).toBeNull();
+		expect(riverOutcomesText({ allocations: undefined })).toBeNull();
+		expect(riverOutcomesOnly(null)).toBe(false);
 	});
 });

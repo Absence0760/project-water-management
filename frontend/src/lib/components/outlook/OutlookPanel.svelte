@@ -325,6 +325,13 @@
 			<p class="muted" data-testid="outlook-empty">No seasonal outlook on this run yet.{canEdit ? '' : ' An editor can run one.'}</p>
 		{/if}
 
+		{#if outlook?.withheld?.length}
+			<!-- An outlook on a cap or full-allocation base, read by a viewer kept from each registered volume (#523 I). -->
+			<p class="alert alert-info" role="note" data-testid="outlook-withheld">
+				This outlook’s results are withheld: it starts from a run that caps use at, or scales demand to, the registered water volumes, which this
+				project shows to its editors and owners only.
+			</p>
+		{/if}
 		{#if view && outlook}
 			<p class="small meta">
 				{outlook.name} · run {fmtDate(outlook.completedAt ?? outlook.createdAt, true)}{outlook.createdBy ? ` by ${outlook.createdBy}` : ''}

@@ -187,6 +187,12 @@
 			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
+				{#if report.withheld?.length}
+					<!-- A report on a cap or full-allocation run, read by a viewer kept from each registered volume (#523 I). -->
+					<p class="alert alert-info" role="note" data-testid="evidence-river-outcomes-only">
+						Only this report’s river outcomes are shown: it rests on a run that caps use at, or scales demand to, the registered water volumes, which this project shows to its editors and owners only. No unit’s supply, registered-use comparison, demand object or run warning is given.
+					</p>
+				{/if}
 				<EvidenceSummary {report} {board} {boardNotFrozen} {authorisedBoard} {frozen} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				<!-- evidence-12: the locality map, frozen into the report from the project's map features (issue #326 A5). -->

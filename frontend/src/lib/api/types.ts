@@ -2578,6 +2578,8 @@ export interface Outlook {
 	result?: OutlookResult | null;
 	/** Likewise; null without a review date. */
 	triggers?: OutlookTriggers | null;
+	/** For a viewer kept from each registered volume, on an outlook whose base caps or fully allocates (#523 I): `result` and `triggers` withheld (null). */
+	withheld?: string[];
 }
 
 /** POST /projects/:id/outlooks. Season and share absent: the project's settings. */
