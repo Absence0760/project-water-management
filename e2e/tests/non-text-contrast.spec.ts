@@ -193,6 +193,22 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			await expect(years.getByText(/Outlined bars, filled lightly, are part years/)).toBeVisible();
 			await expectNonTextContrast(page, { within: '#res-reserve-years' });
 		});
+
+		test('the Dams cards’ storage lines are at 3:1; the tint under each line is decoration', async ({ page, owner }) => {
+			void owner;
+			await page.setViewportSize({ width: 1440, height: 900 });
+			const project = await seedRunnableProject(page.request, `Contrast dams ${colorScheme}`);
+			await createRun(page.request, project.id, 'Baseline');
+			await page.goto(`/projects/${project.id}?tab=dams`);
+			const sparks = page.getByTestId('sparkline');
+			await expect(sparks.first().locator('polyline.line')).toBeAttached();
+			// The light area under the line repeats it (WCAG 1.4.11 needs only what reading the chart requires), so it is
+			// the one exception, and the guard does see it: without the exception it is reported, and nothing else is.
+			const all = await nonTextContrast(page, { within: 'main' });
+			expect(all.length).toBeGreaterThan(0);
+			expect(all.every((f) => f.what.includes('fill'))).toBe(true);
+			await expectNonTextContrast(page, { within: 'main', except: '.sparkline .fill' });
+		});
 	});
 }
 
