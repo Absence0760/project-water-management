@@ -2,6 +2,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { base } from '$app/paths';
 	import { api, roleLabel, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
@@ -155,7 +156,10 @@
 		try {
 			await api.members.remove(projectId, m.userId);
 			if (self) return onLeftProject();
+			const at = shown.findIndex((x) => x.userId === m.userId);
 			members = members.filter((x) => x.userId !== m.userId);
+			// Its row, and the Remove that had the focus, have gone: the member now in its place takes it, on their role.
+			await focusAfterRemove(at, 'select[aria-label^="Role for "]', 'mem-email');
 		} catch (err) {
 			error = msg(err);
 		} finally {
