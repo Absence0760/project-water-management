@@ -5621,7 +5621,7 @@ two.
   #521):** four bordered cards. **GR4J parameters**, with **Fit the
   parameters** (a link to `#set-fit`) in its head: X1, X3 and X4, the
   catchment area and the runoff model, X2's switch, and **More: warm-up 365
-  days**, a `common/DefaultsFold.svelte` line that opens to the warm-up
+  days**, a `common/Fold.svelte` with `atDefaults` line that opens to the warm-up
   (closed while it is 365). Each field's "Changed 1× · last by …" history
   line is one line here (cut with an ellipsis; the whole text is its link's
   name and title), so a changed field's cell is as tall as its neighbours'.
@@ -5818,7 +5818,7 @@ two.
   fold into one line, "All defaults: bias-corrected per month, whole record,
   zero runs missing, accumulations spread" with **Change** (`rainGapsLine`;
   "Now: …" once something is set, when it starts open;
-  `common/DefaultsFold.svelte`). The cards stay in the page while folded, so
+  `common/Fold.svelte` with `atDefaults`). The cards stay in the page while folded, so
   Find a setting opens the fold, and its line says **needs fixing** while a
   list inside is invalid. The **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
@@ -5905,7 +5905,7 @@ two.
   window's From and To, *Scored at* and *Compare with* on one row, then the
   exclusions with **Exclude a water year** / **Exclude a date range** in the
   list's header row (`common/PeriodList.svelte`), then **Quality flags:**, a
-  `common/DefaultsFold.svelte` line of their values ("gauged range not known
+  `common/Fold.svelte` with `atDefaults` line of their values ("gauged range not known
   · above-range days censored · below-range, suspect and infilled days left
   out · no river-stop months · flow gaps not filled", `settings/qualityFlags.ts`
   `qualityFlagsSummary`) that opens to the gauged ranges, the four day
@@ -6240,7 +6240,7 @@ two.
   shows. Then **How the check judges** (issue #521), one line of its values
   ("area ratio · dry season from each run · note 10 % / query 25 % (15 %
   wetter) / unusable 50 %", `wr2012JudgingLine`) that opens, closed while
-  they are the defaults (`common/DefaultsFold.svelte`): the scaling (area,
+  they are the defaults (`common/Fold.svelte` with `atDefaults`): the scaling (area,
   or area and rainfall; the current area ratio is shown), the dry-season
   months (from each run, or chosen) and the four deviation thresholds (%).
   The soft MAR penalty for automatic fitting (off; weight 0.5) is switched
@@ -6457,8 +6457,8 @@ two.
   **Paste or load a CSV…** in one row above the list, and Remove on each row.
   The paste was an always-open box under the list with **Fill the high
   flows**; since issue #521 it is a dialog (**Paste high flows at …**) in the
-  shared paste dialog's look but previewing rows, since this is a list, not a
-  grid: the layout line, **Rows copied from a spreadsheet**, **Load a CSV
+  paste dialogs' shared frame (`model/PasteDialogFrame.svelte`, as the grids'
+  dialog) but previewing rows, since this is a list, not a grid: the layout line, **Rows copied from a spreadsheet**, **Load a CSV
   file** and the synthetic example CSV, then a **Preview** whose status line
   says how many components the rows make and what they replace ("2
   high-flow components, replacing the 1 component listed."), or the parser's
@@ -6492,7 +6492,7 @@ two.
   into one line, "Default limits: gauge/logger 66.7–150 % · outliers × 5 /
   × 10 · flat stretches 5–90 days · zero runs 60 wet-season days · low vs
   CHIRPS below 50 %" (`dataQualityLine`), with **Change the limits**
-  (`common/DefaultsFold.svelte`; issue #521). **Check each zero-rain run
+  (`common/Fold.svelte` with `atDefaults`; issue #521). **Check each zero-rain run
   against CHIRPS** heads a group of its own, named by the box, with what it
   decides indented under it; the low-vs-CHIRPS limits, which don't depend
   on it, follow under *Catchment rain against CHIRPS*. Its messages
@@ -8749,6 +8749,15 @@ them scenarios).
   own validator (`ops.ts` `buildOp`, `validateScenarioOps`), so a bad value is
   refused in the form in the units typed ("Must be at most 100 %"); whether
   it applies to the base is the server's check, shown once it is saved.
+  Its dates are typed day first (issue #521, as Trace a day and Edit a day):
+  Scale rainfall's and Scale demand's **From (day first)** and **To (day
+  first)**, a registered volume's **Valid from / Valid to (day first)** and a
+  date setting's value read "15 Nov 2021", "15/11/2021" or "2021-11-15"
+  (`format/number.ts` `parseDay`, never month first), show back as "15 Nov
+  2021" once the field is left (`tidyDay`), start day first from the current
+  value, and an unreadable one is refused as "From: type a day, day first:
+  …". The op still stores YYYY-MM-DD, and the change list keeps its ISO
+  dates, as the evidence report prints them.
   Every edit is a `PATCH` of the whole op list, answered with the check.
   **Undo** steps back through this visit's edits; each op also has a ✕.
 - **Edit in the model tables** (override mode, drafts only, for whoever may
@@ -8795,8 +8804,8 @@ closing, and **Discard edits** puts it back. **Edits to record**
   separately). **Changes** with **Add a change** (and Undo, **Edit in the
   model tables**) is the first, the editor's main job; **Application
   details** (`application-details`) is the second: the proposer's units,
-  the applicant's statement and the rebase, each a `.fold` whose closed line
-  says its value with a disclosure marker before it ("Proposer: none
+  the applicant's statement and the rebase, each a `common/Fold.svelte` whose
+  closed line says its value with the app's fold chevron before it ("Proposer: none
   ticked" or up to two names and "and N more", `scenarios/details.ts`
   `proposerSummary`; "Statement: 0 of 3 answered"; "Based on Calibrated
   baseline" with **Rebase…**), **Change** (an editor) or **Show** (a

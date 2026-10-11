@@ -571,8 +571,9 @@ section it belongs to, with the example that taught it.
   in the field's `aria-describedby`, since a hidden child of a referenced
   element drops out of the description: "The gauge code, e.g. A2H012." stays,
   "Verified DWS data lags by months…" is `.explain`. The switch hides
-  `.explain` inside `.settings-form` and `.settings-after`, the panels after
-  the form that save on their own, so a panel outside both needs a wrapper);
+  `.explain` inside an `explain-scope` wrapper (`.settings-form` and
+  `.settings-after`, the panels after the form that save on their own, so a
+  panel outside both needs a wrapper);
   and measure the widest content beside a rail before choosing where it
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail
@@ -604,17 +605,32 @@ section it belongs to, with the example that taught it.
   (`.fold:has([aria-invalid='true'])`), so a closed fold never hides a
   problem. A native `<details>` keeps its fields in the page, so Find a
   setting still finds them and opens the fold (`SectionNav` `jump`), and
-  nothing is lost. The CSS is shared in `app.css` (one copy, which also
-  kept the bundle under its ceiling); Fit automatically, the rules' search
-  budget and the node sheet's "More … settings" and "Not used …" lines write
-  the markup out, and the groups that fold at their defaults use
-  `common/DefaultsFold.svelte` (below).
+  nothing is lost. Every fold is one component, `common/Fold.svelte` (`name`,
+  `line`, `change`, `open` or `bind:open`, `atDefaults`, `problem`, `body`:
+  'grid' for the field grid, 'stack' for headed groups, 'none' for a body the
+  caller lays out), on the one CSS in `app.css`: Fit automatically, the
+  rules' search budget, the pan row's fill tools, the node sheet's "More …
+  settings" and "Not used …" lines, the Reserve tables' Table settings, the
+  drought rule in words, the scenario editor's Application details and the
+  defaults groups (below). Rounds 1–3 wrote the markup out six times and the
+  copies had drifted (a marker in one card, "needs fixing" in some); round 4
+  folded them into the component (issue #521). `problem={false}` only where
+  nothing inside is checked (a statement, a rule in words, the proposer's
+  ticks). **One marker rule:** every fold's line starts with the same
+  chevron, pointing right while closed and down while open, and ends with
+  its named action; a node sheet's section card, a headed band rather than a
+  line, keeps its own triangle. `lib/uiPatterns.test.ts` refuses a
+  hand-written `<details class="fold">`, and `expectFoldsNamed`
+  (`e2e/support/settings.ts`) checks every fold on a screen has its line of
+  values, the chevron and its action (`settings-patterns.spec.ts` over every
+  Settings panel, `node-sheet-layout`, `scenario-editor-layout`).
 - **Settings at their defaults are one line.** Rain gaps, Data quality and
   the WR2012 check's judging drew every field at full weight though nearly
   every project leaves them at their defaults (Data quality: 609 px of 14
   limits under a summary that already said "The default limits"; Rain gaps:
   five sub-topics and 11 buttons, every choice "(default)"; issue #521).
-  Now each is `common/DefaultsFold.svelte`: the `.fold` above, starting
+  Now each is `common/Fold.svelte` with `atDefaults` (it was
+  `DefaultsFold.svelte` until round 4): the `.fold` above, starting
   closed only while everything inside is its default (`atDefaults`, from a
   pure helper beside the form, `rainGapsAtDefaults`, `dataQualityAtDefaults`,
   `wr2012JudgingAtDefaults`), its line naming the values ("Default limits:
@@ -622,10 +638,9 @@ section it belongs to, with the example that taught it.
   ending in a named action (`change`: "Change the limits"; **Hide** while
   open). A group with something set starts open, and `atDefaults` is read
   once when it mounts, so a value put back to its default while the fold is
-  open never snaps it shut under the cursor. `stack` lays out headed groups
-  or cards instead of the fold's field grid. It is the third caller of the
-  fold markup, so it is a component; the node sheet's sections and the
-  quality flags can take it next. e2e opens one with `openFold`
+  open never snaps it shut under the cursor. `body="stack"` lays out headed
+  groups or cards instead of the fold's field grid, and `spaced` gives a
+  fold that stands as its own group a little room. e2e opens one with `openFold`
   (`e2e/support/settings.ts`), and `settings-defaults-layout.spec.ts`
   checks the closed line, that it opens, and its actions on screen at
   1440×900.
@@ -638,7 +653,10 @@ section it belongs to, with the example that taught it.
   name, since a `<legend>` can't share a row with buttons), and every
   caller gives the buttons the list's words: "Add a missing water year",
   "Spread a date range", "Exclude a water year". Pin it in e2e: no two
-  visible buttons in a panel share an accessible name.
+  visible buttons in a panel share an accessible name
+  (`sharedButtonNames`, `e2e/support/settings.ts`;
+  `settings-patterns.spec.ts` checks every Settings panel with every fold
+  open, on the Showcase and on a new project).
 - **A panel that adds to a list puts its add action in its head, opening a
   card above the list.** Settings' Data feeds had **Attach a feed** under the
   list and two unlabelled buttons under it ("Use the catchment boundary",
@@ -735,8 +753,12 @@ section it belongs to, with the example that taught it.
   when the same element turns into an error) or is already the ⓘ tip's text.
   The switch is one piece and one remembered value (`common/ExplainSwitch.svelte`
   + `common/explain.svelte.ts`, extracted at its third caller: Settings, the
-  node sheet, the scenario editor); a form puts `class:explained=
-  {explainSwitch.on}` on its wrapper and hides `.explain` under it. A hint
+  node sheet, the scenario editor); a form marks its wrapper
+  `class="explain-scope" class:explained={explainSwitch.on}`, and app.css's
+  one rule hides `.explain` under it (each form had its own copy of that rule
+  until round 4; `lib/uiPatterns.test.ts` now refuses one, and a second
+  switch). Don't use the `explain` class for text that must stay visible on
+  a page with no switch (Applications' "Interaction" key is `interaction-note`). A hint
   with an ⓘ inside it splits: the words go in a `.explain` span, the ⓘ stays
   (the scenario editor's rebase line).
   Give a field's label the height of a label with a tip (`min-height: 24px`),
@@ -983,13 +1005,15 @@ section it belongs to, with the example that taught it.
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
 | Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`). A grid that isn't the model's (no save row; the Map's features save one at a time) is a `TAB_GRIDS` entry its tab draws itself, same `grid=` parameter (`map/MapTab.svelte`) |
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
-| Hiding a form's explanations until asked | `common/ExplainSwitch.svelte` (the remembered "Explain each setting under its field", `common/explain.svelte.ts` `explainSwitch`, one value for every form) and `.explain` on each hint that only explains, hidden under the wrapper's `class:explained` (§ 2 "One short line under a field") |
+| Hiding a form's explanations until asked | `common/ExplainSwitch.svelte` (the remembered "Explain each setting under its field", `common/explain.svelte.ts` `explainSwitch`, one value for every form) and `.explain` on each hint that only explains, hidden by app.css under a wrapper marked `explain-scope` with `class:explained` (§ 2 "One short line under a field") |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
-| Rarely changed settings, folded to one line of their values | `<details class="fold">` (`app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` (`e2e/support/settings.ts`) |
-| A group that usually stays at its defaults, as one line that opens | `common/DefaultsFold.svelte` (`name`, `line`, `atDefaults`, `change`, `stack`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
+| Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
+| A group that usually stays at its defaults, as one line that opens | `common/Fold.svelte` with `atDefaults` (and `body="stack"`, `spaced`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
+| A paste dialog | `model/GridPasteDialog.svelte` for a grid of numbers (Now/Pasted preview); a list of rows uses its frame, `model/PasteDialogFrame.svelte`, with its own preview table (§ 4 "A paste box that replaces a whole table is the shared paste dialog") |
+| A typed date | a text field read by `parseDay`, shown back with `tidyDay` on blur (`format/number.ts`; § 2 "A typed date is day first too"), never `<input type="date">` |
 | Two forms in one panel | a bordered card each (`settings/SettingsTab.svelte` `.sub-card`), the state and actions in the card's head (§ 2) |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
@@ -1111,6 +1135,7 @@ Interaction details that bit:
   table, never uPlot's default.
   The hover read-out under the chart ("Date: 1 Oct 2021") goes through
   `fmtDay` too; it read "2021-10-01" under day-first ticks until issue #521.
+  `river-page.spec.ts` hovers the flow chart and pins the Date row day first.
 - **A table shown day first finds days as it shows them.** The Data page's
   preview and Download → Preview searched by ISO prefix ("2015-03"), which
   stopped matching what the rows said once they read "14 Mar 2015". Read the
@@ -1126,6 +1151,21 @@ Interaction details that bit:
   `fmtDay` once read, and say a day it can't read or that is out of range at
   the field (`runs/SelfChecksPanel.svelte`, `self-checks.spec.ts`; the Data
   page's Edit a day, `series/EditDay.svelte`, `series-hand-edit.spec.ts`).
+  The scenario editor's Add a change reads its dates the same way since
+  round 4 (**From (day first)**, a registered volume's **Valid from**, a date
+  setting; `tidyDay` shows "15 Nov 2021" once the field is left, and the
+  form refuses "From: type a day, day first: …"; `scenario-demand-scale.spec.ts`).
+  `lib/uiPatterns.test.ts` refuses a new native date field; the 30 written
+  before the rule are counted per file there and may only go down (they
+  need a shared day field that joins the save blocker's invalid fields, as
+  `NumberInput` does, before they convert).
+- **The printed evidence report keeps ISO dates, on purpose.** It is a
+  signed document whose lines match the manifest's hashed text (evidence
+  pack manifests, `docs/evidence-pack.md`), so its dates, the fit line
+  included ("GR4J fit of 2026-09-24 14:05 UTC"), stay YYYY-MM-DD:
+  unambiguous in any locale and reproducible byte for byte from the bundle.
+  Don't run them through `fmtDay`; the screens around it read day first
+  (issue #521 round 3, decided by the operator).
 - **A small chart's month letters keep their room at 320 px.** The farm
   charts' "J F M A M …" nearly touched beside a "100 %" axis column on a
   320 px phone (issue #521). Below 20 px a month (`chartGeometry.ts`
@@ -1326,12 +1366,16 @@ Interaction details that bit:
   replaced: drop the confirm the Fill button asked, don't stack a second one.
   A paste that fills a **list of rows** rather than a grid of numbers (the
   Reserve tables' high flows: name, months, peak…) has no Now/Pasted cells to
-  diff, so it is a `Dialog` in the same look (layout line, the box, Load a
-  CSV file and the example, a **Preview** status line, then a table of the
-  rows the parser read) whose button says what it does ("Fill 2 high
-  flows", "Replace with 2 high flows" over typed rows): the same parser and
-  result, opened from **Paste or load a CSV…** above the list
-  (`settings/EwrHighFlowsEditor.svelte`).
+  diff, so it previews the rows the parser read, with a button that says
+  what it does ("Fill 2 high flows", "Replace with 2 high flows" over typed
+  rows): the same parser and result, opened from **Paste or load a CSV…**
+  above the list (`settings/EwrHighFlowsEditor.svelte`). Both dialogs share
+  one frame, `model/PasteDialogFrame.svelte`: the layout notes (`intro`), the
+  box and its label, **Load a CSV file** and a download, the **Preview**
+  status line (muted while empty, red on an error), `notes`, the `table`
+  while `showTable`, and Cancel and the apply action, which empties the box
+  and closes. A third paste dialog takes the frame; `lib/uiPatterns.test.ts`
+  refuses a box labelled "… copied from a spreadsheet" outside it.
 - **A setting that moves to another page stays findable.** Round 1 of issue
   #521 moved the registered-volumes comparison band to Allocations, and Find
   a setting, which reads the page, stopped finding it. SectionNav takes an
@@ -1560,6 +1604,17 @@ Interaction details that bit:
 - **A fold can hold another `<details>`.** The pan row's fill tools hold the
   FAO-56 helper, so `fold.locator('summary')` matched two; `openFold` takes
   the fold's own (`:scope > summary`).
+- **A `$bindable(false)` fallback throws when a caller binds an undefined
+  entry.** The Reserve rule tables bind each table's fold to `foldOpen[i]`,
+  which starts undefined; with `open = $bindable(false)` in `Fold.svelte`
+  Svelte refused the binding and the whole tables editor failed to mount
+  (`ewr-rules.spec.ts` caught it). A shared component's bindable flag takes
+  no fallback and reads undefined as false.
+- **Moving markup into a component moves it out of the caller's styles.**
+  Svelte scopes a caller's `.words .rule` to elements the caller writes, so
+  once the `<details class="words">` was `Fold`'s, the rule stopped matching.
+  Reach the child's element with `:global(.words) .rule` (and a class prop
+  on the component), and look at a screenshot after any extraction.
 - **A `NumberInput` that isn't `nullable` never reaches `null`.** Cleared or
   given text it can't read, it keeps the last number and marks itself
   `aria-invalid` with its own message, so a check written against `null`
