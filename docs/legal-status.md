@@ -183,6 +183,12 @@ A and C remain owed and should be done as soon as possible; setting
   license agreement … at least as protective" enough, or whether §4–§6 of
   the licence (no warranty, indemnity, liability) need mirroring in more
   words than "provided as it is, without any warranty, and not liable".
+  *Researched 2026-10-11* ([legal/map-data-licences.md](./legal/map-data-licences.md),
+  not legal advice): §9 covers § 2.1.2–2.1.3 but probably not the licence
+  as a whole (own use only, the GeoJSON export, the disclaimer, the
+  operator's indemnity to WWF); replacement wording is drafted there for
+  counsel (#92), not adopted. The farm map's missing JRC credit is code,
+  #523 C6.
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
   instructions, with security measures. **Template drafted** (2026-09-27):
