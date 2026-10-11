@@ -1,9 +1,10 @@
 <script lang="ts">
 	// Twelve toggle checkboxes in water-year order, bound to calendar months 1–12,
-	// with a line under them: the months in words (`summary`) and All months /
-	// No months (named "<label>: all months" for a screen reader). Each toggle
-	// is at least 24 × 24 px (WCAG 2.5.8); in a narrow column or on a touch
-	// screen they wrap to two rows of six at the 44 px tap size.
+	// each named by its month (Oct, Nov …), with All months / No months straight
+	// after them (named "<label>: all months" for a screen reader) and the months
+	// in words (`summary`) on a line under them. Each toggle is at least 24 × 24 px
+	// (WCAG 2.5.8); in a narrow column or on a touch screen they wrap to two rows
+	// of six at the 44 px tap size.
 	import { monthName, WATER_YEAR_CALENDAR } from '$lib/format/months';
 
 	let {
@@ -23,26 +24,23 @@
 
 <fieldset class="months">
 	<legend class="visually-hidden">{label}</legend>
+	<!-- The months as Allocations' licence-condition months show them (issue #521): each named in full (Oct, Nov …),
+	     a 24 px row, with All months straight after them rather than at the far edge. -->
 	<div class="picker">
-		<div class="toggles">
-			{#each WATER_YEAR_CALENDAR as m (m)}
-				<label class:on={months.includes(m)}>
-					<input
-						type="checkbox"
-						checked={months.includes(m)}
-						{disabled}
-						onchange={(e) => toggle(m, e.currentTarget.checked)}
-					/>
-					<!-- The initial is visual only; each toggle is named by its full month ("Oct", not "O Oct"). -->
-					<span aria-hidden="true">{monthName(m).slice(0, 1)}</span>
-					<span class="visually-hidden">{monthName(m)}</span>
-				</label>
-			{/each}
-		</div>
-	</div>
-	{#if summary || !disabled}
-		<div class="foot">
-			{#if summary}<span class="summary muted">{summary}</span>{/if}
+		<div class="row">
+			<div class="toggles">
+				{#each WATER_YEAR_CALENDAR as m (m)}
+					<label class:on={months.includes(m)}>
+						<input
+							type="checkbox"
+							checked={months.includes(m)}
+							{disabled}
+							onchange={(e) => toggle(m, e.currentTarget.checked)}
+						/>
+						{monthName(m)}
+					</label>
+				{/each}
+			</div>
 			{#if !disabled}
 				<button
 					type="button"
@@ -54,7 +52,8 @@
 				</button>
 			{/if}
 		</div>
-	{/if}
+	</div>
+	{#if summary}<p class="summary muted">{summary}</p>{/if}
 </fieldset>
 
 <style>
@@ -68,9 +67,15 @@
 	.picker {
 		container: months / inline-size;
 	}
+	.row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.75rem;
+	}
 	.toggles {
 		display: flex;
-		gap: 3px;
+		gap: 4px;
 	}
 	label {
 		position: relative;
@@ -78,14 +83,14 @@
 		align-items: center;
 		justify-content: center;
 		box-sizing: border-box;
-		min-width: 24px;
+		min-width: 2.4rem;
 		min-height: 24px;
-		width: 1.75rem;
-		height: 1.75rem;
+		height: 1.5rem;
+		padding: 0 0.3rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
-		font-size: 0.75rem;
-		color: var(--text-muted);
+		font-size: 0.8rem;
+		color: var(--text-2);
 		cursor: pointer;
 		user-select: none;
 	}
@@ -114,15 +119,15 @@
 	input:disabled {
 		cursor: default;
 	}
-	/* Twelve toggles (1.75rem, 24.5 px at the 14 px root) and their gaps need about 23.5rem: narrower, or on a touch screen,
-	   two rows of six at the tap size (44 px). */
-	@container months (max-width: 23.5rem) {
+	/* Twelve toggles (2.4rem, 33.6 px at the 14 px root) and their gaps need about 33rem: narrower, or on a touch
+	   screen, two rows of six at the tap size (44 px), All months under them. */
+	@container months (max-width: 33rem) {
 		.toggles {
 			display: grid;
 			grid-template-columns: repeat(6, minmax(var(--tap), 1fr));
+			flex: 1 1 100%;
 		}
 		label {
-			width: auto;
 			height: var(--tap);
 		}
 	}
@@ -132,23 +137,14 @@
 			grid-template-columns: repeat(6, minmax(var(--tap), var(--tap)));
 		}
 		label {
-			width: auto;
 			height: var(--tap);
 		}
 	}
-	.foot {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-		margin-top: 0.15rem;
-		min-height: 24px;
-	}
 	.summary {
-		font-size: 0.72rem;
+		font-size: 0.75rem;
+		margin: 0.2rem 0 0;
 	}
 	.all {
-		margin-left: auto;
 		font-size: 0.75rem;
 		min-height: 24px;
 		padding: 0 0.4rem;

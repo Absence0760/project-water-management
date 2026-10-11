@@ -53,12 +53,16 @@ export async function showExplanations(page: Page) {
 
 /**
  * Opens a fold of rarely changed settings (a `<details>` whose summary line shows their values, ui-playbook.md
- * § 2): Fit automatically's search (`fit-search`) or the calibration rules' search budget (`rules-search`).
- * Does nothing when it is already open.
+ * § 2): Fit automatically's search (`fit-search`), the calibration rules' search budget (`rules-search`), Flow
+ * calibration's warm-up (`flow-more`) and the pan row's fill tools (`pan-tools`), or the Calibration record's
+ * quality flags (`record-flags`). Does nothing when it is already open.
  */
-export async function openFold(scope: Locator, testId: 'fit-search' | 'rules-search') {
+export type FoldId = 'fit-search' | 'rules-search' | 'flow-more' | 'pan-tools' | 'record-flags';
+export async function openFold(scope: Locator | Page, testId: FoldId) {
 	const fold = scope.getByTestId(testId);
-	await expect(fold.locator('summary')).toBeVisible();
-	if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click();
+	// Its own summary: a fold can hold another <details> (the pan row's tools hold the FAO-56 helper).
+	const summary = fold.locator(':scope > summary');
+	await expect(summary).toBeVisible();
+	if ((await fold.getAttribute('open')) === null) await summary.click();
 	await expect(fold).toHaveAttribute('open', '');
 }

@@ -95,7 +95,7 @@
 			{/if}
 		</fieldset>
 	{/each}
-	<p class="hint" data-testid="gap-fill-scoring">
+	<p class="hint explain" data-testid="gap-fill-scoring">
 		Whether a filled day is scored is <strong>Infilled days</strong> under the quality flags above, one control for the fit and the run’s
 		statistics: left out by default (they are shown and exported only), or scored as recorded.
 	</p>
@@ -124,5 +124,8 @@
 	}
 	.hint {
 		display: block;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		max-width: 75ch;
 	}
 </style>

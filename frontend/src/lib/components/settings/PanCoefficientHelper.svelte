@@ -46,7 +46,7 @@
 <details class="pan-helper" data-testid="pan-coefficient-helper">
 	<summary>Suggest from FAO-56 Table 5 (humidity, wind, siting)</summary>
 	<div class="body">
-		<p class="hint">
+		<p class="hint explain">
 			Looks up the Class A pan coefficient for each month from that month’s mean relative humidity and wind speed at 2 m, the pan’s siting and its windward
 			fetch. It only fills the pan-coefficient row, which stays editable. Source: {FAO56_TABLE5_SOURCE}.
 		</p>
@@ -65,12 +65,12 @@
 				<select id="{uid}-fetch" disabled={readonly} value={form.fetchM} onchange={(e) => setFetch(e.currentTarget.value)} aria-describedby="{uid}-fetch-h">
 					{#each FETCH_OPTIONS as f (f)}<option value={f}>{f}</option>{/each}
 				</select>
-				<span class="hint" id="{uid}-fetch-h">Table 5’s four distances; no interpolation between them.</span>
+				<span class="hint explain" id="{uid}-fetch-h">Table 5’s four distances; no interpolation between them.</span>
 			</div>
 			<div class="field reduce">
 				<label for="{uid}-red">Reduction for bare surroundings <span class="u">(%, 0–20)</span></label>
 				<NumberInput id="{uid}-red" nullable min={0} max={20} step={1} disabled={readonly} placeholder="none" bind:value={form.reductionPct} aria-describedby="{uid}-red-h" />
-				<span class="hint" id="{uid}-red-h">{FAO56_REDUCTION_GUIDANCE} Applied to every month as stated.</span>
+				<span class="hint explain" id="{uid}-red-h">{FAO56_REDUCTION_GUIDANCE} Applied to every month as stated.</span>
 			</div>
 		</div>
 		<div class="table-wrap">

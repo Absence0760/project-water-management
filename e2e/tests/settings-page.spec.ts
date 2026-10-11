@@ -13,7 +13,7 @@ import { loadSyntheticQuaternaries } from '../support/map.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
-import { anySaveBar, fitSummary, header, isProjectPatch, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
+import { anySaveBar, fitSummary, header, isProjectPatch, openFold, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
 const SETTINGS_INDEX: [string, string[]][] = [
@@ -375,15 +375,14 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 			.evaluateAll((els) => els.filter((e) => !e.closest('dialog:not([open])')).map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
 	// The lazy panels first: Evaporation from the map, the quality flags and the flow gaps.
 	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
+	// The quality flags and flow gaps are folded into one line of their values (issue #521): open it to see them.
+	await openFold(page.locator('#set-record'), 'record-flags');
 	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: /^Quality flags for Fit automatically/ })).toBeVisible();
-	expect((await names('set-flow')).slice(0, 5)).toEqual([
-		'Flow calibration',
-		'Areal rainfall correction',
-		'Rain for each unit',
-		'GR4J potential evaporation',
-		'Evaporation from the map'
-	]);
+	// Its cards (issue #521), each an h3; the switches inside Rain into GR4J are h4s under it.
+	expect((await names('set-flow')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
+	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Areal rainfall correction' })).toBeVisible();
+	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Rain for each unit' })).toBeVisible();
 	expect(await names('set-rain')).toEqual([
 		'Rain gaps',
 		'CHIRPS bias correction and quantile map',

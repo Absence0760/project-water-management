@@ -34,6 +34,8 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 
 	await fitAndApply(page, { seed: '7', validate: true, bounds: 'typical' });
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
+	// At the foot of the Fit automatically card, whose Apply wrote it (issue #521).
+	await expect(page.getByTestId('fit-now-card').getByRole('region', { name: /^Fit record of these parameters/ })).toBeVisible();
 	await expect(definition(record, 'Seed')).toHaveText('7');
 	await expect(definition(record, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
 	await expect(record.getByText('Parameters edited since fit')).toHaveCount(0);

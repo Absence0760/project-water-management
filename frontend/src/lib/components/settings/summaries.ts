@@ -75,6 +75,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`A-pan ${fmtNum(apan)} mm a year`,
 			`effective rain ${fmtPct(s.effectiveRainFraction ?? 0, 0)}`,
 			`soil-water store ${fmtNum(s.effectiveRainStoreMm ?? 0)} mm`,
+			// Under GR4J the threshold only decides which rain days reduce irrigation demand (it moved here from Flow calibration, issue #521).
+			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
 		'set-share': share,

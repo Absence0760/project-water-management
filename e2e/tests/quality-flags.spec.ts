@@ -10,6 +10,11 @@ test('a gauged range needs its source, and saves with it', async ({ page, owner 
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Quality flags form');
 	await page.goto(`/projects/${project.id}?tab=settings`);
+	// Folded into one line of their values (issue #521) until opened.
+	await expect(page.getByTestId('record-flags-summary')).toHaveText(
+		'gauged range not known · above-range days censored · below-range, suspect and infilled days left out · no river-stop months · flow gaps not filled'
+	);
+	await openFold(page, 'record-flags');
 	const flags = page.getByRole('group', { name: /^Quality flags for Fit automatically/ });
 	// Only a gauge record in the project: only its range is offered.
 	await expect(flags.getByLabel(/^Logger record: highest gauging/)).toHaveCount(0);
@@ -29,6 +34,10 @@ test('a gauged range needs its source, and saves with it', async ({ page, owner 
 	await expect(months).toContainText('Feb, Mar, Apr');
 	await saveSettings(page);
 	await page.reload();
+	await expect(page.getByTestId('record-flags-summary')).toHaveText(
+		'gauged range set for the gauge record · above-range days censored · below-range and infilled days left out · suspect days scored as recorded · river stops Feb, Mar, Apr · flow gaps not filled'
+	);
+	await openFold(page, 'record-flags');
 	await expect(flags.getByLabel(/^Gauge record: highest gauging/)).toHaveValue('0.3');
 	await expect(flags.getByRole('textbox', { name: 'Source of the gauge record gauged range', exact: true })).toHaveValue('Synthetic rating table');
 	await expect(flags.getByLabel('Suspect days')).toHaveValue('include');
@@ -71,6 +80,7 @@ test('the fit censors days above the highest gauging, shows its data quality, an
 	await expect(record.getByTestId('fit-quality-flags')).toContainText('120 of 120 observed days scored · 14 censored');
 	await expect(record.getByText('Quality flags changed since fit')).toHaveCount(0);
 	// Leave the flood days out instead: the fit was made on other terms.
+	await openFold(page, 'record-flags');
 	await page.getByRole('group', { name: /^Quality flags for Fit automatically/ }).getByLabel('Days above the highest gauging').selectOption({ label: 'Leave out' });
 	await expect(record.getByText('Quality flags changed since fit')).toBeVisible();
 	await expect(record.getByText(/quality-flag settings .* have changed since the fit/)).toBeVisible();
