@@ -71,6 +71,10 @@
 	const needsTick = $derived(replacing && !replaceTicked);
 	const shown = $derived(blocking.length ? blocking : problems);
 	const problemsOf = (index: number) => shown.filter((p) => p.feature === index).map((p) => p.message);
+	/** The Problems column, only while some row has one: a column of "None" took the width the names need. */
+	const rowProblems = $derived(rows.some((r) => problemsOf(r.index).length > 0));
+	/** Some kinds came from the file's properties: the summary says so once, not under every row. */
+	const fromFile = $derived(rows.some((r) => r.kind && r.kindFrom === 'property'));
 
 	const GEOMETRY_LABEL: Record<string, string> = { Point: 'Point', LineString: 'Line', MultiLineString: 'Lines', Polygon: 'Polygon', MultiPolygon: 'Polygons' };
 	const geometryText = (r: ReviewRow) => (r.geometryType ? `${GEOMETRY_LABEL[r.geometryType]}${r.areaM2 !== null ? `, ${areaText(r.areaM2)}` : ''}` : '–');
@@ -173,9 +177,13 @@
 					aria-describedby="{uid}-file-h"
 					data-testid="map-file"
 				/>
+				<!-- One short line under the field (playbook § 2); the rest stays its description, and the ⓘ explains it in full. -->
 				<span class="hint" id="{uid}-file-h">
-					Longitude and latitude in WGS84 (EPSG:4326). A file in a Lo zone or UTM is refused rather than guessed: reproject it first (QGIS: Export → Save Features As, CRS EPSG:4326).
-					A file may mix boundaries, parcels, dams, gauges and rivers: you check each feature’s kind before anything is saved.
+					WGS84 longitude and latitude; a file in a Lo zone or UTM is refused.
+					<span class="visually-hidden"
+						>It is refused rather than guessed: reproject it first (QGIS: Export → Save Features As, CRS EPSG:4326). A file may mix boundaries,
+						parcels, dams, gauges and rivers: you check each feature’s kind before anything is saved.</span
+					>
 				</span>
 			</div>
 			<FormatHelp format={GEOJSON_FORMAT} />
@@ -187,7 +195,8 @@
 		<form id={formId} onsubmit={importReviewed} novalidate class="review">
 			<p class="summary" data-testid="map-review-summary">
 				<strong>{review.fileName}</strong>: {rows.length}
-				{rows.length === 1 ? 'feature' : 'features'}{importable ? ` (${kindCounts(rows)})` : ''}. Check each kind before you import; nothing is saved until then.
+				{rows.length === 1 ? 'feature' : 'features'}{importable ? ` (${kindCounts(rows)})` : ''}.
+				{#if importable}{fromFile ? 'Kinds come from the file’s properties, else from each shape. ' : ''}Check each kind before you import; nothing is saved until then.{:else}Nothing in this file can be imported.{/if}
 			</p>
 			{#if review.duplicate}
 				<div class="alert alert-error" role="alert" data-testid="map-import-duplicate">
@@ -220,6 +229,8 @@
 					<span class="hint" id="{uid}-every-h" data-testid="map-review-every-note">{everyNote ?? 'A default for the Kind column; each row can still be changed.'}</span>
 				</div>
 			{/if}
+			<!-- A file nothing in can be imported shows its problems once, in the alert above, and no table of dashes. -->
+			{#if importable}
 			<div class="table-wrap review-wrap">
 				<table class="data review-table" data-testid="map-review-table">
 					<caption class="visually-hidden">The file’s features, each with its kind</caption>
@@ -230,7 +241,7 @@
 							<th scope="col">Shape</th>
 							<th scope="col">Kind</th>
 							<th scope="col">Stands for</th>
-							<th scope="col">Problems</th>
+							{#if rowProblems}<th scope="col">Problems</th>{/if}
 						</tr>
 					</thead>
 					<tbody>
@@ -250,7 +261,8 @@
 										<select value={r.kind} onchange={(e) => setKind(i, e.currentTarget.value as MapFeatureKind)} aria-label="Kind of feature {r.index}" aria-describedby="{uid}-from-{r.index}">
 											{#each kindsFor(r) as k (k)}<option value={k}>{KIND_LABEL[k]}</option>{/each}
 										</select>
-										<span class="from" id="{uid}-from-{r.index}">{r.kindFrom === 'property' ? 'from the file' : 'from its shape'}{r.note ? `: ${r.note}` : ''}</span>
+										<!-- Said under the row only when it isn't the file's own (the summary says that once); a screen reader hears it always. -->
+										<span class="from" class:visually-hidden={r.kindFrom === 'property' && !r.note} id="{uid}-from-{r.index}">{r.kindFrom === 'property' ? 'from the file' : 'from its shape'}{r.note ? `: ${r.note}` : ''}</span>
 									{:else}–{/if}
 								</td>
 								<td data-label="Stands for">
@@ -261,14 +273,17 @@
 										</select>
 									{:else}–{/if}
 								</td>
-								<td data-label="Problems" class="problems">
-									{#if own.length}{own.map((m) => `It ${m}.`).join(' ')}{:else}<span class="muted">None</span>{/if}
-								</td>
+								{#if rowProblems}
+									<td data-label="Problems" class="problems" class:none={!own.length}>
+										{#if own.length}{own.map((m) => `It ${m}.`).join(' ')}{:else}<span class="muted">None</span>{/if}
+									</td>
+								{/if}
 							</tr>
 						{/each}
 					</tbody>
 				</table>
 			</div>
+			{/if}
 		</form>
 	{/if}
 
@@ -280,7 +295,10 @@
 	{/if}
 
 	{#snippet actions()}
-		{#if review}
+		{#if review && !importable}
+			<!-- Nothing to import: choosing another file is the one thing left to do. -->
+			<button type="button" class="btn btn-primary" onclick={chooseAnother} disabled={busy}>Choose another file</button>
+		{:else if review}
 			<button type="button" class="btn" onclick={chooseAnother} disabled={busy}>Choose another file</button>
 			<button type="submit" form={formId} class="btn btn-primary" disabled={busy || review.duplicate || blocking.length > 0 || !importable || needsTick}>
 				{busy ? 'Importing…' : `Import ${importable} ${importable === 1 ? 'feature' : 'features'}`}
@@ -308,7 +326,7 @@
 	}
 	.from {
 		display: block;
-		font-size: 0.75rem;
+		font-size: 0.8rem;
 		margin-top: 0.15rem;
 	}
 	.alert p,
@@ -327,15 +345,17 @@
 	.every select {
 		max-width: 20rem;
 	}
-	/* The sheet's body is the one scroll: the table grows with its rows. */
+	/* The sheet's body is the one scroll: the table grows with its rows, and its header row sticks to the top of
+	   that scroll (a wrap that scrolls would hold it, so the wrap doesn't: the sheet is wide enough for the table). */
 	.review-wrap {
 		max-height: none;
+		overflow: visible;
 	}
-	.review-table td {
+	.review-table :is(td, th) {
 		vertical-align: top;
 	}
 	.review-table input {
-		min-width: 9rem;
+		min-width: 14rem;
 	}
 	.problems {
 		min-width: 10rem;
@@ -351,9 +371,12 @@
 		font-size: 1rem;
 	}
 
-	/* A phone: each feature is a card of labelled fields, the sheet scrolls rather than a box in it. */
+	/* A phone: each feature is a card of labelled fields, the sheet scrolls rather than a box in it. Its first line is
+	   the number and shape ("1 · Polygon, 0.35 ha"), then the name, then Kind and Stands for side by side where they
+	   fit; no Problems line on a row without one (the row's flag and the alert carry them). */
 	@media (max-width: 640px) {
 		.review-wrap {
+			container: review / inline-size;
 			border: 0;
 			background: none;
 		}
@@ -366,9 +389,9 @@
 		}
 		.review-table tr {
 			display: grid;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			gap: 0.5rem 0.75rem;
-			padding: 0.75rem;
+			grid-template-columns: auto minmax(0, 1fr);
+			gap: 0.4rem 0.75rem;
+			padding: 0.6rem 0.75rem;
 			margin-bottom: 0.5rem;
 			border: 1px solid var(--border);
 			border-radius: var(--radius);
@@ -388,6 +411,24 @@
 		.review-table td.problems {
 			grid-column: 1 / -1;
 		}
+		.review-table td.problems.none {
+			display: none;
+		}
+		/* The head line: the number and the shape on the first row, whatever comes after them in the markup. */
+		.review-table th[scope='row'] {
+			grid-row: 1;
+			grid-column: 1;
+			font-weight: 600;
+		}
+		.review-table td[data-label='Shape'] {
+			grid-row: 1;
+			grid-column: 2 / -1;
+		}
+		.review-table th[scope='row']::after {
+			content: ' ·';
+			font-weight: 400;
+			color: var(--text-muted);
+		}
 		.review-table input,
 		.review-table select {
 			min-width: 0;
@@ -396,9 +437,31 @@
 		.review-table [data-label]::before {
 			content: attr(data-label);
 			display: block;
-			font-size: 0.75rem;
+			font-size: 0.85rem;
 			font-weight: 400;
 			color: var(--text-2);
+		}
+		/* The head line's two cells need no labels: "1 · Polygon, 0.35 ha" reads as itself. */
+		.review-table th[data-label='Feature']::before,
+		.review-table td[data-label='Shape']::before {
+			content: none;
+		}
+		.hint,
+		.from {
+			font-size: 0.85rem;
+		}
+	}
+	/* Room for two selects (a phone held upright is about 22rem of card): Kind and Stands for side by side, Kind
+	   taking the number's narrow column too, so the two are close to equal. */
+	@container review (min-width: 20rem) {
+		.review-table tr {
+			grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+		}
+		.review-table td[data-label='Kind'] {
+			grid-column: 1 / 3;
+		}
+		.review-table td[data-label='Stands for'] {
+			grid-column: 3;
 		}
 	}
 </style>

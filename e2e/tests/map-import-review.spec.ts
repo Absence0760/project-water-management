@@ -158,3 +158,85 @@ test('a row marked as the boundary while the project has one warns, and Import w
 	await showTab(page, 'features');
 	await expect(page.getByTestId('map-feature-list').getByRole('group', { name: /Catchment boundary/ }).locator('.nm')).toHaveText(['Wider catchment']);
 });
+
+/** Thirty parcels with long names, every third with its kind in the file. */
+const thirty = JSON.stringify({
+	type: 'FeatureCollection',
+	features: Array.from({ length: 30 }, (_, i) => ({
+		type: 'Feature',
+		properties: { name: `Parcel ${i + 1} with a fairly long field name`, ...(i % 3 === 0 ? { kind: 'farm_parcel' } : {}) },
+		geometry: { type: 'Polygon', coordinates: [box(21.31 + (i % 6) * 0.012, -33.69 + Math.floor(i / 6) * 0.012, 0.01)] }
+	}))
+});
+
+test('thirty features: whole names, no column of “None”, a header row that stays, and short cards on a phone (issue #521)', async ({ page, owner }) => {
+	test.setTimeout(60_000);
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Thirty features');
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await openMap(page, project.id);
+	const sheet = await review(page, 'thirty.geojson', thirty);
+	const table = sheet.getByTestId('map-review-table');
+	// No row has a problem: no Problems column, and the name gets the room (14rem, 196 px).
+	await expect(table.getByRole('columnheader')).toHaveText(['#', 'Name', 'Shape', 'Kind', 'Stands for']);
+	expect((await sheet.getByLabel('Name of feature 1', { exact: true }).boundingBox())!.width).toBeGreaterThanOrEqual(196);
+	// Where a kind came from: said once in the summary for the file's own, under a row only when it is a guess, and
+	// always the row's description for a screen reader.
+	await expect(sheet.getByTestId('map-review-summary')).toContainText('Kinds come from the file’s properties, else from each shape.');
+	// Visually hidden (a 1 px box, which Playwright counts as visible).
+	expect((await sheet.getByTestId('map-review-row').nth(0).getByText('from the file').boundingBox())!.width).toBeLessThanOrEqual(1);
+	await expect(sheet.getByLabel('Kind of feature 1', { exact: true })).toHaveAccessibleDescription('from the file');
+	await expect(sheet.getByTestId('map-review-row').nth(1).getByText('from its shape')).toBeVisible();
+	// The cells top-aligned, the number with them.
+	const row = sheet.getByTestId('map-review-row').first();
+	expect(Math.abs((await row.getByRole('rowheader').boundingBox())!.y - (await row.getByRole('cell').first().boundingBox())!.y)).toBeLessThan(2);
+	// Scrolled to the last rows, the column names are still at the top of the sheet's scroll.
+	await sheet.getByLabel('Name of feature 28', { exact: true }).scrollIntoViewIfNeeded();
+	const head = (await table.getByRole('columnheader', { name: 'Kind' }).boundingBox())!;
+	const firstRow = (await sheet.getByLabel('Name of feature 1', { exact: true }).boundingBox())!;
+	expect(head.y).toBeGreaterThan(firstRow.y + firstRow.height);
+	await expect(table.getByRole('columnheader', { name: 'Kind' })).toBeInViewport();
+	await expectNoViolations(page);
+
+	// A phone: each feature a card under 200 px (it was 352), its first line the number and shape, Kind and Stands
+	// for side by side, no Problems line.
+	for (const size of [{ width: 390, height: 844 }, { width: 360, height: 740 }, { width: 320, height: 640 }]) {
+		await resizeTo(page, size);
+		const card = sheet.getByTestId('map-review-row').first();
+		const b = (await card.boundingBox())!;
+		expect(b.height, `${size.width} px`).toBeLessThanOrEqual(size.width >= 360 ? 200 : 260);
+		const num = (await card.getByRole('rowheader').boundingBox())!;
+		const shape = (await card.getByText(/^Polygon, /).boundingBox())!;
+		expect(Math.abs(num.y - shape.y), `${size.width} px`).toBeLessThan(4);
+		if (size.width >= 360) expect(Math.abs((await card.getByLabel('Kind of feature 1', { exact: true }).boundingBox())!.y - (await card.getByLabel('What feature 1 stands for', { exact: true }).boundingBox())!.y)).toBeLessThan(2);
+		await expect(card.getByText('None')).toHaveCount(0);
+		await expectNoSidewaysScroll(page);
+	}
+	await expectNoViolations(page);
+});
+
+test('a file nothing in can be imported says so once and leaves Choose another file as the one action', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Nothing to import');
+	for (const size of [{ width: 1440, height: 960 }, { width: 390, height: 844 }]) {
+		await page.setViewportSize(size);
+		await openMap(page, project.id, '&upload=1');
+		const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
+		// The empty sheet: one short line under the file field; the rest stays its description.
+		await expect(sheet.locator('.hint').first()).toHaveText(/^WGS84 longitude and latitude; a file in a Lo zone or UTM is refused\./);
+		await expect(sheet.getByLabel(/^GeoJSON file/)).toHaveAccessibleDescription(/reproject it first \(QGIS: Export → Save Features As, CRS EPSG:4326\)/);
+		await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile('lo19.geojson', JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [-45_000, 3_700_000] } }] })));
+		await sheet.getByRole('button', { name: 'Review', exact: true }).click();
+		await expect(sheet.getByTestId('map-review-summary')).toContainText('Nothing in this file can be imported.');
+		await expect(sheet.getByTestId('map-review-summary')).not.toContainText('Check each kind');
+		await expect(sheet.getByTestId('map-import-error').getByRole('listitem')).toHaveText([/^Feature 1 has a coordinate .* looks projected/]);
+		// The problem once: no table repeating it.
+		await expect(sheet.getByTestId('map-review-table')).toHaveCount(0);
+		await expect(sheet.getByRole('button', { name: /^Import / })).toHaveCount(0);
+		await expect(sheet.getByRole('button', { name: 'Choose another file' })).toHaveClass(/btn-primary/);
+		await expectNoSidewaysScroll(page);
+		await expectNoViolations(page);
+		await sheet.getByRole('button', { name: 'Choose another file' }).click();
+		await expect(sheet.getByLabel(/^GeoJSON file/)).toBeVisible();
+	}
+});
