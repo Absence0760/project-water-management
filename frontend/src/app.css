@@ -101,6 +101,8 @@
 	--overlay-border: var(--border);
 	--overlay-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
 	--popover-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	/* A bar docked at the window's foot (the save bar): its shadow falls upward onto the page. */
+	--bar-shadow: 0 -2px 8px rgb(0 0 0 / 0.08);
 	--gutter: 16px;
 	/* The phone bar's height (AppShell); 0 from 900 px, where the sidebar replaces it. */
 	--header-h: 52px;
@@ -154,6 +156,7 @@
 		--overlay-border: var(--border-strong);
 		--overlay-shadow: 0 10px 30px rgb(0 0 0 / 0.7);
 		--popover-shadow: 0 6px 20px rgb(0 0 0 / 0.6);
+		--bar-shadow: 0 -2px 8px rgb(0 0 0 / 0.5);
 	}
 }
 
@@ -434,6 +437,26 @@ textarea {
 	flex-wrap: wrap;
 	gap: 0.75rem;
 	align-items: flex-end;
+}
+/* A field showing its error line (NumberInput's and DayInput's .num-err) grows downward and never moves its row
+   (issue #521, round 6; ui-playbook.md § 2). Rows align their fields to the bottom, so a label that wraps keeps the
+   inputs in line, and an error under one field then pushed its neighbours down by the error's height. While a
+   field in a row shows one, the row's fields stretch to the row's height with their label and input at the top
+   (one-line labels: nothing moves), and a .form-row's buttons hold the inputs' line. Any row, not only .form-row:
+   Settings' and the node sheet's own rows align to the bottom too. Stretch rather than flex-start, so a column of
+   fields (a column flexbox, where align-self is horizontal) keeps its full width. */
+:has(> .field .num-err) > .field {
+	align-self: stretch;
+}
+/* Nor does it widen its field: it wraps to the input's width (a day's message, 90 characters, made its field
+   79 px wider and pushed the next one aside). */
+.num-err {
+	contain: inline-size;
+}
+.form-row:has(> .field .num-err) > :is(.btn, button) {
+	align-self: flex-start;
+	/* A field's label line and the gap under it (.field > label: 0.85rem at the body's 1.45 line height). */
+	margin-top: calc(0.85rem * 1.45 + 0.25rem);
 }
 /* A form's buttons: one row under its fields, hints and checkboxes, at the content edge, the main
    run first (ui-playbook.md § 3, Action rows). The same gap above it whatever comes before, so the

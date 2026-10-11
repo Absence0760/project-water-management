@@ -6,7 +6,7 @@
 // The other forms that use it are covered by their own specs (settings, dam-development, report-window,
 // licence-record, applications, publication, unit-rain, …).
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -95,4 +95,40 @@ test('a form refuses to submit a day it can’t read', async ({ page, owner }) =
 	await on.fill('1 March 2026');
 	await form.getByRole('button', { name: 'Save the outcome' }).click();
 	await expect(page.getByTestId('licence-record').getByTestId('licence-record-status')).toHaveText('Refused on 2026-03-01. The record is kept until 2029-03-01.');
+});
+
+// A field's error line never moves its row (issue #521, round 6; app.css, after .form-row): rows align their fields
+// to the bottom, so an error under one field used to push its neighbours down by the error's height.
+test('a day or number field showing its error leaves its neighbour’s input where it was', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const project = await createProject(page.request, 'Errors in a row');
+	await updateSettings(page.request, project.id, { flowShareMethod: 'hiLo' });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const pairs = [
+		{ field: page.getByLabel('Simulation start'), neighbour: page.getByLabel('Simulation end'), text: 'soon' },
+		{ field: page.getByLabel('High (%)'), neighbour: page.getByLabel('Low (%)'), text: '150' }
+	];
+	for (const { field, neighbour, text } of pairs) {
+		await neighbour.scrollIntoViewIfNeeded();
+		const before = (await neighbour.boundingBox())!;
+		// Side by side in one row at 1440.
+		expect(Math.round((await field.boundingBox())!.y)).toBe(Math.round(before.y));
+		await field.fill(text);
+		await field.blur();
+		await expect(field).toHaveAttribute('aria-invalid', 'true');
+		const err = page.locator(`#${await field.getAttribute('id')}-err`);
+		await expect(err).toBeVisible();
+		const after = (await neighbour.boundingBox())!;
+		expect(after.y).toBeCloseTo(before.y, 0);
+		expect(after.x).toBeCloseTo(before.x, 0);
+		// The field's own input stays level with it too.
+		expect((await field.boundingBox())!.y).toBeCloseTo(before.y, 0);
+	}
+	// The error lines wrap inside their fields on a phone.
+	for (const width of [390, 320]) {
+		await page.setViewportSize({ width, height: 844 });
+		await expect(page.locator('#st-start-err')).toBeVisible();
+		await expectNoSidewaysScroll(page);
+	}
 });
