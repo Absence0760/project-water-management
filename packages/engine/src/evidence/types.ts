@@ -102,8 +102,18 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * beside the use, never counted (`damLossesA` / `B`, issue #507 item 7). A total of other units
  * carries none of them. A pack drafted before evidence-16 has no such fields, and § 5 shows no
  * such words.
+ * evidence-17: § 5 lists units one by one only for an applicant's application
+ * (`identity.application.origin`, issue #523 G1, D3): a team scenario's own
+ * units are an editor's choice, not the applicant's farms, so all of its
+ * units are in the totals. Page 1's authorised volume mix
+ * (`licenceImpactAuthorised.mix`) gives no fewer than 5 registered users'
+ * volume (`folded`): a water source held by fewer is left out, the ways of
+ * holding held by fewer are pooled in one `other` row. A pack drafted before
+ * keeps its document; a viewer who can't read each farm's volume gets no
+ * team-scenario pack before evidence-17 that names a unit, and no mix that
+ * isn't folded (backend evidence/packs.ts).
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-16';
+export const EVIDENCE_REPORT_VERSION = 'evidence-17';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -160,6 +170,13 @@ export interface EvidenceScenarioInput {
 	ownedNodeIds: string[];
 	/** One class per op, as the run classified them. */
 	classified: OpClass[];
+	/**
+	 * Who made it (evidence-17): an applicant's application, whose own units are
+	 * their farm links, or the team's scenario, whose units an editor chose.
+	 * Only an application's own units are listed one by one in § 5; absent
+	 * reads as `team`.
+	 */
+	origin?: 'team' | 'applicant';
 }
 
 /** A row of the evidence nomination history (010_run_nomination), oldest first. */
@@ -962,6 +979,8 @@ export interface EvidenceReport {
 			opsSha256: string;
 			proposals: number;
 			assumptions: number;
+			/** An applicant's application or the team's scenario (evidence-17); absent from an older pack's document. */
+			origin?: 'team' | 'applicant';
 		} | null;
 	};
 	checks: EvidenceCheck[];
