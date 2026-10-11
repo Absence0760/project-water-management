@@ -234,7 +234,7 @@ test('a click off the elevation model is taken back with the reason; Done asks b
 	// No terrain channel within 150 m (issue #472): taken back with what to do, the first click's piece unchanged.
 	const first = await lines(page).first().textContent();
 	await typeOutlet(page, FIXTURE_OFF_TERRAIN);
-	await expect(bar(page).getByTestId('map-click-error')).toHaveText(/^Click not added: No terrain channel runs within 150 m of click 2\. Zoom in until the terrain channels \(the red lines\) show, and click on one/);
+	await expect(bar(page).getByTestId('map-click-error')).toHaveText(/^Click not added: No terrain channel runs within 150 m of click 2\. Zoom in until the terrain channels show \(they're in the map's key\), and click on one/);
 	await expect(lines(page)).toHaveCount(1);
 	await expect(lines(page).first()).toHaveText(first!);
 

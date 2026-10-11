@@ -515,7 +515,7 @@ describe('delineateUnits: each point on the terrain channel nearest it (start-15
 		const slope = at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120);
 		const e = await delineateUnits(dem, { outlet: slope, boundary: null, points: [] }).catch((x: unknown) => x);
 		expect((e as DelineationRefused).code).toBe('off_channel');
-		expect((e as Error).message).toBe('No terrain channel runs within 150 m of the outlet gauge. Move the gauge onto a terrain channel (Delineate and Sub-catchments draw them as red lines) and propose again.');
+		expect((e as Error).message).toBe("No terrain channel runs within 150 m of the outlet gauge. Move the gauge onto a terrain channel (Delineate and Sub-catchments draw them; they're in the map's key) and propose again.");
 		const r = await delineateUnits(dem, { outlet: at(OUTLET_CELL.x, OUTLET_CELL.y), boundary: null, points: [{ ...point('far', 0, 0), geometry: { type: 'Point', coordinates: slope } }] });
 		expect(r.dropped).toEqual([{ id: 'far', reason: 'has no terrain channel within 150 m: move it onto one of the elevation model’s channels' }]);
 	});

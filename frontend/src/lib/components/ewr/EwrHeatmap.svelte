@@ -267,16 +267,6 @@
 			--heat-ink-4: #121312;
 		}
 	}
-	:global(:root[data-theme='dark']) .ewr-heatmap {
-		--heat-1: #184f95;
-		--heat-2: #256abf;
-		--heat-3: #3987e5;
-		--heat-4: #86b6ef;
-		--heat-ink-1: #ffffff;
-		--heat-ink-2: #ffffff;
-		--heat-ink-3: #121312;
-		--heat-ink-4: #121312;
-	}
 
 	.head {
 		display: flex;

@@ -208,7 +208,7 @@
 		color: var(--text);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 		font-size: 0.85rem;
 		font-weight: 400;
 		line-height: 1.4;

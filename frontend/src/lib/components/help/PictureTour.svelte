@@ -132,6 +132,15 @@
 		height: auto;
 		border-radius: var(--radius);
 	}
+	/* The renders are daylight scenes, the brightest thing on a dark page:
+	   dim them a little and frame them (issue #521). The markers stay full
+	   strength. */
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) .picture img {
+			filter: brightness(0.82) contrast(1.05);
+			outline: 1px solid var(--border);
+		}
+	}
 	.marker {
 		position: absolute;
 		display: grid;

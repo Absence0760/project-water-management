@@ -135,7 +135,7 @@ describe('Delineate: the mapped river never places the outlet (issue #472)', () 
 		const r = await delineate(slope);
 		expect(r.status, JSON.stringify(r.body)).toBe(422);
 		expect(r.body.details.reason).toBe('off_channel');
-		expect(r.body.error).toMatch(/^No terrain channel runs within 150 m of that point\. Zoom in until the terrain channels \(the red lines\) show, and click on one/);
+		expect(r.body.error).toMatch(/^No terrain channel runs within 150 m of that point\. Zoom in until the terrain channels show \(they're in the map's key\), and click on one/);
 	});
 });
 

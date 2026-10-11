@@ -19,7 +19,8 @@
 		width: auto;
 		color: var(--text-muted);
 		background: transparent;
-		border: 1px solid var(--border);
+		/* The input border token: --border was 1.3–1.5:1, too faint to read as a control (WCAG 1.4.11, issue #521). */
+		border: 1px solid var(--border-input);
 		border-radius: var(--radius-sm);
 	}
 </style>

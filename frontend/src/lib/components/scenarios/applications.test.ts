@@ -8,6 +8,7 @@ import {
 	filterApplications,
 	longestWaiting,
 	parseFilter,
+	parseSort,
 	sortApplications,
 	statusPill
 } from './applications';
@@ -35,6 +36,15 @@ describe('sortApplications', () => {
 		const same = [app('y', 'submitted', '2026-02-01T08:00:00.000Z', 'Zulu'), app('x', 'submitted', '2026-02-01T08:00:00.000Z', 'Alpha')];
 		expect(sortApplications(same, 'date').map((a) => a.name)).toEqual(['Alpha', 'Zulu']);
 		expect(same.map((a) => a.id)).toEqual(['y', 'x']);
+	});
+});
+
+describe('the sort in the URL', () => {
+	it('reads ?sort=status, and anything else as newest first', () => {
+		expect(parseSort('status')).toBe('status');
+		expect(parseSort(null)).toBe('date');
+		expect(parseSort('date')).toBe('date');
+		expect(parseSort('name')).toBe('date');
 	});
 });
 

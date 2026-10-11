@@ -1781,7 +1781,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'outlet-placement',
 		term: 'Outlet placement on the channel',
-		short: 'A clicked outlet goes on the nearest terrain channel (the red lines) within 150 m; mapped rivers never move it.',
+		short: 'A clicked outlet goes on the nearest terrain channel (terrain channels in the map’s key) within 150 m; mapped rivers never move it.',
 		category: 'data'
 	},
 	{

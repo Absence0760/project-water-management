@@ -104,7 +104,7 @@ describe('delineate (synthetic DEM)', () => {
 		const e = await refusal(delineate(dem, at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120)));
 		expect(e.code).toBe('off_channel');
 		expect(e.message).toBe(
-			`No terrain channel runs within ${SNAP_RADIUS_M} m of that point. Zoom in until the terrain channels (the red lines) show, and click on one: they are the elevation model's rivers, which the outline follows.`
+			`No terrain channel runs within ${SNAP_RADIUS_M} m of that point. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows.`
 		);
 	});
 

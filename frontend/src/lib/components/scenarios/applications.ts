@@ -5,6 +5,11 @@ import { OUTCOME_LABEL, type Scenario, type ScenarioOutcome } from '$lib/api/typ
 
 export type ApplicationSort = 'date' | 'status';
 
+/** The sort in the URL: `?sort=status`; none (or anything else) is newest first, so a reload and Back keep it. */
+export function parseSort(v: string | null): ApplicationSort {
+	return v === 'status' ? 'status' : 'date';
+}
+
 /** Awaiting a decision first: it is the assessor's queue. Then withdrawn, then decided. */
 const STATUS_ORDER: Record<Scenario['status'], number> = { submitted: 0, withdrawn: 1, decided: 2, draft: 3 };
 

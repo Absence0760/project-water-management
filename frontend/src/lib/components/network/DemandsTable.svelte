@@ -259,7 +259,7 @@
 			</table>
 		</div>
 		<p class="muted small after">
-			1 Mm³ = 1 million m³. Darker cells are months of higher demand. A demand object that isn't modelled counts nothing.
+			1 Mm³ = 1 million m³. The stronger a cell's shade, the higher that month's demand. A demand object that isn't modelled counts nothing.
 			{#if scheduled}A scheduled demand shows its months before its schedule windows.{/if}
 			A run's demand also follows rain, daily A-pan, demand factors and restrictions; its own figures are on its results.
 		</p>

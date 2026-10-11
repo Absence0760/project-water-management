@@ -821,7 +821,11 @@ section it belongs to, with the example that taught it.
   follows these", "River network: mapped rivers, for reference only; …")
   and the key's Lines lead with the same words from one helper
   (`map/mapList.ts` `delineationLines`). Don't name a thing by its colour
-  in text: colours change with the theme. And keep what a decision is
+  in text: colours change with the theme ("Darker cells are months of higher
+  demand" read backwards in dark, where a higher demand is a brighter teal;
+  now "The stronger a cell's shade…"). `frontend/src/lib/darkTheme.test.ts`
+  refuses "the red lines", "darker cells", "green = better" and the like in
+  any copy. And keep what a decision is
   checked against on screen while it is decided: the channels went with the
   click step, so the proposal couldn't be checked against them; they stay,
   dimmed, until it is accepted or rejected.
@@ -831,6 +835,32 @@ section it belongs to, with the example that taught it.
   says "It isn’t in the model yet." with the next step as a button (Divide
   the model, or Start from the map), and the boundary's card keeps it while
   it applies (`mapList.ts` `boundaryNextStep`).
+- **Overlays take their edge from tokens.** A dialog, sheet or popover's
+  backdrop, border and shadow are `--overlay-backdrop`, `--overlay-border`,
+  `--overlay-shadow` and `--popover-shadow` (`app.css`), which deepen in dark:
+  the literal 20 % black shadow and `--border` edge left a dark sheet at
+  1.1:1 against the page it covered, so on a phone the two read as one
+  (issue #521). `::backdrop` only inherits custom properties in recent
+  browsers, so give it the light value as the `var()` fallback.
+  `darkTheme.test.ts` refuses a literal popover shadow in a component.
+- **Hold non-text parts to 3:1.** A control's outline (or its fill, where it
+  stands off the ground) and a chart's marks need 3:1 against the ground
+  (WCAG 1.4.11), and axe checks neither: the flow unit picker's `--border`
+  outline (1.3–1.5:1) and the reserve chart's faded part years (1.9:1) passed
+  every scan in both themes. A control's outline is `--border-input`; a mark
+  drawn "lighter" keeps a full-strength outline and fades only its fill
+  (`fill-opacity`, never `opacity`), and its note says "outlined", not
+  "faded". `e2e/support/contrast.ts` checks both (§ 5).
+- **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
+  the dark theme's accent into a mid teal that read as a live secondary
+  button; `.btn-primary:disabled` is the plain surface, the strong border and
+  muted text in both themes (`app.css`).
+- **A badge is sentence case and a rounded box.** `text-transform:
+  capitalize` gave "Dam Settings Changed Since The Run"; a badge capitalises
+  its first letter only (`::first-letter`). Its corners are half a one-line
+  badge's height (0.7rem), so a long badge that wraps in a narrow cell is a
+  rounded box, not the tall blob `999px` made; give the cell room
+  (Curtailment targets' names are at least 11rem).
 - **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
   with `opacity: 0.6` and axe failed its text on contrast (no scan had a
   disabled rule until the page got one). Tint the row and say **off** in
@@ -1357,6 +1387,27 @@ Interaction details that bit:
   and the project's members, the pending invitations and the farmers use it;
   Crops' `removed()` and the Network's `remove()` did the same by hand, and
   Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
+  A row with no control every row has (a note: only some have Delete) takes
+  the focus itself: the notes list's items carry `tabindex="-1"` and the
+  selector is the item (`notes/NotesList.svelte`, `history-steps.spec.ts`).
+- **A pick is a step in history; typing is one step; a default is none.**
+  Runs replaced the history entry on a run pick while River, Units, Dams and
+  Allocations added one, so Back did different things on neighbouring pages
+  (issue #521). The rule: a run, unit, dam or feature the user picks, and a
+  filter or sort chosen from a control, pushes (`goto` without
+  `replaceState`), so Back returns to the pick before. A search typed into a
+  box is one step: its first change after the box takes the focus pushes,
+  the rest replace (the project list, Runs' label filter; History's search
+  only replaces). A default pick, a redirect from an old link and closing an
+  overlay replace. Every sort and filter is in the URL, so a reload keeps it
+  (the Applications sort `sort=status`, Runs' `q=`).
+- **A failed load says what failed and offers Try again.** A panel that reads
+  on its own (Recent notes, Registration checks, the Outcome matrix's sweep,
+  the Seasonal outlook, Automated calibration's fits) shows "Couldn’t look
+  up …: <reason>" with **Try again** calling its load again, never the bare
+  server text with only a reload to retry. An action's failure (a start, an
+  apply) keeps its own message: the action's button is its retry
+  (`AutoCalibrationFollower.loadFailed`).
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
@@ -1637,6 +1688,23 @@ Interaction details that bit:
   (Fit automatically's "Enter a seed.") can't be reached from the page. Test
   the state the field really shows (`aria-invalid`), and key any summary of
   it on that.
+- **Check non-text contrast with `support/contrast.ts`.** axe reads text
+  only. `expectNonTextContrast(page, { within, marks, except })` checks every
+  visible, enabled text field, select and textarea (its weakest drawn border,
+  or its own fill, against the composited background of its ancestors) and
+  every SVG chart mark (fill and outline, each with its opacity and its
+  groups', against the chart's ground; `<line>`s are gridlines and skipped),
+  at 3:1. Call it in both themes (`test.use({ colorScheme })`) on a screen
+  that has loaded; `nonTextContrast` returns the failures with their
+  colours. `non-text-contrast.spec.ts` runs it on Transfers, the node sheet
+  and the reserve chart, with a positive control. uPlot's canvas charts take
+  their colours from tokens, which the dark-mode audit measured once; the
+  helper doesn't see a canvas.
+- **To test a loading state, hold the chunk by what it holds.** Production
+  chunk names are bare hashes, so a route can't pick the Map's lazy chunk by
+  name: fetch every `_app/immutable/**/*.js`, and hold the one whose body has
+  the component's `data-testid` until the check is done
+  (`small-layout-fixes.spec.ts`; Svelte may drop the attribute's quotes).
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle

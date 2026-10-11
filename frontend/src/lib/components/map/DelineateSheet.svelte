@@ -233,7 +233,7 @@
 				{/each}
 			</fieldset>
 			{#if at}
-				<p class="at" data-testid="delineate-at">Clicked at {positionText(at)}. The point goes on the nearest terrain channel (the red lines), within 150 m; mapped rivers never move it.</p>
+				<p class="at" data-testid="delineate-at">Clicked at {positionText(at)}. The point goes on the nearest terrain channel (terrain channels in the map’s key), within 150 m; mapped rivers never move it.</p>
 			{/if}
 			<details class="coords" bind:open={showCoords}>
 				<summary>Enter coordinates</summary>

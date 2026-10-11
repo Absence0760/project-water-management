@@ -254,7 +254,7 @@
 		padding: 0.5rem var(--gutter);
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
+		box-shadow: var(--popover-shadow);
 	}
 	.app-menu[hidden] {
 		display: none;
