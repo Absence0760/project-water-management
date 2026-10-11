@@ -9,7 +9,8 @@
 // times a dam-less unit's share, both to one holder's volume exactly. So
 // such a viewer reads an allowlist of verdicts and counts, nothing else: per
 // EWR site the days and months its EWR is not met and its assurance verdicts
-// (rates, months met), the monthly delivered shares the report already shows
+// (rates, months met) without the monthly delivered shares (a share times the
+// base run's requirement is the month's flow)
 // coarsely, and each licence-impact board's below / verdict / class fields.
 // No series of any kind (no natural flow, outflow, gauge flow or EWR
 // shortfall), no volume, no use total, no ensemble flow figure, no sweep
@@ -157,7 +158,7 @@ export function ensembleVerdicts<T>(v: T): T {
 const ROW_VERDICTS: ReadonlySet<string> = new Set(['reserve', 'ewrDays', 'noFlowDays', 'ewrBelowWorks', 'otherApplications']);
 /** Its flags that say nothing of a unit's figure or a flow. */
 const FLAG_VERDICTS: ReadonlySet<string> = new Set(['assumptions', 'reference', 'ewrZero', 'noReserve', 'gated', 'noRule', 'noCalibration', 'noFit', 'chirps', 'dataQuality', 'notEndorsed']);
-/** An EWR site's section (EvidenceSite) as verdicts: the months met, the delivered shares, no natural or flow figure. */
+/** An EWR site's section (EvidenceSite) as verdicts: the months met, no delivered share, natural or flow figure. */
 const SITE_VERDICTS = ['key', 'name', 'isOutlet', 'source', 'sourceKind', 'component', 'unit', 'category', 'months', 'lost', 'gained', 'worst', 'longestA', 'longestB', 'rateA', 'rateB', 'monthsA', 'belowTableA', 'belowTableB', 'belowTableExpectedPct', 'byMonth', 'fdcMonth', 'fdcDriestMonth'] as const;
 
 type ReportLike = Obj & { summaries: { baseline: SummaryLike | null; application: SummaryLike | null } };
@@ -196,7 +197,20 @@ const REPORT_VERDICTS: Record<string, (v: unknown) => unknown> = {
 	cumulative: (v) => v,
 	rows: (v) => (Array.isArray(v) ? v.filter((r) => isObj(r) && ROW_VERDICTS.has(r.id as string)) : []),
 	flags: (v) => (Array.isArray(v) ? v.filter((f) => isObj(f) && FLAG_VERDICTS.has(f.id as string)) : []),
-	river: (v) => pickEach(v, SITE_VERDICTS).map((s) => ({ ...s, naturalMar: null, ewrPctNmar: null, fdcBands: null, fdcBandNote: null, fdcChange: null })),
+	// Each month met or not, never the share delivered: share × the base run's requirement (which the viewer reads in
+	// full, since it rests on natural flow alone) is the month's exact flow (#523 I, round 6). The worst month stays as
+	// a month, without its share.
+	river: (v) =>
+		pickEach(v, SITE_VERDICTS).map((s) => ({
+			...s,
+			months: pickEach(s.months, ['year', 'month', 'waterYear', 'metA', 'metB']).map((m) => ({ ...m, deliveredA: null, deliveredB: null })),
+			worst: isObj(s.worst) ? { ...pick(s.worst, ['year', 'month']), delivered: null } : null,
+			naturalMar: null,
+			ewrPctNmar: null,
+			fdcBands: null,
+			fdcBandNote: null,
+			fdcChange: null
+		})),
 	licenceImpact: boardVerdicts,
 	licenceImpactAuthorised: boardVerdicts,
 	uncertainty: ensembleVerdicts,

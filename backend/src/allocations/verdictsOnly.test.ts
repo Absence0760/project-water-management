@@ -181,7 +181,7 @@ describe('an evidence report on such a run', () => {
 		servedWhileFailing: { notAssessed: null, sites: [{ key: 'outlet', name: 'Weir', isOutlet: true, basis: 'x', daysNotMetA: 1, daysNotMetB: 2, units: [{ nodeId: 'a' }] }] },
 		allocations: { modeA: 'none', modeB: mode, units: [{ nodeId: 'a' }] },
 		licenceImpact: { result: { status: 'ok', impact: { classes: [{ classId: 'dry', label: 'Dry', nYears: 3, enoughYears: true, waterYears: [2001], lowerM3: 1, upperM3: 2, waterfall: { existingUseM3: VOL }, below: { units: 12 }, verdict: 'worse' }], warnings: ['w'] } } },
-		river: [{ key: 'outlet', months: [{ deliveredA: 0.5 }], naturalMar: { runMcm: 3 }, fdcBands: [] }],
+		river: [{ key: 'outlet', months: [{ year: 2001, month: 1, waterYear: 2000, deliveredA: 0.5, deliveredB: 0.25, metA: false, metB: false }], worst: { year: 2001, month: 1, delivered: 0.25 }, naturalMar: { runMcm: 3 }, fdcBands: [] }],
 		newSection: { m3: VOL },
 		appendix: { warnings: { baseline: ['w'], application: ['w'] }, baselineInputs: {} },
 		summaries: { baseline: { allocations: { mode: 'none' } }, application: { allocations: { mode }, waterBalance: { total: VOL } } }
@@ -193,7 +193,9 @@ describe('an evidence report on such a run', () => {
 		expect(out.rows.map((r) => r.id)).toEqual(['reserve', 'ewrDays']);
 		expect(out.flags.map((f) => f.id)).toEqual(['noRule']);
 		expect([out.users, out.questions, out.allocations.units, out.servedWhileFailing.sites[0]!.units]).toEqual([[], [], [], []]);
-		expect(out.river[0]).toMatchObject({ key: 'outlet', months: [{ deliveredA: 0.5 }], naturalMar: null, fdcBands: null });
+		// No share delivered: share × the base run's requirement would be the month's flow (#523 I, round 6).
+		expect(out.river[0]).toMatchObject({ key: 'outlet', months: [{ year: 2001, month: 1, waterYear: 2000, metA: false, metB: false, deliveredA: null, deliveredB: null }], worst: { year: 2001, month: 1, delivered: null }, naturalMar: null, fdcBands: null });
+		expect(JSON.stringify(out.river)).not.toMatch(/0\.25|0\.5\b/);
 		expect(out.licenceImpact.result.impact.classes[0]).toEqual({ classId: 'dry', label: 'Dry', nYears: 3, enoughYears: true, waterYears: [2001], below: { units: 12 }, verdict: 'worse', lowerM3: null, upperM3: null, waterfall: null });
 		expect('newSection' in out).toBe(false);
 		expect(out.withheld).toEqual(expect.arrayContaining(['newSection', 'users', 'licenceImpact']));

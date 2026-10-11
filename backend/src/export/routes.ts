@@ -328,7 +328,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 					notesUpdatedAt: run.notesUpdatedAt ? new Date(run.notesUpdatedAt).toISOString() : null,
 					notesUpdatedBy: run.notesUpdatedBy,
 					evidence: runEvidence(await listNominations(db, id), runId),
-					flowDuration: await loadFlowDuration(db, runId, { startDate: run.startDate, forecastFrom: run.summary.forecast?.from ?? null }),
+					// Flow quantiles of a cap or full-allocation run are flow figures that viewer doesn't read (#523 I, round 6).
+					flowDuration: (await seriesWithholding(db, id, role, runId))?.verdictsOnly ? null : await loadFlowDuration(db, runId, { startDate: run.startDate, forecastFrom: run.summary.forecast?.from ?? null }),
 					runoffModel: run.runoffModel,
 					damCapacityM3: await loadDamCapacities(db, runId),
 					damCapacityEndM3: await loadDamCapacitiesOn(db, runId, summaryEnd(run)),

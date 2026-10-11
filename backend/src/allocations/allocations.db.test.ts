@@ -1239,6 +1239,10 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		expect([capSummary.allocations.verdictsOnly, capSummary.farms, capSummary.waterBalance]).toEqual([true, [], undefined]);
 		expect(capSummary.withheld).toContain('waterBalance');
 		expect((await get(ctx.viewer, `${at}/runs/${capRun}/export/summary.csv`)).text).toMatch(/^# withheld=[^\n]*waterBalance/m);
+		// No flow quantiles either (#523 I, round 6): the summary CSV prints none of the cap run's flow; the editor's has them.
+		const noFdc = (txt: string) => /No catchment flow series stored for this run/.test(txt) && !/Simulated outflow/.test(txt);
+		expect(noFdc((await get(ctx.viewer, `${at}/runs/${capRun}/export/summary.csv`)).text)).toBe(true);
+		expect(noFdc((await get(ctx.editor, `${at}/runs/${capRun}/export/summary.csv`)).text)).toBe(false);
 		const full = await ctx.viewer.call('GET', `${at}/runs/${fullRun}`);
 		expect(full.body.series.some((s: { nodeId: string | null }) => s.nodeId === unit)).toBe(false);
 		expect(full.body.withheldSeries).toContainEqual({ nodeId: unit, key: 'demand' });

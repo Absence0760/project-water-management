@@ -2992,8 +2992,10 @@ database:
   that viewer reads an **allowlist of verdicts and counts**, nothing else
   (`allocations/verdictsOnly.ts`): per EWR site the days and months its EWR
   is not met, its assurance verdicts (months met, rates, the longest run not
-  met), the monthly delivered shares the evidence report already shows
-  coarsely, the no-flow day count and each licence-impact board's below,
+  met), each month met or not (never the share delivered: a share times the
+  base run's requirement, which rests on natural flow alone, is that
+  month's exact flow; round 6), the no-flow day count and each
+  licence-impact board's below,
   verdict and class fields. **No series of any kind** (no natural flow,
   outflow, gauge flow or EWR shortfall, the catchment day trace included),
   no volume (no MAR, shortfall in m³, class bounds or EWR flow), no use
