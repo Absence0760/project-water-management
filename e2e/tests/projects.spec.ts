@@ -3,7 +3,8 @@ import { addMember, createProject, createRun, nominateRun, putModel, putSeries, 
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
-import { openRowMenu, outcomesReady, row } from '../support/projects.ts';
+import { importButton, openRowMenu, outcomesReady, row } from '../support/projects.ts';
+import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { runsList } from '../support/runs.ts';
 import { projectDay } from '../support/dates.ts';
@@ -553,6 +554,34 @@ test.describe('fifty projects', () => {
 		// The figures move under the name on a phone; the owner filter is a select.
 		await expect(row(page, 'Big published catchment').locator('.meta-narrow').first()).toBeVisible();
 		await expect(page.getByLabel('Show')).toBeVisible();
+		// The head is one row, Import beside New project (issue #521: it was three full-width buttons, ~150 px,
+		// before any project), so the first project is in the first screen. The two named imports are its list.
+		await expect(page.getByRole('button', { name: 'Import b023 workbook', exact: true })).toHaveCount(0);
+		const newProject = page.getByRole('button', { name: 'New project', exact: true });
+		const importBox = (await importButton(page).boundingBox())!;
+		const newBox = (await newProject.boundingBox())!;
+		expect(Math.abs(importBox.y - newBox.y)).toBeLessThanOrEqual(1);
+		await expect(page.getByRole('rowheader').first()).toBeInViewport();
+		// Each row's Add data and ⋯ sit side by side, one tap high, not stacked.
+		const big = row(page, 'Big published catchment');
+		const addBox = (await big.getByRole('link', { name: 'Add data to Big published catchment' }).boundingBox())!;
+		const moreBox = (await big.getByRole('button', { name: 'More actions for Big published catchment', exact: true }).boundingBox())!;
+		expect(Math.abs(addBox.y - moreBox.y)).toBeLessThanOrEqual(1);
+		expect(moreBox.x).toBeGreaterThan(addBox.x + addBox.width - 1);
+		expect(addBox.height).toBeGreaterThanOrEqual(44);
+		// Import's list opens into the screen, and nothing scrolls sideways, at 390 or at 320.
+		for (const width of [390, 320]) {
+			await resizeTo(page, { width, height: 844 });
+			await importButton(page).click();
+			for (const item of ['Import b023 workbook', 'Import project file (.json)']) {
+				const box = (await page.locator('#pj-import-menu').getByRole('button', { name: item, exact: true }).boundingBox())!;
+				expect(box.x, `${item} at ${width}`).toBeGreaterThanOrEqual(0);
+				expect(box.x + box.width, `${item} at ${width}`).toBeLessThanOrEqual(width);
+			}
+			await expectNoSidewaysScroll(page);
+			await page.keyboard.press('Escape');
+			await expect(importButton(page)).toHaveAttribute('aria-expanded', 'false');
+		}
 		await expectNoViolations(page);
 	});
 });
