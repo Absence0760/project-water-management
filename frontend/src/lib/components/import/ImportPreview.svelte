@@ -165,9 +165,6 @@
 		font-size: 0.8rem;
 	}
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
 		margin-top: 0.75rem;
 		font-weight: 500;
 	}

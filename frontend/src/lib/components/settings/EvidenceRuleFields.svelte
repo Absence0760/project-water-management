@@ -211,9 +211,7 @@
 		width: 100%;
 	}
 	.check {
-		display: flex;
 		align-items: center;
-		gap: 0.4rem;
 		min-height: 32px;
 	}
 	.rule {

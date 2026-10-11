@@ -253,7 +253,6 @@
 	.check {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
 		min-height: 36px;
 	}
 	@media (pointer: coarse), (max-width: 640px) {

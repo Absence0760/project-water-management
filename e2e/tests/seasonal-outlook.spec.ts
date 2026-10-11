@@ -114,6 +114,13 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	const btn = (await panel.getByRole('button', { name: 'Run seasonal outlook' }).boundingBox())!;
 	expect(btn.y).toBeGreaterThan(box.y + box.height);
 	expect(Math.abs(btn.x - box.x)).toBeLessThan(2);
+	// The levels' hint is the box's placeholder and the ⓘ beside its label, not two lines under it (issue #521 § 14),
+	// so the button sits straight under the box; a screen reader still reads the whole hint.
+	expect(btn.y - (box.y + box.height)).toBeLessThan(45);
+	await expect(panel.getByRole('button', { name: 'Run seasonal outlook' })).toBeInViewport();
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveAttribute('placeholder', 'Up to 6, separated by commas');
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveAccessibleDescription(/^Up to 6, separated by commas\. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run/);
+	await expect(panel.getByRole('button', { name: 'About Demand levels' })).toBeVisible();
 	await panel.getByRole('checkbox', { name: 'Add a monthly plan' }).check();
 	await panel.getByLabel('Name', { exact: true }).fill('Taper');
 	for (const m of ['Jan', 'Feb', 'Mar', 'Apr']) await panel.getByLabel(`${m} (%)`).fill('80');

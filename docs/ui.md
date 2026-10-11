@@ -1855,20 +1855,29 @@ it scrolls, and isn't fitted to the window.
   party has a **Specialist for this party** tick box for owners (167_signers;
   others see "Specialist for <party>"): the registered professional the
   applicant appointed, who signs the evidence packs of the party's
-  applications.
+  applications. The roles, invitations, applying parties, specialists and
+  acting for the authority are explained by the ⓘ tips (the heading's
+  *roles*, the email box's *invitation*, the party box's *applying party*,
+  the authority box's *responsible authority*) and their glossary entries;
+  an 8-line paragraph under **Add** repeated them until issue #521 § 13.
 - **Registration checks** (`project/RegistrationChecksPanel.svelte`, 167;
   editors and owners): the host's checks of members' registrations against
   the public SACNASP or ECSA register, newest first (member, registration
   and the name on the register, found or not, checked when and by whom).
   An owner, or an editor acting for the responsible authority, gets
-  **Record a check** (member, register, category, number, name on the
-  register, found, the checking organisation, the date, a note; the
-  register's address to look it up), and the owner the tick box "Issuing an
+  **+ Record a check** in the panel's head row, which opens the form
+  (member, register, category, number, name on the register, found, the
+  checking organisation, the date, a note; the register's address to look it
+  up) with focus on Member; **Cancel**, or recording the check, closes it and
+  returns focus to the button. Closed at first since issue #521 § 13: a
+  check is recorded about once a year a signer. The owner the tick box "Issuing an
   evidence pack waits until each specialist signer has a check from the
   last year" (on by default). `registration-checks.spec.ts` pins it with
   axe.
 - **Responsible authority** (`project/AuthorityPanel.svelte`, 163): who
-  decides the project's licence applications, its name, kind (a catchment
+  decides the project's licence applications (explained by the heading's ⓘ
+  and its glossary entry; the 2-line paragraph that repeated it went in issue
+  #521 § 13), its name, kind (a catchment
   management agency or the Department of Water and Sanitation) and office,
   saved at once by an editor (`settings.responsibleAuthority`; empty clears
   it); read-only text for a viewer. The decision form and the evidence
@@ -6619,8 +6628,10 @@ or a script uses to push daily readings into the project's series.
 ### Scheduled reports
 
 Below Data feeds (and API keys, for an owner), **Scheduled reports** (`#set-report-schedules`;
-`lib/components/report/ReportSchedulesPanel.svelte`, part of the Settings
-tab's chunk; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
+`lib/components/report/ReportSchedulesPanel.svelte`, its own chunk since
+issue #521, loaded when the Settings tab draws, as Data feeds is, so the tab's
+chunk keeps room under its ceiling; the anchor's id sits on a wrapper outside
+the lazy panel; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
 run's report to chosen members every week or month.
 
 - **The list**, one card per schedule: "Every Monday at 07:00
@@ -6793,8 +6804,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   which counts its charged shortfall, doesn't), and the **Water account**
   (`#res-water-account`). Then, under an `h2` **How sure, and what if** (a
   region, named as the menu's group), the run-it-yourself tools: the
-  **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
-  under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
+  **Uncertainty bands** (`#res-uncertainty`), the **Sensitivity runs**
+  (`#res-sensitivity`, a card of its own since issue #521 § 14, so each
+  card's actions are its own; [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)) and the **Seasonal
   outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)). A
   tool that hasn't run is **one row** (`common/ToolRow.svelte`,
@@ -8027,9 +8039,10 @@ read it before.
 
 Calibration research CR-21 ([model.md §2.10g](./model.md#210g-sensitivity-runs-ewr-compliance-as-a-range-engine--1180-calibration-research-cr-21)):
 how far EWR compliance moves when one input the record can't settle is
-changed at a time. On [River & reserve](#river--reserve), under the
-uncertainty bands in the same panel (`#res-uncertainty`; the **Uncertainty**
-link of the page's menu reaches both), `uncertainty/SensitivityPanel.svelte`
+changed at a time. On [River & reserve](#river--reserve), in its own card
+after the uncertainty bands' (`#res-sensitivity`, the page menu's
+**Sensitivity runs**; it shared the bands' card, three actions in one, until
+issue #521 § 14), `uncertainty/SensitivityPanel.svelte`
 with its chart `uncertainty/TornadoChart.svelte` and helpers
 `uncertainty/sensitivity.ts`.
 
@@ -8079,7 +8092,10 @@ reserve's chunk, view model `outcomes/matrix.ts`).
   until **Run…** opens this form, [§ River & reserve](#river--reserve),
   issue #465): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
-  with its hint under the box, then **Run demand sweep** in the action
+  with its ⓘ beside the label and "Up to 12, separated by commas" as the
+  box's placeholder (the whole hint, with the full-allocation note, is the
+  box's description for a screen reader; it was two lines under the box
+  until issue #521 § 14), then **Run demand sweep** in the action
   row under them, queue a [sweep](./scenarios.md#sweeps) of the
   shown run: one member per level, each a single `demand.scale` op on every
   farm, named "85 %" (on a full-allocation run, 85 % of each unit's
@@ -8161,7 +8177,9 @@ confirmed farmers see the outlook, O5, issue #90).
   each one `demand.scale` op on every farm from the decision date. On a
   full-allocation project a level is that % of each unit's registered
   volume (engine ≥ 1.70.0, [model.md §2.12a](./model.md)), which the field's
-  hint says. **Add a
+  hint says (as the matrix's: the ⓘ beside the label, "Up to 6, separated by
+  commas" as the placeholder, the whole hint as the box's description for a
+  screen reader). **Add a
   monthly plan** adds one more level: a name (default *Monthly plan*) and
   a % per month of the project's season (Oct … Apr by default), sent as
   R1's `months` form, one `demand.scale` per distinct % (so the plan and

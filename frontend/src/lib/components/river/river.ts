@@ -179,6 +179,7 @@ export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, da
 			label: 'How sure, and what if',
 			sections: [
 				{ id: 'res-uncertainty', label: 'Uncertainty bands', bar: 'Uncertainty' },
+				{ id: 'res-sensitivity', label: 'Sensitivity runs', bar: 'Sensitivity' },
 				{ id: 'res-outcomes', label: 'Outcome matrix' },
 				{ id: 'res-outlook', label: 'Seasonal outlook' }
 			]

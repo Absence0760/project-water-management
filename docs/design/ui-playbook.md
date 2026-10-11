@@ -1104,10 +1104,26 @@ Interaction details that bit:
   To line a box up with a wrapped label's first line, use `align-items:
   flex-start` and `margin-top: calc((1lh - 1rem) / 2)` on the box, rather
   than centring it on the whole label.
+- **A box with its words is `<label class="check">`, styled once.**
+  `app.css`'s `label.check` is the flex row (`gap: 0.4rem`, `align-items:
+  flex-start`) and gives the box block margins that fill one line
+  (`max(3px, calc((1lh - 1rem) / 2))`: never under the browser's own 3 px,
+  or two stacked small labels' boxes came closer than 24 px and axe's
+  target-size failed on the Members panel), so the box sits on the first line's middle when
+  the words wrap and still centres when a component keeps `align-items:
+  center` for a taller row (a `min-height` of 28 px or more). A component's
+  own `.check` rule keeps only what differs: `display: inline-flex`, a
+  min-height, a font size, margins. About forty components each wrote the
+  same three declarations (issue #521); don't add a fourth spelling (`.tick`,
+  `.toggle`, `.choice` were folded into it). A switch drawn over a hidden box
+  (`.switch`) and the month toggles are not this pattern.
 - **Width rules for a field's inputs catch its checkbox.** Settings'
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with
-  `input:not([type='checkbox'])`.
+  `input:not([type='checkbox'])`. `app.css`'s `table.data td input` did the
+  same in every table cell: the Members panel's "Acts for the responsible
+  authority" box took the cell's width and its words ran under the row's
+  Remove button (issue #521); it skips checkboxes and radios now.
 - **Keep a picked row in view when the list's box changes, not only when the
   pick does.** The Map's `node=` link picks a parcel far down a list that
   scrolls in its fitted card; on the first render the fit wasn't measured, the

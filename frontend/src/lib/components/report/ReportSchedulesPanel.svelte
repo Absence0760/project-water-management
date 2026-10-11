@@ -116,7 +116,7 @@
 	}
 </script>
 
-<section class="panel" id="set-report-schedules" aria-labelledby="{uid}-h">
+<section class="panel" aria-labelledby="{uid}-h">
 	<h2 id="{uid}-h">Scheduled reports</h2>
 	<p class="hint muted">
 		Email a PDF of the latest run’s report to project members every week or month. The link needs the member to sign in, and the PDF is kept
@@ -259,9 +259,6 @@
 		padding: 0.5rem 0.75rem;
 	}
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 		min-height: 24px;
 	}
 	.err {

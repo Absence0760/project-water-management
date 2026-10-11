@@ -111,6 +111,7 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 		'res-ewr-grid',
 		'res-water-account',
 		'res-uncertainty',
+		'res-sensitivity',
 		'res-outcomes',
 		'res-outlook'
 	]);

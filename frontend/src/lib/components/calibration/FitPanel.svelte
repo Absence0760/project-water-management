@@ -514,9 +514,6 @@
 	}
 	/* A box beside its words, aligned with their first line however many lines they wrap to. */
 	.check {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.45rem;
 		padding: 0.3rem 0;
 		line-height: 1.4;
 	}

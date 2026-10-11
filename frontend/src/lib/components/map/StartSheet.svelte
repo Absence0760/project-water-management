@@ -337,7 +337,7 @@
 							</div>
 							{#if u.role === 'gauge' && u.totalAreaM2 !== null}<p class="hint">It measures {km2Text(u.totalAreaM2)} of the catchment above it; a gauge owns no land of its own.</p>{/if}
 							{#if offer.area}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.area} data-testid="start-tick-area" />
 									<span>Area <strong>{km2Text(u.areaM2)}</strong>: what drains to it and to no unit above it (its whole catchment: {km2Text(u.totalAreaM2)}), saved as its parcel</span>
 								</label>
@@ -349,7 +349,7 @@
 								<p class="hint">No area proposed: type it on the Network, or draw its parcel and Use it.</p>
 							{/if}
 							{#if offer.drainsInto}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.drainsInto} data-testid="start-tick-drains" />
 									<span>Drains into <strong>{drainsIntoName(p, ticks, u)}</strong></span>
 								</label>
@@ -357,13 +357,13 @@
 								<p class="hint">Drains into the outflow gauge until you set the order on the Network.</p>
 							{/if}
 							{#if offer.runoffToDam}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="start-tick-dam" />
 									<span>{damShareLines(u.damShares, u.areaM2, t.area ? (t.areaBasis ?? 'gross') : 'gross', u.nonContributingM2)?.runoff ?? 'All of its own runoff reaches the dam (its area ends at the wall)'}</span>
 								</label>
 							{/if}
 							{#if offer.upstreamToDam}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.upstreamToDam} data-testid="start-tick-upstream" />
 									<span>{damShareLines(u.damShares, u.areaM2)?.upstream}</span>
 								</label>
@@ -384,7 +384,7 @@
 						onfocusout={(e) => cardOut(e, REST_KEY)}
 					>
 						{#if pieceOf.has(REST_KEY)}<PieceBadge label="R" tint={-1} />{/if}
-						<label class="tick">
+						<label class="check">
 							<input type="checkbox" bind:checked={ticks.rest.include} data-testid="start-tick-rest" />
 							<span>Add <strong>the rest of the catchment</strong> as a unit (what drains to the outlet through no unit; without it the model’s catchment is only the units’)</span>
 						</label>
@@ -394,7 +394,7 @@
 								<input id="{uid}-rest-name" bind:value={ticks.rest.name} maxlength="100" aria-invalid={bad(ticks.rest.name) ? 'true' : undefined} aria-describedby={bad(ticks.rest.name) ? `${uid}-names` : undefined} />
 							</div>
 							{#if restOffersArea(p)}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={ticks.rest.area} data-testid="start-tick-rest-area" />
 									<span>Area <strong>{km2Text(p.rest.areaM2)}</strong>{p.fromDem ? '' : ' (the boundary)'}, saved as its parcel</span>
 								</label>
@@ -563,14 +563,8 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	.tick {
-		display: flex;
-		gap: 0.5rem;
-		align-items: baseline;
+	.check {
 		min-height: 24px;
-	}
-	.tick input {
-		flex: none;
 	}
 	.hint {
 		font-size: 0.85rem;

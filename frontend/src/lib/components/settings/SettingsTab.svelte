@@ -17,6 +17,8 @@
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
+	// Scheduled reports: their own chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
+	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
 	// Evaporation from the map (issue #326 B-evap): its own chunk, for the same reason as the panels above; it loads its proposal on mount.
 	const loadEvaporationProposal = () => import('./EvaporationProposal.svelte');
 	// The FAO-56 pan-coefficient helper: editors only, under pan coefficient × A-pan, so a viewer or a monthly-PE
@@ -118,7 +120,6 @@
 	// reports save through their own APIs, never through the save bar (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
-	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
 	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 	import type { SettingsDraft } from './settingsDraft.svelte';
@@ -1516,7 +1517,12 @@
 	</Lazy>
 {/if}
 
-<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
+<!-- As #set-feeds: the id outside the lazy panel. -->
+<div id="set-report-schedules">
+	<Lazy load={loadReportSchedules}>
+		{#snippet children(ReportSchedulesPanel)}<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />{/snippet}
+	</Lazy>
+</div>
 </SectionNav>
 
 <style>
@@ -1736,7 +1742,6 @@
 	.check {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
 		min-height: 36px;
 	}
 	.lbl {

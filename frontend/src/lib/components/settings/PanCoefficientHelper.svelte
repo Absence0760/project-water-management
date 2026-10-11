@@ -200,9 +200,6 @@
 		width: 100%;
 	}
 	.check {
-		display: flex;
-		gap: 0.4rem;
-		align-items: center;
 		font-size: 0.85rem;
 		min-height: 24px;
 	}

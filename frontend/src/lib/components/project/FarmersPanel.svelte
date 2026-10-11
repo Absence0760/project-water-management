@@ -298,8 +298,6 @@
 	}
 	.check {
 		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
 		min-height: 24px;
 	}
 	.act {

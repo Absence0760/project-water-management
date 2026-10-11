@@ -51,7 +51,7 @@ describe('riverHref and riverAnchor', () => {
 		expect(riverHref(null, 'res-ewr')).toBe('?tab=river#res-ewr');
 	});
 	it('knows the panels that moved from Runs & results, and no others', () => {
-		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-outcomes', 'res-outlook', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
+		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-sensitivity', 'res-outcomes', 'res-outlook', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
 		for (const id of ['res-curtailment', 'res-ewr-agreement', 'res-summary', '']) expect(riverAnchor(id)).toBe(false);
 	});
 });
@@ -69,7 +69,7 @@ describe('riverNavGroups', () => {
 	it('puts the findings first, the water account straight after them, and the run-it-yourself tools last (issue #465)', () => {
 		expect(riverNavGroups(false, false).map((g) => g.label)).toEqual(['The reserve', 'Water balance', 'How sure, and what if']);
 		const bar = riverNavGroups(false, false).flatMap((g) => g.sections.map((s) => navText(s, 'bar')));
-		expect(bar).toEqual(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
+		expect(bar).toEqual(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
 	});
 	it('names each link as its panel’s heading, shorter on the bar only (issue #462)', () => {
 		const labels = (ruleTable: boolean) => riverNavGroups(false, ruleTable).flatMap((g) => g.sections.map((s) => s.label));
@@ -80,6 +80,7 @@ describe('riverNavGroups', () => {
 			EWR_MONTHS_HEADING,
 			'Water account',
 			'Uncertainty bands',
+			'Sensitivity runs',
 			'Outcome matrix',
 			'Seasonal outlook'
 		]);

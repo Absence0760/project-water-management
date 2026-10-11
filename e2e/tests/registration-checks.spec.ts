@@ -14,7 +14,7 @@ import { openProject } from '../support/project.ts';
 
 test('the owner appoints a party’s specialist and records a registration check; an editor only reads them', async ({ page, owner, signIn }) => {
 	void owner;
-	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.setViewportSize({ width: 1440, height: 900 });
 	const specialist = await signIn('Party specialist');
 	const editor = await signIn('Checks editor');
 	const project = await createProject(page.request, 'Signers');
@@ -30,6 +30,26 @@ test('the owner appoints a party’s specialist and records a registration check
 
 	const panel = page.getByTestId('registration-checks');
 	await expect(panel.getByText('No check recorded yet.')).toBeVisible();
+	// Recording a check is rare, so its form stays closed behind "+ Record a check" in the panel's head row, beside
+	// its heading (issue #521 § 13); opening it puts focus on its first field, Cancel closes it and returns focus.
+	const heading = (await panel.getByRole('heading', { level: 2, name: /^Registration checks/ }).boundingBox())!;
+	const opener = panel.getByRole('button', { name: '+ Record a check' });
+	const openerBox = (await opener.boundingBox())!;
+	expect(Math.abs(openerBox.y + openerBox.height / 2 - (heading.y + heading.height / 2))).toBeLessThan(8);
+	expect(openerBox.x).toBeGreaterThan(heading.x + heading.width);
+	await expect(panel.getByLabel('Registration number')).toHaveCount(0);
+	await expect(panel.getByRole('button', { name: 'Record the check' })).toHaveCount(0);
+	await opener.click();
+	await expect(panel.getByLabel('Member', { exact: true })).toBeFocused();
+	await expect(opener).toHaveCount(0);
+	await panel.getByRole('button', { name: 'Cancel' }).click();
+	await expect(panel.getByLabel('Registration number')).toHaveCount(0);
+	await expect(opener).toBeFocused();
+	await opener.click();
+	// Open, the form's action row is on screen with it at 1440 wide.
+	await panel.getByRole('button', { name: 'Record the check' }).scrollIntoViewIfNeeded();
+	await expect(panel.getByLabel('Member', { exact: true })).toBeInViewport();
+	await expect(panel.getByRole('button', { name: 'Record the check' })).toBeInViewport();
 	await panel.getByLabel('Member', { exact: true }).selectOption({ label: 'Party specialist' });
 	await panel.getByLabel('Category', { exact: true }).selectOption({ index: 1 });
 	await panel.getByLabel('Registration number').fill('400123/10');
@@ -38,6 +58,9 @@ test('the owner appoints a party’s specialist and records a registration check
 	await panel.getByRole('button', { name: 'Record the check' }).click();
 	await expect(panel.getByRole('row', { name: /Party specialist/ })).toContainText('On the register');
 	await expect(panel.getByRole('row', { name: /Party specialist/ })).toContainText('Rooikloof WUA');
+	// Recorded: the form closes and focus goes back to the header's button.
+	await expect(panel.getByLabel('Registration number')).toHaveCount(0);
+	await expect(opener).toBeFocused();
 	await panel.getByTestId('registration-check-required').uncheck();
 	await expect(panel.getByTestId('registration-check-required')).not.toBeChecked();
 	await expectNoViolations(page);
@@ -46,6 +69,7 @@ test('the owner appoints a party’s specialist and records a registration check
 	await openProject(editor.page, project.id);
 	const theirs = editor.page.getByTestId('registration-checks');
 	await expect(theirs.getByRole('row', { name: /Party specialist/ })).toContainText('Rooikloof WUA');
+	await expect(theirs.getByRole('button', { name: '+ Record a check' })).toHaveCount(0);
 	await expect(theirs.getByRole('button', { name: 'Record the check' })).toHaveCount(0);
 	await expect(theirs.getByTestId('registration-check-required')).toHaveCount(0);
 	await expect(theirs).toContainText('Issuing an evidence pack doesn’t wait for a check.');
