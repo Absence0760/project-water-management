@@ -721,6 +721,30 @@ def unit_rain_reference_not_land() -> dict:
     return doc
 
 
+def baseflow_loss_and_gain() -> dict:
+    """A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0): unit a
+    loses up to 3 000 m³/day of its own runoff, all of it on the dry days, and
+    sends half of what is left into its dam; unit b gains 500 m³/day from
+    outside the catchment on every day, rain or not, and a priority user
+    below both takes from the river. The runoff column stays natural × share;
+    the split, the dam, the priority pass and the outflow read I − MIN(loss,
+    I) + gain. Read on the gross runoff instead, or with the loss uncapped,
+    the dam and the user's take differ."""
+    days = 120
+    rain = [0.0] * days
+    for t in range(days):
+        if t % 9 in (0, 1):
+            rain[t] = 25.0 if t % 27 < 9 else 8.0
+    nodes = [
+        _node("o", "gauge", None),
+        _node("p", "user", "o", userDemandM3Day=[1500] * 12, userPriority="senior"),
+        _node("a", "farm", "p", areaKm2=6, pctRunoffToDam=0.5, damCapacityM3=40000, damInitialPct=0.2, baseflowLossM3Day=3000),
+        _node("b", "farm", "p", areaKm2=2, baseflowGainM3Day=500),
+    ]
+    s = _settings(gr4j={"x1": 250, "x2": 0, "x3": 60, "x4": 1.5, "warmupDays": 0})
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": {"rain_catchment_mm": {"startDate": "2020-01-01", "values": rain}}}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -750,4 +774,5 @@ PROBES = {
     "unit-rain-no-land-unit": unit_rain_no_land_unit(),
     "unit-rain-reference": unit_rain_reference(),
     "unit-rain-reference-not-land": unit_rain_reference_not_land(),
+    "baseflow-loss-and-gain": baseflow_loss_and_gain(),
 }

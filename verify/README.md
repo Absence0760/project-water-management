@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 117 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 120 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -178,6 +178,12 @@ the ranks within one (engine ≥ 1.64.0),
   rest; a priority user's claim grossed up through every reach on the way, and
   the requirement crossing each less what the claims were grossed up by for
   it (`reach_loss`, `senior_reach_loss`).
+- **A unit's base-flow loss and gain** (§2.6b, engine 1.86.0): MIN(loss, I)
+  taken off the unit's runoff and the gain added before the dam/river split,
+  the priority pass and the hands-off flow, the runoff column staying I; the
+  EWR attribution's net impact reading the runoff after them
+  (`baseflow_loss`, `baseflow_gain`; probe `baseflow-loss-and-gain`, and a
+  quarter of the random networks).
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent
@@ -285,7 +291,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (115
+`test_verify.py` breaks `model.py` one documented rule at a time (120
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -321,7 +327,9 @@ the losses not capped at 1 − e (engine 1.71.0); a unit's own system on a
 planting ignored, a crop's default system ignored, and the project's
 systems table ignored for the SABI defaults (engine 1.72.0); bed losses left
 in the river, uncapped, a priority claim not grossed up for them, and the
-priority requirement crossing a reach whole (engine 1.75.0). Per-unit
+priority requirement crossing a reach whole (engine 1.75.0); a base-flow
+loss not capped at the runoff, the gain left out, and the split reading the
+runoff before them (engine 1.86.0). Per-unit
 rain's 21 (engine 1.78.0): the units' records used with the setting off; a
 unit's inflow as natural × share; `catchmentAreaKm2` kept; no land unit
 refused; the catchment's series weighting every unit alike; a unit's

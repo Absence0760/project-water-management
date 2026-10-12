@@ -303,6 +303,10 @@ MUTANTS = [
         "                zs_in += ZS[u] - min(ZS[u], sen_led[u][i]) if u in sen_led else ZS[u]",
         "                zs_in += ZS[u]",
     ),
+    # A unit's base-flow loss and gain (§2.6b, engine 1.86.0).
+    ("a base-flow loss is not capped at the runoff", "                lost_bf = min(bl_, I) if I > 0 else 0.0", "                lost_bf = bl_"),
+    ("the base-flow gain is left out of the runoff", "                Ib = I - lost_bf + bg_", "                Ib = I - lost_bf"),
+    ("the runoff split reads the runoff before the base flow", '                M = Ib * x["pctRunoffToDam"]', '                M = I * x["pctRunoffToDam"]'),
     # Runoff from each unit's own rain (§2.4h, engine 1.78.0).
     ("per-unit rain off: the units' records are used whatever the mode", 'per_unit = isinstance(ur, dict) and ur.get("mode") == "perUnit"', "per_unit = isinstance(ur, dict)"),
     ("a unit's local inflow is natural × share, not its own runoff", "I = natural[i] * shares.get(xid, 0.0) if local is None else", "I = natural[i] * shares.get(xid, 0.0) if True else"),
@@ -377,7 +381,7 @@ class CrossCheck(unittest.TestCase):
             "borehole_days", "borehole_to_dam_days", "borehole_annual_cap_days", "depletion_owed_days",
             "cap_bound_days", "full_allocation_units", "floor_days", "object_shortage_days", "offtake_days",
             "offtake_return_days", "user_days", "junior_short_days", "senior_pass_days", "river_pump_days",
-            "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days", "reach_loss_days",
+            "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days", "reach_loss_days", "baseflow_days",
             # Per-unit rain (§2.4h).
             "unit_rule_gauge", "unit_rule_gauge_map", "unit_rule_chirps", "unit_rule_catchment", "unit_clamped",
             "unit_map_all_years", "unit_chirps_bias", "unit_link_days", "unit_catchment_days",
