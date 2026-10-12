@@ -1098,7 +1098,11 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   `buildOp`), checks it with the engine's `validateScenarioOps` (so the form
   refuses exactly what the backend would), and `PATCH`es the whole list; the
   answer's check (`applied`, `problems`, `classified`) drives the list. Undo
-  re-sends the list as it was before the last edit.
+  re-sends the list as it was before the last edit. A flow rate the Network
+  form shows in a picked unit (River to dam, every pump capacity, the
+  borehole and pipe capacities) is typed in that pick there too, m³/s, l/s or
+  m³/day, and the op stores m³/day whatever was picked (issue #523 C2,
+  [ui.md § Flow units](./ui.md#flow-units)).
 - **What the editor computes itself**, from the base run's model and settings
   snapshot (`GET …/runs/:runId`) with no series: the input each op meets
   (`stepInputs`, the engine's `scenarioSteps`), for the targets the form
