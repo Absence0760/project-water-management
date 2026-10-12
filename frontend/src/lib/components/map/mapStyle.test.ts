@@ -564,7 +564,7 @@ describe('attribution HTML (MapLibre sets it as innerHTML)', () => {
 	it('escapes every value put into it, so no text can become markup', () => {
 		expect(escapeAttribution(`<img src=x onerror="a()">&'`)).toBe('&#60;img src=x onerror=&#34;a()&#34;&#62;&#38;&#39;');
 		const html = creditLink('" onmouseover="x', '"><script>', '<b>credit</b>');
-		expect(html).not.toMatch(/<b>|" onmouseover|<script>/);
+		expect(html).not.toMatch(/<b>|" onmouseover|<script>/i);
 		expect(terrainSource('/t.pmtiles', '"><script>').attribution).not.toContain('<script>');
 	});
 });

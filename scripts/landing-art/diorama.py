@@ -63,7 +63,6 @@ X0, X1, Y0, Y1 = S["X0"], S["X1"], S["Y0"], S["Y1"]
 srgb, material = S["srgb"], S["material"]
 wx, wy, gx0, gy0 = S["wx"], S["wy"], S["gx0"], S["gy0"]
 cloud_spots, SUN_AT, sunball = S["cloud_spots"], S["SUN_AT"], S["sunball"]
-hx, hy, hz = S["hx"], S["hy"], S["hz"]
 np = S["np"]
 
 # ---- the dusk rig: the help scene's (catchment.py light()), the sun a moon --

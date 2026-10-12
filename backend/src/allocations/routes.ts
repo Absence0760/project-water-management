@@ -331,7 +331,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 	.get('/:id/allocations', async (c) => {
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
-			const role = await requireRole(db, id, 'viewer');
+			await requireRole(db, id, 'viewer');
 			const { rows: sources } = await db.query(`${SOURCE_SELECT} WHERE s.project_id = $1 ORDER BY s.imported_at DESC, s.id`, [id]);
 			const allocations = await loadAllocations(db, id);
 			// The farms and water users an allocation can be matched to.
