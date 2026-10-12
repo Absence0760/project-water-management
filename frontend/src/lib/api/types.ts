@@ -848,6 +848,13 @@ export interface Ensemble {
 	/** Null once the starter's account is deleted (138). */
 	createdById: string | null;
 	completedAt: string | null;
+	/**
+	 * Present only for a viewer kept from the registered volumes when the
+	 * ensemble is served as EWR counts and rates only: the runs (this one, or
+	 * a paired band's baseline run) that cap use at or scale demand to those
+	 * volumes (#523 I, G1c; docs/security.md).
+	 */
+	verdictsOnlyRuns?: string[];
 }
 
 /** An ensemble with what it was built from (GET …/uncertainty/:uid). */

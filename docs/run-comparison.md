@@ -457,6 +457,13 @@ headline results, for two runs of **one project**:
   the server re-runs the first pair and three at random before storing it
   under run B ([api.md](./api.md#uncertainty-bands)). Cross-project pairs
   get a note instead: the parameter sets describe one catchment.
+- A viewer kept from the registered volumes reads a band that rests on a
+  run that caps use at, or scales demand to, those volumes (A's or B's own
+  band, and the paired band when **either** run does) as EWR counts and
+  rates only; the panel says which run in a note (`paired-uncertainty-withheld`,
+  from the ensembles' `verdictsOnlyRuns`), so a withheld "–" isn't read as a
+  band gated for too few sets (issue #523 G1c,
+  [security.md](./security.md)).
 
 Every change is **B − A**. A change is shown with a sign and ▲/▼. Green means
 better and red means worse (for example, less deficit or fewer EWR days not

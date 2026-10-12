@@ -2003,7 +2003,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   counts and rates (`ewrDaysNotMet`, by month, `reserveRate`, `noFlowDays`,
   `ewrSiteDaysNotMet`) and the matching bands, no flow, shortfall or unit
   figure, and so does a paired band when either run is such a run (the one
-  it is listed under or its baseline ensemble's, #523 G1c); a yield computed on such a run or scenario is listed with
+  it is listed under or its baseline ensemble's, #523 G1c), each such row
+  marked `verdictsOnlyRuns` (those run ids, baseline first); a yield computed on such a run or scenario is listed with
   `points: null` and `withheld: ["points"]`. The evidence report on such a
   run (either side) keeps only the sections it lists (an allowlist, so a
   new one is withheld): page 1's count rows and the flags that name no

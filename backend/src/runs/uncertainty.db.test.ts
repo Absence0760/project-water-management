@@ -267,9 +267,15 @@ describe('storing the result', () => {
 				const list = (await u.call('GET', `${base(runB)}/uncertainty`)).body.ensembles as { id: string; baselineId: string | null; status: string; summary: Record<string, unknown> }[];
 				const row = list.find((e) => e.baselineId === uid && e.status === 'complete')!;
 				const one = (await u.call('GET', `${base(runB)}/uncertainty/${row.id}`)).body.ensemble;
-				return { summaries: [row.summary, one.summary as Record<string, unknown>], members: one.result.members as { metrics: Record<string, unknown> }[] };
+				return {
+					summaries: [row.summary, one.summary as Record<string, unknown>],
+					members: one.result.members as { metrics: Record<string, unknown> }[],
+					// The marker the panels' note reads: the runs (baseline first) that cap or fully allocate.
+					by: [(row as { verdictsOnlyRuns?: string[] }).verdictsOnlyRuns, one.verdictsOnlyRuns as string[] | undefined]
+				};
 			};
 			const whole = (p: Awaited<ReturnType<typeof paired>>) =>
+				p.by.every((b) => b === undefined) &&
 				p.summaries.every((s) => typeof (s.marOutflowMm3 as { max?: unknown } | undefined)?.max === 'number') && p.members.every((m) => typeof m.metrics.marOutflowMm3 === 'number');
 			const verdicts = (p: Awaited<ReturnType<typeof paired>>) =>
 				p.summaries.every((s) => s.marOutflowMm3 === undefined && s.supply === undefined && s.ewrDaysNotMet !== undefined) &&
@@ -282,12 +288,14 @@ describe('storing the result', () => {
 				// the editor reads it whole (positive control).
 				for (const mode of ['cap', 'fullAllocation']) {
 					await markMode(runA, mode);
-					expect([mode, verdicts(await paired(viewer)), whole(await paired(editor))]).toEqual([mode, true, true]);
+					const seen = await paired(viewer);
+					expect([mode, verdicts(seen), seen.by, whole(await paired(editor))]).toEqual([mode, true, [[runA], [runA]], true]);
 				}
 				// The band's own run caps, the baseline's doesn't: verdicts too.
 				await markMode(runA, 'none');
 				await markMode(runB, 'cap');
-				expect([verdicts(await paired(viewer)), whole(await paired(editor))]).toEqual([true, true]);
+				const seen = await paired(viewer);
+				expect([verdicts(seen), seen.by, whole(await paired(editor))]).toEqual([true, [[runB], [runB]], true]);
 			} finally {
 				for (const r of before) await setAllocations(r.id as string, r.a);
 			}

@@ -15,7 +15,7 @@
 	import { FitCancelled, startEnsemble, type EnsembleHandle } from '$lib/calibration/runner';
 	import { fmtNum } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
-	import { bandCells, pct, rangeText, shownEnsemble, sig } from './bands';
+	import { bandCells, pct, rangeText, shownEnsemble, sig, withheldNote } from './bands';
 
 	let {
 		projectA,
@@ -61,6 +61,8 @@
 	// The newest stored paired band on B whose baseline is A's shown ensemble.
 	const paired = $derived(bandA ? (listB.find((e) => e.baselineId === bandA.id && e.status === 'complete') ?? null) : null);
 	const ps = $derived((paired?.summary ?? null) as PairedSummary | null);
+	// A or B caps or fully allocates, for a viewer kept from each registered volume (#523 I, G1c): its "–" is withheld, not gated.
+	const withheld = $derived(withheldNote([bandA, bandB, paired], { a: runA, b: runB }));
 
 	let progress = $state<{ done: number; total: number } | null>(null);
 	let busy = $state(false);
@@ -108,6 +110,7 @@
 	{:else if error}
 		<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" onclick={load}>Try again</button></div>
 	{:else}
+		{#if withheld}<p class="alert alert-info" role="note" data-testid="paired-uncertainty-withheld">{withheld}</p>{/if}
 		{#if sumA || sumB}
 			<div class="table-wrap">
 				<table class="data compact" aria-labelledby="{uid}-sides">

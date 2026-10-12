@@ -241,7 +241,9 @@ const runModelOf = (input: ModelInput) => (input.settings.runoffModel as string 
  * and a paired band also when the run its baseline ensemble is of does
  * (#523 G1c): the band is the difference between the two runs' members, so
  * either side's figures give the other's back. A baseline run that can't be
- * read is treated as one that does.
+ * read is treated as one that does. Such a row is marked `verdictsOnlyRuns`:
+ * the run ids (baseline first) that cap or fully allocate, for the panels'
+ * note; absent on a row served whole.
  */
 export async function ensemblesAsSeen<T extends { baselineRunId: string | null }>(db: Db, projectId: string, role: Role, runId: string, rows: T[]): Promise<T[]> {
 	if (!rows.length || !(await allocationUnitsHidden(db, projectId, role))) return rows;
@@ -252,7 +254,10 @@ export async function ensemblesAsSeen<T extends { baselineRunId: string | null }
 	);
 	const modes = new Map(runs.map((r) => [r.id, r.allocations]));
 	const bound = (id: string) => !modes.has(id) || verdictsOnly(modes.get(id));
-	return rows.map((r) => (bound(runId) || (r.baselineRunId !== null && bound(r.baselineRunId)) ? ensembleVerdicts(r) : r));
+	return rows.map((r) => {
+		const by = [r.baselineRunId, runId].filter((x): x is string => x !== null && bound(x));
+		return by.length ? { ...ensembleVerdicts(r), verdictsOnlyRuns: by } : r;
+	});
 }
 
 export const uncertaintyRoutes = new Hono<AuthEnv>()

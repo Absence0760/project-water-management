@@ -34,6 +34,25 @@ export const rangeText = (b: Band | null | undefined, f: (v: number) => string =
 /** A band's three numbers for a table row, "–" for each when gated or withheld (as rangeText). */
 export const bandCells = (b: Band | null | undefined, f: (v: number) => string = sig) => (b ? [b.p5, b.p50, b.p95] : [null, null, null]).map((v) => (v === null ? '–' : f(v)));
 
+const WITHHELD_REST = "flows, shortfall and each unit's figures are withheld, because this project shows those volumes to its editors and owners only.";
+
+/**
+ * The note over ensembles served as EWR counts and rates only (their
+ * `verdictsOnlyRuns`, #523 I, G1c), so a withheld band's "–" isn't read as
+ * one gated for too few parameter sets; null when all are served whole.
+ * Without `runs`, one run's own ensemble; with them, the compare panel's
+ * (A's and B's own bands and the paired band on B − A).
+ */
+export function withheldNote(es: readonly (Pick<Ensemble, 'verdictsOnlyRuns'> | null | undefined)[], runs?: { a: string; b: string }): string | null {
+	const by = new Set(es.flatMap((e) => e?.verdictsOnlyRuns ?? []));
+	if (!by.size) return null;
+	if (!runs) return `This run caps use at, or scales demand to, the registered water volumes, so its band shows EWR counts and rates only: ${WITHHELD_REST}`;
+	const a = by.has(runs.a);
+	const b = by.has(runs.b);
+	const who = a && b ? 'Both runs cap' : a ? 'Run A caps' : b ? 'Run B caps' : 'A run behind these bands caps';
+	return `${who} use at, or ${a && b ? 'scale' : 'scales'} demand to, the registered water volumes, so the bands that rest on ${a && b ? 'them' : 'it'} show EWR counts and rates only: ${WITHHELD_REST}`;
+}
+
 /** A share as a whole %, "–" for null. */
 export const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '–' : `${fmtNum(v * 100, 0)} %`);
 
