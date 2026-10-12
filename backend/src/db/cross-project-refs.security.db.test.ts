@@ -31,7 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withApiKey, withUser, type Db } from './tx.js';
-import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
+import { DAM_CELL, fixtureLonLat, OUTLET_CELL, valleyUnitRing } from '../delineation/fixture.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -935,8 +935,8 @@ async function startProposal(h: World, r: World, field: 'outletFeatureId' | 'fea
  * outflow: each call makes a fresh project of the editor's with a typed model
  * (the outflow, two units) and the synthetic DEM's valley points, and names a
  * feature or node made in it (control, r = h) or in the referenced project
- * (attack): the outlet gauge, a point, the node a point stands for, or the
- * unit the rest of the catchment goes to.
+ * (attack): the outlet gauge, a unit's boundary (start-16), the node it
+ * stands for, or the unit the rest of the catchment goes to.
  */
 async function divideProposal(h: World, r: World, field: 'outletFeatureId' | 'featureId' | 'nodeId' | 'rest.nodeId'): Promise<Res> {
 	const home = (await dual.call('POST', '/projects', { name: `Divide ${randomUUID()}` })).body.project.id as string;
@@ -955,7 +955,7 @@ async function divideProposal(h: World, r: World, field: 'outletFeatureId' | 'fe
 		return f.body.feature.id as string;
 	};
 	const outlet = await feature(field === 'outletFeatureId' ? at : home, { kind: 'gauge', ...lonLat(OUTLET_CELL.x, OUTLET_CELL.y) });
-	const dam = await feature(field === 'featureId' ? at : home, { kind: 'dam', ...lonLat(DAM_CELL.x, DAM_CELL.y + 1) });
+	const dam = await feature(field === 'featureId' ? at : home, { kind: 'other', geometry: { type: 'Polygon', coordinates: [valleyUnitRing(0, DAM_CELL.y + 5)] } });
 	const nodeId = field === 'nodeId' && r !== h ? r.farmId : farm.id;
 	const prev = process.env.DEM_URL;
 	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));

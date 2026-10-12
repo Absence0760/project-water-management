@@ -576,7 +576,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'This works on a model with no hydrological units yet. With an [[elevation-model|elevation model]] on the server, each unit’s area and order come from the terrain; without one, you get the units with no areas, to type on the Network. Nothing reaches the model until you tick it.'
+						text: 'This works on a model with no hydrological units yet, and the units follow your own boundaries: have each unit’s boundary ready to draw or upload (or save sub-catchments from clicks). With an [[elevation-model|elevation model]] on the server, the units’ order comes from the terrain and each area is checked against it; without one, you set the order on the Network. Nothing reaches the model until you tick it.'
 					}
 				]
 			},
@@ -588,11 +588,11 @@ export const GUIDES: Guide[] = [
 						items: [
 							'On the **Map**, press **Start from the map** (or the link on the empty map). Step one is the boundary.',
 							'**Delineate from the outlet**: the terrain channels appear; click the one at the catchment’s outlet. The outlet goes on the nearest terrain channel ([[outlet-placement]]), and the catchment above it is proposed. Check it against the relief and the mapped rivers, then **Accept as the catchment boundary**. Or draw the boundary, or upload it as GeoJSON.',
-							'Place each dam at its wall, each abstraction point where water leaves the river, and the gauges, with **Place a point** or by drawing a dam’s outline. On a dam outline’s card, set its [[dam-siting|siting]] if it is filled by a pump or a furrow.',
-							'In the sheet, say what each point is (a unit with a dam, a unit at an abstraction point, another water user, a gauge in the network, or not in the model) and which gauge is the outlet, then propose.',
-							'Read the proposal. Each unit’s piece is tinted and numbered on the map, and its card gives its own area, its whole catchment above, what it drains into and, for a dam, the runoff and inflow shares. Read the warnings: dropped points and their reasons, a much larger channel beside a point.',
-							'Tick the values to take (**Tick every value** takes them all), choose [[area-basis|gross or effective]] areas where a piece holds pans, name the units, and apply. One model revision writes them, with each area saved as its unit’s parcel.',
-							'Follow the data step’s links in order: rain from the boundary, the nearest gauging stations, the dams from the register, cultivated area from land cover, then run the model.'
+							'Put each unit’s boundary on the map (draw it, upload it, or save sub-catchments from clicks), and place the dams, the abstraction points and the gauges with **Place a point** or by drawing a dam’s outline.',
+							'In the sheet, say what each feature is (a unit’s boundary, part of its unit’s composite dam, its unit’s river pump, another water user, a gauge in the network, or not in the model) and which gauge is the outlet, then propose. A dam or an abstraction point is never a unit of its own.',
+							'Read the proposal. Each unit is tinted and numbered on the map, and its card gives its boundary’s area, what it drains into, and the dams and pumps inside it. Read the warnings: a boundary whose area is far off what the terrain drains to its outflow, boundaries that add up past the catchment, dropped features and their reasons.',
+							'Tick the values to take (**Tick every value** takes them all), name the units, and apply. One model revision writes them, each unit’s area its boundary, and links each unit’s dams and pump to it.',
+							'Follow the data step’s links in order: rain from the boundary, the nearest gauging stations, each unit’s composite dam (its volume and the area draining to it are yours to enter; the register of dams is a reference only), cultivated area from land cover, then run the model.'
 						]
 					},
 					{
@@ -607,7 +607,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Use **Divide the model** instead ([[divide-model]]): say which unit each point stands for, and each unit’s own area and order are proposed beside its values now. Or click the rivers with **Sub-catchments, one per click** ([[sub-catchments]]), save the pieces as areas, link each to its unit and **Use** its [[map-area|area]].'
+						text: 'Use **Divide the model** instead ([[divide-model]]): say which unit each boundary stands for, and each unit’s area and order are proposed beside its values now. Or click the rivers with **Sub-catchments, one per click** ([[sub-catchments]]), save the pieces as areas, link each to its unit and **Use** its [[map-area|area]].'
 					}
 				]
 			}
@@ -1871,7 +1871,7 @@ export const GUIDES: Guide[] = [
 							'With an elevation model on the server, **Delineate** draws the terrain channels (solid lines): click one at the catchment’s outlet and the catchment above it is proposed, following the terrain, to accept or reject. The river network’s dashed lines are for reference only and can sit off the terrain channels.',
 							'A catchment over about 100 km across is worked out in the background (or tick **work it out in the background**); the map shows the proposal when it is ready. Where pans drain part of it, **Which area** lets you take the gross area (the default, as WR2012’s quaternaries are) or the effective one without them.',
 							'On a dam’s card, say whether it stands **On the river** or **Off-channel** (filled by a pump or a furrow): Start and Divide place an off-channel dam’s unit where its own outflow meets the river, and propose its inflow and runoff shares from that.',
-							'An accepted boundary is on the map only, not in the model yet. Its card, and the message after accepting, offer the next step: **Divide the model** splits it into each unit’s area at your dams, abstraction points and gauges (**Start from the map** while the model is empty), each value ticked to take it.',
+							'An accepted boundary is on the map only, not in the model yet. Its card, and the message after accepting, offer the next step: **Divide the model** gives each unit its boundary’s area and order (**Start from the map** while the model is empty makes a unit of each boundary), each value ticked to take it.',
 							'While the model is empty, **Start from the map** proposes the units, their areas and their order from the boundary and the points; each value is ticked to take it.',
 							'With water occurrence data on the server, **Trace a dam** proposes a dam’s outline from a click inside it.',
 							'**Measure** and **Download GeoJSON** are there for everyone, viewers too.'

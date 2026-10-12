@@ -1816,19 +1816,19 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'start-from-map',
 		term: 'Start the model from the map',
-		short: 'On an empty model: proposes the units, their areas and their order from the boundary and the dams, abstraction points and gauges.',
+		short: 'On an empty model: a unit from each boundary you put on the map, with its area and order, and the dams and pumps inside it linked to it.',
 		category: 'data'
 	},
 	{
 		id: 'divide-model',
 		term: 'Divide the model from the map',
-		short: 'For a model with units: proposes each unit’s own area, what it drains into and its dam’s runoff share, beside its value now.',
+		short: 'For a model with units: proposes each unit’s area from its boundary and what it drains into, beside its value now.',
 		category: 'data'
 	},
 	{
 		id: 'dam-siting',
 		term: 'Dam siting: on the river or off-channel',
-		short: 'Whether a dam sits on the river or is filled by a pump or furrow. Start and Divide place its unit and propose its dam shares by it.',
+		short: 'Whether a dam sits on the river or is filled by a pump or furrow. A water user placed at the dam in Start or Divide goes by it.',
 		category: 'data'
 	},
 	{
@@ -1852,7 +1852,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'dam-proposals',
 		term: 'Dam values from the register and the map',
-		short: 'A dam’s capacity from the register of dams (registered dams within 1 km) and its full-supply area from its polygon on the map.',
+		short: 'Registered dams within 1 km, their capacities for reference only, and a dam’s full-supply area from its polygon on the map.',
 		category: 'data'
 	},
 	{

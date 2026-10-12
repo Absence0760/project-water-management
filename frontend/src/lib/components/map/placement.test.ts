@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PointPlacement } from '$lib/api/types';
-import { choiceFor, damShareLines, emptyPlacement, OUTLET_KEY, placedByMappedRivers, placementLine, withPlacement } from './placement';
+import { choiceFor, emptyPlacement, OUTLET_KEY, placedByMappedRivers, placementLine, withPlacement } from './placement';
 
 const reach = { dataset: 'HydroRIVERS-v10', reachId: 11509680, upstreamKm2: 292.4, chosen: false };
 const pl = (over: Partial<PointPlacement>): PointPlacement => ({ placedBy: 'snapped', larger: null, ...over });
@@ -20,26 +20,8 @@ describe('placementLine', () => {
 			'At the outflow of the dam’s own outline: a much larger channel (450 km²) only clips its edge, so the dam was taken as off that channel.'
 		);
 		expect(placementLine(pl({ placedBy: 'boundary' }), null)).toBe('At the most-drained cell inside the boundary.');
-	});
-
-	it('words a marked dam’s two shares, and nothing for an unmarked one (194)', () => {
-		expect(damShareLines(undefined, 4e6)).toBeNull();
-		expect(damShareLines({ pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null }, 4e6)).toEqual({
-			runoff: 'All of its own runoff reaches the dam (its area ends at the wall).',
-			upstream: 'Upstream inflow to dam 100 %: on the river, as marked on the map, so it catches everything coming down.'
-		});
-		expect(damShareLines({ pctUpstreamToDam: 0, pctRunoffToDam: 0.025, damCatchmentM2: 0.1e6 }, 4e6)).toEqual({
-			runoff: '2.5 % of its runoff reaches the dam: the 0.10 km² draining to the dam’s own outflow, of the unit’s 4.00 km²; the rest passes it by.',
-			upstream: 'Upstream inflow to dam 0 %: off-channel, as marked on the map, so the river passes it by; River to dam fills it.'
-		});
-	});
-
-	it('words an off-channel dam’s share on the area taken: effective leaves the pans out of both sides (195)', () => {
-		const shares = { pctUpstreamToDam: 0 as const, pctRunoffToDam: 0.025, damCatchmentM2: 0.1e6, pctRunoffToDamEffective: 0.033 };
-		expect(damShareLines(shares, 4e6, 'gross', 1e6)!.runoff).toBe('2.5 % of its runoff reaches the dam: the 0.10 km² draining to the dam’s own outflow, of the unit’s 4.00 km²; the rest passes it by.');
-		expect(damShareLines(shares, 4e6, 'effective', 1e6)!.runoff).toBe('3.3 % of its runoff reaches the dam: of the unit’s effective 3.00 km², what drains to the dam’s own outflow, its pans left out; the rest passes it by.');
-		// No effective figure (a plan from before it): the gross words.
-		expect(damShareLines({ ...shares, pctRunoffToDamEffective: undefined }, 4e6, 'effective', 1e6)!.runoff).toMatch(/^2\.5 % /);
+		// A unit's boundary (start-16): its outflow, where its order is read from.
+		expect(placementLine(pl({ placedBy: 'unit' }), null)).toBe('Its boundary’s outflow: the most-drained cell inside it above the outlet, where its order is read from.');
 	});
 
 	it('says a dam was placed by the position marked on the map (194)', () => {

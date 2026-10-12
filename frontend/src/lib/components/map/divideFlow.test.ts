@@ -20,14 +20,15 @@ import {
 	tickAllDivide
 } from './divideFlow';
 
-const feature = (id: string, kind: MapFeature['kind'], nodeId: string | null = null): MapFeature => ({
+const AREA: MapFeature['geometry'] = { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] };
+const feature = (id: string, kind: MapFeature['kind'], nodeId: string | null = null, geometry: MapFeature['geometry'] = { type: 'Point', coordinates: [20, -33] }): MapFeature => ({
 	id,
 	kind,
 	name: id,
 	nodeId,
 	nodeName: null,
 	damPosition: null,
-	geometry: { type: 'Point', coordinates: [20, -33] },
+	geometry,
 	properties: {},
 	areaM2: null,
 	center: [20, -33],
@@ -48,7 +49,7 @@ const unit = (key: string, over: Partial<DivideUnit> = {}): DivideUnit => ({
 	featureName: key,
 	nodeId: key,
 	name: key,
-	role: 'dam',
+	role: 'unit',
 	point: [20, -33],
 	snapDistanceM: 0,
 	areaM2: 2e6,
@@ -73,16 +74,22 @@ const plan = (units: DivideUnit[]): DividePlan => ({
 });
 
 describe('the points', () => {
-	it('finds the one outflow, and offers each point the nodes its kind may stand for, never the outflow', () => {
+	it('finds the one outflow, and offers each feature the nodes its kind may stand for, never the outflow; a unit only by its boundary (start-16)', () => {
 		expect(outflowOf(nodes)).toBe('out');
 		expect(outflowOf([...nodes, { id: 'x', downstreamNodeId: null }])).toBeNull();
-		expect(nodeOptions(feature('d', 'dam'), nodes).map((n) => n.id)).toEqual(['dam', 'town']);
+		// A dam or an other point is part of its unit, never where it ends: a water user (or a gauge) only.
+		expect(nodeOptions(feature('d', 'dam'), nodes).map((n) => n.id)).toEqual(['town']);
 		expect(nodeOptions(feature('g', 'gauge'), nodes).map((n) => n.id)).toEqual(['mid']);
-		expect(nodeOptions(feature('o', 'other'), nodes).map((n) => n.id)).toEqual(['dam', 'town', 'mid']);
+		expect(nodeOptions(feature('o', 'other'), nodes).map((n) => n.id)).toEqual(['town', 'mid']);
+		// An area (an other area or a parcel) is a unit's boundary, and only that.
+		expect(nodeOptions(feature('a', 'other', null, AREA), nodes).map((n) => n.id)).toEqual(['dam']);
+		expect(nodeOptions(feature('p', 'farm_parcel', null, AREA), nodes).map((n) => n.id)).toEqual(['dam']);
 	});
 
-	it('defaults to the node a point stands for, a new gauge for an unlinked gauge, else nothing', () => {
-		expect(defaultDivideChoice(feature('d', 'dam', 'dam'), nodes)).toBe('dam');
+	it('defaults to the node a feature stands for (if it may), a new gauge for an unlinked gauge, else nothing', () => {
+		expect(defaultDivideChoice(feature('a', 'other', 'dam', AREA), nodes)).toBe('dam');
+		// A dam linked to its unit no longer stands for it in a division: it is part of it.
+		expect(defaultDivideChoice(feature('d', 'dam', 'dam'), nodes)).toBe(NONE);
 		expect(defaultDivideChoice(feature('g', 'gauge'), nodes)).toBe(NEW_GAUGE);
 		expect(defaultDivideChoice(feature('g', 'gauge', 'mid'), nodes)).toBe('mid');
 		expect(defaultDivideChoice(feature('o', 'other'), nodes)).toBe(NONE);
@@ -106,7 +113,7 @@ describe('the points', () => {
 });
 
 describe('the ticks', () => {
-	const p = plan([unit('top', { role: 'abstraction', drainsInto: 'gauge' }), unit('gauge', { nodeId: null, name: 'G4', role: 'gauge', areaM2: null, geometry: null, current: null })]);
+	const p = plan([unit('top', { drainsInto: 'gauge' }), unit('gauge', { nodeId: null, name: 'G4', role: 'gauge', areaM2: null, geometry: null, current: null })]);
 
 	it('open unticked, a new gauge named as its point; tick every value ticks what was proposed', () => {
 		const t = initialDivideTicks(p);
@@ -117,8 +124,9 @@ describe('the ticks', () => {
 			],
 			rest: { to: 'none' }
 		});
-		expect(divideOffers(p.units[0]!)).toEqual({ add: false, area: true, drainsInto: true, runoffToDam: false, upstreamToDam: false });
-		expect(divideOffers(p.units[1]!)).toEqual({ add: true, area: false, drainsInto: true, runoffToDam: false, upstreamToDam: false });
+		// The composite dam's shares are never offered (start-16).
+		expect(divideOffers(p.units[0]!)).toEqual({ add: false, area: true, drainsInto: true });
+		expect(divideOffers(p.units[1]!)).toEqual({ add: true, area: false, drainsInto: true });
 		expect(tickAllDivide(p, t).units).toEqual([
 			{ key: 'top', area: true, drainsInto: true, runoffToDam: false, add: false },
 			{ key: 'gauge', area: false, drainsInto: true, runoffToDam: false, add: true, name: 'G4' }
@@ -155,27 +163,24 @@ describe('the ticks', () => {
 		const same = plan([unit('a', { areaM2: 5e6 })]);
 		expect(sameAsNow(same, same.units[0]!, 'area')).toBe(true);
 		expect(sameAsNow(same, same.units[0]!, 'drainsInto')).toBe(true);
-		expect(sameAsNow(same, same.units[0]!, 'runoffToDam')).toBe(false);
 		expect(sameAsNow(p, p.units[0]!, 'drainsInto')).toBe(false);
 	});
 
-	it('offers, compares and counts a marked dam’s shares (194)', () => {
+	it('never ticks a share of runoff to a dam, even on a plan from before start-16 that proposed one (194)', () => {
 		const shares = { pctUpstreamToDam: 0 as const, pctRunoffToDam: 0.025, damCatchmentM2: 0.05e6 };
-		const marked = plan([unit('off', { damShares: shares, current: { areaKm2: 5, areaSource: 'typed', downstreamNodeId: 'out', downstreamName: 'Outflow', pctRunoffToDam: 0.025, pctUpstreamToDam: 1 } }), unit('plain')]);
-		expect(sameAsNow(marked, marked.units[0]!, 'runoffToDam')).toBe(true);
-		expect(sameAsNow(marked, marked.units[0]!, 'upstreamToDam')).toBe(false);
-		// An unmarked dam proposes no upstream share: never "the same".
-		expect(sameAsNow(marked, marked.units[1]!, 'upstreamToDam')).toBe(false);
-		const t = tickAllDivide(marked, initialDivideTicks(marked));
-		expect(t.units.map((u) => u.upstreamToDam)).toEqual([true, undefined]);
-		expect(divideSummary(t)).toBe('The model takes 2 areas (each saved as its unit’s parcel), 2 drains-into and 2 runoffs to the dam, 1 upstream inflow to a dam. Every value not ticked stays as it is.');
+		const old = plan([unit('off', { role: 'dam', damShares: shares }), unit('plain')]);
+		const t = tickAllDivide(old, initialDivideTicks(old));
+		expect(t.units.map((u) => [u.runoffToDam, u.upstreamToDam])).toEqual([
+			[false, undefined],
+			[false, undefined]
+		]);
 	});
 
 	it('says what apply will do in counts', () => {
 		const t = tickAllDivide(p, initialDivideTicks(p));
 		t.rest = { to: 'new', name: 'Rest' };
 		expect(divideSummary(t)).toBe(
-			'The model takes 2 areas (each saved as its unit’s parcel), 2 drains-into and 0 runoffs to the dam, and 1 new gauge, and a new unit for the rest of the catchment. Every value not ticked stays as it is.'
+			'The model takes 2 areas (a unit’s is its boundary on the map) and 2 drains-into, and 1 new gauge, and a new unit for the rest of the catchment. The unlinked dams and pumps inside each unit’s boundary are linked to it. Every value not ticked stays as it is.'
 		);
 	});
 
@@ -191,7 +196,7 @@ describe('the ticks', () => {
 			['gauge', undefined]
 		]);
 		expect(body.rest).toEqual({ to: 'new', name: 'Rest', areaBasis: 'effective' });
-		expect(divideSummary(t)).toMatch(/^The model takes 2 areas \(each saved as its unit’s parcel; 2 without what drains into pans\), /);
+		expect(divideSummary(t)).toMatch(/^The model takes 2 areas \(a unit’s is its boundary on the map; 2 without what drains into pans\) /);
 	});
 });
 
@@ -219,7 +224,7 @@ describe('land counted twice (persona-hydrologist, round 4)', () => {
 		// Nothing taken yet: the model's own typed areas, and the point whose typed area is bigger than its piece, named.
 		const big = { ...p, units: [unit('dam', { areaM2: 5e6, current: { areaKm2: 300, areaSource: 'typed', downstreamNodeId: 'out', downstreamName: 'Outflow', pctRunoffToDam: 0 } })] };
 		expect(divideOverlap(big, initialDivideTicks(big))).toBe(
-			'The model’s areas already add up to 303.00 km², more than the 9.00 km² above the outlet, so some land counts twice and its runoff with it. dam keeps its typed 300.00 km²: tick its area to take its piece. Hillside keeps its typed area: give it the rest of the catchment or a point of its own, or check it.'
+			'The model’s areas already add up to 303.00 km², more than the 9.00 km² above the outlet, so some land counts twice and its runoff with it. dam keeps its typed 300.00 km²: tick its area to take the proposed one. Hillside keeps its typed area: give it the rest of the catchment or a point of its own, or check it.'
 		);
 		// Hillside takes the rest: the units are the catchment exactly.
 		t.rest = { to: 'node', nodeId: 'hill' };

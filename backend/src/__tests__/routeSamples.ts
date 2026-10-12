@@ -152,7 +152,6 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	// The DEM's channels: the tile holding the synthetic DEM's valley (the ladder turns DEM_URL on with it).
 	'GET /projects/:id/map/channels': () => ({ query: { tile: '103,-168' } }),
 	'POST /projects/:id/map/rivers/add': () => ({ body: { dataset: 'synthetic', reachId: 90000005 } }),
-	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': () => ({ body: { registerNo: 'Z100/07' } }),
 	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	// Delineation (175): the ladder turns DEM_URL on with the committed synthetic DEM, and this is its valley's outlet.
 	'POST /projects/:id/map/delineation': () => ({ body: { lon: 20.7428741, lat: -33.5396777, from: 'outlet' } }),

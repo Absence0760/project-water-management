@@ -4,9 +4,10 @@
 //  - a viewer reads a unit's proposals: the registered dams within 1 km of
 //    its dam on the map, nearest first, marked synthetic, with their source,
 //    and the dam polygon's area; a dam further away is never proposed;
-//  - an editor accepts a registered capacity and the polygon's area, each
-//    one value, each a model revision whose reason names the source; a viewer
-//    can't; a dam not proposed for this unit, a point's area, a dam linked to
+//  - the registered capacities are a reference only (#523 C1): a unit's dam
+//    is its composite dam, its volume the user's, so there is no accept;
+//  - an editor accepts the polygon's area, one value, a model revision whose
+//    reason names the source; a viewer can't; a point's area, a dam linked to
 //    another unit and a unit with no dam capacity are refused;
 //  - a gauge is 400, another project's node or feature 404, a stranger 404;
 //  - the register is read-only to the app role (control: it reads it).
@@ -99,30 +100,15 @@ describe('the proposals', () => {
 	});
 });
 
-describe('accepting a capacity from the register', () => {
-	const accept = (u: User, nodeId: string, registerNo: string) => u.call('POST', at(`/nodes/${nodeId}/dam-capacity-from-register`), { registerNo });
-
-	it('sets the dam’s capacity and records a revision naming the registered dam and its source; a viewer can’t', async () => {
-		expect((await accept(viewer, farmA.id, 'Z100/07')).status).toBe(403);
+describe('the register’s capacities are a reference only (#523 C1)', () => {
+	it('are listed, but never written into the unit’s composite dam: there is no accept, and the capacity stays the user’s', async () => {
+		// Listed (the positive control): Bo-dam's capacity, for reference.
+		const listed = await proposals(viewer, farmA.id);
+		expect(listed.body.register.map((d: { registerNo: string; capacityM3: number }) => [d.registerNo, d.capacityM3])).toContainEqual(['Z100/07', 140_000]);
+		// The accept that wrote it into the model is gone.
+		const res = await editor.call('POST', at(`/nodes/${farmA.id}/dam-capacity-from-register`), { registerNo: 'Z100/07' });
+		expect(res.status).toBe(404);
 		expect((await modelNode(farmA.id)).damCapacityM3).toBe(100_000);
-		const res = await accept(editor, farmA.id, 'z100/07');
-		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body).toMatchObject({ nodeId: farmA.id, damCapacityM3: 140_000, registerNo: 'Z100/07', revisionId: expect.any(String) });
-		expect((await modelNode(farmA.id)).damCapacityM3).toBe(140_000);
-		expect(await lastReason()).toMatch(/^Dam capacity of Farm A from the register of dams: Bo-dam \(Z100\/07, 140000 m³, \d+ m from “Bo-dam outline”; SYNTHETIC .*Z100\/07\)$/);
-	});
-
-	it('refuses a registered dam not proposed for this unit, and a unit with no dam on the map; the capacity stays', async () => {
-		for (const no of ['Z100/08', 'Z999/99']) {
-			const res = await accept(editor, farmA.id, no);
-			expect(res.status).toBe(400);
-			expect(res.body.error).toMatch(/is not within 1 km of “Bo-dam outline”/);
-		}
-		expect((await editor.call('PATCH', at(`/map/features/${pointDamId}`), { nodeId: null })).status).toBe(200);
-		expect((await accept(editor, farmB.id, 'Z100/07')).body.error).toMatch(/^No dam on the map is linked to Farm B/);
-		expect((await editor.call('PATCH', at(`/map/features/${pointDamId}`), { nodeId: farmB.id })).status).toBe(200);
-		expect((await accept(editor, outlet.id, 'Z100/07')).status).toBe(400);
-		expect((await modelNode(farmA.id)).damCapacityM3).toBe(140_000);
 	});
 });
 

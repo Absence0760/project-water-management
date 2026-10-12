@@ -1858,16 +1858,18 @@ for every workspace tab. Its own chunk.
   "33.6800° S, 21.3200° E" as the Map writes it, `searchedFrom`, **Show on map**),
   then a table: one row per registered dam within 1 km ("Capacity:
   Grootdraai Dam (Z100/01)", its distance, wall height, completion year,
-  river and farm under it) and one for the dam polygon's area ("Full-supply
+  river and farm under it), its last cell **Reference only** (#523 C1: a
+  unit's dam is its composite dam, all its farm dams, many unregistered, so
+  its volume is the user's to enter and a registered capacity is never
+  used; the intro says so), and one for the dam polygon's area ("Full-supply
   area: “Grootdraai dam”"), each with **Saved now** (the saved model's
   value, "Not set (estimated from capacity)" for no area), **Proposed**,
-  **Source** (the register's dataset and source line, or "The map: …") and
-  **Use**, or "Saved" when the model already holds it (to the nearest m³ or
-  m²), or "Nothing to use" for a register entry without a capacity. **Use**
-  asks first (`confirmWords`: the unit, the old and new value, the source;
-  "Use this capacity" / "Use this area"), saves that one value on the
-  server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
-  the register of dams (Z100/07). Run the model to see its effect.", its
+  **Source** (the register's dataset and source line, or "The map: …") and,
+  for the area, **Use**, or "Saved" when the model already holds it (to the
+  nearest m²). **Use** asks first (`confirmWords`: the unit, the old and new
+  value, the source; "Use this area"), saves that one value on the server,
+  shows a notice ("Upper farm’s full-supply area is now 39 012 m² (3.9 ha),
+  from the map. Run the model to see its effect.", its
   "Run the model" a link to Runs & results, where Run model is; the notice
   takes the keyboard, since the Use button is gone) and reloads the saved
   model and the proposals. The frame is shared with land cover and
@@ -3576,10 +3578,11 @@ map" card) stays the schematic; this is the geography.
   nodes of fitting kinds for editors, else the node's name), **Siting** for
   a dam drawn as its outline (194: a select of *Not said (from its
   outline)*, *On the river* and *Off-channel (filled by a pump or a
-  furrow)* for editors, saved on change, with a line saying Start and Divide
-  take only an off-channel dam's own catchment into it, the river passing it
-  by (their review cards then offer the dam's *Upstream inflow to dam* and
-  its runoff share as ticks); the words for a viewer; not
+  furrow)* for editors, saved on change, with a line "For your records, and
+  for a water user placed at the dam in Start or Divide; unsaid, its outline
+  decides. Its unit’s composite dam takes the shares of upstream inflow and
+  runoff you enter on the unit." (`start-16`: Start and Divide no longer
+  propose a dam's shares); the words for a viewer; not
   asked of a point dam; maps.md § Start from the map), **Unit’s
   area** for a parcel or "other" polygon that stands for a hydrological unit
   (its area *typed*, **From the map** this feature, or this feature's
@@ -3624,38 +3627,50 @@ map" card) stays the schematic; this is the geography.
   **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
   boundary**, **Upload a GeoJSON file**; each closes the sheet into that
   tool, and the sheet opens again once it saves; with a gauge on the map
-  and no boundary, "go on to the points". **The points**: each dam, other
-  point and gauge with a select (A unit with a dam / A unit at an
-  abstraction point / Another water user (no land) / Not in the model; a
-  gauge: A gauge in the network (no land), the default, / Not in the model),
-  **Place a point** (into the drawing mode, back after the save), the
-  outlet (The boundary’s own outlet, or a gauge), the count ("1 unit, plus
-  the rest of the catchment."), and **Propose the network**. **The
-  proposal** (drawn on the map piece by piece: each unit's piece tinted
-  with its number on it, the rest R): the catchment's
-  area, the warnings and dropped points, the outflow gauge's name, then one
-  card a unit: its number badge (the piece's number and tint, so the cards
-  are the map's key; the card with the focus or the pointer lights its
-  piece), its name, a gauge's "It measures … of the catchment above it",
-  and a tick for each value proposed (Area … saved
-  as its parcel; Drains into …; All of its own runoff reaches the dam, or
-  for a dam marked off-channel on the map "2.5 % of its runoff reaches the
-  dam: the 0.10 km² draining to the dam’s own outflow, of the unit’s …"
-  and a tick for "Upstream inflow to dam 0 %: off-channel, …" (100 % for
-  one marked on the river), 194),
-  every tick off at first; under a ticked area whose piece holds pans, a
+  and no boundary, "go on to the points". **The points** (units follow the
+  user's boundaries, `start-16`, #523 C1; the lead says a dam or an
+  abstraction point is never a unit of its own): each unit's boundary (an
+  *other* area or a parcel, "(area)": A hydrological unit (this is its
+  boundary), the default, / Not in the model), dam (Part of its unit’s
+  composite dam, the default, / Another water user (no land) / Not in the
+  model), other point (Its unit’s river pump, the default, / Another water
+  user / Not in the model) and gauge (A gauge in the network (no land), the
+  default, / Not in the model) with a select, **Place a point** (into the
+  drawing mode, back after the save), the outlet (The boundary’s own
+  outlet, or a gauge), the count (`countText`: "2 units, plus the rest of
+  the catchment; 1 dam or pump as part of the unit around it."), and
+  **Propose the network**. **The proposal** (drawn on the map piece by
+  piece: each unit's boundary tinted with its number on it, the rest R when
+  it has an outline): the catchment's area, the warnings and dropped
+  points, the outflow gauge's name, then one card a unit: its number badge
+  (the piece's number and tint, so the cards are the map's key; the card
+  with the focus or the pointer lights its piece), its name ("· its
+  boundary: “Upper unit”"), a gauge's "It measures … of the catchment
+  above it", a tick for each value proposed (Area …: its boundary on the
+  map (the elevation model gives … draining to its outflow); Drains into
+  …), "Its composite dam: Valley dam. Its volume and the area draining to
+  it are yours to enter on the unit; the register of dams is a reference
+  only." and "Its river pump: …. Its capacity is yours to enter on the
+  unit." (no share of runoff or upstream inflow is offered); a plan from
+  before `start-16` says to discard it and propose again, Apply disabled;
+  every tick off at first; under a ticked area whose piece holds pans (the
+  rest's outlet piece, with no units' boundaries), a
   **Which area** radio group (`AreaBasisChoice.svelte`, 195): **Gross, …
   (what drains into pans included)**, checked, or **Effective, … (without
   the … draining into pans)**, with "WR2012’s quaternary areas are gross;
   take the effective area if you model the pans as not contributing runoff."
   (unticking the area hides it and drops the choice from what is sent); the rest of the catchment as a unit (a tick,
-  then its name and area, and the same choice); **Tick every value**; **How it was made**
+  then its name and area, and the same choice; beside the units'
+  boundaries "Area …: the catchment less the units’ boundaries (no outline
+  of its own)", and "In no unit’s boundary: …" for the dams and pumps it
+  takes); **Tick every value**; **How it was made**
   (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
   the reason by the names, while a name is empty or used twice),
-  which asks first ("The empty model gets 3 hydrological units, with 2 areas (each saved
-  as its unit’s parcel; Valley dam without what drains into pans) … It is
+  which asks first ("The empty model gets 4 hydrological units, with 3 areas (a unit’s is
+  its boundary on the map) and 2 drains-into from the proposal. Each unit’s
+  dams and pump are linked to it, their sizes yours to enter. … It is
   saved now as one change in History."). **Data and the first run**: links
-  to rain from the boundary, observed flow, evaporation (the A-pan the dams lose, to Settings' Demand group), the dams' capacities, cultivated
+  to rain from the boundary, observed flow, evaporation (the A-pan the dams lose, to Settings' Demand group), each unit’s composite dam (its volume and the area draining to it yours to enter; the register a reference only), cultivated
   area, the Network and **Run the model**. With nodes typed in, the sheet
   says the model isn't started from the map and points to Divide the model.
   With the sheet closed, a piece (or its number) under the pointer shows
@@ -3663,8 +3678,9 @@ map" card) stays the schematic; this is the geography.
   the sheet at its card, focused, and a line over the map ("A proposed
   model is drawn on the map piece by piece, each piece tinted and numbered
   as its card in the sheet (R: the rest of the catchment) …" with **Review
-  it**) says what the pieces are. The points step counts gauges apart ("1
-  unit and 1 gauge, plus the rest of the catchment.").
+  it**) says what the pieces are. The points step counts gauges and water
+  users apart ("1 unit, 1 gauge, plus the rest of the catchment; 1 dam or
+  pump as part of the unit around it.").
   **Where each point went** (`start-15`, issue #472; `placement.ts`):
   the outlet's line under the warnings ("The outlet: On the nearest
   terrain channel, 42 m from the point."), and each card's ("On the
@@ -3684,10 +3700,13 @@ map" card) stays the schematic; this is the geography.
   header's **Divide the model** (an open division is reviewed from the line
   over the map) opens a side
   sheet (`divide=1`, "Divide the model from the map"), read from the
-  server: **the points**: each dam, other point and gauge with a select
-  (Not in the division / the nodes its kind may stand for / A new gauge
-  node for an unlinked gauge), a linked point on its node by default, "Two
-  points stand for …" refusing a node twice, **Place a point**, the outlet,
+  server: **the points**: each unit's boundary (an *other* area or a parcel,
+  "(area)"), dam, other point and gauge with a select (Not in the division
+  / the nodes its kind may stand for: an area only a unit, a dam or other
+  point only an other water user (or a gauge), since a dam or abstraction
+  point never divides, `start-16` / A new gauge node for an unlinked
+  gauge), a linked feature on its node by default, "Two points stand for
+  …" refusing a node twice, **Place a point**, the outlet,
   the count ("3 points in the division."), **Propose the division**; **the
   proposal**: the warnings (dropped points, "No point stands for …: it keeps
   its values", and, as the ticks and the rest's choice change, "After Apply
@@ -3697,15 +3716,21 @@ map" card) stays the schematic; this is the geography.
   (`role="alert"`, Apply disabled while it stands), one card a point with
   its number badge, the node's name (or "A new gauge" with **Add it to the
   model as a gauge node** and its name), and a tick for each value with the
-  value now beside it (Area … Now: 12.00 km², typed; Drains into … Now: …;
-  All of its own runoff reaches the dam. Now: 50 %; a marked dam's share
-  and Upstream inflow to dam as in Start, each with Now), "(the same)" when
-  equal; under a ticked area whose piece holds pans, Start's **Which area**
-  choice; the rest of the catchment ("Its area goes to": Nobody / a unit /
-  A new unit, with its name, and the choice when it holds pans); **How it was made**; **Discard** and **Apply
-  the ticked values** (asks first: "The model takes 2 areas (each saved as
-  its unit’s parcel; 1 without what drains into pans), 3 drains-into
-  … Every value not ticked stays as it is."). Without a DEM the sheet says
+  value now beside it (Area …, its boundary on the map (the elevation model
+  gives … draining to its outflow). Now: 12.00 km², typed; Drains into …
+  Now: …), "(the same)" when equal, then "Joins its composite dam: …" and
+  "Joins its river pump: …" for the unlinked dams and pumps inside the
+  unit's boundary (`start-16`; no share of runoff or upstream inflow is
+  offered); the rest of the catchment ("Its area goes to": Nobody / a unit
+  / A new unit, with its name, and Start's **Which area** choice when it
+  holds pans; beside the units' boundaries "… the catchment less them, with
+  no outline of its own: its area goes in as typed."); a plan from before
+  `start-16` says to discard it and propose again, Apply disabled; **How it
+  was made**; **Discard** and **Apply the ticked values** (asks first: "The
+  model takes 2 areas (a unit’s is its boundary on the map) and 2
+  drains-into, and 1 new gauge. The unlinked dams and pumps inside each
+  unit’s boundary are linked to it. Every value not ticked stays as it
+  is."). Without a DEM the sheet says
   dividing needs one; with no single outflow, that the Network must set it.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
@@ -3790,11 +3815,12 @@ map" card) stays the schematic; this is the geography.
   2026-10-03): accepting a boundary saves a map feature only, so the
   catchment boundary's card (the side column's Details) says so under its
   facts in a tinted box: "This boundary is on the map, not in the model
-  yet. Divide the model splits it into each unit’s area at your dams,
-  abstraction points and gauges, for you to tick." with **Divide the model**
-  (`divide=1`; **Review the proposed division** while one waits), or for an
-  empty model "… Start from the map proposes the model’s units from it: …"
-  with **Start from the map** (`start=1`). It goes once a unit has taken its
+  yet. Divide the model gives each unit its boundary’s area and order, for
+  you to tick." with **Divide the model** (`divide=1`; **Review the
+  proposed division** while one waits), or for an empty model "… Start from
+  the map proposes the model’s units from it: one for each unit’s boundary
+  you put on the map, with its area and order, for you to tick." with
+  **Start from the map** (`start=1`). It goes once a unit has taken its
   area from the map; without a DEM (no Divide) it doesn't show.
 - **The elevation model's channels** (while Delineate or Sub-catchments is
   on; issue #374, [maps.md § The elevation model's channels](./maps.md#the-elevation-models-channels)):

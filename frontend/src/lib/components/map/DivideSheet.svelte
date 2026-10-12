@@ -48,8 +48,8 @@
 	import { offersEffective } from './areaBasis';
 	import PieceBadge from './PieceBadge.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
-	import { damShareLines, OUTLET_KEY, placementLine, withPlacement } from './placement';
-	import { openDivide, outletGauges } from './startFlow';
+	import { OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import { isUnitBoundary, openDivide, outletGauges, planBeforeBoundaries } from './startFlow';
 
 	let {
 		open = $bindable(false),
@@ -214,7 +214,7 @@
 			card.querySelector<HTMLElement>('input, select, button')?.focus();
 		});
 	});
-	const pct = (f: number) => `${fmtNum(f * 100, 0)} %`;
+	const memberNames = (ms: { name: string }[]) => ms.map((m) => m.name || 'unnamed').join(', ');
 </script>
 
 <Dialog bind:open title="Divide the model from the map" side>
@@ -227,14 +227,14 @@
 		{:else if step === 'points'}
 			<form id="{uid}-points" onsubmit={propose} novalidate data-testid="divide-points">
 				<p class="lead">
-					Say which hydrological unit each point on the map stands for. Each gets its own sub-catchment (what drains to its point and to no point above it) and the point below it, proposed beside its values now; nothing changes until you tick it. A gauge with no node can be added as a new gauge node. <HelpTip key="divide-model" />
+					Say which hydrological unit each unit’s boundary on the map stands for. Each unit’s area is its boundary’s, and the elevation model proposes what it drains into, beside its values now; nothing changes until you tick it. A dam or an abstraction point never divides a unit: the unlinked ones inside a unit’s boundary become its composite dam and its river pump. A point can stand for an other water user, and a gauge with no node can be added as a new gauge node. <HelpTip key="divide-model" />
 				</p>
 				{#if candidates.length}
 					<ul class="points">
 						{#each candidates as f (f.id)}
 							{@const options = nodeOptions(f, nodes)}
 							<li data-feature={f.id}>
-								<label for="{uid}-node-{f.id}" class="pname">{featureName(f)} <span class="muted small">({f.kind === 'dam' ? 'dam' : f.kind === 'gauge' ? 'gauge' : 'point'})</span></label>
+								<label for="{uid}-node-{f.id}" class="pname">{featureName(f)} <span class="muted small">({isUnitBoundary(f) ? 'area' : f.kind === 'dam' ? 'dam' : f.kind === 'gauge' ? 'gauge' : 'point'})</span></label>
 								{#if f.id === outlet}
 									<span class="muted small">The outlet ({outflow?.name})</span>
 								{:else}
@@ -248,7 +248,7 @@
 						{/each}
 					</ul>
 				{:else}
-					<p class="muted" data-testid="divide-no-points">No dams or points on the map yet: place each unit’s point (a dam at its wall, an abstraction point where it takes water) first.</p>
+					<p class="muted" data-testid="divide-no-points">No units’ boundaries or gauges on the map yet: draw or upload each unit’s boundary (or save sub-catchments) first.</p>
 				{/if}
 				<p><button type="button" class="btn btn-sm" onclick={onplace} data-testid="divide-place">Place a point</button></p>
 				<div class="field">
@@ -268,6 +268,9 @@
 				<p class="lead">
 					Tick each value to take it; anything unticked stays as it is in the model. The catchment above the outlet: <strong>{km2(p.catchment.areaM2)}</strong>.
 				</p>
+				{#if planBeforeBoundaries(p)}
+					<p class="err" role="alert" data-testid="divide-before-boundaries">This proposal divides at each dam and abstraction point, from before units followed your boundaries: discard it and propose again.</p>
+				{/if}
 				{#if p.warnings.length || p.dropped.length || p.untouched.length || overlap}
 					<ul class="warnings" data-testid="divide-warnings">
 						{#each p.warnings as w (w)}<li>{w}</li>{/each}
@@ -325,7 +328,7 @@
 								<label class="check">
 									<input type="checkbox" bind:checked={t.area} data-testid="divide-tick-area" />
 									<span
-										>Area <strong>{km2(u.areaM2)}</strong>, its own piece (whole catchment {km2(u.totalAreaM2)}), saved as its parcel. Now:
+										>Area <strong>{km2(u.areaM2)}</strong>, {u.role === 'unit' ? `its boundary on the map${u.demAreaM2 ? ` (the elevation model gives ${km2(u.demAreaM2)} draining to its outflow)` : ''}` : `its own piece (whole catchment ${km2(u.totalAreaM2)}), saved as its parcel`}. Now:
 										{u.current ? `${km2Now(u.current.areaKm2)}, ${u.current.areaSource === 'map' ? 'from the map' : 'typed'}` : '–'}{sameAsNow(p, u, 'area') ? ' (the same)' : ''}</span
 									>
 								</label>
@@ -344,23 +347,11 @@
 									>
 								</label>
 							{/if}
-							{#if offer.runoffToDam}
-								<label class="check">
-									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="divide-tick-dam" />
-									<span
-										>{damShareLines(u.damShares, u.areaM2, t.area ? (t.areaBasis ?? 'gross') : 'gross', u.nonContributingM2)?.runoff ?? 'All of its own runoff reaches the dam (its piece ends at the wall).'} Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span
-									>
-								</label>
+							{#if u.members?.some((m) => m.role === 'dam')}
+								<p class="hint" data-testid="divide-composite-dam">Joins its composite dam: {memberNames(u.members.filter((m) => m.role === 'dam'))}. Its volume and the area draining to it stay yours to enter; the register of dams is a reference only.</p>
 							{/if}
-							{#if offer.upstreamToDam}
-								<label class="check">
-									<input type="checkbox" bind:checked={t.upstreamToDam} data-testid="divide-tick-upstream" />
-									<span
-										>{damShareLines(u.damShares, u.areaM2)?.upstream} Now: {u.current?.pctUpstreamToDam !== undefined ? pct(u.current.pctUpstreamToDam) : '–'}{sameAsNow(p, u, 'upstreamToDam')
-											? ' (the same)'
-											: ''}</span
-									>
-								</label>
+							{#if u.members?.some((m) => m.role === 'abstraction')}
+								<p class="hint" data-testid="divide-river-pump">Joins its river pump: {memberNames(u.members.filter((m) => m.role === 'abstraction'))}. Its capacity stays yours to enter.</p>
 							{/if}
 							{#if placementLine(u.placement, u.snapDistanceM, pending.methodVersion)}<p class="hint" data-testid="divide-placement">{placementLine(u.placement, u.snapDistanceM, pending.methodVersion)}</p>{/if}
 							{#if u.placement?.larger}
@@ -374,7 +365,7 @@
 							<strong>The rest of the catchment</strong>
 							<span class="muted small">{km2(p.rest.areaM2)}: what drains to the outlet through no point</span>
 						</p>
-						{#if p.rest.geometry}
+						{#if !p.rest.geometry}<p class="hint" data-testid="divide-rest-typed">Beside the units’ boundaries it is the catchment less them, with no outline of its own: its area goes in as typed.</p>{/if}
 							<div class="field">
 								<label for="{uid}-rest">Its area goes to</label>
 								<select id="{uid}-rest" value={restChoice} onchange={(e) => setRest(e.currentTarget.value)} data-testid="divide-rest-to">
@@ -394,9 +385,6 @@
 								{@const r = ticks.rest}
 								<AreaBasisChoice areaM2={p.rest.areaM2} ncM2={p.rest.nonContributingM2!} bind:basis={() => r.areaBasis ?? 'gross', (v) => (r.areaBasis = v)} testid="divide-rest-area-basis" />
 							{/if}
-						{:else}
-							<p class="hint">Its outline couldn’t be made a polygon, so it has no parcel to save; type its area on the Network.</p>
-						{/if}
 						<!-- The overlap again where the choice that clears it is made, announced as it changes (the list above is far up). -->
 						<p class="hint" aria-live="polite" data-testid="divide-overlap-rest">{overlap ?? ''}</p>
 					</li>

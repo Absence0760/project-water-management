@@ -1,14 +1,16 @@
 // Divide a model that has nodes from the map (#326 C3's follow-up,
 // docs/design/start-from-map.md § Dividing a model that has nodes, docs/ui.md
-// § Map): the pure parts of the Map's Divide sheet. What each point on the map
-// can stand for (the model's nodes its kind may, or a new gauge), the ticks
-// (every value unticked until the editor ticks it), the problems the server
-// would refuse, and what apply will do.
+// § Map): the pure parts of the Map's Divide sheet. What each feature on the
+// map can stand for (a unit's boundary for its unit, a point for an other
+// water user, a gauge for a gauge node or a new one; a dam or an abstraction
+// point never divides, start-16, #523 C1), the ticks (every value unticked
+// until the editor ticks it), the problems the server would refuse, and what
+// apply will do.
 import type { NetworkNode } from '@water-management/engine';
 import type { DividePlan, DivideTicks, DivideUnit, MapFeature } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
 import { KIND_NODES } from './mapData';
-import { candidatePoints } from './startFlow';
+import { candidatePoints, isUnitBoundary } from './startFlow';
 import type { PlacementChoices } from './placement';
 
 /** A point's choice: a node's id, a new gauge node, or not in the division. */
@@ -31,10 +33,14 @@ export function outflowOf(nodes: readonly Pick<NetworkNode, 'id' | 'downstreamNo
 	return roots.length === 1 ? roots[0]!.id : null;
 }
 
-/** The nodes a point may stand for: those its kind may (map_feature's KIND_NODES), never the outflow. */
+/**
+ * The nodes a feature may stand for: those its kind may (map_feature's KIND_NODES), never the outflow. A unit only by its
+ * boundary (an area on the map), and an area only for a unit (start-16): a dam or a point is part of its unit, not where it ends.
+ */
 export function nodeOptions<N extends Pick<NetworkNode, 'id' | 'kind' | 'downstreamNodeId'>>(f: MapFeature, nodes: readonly N[]): N[] {
 	const outflow = outflowOf(nodes);
-	return nodes.filter((n) => n.id !== outflow && KIND_NODES[f.kind].includes(n.kind));
+	const area = isUnitBoundary(f);
+	return nodes.filter((n) => n.id !== outflow && KIND_NODES[f.kind].includes(n.kind) && (n.kind === 'farm') === area);
 }
 
 /** A point's default: the node it stands for on the map (if it may), else a new gauge for a gauge, else not in the division. */
@@ -43,7 +49,7 @@ export function defaultDivideChoice(f: MapFeature, nodes: readonly Pick<NetworkN
 	return f.kind === 'gauge' && !f.nodeId && f.geometry.type === 'Point' ? NEW_GAUGE : NONE;
 }
 
-/** Points that can be in a division: the Start sheet's candidates. */
+/** Features that can be in a division: the Start sheet's candidates (a dam or an other point only for a water user or a gauge). */
 export const dividePoints = candidatePoints;
 
 /** The propose body; the outlet gauge is never also a point. */
@@ -65,20 +71,17 @@ export function doubleNode(choices: Record<string, DivideChoice>, outlet: string
 	return null;
 }
 
-/** Which values of a point were proposed, and so can be ticked. */
+/** Which values of a point were proposed, and so can be ticked (the composite dam's shares never: they are the user's, start-16). */
 export const divideOffers = (u: DivideUnit) => ({
 	add: u.nodeId === null,
 	area: u.areaM2 !== null && !!u.geometry && u.role !== 'user' && u.role !== 'gauge',
-	drainsInto: true,
-	runoffToDam: u.role === 'dam',
-	/** A dam marked on or off the river (194): its Upstream inflow to dam. */
-	upstreamToDam: !!u.damShares
+	drainsInto: true
 });
 
 /** The ticks a division opens with: every value unticked, a new gauge named as its point. */
 export function initialDivideTicks(p: DividePlan): DivideTicks {
 	return {
-		units: p.units.map((u) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, ...(u.damShares ? { upstreamToDam: false } : {}), add: false, ...(u.nodeId ? {} : { name: u.name }) })),
+		units: p.units.map((u) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, add: false, ...(u.nodeId ? {} : { name: u.name }) })),
 		rest: { to: 'none' }
 	};
 }
@@ -89,7 +92,7 @@ export function tickAllDivide(p: DividePlan, t: DivideTicks): DivideTicks {
 	return {
 		units: t.units.map((x) => {
 			const o = divideOffers(by.get(x.key)!);
-			return { ...x, add: o.add, area: o.area, drainsInto: true, runoffToDam: o.runoffToDam, ...(o.upstreamToDam ? { upstreamToDam: true } : {}) };
+			return { ...x, add: o.add, area: o.area, drainsInto: true, runoffToDam: false };
 		}),
 		rest: t.rest
 	};
@@ -104,12 +107,10 @@ export function divideDrainsIntoName(p: DividePlan, t: DivideTicks, u: DivideUni
 }
 
 /** Whether a proposed value is what the node has already (ticking it changes nothing). */
-export function sameAsNow(p: DividePlan, u: DivideUnit, what: 'area' | 'drainsInto' | 'runoffToDam' | 'upstreamToDam'): boolean {
+export function sameAsNow(p: DividePlan, u: DivideUnit, what: 'area' | 'drainsInto'): boolean {
 	const c = u.current;
 	if (!c) return false;
 	if (what === 'area') return u.areaM2 !== null && Math.abs(c.areaKm2 - u.areaM2 / 1e6) < 0.0005;
-	if (what === 'runoffToDam') return c.pctRunoffToDam === (u.damShares?.pctRunoffToDam ?? 1);
-	if (what === 'upstreamToDam') return !!u.damShares && c.pctUpstreamToDam === u.damShares.pctUpstreamToDam;
 	const target = u.drainsInto ? p.units.find((x) => x.key === u.drainsInto)?.nodeId : p.outlet.nodeId;
 	return !!target && c.downstreamNodeId === target;
 }
@@ -126,7 +127,7 @@ export function divideProblem(p: DividePlan, t: DivideTicks, nodeNames: readonly
 			if (names.has(n.toLowerCase())) return `Two hydrological units would be called “${n}”: give the new gauge a name of its own.`;
 			names.add(n.toLowerCase());
 		}
-		if (!u.nodeId && !x.add && (x.drainsInto || x.area || x.runoffToDam || x.upstreamToDam)) return `${u.name} is a new gauge: tick Add it before taking its order.`;
+		if (!u.nodeId && !x.add && (x.drainsInto || x.area)) return `${u.name} is a new gauge: tick Add it before taking its order.`;
 		if (x.drainsInto && u.drainsInto) {
 			const target = p.units.find((y) => y.key === u.drainsInto);
 			if (target && !target.nodeId && !tick.get(target.key)?.add) return `${u.name} would drain into the new gauge ${tick.get(target.key)?.name?.trim() || target.name}, which isn’t being added: tick Add it too.`;
@@ -153,11 +154,9 @@ export function divideSummary(t: DivideTicks): string {
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 	const areas = t.units.filter((u) => u.area).length + (t.rest.to === 'none' ? 0 : 1);
 	const orders = t.units.filter((u) => u.drainsInto).length;
-	const runoff = t.units.filter((u) => u.runoffToDam).length;
-	const upstream = t.units.filter((u) => u.upstreamToDam).length;
 	const gauges = t.units.filter((u) => u.add).length;
 	const effective = t.units.filter((u) => u.area && u.areaBasis === 'effective').length + (t.rest.to !== 'none' && t.rest.areaBasis === 'effective' ? 1 : 0);
-	return `The model takes ${s(areas, 'area')} (each saved as its unit’s parcel${effective ? `; ${effective} without what drains into pans` : ''}), ${s(orders, 'drains-into', 'drains-into')} and ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${upstream ? `, ${s(upstream, 'upstream inflow to a dam', 'upstream inflows to dams')}` : ''}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. Every value not ticked stays as it is.`;
+	return `The model takes ${s(areas, 'area')} (a unit’s is its boundary on the map${effective ? `; ${effective} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. The unlinked dams and pumps inside each unit’s boundary are linked to it. Every value not ticked stays as it is.`;
 }
 
 /** How far over the catchment the units may add up before the sheet says so: the pieces' own rounding stays under it. */
@@ -202,7 +201,7 @@ export function divideOverlap(p: DividePlan, t: DivideTicks): string | null {
 		: `After Apply the units would add up to ${km2Now(total)}, more than the ${km2Now(catchment)} above the outlet, so some land would count twice and its runoff with it.`;
 	const parts: string[] = [];
 	const bigger = p.units.filter((u) => u.areaM2 !== null && !ticked.get(u.key)?.area && u.current && u.current.areaKm2 > (u.areaM2 / 1e6) * (1 + DIVIDE_OVERLAP_TOLERANCE));
-	if (bigger.length) parts.push(`${bigger.map((u) => `${u.name} keeps its typed ${km2Now(u.current!.areaKm2)}`).join(', ')}: tick ${bigger.length === 1 ? 'its' : 'their'} area to take ${bigger.length === 1 ? 'its piece' : 'their pieces'}.`);
+	if (bigger.length) parts.push(`${bigger.map((u) => `${u.name} keeps its typed ${km2Now(u.current!.areaKm2)}`).join(', ')}: tick ${bigger.length === 1 ? 'its' : 'their'} area to take the proposed ${bigger.length === 1 ? 'one' : 'ones'}.`);
 	const kept = p.untouched.filter((u) => u.areaKm2 > 0 && !(t.rest.to === 'node' && t.rest.nodeId === u.nodeId));
 	if (kept.length) parts.push(`${kept.map((u) => u.name).join(', ')} ${kept.length === 1 ? 'keeps its' : 'keep their'} typed area: give ${kept.length === 1 ? 'it' : 'one'} the rest of the catchment or a point of its own, or check ${kept.length === 1 ? 'it' : 'them'}.`);
 	return [head, ...parts].join(' ');

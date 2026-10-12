@@ -103,3 +103,25 @@ export const FIXTURE_BOUNDS = ((): [number, number, number, number] => {
 	return [w, s, e, n];
 })();
 export const FIXTURE_FILE = new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url);
+
+/**
+ * A unit's boundary in the valley (start-16, #523 C1): the stretch of the ellipse (grown by `pad` cells) between rows `fromY`
+ * and `toY`, closed by straight cuts across it, as a lon/lat ring. Rows past the ellipse's top or bottom close it on its rim;
+ * with the default pad, one reaching the bottom takes in the outlet's cell. `step`: rows between the ring's points (e2e/support/dem.ts
+ * keeps a coarser copy, checked by delineate.test.ts).
+ */
+export function valleyUnitRing(fromY: number, toY: number, pad = 2, step = 2): [number, number][] {
+	const a = A + pad;
+	const b = B + pad;
+	const top = Math.max(fromY, CY - b);
+	const bottom = Math.min(toY, CY + b);
+	const half = (y: number) => a * Math.sqrt(Math.max(0, 1 - ((y - CY) / b) ** 2));
+	const ys: number[] = [];
+	for (let y = top; y < bottom; y += step) ys.push(y);
+	ys.push(bottom);
+	const all = [...ys.map((y) => fixtureLonLat(CX + 0.5 + half(y), y)), ...[...ys].reverse().map((y) => fixtureLonLat(CX + 0.5 - half(y), y))];
+	// No point twice in a row (the rim's tip where the two sides meet), then closed.
+	const ring = all.filter((p, i) => i === 0 || p[0] !== all[i - 1]![0] || p[1] !== all[i - 1]![1]);
+	if (ring.length > 1 && ring[ring.length - 1]![0] === ring[0]![0] && ring[ring.length - 1]![1] === ring[0]![1]) ring.pop();
+	return [...ring, ring[0]!];
+}

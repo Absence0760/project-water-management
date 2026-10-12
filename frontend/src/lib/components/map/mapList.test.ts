@@ -157,7 +157,7 @@ describe('boundaryNextStep: what turns the boundary on the map into the model', 
 		expect(s).toEqual({
 			sheet: 'divide',
 			label: 'Divide the model',
-			text: 'This boundary is on the map, not in the model yet. Divide the model splits it into each unit’s area at your dams, abstraction points and gauges, for you to tick.'
+			text: 'This boundary is on the map, not in the model yet. Divide the model gives each unit its boundary’s area and order, for you to tick.'
 		});
 		expect(boundaryNextStep({ ...base, canDivide: true, pendingDivide: true })!.label).toBe('Review the proposed division');
 	});

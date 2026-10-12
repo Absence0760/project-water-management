@@ -1,5 +1,8 @@
-// Sub-catchments at every dam and abstraction point (issue #326 C3 and the
-// B-delineate stretch; docs/design/start-from-map.md § Sub-catchments).
+// Sub-catchments at points on the rivers (issue #326 C3 and the B-delineate
+// stretch; docs/design/start-from-map.md § Sub-catchments). Start from the map
+// and Divide (start-16, #523 C1) pass the units' own boundaries (polygons),
+// each placed at its most-drained cell above the outlet: the routing proposes
+// their order and checks their areas; the clicks (clicks.ts) pass points.
 // One DEM window around the catchment is filled and routed once; the outlet
 // and every unit's point snap to the channel; each unit drains into the
 // first other unit (or the outlet) its D8 path meets; and each unit owns
@@ -63,19 +66,28 @@ import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport 
  * start-15 (issue #472, delineate-13 reaching them): every point and the outlet on the terrain channel nearest it within the snap
  * radius (a click or the outlet with none refused, another point dropped); the mapped river network no longer matches, moves or
  * chooses them (start-3's, -4's, -7's to -9's, -12's and -13's reach rules gone).
+ * start-16 (#523 C1, #90 "Abstraction points from Start from the map / Divide"): Start and Divide no longer make a unit at each
+ * dam and abstraction point. The units are the user's own boundaries (role `unit`, a polygon), each at its most-drained cell
+ * inside the catchment (`placedBy: 'unit'`); the one whose most-drained cell is the outlet itself drains into the outflow and takes
+ * the outlet's piece. The dams and abstraction points inside a unit become its composite dam and its river pump (start.ts).
+ * Sub-catchments from clicks (clicks.ts) place and partition exactly as before; they carry the shared version.
  */
-export const START_METHOD_VERSION = 'start-15';
+export const START_METHOD_VERSION = 'start-16';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
-export type UnitRole = 'dam' | 'abstraction' | 'user' | 'gauge';
+/**
+ * `unit`: a hydrological unit drawn as its own boundary (a polygon; start-16). `dam` and `abstraction`: a unit at a dam or an
+ * abstraction point, as Start and Divide made them before start-16 (stored plans keep them; the clicks are `abstraction`).
+ */
+export type UnitRole = 'unit' | 'dam' | 'abstraction' | 'user' | 'gauge';
 
 /**
  * How a point was put on the channel: on the terrain channel nearest it (`snapped`), moved onto the much larger channel the editor
  * chose (`useLarger`), on its own cell (`exact`: a delineated outlet, already placed), a dam polygon's most-drained cell, or the
  * boundary's most-drained cell. Plans stored before start-15 can also say `matched` or `junction` (the mapped river's rules).
  */
-export type PlacedBy = 'snapped' | 'larger' | 'exact' | 'polygon' | 'boundary';
+export type PlacedBy = 'snapped' | 'larger' | 'exact' | 'polygon' | 'boundary' | 'unit';
 
 /** How a point is to be placed (the editor's choices); none of it means the plain snap. */
 export interface PlacementHints {
@@ -455,9 +467,10 @@ export function placementText(
 		larger: 'on the larger channel chosen',
 		exact: 'on its delineated cell',
 		polygon: 'at a dam polygon’s outflow',
-		boundary: 'at the boundary’s most-accumulating cell'
+		boundary: 'at the boundary’s most-accumulating cell',
+		unit: 'at a unit boundary’s outflow'
 	};
-	const order: PlacedBy[] = ['snapped', 'larger', 'exact', 'polygon', 'boundary'];
+	const order: PlacedBy[] = ['snapped', 'larger', 'exact', 'polygon', 'boundary', 'unit'];
 	const parts: string[] = [];
 	if (outletPlaced) parts.push(`the outlet ${short[outletPlaced]}`);
 	for (const how of order) {
@@ -486,6 +499,7 @@ export function placementText(
 			);
 		if (positions.includes('on_channel')) defs.push('marked on the river: its most-accumulating cell');
 	}
+	if (ran.has('unit')) defs.push('a unit’s boundary: its most-accumulating cell above the outlet, its area the boundary’s own, the cells reaching it a check');
 	if (ran.has('snapped') || ran.has('larger'))
 		defs.push(
 			`the nearest terrain channel: the nearest cell within ${snapRadiusM} m with at least ${ON_CHANNEL_KM2} km² draining through it, the mapped river network not used; a ${LARGER_FACTOR}× larger channel within ${GUARD_RADIUS_M} m named`
@@ -745,6 +759,14 @@ export async function delineateUnits(
 		const droppedKm2 = new Map<string, number>();
 		const taken = new Map<number, string>([[outlet, '']]);
 		const kept: { p: UnitPoint; cell: number; snapDistanceM: number | null }[] = [];
+		/** The unit boundary (start-16) whose outflow is the outlet: it drains into the outflow, and every unit draining to the outlet drains into it. */
+		let outletUnit: UnitPoint | null = null;
+		/** The unit boundaries' outflow cells. */
+		const unitCells = new Set<number>();
+		const downstreamOf = (c: number): number => {
+			const d = dir[c]!;
+			return d === OUT ? -1 : c + DY[d]! * nCells + DX[d]!;
+		};
 		/** An off-channel dam's own outflow cell, by its id: its catchment within the unit's piece is the dam's share. */
 		const damOwn = new Map<string, number>();
 		const riverSteps = Math.ceil(GUARD_RADIUS_M / cellSizeM);
@@ -762,6 +784,14 @@ export async function delineateUnits(
 			if (p.geometry.type === 'Point') {
 				cell = snapAt(p.geometry.coordinates, p.id, p);
 				if (cell !== null) moved = movedM(p.geometry.coordinates, cell);
+			} else if (p.role === 'unit') {
+				// A unit's own boundary (start-16): its most-drained cell inside the catchment, where its water leaves it.
+				const rings = polygonRings(p.geometry);
+				const mask = rings.length ? rasterize(nCells, nCells, rings.map((r) => r.map(toGrid))) : null;
+				if (mask) for (let i = 0; i < mask.length; i++) if (!catchment[i]) mask[i] = 0;
+				const c = mask ? mostDrained(mask, acc, edge) : -1;
+				how.set(p.id, { placedBy: 'unit' });
+				cell = c >= 0 ? c : null;
 			} else {
 				const rings = polygonRings(p.geometry);
 				const position = p.damPosition ?? null;
@@ -815,9 +845,28 @@ export async function delineateUnits(
 				if (cell !== null) droppedKm2.set(p.id, km2(acc[cell]!));
 				dropped.push({
 					id: p.id,
-					reason: lowest ? 'doesn’t drain to the lowest click (it is on another river, or off the elevation model)' : 'isn’t upstream of the outlet (it drains elsewhere, or is off the elevation model)'
+					reason:
+						p.role === 'unit'
+							? 'lies outside the catchment above the outlet (or off the elevation model)'
+							: lowest
+								? 'doesn’t drain to the lowest click (it is on another river, or off the elevation model)'
+								: 'isn’t upstream of the outlet (it drains elsewhere, or is off the elevation model)'
 				});
 				continue;
+			}
+			// A unit whose boundary reaches the outlet: its water leaves at the outlet, so it takes the outlet's piece (start-16).
+			if (p.role === 'unit' && cell === outlet) {
+				if (outletUnit) {
+					dropped.push({ id: p.id, reason: `ends at the outlet, as another unit’s boundary does: do the two boundaries overlap?` });
+					continue;
+				}
+				outletUnit = p;
+				continue;
+			}
+			// A gauge or water user on a unit boundary's outflow cell: one cell further down, so the unit drains into it.
+			if (p.role !== 'unit' && taken.has(cell) && taken.get(cell) !== '' && unitCells.has(cell)) {
+				const below = downstreamOf(cell);
+				if (below >= 0 && catchment[below] && !taken.has(below)) cell = below;
 			}
 			const clash = taken.get(cell);
 			if (clash !== undefined) {
@@ -825,6 +874,7 @@ export async function delineateUnits(
 				continue;
 			}
 			taken.set(cell, p.id);
+			if (p.role === 'unit') unitCells.add(cell);
 			kept.push({ p, cell, snapDistanceM: moved });
 		}
 		const part = partition(
@@ -969,12 +1019,13 @@ export async function delineateUnits(
 			...(outletId !== undefined ? { id: outletId, ...(how.get(outletId) ?? {}) } : (how.get(OUTLET) ?? {}))
 		},
 			catchment: catchmentShape,
-			units: kept.map((k, i) => ({
+			units: [
+				...kept.map((k, i) => ({
 				id: k.p.id,
 				role: k.p.role,
 				point: cellPos(k.cell),
 				snapDistanceM: k.snapDistanceM,
-				drainsInto: part.down[i]! < 0 ? null : kept[part.down[i]!]!.p.id,
+				drainsInto: part.down[i]! < 0 ? (outletUnit?.id ?? null) : kept[part.down[i]!]!.p.id,
 				geometry: pieces[i]!.geometry,
 				areaM2: pieces[i]!.areaM2,
 				totalAreaM2: total[i]!,
@@ -984,9 +1035,28 @@ export async function delineateUnits(
 				...(damM2[i] !== undefined ? { damCatchmentM2: damM2[i], damNonContributingM2: damNc[i]! } : {}),
 				...(open[i] ? { open: true } : {})
 			})),
+				// The unit boundary that ends at the outlet: the outlet's own piece is its (start-16).
+				...(outletUnit
+					? [
+							{
+								id: outletUnit.id,
+								role: outletUnit.role,
+								point: cellPos(outlet),
+								snapDistanceM: null,
+								drainsInto: null,
+								geometry: rest.geometry,
+								areaM2: rest.areaM2,
+								totalAreaM2: catchmentM2,
+								nonContributingM2: open[R] ? 0 : ncOf[R]!,
+								totalNonContributingM2: truncated ? 0 : ncAreaM2(nCells, found.nc, rowM2),
+								placedBy: 'unit' as const
+							}
+						]
+					: [])
+			],
 			// A dropped point keeps its placement: one snapped into a gully beside its river names the river, so it can be moved there.
 			dropped: dropped.map((d) => ({ ...d, ...(how.get(d.id) ?? {}) })),
-			rest: open[R] ? { ...rest, nonContributingM2: 0, open: true } : { ...rest, nonContributingM2: ncOf[R]! },
+			rest: outletUnit ? { geometry: null, areaM2: 0, nonContributingM2: 0 } : open[R] ? { ...rest, nonContributingM2: 0, open: true } : { ...rest, nonContributingM2: ncOf[R]! },
 			pans: panReport(truncated ? Number.NaN : ncAreaM2(nCells, found.nc, rowM2), found.pans, found.onRiver),
 			cellSizeM,
 			zoom: z,

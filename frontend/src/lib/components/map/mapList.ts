@@ -226,13 +226,13 @@ export function boundaryNextStep(s: { canStart: boolean; canDivide: boolean; pen
 		return {
 			sheet: 'start',
 			label: s.pendingStart ? 'Review the proposed model' : 'Start from the map',
-			text: `${lead} Start from the map proposes the model’s units from it: each unit’s area at your dams, abstraction points and gauges, for you to tick.`
+			text: `${lead} Start from the map proposes the model’s units from it: one for each unit’s boundary you put on the map, with its area and order, for you to tick.`
 		};
 	if (s.canDivide && s.unitAreasFromMap === 0)
 		return {
 			sheet: 'divide',
 			label: s.pendingDivide ? 'Review the proposed division' : 'Divide the model',
-			text: `${lead} Divide the model splits it into each unit’s area at your dams, abstraction points and gauges, for you to tick.`
+			text: `${lead} Divide the model gives each unit its boundary’s area and order, for you to tick.`
 		};
 	return null;
 }
