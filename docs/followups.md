@@ -300,29 +300,53 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
-- [ ] **Runoff from each unit's own rain (engine 1.78.0,
+- [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
-      runs as before, to the bit). Provisional calls awaiting the
-      hydrologist: (1) is a unit's CHIRPS levelled by unit MAP ÷ its mean
-      annual over 1991–2020 the right correction, against the catchment
-      gauge's monthly §2.4b factors, when both exist; (2) should the clamp
-      stay 0.25–4 for the per-unit MAP factors; (3) `rnl` (from 1981) or
-      `sat` (from 1998) as the per-unit feeds' default product; (4) the
-      5-year minimum, and falling back to every complete year below it;
-      (5) the forecast (CHIRPS-GEFS) staying catchment-wide × the MAP
-      ratio; (6) a unit's own gauge used as recorded, with no zero-run or
-      accumulation check of its own. Trigger: the hydrologist's answer, or
-      the client's first per-unit run once part B's feeds and part D's
-      settings land. `verify/` cross-checks §2.4h (part E of #482). Also
-      left: the run window still follows the catchment rain series. (The
-      seasonal outlook runs each unit's season on its own rain, engine
-      1.78.0.) Issue #500 item 1, the reference gauge's monthly factors on
-      every unit's CHIRPS, is built in engine 1.80.0 (opt-in,
-      `settings.unitRain.reference`), with item 1a (× unit MAP ÷ the
-      reference unit's MAP on top) a provisional decision
-      (engine-audit.md § Provisional decisions 2026-10-10); the other
-      items of #500 stay open there.
+      runs as before, to the bit). Every provisional call was answered by
+      the operator on 2026-10-09
+      ([#500](https://github.com/Absence0760/project-water-management/issues/500),
+      items 1a–8) and is built in engine 1.85.0 (engine-audit.md § Decided
+      rules 2026-10-09): the reference gauge's monthly factors × k_unit
+      (each unit rescaled to its own MAP), fitted against the checked gauge
+      rain; the 0.25–4 clamp kept with a warning outside 0.5–2; `rnl` for
+      units; 10 complete years; a CHIRPS-GEFS forecast corrected like the
+      unit's CHIRPS; a unit's own gauge through §2.4c/§2.4d; CHIRPS that
+      averages 0 mm a year skipped as unusable; no land units runs the
+      catchment rain; MAP-from-grid coverage shown below 100 %. Engines
+      1.80.0–1.84.0 had built item 1 from the issue's original wording.
+      Still open, tracked below: the fit at the gauge's own cell (1b), and
+      the MAP's own period. Also left: the run window still follows the
+      catchment rain series, and the EWR split and the land cover's
+      low-flow threshold stay on the flow shares (engine-audit U1).
+- [ ] **Fit the reference gauge's factors at the gauge's own CHIRPS cell
+      (issue #500 item 1b).** The decision is the cell the reference gauge
+      sits in, with the reference unit's centre only when the gauge has no
+      location. Rain gauges have no location on the map (a rain series is
+      not a map point), so every run uses the reference unit's centre cell
+      and says so (`cellReason: 'referenceUnitCentre'`, model.md §2.4h).
+      Durable fix: give a rain gauge a map point (a gauge point on the Map
+      tab, or a location on the series), have `runs/referenceCell.ts` read
+      the cell holding it (fetching it for the cell cache if no feed has),
+      and set `cellReason: 'gaugeCell'`; an engine version bump, since the
+      factors move. Trigger: a client project turning a reference gauge on
+      whose gauge sits in another cell than its unit's centre, or the rain
+      gauge map point being built for another reason.
+- [ ] **The unit MAPs' own period against the 1991–2020 MAP period (issue
+      #500).** k_unit compares a unit's MAP with its CHIRPS over the MAP
+      period, so any difference between the MAP source's years and
+      1991–2020 goes into the unit's rain level. The client's units take
+      their MAPs from the Western Cape (Berg WAAS) MAP surface, which names
+      no common period: station MAPs over each station's patched record,
+      the study's hydrology over the hydrological years 1927–2004 (DWAF
+      2007 Report No. 2; 2010 summary report §2.2–§2.3; model.md §2.4h *The
+      MAP's own period*). Durable fix: read Report No. 2 for the station
+      periods (DWS's site refuses downloads; ask the client's hydrologist
+      or DWS for a copy), then record the expected difference in the unit
+      MAPs' source, or widen `mapPeriod` to every year CHIRPS has (from
+      1981) where that narrows it. Trigger:
+      the client's first per-unit run, or the hydrologist's review of the
+      unit MAPs.
 - [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
