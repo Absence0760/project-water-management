@@ -15,6 +15,7 @@ import type { PlanOfftake } from './offtake';
 import type { PlanRemote } from './cropSupply';
 import type { AllocationCap } from '../allocations/mode';
 import { reachLossDay, type PlanReachLoss } from './reachLoss';
+import { baseflowLossDay, type PlanBaseflow } from './baseflow';
 
 /**
  * Relative size of float noise treated as zero in a shortfall. A difference
@@ -137,6 +138,12 @@ export interface PlanNode {
 	 * downstream. Absent = none (and on the outlet).
 	 */
 	reachLoss?: PlanReachLoss;
+	/**
+	 * A unit's base-flow loss and gain (engine 1.86.0, ./baseflow.ts,
+	 * docs/model.md §2.6b): its runoff I becomes I − MIN(loss, I) + gain
+	 * before the dam/river split. Absent = neither.
+	 */
+	baseflow?: PlanBaseflow;
 	/**
 	 * The senior users' claims' share of those bed losses, m³/day (engine ≥
 	 * 1.75.0, ../run.ts otherUsers): Σ over the claims crossing the reach of
@@ -438,6 +445,10 @@ export interface NodeResult {
 	 * Absent on a node without bed losses.
 	 */
 	reachLoss?: Float64Array;
+	/** A unit's base-flow loss, MIN(loss, I) (engine 1.86.0, ./baseflow.ts); absent without one. */
+	baseflowLoss?: Float64Array;
+	/** A unit's base-flow gain (engine 1.86.0); absent without one. */
+	baseflowGain?: Float64Array;
 }
 
 /**
@@ -773,6 +784,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		}
 		if (plan.restriction?.inScope[i] || (plan.restriction?.userCut?.[i] ?? 0) > 0) r.restrictedDemand = new Float64Array(days);
 		if (n.reachLoss) r.reachLoss = new Float64Array(days);
+		if (n.baseflow?.lossM3Day) r.baseflowLoss = new Float64Array(days);
+		if (n.baseflow?.gainM3Day) r.baseflowGain = new Float64Array(days);
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (n.river) {
 			const tk = n.river.takes;
@@ -1454,6 +1467,19 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const lc = node.landCover ? landCoverReduction(I0, qLow * node.share, node.landCover) : 0;
 			const I = I0 - lc;
 			r.landCoverReduction[t] = lc;
+			// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): taken off and added to its runoff
+			// before it reaches the river or the dam, so Ib is what the unit's runoff brings in. Ib = I without them.
+			const bf = node.baseflow;
+			let Ib = I;
+			let bfLoss = 0;
+			let bfGain = 0;
+			if (bf) {
+				bfLoss = baseflowLossDay(bf, I);
+				bfGain = bf.gainM3Day;
+				Ib = I - bfLoss + bfGain;
+				if (r.baseflowLoss) r.baseflowLoss[t] = bfLoss;
+				if (r.baseflowGain) r.baseflowGain[t] = bfGain;
+			}
 			const J = jToday[i]!;
 			// The percentage is the share of upstream inflow that enters the dam
 			// (K); the rest passes below it (L), where the diversion capacity (O)
@@ -1466,8 +1492,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const ror = sup !== undefined && sup.rule === 3;
 			let K = ror ? 0 : Math.min(H * node.pctUpstreamToDam, H);
 			let L = H - K;
-			let M = ror ? 0 : Math.min(I * node.pctRunoffToDam, I);
-			let N = I - M;
+			let M = ror ? 0 : Math.min(Ib * node.pctRunoffToDam, Ib);
+			let N = Ib - M;
 			let O = ror ? 0 : Math.min(node.divertM3DayByMonth ? divertCapacityToday(node, month[t]!) : node.divertCapacityM3Day, L + N);
 			// Senior users below (WP-1.33): the farm passes their requirement Zs
 			// below the dam (S) before it fills the dam, as far as its inflow
@@ -1477,7 +1503,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const Zs = sumZs + (claim ? claim[t]! : 0);
 			let passed = 0;
 			if (Zs > 0) {
-				let short = Math.min(Zs, H + I) - (L + N - O);
+				let short = Math.min(Zs, H + Ib) - (L + N - O);
 				if (short > 0) {
 					const dO = Math.min(short, O);
 					O -= dO;
@@ -1498,7 +1524,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 							M = Math.max(0, M - (cut - dK));
 						}
 						L = H - K;
-						N = I - M;
+						N = Ib - M;
 						passed += cut;
 					}
 				}
@@ -1521,7 +1547,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				if (cap > 0) {
 					if (O > 0) O = Math.min(O, Math.max(0, L + N - hk));
 				} else {
-					let short = Math.min(hk, H + I) - (L + N - O);
+					let short = Math.min(hk, H + Ib) - (L + N - O);
 					if (short > 0) {
 						const dO = Math.min(short, O);
 						O -= dO;
@@ -1538,7 +1564,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 								M = Math.max(0, M - (short - dK));
 							}
 							L = H - K;
-							N = I - M;
+							N = Ib - M;
 						}
 					}
 				}
@@ -1879,7 +1905,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				w.damRelease[t] = Rel;
 				// Another unit's dam: what came in to the crops, and what this dam gave out (engine ≥ 1.73.0).
 				const V0 =
-					Xin > 0 || Xout > 0 || Xret > 0 ? H + I + J + Pd + Ggw + Gd + Xin + Xret - Xout - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost;
+					Xin > 0 || Xout > 0 || Xret > 0 ? H + Ib + J + Pd + Ggw + Gd + Xin + Xret - Xout - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost : H + Ib + J + Pd + Ggw + Gd - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost;
 				const V = Gin > 0 || Xr > 0 ? V0 + Gin - Xr : V0;
 				// The river abstractions' pools: their change and evaporation (engine ≥ 1.65.0).
 				w.balanceResidual[t] = riv ? V - poolChange : V;

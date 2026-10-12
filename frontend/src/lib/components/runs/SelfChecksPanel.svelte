@@ -238,7 +238,7 @@
 			{/if}
 		{:else if dayBalance}
 			<p class="closure small">
-				In (H + I + J + rain on dam) {fmtValue(dayBalance.inflow)} − used (G − T) {fmtValue(dayBalance.consumptive)} − evaporated {fmtValue(dayBalance.evaporation)} − stored (Q − Q[t−1]) {fmtValue(dayBalance.storageChange)}
+				In (H + I + J + rain on dam{dayBalance.baseflow ? ' + base-flow gain − base-flow loss' : ''}) {fmtValue(dayBalance.inflow)} − used (G − T) {fmtValue(dayBalance.consumptive)} − evaporated {fmtValue(dayBalance.evaporation)} − stored (Q − Q[t−1]) {fmtValue(dayBalance.storageChange)}
 				− out (U) {fmtValue(dayBalance.outflow)} = <strong>{fmtValue(dayBalance.residual)}</strong> m³
 			</p>
 		{:else if day.kind === 'farm'}

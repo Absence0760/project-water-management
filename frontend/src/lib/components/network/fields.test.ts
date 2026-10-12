@@ -92,13 +92,15 @@ describe('TABLE_FIELDS', () => {
 		for (const k of ['damSeepageReturnPct', 'damOutletCapacityM3Day']) expect(keys).not.toContain(k);
 		// … and the bed losses in the reach below (engine 1.75.0).
 		for (const k of ['reachLossFrac', 'reachLossMaxM3Day']) expect(keys).not.toContain(k);
-		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 12);
+		// … and a unit's base-flow loss and gain (engine 1.86.0).
+		for (const k of ['baseflowLossM3Day', 'baseflowGainM3Day']) expect(keys).not.toContain(k);
+		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 14);
 	});
 });
 
 describe('isVolume', () => {
 	it('marks the m³ and m³/day fields, whose columns need room for large values (River to dam is m³/s, a small number)', () => {
-		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'boreholeCapacityM3Day', 'reachLossMaxM3Day']);
+		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'boreholeCapacityM3Day', 'reachLossMaxM3Day', 'baseflowLossM3Day', 'baseflowGainM3Day']);
 	});
 });
 

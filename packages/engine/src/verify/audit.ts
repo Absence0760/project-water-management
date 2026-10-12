@@ -28,6 +28,7 @@ import { ALLOCATION_SERIES } from '../allocations/mode';
 import { resolveDamCurve } from '../network/dam';
 import { demandObjectsByNode } from '../network/demandObjects';
 import { riverSourcesOf } from '../network/riverSource';
+import { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES } from '../network/baseflow';
 import { onRiverDam, operatingOf } from '../network/supply';
 import { runReturnFlow, type ModelInput, type NetworkNode } from '../project';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, onRiverDamForRun, runEfficiency } from './workings';
@@ -195,7 +196,10 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	// Engine ≥ 1.54.0: the day's level cuts what the sources are asked for.
 	['restricted_demand', 'a drought restriction rule'],
 	// Engine ≥ 1.54.0: a unit's own level under the 'own' basis (always beside its restricted demand).
-	['restriction_level', 'a drought restriction rule']
+	['restriction_level', 'a drought restriction rule'],
+	// Engine 1.86.0: a unit's base-flow loss and gain change the runoff the split reads (docs/model.md §2.6b).
+	[BASEFLOW_LOSS_SERIES.key, 'a base-flow loss'],
+	[BASEFLOW_GAIN_SERIES.key, 'a base-flow gain']
 ];
 
 /** The farm series the formulas compare against (and the inputs they read). */

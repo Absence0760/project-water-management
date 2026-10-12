@@ -2866,7 +2866,13 @@ itself.
   **Supply** (with Water for the crops and the hands-off flow), **Irrigation**,
   **Demand objects** (after the supply their "Water for" names), **Combined
   boreholes (one capacity)** and **Individual boreholes** side by side,
-  **Land cover**, and last **Bed losses in the reach below** (engine ≥
+  **Land cover**, **Base-flow loss and gain** (engine 1.86.0, issue #523 B1,
+  [model.md §2.6b](./model.md); units only, bar label "Base flow"): the m³/day
+  the unit's own runoff loses to groundwater (out of the catchment, at most
+  the day's runoff) and gains from outside it, both 0 by default, under a
+  note saying where the water goes and that neither is the unit's use; its
+  line reads "None" or "loses 1 500 m³/day · gains 20 m³/day". And last
+  **Bed losses in the reach below** (engine ≥
   1.75.0, [model.md §2.6b](./model.md); on every kind of node, gauges and
   other water users too): the share of the flow lost (up to 100 %: with a daily maximum, WRSM's bed loss; over half without one, the run warns) and the
   most lost in a day, under a note saying where the water goes. On the outlet
@@ -7568,7 +7574,9 @@ read it before.
      counted). Its caption counts the reaches; without bed losses there is no
      fifth line and no text about them. A how-to-read line heads it: simulated should track observed;
      natural sits above simulated by roughly the use upstream (plus the bed
-     losses in the reaches above the gauge, on such a run); where demand
+     losses in the reaches above the gauge, on such a run; a unit's base-flow
+     loss or gain, engine 1.86.0, isn't drawn: *Natural* is the runoff before
+     it, so on a run with one, natural and simulated also differ by it); where demand
      rises and simulated drops below natural, abstraction is biting. A
      forecast run's lines stop the day before its forecast starts
      (`beforeForecastFlows`, engine `beforeForecast`, as the flow duration

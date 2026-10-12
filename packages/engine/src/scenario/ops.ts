@@ -255,6 +255,12 @@ const CROP_SUPPLY = ['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropR
  * kind of node; a property of the river, so a baseline assumption.
  */
 const REACH = ['reachLossFrac', 'reachLossMaxM3Day'] as const;
+/**
+ * A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1,
+ * docs/model.md §2.6b), m³/day. Units only; the land's groundwater, so a
+ * baseline assumption.
+ */
+const BASEFLOW = ['baseflowLossM3Day', 'baseflowGainM3Day'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -264,7 +270,7 @@ const REACH = ['reachLossFrac', 'reachLossMaxM3Day'] as const;
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE, ...CROP_SUPPLY, ...REACH],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE, ...CROP_SUPPLY, ...REACH, ...BASEFLOW],
 	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES, ...REACH],
 	gauge: ['name', 'ewrSite', ...REACH]
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -276,9 +282,10 @@ export type NodeSetField = (typeof NODE_SET_FIELDS)[NodeKind][number];
  * node (classifyOp): land and flow share split the catchment's natural
  * runoff, where the EWR is assessed is the Reserve's, a dam's survey and
  * sediment rate (engine ≥ 1.30.0) describe the dam as it is, never a
- * proposal, and the river bed's losses (engine ≥ 1.75.0) are the river's.
+ * proposal, and the river bed's losses (engine ≥ 1.75.0) are the river's,
+ * as a unit's base-flow loss and gain (engine 1.86.0) are its groundwater's.
  */
-export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite', 'damSurveyDate', 'damSedimentPctPerYear', ...REACH];
+export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite', 'damSurveyDate', 'damSedimentPctPerYear', ...REACH, ...BASEFLOW];
 
 const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	name,
@@ -334,6 +341,8 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	cropRemoteCapM3Day: nullable(nonNeg),
 	reachLossFrac: range(0, REACH_LOSS_FRAC_MAX),
 	reachLossMaxM3Day: nullable(nonNeg),
+	baseflowLossM3Day: nonNeg,
+	baseflowGainM3Day: nonNeg,
 	ewrSite: boolean
 };
 
@@ -1176,6 +1185,8 @@ const NODE_OPTIONAL = new Set<string>([
 	'cropRemoteNodeId',
 	// No bed losses in the reach below unless given (engine ≥ 1.75.0).
 	...REACH,
+	// No base-flow loss or gain unless given (engine 1.86.0).
+	...BASEFLOW,
 	...DAM_STORAGE,
 	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.
 	...DEVELOPMENT,

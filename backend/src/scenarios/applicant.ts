@@ -9,8 +9,8 @@
 //  - the applicant's own nodes (their farm links) and every gauge (public
 //    infrastructure, as a farmer sees them): in full;
 //  - every other node: its id, kind, place in the network and order, so a
-//    new dam can be placed below it, and the river's bed losses below it
-//    (engine ≥ 1.75.0), under an anonymous name ("Farm 3",
+//    new dam can be placed below it, the river's bed losses below it
+//    (engine ≥ 1.75.0) and a unit's base-flow loss and gain (engine 1.86.0), under an anonymous name ("Farm 3",
 //    "Water user 1"); every number zeroed and every list emptied, so no other
 //    farm's area, dam, crops, demand or boreholes leave the server;
 //  - crops, crop areas, transfers, land cover, boreholes, demand objects and
@@ -27,11 +27,11 @@ export interface ApplicantBase {
 
 const KIND_NAME: Record<NodeKind, string> = { farm: 'Farm', gauge: 'Gauge', user: 'Water user' };
 /**
- * Kept as they are on an anonymised node: where it sits in the network, what it is, and the bed losses of the reach
- * below it (engine ≥ 1.75.0), a property of the river rather than of the farm's use, so the applicant's runs lose
- * water where the base's do.
+ * Kept as they are on an anonymised node: where it sits in the network, what it is, the bed losses of the reach
+ * below it (engine ≥ 1.75.0) and a unit's base-flow loss and gain (engine 1.86.0), properties of the river and the
+ * groundwater rather than of the farm's use, so the applicant's runs lose and gain water where the base's do.
  */
-const KEEP = new Set(['id', 'kind', 'downstreamNodeId', 'sortOrder', 'reachLossFrac', 'reachLossMaxM3Day']);
+const KEEP = new Set(['id', 'kind', 'downstreamNodeId', 'sortOrder', 'reachLossFrac', 'reachLossMaxM3Day', 'baseflowLossM3Day', 'baseflowGainM3Day']);
 
 /** NetworkNode's text fields (a string, or a union of strings). */
 type TextField = { [K in keyof NetworkNode]-?: NonNullable<NetworkNode[K]> extends string ? K : never }[keyof NetworkNode];

@@ -239,6 +239,11 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 		if (!inRange(n.reachLossMaxM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the most lost in the reach below in a day can't be negative.` });
 		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0)
 			issues.push({ area: 'network', itemId: n.id, message: `${label}: the outlet has no reach below it in the model; set its bed losses to 0%.` });
+		// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), as the API checks them: sizes ≥ 0, units only.
+		if (!inRange(n.baseflowLossM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow loss can't be negative.` });
+		if (!inRange(n.baseflowGainM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow gain can't be negative.` });
+		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0))
+			issues.push({ area: 'network', itemId: n.id, message: `${label}: only a hydrological unit has a base-flow loss or gain; set both to 0.` });
 		// A unit's MAP (issue #482), as the API checks it.
 		const map = unitMapIssue(n);
 		if (map) issues.push({ area: 'network', itemId: n.id, message: `${label}: ${map}` });

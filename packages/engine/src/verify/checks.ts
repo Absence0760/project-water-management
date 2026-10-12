@@ -22,6 +22,7 @@ import { canMove, externalRules, farmRules, readRuleVolumes, transferRuleKey } f
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { reachLossDay, reachLossOf, REACH_LOSS_SERIES, SENIOR_REACH_LOSS_SERIES } from '../network/reachLoss';
+import { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, baseflowLossDay, baseflowOf } from '../network/baseflow';
 import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
@@ -455,6 +456,11 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const riv = riverColumns(input, n, get, out);
 		if (typeof riv === 'string') return riv;
 		const poolPrev = riv ? riv.takes.map((k) => k.pool?.capM3 ?? 0) : [];
+		// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): a series exactly when the setting has one.
+		const BFL = get.get(`${n.id}|${BASEFLOW_LOSS_SERIES.key}`);
+		const BFG = get.get(`${n.id}|${BASEFLOW_GAIN_SERIES.key}`);
+		const bf = baseflowOf(n, []).baseflow;
+		if (!!BFL !== !!bf?.lossM3Day || !!BFG !== !!bf?.gainM3Day) return `${n.id}: base-flow series ${BFL ? 'loss' : ''}${BFG ? ' gain' : ''} don't match the setting`;
 		for (let t = 0; t < out.days; t++) {
 			let pools = 0;
 			if (riv) {
@@ -485,9 +491,17 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const gw = (GW?.[t] ?? 0) + (GD?.[t] ?? 0);
 			const dep = DEP?.[t] ?? 0;
 			const spl = SPL?.[t] ?? 0;
-			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret + rin;
-			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout + pools + rout;
 			const where = `${n.id} day ${t}`;
+			// The day's base-flow loss is MIN(L, I), its gain the setting's, every day.
+			const bfl = BFL?.[t] ?? 0;
+			const bfg = BFG?.[t] ?? 0;
+			if (bf) {
+				const want = baseflowLossDay(bf, I![t]!);
+				if (Math.abs(bfl - want) > tol(want)) return `${where}: base-flow loss ${bfl} ≠ MIN(${bf.lossM3Day}, runoff ${I![t]}) = ${want}`;
+				if (bfg !== bf.gainM3Day) return `${where}: base-flow gain ${bfg} ≠ ${bf.gainM3Day}`;
+			}
+			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret + rin + bfg;
+			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout + pools + rout + bfl;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
 			if (spl < 0 || spl > (Sp?.[t] ?? 0) + tol(spl)) return `${where}: seepage lost ${spl} outside [0, seepage ${Sp?.[t]}]`;
 			if (pd < 0 || ev < 0 || (Sp?.[t] ?? 0) < 0) return `${where}: rain on dam ${pd}, evaporation ${ev} and seepage ${Sp?.[t]} must be ≥ 0`;
@@ -509,8 +523,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const AB = ABs![t]!;
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
-			totIn += I![t]! + pd + gw + xin + xret + rin;
-			totOut += G![t]! - T + ev + dep + spl + xout + pools + rout;
+			totIn += I![t]! + pd + gw + xin + xret + rin + bfg;
+			totOut += G![t]! - T + ev + dep + spl + xout + pools + rout + bfl;
 			qPrev = Q![t]!;
 		}
 		totOut += qPrev;
@@ -618,6 +632,18 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 		for (const k of later) if (units[k]!.mode === 0 || qPrev < units[k]!.triggerM3) direct += pump(k, D - surface - fromRiver - direct);
 		return { direct, dam, surface, river: fromRiver };
 	};
+}
+
+/**
+ * A unit's runoff as it reaches the river or its dam: I − its base-flow loss + its base-flow gain (engine 1.86.0,
+ * docs/model.md §2.6b); the runoff series itself on a unit without them.
+ */
+function runoffAfterBaseflow(get: SeriesMap, id: string): number[] | undefined {
+	const I = get.get(`${id}|runoff`);
+	const L = get.get(`${id}|${BASEFLOW_LOSS_SERIES.key}`);
+	const G = get.get(`${id}|${BASEFLOW_GAIN_SERIES.key}`);
+	if (!I || (!L && !G)) return I;
+	return I.map((v, t) => v - (L?.[t] ?? 0) + (G?.[t] ?? 0));
 }
 
 /**
@@ -1573,9 +1599,12 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// The unit's own level under the 'own' basis (engine ≥ 1.54.0), else the catchment's.
 		const LV = g(RESTRICTION_SERIES.level.key) ?? get.get(`null|${RESTRICTION_SERIES.level.key}`);
 		if (DR && (!rule || !LV)) return `${n.id}: a restricted_demand column without a drought restriction rule and its level column`;
+		// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): the runoff the split reads is I − loss + gain.
+		const BFL = g(BASEFLOW_LOSS_SERIES.key);
+		const BFG = g(BASEFLOW_GAIN_SERIES.key);
 		for (let t = 0; t < out.days; t++) {
 			if (SET) qPrev += SET[t]!;
-			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
+			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = BFL || BFG ? I![t]! - (BFL?.[t] ?? 0) + (BFG?.[t] ?? 0) : I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
 			const kd = ks ? ks[t]! : 1;
@@ -2318,7 +2347,7 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			// A unit with demand objects (engine ≥ 1.7.0): consumptive use is G − T day by day, its objects returning their own shares.
 			const T = !user && demandObjectsByNode(input.model, []).has(f.id) ? col(f.id, 'return_flow') : null;
 			// A user has no runoff or transfers, and no irrigation-part series (checked as 0).
-			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : col(f.id, 'runoff'), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k, T }];
+			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : (runoffAfterBaseflow(get, f.id) ?? col(f.id, 'runoff')), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k, T }];
 		})
 	);
 	const allExact = new Map(farms.map((f) => [f.id, siteInfo.every((s) => s.exact || !s.farms.includes(f))]));
@@ -2488,7 +2517,8 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 		if (!L || !N || !O || !S || !Z) return `${n.id}: the columns L, N, O, S and Z are needed to check its operating rules`;
 		if (sup && !GR) return `${n.id}: river_abstraction column missing for a supply rule that pumps from the river`;
 		const H = g('inflow_upstream');
-		const I = g('runoff');
+		// After a base-flow loss or gain (engine 1.86.0): what the unit's runoff brings to the river.
+		const I = runoffAfterBaseflow(get, n.id);
 		if (!H || !I) return `${n.id}: the columns H and I are needed to check its operating rules`;
 		const divertOf = { divertCapacityM3Day: ops.divertCapacityM3Day ?? n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
 		// The day's dam capacity factor (engine ≥ 1.30.0), as runModel resolves it: a dam with capacity 0 today is none.

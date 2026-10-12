@@ -43,6 +43,7 @@ import { RIVER_TAKE_SERIES, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, r
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey, userRestrictionShare } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
+import { baseflowOf, BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, hasBaseflow } from './network/baseflow';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
 import { flowShares, overAllocationError } from './network/shares';
 import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
@@ -335,7 +336,8 @@ function runNetwork(
 	// natural flow at the outlet net of them (naturalAtOutlet below).
 	const wr2012Of = (flow: Float64Array) =>
 		wr2012Report({ settings: settings.wr2012, startDate, natural: flow, areaKm2: resolveCatchmentAreaKm2(settings.calibration, input), rainMm: catchmentRain }, warnings);
-	const lossy = hasReachLosses(input.model.nodes);
+	// A unit's base-flow loss or gain (engine 1.86.0, ./network/baseflow.ts) is the land's too: the natural flow is net of it.
+	const lossy = hasReachLosses(input.model.nodes) || hasBaseflow(input.model.nodes);
 	let wr2012 = lossy ? null : wr2012Of(natural);
 
 	// --- network ----------------------------------------------------------------
@@ -579,7 +581,9 @@ function runNetwork(
 		upstream: plan.upstream,
 		order: ranked,
 		inflow: sim.nodes.map((r) => r.inflowUpstream),
-		runoff: sim.nodes.map((r) => r.runoff),
+		// A unit's base-flow loss and gain (engine 1.86.0) are the land's, not its use: its impact e = H + I + J − U
+		// reads the runoff after them, so neither is charged to it.
+		runoff: sim.nodes.map((r) => (r.baseflowLoss || r.baseflowGain ? Float64Array.from(r.runoff, (v, t) => v - (r.baseflowLoss?.[t] ?? 0) + (r.baseflowGain?.[t] ?? 0)) : r.runoff)),
 		outflow: sim.nodes.map((r) => r.outflow),
 		supplied: sim.nodes.map((r) => r.supplied),
 		storage: sim.nodes.map((r) => r.storage),
@@ -637,7 +641,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss' | 'baseflowLoss' | 'baseflowGain'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -698,6 +702,9 @@ function runNetwork(
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
 		// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): on any node that has them.
 		if (r.reachLoss) push(node.id, REACH_LOSS_SERIES.key, REACH_LOSS_SERIES.label, REACH_LOSS_SERIES.unit, r.reachLoss);
+		// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): on a unit that has them.
+		if (r.baseflowLoss) push(node.id, BASEFLOW_LOSS_SERIES.key, BASEFLOW_LOSS_SERIES.label, BASEFLOW_LOSS_SERIES.unit, r.baseflowLoss);
+		if (r.baseflowGain) push(node.id, BASEFLOW_GAIN_SERIES.key, BASEFLOW_GAIN_SERIES.label, BASEFLOW_GAIN_SERIES.unit, r.baseflowGain);
 		// The priority users' claims' share of them, which the node below takes off the priority requirement.
 		// On the days the drought restriction cuts the Priority users with a fixed % (engine 1.86.0), their claims' share.
 		const srl0 = plan.nodes[i]!.seniorReachLoss;
@@ -1109,6 +1116,8 @@ function runNetwork(
 				...(r.offtakeReturn ? { offtakeReturn: r.offtakeReturn } : {}),
 				...(r.reachLoss ? { reachLoss: r.reachLoss } : {}),
 				...(externalOut[i] ? { externalOut: externalOut[i] } : {}),
+				...(r.baseflowLoss ? { baseflowLoss: r.baseflowLoss } : {}),
+				...(r.baseflowGain ? { baseflowGain: r.baseflowGain } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),
@@ -1779,6 +1788,7 @@ export function buildNetworkPlan(
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
 				...(restriction?.userCut && users.claimsCut?.[i] ? { seniorClaimCut: users.claimsCut[i] } : {}),
 				...(reaches[i] ? { reachLoss: reaches[i] } : {}),
+				...baseflowOf(n, warnings),
 				...(users.reachClaims[i] ? { seniorReachLoss: users.reachClaims[i] } : {}),
 				...(restriction?.userCut && users.reachClaimsCut?.[i] ? { seniorReachLossCut: users.reachClaimsCut[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
@@ -2623,10 +2633,15 @@ function catchmentRunoffCoefficient(
 	return coefficient;
 }
 
-/** The plan as the natural flow crosses it (./network/reachLoss.ts routeNatural), or null when no reach loses (engine ≥ 1.76.0). */
+/**
+ * The plan as the natural flow crosses it (./network/reachLoss.ts routeNatural), or null when no reach loses
+ * (engine ≥ 1.76.0) and no unit loses or gains base flow (engine 1.86.0, ./network/baseflow.ts).
+ */
 export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>): NaturalReaches | null {
 	const reach = plan.nodes.map((n) => n.reachLoss);
-	return reach.some((p) => p) ? { order: plan.order, upstream: plan.upstream, reach } : null;
+	const baseflow = plan.nodes.map((n) => n.baseflow);
+	const hasBase = baseflow.some((p) => p);
+	return reach.some((p) => p) || hasBase ? { order: plan.order, upstream: plan.upstream, reach, ...(hasBase ? { baseflow } : {}) } : null;
 }
 
 /**

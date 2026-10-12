@@ -16,6 +16,7 @@
 // simulation (./simulate.ts) and the self-checks (../verify/checks.ts) read a
 // reach through these functions, so a stored setting means the same to each.
 import type { NetworkNode } from '../project';
+import { baseflowRunoff, type PlanBaseflow } from './baseflow';
 
 /** The largest share of the flow a reach may lose (docs/model.md §2.6b): all of it, up to the cap (WRSM's Bedloss). */
 export const REACH_LOSS_FRAC_MAX = 1;
@@ -120,6 +121,12 @@ export interface NaturalReaches {
 	upstream: readonly ArrayLike<number>[];
 	/** The bed losses of the reach below each node (absent = none). */
 	reach: readonly (PlanReachLoss | undefined)[];
+	/**
+	 * Each unit's base-flow loss and gain (engine 1.86.0, ./baseflow.ts),
+	 * absent = none: its own runoff is taken through baseflowRunoff before it
+	 * joins the river, as in the simulation. Absent on a model without them.
+	 */
+	baseflow?: readonly (PlanBaseflow | undefined)[];
 }
 
 /**
@@ -132,6 +139,8 @@ export interface NaturalReaches {
  * curve and the WR2012 comparison read when bed losses are on: WRSM's
  * naturalised flows are net of its Bedloss, so a site's natural flow has to
  * be too, or a site below a losing reach falls short with nothing built.
+ * A unit's base-flow loss and gain (engine 1.86.0) are the land's too, so
+ * its own runoff crosses them first (`r.baseflow`).
  */
 export function routeNatural(r: NaturalReaches, own: (i: number, t: number) => number, days: number, at: readonly number[]): Float64Array<ArrayBuffer>[] {
 	const q = new Float64Array(r.reach.length);
@@ -140,6 +149,8 @@ export function routeNatural(r: NaturalReaches, own: (i: number, t: number) => n
 		for (let k = 0; k < r.order.length; k++) {
 			const i = r.order[k]!;
 			let s = own(i, t);
+			const bf = r.baseflow?.[i];
+			if (bf) s = baseflowRunoff(bf, s);
 			const ups = r.upstream[i]!;
 			for (let j = 0; j < ups.length; j++) {
 				const u = ups[j]!;

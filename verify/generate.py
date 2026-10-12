@@ -258,6 +258,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_phase_two(rng, doc, start, days, dense)
     add_irrigation_systems(random.Random(seed * 104729 + 3), doc, dense)
     add_unit_rain(random.Random(seed * 15485863 + 11), doc, start, days, dense)
+    add_baseflow(random.Random(seed * 2750159 + 7), doc, dense)
     add_unit_rain_decisions(random.Random(seed * 32452843 + 7), doc)
     return doc
 
@@ -396,6 +397,25 @@ def add_unit_rain_decisions(rng: random.Random, doc: dict) -> None:
 
 
 SABI_SYSTEMS = [("drip", "Drip", 0.9), ("micro", "Micro-sprinkler", 0.82), ("pivot", "Centre pivot / linear move", 0.85), ("sprinkler", "Sprinkler (permanent)", 0.8), ("movable", "Sprinkler (movable)", 0.75), ("surface", "Flood / furrow", 0.7)]
+
+
+def add_baseflow(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0), from their
+    own stream so the rest of a network is unchanged: in 25 % of networks
+    (70 % dense), on each unit half the time, a loss, a gain or both, from a
+    trickle to more than a day's runoff (so the loss takes all of it some
+    days)."""
+    if rng.random() >= (0.7 if dense else 0.25):
+        return
+    for x in doc["model"]["nodes"]:
+        if x["kind"] != "farm" or rng.random() >= 0.5:
+            continue
+        which = rng.randrange(3)
+        size = lambda: rng.choice([round(rng.uniform(1, 200), 1), round(rng.uniform(200, 20000)), round(rng.uniform(20000, 500000))])
+        if which != 1:
+            x["baseflowLossM3Day"] = size()
+        if which != 0:
+            x["baseflowGainM3Day"] = size()
 
 
 def add_irrigation_systems(rng: random.Random, doc: dict, dense: bool = False) -> None:

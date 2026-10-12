@@ -153,6 +153,8 @@ data](./api.md#model-data)).
 | `ga_rate_m3_ha_year` | (none) | Same: the GN 538 Table 2 rate for the property's quaternary, m³/ha/a, CHECK one of 0, 45, 75, 150, 275, 400. NULL = not looked up. Volume = min(area × rate, 40 000), context only |
 | `reach_loss_frac` | (none: b023 routes every outflow whole) | Any node (migration 203, engine ≥ 1.75.0, issue #444, [model.md §2.6b](./model.md)): the share f (0–1, CHECK `node_reach_loss_frac_range`; 1 with a cap is WRSM's fixed monthly Bedloss) of the flow the node passes downstream lost into the river bed in the reach to the next node, out of the catchment. 0 (default, every existing row) = none. The API refuses one on the outlet (`modelRuleIssues`, `reachLossOutlet`), which has no reach below it |
 | `reach_loss_max_m3_day` | (none) | The reach's loss at most, m³/day (≥ 0, finite, CHECK `node_reach_loss_max_size`); NULL (default) = no cap. Read only with `reach_loss_frac` > 0 |
+| `baseflow_loss_m3_day` | (none) | A unit's base-flow loss (migration 222, engine 1.86.0, issue #523 B1, [model.md §2.6b](./model.md)): m³/day of its own runoff lost to groundwater, MIN(this, runoff), out of the catchment (≥ 0, finite, CHECK `node_baseflow_loss_size`). 0 (default, every existing row) = none. Units only (`modelRuleIssues`, `baseflowKind`) |
+| `baseflow_gain_m3_day` | (none) | A unit's base-flow gain: m³/day joining its runoff every day from outside the catchment (≥ 0, finite, CHECK `node_baseflow_gain_size`). 0 (default) = none. Units only |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).

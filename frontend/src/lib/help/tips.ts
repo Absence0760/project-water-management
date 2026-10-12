@@ -676,6 +676,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.reachLossFrac', 'node.reachLossMaxM3Day', 'run.reach_loss']
 	},
 	{
+		id: 'base-flow-loss-gain',
+		term: 'Base-flow loss and gain',
+		short: 'Groundwater a hydrological unit’s own runoff loses (out of the catchment) or gains (from outside it) each day, before the river or dam.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['node.baseflowLossM3Day', 'node.baseflowGainM3Day', 'run.baseflow_loss', 'run.baseflow_gain']
+	},
+	{
 		id: 'outflow-gauge',
 		term: 'Outflow gauge',
 		short: 'The single element at the bottom of the network. Its simulated flow is compared with the EWR and with observed flow.',

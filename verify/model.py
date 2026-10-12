@@ -1009,7 +1009,7 @@ def run(doc: dict) -> dict:
                 cap_bound_days=0, full_allocation_units=0, floor_days=0, object_shortage_days=0,
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
-                divert_by_month_days=0, reach_loss_days=0,
+                divert_by_month_days=0, reach_loss_days=0, baseflow_days=0,
                 # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
                 unit_rule_gauge=0, unit_rule_gauge_map=0, unit_rule_chirps=0, unit_rule_catchment=0, unit_clamped=0,
                 unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0,
@@ -1509,6 +1509,18 @@ def run(doc: dict) -> dict:
         if f_ > 0 and c_ > 0:
             reach[x["id"]] = (f_, c_)
 
+    # A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0): m³/day sizes >= 0 (anything else none), units only.
+    def _size(v):
+        return float(v) if isinstance(v, (int, float)) and math.isfinite(v) and v >= 0 else 0.0
+
+    baseflow: dict[str, tuple[float, float]] = {}
+    for x in nodes:
+        if x["kind"] != "farm":
+            continue
+        bl_, bg_ = _size(x.get("baseflowLossM3Day")), _size(x.get("baseflowGainM3Day"))
+        if bl_ > 0 or bg_ > 0:
+            baseflow[x["id"]] = (bl_, bg_)
+
     def reach_loss(xid, q):
         f_, c_ = reach[xid]
         return min(c_, f_ * q) if q > 0 else 0.0
@@ -1657,7 +1669,7 @@ def run(doc: dict) -> dict:
         "baseflow_depletion", "depletion_deficit", "depletion_store", "senior_requirement", "passed_for_senior",
         "offtake_out", "offtake_in", "offtake_used", "offtake_to_dam", "offtake_loss_return",
         "allocation_room_surface", "allocation_room_groundwater", "allocation_left_surface", "allocation_left_groundwater",
-        "basic_needs", "remote_dam_in", "remote_dam_out", "reach_loss",
+        "basic_needs", "remote_dam_in", "remote_dam_out", "reach_loss", "baseflow_loss", "baseflow_gain",
     ]
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
@@ -2030,6 +2042,17 @@ def run(doc: dict) -> dict:
             rule_ = supply_rule(x)
             # Per-unit rain (§2.4h): the unit's own runoff in place of natural × share.
             I = natural[i] * shares.get(xid, 0.0) if local is None else (local[xid][i] if xid in local else 0.0)
+            # The unit's base-flow loss and gain (§2.6b): Ib = I − MIN(loss, I) + gain is what its runoff brings to
+            # the dam and the river; the runoff column stays I.
+            Ib = I
+            if xid in baseflow:
+                bl_, bg_ = baseflow[xid]
+                lost_bf = min(bl_, I) if I > 0 else 0.0
+                Ib = I - lost_bf + bg_
+                cc["baseflow_loss"][i] = lost_bf
+                cc["baseflow_gain"][i] = bg_
+                if lost_bf > 0 or bg_ > 0:
+                    diag["baseflow_days"] += 1
             y_ewr = ewr[i] * ewr_share[xid]
             z = y_ewr + zu
             zs = sen_y[xid][i] + zs_in
@@ -2037,9 +2060,9 @@ def run(doc: dict) -> dict:
                 K = M = 0.0
             else:
                 K = H * x["pctUpstreamToDam"]
-                M = I * x["pctRunoffToDam"]
+                M = Ib * x["pctRunoffToDam"]
             L = H - K
-            N = I - M
+            N = Ib - M
             dm = x.get("divertMonthlyM3Day")
             dcap = float(dm[m]) if dm else (x.get("divertCapacityM3Day") or 0.0)
             if x["pctUpstreamToDam"] >= 1:
@@ -2047,24 +2070,24 @@ def run(doc: dict) -> dict:
             O = 0.0 if rule_ == "runOfRiver" else min(dcap, L + N)
             # The senior users' pass (§2.7c): O first, then K and M pro rata.
             passed = 0.0
-            need = min(zs, H + I)
+            need = min(zs, H + Ib)
             if L + N - O < need:
                 cut = min(O, need - (L + N - O))
                 O -= cut
                 passed += cut
                 rest = need - (L + N - O)
-                if need >= H + I and K + M > 0:
+                if need >= H + Ib and K + M > 0:
                     # Everything passes: K and M exactly 0.
                     passed += K + M
                     K = M = 0.0
-                    L, N = H, I
+                    L, N = H, Ib
                 elif rest > 0 and K + M > 0:
                     kc = rest * K / (K + M)
                     mc = rest - kc
                     K -= kc
                     M -= mc
                     L = H - K
-                    N = I - M
+                    N = Ib - M
                     passed += rest
             # The hands-off flow (§2.7h).
             ho = x.get("handsOffM3Day")
@@ -2074,21 +2097,21 @@ def run(doc: dict) -> dict:
                 if cap > 0:
                     O = min(O, max(0.0, L + N - keep_h))
                 else:
-                    need = min(H + I, keep_h)
+                    need = min(H + Ib, keep_h)
                     if L + N - O < need:
                         cut = min(O, need - (L + N - O))
                         O -= cut
                         rest = need - (L + N - O)
-                        if need >= H + I and K + M > 0:
+                        if need >= H + Ib and K + M > 0:
                             K = M = 0.0
-                            L, N = H, I
+                            L, N = H, Ib
                         elif rest > 0 and K + M > 0:
                             kc = rest * K / (K + M)
                             mc = rest - kc
                             K -= kc
                             M -= mc
                             L = H - K
-                            N = I - M
+                            N = Ib - M
             if keep_h > 0 and O < o_before:
                 diag["hands_off_days"] += 1
             S = L + N - O
@@ -2391,7 +2414,7 @@ def run(doc: dict) -> dict:
             for _, bv in sorted(back_to.get(xid, [])):
                 back += bv
             Uo = U0 - taken + back
-            V = (H + I + j + pd + GW + GWd + arrives + back + gin) - (g_all - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg - xr
+            V = (H + Ib + j + pd + GW + GWd + arrives + back + gin) - (g_all - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg - xr
             aa = noise_short(z, Uo)
             ab = min(aa - aau, 0.0)
             for key, val in (
@@ -2505,8 +2528,10 @@ def run(doc: dict) -> dict:
             imp = {}
             for f in members:
                 cc = col[f]
-                e_f = cc["inflow_upstream"][i] + cc["runoff"][i] + jint[f] - cc["outflow"][i]
-                scale = max(abs(cc["inflow_upstream"][i]), abs(cc["runoff"][i]), abs(cc["outflow"][i]), abs(jint[f]))
+                # A unit's base-flow loss and gain (§2.6b) are the land's, not its use: e reads the runoff after them.
+                ib_f = cc["runoff"][i] - cc["baseflow_loss"][i] + cc["baseflow_gain"][i]
+                e_f = cc["inflow_upstream"][i] + ib_f + jint[f] - cc["outflow"][i]
+                scale = max(abs(cc["inflow_upstream"][i]), abs(ib_f), abs(cc["outflow"][i]), abs(jint[f]))
                 imp[f] = e_f if e_f > 1e-12 * scale else 0.0
             members_sorted = sorted(members, key=lambda f: (-depth[f], f))
             E_s = 0.0
@@ -2600,6 +2625,11 @@ def run(doc: dict) -> dict:
             put(xid, "reach_loss", cc["reach_loss"])
         if xid in sen_led:
             put(xid, "senior_reach_loss", sen_led[xid])
+        if xid in baseflow:
+            if baseflow[xid][0] > 0:
+                put(xid, "baseflow_loss", cc["baseflow_loss"])
+            if baseflow[xid][1] > 0:
+                put(xid, "baseflow_gain", cc["baseflow_gain"])
         if x["kind"] == "farm":
             d = fd[xid]
             put(xid, "gross_demand", d["gross"])

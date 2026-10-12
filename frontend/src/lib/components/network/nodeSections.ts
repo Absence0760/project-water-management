@@ -2,8 +2,9 @@
 // through a unit: its area and flow share, its dam with the dam's survey and
 // releases, how water reaches the dam, where the unit's supply comes from,
 // how it irrigates, its other demands, its groundwater (the combined
-// boreholes, then the individual ones), its land cover, and last the bed
-// losses in the reach below it, where its water leaves it. The node sheet's
+// boreholes, then the individual ones), its land cover and its base-flow loss
+// and gain (both change its own runoff), and last the bed losses in the reach
+// below it, where its water leaves it. The node sheet's
 // section menu (NetworkTab.svelte, the shared common/SectionNav, issue #462)
 // lists the same sections, so the two never disagree.
 import type { NetworkNode } from '@water-management/engine';
@@ -14,7 +15,7 @@ import { hasSupplySettings } from './supply';
 /** A field group of NODE_FIELDS, or one of the form's own sections. */
 export type NodeSection = NodeField['group'] | 'damSurvey' | 'supply' | 'demand' | 'boreholes' | 'cover';
 
-export const SECTION_ORDER: readonly NodeSection[] = ['area', 'share', 'dam', 'damSurvey', 'routing', 'supply', 'irrigation', 'demand', 'groundwater', 'boreholes', 'cover', 'reach'];
+export const SECTION_ORDER: readonly NodeSection[] = ['area', 'share', 'dam', 'damSurvey', 'routing', 'supply', 'irrigation', 'demand', 'groundwater', 'boreholes', 'cover', 'baseflow', 'reach'];
 
 /** Each section's legend in the form. */
 export const SECTION_TITLE: Record<NodeSection, string> = {
@@ -31,6 +32,7 @@ export const SECTION_SHORT: Record<NodeSection, string> = {
 	...SECTION_TITLE,
 	groundwater: 'Combined boreholes',
 	damSurvey: 'Dam survey',
+	baseflow: 'Base flow',
 	reach: 'Bed losses'
 };
 

@@ -115,6 +115,20 @@ describe('validateModel', () => {
 		]);
 	});
 
+	it('checks a unit’s base-flow loss and gain as the API does: sizes ≥ 0, units only (engine 1.86.0)', () => {
+		const g = node('g', 'G', null);
+		const a = node('a', 'A', 'g');
+		a.baseflowLossM3Day = 1500;
+		a.baseflowGainM3Day = 20;
+		// Positive control: on a unit, sizes ≥ 0 are fine.
+		expect(messages(model([g, a]))).toEqual([]);
+		a.baseflowLossM3Day = -1;
+		g.baseflowGainM3Day = 5;
+		expect(messages(model([g, a]))).toEqual(
+			expect.arrayContaining(['"A": the base-flow loss can\'t be negative.', '"G": only a hydrological unit has a base-flow loss or gain; set both to 0.'])
+		);
+	});
+
 	it('needs an irrigation efficiency above 0% (abstraction = crop requirement ÷ efficiency, N1)', () => {
 		const a = node('a', 'A', null);
 		a.irrigationEfficiency = 0;

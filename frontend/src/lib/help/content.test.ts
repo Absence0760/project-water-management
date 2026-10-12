@@ -41,6 +41,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	gaPropertyAreaHa: true, gaRateM3HaYear: true,
 	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true,
 	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true, reachLossFrac: true, reachLossMaxM3Day: true,
+	baseflowLossM3Day: true, baseflowGainM3Day: true,
 	cropWaterSource: true, cropRiverPumpM3Day: true, cropRiverPoolM3: true,
 	cropShareDam: true, cropShareRiver: true, cropShareRemote: true, cropRemoteNodeId: true, cropRemoteCapM3Day: true, mapMm: true, mapSource: true
 };
@@ -114,6 +115,8 @@ const RUN_KEYS = [
 	'landcover_reduction',
 	// Bed losses in the reach below a node (engine 1.75.0, issue #444)
 	'reach_loss',
+	// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1)
+	'baseflow_loss', 'baseflow_gain',
 	// Gap filling of the observed flow records (engine 1.23.0, issue #66)
 	'observed_flow_fill', 'observed_flow_filled', 'observed_flow_other_fill', 'observed_flow_other_filled',
 	// The scored record's per-day quality flags (engine 1.48.0, CR-18)

@@ -129,6 +129,8 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			if (n.kind !== 'user') add(`userRestrictionKind:${n.id}`, `"${n.name}": only an other water user has a fixed restriction %`);
 			else if (n.userPriority === 'junior') add(`userRestrictionJunior:${n.id}`, `"${n.name}": a fixed restriction % is for Priority users; a Non-priority user is curtailed for its whole EWR charge`);
 		}
+		// A base-flow loss or gain (engine 1.86.0, docs/model.md §2.6b) acts on a unit's own runoff: only a unit has one.
+		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0)) add(`baseflowKind:${n.id}`, `"${n.name}": only a hydrological unit has a base-flow loss or gain`);
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
 		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';

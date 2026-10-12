@@ -1761,6 +1761,16 @@ A run with bed losses stores `reach_loss` (m³/day) on each node that has them,
 and `summary.waterBalance` and the water account gain `reachLossM3`; the
 run warns that the EWR is still read from the natural flow before the losses.
 
+A unit's base-flow loss and gain (engine 1.86.0, migration 222, issue #523
+B1, [model.md §2.6b](./model.md)): every node carries `baseflowLossM3Day` and
+`baseflowGainM3Day` (m³/day, ≥ 0). A body without them gets 0 (none, no
+change to any run). `PUT` refuses a negative or infinite value, and either
+one set on a gauge or an other water user (a model rule, `baseflowKind`). A
+run with them stores `baseflow_loss` and `baseflow_gain` (m³/day) on the unit,
+and `summary.waterBalance` and the water account gain `baseflowLossM3` (out)
+and `baseflowGainM3` (in). The project document, a copy and an applicant's
+view (which keeps them on an anonymised unit) carry them with the node.
+
 A unit's MAP (issue #482, migration 209, [model.md §2.4h](./model.md)): every
 node carries `mapMm` (1–12 000 mm, or `null` = none) and `mapSource` (where
 it came from, at most 600 characters, or `null`). A MAP needs its source

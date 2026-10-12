@@ -1619,6 +1619,21 @@ export interface NetworkNode {
 	reachLossFrac?: number;
 	/** The reach's bed losses at most, m³/day; null / absent = no cap. Read only with `reachLossFrac` > 0. */
 	reachLossMaxM3Day?: number | null;
+	/**
+	 * A unit's base-flow loss (engine 1.86.0, issue #523 B1, #90 R4 (a),
+	 * docs/model.md §2.6b): m³/day of its own runoff lost to groundwater
+	 * before it reaches the river or its dam, at most the day's runoff
+	 * (MIN(this, I)). The lost water leaves the catchment. 0 / absent = none,
+	 * every engine before 1.86.0. Units only.
+	 */
+	baseflowLossM3Day?: number;
+	/**
+	 * A unit's base-flow gain (engine 1.86.0, issue #523 B1): m³/day that
+	 * joins its runoff from groundwater every day (a spring, an aquifer
+	 * draining into the river), from outside the modelled catchment. 0 /
+	 * absent = none. Units only.
+	 */
+	baseflowGainM3Day?: number;
 }
 
 /**
@@ -1744,6 +1759,12 @@ export const DAM_STORAGE_DEFAULTS = {
 export const REACH_LOSS_DEFAULTS = {
 	reachLossFrac: 0,
 	reachLossMaxM3Day: null
+} as const;
+
+/** What a unit without the base-flow fields (engine 1.86.0, docs/model.md §2.6b) runs as: no base-flow loss or gain. */
+export const BASEFLOW_DEFAULTS = {
+	baseflowLossM3Day: 0,
+	baseflowGainM3Day: 0
 } as const;
 
 /** What a node without the development fields (engine ≥ 1.30.0, docs/model.md §2.7g) runs as: its entered dam and demand throughout. */
@@ -1939,6 +1960,8 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 		...CROP_SUPPLY_DEFAULTS,
 		// No bed losses in the reach below (engine 1.75.0).
 		...REACH_LOSS_DEFAULTS,
+		// No base-flow loss or gain (engine 1.86.0).
+		...BASEFLOW_DEFAULTS,
 		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
 		ewrSite: true
 	};
@@ -2054,6 +2077,9 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				// Bed losses in the reach below (engine ≥ 1.75.0): none unless set.
 				n.reachLossFrac ??= REACH_LOSS_DEFAULTS.reachLossFrac;
 				if (n.reachLossMaxM3Day === undefined) n.reachLossMaxM3Day = REACH_LOSS_DEFAULTS.reachLossMaxM3Day;
+				// A unit's base-flow loss and gain (engine 1.86.0): none unless set.
+				n.baseflowLossM3Day ??= BASEFLOW_DEFAULTS.baseflowLossM3Day;
+				n.baseflowGainM3Day ??= BASEFLOW_DEFAULTS.baseflowGainM3Day;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
@@ -4101,10 +4127,14 @@ export interface WaterBalanceRow {
 	reachLossM3?: number;
 	/** Sent out of the catchment by transfer rules (engine ≥ 1.86.0, issue #523 B5, docs/model.md §2.6), out of the source dams; absent without such a rule. `transfersM3` is then the transfers between units only. */
 	externalTransferM3?: number;
+	/** The units' base-flow gains, from outside the catchment (engine 1.86.0, docs/model.md §2.6b), an in term; absent without one. */
+	baseflowGainM3?: number;
+	/** The units' base-flow losses, out of the catchment (engine 1.86.0); absent without one. */
+	baseflowLossM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation (engines 1.65.0–1.85.x) − other use − stream depletion − seepage lost − conveyance losses − bed losses − transfers out of the catchment (engine ≥ 1.86.0) − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation (engines 1.65.0–1.85.x) − other use − stream depletion − seepage lost − conveyance losses − bed losses − transfers out of the catchment (engine ≥ 1.86.0) − outflow − closing (+ base-flow gains − base-flow losses, engine 1.86.0). */
 	residualM3: number;
 }
 
