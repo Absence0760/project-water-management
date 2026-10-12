@@ -2701,8 +2701,11 @@ export interface FarmMapFeature {
 	geometry: MapGeometry;
 	areaM2: number | null;
 	center: MapPosition;
-	/** The licence credit the map shows while it draws this feature: 'hydrorivers' on a river added from a HydroRIVERS reach. */
-	credit?: 'hydrorivers';
+	/**
+	 * The licence credit the map shows while it draws this feature: 'hydrorivers' on a river added from a HydroRIVERS
+	 * reach, 'jrc-water' on an outline (a dam) traced from JRC Global Surface Water (backend farms/view.ts).
+	 */
+	credit?: 'hydrorivers' | 'jrc-water';
 }
 
 /** GET /projects/:id/farm/:nodeId/map: empty when the farm has no parcel or dam of its own on the map. */

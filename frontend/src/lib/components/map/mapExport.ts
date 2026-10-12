@@ -6,7 +6,7 @@
 // Uploads). Pure (mapExport.test.ts).
 import type { MapFeature } from '$lib/api/types';
 import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '$lib/components/legal/dataCredits';
-import { creditedFeature } from './mapLayers';
+import { creditedFeature, jrcCreditedFeature } from './mapLayers';
 
 export interface ExportedProperties {
 	name: string;
@@ -31,8 +31,7 @@ export interface ExportedProperties {
 /** The credit a feature's data carries out of the app, or null (ExportedProperties.credit). */
 export function featureCredit(f: Pick<MapFeature, 'kind' | 'properties'>): string | null {
 	if (creditedFeature(f)) return HYDRORIVERS_MAP_ATTRIBUTION;
-	const d = f.properties?.description;
-	return typeof d === 'string' && d.includes(JRC_WATER_STATEMENT) ? JRC_WATER_STATEMENT : null;
+	return jrcCreditedFeature(f) ? JRC_WATER_STATEMENT : null;
 }
 
 /**

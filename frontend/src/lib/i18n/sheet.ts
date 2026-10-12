@@ -110,6 +110,7 @@ export const NOTES: Record<string, string> = {
 	'Dam storage: {volume}': '{volume} is a volume like “150 000 m³”: the storage registered with DWS for the farm’s dam.',
 	'The model supplied {got} since {from}. The volume registered for the whole year is {year}.': '{got} and {year} are volumes like “324.2 ML”; {from} is a date like “1 Oct” (the start of the water year).',
 	'Your dam in the model holds {capacity} when full.': '{capacity} is a volume like “350 ML”.',
+	'Dam outline: traced from {dataset} ({source}), modified': 'A licence credit in small type under the farm map, shown only when the farm’s dam outline was traced from satellite data. {dataset} is a dataset’s name (“JRC Global Surface Water”) and {source} its required credit (“Source: EC JRC/Google”): both stay in English. “Modified” says the outline was adapted from that data, which its licence asks to be said.',
 	'mm a week': 'The unit on a chart’s axis: millimetres of rain in a week.',
 	'Couldn’t load the notes. {reason}': '{reason} is one of the “Error messages” below.',
 	'note from {date}': 'Read only by screen readers, after “Edit” or “Delete”: which note the button is for. {date} is like “2026-09-26 14:05”.',

@@ -732,8 +732,8 @@ export interface StyleOptions {
 	terrain?: string | null;
 	/** A delineation proposal to draw (proposalData()); none when omitted. */
 	proposal?: ReturnType<typeof proposalData>;
-	/** The river network's credit (riversCredit()), while reaches from a credited dataset are drawn; none when omitted. */
-	riversCredit?: string | null;
+	/** The licence credits for licensed data drawn (mapLayers.ts mapCredits), each its id and its attribution HTML (creditLink()); none when omitted. */
+	credits?: readonly { id: string; html: string }[];
 	/** The data sources page's URL: the relief's credit links its Copernicus section (the Art. 6(c) liability sentence). */
 	dataSourcesHref?: string;
 	/** The hydrological units' outlines and labels (unitsData()); none when omitted. */
@@ -801,28 +801,28 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 		const at = before ? style.layers.findIndex((l) => l.id === before) : style.layers.length;
 		style.layers.splice(at, 0, reliefLayer(dark));
 	}
-	if (opts.riversCredit) {
-		style.sources[RIVERS_CREDIT_SOURCE] = riversCreditSource(opts.riversCredit);
-		style.layers.push(RIVERS_CREDIT_LAYER);
+	for (const c of opts.credits ?? []) {
+		style.sources[creditSourceId(c.id)] = creditSource(c.html);
+		style.layers.push(creditLayer(c.id));
 	}
 	if (glyphs) style.glyphs = glyphs;
 	return style;
 }
 
 /**
- * The river network's credit on the map (HydroRIVERS' licence, docs/maps.md
- * § Sources): MapLibre's attribution control lists a source's attribution
- * only while a layer reads it, so the credit is its own empty source with
- * one invisible layer, added while reaches from HydroRIVERS are drawn and
- * removed after (CatchmentMap syncRiversCredit), as the relief's is. The
- * `rivers` source itself is always in the style, drawn or not.
+ * A licensed source's credit on the map (HydroRIVERS' licence, JRC Global
+ * Surface Water's; docs/maps.md § Sources): MapLibre's attribution control
+ * lists a source's attribution only while a layer reads it, so each credit is
+ * its own empty source (`credit-<id>`) with one invisible layer, added while
+ * that data is drawn and removed after (CatchmentMap syncCredits), as the
+ * relief's is. The `rivers` and `features` sources themselves never carry one.
  */
-export const RIVERS_CREDIT_SOURCE = 'rivers-credit';
-export const RIVERS_CREDIT_LAYER: Layer = { id: 'rivers-credit', type: 'line', source: RIVERS_CREDIT_SOURCE, paint: { 'line-opacity': 0 } };
-export const riversCreditSource = (attribution: string) => ({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution });
+export const creditSourceId = (id: string) => `credit-${id}`;
+export const creditLayer = (id: string): Layer => ({ id: `credit-${id}`, type: 'line', source: creditSourceId(id), paint: { 'line-opacity': 0 } });
+export const creditSource = (attribution: string) => ({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution });
 
-/** The credit's HTML for the attribution control: the short line, linking to its full statement on the data sources page. */
-export const riversCredit = (dataSourcesHref: string, text: string) => `<a href="${escapeAttribution(dataSourcesHref)}#hydrorivers">${escapeAttribution(text)}</a>`;
+/** A credit's HTML for the attribution control: the short line, linking to its full statement on the data sources page (its section has the credit's id). */
+export const creditLink = (dataSourcesHref: string, id: string, text: string) => `<a href="${escapeAttribution(dataSourcesHref)}#${escapeAttribution(id)}">${escapeAttribution(text)}</a>`;
 
 /**
  * The `features` source's data: polygons and lines (points are drawn as
