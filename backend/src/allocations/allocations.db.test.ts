@@ -24,6 +24,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
+import { figuresAt, holdsFigure } from '../__tests__/figures.js';
 import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { reportRenderHandler } from '../jobs/handlers/report-render.js';
 import { computeSweep } from '../sweeps/store.js';
@@ -542,31 +543,6 @@ describe('the allocations export', () => {
 // them the modelled use and the status only. Each test is the review's repro, which failed before, with an editor
 // positive control.
 
-/** A whole number token in text (digits, maybe grouped by spaces or commas, maybe decimals), never part of an id, a word or a hex run. */
-const NUMBER_TOKEN = /(?<![\w.\-])(\d{1,3}(?:[ ,  ]\d{3})+|\d+)(?:\.\d+)?(?![\w\-])/g;
-/**
- * Where a JSON answer carries v as a figure: a number within 0.5 of v m³ a year, or, for v of 365 000 or more, of its
- * share of a day (smaller day shares are too short to tell from any other number); in a JSON number, or a whole
- * number token in a string. Each match as "path = value", so a failure says what matched (#523 round 6: the old
- * pattern matched 3-digit day shares inside uuids).
- */
-function figuresAt(text: string, v: number): string[] {
-	const targets = v >= 365_000 ? [v, v / 365, v / 366] : [v];
-	const hit = (n: number) => targets.some((t) => Math.abs(n - t) < 0.5);
-	const out: string[] = [];
-	const walk = (x: unknown, at: string) => {
-		if (typeof x === 'number') {
-			if (hit(x)) out.push(`${at} = ${x}`);
-		} else if (typeof x === 'string') {
-			for (const m of x.matchAll(NUMBER_TOKEN)) if (hit(Number(m[0].replace(/[ ,  ]/g, '')))) out.push(`${at} ~ "${m[0]}" in "${x.slice(0, 120)}"`);
-		} else if (Array.isArray(x)) x.forEach((y, i) => walk(y, `${at}[${i}]`));
-		else if (x && typeof x === 'object') for (const [k, y] of Object.entries(x)) walk(y, `${at}.${k}`);
-	};
-	walk(JSON.parse(text), '$');
-	return out;
-}
-const holdsFigure = (text: string, v: number) => figuresAt(text, v).length > 0;
-
 /** A project with units `names` under a weir, rain from `start` for `days`, the editor and viewer as members. */
 async function volumesProject(name: string, names: string[], start: string, days: number) {
 	const pid = (await owner.call('POST', '/projects', { name })).body.project.id as string;
@@ -958,18 +934,13 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 	const CANARIES = [CANARY, SCENARIO_CANARY, STORAGE_CANARY, SWEEP_CANARY];
 	/** The ladder run's last, partial water year: 400 days from 1 October 2021, so 35 days of 2022's. */
 	const PARTIAL_DAYS = 35;
-	const SEP = "[\\s,.'\\u00a0\\u202f]?";
-	/** A figure's leading `digits` significant digits, with or without a separator between any two, not inside an id or a hash. */
-	const figure = (v: number, digits: number) => {
-		const d = v.toPrecision(Math.max(digits, 1)).replace('.', '').replace(/^0+/, '').replace(/e.*$/, '').slice(0, digits);
-		return new RegExp(`(?<![\\w.])${d.split('').join(SEP)}`);
-	};
 	/**
-	 * The number in every form the API words a volume in: m³ a year (all its digits), megalitres (its leading 6),
-	 * m³ a day and a partial water year's pro-rated share (their leading 7).
+	 * Where an answer carries n, in any form the API words a volume in (__tests__/figures.ts): m³ a year, of either sign,
+	 * in figures or in words ("987 654 321"); its megalitres, its share of a day (365 or 366, m³ or ML) or of the
+	 * partial water year, matched by closeness; never the digits of an id key, a uuid or a hash (#523 G1c).
 	 */
-	const forms = (n: number) => [figure(n, 9), figure(n / 1000, 6), figure(n / 365, 7), figure((n * PARTIAL_DAYS) / 365, 7)];
-	const seen = (text: string, n: number) => forms(n).some((r) => r.test(text));
+	const where = (text: string, n: number) => figuresAt(text, n, { partialDays: [PARTIAL_DAYS] });
+	const seen = (text: string, n: number) => where(text, n).length > 0;
 	/** Where a JSON answer carries a registered volume as a number (a key starting registered or meanRegistered, #523 K/L/M). */
 	const registeredFigures = (text: string): string[] => {
 		let body: unknown;
@@ -1190,7 +1161,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 				const r = await get(ctx.viewer, path);
 				const expected = (runId === capRun || runId === fullRun ? EXPECTED_BOUND[route] : undefined) ?? EXPECTED[route];
 				if ((r.status < 200 || r.status >= 400) && r.status !== expected?.status) refused.push(`${path} answered ${r.status}`);
-				for (const n of CANARIES) if (seen(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n}`);
+				for (const n of CANARIES) for (const w of where(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n} at ${w}`);
 				// #523 K/L/M: the only registered m³ such a viewer reads is today's total per water source; any other
 				// registered figure (a run's year, a total of other units) can be differenced against it or another.
 				for (const at of registeredFigures(r.text)) if (!(route === '/projects/:id/allocations' && /^totals\.\d+\.registeredM3PerYear$/.test(at))) leaks.push(`${path} carries a registered figure at ${at}`);
@@ -1212,7 +1183,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		for (const runId of [capRun, fullRun]) {
 			for (const path of unitSeriesPaths(`${at}/runs/${runId}`, unit, '2021-10-01')) {
 				const r = await get(ctx.viewer, path);
-				for (const n of CANARIES) if (seen(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n}`);
+				for (const n of CANARIES) for (const w of where(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n} at ${w}`);
 				// Withheld outright (403, coded) or answered without the unit's withheld columns, never a 404 that hides why.
 				if (r.status === 403 && JSON.parse(r.text).code !== 'allocation_series_withheld') answers.push(`${path}: 403 ${r.text}`);
 				if (r.status !== 200 && r.status !== 403) answers.push(`${path}: ${r.status}`);
