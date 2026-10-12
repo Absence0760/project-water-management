@@ -487,6 +487,8 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 		'Combined boreholes (one capacity)',
 		'Individual boreholes',
 		'Land cover',
+		// The unit's own base-flow loss and gain (engine 1.86.0, issue #523 B1).
+		'Base-flow loss and gain',
 		// Last, where the unit's water leaves it: the reach below (engine 1.75.0, issue #444).
 		'Bed losses in the reach below'
 	];
@@ -494,7 +496,7 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 	// The pages' section menu (common/SectionNav, issue #462), as a bar in the sheet's fixed sub-header: the same
 	// sections in the same order, by their short names on the bar and their legends in More.
 	const menu = sheet.getByRole('navigation', { name: 'Sections of the form' });
-	const short = ['Catchment area', 'Flow share', 'Dam', 'Dam survey', 'Routing', 'Supply', 'Irrigation', 'Demand objects', 'Combined boreholes', 'Individual boreholes', 'Land cover', 'Bed losses'];
+	const short = ['Catchment area', 'Flow share', 'Dam', 'Dam survey', 'Routing', 'Supply', 'Irrigation', 'Demand objects', 'Combined boreholes', 'Individual boreholes', 'Land cover', 'Base flow', 'Bed losses'];
 	const onBar = menu.locator('.groups').getByRole('link');
 	await expect(onBar.first()).toBeVisible();
 	const kept = await onBar.count();
