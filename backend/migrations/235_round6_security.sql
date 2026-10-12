@@ -20,6 +20,24 @@
 --     No parts above 0, farms and users both (nobody takes water), still
 --     shows: natural flow less the outflow is then no holder's use (dam
 --     evaporation and land cover only).
+--
+--  2. allocation_select and allocation_holder_select, from 231, uncorrelated.
+--     231 called app_reads_allocation_units(project_id) once per row: a SQL
+--     definer wrapping a plpgsql invoker, none of them inlinable, ~40 % slower
+--     than 162's policy at the 5,000-row cap. Now the policy asks for the
+--     projects whose allocations the current user reads, once per query:
+--       project_id IN (SELECT p.id FROM project p WHERE app_reads_allocation_units(p.id))
+--     Who reads what is exactly as before: the subquery reads `project`
+--     under the user's own RLS (project_select: a viewer or above), and
+--     every reader app_user_reads_allocation_units admits is one (the
+--     authority's members are confirmed delegates holding editor, 229; the
+--     rest are viewers or above by its own test). A farmer, below viewer,
+--     reads no project row here and never did read through this policy; their
+--     own farms' rows stay allocation_select_farmer's (038). The holder
+--     policy likewise, and its farmer branch (038) as an uncorrelated
+--     IN over allocation (allocation's own policies apply inside, as before).
+--     G6's guarantee is untouched: the one rule decides, its first line is the
+--     authority's (authority-reads.db.test.ts).
 
 -- ---------------------------------------------------------------------------
 -- 1. app_run_use_shown, from 232 (its latest): the users' take among the parts
@@ -61,3 +79,17 @@ CREATE OR REPLACE FUNCTION app_run_use_shown(p_run uuid) RETURNS boolean
 COMMENT ON FUNCTION app_run_use_shown(uuid) IS
 	'Whether a run''s use (outflow, observed flow, EWR shortfall, catchment volumes) may be shown to someone kept from each farm: 5 or more farm holders (k; other water users don''t count) and the dominance rule over the run''s supply per holder, farms and other water users alike (none above 80 %, no two above 90 %; provisional, #92) (232, 235, #523 G8). Internal: invoker''s rights, closed to PUBLIC and water_app; every caller is SECURITY DEFINER.';
 
+-- ---------------------------------------------------------------------------
+-- 2. The allocation policies, from 231 (their latest): once per query
+-- ---------------------------------------------------------------------------
+DROP POLICY allocation_select ON allocation;
+CREATE POLICY allocation_select ON allocation FOR SELECT
+	USING (project_id IN (SELECT p.id FROM project p WHERE app_reads_allocation_units(p.id)));
+
+-- A farmer: an allocation on their own farm (allocation's own policies apply inside the subquery), as in 038.
+DROP POLICY allocation_holder_select ON allocation_holder;
+CREATE POLICY allocation_holder_select ON allocation_holder FOR SELECT
+	USING (
+		project_id IN (SELECT p.id FROM project p WHERE app_reads_allocation_holders(p.id))
+		OR allocation_id IN (SELECT a.id FROM allocation a WHERE a.node_id IN (SELECT app_farm_nodes(a.project_id)))
+	);

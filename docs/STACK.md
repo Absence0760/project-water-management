@@ -52,8 +52,8 @@ sides share.
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
   engine's) and `perf-db` (wall-clock budgets against Postgres,
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
-  query's, the RLS role check's, the Step 2 60-farm load checks and the
-  Map search over 150 000 gazetteer places).
+  query's, the RLS role check's, the Step 2 60-farm load checks, the
+  Map search over 150 000 gazetteer places and reading 5,000 allocations).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome` and `/welcome/af`, prerendered once per language, architecture.md), Vite, TypeScript, uPlot

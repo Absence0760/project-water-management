@@ -1666,6 +1666,14 @@ water-use volumes per farm or water user.
   `with_volumes` (218) and the API read the same functions;
   `app_allocation_units_readers(project)` lists the members who read each
   row, for a viewer or above (who a report with volumes is emailed to).
+  Since 235 both policies ask once per query, not once per row: `project_id
+  IN (SELECT p.id FROM project p WHERE app_reads_allocation_units(p.id))`
+  (the holder policy likewise, and its farmer branch an uncorrelated `IN`
+  over `allocation`). The subquery reads `project` under the user's RLS
+  (viewer or above), which every reader the rule admits is, so who reads
+  what is unchanged; 231's per-row form cost ~5× at the 5,000-row cap
+  (`allocations/allocations.db.perf.test.ts`, under 250 ms for an editor, a
+  viewer with the switch on and the authority's member; measured ~100 ms).
 - **Viewers' switch and totals (162).** `project.allocations_viewer_units`
   (default false) is set only through `app_set_allocations_viewer_units`
   (`SECURITY DEFINER`, owners; `allocation_viewer_units_guard` refuses

@@ -186,9 +186,12 @@ describe('one place decides (the guards)', () => {
 		const policies = (await asOwner(
 			`SELECT tablename, policyname, qual FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('allocation', 'allocation_holder') AND cmd = 'SELECT' ORDER BY policyname`
 		)) as { tablename: string; policyname: string; qual: string }[];
-		const by = Object.fromEntries(policies.map((p) => [p.policyname, p.qual]));
-		expect(by.allocation_select).toMatch(/^app_reads_allocation_units\(project_id\)$/);
-		expect(by.allocation_holder_select).toContain('app_reads_allocation_holders(project_id)');
+		const by = Object.fromEntries(policies.map((p) => [p.policyname, p.qual.replace(/\s+/g, ' ')]));
+		// The rule and nothing else, asked once per query for the projects it admits (235: uncorrelated, not per row).
+		expect(by.allocation_select).toBe('(project_id IN ( SELECT p.id FROM project p WHERE app_reads_allocation_units(p.id)))');
+		expect(by.allocation_holder_select).toContain('project_id IN ( SELECT p.id FROM project p WHERE app_reads_allocation_holders(p.id))');
+		for (const decides of ['app_has_role', 'app_member_role', 'app_project_role', 'app_allocations_viewer_units'])
+			expect(by.allocation_holder_select, decides).not.toContain(decides);
 		// The farmer's own farm is the other permissive policy, untouched.
 		expect(by.allocation_select_farmer).toContain('app_farm_nodes');
 		expect(Object.keys(by).sort()).toEqual(['allocation_holder_select', 'allocation_select', 'allocation_select_farmer']);
