@@ -100,6 +100,17 @@ describe('water account view', () => {
 		expect(accountLines([t]).map((l) => l.key)).not.toContain('externalTransferM3');
 	});
 
+	it('storage set by a storage reset is an in line, so the in lines add up to the account’s in', () => {
+		// A reset set 30 into the dams: 30 more kept in storage.
+		const r: WaterAccountRow = { ...t, storageSetM3: 30, storageChangeM3: 90 };
+		expect(accountLines([r]).map((l) => l.key)).toContain('storageSetM3');
+		expect(accountBars(r).inBar.map((s) => s.m3).reduce((a, b) => a + b, 0)).toBe(630);
+		// Set out of the dams instead: the term goes on the out side.
+		const o: WaterAccountRow = { ...t, storageSetM3: -30, storageChangeM3: 30 };
+		expect(accountBars(o).outBar.map((s) => s.key)).toContain('storageSetM3');
+		expect(accountLines([t]).map((l) => l.key)).not.toContain('storageSetM3');
+	});
+
 	it('a dam that ran down supplies water: storage goes on the in side', () => {
 		const r: WaterAccountRow = { ...t, storageChangeM3: -50, naturalFlowM3: 550 };
 		const b = accountBars(r);

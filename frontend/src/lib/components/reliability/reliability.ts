@@ -101,6 +101,7 @@ export const ACCOUNT_LINES: AccountLine[] = [
 	{ key: 'rainOnDamsM3', label: 'Rain on dams', side: 'in', optional: true },
 	{ key: 'groundwaterM3', label: 'Groundwater pumped', side: 'in', optional: true },
 	{ key: 'transfersM3', label: 'Transfers (net)', side: 'in', optional: true },
+	{ key: 'storageSetM3', label: 'Storage set into (+) / out of (−) the dams by a storage reset', side: 'in', optional: true },
 	{ key: 'baseflowGainM3', label: 'Base-flow gain (from outside the catchment)', side: 'in', optional: true },
 	{ key: 'landCoverM3', label: 'Removed by land cover', side: 'out', optional: true },
 	{ key: 'unallocatedM3', label: 'Natural flow not allocated to a hydrological unit', side: 'out', optional: true },
