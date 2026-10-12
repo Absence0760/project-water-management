@@ -1376,8 +1376,10 @@ scenario is `'team'`, and behaves exactly as above).
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
   its values blanked but for the bed losses in the reach below it (engine ≥
   1.75.0: the river's, not the farm's use, so the applicant's runs lose water
-  where the base's do) and a unit's base-flow loss and gain (engine 1.86.0,
-  the groundwater's, likewise); crops, crop areas, transfers, land cover and
+  where the base's do); a unit's base-flow loss and gain (engine 1.86.0) go
+  with its other runoff-dependent figures: the loss is MIN(loss, the unit's
+  runoff), which its zeroed area makes 0, so a kept gain would add water
+  with no loss beside it; crops, crop areas, transfers, land cover and
   boreholes on their own farms only. Of a hidden node's text fields only
   those an explicit list keeps survive (`TEXT_KEPT`: its place, kind and
   the categorical rules: dam release, dates in service, user priority,

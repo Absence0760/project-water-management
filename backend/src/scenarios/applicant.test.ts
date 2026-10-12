@@ -139,10 +139,19 @@ describe('projectBaseForApplicant', () => {
 		expect(base.model.nodes.find((n) => n.id === N1)).toMatchObject({ mapMm: 840, mapSource: 'Study of the neighbour’s gauge' });
 	});
 
-	it('keeps the river’s bed losses below a hidden node and its base-flow loss and gain, properties of the river and the groundwater, not of the farm (engine ≥ 1.75.0, 1.86.0)', () => {
-		expect(byId.get(N2)).toMatchObject({ reachLossFrac: 0.2, reachLossMaxM3Day: 300, baseflowLossM3Day: 40, baseflowGainM3Day: 15 });
+	it('keeps the river’s bed losses below a hidden node, a property of the river, not of the farm (engine ≥ 1.75.0)', () => {
+		expect(byId.get(N2)).toMatchObject({ reachLossFrac: 0.2, reachLossMaxM3Day: 300 });
 		// Its use is still blanked beside them.
 		expect(byId.get(N2)!.damCapacityM3).toBe(0);
+	});
+
+	it('drops a hidden unit’s base-flow loss and gain with its runoff, so a run of the view gets no gain without the loss (engine 1.86.0)', () => {
+		// The zeroed area leaves no runoff, so the loss (at most the runoff) would be 0 while a kept gain still added water.
+		expect(byId.get(N2)!.areaKm2).toBe(0);
+		expect(byId.get(N2)!.baseflowLossM3Day).toBe(0);
+		expect(byId.get(N2)!.baseflowGainM3Day).toBe(0);
+		// Positive control: the base has them.
+		expect(base.model.nodes.find((n) => n.id === N2)).toMatchObject({ baseflowLossM3Day: 40, baseflowGainM3Day: 15 });
 	});
 
 	it('keeps only what is on their own farm: crops, crop areas, transfers, land cover, boreholes', () => {
