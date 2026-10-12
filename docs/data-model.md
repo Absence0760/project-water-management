@@ -795,7 +795,10 @@ the result change?", and put back any earlier version.
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
   it is decided; since 163 `scenario.decided` also carries the `authority`
-  and `decisionDate`), `member.authority` (163: an owner marked or unmarked
+  and `decisionDate`, and since 231 with a licence issued `granted`,
+  `as_applied` or `changed`, and `grantedOpsSha256`), `scenario.appeal_recorded`
+  (232: what followed a decision: `eventId`, `kind`, `forum`, `eventDate`, a
+  variation's `opsSha256`; never its note), `member.authority` (163: an owner marked or unmarked
   a member as acting for the responsible authority, `actsForAuthority`),
   `publication.endorsed` (163: `publicationId`, `runId`, `note`),
   `member.specialist` (167: an owner appointed or ended a party's
@@ -2188,6 +2191,48 @@ projection's read and narrows their series further:
   change to a decision. `scenario_drop_application_runs` deletes a deleted
   application's runs that nothing keeps (else `SET NULL` would show them to
   every viewer).
+- **Granted terms** (231_licence_terms, issue #523 G3): `scenario.granted_ops`
+  (the "as licensed" revision of the ops, ≤ 500, the API checks them as the
+  scenario's own against the base run, an application's under its
+  applicant's mask), `granted_ops_sha256` (RFC 8785, as `ops_sha256`),
+  `granted_op_names` (as `op_names`: an application keeps only its own
+  nodes' names) and `granted_conditions` (≤ 4000, the licence's conditions in
+  words). Set exactly when the outcome is `licence_issued`
+  (`scenario_granted_terms`), with the decision, once; issued as applied for,
+  the guard writes the applied ops out as the granted ones (`granted_ops_sha256
+  = ops_sha256`). A licence issued before 231 was given its applied ops, the
+  conditions "Not recorded (before 231): counted as applied for.".
+  `scenario_guard` (from 188) refuses terms with any other outcome and keeps
+  them with the decision's record.
+- **`decision_event (id, project_id, scenario_id, position, kind, forum,
+  event_date, reference, note, ops, ops_sha256, op_names, conditions,
+  recorded_by, recorded_at)`** (232_decision_events, issue #523 G4): what
+  followed a decision, one append-only row per event: `lodged` (an appeal,
+  `forum` `water_tribunal` (NWA s148) or `court`), then `upheld`,
+  `set_aside` or `varied` (a variation's new granted terms in 231's shape:
+  `ops` set exactly then). `decision_event_guard` (SECURITY DEFINER, under
+  a per-scenario advisory lock) stamps `position` (from 1), `recorded_by`
+  and `recorded_at`; admits only a member acting for the authority
+  (`app_acts_for_authority`), never an application's owner, on a scenario
+  decided with an outcome; an appeal is lodged only while none is open, an
+  outcome only answers the open one in its forum; each event dated on or
+  after the one before (the decision letter's date first), not in the
+  future. RLS: read by whoever reads the scenario (the policy asks the
+  scenario's own policies); inserted by a member acting for the authority;
+  no UPDATE or DELETE grant or policy (catalogue `APPEND_ONLY`). Goes with
+  its scenario (which a decision keeps) or project; `recorded_by` is SET
+  NULL when the account goes. Covering indexes: `(scenario_id, position)`
+  unique, `(project_id, recorded_at)`, `(recorded_by)`.
+- **`app_scenario_licence(scenario)`** (231, events since 232): the one rule
+  for whether a decided scenario's licence counts, as its caller reads it:
+  `{ inForce, from: 'decision' | 'event', eventId, appealPending, terms }`,
+  NULL until decided with an outcome. The newest `set_aside` or `varied`
+  decides (varied: in force on its terms, also after a refusal; set aside:
+  not in force); without one, a `licence_issued` decision is in force on its
+  granted terms; an open appeal changes only `appealPending`.
+  `assessment_member_guard` (from 145) copies the licence's terms in place
+  of the ops when it is in force; the evidence report's other applications
+  and combined row read the same function (backend `evidence/report.ts`).
 - **`scenario_member (scenario_id, project_id, user_id, added_by,
   added_at)`**: the people an applicant shares an application with.
   `(project_id, user_id)` references `project_member` `ON DELETE CASCADE`

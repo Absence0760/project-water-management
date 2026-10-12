@@ -6284,3 +6284,30 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       cells), and matching only within the snap radius turned 41 of 90
       clicks into asks
       ([delineation-snapping.md § The head reach's upper end](./design/delineation-snapping.md#the-head-reachs-upper-end-seventh-experiment-delineate-11)).
+
+## Licence terms and appeals (issue #523 G3, G4, 2026-10-12)
+
+Built: a licence issued records its granted terms, which count in cumulative
+impact in place of the changes applied for (231_licence_terms); appeal
+events after a decision, append-only (232_decision_events). Left open:
+
+- [ ] **"Lapsed / deemed withdrawn"** (the licensing assessor's review, §
+      Outcome words (D14)): an application that misses GN R267's time limits
+      ends without a decision, so it isn't an event after one and doesn't fit
+      `decision_event`. Today the assessor can only leave it submitted, or the
+      applicant withdraws it. Durable fix: a fifth outcome word (or a
+      `withdrawn` status the authority records, with the regulation it lapsed
+      under) in `scenario_outcome_check`, `SCENARIO_OUTCOMES`, the labels and
+      the evidence report's outcome words, through counsel as D14 was.
+      Trigger: the pilot authority's first lapsed application, or counsel's D14
+      review.
+- [ ] **Share links and the evidence report don't print the terms.** A
+      decided application's read-only share link (`app_share_scenario`, 115)
+      shows the outcome and note but not the granted terms or the appeal
+      events, and § 4 of the evidence report lists an issued licence by name
+      and run without saying it was read at its licensed terms (the run's
+      label says "(as licensed)"; the report's format has no field for it).
+      Durable fix: add the terms and events to the share projection, and an
+      `asLicensed` flag to § 4's rows in the next evidence format (a new
+      `evidence-N`, so issued packs keep theirs). Trigger: the next evidence
+      format change, or a pilot reader asking which terms § 4 counted.

@@ -976,6 +976,14 @@ effect on the resource and the Reserve). Build plan:
 [roadmap WP-3.11](./roadmap/step-3-licensing.md#wp-311-cumulative-impact-assessment),
 issue #287.
 
+**An issued licence counts on its granted terms** (231/232, issue #523 G3,
+G4). A decided application whose licence is in force (`app_scenario_licence`)
+joins an assessment with the licence's terms, the granted ones or the newest
+variation's, in place of the changes applied for: `assessment_member_guard`
+copies them, and the request's combination check reads the same
+(`countedOps`, backend `scenarios/licence.ts`). A licence set aside, or a
+refused application someone adds anyway, joins with its applied changes.
+
 ### Engine: `combineScenarios` and `cumulativeImpact`
 
 `packages/engine/src/scenario/combine.ts`, `cumulative.ts`. Pure; neither
@@ -1491,7 +1499,28 @@ scenario is `'team'`, and behaves exactly as above).
   `licence_refused`), with the authority "Not recorded (before 163)" and no
   date. A team scenario an editor only marks decided (no outcome) is the
   team's own what-if and records none of this. The panel says any appeal runs from the authority's decision letter
-  (s148, s41(6)) and works out no deadline. `submitted_at`, `decided_at` and
+  (s148, s41(6)) and works out no deadline.
+  **Granted terms** (231_licence_terms, issue #523 G3): a licence issued
+  records the terms it was granted on, `…/decide { …, granted?: { ops?,
+  conditions? } }`: the "as licensed" revision of the changes (a smaller
+  volume, an added release rule; checked against the base run as the
+  application's own changes are, under its applicant's mask) and the
+  licence's conditions in words; without `ops` it is granted as applied for,
+  and the applied changes are written out as the granted ones. Wherever an
+  issued application counts among the other applications on a baseline
+  (§ Cumulative impact: an assessment's members; the evidence report's § 4
+  and page 1's combined row), the granted terms count, never the changes
+  applied for. A run of them is `…/runs { terms: 'licensed' }`.
+  **What followed the decision** (232_decision_events, #523 G4): a member
+  acting for the authority records, append-only, an appeal lodged (the Water
+  Tribunal, s148, or a court) and then its outcome in that forum, upheld,
+  set aside or varied (`…/appeals`); the decision itself never changes.
+  Lodged changes nothing until resolved; set aside, the licence stops
+  counting; varied records new granted terms that count from then on; upheld
+  keeps what stood (`app_scenario_licence` is the one rule). "Lapsed /
+  deemed withdrawn" (R267's time limits) is not an event after a decision
+  and isn't built ([followups.md](./followups.md)). Applicants read the terms
+  and the events on their own application. `submitted_at`, `decided_at` and
   `decided_by` are stamped by the trigger. The roadmap's "under review" is
   not a status of its own: a submitted application is the assessors' queue.
 - **Who decides: the responsible authority** (163, D1 in step-3 § 11). The
