@@ -1099,9 +1099,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			for (let i = 0; i < nodes.length; i++) if (nodes[i]!.kind === 'farm') rD![i] = restrictDay(i, t);
 			if (userOut) userOut[t] = lv![firstUser]!;
 		}
-		// Whether the Priority users with a fixed restriction % are cut today (engine 1.86.0): the farms upstream then
+		// Whether the Priority users with a fixed restriction % are cut today (engine 1.86.0): their level cuts some part
+		// of a unit's demand (a watch level, every cut 0 %, restricts nobody; engine-audit.md P2). The farms upstream then
 		// pass their claims at the restricted demand.
-		const usersCut = userOut !== null && userOut[t]! > 0;
+		const usersCut = userOut !== null && rp!.cutsDemand[userOut[t]!]! > 0;
 		// The dam-side demand of each unit with river abstractions (engine ≥ 1.65.0): its dam-sourced demands only,
 		// after the restriction's cut when the rule is on.
 		// A crop supply table's dam share (engine ≥ 1.73.0) asks the dam side for that share of the crops only.
@@ -1407,10 +1408,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// the same day. Like a gauge it has no EWR share of its own.
 				const D0 = node.demand[t]!;
 				// A Priority user with a fixed restriction % (engine 1.86.0, issue #523 B3): on a day the drought
-				// restriction cuts it, it asks the river and its boreholes for D × (1 − cut), with no basic-needs floor.
-				// Its demand and deficit stay the unrestricted demand's, as a unit's do.
+				// restriction cuts it (its level cuts some part of a unit's demand, engine-audit.md P2), it asks the
+				// river and its boreholes for D × (1 − cut), with no basic-needs floor. Its demand and deficit stay the
+				// unrestricted demand's, as a unit's do.
 				const uc = userCut ? userCut[i]! : 0;
-				const D = uc > 0 && heldLevels![i]! > 0 ? D0 * (1 - uc) : D0;
+				const D = uc > 0 && rp!.cutsDemand[heldLevels![i]!]! > 0 ? D0 * (1 - uc) : D0;
 				if (r.restrictedDemand) r.restrictedDemand[t] = D;
 				const avail = node.senior ? sumU : Math.max(0, sumU - sumZs);
 				// Its river pump (engine ≥ 1.58.0): it takes at most its capacity from the river; no pump = no limit.

@@ -4418,8 +4418,10 @@ choices:
   window, and under the rule, asks the river and
   the boreholes for D′ = D × (1 − c) on each day it is restricted: a fixed
   share, whatever the level, the way a municipal restriction stage is
-  stated. A level of the rule that cuts no part of a unit's demand still
-  restricts it: the level is in force.
+  stated. It is restricted only at a level that cuts some part of a unit's
+  demand (a cut above 0 on any part): a "watch" level whose cuts are all
+  0 % warns and restricts nobody (decided by the operator 2026-10-12,
+  [engine-audit.md P2](./engine-audit.md)).
 - *No basic-needs floor.* A user has no population, so 25 l a person a day
   can't be worked out; the cut is marked "fixed %, no basic-needs floor"
   wherever it shows, and a large % can take a town below basic needs. The
@@ -5615,12 +5617,15 @@ each **pending the hydrologist**, listed in
   1.86.0, issue #523 B3, §2.7c). A user node's demand has no category and
   no population, so the levels' cuts by part don't reach it, and no floor
   stops a cut taking a town below basic needs. A Priority user with a fixed
-  restriction % c asks for D × (1 − c) on every day its level is above 0,
-  whatever the level's cuts, marked "fixed %, no basic-needs floor"; every
-  other user keeps taking its demand. That a level whose cuts are all 0 %
-  (a "watch" level) still applies the full % is provisional, pending the
-  hydrologist ([engine-audit.md P2](./engine-audit.md); the alternative
-  applies it only at a level that cuts something). Its level is the shared
+  restriction % c asks for D × (1 − c) on every day its level cuts some
+  part of a unit's demand (a cut above 0 on any part, whichever parts and
+  however deep), marked "fixed %, no basic-needs floor"; every other user
+  keeps taking its demand. A "watch" level, whose cuts are all 0 %, is in
+  force but restricts no user, as it cuts no unit (decided by the operator
+  2026-10-12, [engine-audit.md P2](./engine-audit.md); before, the % applied
+  at every level above 0). The claims the farms upstream pass for the users
+  follow the same days (`PlanRestriction.cutsDemand`), and the curtailment
+  table's cut counts what the rule took on them only. Its level is the shared
   one under `total` and `dams` (the rule's `nodeIds` lists units and
   doesn't limit it), and under `own` the EWR trigger's alone, as a unit
   without a dam: a user has no dam to read. Since the EWR trigger runs only

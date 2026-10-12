@@ -39,7 +39,7 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await restriction.fill('25');
 	await restriction.blur();
 	await expect(users.getByTestId('user-restriction-note')).toHaveText(
-		'Restricted, it gives up 25 % of its demand: in a curtailment, and while the drought restriction rule is in force. No basic-needs floor: the model doesn’t know the people it serves.'
+		'Restricted, it gives up 25 % of its demand: in a curtailment, and while the drought restriction rule is at a level that cuts water. No basic-needs floor: the model doesn’t know the people it serves.'
 	);
 	await users.getByLabel('Priority', { exact: true }).selectOption('junior');
 	await expect(users.getByLabel('Fixed restriction (%)')).toHaveCount(0);

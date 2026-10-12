@@ -120,8 +120,8 @@
 	{/if}
 	{#if v.users.length}
 		<p class="muted small">
-			Priority other water users with a fixed restriction: each gives up its fixed % of its demand while a level is in force, with no
-			basic-needs floor. Daily averages over the whole run.
+			Priority other water users with a fixed restriction: each gives up its fixed % of its demand while a level that cuts some
+			part of the units’ demand is in force (a watch level, every cut 0 %, restricts none of them), with no basic-needs floor. Daily averages over the whole run.
 		</p>
 		<div class="table-wrap">
 			<table class="data restriction-users" data-testid="restriction-users-table">

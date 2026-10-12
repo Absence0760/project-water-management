@@ -1,8 +1,9 @@
 // A fixed restriction % for Priority users (engine 1.86.0, issue #523 B3,
 // docs/model.md §2.7c and §2.7i): off by default (absent, null and 0 run to
 // the bit as before); with a drought restriction rule, a Priority user's
-// demand is cut by its fixed % on every day its level is above 0, with no
-// basic-needs floor, and the farms upstream pass its claim at the restricted
+// demand is cut by its fixed % on every day its level cuts some part of a
+// unit's demand (a "watch" level, every cut 0 %, restricts nobody:
+// engine-audit.md P2, decided 2026-10-12), with no basic-needs floor, and the farms upstream pass its claim at the restricted
 // demand; in the curtailment table it is curtailed by at most that share of
 // its demand, the rest of its EWR charge standing. Hand cases on a fixed
 // natural flow, then random networks for the invariants.
@@ -67,8 +68,11 @@ const run = (i: ModelInput) => withVerification(i, runModelWith(i, () => ({ natu
 const col = (o: ModelOutput, id: string | null, key: string) => o.series.find((s) => s.nodeId === id && s.key === key)?.values;
 const passed = (o: ModelOutput) => expect(o.summary.verification?.passed, JSON.stringify(o.summary.verification?.checks.filter((c) => !c.passed))).toBe(true);
 
-// Reviewed on 1 January (the run's first day): one level, in force whenever the dams aren't full, cutting no part of a unit's demand.
-const always: DroughtRestrictionRule = { reviewDates: ['01-01'], levels: [{ belowPct: 1, cuts: {} }] };
+// Reviewed on 1 January (the run's first day): one level, in force whenever the dams aren't full, cutting the units'
+// crops by 20 % (A has none, so its own water doesn't change): a level that cuts some part of a unit's demand.
+const always: DroughtRestrictionRule = { reviewDates: ['01-01'], levels: [{ belowPct: 1, cuts: { crops: 0.2 } }] };
+// The same level as a "watch" level: every cut 0 % (or none named), so it warns and restricts nobody (engine-audit.md P2).
+const watch: DroughtRestrictionRule = { reviewDates: ['01-01'], levels: [{ label: 'Watch', belowPct: 1, cuts: {} }] };
 
 describe('a fixed restriction % for Priority users (engine 1.86.0)', () => {
 	it('reads the share: 0 for none, for a Non-priority user and for a value that is not a share, with a warning', () => {
@@ -127,7 +131,7 @@ describe('a fixed restriction % for Priority users (engine 1.86.0)', () => {
 	it("under the 'own' basis a user has no dam to read: only the EWR trigger restricts it", () => {
 		// A's own dam is half full: A is at level 1 from day 0. The EWR (10 million m³/day) fails every day, so the
 		// review on 3 January (day 2) raises the user to the trigger's level 1; day 0 has no day before to read.
-		const rule: DroughtRestrictionRule = { reviewDates: ['01-01', '01-03'], levels: [{ belowPct: 1, cuts: {} }], basis: 'own', ewrTrigger: { siteNodeId: null, level: 1 } };
+		const rule: DroughtRestrictionRule = { reviewDates: ['01-01', '01-03'], levels: [{ belowPct: 1, cuts: { crops: 0.2 } }], basis: 'own', ewrTrigger: { siteNodeId: null, level: 1 } };
 		const out = run(input({ userRestrictionPct: 0.3 }, rule, 1e7));
 		passed(out);
 		expect(col(out, 'U', RESTRICTION_SERIES.restricted.key)).toEqual([200, 200, 140, 140]);
@@ -138,6 +142,47 @@ describe('a fixed restriction % for Priority users (engine 1.86.0)', () => {
 		const noTrigger = run(input({ userRestrictionPct: 0.3 }, { ...rule, ewrTrigger: undefined }, 1e7));
 		passed(noTrigger);
 		expect(col(noTrigger, 'U', 'supplied')).toEqual([200, 200, 200, 200]);
+	});
+
+	it('a watch level (every cut 0 %) leaves the user’s demand whole; a deeper level that cuts some part of a unit’s demand applies the %', () => {
+		// Engine-audit.md P2, decided 2026-10-12: the % applies only at a level that cuts some part of a unit's demand.
+		for (const cuts of [{}, { crops: 0, domestic: 0, livestock: 0 }]) {
+			const out = run(input({ userRestrictionPct: 0.3 }, { ...watch, levels: [{ label: 'Watch', belowPct: 1, cuts }] }));
+			passed(out);
+			// The level is in force all four days, and the user still asks for, takes and passes its whole demand.
+			expect(col(out, null, RESTRICTION_SERIES.level.key)).toEqual([1, 1, 1, 1]);
+			expect(col(out, 'U', RESTRICTION_SERIES.restricted.key)).toEqual([200, 200, 200, 200]);
+			expect(col(out, 'U', 'supplied')).toEqual([200, 200, 200, 200]);
+			expect(col(out, 'U', 'deficit')).toEqual([0, 0, 0, 0]);
+			expect(col(out, 'A', 'senior_requirement')).toEqual([200, 200, 200, 200]);
+			const u = out.summary.droughtRestriction!.users![0]!;
+			expect(u).toMatchObject({ avgRestrictedDemandM3Day: 200, avgSuppliedM3Day: 200, avgCutOnRestrictedDaysM3Day: 0, daysByLevel: [0, 4] });
+		}
+		// A watch level above a level that cuts: the half-full dam (50 %) sits at the deeper level only once it falls
+		// below 60 %; at 'Watch' (below 100 %) the user is whole, at 'Cut' (below 60 %) it asks for 200 × 0.7.
+		const twoLevels = (pct: number) => {
+			const x = input({ userRestrictionPct: 0.3 }, { reviewDates: ['01-01'], levels: [{ label: 'Watch', belowPct: 1, cuts: {} }, { label: 'Cut', belowPct: 0.6, cuts: { livestock: 0.1 } }] });
+			x.model.nodes.find((n) => n.id === 'A')!.damInitialPct = pct;
+			return run(x);
+		};
+		const atCut = twoLevels(0.5);
+		passed(atCut);
+		expect(col(atCut, null, RESTRICTION_SERIES.level.key)).toEqual([2, 2, 2, 2]);
+		expect(col(atCut, 'U', RESTRICTION_SERIES.restricted.key)).toEqual([140, 140, 140, 140]);
+		expect(col(atCut, 'A', 'senior_requirement')).toEqual([140, 140, 140, 140]);
+		const atWatch = twoLevels(0.8);
+		passed(atWatch);
+		expect(col(atWatch, null, RESTRICTION_SERIES.level.key)).toEqual([1, 1, 1, 1]);
+		expect(col(atWatch, 'U', RESTRICTION_SERIES.restricted.key)).toEqual([200, 200, 200, 200]);
+		expect(col(atWatch, 'A', 'senior_requirement')).toEqual([200, 200, 200, 200]);
+	});
+
+	it('at a watch level the curtailment cut takes the user’s whole % (the rule took nothing of it)', () => {
+		const out = run(input({ userRestrictionPct: 0.3 }, watch, 1500));
+		passed(out);
+		const row = out.summary.curtailment!.otherUsers!.find((u) => u.nodeId === 'U')!;
+		expect(row).toMatchObject({ curtailed: true, restrictionPct: 0.3 });
+		expect(row.supplyCutM3Day).toBeCloseTo(-60, 9);
 	});
 
 	it('a Non-priority user’s % is ignored, with a warning', () => {

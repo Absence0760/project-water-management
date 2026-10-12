@@ -130,13 +130,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Needs hydrologist (engine 1.73.0, issue #408)"
 	},
 	{
-		"id": "P2",
-		"source": "finding",
-		"severity": "Low (Priority users with a fixed restriction %, under a drought restriction rule with a level whose cuts are all 0 %, engine 1.86.0)",
-		"title": "A \"watch\" level whose cuts are all zero still restricts every Priority user with a fixed % by its full %",
-		"status": "Provisional (engine 1.86.0; Needs hydrologist)"
-	},
-	{
 		"id": "X1",
 		"source": "finding",
 		"severity": "Medium (capped scenarios and the Allocations tab for a unit whose dam sends water out of the catchment, engine 1.86.0)",

@@ -2569,6 +2569,10 @@ function checkedLevel(share: number, thresholds: readonly number[]): number {
 function checkedCut(rule: DroughtRestrictionRule, level: number, part: DemandPart): number {
 	return level > 0 ? (rule.levels[level - 1]!.cuts[part] ?? 0) : 0;
 }
+/** Whether level `level` cuts some part of a unit's demand: the levels a Priority user's fixed % applies at (engine-audit.md P2). */
+function levelCutsDemand(rule: DroughtRestrictionRule, level: number): boolean {
+	return DEMAND_PARTS.some((p) => checkedCut(rule, level, p) > 0);
+}
 function checkedObjectDemand(d: number, cut: number, floor: number | null): number {
 	const r = d * (1 - cut);
 	return floor === null ? r : Math.max(r, Math.min(floor, d));
@@ -2765,7 +2769,8 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	for (const n of nodes) {
 		const DR = get.get(`${n.id}|${RESTRICTION_SERIES.restricted.key}`);
 		if (userIds.has(n.id)) {
-			// A Priority user with a fixed restriction %: D × (1 − c) on the days its level is above 0, no floor.
+			// A Priority user with a fixed restriction %: D × (1 − c) on the days its level cuts some part of a unit's
+			// demand (a watch level, every cut 0 %, restricts nobody; engine-audit.md P2), no floor.
 			if (!DR) return `${n.id}: no restricted_demand column for a Priority user with a fixed restriction %`;
 			const c = userRestrictionShare(n);
 			const D = get.get(`${n.id}|demand`);
@@ -2773,7 +2778,7 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 			if (!D || !G) return `${n.id}: demand and supplied are needed to check the drought restriction`;
 			const lvs = unitLevels.get(n.id)!;
 			for (let t = 0; t < out.days; t++) {
-				const want = lvs[t]! > 0 ? D[t]! * (1 - c) : D[t]!;
+				const want = levelCutsDemand(rule, lvs[t]!) ? D[t]! * (1 - c) : D[t]!;
 				if (Math.abs(DR[t]! - want) > tol(D[t]!)) return `${n.id} day ${t}: user restricted demand ${DR[t]} ≠ ${want} (level ${lvs[t]}, fixed ${c})`;
 				if (G[t]! > DR[t]! + tol(Math.max(DR[t]!, G[t]!))) return `${n.id} day ${t}: user supplied ${G[t]}, more than its restricted demand ${DR[t]}`;
 			}

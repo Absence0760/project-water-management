@@ -706,11 +706,13 @@ function runNetwork(
 		if (r.baseflowLoss) push(node.id, BASEFLOW_LOSS_SERIES.key, BASEFLOW_LOSS_SERIES.label, BASEFLOW_LOSS_SERIES.unit, r.baseflowLoss);
 		if (r.baseflowGain) push(node.id, BASEFLOW_GAIN_SERIES.key, BASEFLOW_GAIN_SERIES.label, BASEFLOW_GAIN_SERIES.unit, r.baseflowGain);
 		// The priority users' claims' share of them, which the node below takes off the priority requirement.
-		// On the days the drought restriction cuts the Priority users with a fixed % (engine 1.86.0), their claims' share.
+		// On the days the drought restriction cuts the Priority users with a fixed % (engine 1.86.0), their claims' share:
+		// a level that cuts some part of a unit's demand (engine-audit.md P2).
 		const srl0 = plan.nodes[i]!.seniorReachLoss;
 		const srlCut = plan.nodes[i]!.seniorReachLossCut;
 		const ulv = sim.restrictionUserLevel;
-		const srl = srl0 && srlCut && ulv ? Float64Array.from(srl0, (v, t) => (ulv[t]! > 0 ? srlCut[t]! : v)) : srl0;
+		const cutsAt = plan.restriction?.cutsDemand;
+		const srl = srl0 && srlCut && ulv && cutsAt ? Float64Array.from(srl0, (v, t) => (cutsAt[ulv[t]!]! > 0 ? srlCut[t]! : v)) : srl0;
 		if (srl) push(node.id, SENIOR_REACH_LOSS_SERIES.key, SENIOR_REACH_LOSS_SERIES.label, SENIOR_REACH_LOSS_SERIES.unit, srl);
 		if (plan.nodes[i]!.borehole) {
 			// Boreholes (WP-1.34): what they gave and what the river loses for it.

@@ -562,18 +562,17 @@ runs and accumulations are real) can't be decided without the client.
       and under the drought restriction rule, as the NWA reading in §2.7c
       asks. Trigger: the client gives the population each Priority user
       serves.
-- [ ] **A level that cuts nothing still applies a Priority user's fixed %**
+- [x] **A level that cuts nothing still applies a Priority user's fixed %**
       (engine 1.86.0, issue #523 B3, [engine-audit.md P2](./engine-audit.md),
-      [model.md §2.7i](./model.md); provisional, needs the hydrologist).
-      Under the drought restriction rule a Priority user with a fixed % asks
-      for D × (1 − c) on every day its level is above 0, even at a "watch"
-      level whose cuts are all 0 %, so a level meant only to warn restricts
-      every such user by its full %. The alternative: apply the % only at a
-      level that cuts some part of a unit's demand (any cut above 0), so a
-      warning level restricts nobody. The change is when `network/simulate.ts`
-      cuts the users (`usersCut`), with the drought restriction self-check
-      and the Python cross-check, and an `ENGINE_VERSION` bump.
-      Trigger: the hydrologist's answer.
+      [model.md §2.7c, §2.7i](./model.md)). Under the drought restriction rule
+      a Priority user with a fixed % asked for D × (1 − c) on every day its
+      level was above 0, so a "watch" level whose cuts are all 0 % restricted
+      every such user by its full %. **Decided by the operator 2026-10-12 and
+      built (issue #523):** the % applies only at a level that cuts some part
+      of a unit's demand (any cut above 0), so a watch level restricts nobody:
+      `network/simulate.ts` (`usersCut`, from `PlanRestriction.cutsDemand`)
+      and the drought restriction self-check; the Python cross-check doesn't
+      model the rule, so it is unchanged. Released with #523's engine bump.
 - [ ] **Count a transfer out of the catchment as its source unit's use in
       the allocations comparison and under the cap** (engine 1.86.0, issue
       #523 B5, [engine-audit.md X1](./engine-audit.md), [model.md §2.6 and

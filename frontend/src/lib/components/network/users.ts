@@ -46,7 +46,7 @@ export function userPumpNote(n: Pick<NetworkNode, 'pumpCapacityM3Day' | 'userPri
  */
 export function userRestrictionNote(pct: number | null | undefined): string {
 	if (!(typeof pct === 'number' && pct > 0)) return 'Blank is uncurtailed: its EWR charge stands and the drought restriction rule doesn’t cut it.';
-	return `Restricted, it gives up ${fmtNum(pct * 100, 0)} % of its demand: in a curtailment, and while the drought restriction rule is in force. No basic-needs floor: the model doesn’t know the people it serves.`;
+	return `Restricted, it gives up ${fmtNum(pct * 100, 0)} % of its demand: in a curtailment, and while the drought restriction rule is at a level that cuts water. No basic-needs floor: the model doesn’t know the people it serves.`;
 }
 
 /**

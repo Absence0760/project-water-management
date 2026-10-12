@@ -1464,7 +1464,8 @@ export interface NetworkNode {
 	 * when restricted, with no basic-needs floor (a user has no population).
 	 * It caps the user's supply cut for its EWR charge in the curtailment
 	 * table, and the drought restriction rule (§2.7i) cuts the user's demand
-	 * by it on every day the rule's level is in force for it. null / absent /
+	 * by it on every day its level cuts some part of a unit's demand (a watch
+	 * level, every cut 0 %, restricts nobody; engine-audit.md P2). null / absent /
 	 * 0 = uncurtailed (the default, every run before 1.86.0). Ignored, with a
 	 * warning, on a Non-priority user (curtailed for its whole charge).
 	 */

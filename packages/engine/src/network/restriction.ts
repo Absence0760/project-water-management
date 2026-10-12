@@ -302,6 +302,13 @@ export interface PlanRestriction {
 	thresholds: Float64Array;
 	/** cut[level][part index in DEMAND_PARTS]; level 0 is all zeros. */
 	cut: Float64Array[];
+	/**
+	 * 1 for each level that cuts some part of a unit's demand (a cut above 0 on
+	 * any part), 0 for level 0 and for a level whose cuts are all 0 % (a
+	 * "watch" level): the levels at which a Priority user's fixed restriction %
+	 * applies (engine-audit.md P2).
+	 */
+	cutsDemand: Uint8Array;
 	/** One level for every unit ('total', 'dams') or one per unit ('own'). */
 	shared: boolean;
 	/** Shared: the farm dams the storage is read from (node indices, in node-id order so the sum doesn't depend on the listing). */
@@ -314,7 +321,9 @@ export interface PlanRestriction {
 	 * Each Priority user's fixed restriction share (engine 1.86.0, issue #523
 	 * B3, userRestrictionShare), 0 for every other node; absent when no user
 	 * has one. The rule cuts such a user's demand by it on every day its
-	 * level is above 0: the shared level under 'total' and 'dams', the EWR
+	 * level cuts some part of a unit's demand (`cutsDemand`; a "watch" level
+	 * whose cuts are all 0 % restricts nobody, engine-audit.md P2, decided
+	 * 2026-10-12): the shared level under 'total' and 'dams', the EWR
 	 * trigger's alone under 'own' (a user has no dam to read), held and
 	 * lifted with the units'. Not in `inScope`: a user isn't a unit, and it
 	 * alone doesn't make a rule apply.
@@ -438,6 +447,7 @@ export function planRestriction(
 		startDecides,
 		thresholds: Float64Array.from(rule.levels, (l) => l.belowPct),
 		cut,
+		cutsDemand: Uint8Array.from(cut, (c) => (c.some((x) => x > 0) ? 1 : 0)),
 		shared: basis !== 'own',
 		dams: Int32Array.from(dams),
 		ownDam,

@@ -48,6 +48,6 @@ describe('a Priority user’s fixed restriction % (engine 1.86.0, issue #523 B3)
 	it('says blank is uncurtailed, and that a % has no basic-needs floor', () => {
 		expect(userRestrictionNote(null)).toMatch(/^Blank is uncurtailed/);
 		expect(userRestrictionNote(0)).toMatch(/^Blank is uncurtailed/);
-		expect(userRestrictionNote(0.25)).toBe('Restricted, it gives up 25 % of its demand: in a curtailment, and while the drought restriction rule is in force. No basic-needs floor: the model doesn’t know the people it serves.');
+		expect(userRestrictionNote(0.25)).toBe('Restricted, it gives up 25 % of its demand: in a curtailment, and while the drought restriction rule is at a level that cuts water. No basic-needs floor: the model doesn’t know the people it serves.');
 	});
 });
