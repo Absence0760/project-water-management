@@ -1510,7 +1510,10 @@ scenario is `'team'`, and behaves exactly as above).
   issued application counts among the other applications on a baseline
   (§ Cumulative impact: an assessment's members; the evidence report's § 4
   and page 1's combined row), the granted terms count, never the changes
-  applied for. A run of them is `…/runs { terms: 'licensed' }`.
+  applied for. A run of them is `…/runs { terms: 'licensed' }`; until one
+  exists (and again after a variation), § 4 names the licence among those
+  with no run of their licensed terms (`evidence-20`) rather than leaving it
+  out ([evidence-pack.md § The responsible authority](./evidence-pack.md#the-responsible-authority)).
   **What followed the decision** (228_decision_events, #523 G4): a member
   acting for the authority records, append-only, an appeal lodged (the Water
   Tribunal, s148, or a court) and then its outcome in that forum, upheld,

@@ -234,7 +234,7 @@ export async function headlinePackFixture(hash: SyncHash, opts: { legacy?: boole
 		Object.entries(run.inputs.series).map(([kind, s]) => ({ run: name, kind, startDate: s!.startDate, days: s!.length, sha256: s!.valuesSha256 ?? null }));
 	const project = { id: '00000000-0000-4000-8000-0000000000f1', name: 'Catchment' };
 	const report = {
-		version: 'evidence-19',
+		version: 'evidence-20',
 		mode: 'application',
 		builtBy: ENGINE_VERSION,
 		identity: {

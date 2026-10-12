@@ -60,7 +60,12 @@ dominating (a year too few hold, or one or two hold most of, reads "not
 shown", its modelled use kept; holders counted by keys frozen with each
 run), with the folded
 mix frozen as whole-percent shares with no m³ (report format
-`evidence-18`, issue #523 G/H/J, 2026-10-11). What is left is
+`evidence-18`, issue #523 G/H/J, 2026-10-11); page 1's headline against
+full authorised use recording how to re-derive its pair (report format
+`evidence-19`, issue #523 G2); and § 4 naming every other application
+that counts but has no run of the ops it counts with, and saying which
+terms each listed run applied (report format `evidence-20`, issue #523
+G3/G4, 2026-10-12; [§ The responsible authority](#the-responsible-authority)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -398,14 +403,29 @@ for and whether that authority accepted the baseline:
   `approved_with_conditions`, which it still words). Since 227/228 (issue
   #523 G3, G4) it counts on its **granted terms**, never the changes applied
   for: § 4 reads its newest run of those terms (an assessor's **Run the
-  licensed terms**; the run of the applied changes no longer stands for it,
-  so an issued licence with no such run isn't in the table), and page 1's
-  combined row matches an assessment that took those terms. A licence set
-  aside on appeal stops counting; one varied counts on the variation's
-  terms, read from a run of them; an appeal only lodged changes nothing.
-  The report's format is unchanged (no new field): a pack freezes which
-  applications and runs it read, so a decision or appeal recorded later
-  changes the live report, never an issued pack. The applicant reads the
+  licensed terms**; the run of the applied changes no longer stands for
+  it), each row saying its run applied the licensed terms (`terms:
+  'licensed'`, a submitted application's `applied`), and page 1's combined
+  row matches an assessment that took those terms. A licence set aside on
+  appeal stops counting; one varied counts on the variation's terms, read
+  from a run of them; an appeal only lodged changes nothing.
+  **Nothing drops out silently** (report format `evidence-20`): an issued
+  licence with no run of its licensed terms on this baseline (granted on
+  other terms than applied for, or varied since its run), and a submitted
+  application never run on it, can't be in the table or its sum, so § 4
+  names them with a fixed line (`cumulative.notRun`, `notRunCount`,
+  `notRunNote`: *Not in the table or its sum: N licences in force have no
+  run of their licensed terms on this baseline (…), so the table leaves
+  their change out: run them from the application (a licence: Run the
+  licensed terms) and build the report again.*), under the reader's RLS as
+  the table is (a viewer sees no submitted application, so isn't told its
+  name). The licensed-terms run isn't made automatically when the decision
+  or variation is recorded: a scenario run is an engine run on the request
+  path (`runScenario`), and no job kind runs a scenario, so the line is the
+  guard ([followups.md § Licence terms and appeals](./followups.md#licence-terms-and-appeals-issue-523-g3-g4-2026-10-12)). A pack
+  freezes which applications and runs it read, so a decision or appeal
+  recorded later changes the live report, never an issued pack; one
+  drafted before `evidence-20` has no such line or `terms`. The applicant reads the
   granted terms and the appeal events on their own application (§
   Applicants).
 
@@ -463,6 +483,13 @@ the application twice, both labelled:
 - **Against modelled current use** (`licenceImpact`, as before): the
   baseline as it ran, so "existing use" is what the model found holders
   use; it answers what changes tomorrow.
+
+Both pairs apply **this application's own applied ops** (the ops its run
+recorded) to the baseline, and nothing else: never another licence's
+granted terms or a variation's, which count only among the other
+applications (§ 4's table and page 1's combined row, above). The baseline
+is the published run as it is; another application issued since isn't
+folded into it.
 
 The pair is two model runs, which a report request (a viewer's GET, a pack
 draft) must not carry, so an editor runs it from the evidence report

@@ -6307,13 +6307,24 @@ events after a decision, append-only (228_decision_events). Left open:
       the evidence report's outcome words, through counsel as D14 was.
       Trigger: the pilot authority's first lapsed application, or counsel's D14
       review.
-- [ ] **Share links and the evidence report don't print the terms.** A
-      decided application's read-only share link (`app_share_scenario`, 115)
-      shows the outcome and note but not the granted terms or the appeal
-      events, and § 4 of the evidence report lists an issued licence by name
-      and run without saying it was read at its licensed terms (the run's
-      label says "(as licensed)"; the report's format has no field for it).
-      Durable fix: add the terms and events to the share projection, and an
-      `asLicensed` flag to § 4's rows in the next evidence format (a new
-      `evidence-N`, so issued packs keep theirs). Trigger: the next evidence
-      format change, or a pilot reader asking which terms § 4 counted.
+- [ ] **Share links don't print the terms.** A decided application's
+      read-only share link (`app_share_scenario`, 115) shows the outcome and
+      note but not the granted terms or the appeal events. (§ 4 of the
+      evidence report now says a licence's run applied its licensed terms,
+      `terms: 'licensed'`, `evidence-20`.) Durable fix: add the terms and
+      events to the share projection. Trigger: a pilot reader of a share
+      link asking which terms were granted.
+- [ ] **The licensed-terms run isn't made for the assessor.** An issued
+      licence whose granted terms differ from the ops applied for, or one
+      varied on appeal, counts in § 4's table only once someone runs its
+      licensed terms (**Run the licensed terms**). Since `evidence-20` the
+      report names every such licence (`cumulative.notRunNote`), so nothing
+      drops out silently, but the assessor still has to run it. Not built
+      with the decision: a scenario run is an engine run on the request path
+      (`scenarios/execute.ts` `runScenario`), and no job kind runs a scenario.
+      Durable fix: a `scenario_run` job kind (migration for the `job.kind`
+      CHECK, a handler that stores the run as the deciding member, cost caps
+      as for the other kinds) queued by `…/decide` with changed terms and by
+      a `varied` appeal event. Trigger: a pilot assessor's report showing the
+      line, or a second report-request feature that needs a scenario run off
+      the request path.

@@ -2841,7 +2841,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 - **Other applications on the baseline** (`cumulative`, § 4): every other scenario that is
   submitted, or decided `licence_issued` (`approved` / `approved_with_conditions` in a pack drafted before `evidence-13`), with its
   newest run of its current ops (`inputs.scenario.opsSha256` equal to the
-  scenario's) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Read under the reader's RLS, so a
+  scenario's; for a licence in force, its licensed terms' hash, 227/228) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Since `evidence-20` each row has `terms: 'applied' | 'licensed'`, and the ones that count but have no such run are named, not dropped: `cumulative.notRun` (`{ scenarioId, scenarioName, status, outcome }[]`, at most 50), `notRunCount` and `notRunNote` (the fixed line § 4 prints, `null` when none). Read under the reader's RLS, so a
   viewer's report lists no submitted application (editors read those) and
   nobody's lists a draft. Only `summary.catchment.ewrDaysNotMet` and the
   outlet's Reserve `overall` leave the database, not the runs. The engine

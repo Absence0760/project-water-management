@@ -275,7 +275,12 @@ const LICENCE_JOIN_SQL = `LEFT JOIN LATERAL (SELECT app_scenario_licence(s.id) A
  * reader couldn't open. The newest 50, and whether there were more. Only the two measures the table reads leave the
  * database, not the runs' summaries.
  */
-async function loadOtherApplications(db: Db, projectId: string, baselineRunId: string, ownScenarioId: string | null): Promise<Pick<EvidenceInput, 'otherApplications' | 'otherApplicationsTruncated'>> {
+async function loadOtherApplications(
+	db: Db,
+	projectId: string,
+	baselineRunId: string,
+	ownScenarioId: string | null
+): Promise<Pick<EvidenceInput, 'otherApplications' | 'otherApplicationsTruncated' | 'otherApplicationsNotRun' | 'otherApplicationsNotRunCount'>> {
 	const { rows } = await db.query<{
 		scenarioId: string;
 		scenarioName: string;
@@ -316,7 +321,28 @@ async function loadOtherApplications(db: Db, projectId: string, baselineRunId: s
 		runCreatedAt: iso(r.runCreatedAt)!,
 		reserveOutlet: r.reserveOutlet ? { months: r.reserveOutlet.months, met: r.reserveOutlet.met, rate: r.reserveOutlet.rate } : null
 	}));
-	return { otherApplications, otherApplicationsTruncated: truncated };
+	// evidence-20: the ones that count but have no such run, so they'd drop out of the table silently (an issued
+	// licence whose terms differ from the ops applied for, or one varied on appeal, until someone runs its licensed
+	// terms; a submitted application never run on this baseline). Named, so the report says so; same RLS.
+	const { rows: notRun } = await db.query<{ scenarioId: string; scenarioName: string; status: 'submitted' | 'decided'; outcome: string | null; total: number }>(
+		`SELECT s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome, (count(*) OVER ())::int AS total
+		 FROM scenario s
+		 ${LICENCE_JOIN_SQL}
+		 WHERE s.project_id = $1 AND s.base_run_id = $2
+			AND ($3::uuid IS NULL OR s.id <> $3::uuid)
+			AND ${COUNTS_SQL}
+			AND NOT EXISTS (SELECT 1 FROM model_run r WHERE r.scenario_id = s.id AND r.project_id = s.project_id
+				AND r.inputs->'scenario'->>'baseRunId' = $2::text AND r.inputs->'scenario'->>'opsSha256' = ${COUNTED_SHA_SQL})
+		 ORDER BY s.name, s.id
+		 LIMIT $4`,
+		[projectId, baselineRunId, ownScenarioId, APPLICATION_RUNS_MAX]
+	);
+	return {
+		otherApplications,
+		otherApplicationsTruncated: truncated,
+		otherApplicationsNotRun: notRun.map(({ total: _total, ...o }) => o),
+		otherApplicationsNotRunCount: notRun[0]?.total ?? 0
+	};
 }
 
 /** This report's own application, as the combination takes it: the ops its run recorded. */

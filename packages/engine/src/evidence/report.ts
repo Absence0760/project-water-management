@@ -57,6 +57,7 @@ import {
 	type EvidenceInput,
 	type EvidenceMonthChange,
 	type EvidenceOtherApplicationInput,
+	type EvidenceCombinedOtherInput,
 	type EvidenceReport,
 	type EvidenceRow,
 	type EvidenceRunInput,
@@ -407,7 +408,10 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	const river = sites(b, a, fdcBandsOf(input, cited, baseSum, paired, change));
 	const users = userRows(b, a, paired, change);
 	const served = servedSection(b, a);
-	const cumulative: EvidenceCumulative = { ...cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated), combined: combinedOf(a, input.combined) };
+	const cumulative: EvidenceCumulative = {
+		...cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated, input.otherApplicationsNotRun ?? [], input.otherApplicationsNotRunCount ?? null),
+		combined: combinedOf(a, input.combined)
+	};
 	const licenceImpact = licenceImpactSection(b, a, input.impact);
 	if (a) rows.push(combinedRow(cumulative.combined!));
 	const errata = dedupe([
@@ -1151,8 +1155,40 @@ export const COMBINED_NO_OUTLET = 'Not assessed: the assessment has no pragmatic
 /** Page 1 names at most this many; § 4 lists every one, so the row stays one row high (G6). */
 const COMBINED_NAMED = 3;
 
+/**
+ * § 4's fixed line for the other applications that count on the baseline but have no run there of the ops they
+ * count with (evidence-20), so they are in neither the table nor its sum: never left out silently. Names the first
+ * few; null when there are none.
+ */
+export function CUMULATIVE_NOT_RUN(notRun: readonly EvidenceCombinedOtherInput[], count: number = notRun.length): string | null {
+	if (count <= 0) return null;
+	const licences = notRun.filter((o) => o.status === 'decided');
+	const submitted = notRun.filter((o) => o.status !== 'decided');
+	const names = (xs: readonly EvidenceCombinedOtherInput[]) => {
+		const q = xs.map((x) => `“${x.scenarioName}”`);
+		return q.length > COMBINED_NAMED ? `${q.slice(0, COMBINED_NAMED).join(', ')} and ${q.length - COMBINED_NAMED} more` : q.join(', ');
+	};
+	const parts: string[] = [];
+	if (licences.length)
+		parts.push(`${licences.length} ${licences.length === 1 ? 'licence in force has' : 'licences in force have'} no run of ${licences.length === 1 ? 'its' : 'their'} licensed terms on this baseline (${names(licences)})`);
+	if (submitted.length)
+		parts.push(`${submitted.length} submitted ${submitted.length === 1 ? 'application has' : 'applications have'} no run of ${submitted.length === 1 ? 'its' : 'their'} ops on it (${names(submitted)})`);
+	const more = count - notRun.length;
+	return `Not in the table or its sum: ${parts.join(', and ')}${more > 0 ? `, and ${more} more not listed` : ''}, so the table leaves ${count === 1 ? 'its' : 'their'} change out: run ${count === 1 ? 'it' : 'them'} from the application (a licence: Run the licensed terms) and build the report again.`;
+}
+
 /** Other applications on the baseline, each one's own change, and their sum (§ 4, and page 1's row). */
-function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: readonly EvidenceOtherApplicationInput[], truncated: boolean): EvidenceCumulative {
+function cumulativeOf(
+	b: EvidenceRunInput,
+	a: EvidenceRunInput | null,
+	others: readonly EvidenceOtherApplicationInput[],
+	truncated: boolean,
+	notRunIn: readonly EvidenceCombinedOtherInput[],
+	notRunCountIn: number | null
+): EvidenceCumulative {
+	const notRun = notRunIn.map((o) => ({ scenarioId: o.scenarioId, scenarioName: o.scenarioName, status: o.status, outcome: o.outcome }));
+	const notRunCount = Math.max(notRunCountIn ?? notRun.length, notRun.length);
+	const missing = { notRun, notRunCount, notRunNote: CUMULATIVE_NOT_RUN(notRun, notRunCount) };
 	const outlet = (b.summary.ewrAssurance ?? []).find((s) => s.isOutlet) ?? null;
 	const baseRate = outlet?.overall.rate ?? null;
 	const baseDays = b.summary.catchment.ewrDaysNotMet;
@@ -1177,6 +1213,8 @@ function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: r
 				runCreatedAt: o.runCreatedAt,
 				comparable: reason === null,
 				reason,
+				// A decided application counts only while its licence is in force, and then on its licensed terms (227/228).
+				terms: o.status === 'decided' ? ('licensed' as const) : ('applied' as const),
 				ewrDays: diff(baseDays, o.ewrDaysNotMet),
 				reservePp: pp(o.reserveOutlet?.rate)
 			};
@@ -1189,8 +1227,8 @@ function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: r
 		const own = { ewrDays: diff(baseDays, a.summary.catchment.ewrDaysNotMet), reservePp: pp(outlet ? matchSite(a.summary.ewrAssurance ?? [], outlet)?.overall.rate : null) };
 		withThis = { ewrDays: sumOf([total.ewrDays, own.ewrDays]), reservePp: sumOf([total.reservePp, own.reservePp]) };
 	}
-	if (truncated) return { applications, counted: counted.length, truncated, total: { ewrDays: null, reservePp: null }, withThis: a ? { ewrDays: null, reservePp: null } : null };
-	return { applications, counted: counted.length, truncated, total, withThis };
+	if (truncated) return { applications, counted: counted.length, truncated, total: { ewrDays: null, reservePp: null }, withThis: a ? { ewrDays: null, reservePp: null } : null, ...missing };
+	return { applications, counted: counted.length, truncated, total, withThis, ...missing };
 }
 
 /**

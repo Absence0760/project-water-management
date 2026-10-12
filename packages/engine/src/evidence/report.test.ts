@@ -334,7 +334,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-19');
+		expect(r.version).toBe('evidence-20');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -1039,7 +1039,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-19');
+		expect(got.version).toBe('evidence-20');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1556,6 +1556,38 @@ describe('§ 4 other applications on the baseline, each one’s own run (evidenc
 		expect(evidenceReport(input({ otherApplications: [other()] })).cumulative.total.ewrDays).not.toBeNull();
 	});
 
+	it('names every application that counts but has no run of the ops it counts with, never dropping it silently (evidence-20)', () => {
+		const licence = (n: number) => ({ scenarioId: `lic-${n}`, scenarioName: `Licence ${n}`, status: 'decided' as const, outcome: 'licence_issued' });
+		const r = evidenceReport(
+			input({
+				otherApplications: [other()],
+				otherApplicationsNotRun: [licence(1), { scenarioId: 'sub-1', scenarioName: 'Unrun dam', status: 'submitted', outcome: null }]
+			})
+		);
+		expect(r.cumulative.notRun!.map((x) => x.scenarioName)).toEqual(['Licence 1', 'Unrun dam']);
+		expect(r.cumulative.notRunCount).toBe(2);
+		expect(r.cumulative.notRunNote).toBe(
+			'Not in the table or its sum: 1 licence in force has no run of its licensed terms on this baseline (“Licence 1”), and 1 submitted application has no run of its ops on it (“Unrun dam”), so the table leaves their change out: run them from the application (a licence: Run the licensed terms) and build the report again.'
+		);
+		// The listed one is still in the table and its sum; the missing ones are in neither.
+		expect(r.cumulative.applications.map((x) => x.scenarioId)).toEqual(['scn-2']);
+		expect(r.cumulative.counted).toBe(1);
+		// More than the backend listed: the rest are counted, the first three named.
+		const many = evidenceReport(input({ otherApplicationsNotRun: [1, 2, 3, 4].map(licence), otherApplicationsNotRunCount: 6 }));
+		expect(many.cumulative.notRunNote).toBe(
+			'Not in the table or its sum: 4 licences in force have no run of their licensed terms on this baseline (“Licence 1”, “Licence 2”, “Licence 3” and 1 more), and 2 more not listed, so the table leaves their change out: run them from the application (a licence: Run the licensed terms) and build the report again.'
+		);
+		// Control: none missing, no line.
+		const none = evidenceReport(input({ otherApplications: [other()] }));
+		expect([none.cumulative.notRun, none.cumulative.notRunCount, none.cumulative.notRunNote]).toEqual([[], 0, null]);
+	});
+
+	it('says which terms each listed run applied: an issued licence’s are its licensed terms (evidence-20)', () => {
+		const issued = other({ scenarioId: 'scn-3', scenarioName: 'Issued weir', status: 'decided', outcome: 'licence_issued', runId: 'run-3' });
+		const r = evidenceReport(input({ otherApplications: [other(), issued] }));
+		expect(Object.fromEntries(r.cumulative.applications.map((x) => [x.scenarioName, x.terms]))).toEqual({ 'Farm one dam': 'applied', 'Issued weir': 'licensed' });
+	});
+
 	it('has no Reserve change without a rule table at the outlet', () => {
 		const b = stored('base', base, { ...baseOut, summary: { ...baseOut.summary, ewrAssurance: [] } });
 		const c = evidenceReport(input({ baseline: b, otherApplications: [other()] })).cumulative;
@@ -1666,7 +1698,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-19');
+		expect(r.version).toBe('evidence-20');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1722,7 +1754,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-19');
+		expect(r.version).toBe('evidence-20');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],

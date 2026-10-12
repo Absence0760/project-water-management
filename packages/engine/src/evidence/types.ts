@@ -137,8 +137,17 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * (`bundle-2`) re-runs the pair and checks it. A board without the record is
  * stale (run it again); a pack drafted before keeps its document, and its
  * bundle says the headline isn't included.
+ * evidence-20 (issue #523 G3/G4 review): § 4 no longer drops an application
+ * silently. Every other application that counts on the baseline but has no
+ * run of the ops it counts with there (an issued licence with no run of its
+ * licensed terms, or one varied on appeal since; a submitted application never
+ * run on it) is listed with a fixed line saying it isn't in the table or its
+ * sum and how to run it (`EvidenceCumulative.notRun`, `notRunCount`,
+ * `notRunNote`), and each listed row says which terms its run applied
+ * (`EvidenceCumulativeApplication.terms`: an issued licence's are always its
+ * licensed terms). A pack drafted before keeps its document, without them.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-19';
+export const EVIDENCE_REPORT_VERSION = 'evidence-20';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -383,6 +392,14 @@ export interface EvidenceInput {
 	otherApplications: EvidenceOtherApplicationInput[];
 	/** More than the backend's cap (the newest 50 are listed): the sum is then not assessed. */
 	otherApplicationsTruncated: boolean;
+	/**
+	 * evidence-20: other applications that count on the baseline (as `otherApplications`) but have no run there of
+	 * the ops they count with (an issued licence's licensed terms, a submitted one's own ops), by name, at most the
+	 * backend's cap; absent or [] = none.
+	 */
+	otherApplicationsNotRun?: EvidenceCombinedOtherInput[] | null;
+	/** How many there are in all (more than `otherApplicationsNotRun` lists when cut at the cap); absent = its length. */
+	otherApplicationsNotRunCount?: number | null;
 	/** The other applications to run together with this one, and what the backend found doing so (evidence-11). */
 	combined: EvidenceCombinedInput;
 	/** What the report cites for its methods and limits (the engine's generated lists). */
@@ -741,6 +758,11 @@ export interface EvidenceCumulativeApplication {
 	comparable: boolean;
 	/** Why it isn't counted, in words; null when it is. */
 	reason: string | null;
+	/**
+	 * evidence-20: which ops its run applied: an issued licence's licensed terms (the granted ones or the newest
+	 * variation's, 227/228), a submitted application's own. Absent from a document before evidence-20.
+	 */
+	terms?: 'applied' | 'licensed';
 	/** Its days below the pragmatic EWR at the outlet minus the baseline's. */
 	ewrDays: number | null;
 	/** Its Reserve months met at the outlet minus the baseline's, percentage points; null without a rule table at the outlet. */
@@ -766,6 +788,15 @@ export interface EvidenceCumulative {
 	counted: number;
 	/** The list was cut at the backend's cap: the sum would understate, so it is not assessed. */
 	truncated: boolean;
+	/**
+	 * evidence-20: the other applications that count but have no run of the ops they count with on this baseline,
+	 * so they are in neither the table nor its sum (at most the backend's cap, by name). Absent before evidence-20.
+	 */
+	notRun?: EvidenceCombinedOtherInput[];
+	/** evidence-20: how many there are in all. */
+	notRunCount?: number;
+	/** evidence-20: the fixed line § 4 prints for them (CUMULATIVE_NOT_RUN); null when there are none. */
+	notRunNote?: string | null;
 	/** Σ over the counted applications; null when none carries the measure. */
 	total: { ewrDays: number | null; reservePp: number | null };
 	/** The sum with this report's own change added; null for baseline evidence. */

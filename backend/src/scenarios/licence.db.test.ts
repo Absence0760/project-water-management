@@ -42,6 +42,11 @@ const report = async (u: User) => {
 /** The other applications § 4 reads, by name, with the run each was read from. */
 const listed = async (u: User) => (await report(u)).cumulative.applications.map((a) => [a.scenarioName, a.runId]);
 const combinedNames = async (u: User) => ((await report(u)).cumulative.combined?.applications ?? []).map((a) => a.scenarioName);
+/** § 4's applications that count but have no run of the ops they count with (evidence-20), by name, and its fixed line. */
+const notRun = async (u: User) => {
+	const c = (await report(u)).cumulative;
+	return { names: (c.notRun ?? []).map((a) => a.scenarioName), note: c.notRunNote ?? null };
+};
 
 async function apply(name: string, ops: unknown[]) {
 	const res = await applicant.call('POST', `${P()}/scenarios`, { name, baseRunId: published, ops });
@@ -176,12 +181,29 @@ describe('granted terms (227)', () => {
 		expect(await assessedSha(sid, otherTeam)).toBe(granted);
 		// Page 1's combined row still names it (it needs no run of its own).
 		expect(await combinedNames(owner)).toContain('Upper dam');
+		// § 4 doesn't drop it silently (evidence-20): it is named, with the line saying it has no run of its licensed terms.
+		const missing = await notRun(owner);
+		expect(missing.names).toContain('Upper dam');
+		expect(missing.note).toMatch(/^Not in the table or its sum: \d+ licences? in force ha(s|ve) no run of (its|their) licensed terms on this baseline \(/);
 		// A run of the licensed terms is what § 4 reads, labelled so.
 		const licensedRun = await run(assessor, sid, 'licensed');
 		const [meta] = await rowsAs<{ label: string; recorded: unknown }>(owner, `SELECT label, inputs->'scenario' AS recorded FROM model_run WHERE id = $1`, [licensedRun]);
 		expect(meta!.label).toBe('Upper dam (as licensed)');
 		expect(meta!.recorded).toMatchObject({ opsSha256: granted, ops: [dam(upper.id, 150_000)] });
 		expect(await listed(owner)).toContainEqual(['Upper dam', licensedRun]);
+		// Now in the table, saying its run is of the licensed terms, and no longer among the missing.
+		const row = (await report(owner)).cumulative.applications.find((a) => a.scenarioName === 'Upper dam');
+		expect(row).toMatchObject({ status: 'decided', terms: 'licensed' });
+		expect((await notRun(owner)).names).not.toContain('Upper dam');
+	});
+
+	it('names a submitted application never run on the baseline, as the RLS lets the reader see it (evidence-20)', async () => {
+		await apply('Never run', [dam(upper.id, 205_000)]);
+		const missing = await notRun(owner);
+		expect(missing.names).toContain('Never run');
+		expect(missing.note).toMatch(/submitted applications? ha(s|ve) no run of (its|their) ops on it \(.*“Never run”/);
+		// A viewer reads no submitted application at all, so isn't told its name either (positive control: the owner above).
+		expect((await notRun(viewer)).names).not.toContain('Never run');
 	});
 
 	it('has no licensed terms to run while nothing is issued', async () => {
@@ -260,10 +282,12 @@ describe('appeal events (228)', () => {
 		expect(varied).toMatchObject({ position: 4, kind: 'varied', terms: { ops: [dam(upper.id, 140_000)], conditions: 'As the court ordered.', asApplied: false } });
 		expect(s.licence).toEqual({ inForce: true, from: 'event', eventId: varied.id, appealPending: false });
 		expect(await assessedSha(sid, otherTeam)).toBe(varied.terms.opsSha256);
-		// The run of the decision's terms no longer stands for it; a run of the varied terms does.
+		// The run of the decision's terms no longer stands for it, and § 4 says so (evidence-20); a run of the varied terms does.
 		expect((await listed(owner)).map(([n]) => n)).not.toContain('Appealed dam');
+		expect((await notRun(owner)).names).toContain('Appealed dam');
 		const variedRun = await run(assessor, sid, 'licensed');
 		expect(await listed(owner)).toContainEqual(['Appealed dam', variedRun]);
+		expect((await notRun(owner)).names).not.toContain('Appealed dam');
 		expect(await combinedNames(owner)).toContain('Appealed dam');
 	});
 
