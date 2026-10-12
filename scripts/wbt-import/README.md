@@ -509,11 +509,11 @@ fixture cells whose text SheetJS read differently; `sourceWorkbooks.test.ts`
 compares the client workbooks, allowing only differences that
 `explainedByDecoding()` puts down to the text decoding.
 
-**In the UI.** **Import b023 workbook** on the project list runs the port in a
+**In the UI.** **Import workbook** on the project list runs the port in a
 Web Worker (`import.worker.ts`: the picked file goes in, progress per sheet
 comes out, then the project, notes and unmapped report), shows the review,
 and posts the project to `POST /projects/import`, the same route and
-validation as a `.json` file ([docs/ui.md](../../docs/ui.md#import-a-b023-workbook)).
+validation as a `.json` file ([docs/ui.md](../../docs/ui.md#import-a-workbook)).
 The review's gauge option is `gaugeAsReference` (a date and factor for the
 scaling), and its *River pumping units* option, shown only when a unit is
 flagged as probable run-of-river, is `runOfRiver` (`--run-of-river`, same

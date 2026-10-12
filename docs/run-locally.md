@@ -617,8 +617,8 @@ WBT_GAUGE_SCALE_FACTOR=F
 and, for a workbook with units that pump straight from the river, to
 import the units the importer flags as probable run-of-river with the
 run-of-river supply rule (issue #54, 2c/2d; off unless set; the in-app
-**Import b023 workbook** review has the same option as its *River pumping
-units* checkbox, [ui.md](./ui.md#import-a-b023-workbook)):
+**Import workbook** review has the same option as its *River pumping
+units* checkbox, [ui.md](./ui.md#import-a-workbook)):
 
 ```bash
 WBT_RUN_OF_RIVER=1
@@ -680,7 +680,7 @@ It's the same code path as `import:project` (`POST /projects/import`,
 how a catchment gets into production ([deployment.md](./deployment.md#getting-a-catchment-into-production)).
 
 **Or import the workbook itself in the UI**, with no Python at all: choose
-**Import b023 workbook** on the project list and pick the `.xlsm` (or
+**Import workbook** on the project list and pick the `.xlsm` (or
 `.xlsx`). It's read in the browser, in a Web Worker, with progress per sheet
 and Cancel; then the review shows what's in it, the importer's notes (with
 warnings marked), the **unmapped report** (what couldn't be carried across as

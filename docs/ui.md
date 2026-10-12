@@ -372,9 +372,9 @@ anchor. `e2e/tests/planted-areas-import.spec.ts` checks the page.
 | Allocations, Import registered volumes | CSV, 2 MB, 5 000 rows, 200 columns | the template's fewest columns, a take and a storage (`ALLOCATIONS_EXAMPLE`); **Download the CSV template** stays beside it | each row's line, in the preview |
 | Project, Invite farmers (CSV) | pasted rows, or .csv/.txt | `invite-farmers-example.csv`, built from the project's first two units (`inviteExampleCsv`) | each row's line, in the preview |
 | Map, Upload a GeoJSON file | .geojson/.json, 5 MB, 500 features | `example-features.geojson` (`map/example-features.geojson`): a boundary, a parcel, a river and a gauge, each with its `kind` | each feature's place (“Feature 3 …”) |
-| Load crop factors, a b023 workbook | .xlsx/.xlsm, the whole tool | – | the missing named ranges; the crops to check |
+| Load crop factors, a Water Balance Tool workbook | .xlsx/.xlsm, the whole tool | – | the missing named ranges; the crops to check |
 | Load crop factors, a hydrological-unit-based workbook | .xlsx/.xlsm with [Crop_Factors] | the table's shape (`NODE_FACTORS_EXAMPLE`) | each warning's cell |
-| Import a b023 workbook | .xlsm/.xlsx, 150 MB, a b02x build | – | the missing named ranges; sheet and cell |
+| Import a workbook | .xlsm/.xlsx, 150 MB, a build the importer reads | – | the missing named ranges; sheet and cell |
 | Import a project file | .json, 5 MB | – (*Download project (JSON)* writes one) | the line and column where the JSON stops (`jsonErrorAt`) |
 | Settings, the daily EWR at the outlet and each Reserve rule table (`settings/DrmFormatHelp.svelte`) | a DRM .rul or .tab (plain text, either line ending); a rule table also a CSV, which opens its paste dialog | `drm-example.rul` (m³/s), `drm-example-mcm.rul`, `drm-example.tab` (`drmFiles.ts drmExampleFiles`) and the CSV layouts (`ewr-example.csv`; `ewr-total-example.csv`, `ewr-low-flow-example.csv`) | the file's line (“line 13: the Jan row of the total Reserve block needs 10 numbers…”) |
 | Settings, API keys (**Expected format of a request**) | JSON to `/ingest/v1/series/merge` | the merge body (`INGEST_EXAMPLE_BODY`) | `details`, each problem's place in the body |
@@ -2127,7 +2127,7 @@ line).
 me?" on the first screen, then lists every project you can see. Its header
 has the title, one line with the count and the EWR status of the catchments
 in view ("50 catchments · EWR, last 30 days: 2 red, 1 amber, 18 green"),
-and **Import b023 workbook**, **Import project file (.json)** and **New
+and **Import workbook**, **Import project file (.json)** and **New
 project**. Both import buttons open the same dialog; the button only
 sets its wording and what the file picker offers, and the picked file's type
 decides how it's read, so a workbook picked from the JSON button still works.
@@ -2350,15 +2350,26 @@ Its preview and submit steps take an already-parsed document
 (`ParsedImport = { file, notes }`), so a second source only has to produce
 one; `ImportPreview`'s `extra` snippet takes whatever else that source shows.
 
-### Import a b023 workbook
+### Import a workbook
 
-**Import b023 workbook** (WP-1.31) turns a Water Balance Tool b023 `.xlsm` or
-`.xlsx` into a project with no Python. The workbook never leaves the browser:
+**Import workbook** (WP-1.31) turns a Water Balance Tool workbook (`.xlsm` or
+`.xlsx`) into a project with no Python. The workbook never leaves the browser:
 it's read in a Web Worker (`lib/spreadsheet/import/import.worker.ts`, loaded
 only now; [architecture.md § Code splitting](./architecture.md#code-splitting-frontend)),
 and only the extracted project is sent to `POST /projects/import`, like a
 `.json` file. The view logic is `import/workbookFile.ts`; the review's
 workbook part is `WorkbookReview.svelte`.
+
+The app never shows the client build's code name ("b023", "b02x"; issue
+#523): the button is *Import workbook*, a file is "a Water Balance Tool
+workbook", and the legacy runoff model is "the original workbook's".
+Stored values keep it (`source: 'b023-workbook'`, the `not-b023` failure
+code), and an import record stored before the rename shows its importer as
+the workbook importer (`importerLabel`). `lib/noB023.test.ts` fails on the
+name in any string a user can meet: template text, attributes and script
+strings of every component, and the string literals of the frontend, backend
+and engine modules (comments, imports, type literals, a help entry's
+`source` and a short list of stored ids aside).
 
 1. **Pick** the workbook (up to 150 MB).
 2. **Reading:** a progress bar and "Reading sheet *Flow data* (7 of 9)…" per
@@ -2366,7 +2377,7 @@ workbook part is `WorkbookReview.svelte`.
    **Cancel**, which stops the worker at once and returns to the picker.
    Failures come back here, each with its own headline and the importer's
    message:
-   - *not a b023 workbook*: the named ranges it lacks (the first eight, then
+   - *not a Water Balance Tool workbook*: the named ranges it lacks (the first eight, then
      "and N more");
    - *unsupported build* (AppSettings `zAppVer` isn't b02x);
    - *too large* (the file, the sheet count, or the parts it reads unpacking
@@ -8334,7 +8345,7 @@ read it before.
   the badge and the evidence line (a link to the section). Above the results,
   a warning appears when a run made **after** the nominated run uses a
   **different runoff model** ("1 run made after the nominated evidence run “A”
-  uses a different runoff model (legacy (b023 workbook), not GR4J). The
+  uses a different runoff model (legacy (original workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. Since engine 1.0.0 every new run is GR4J, so
   only a stored legacy run made after the nomination can raise it.
@@ -10146,7 +10157,7 @@ baseline card links to the published run's report (**Report**, beside
     methodology statement it cites (version and a 12-digit hash prefix,
     `docs/methodology/`), the run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
-    ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
+    ("Legacy runoff model (the original workbook’s, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
     caveat, the flagged data-quality years (every one, engine ≥ 1.31.1; an
     older run that hit the old cap of 5 says its list may be cut short) and

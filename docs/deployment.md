@@ -1148,9 +1148,9 @@ A catchment reaches production through the app instead
 ([api.md § Import a project file](./api.md#import-a-project-file)):
 
 1. Either import the b023 workbook itself: sign in to production, choose
-   **Import b023 workbook** on the project list and pick the `.xlsm`. It is
+   **Import workbook** on the project list and pick the `.xlsm`. It is
    read in the browser (only the project is sent), and the review shows the
-   importer's notes and the unmapped report ([ui.md](./ui.md#import-a-b023-workbook)).
+   importer's notes and the unmapped report ([ui.md](./ui.md#import-a-workbook)).
 2. Or, locally, extract the workbook (`scripts/wbt-import/extract_project.py`,
    [run-locally.md](./run-locally.md)) or build and check the project in the
    local app and download it (**Download project (JSON)** on its Overview),

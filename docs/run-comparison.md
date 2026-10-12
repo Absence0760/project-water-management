@@ -305,7 +305,7 @@ bottom:
    forcing — nothing to compare). A run whose parameters
    didn't come from Fit automatically reads "none". A stored legacy run
    compared with a GR4J run (every run since engine 1.0.0) reads *"Runoff
-   model: legacy (b023 recession) → GR4J"* in the input diff, followed by any
+   model: legacy (the original workbook’s recession) → GR4J"* in the input diff, followed by any
    GR4J parameter or pan-coefficient changes. The legacy model's own
    calibration settings (`a`, `b`, the season factors, summer months, the
    initial base flow, the recession tables) changed a run only if it ran

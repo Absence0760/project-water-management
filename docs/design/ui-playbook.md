@@ -1581,7 +1581,7 @@ Interaction details that bit:
   Settings.
 - **A head of named actions folds into one control on a phone, keeping the
   names.** The project list's head was three full-width buttons (New
-  project, Import b023 workbook, Import project file) before any project on
+  project, Import workbook, Import project file) before any project on
   a phone. The two imports stay named buttons where there is room (the
   client looks for a named workbook import), and at 560 px they become one
   **Import ▾** beside New project whose list names both; the one picked

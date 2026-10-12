@@ -2063,7 +2063,7 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
   `imported_by` (→ `app_user`, `ON DELETE SET NULL` since 138, like
   `model_run.created_by`: the record stays with who imported it cleared),
   `source` (`b023-workbook` | `project-file`), `file_name` (≤ 255),
-  `importer_version` (≤ 100, e.g. `b023 browser importer (web build …)`),
+  `importer_version` (≤ 100, e.g. `workbook browser importer (web build …)`; a report from before issue #523 says `b023 browser importer`, which the Project page shows as the workbook importer),
   `notes jsonb` (`ImportNote[]`), `unmapped jsonb` (`UnmappedItem[]`), and
   `notes_omitted` / `unmapped_omitted` (items found beyond the kept 500 per
   list). CHECKs: both lists are arrays of at most 500, and together at most

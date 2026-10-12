@@ -1054,7 +1054,7 @@ as before and stores no report:
   "importReport": {
     "source": "b023-workbook",                      // or "project-file"
     "fileName": "catchment_WBT_b023.xlsm",          // 1–255 characters
-    "importerVersion": "b023 browser importer (web build …)",  // 1–100
+    "importerVersion": "workbook browser importer (web build …)",  // 1–100
     "notes": [{ "code": "dam-area-unknown", "severity": "info", "message": "…", "sheet": "Farm spec", "cell": "B4", "element": "Echo Farm" }],
     "unmapped": [{ "code": "transfer-inout-formula", "message": "…", "sheet": "Transfers", "cell": "T7", "element": "Echo Farm", "text": "=S7*0.9-V7" }],
     "notesOmitted": 0, "unmappedOmitted": 0         // items beyond what was kept (default 0)

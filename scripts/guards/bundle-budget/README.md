@@ -262,7 +262,7 @@ ceilings still append here.
             unchanged. The in-browser b023 workbook import (WP-1.31, issue
             #11). Measured on the base 02b6f1e → this change: total 591 →
             696 KB. New: workers/import.worker-*.js, 101 KB, loaded only
-            when someone picks a workbook in "Import b023 workbook". It is
+            when someone picks a workbook in "Import workbook". It is
             SheetJS's mini build (the same ~80 KB the export worker
             carries; mini reads .xlsm as well as .xlsx, measured on both by
             the parity tests) plus the parser (the TypeScript port of

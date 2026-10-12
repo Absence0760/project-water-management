@@ -1638,13 +1638,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.31 In-browser b023 workbook import
 
-- **Status: landed (2026-09-25, issue #11).** **Import b023 workbook** on the
+- **Status: landed (2026-09-25, issue #11).** **Import workbook** (until issue #523, *Import b023 workbook*) on the
   project list reads the workbook in `lib/spreadsheet/import/import.worker.ts`
   (the TypeScript port and its streaming workbook reader, 25 KB gzip; it
   shipped on SheetJS CE's mini build at 101 KB) and submits through
   `POST /projects/import`;
   the review shows the counts, the importer's notes, the unmapped report
-  and the gauge-as-reference option (ui.md § Import a b023 workbook). The
+  and the gauge-as-reference option (ui.md § Import a workbook). The
   notes and unmapped report are kept with the project (017_project_import,
   `GET /projects/:id/import-report`) and shown on its Overview's Import
   record (ui.md § Overview). Departures from the plan below:
@@ -1692,7 +1692,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Data model:** none.
 - **API:** reuses the import route.
 - **UI:**
-  - "Import b023 workbook" on the project list;
+  - "Import workbook" on the project list;
   - states: parsing (progress per sheet), a review screen (counts, the
     unmapped report, warnings, name), importing, done (link);
   - errors: not a b023 workbook, or an unsupported version;

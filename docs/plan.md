@@ -42,7 +42,7 @@ and [data-model.md](./data-model.md)):
 - Time series are stored as `double precision[]`, and run outputs as one array
   per series. Sessions use a JWT in an httpOnly cookie. Migrations are plain
   SQL. Charts use uPlot.
-- **Excel import:** **Import b023 workbook** reads the workbook in the browser
+- **Excel import:** **Import workbook** reads the workbook in the browser
   (a TypeScript port of the Python extractor on its own streaming workbook
   reader, in a Web Worker, WP-1.31). The Python extractor (`scripts/wbt-import`) stays for the
   regression fixtures and `pnpm seed:demo`; both give the same `project.json`.
@@ -124,10 +124,10 @@ departure, and it lists each affected column with its finding ID.
 - ✅ **Import project file (.json)** on the project list (WP-1.8,
   `POST /projects/import`) takes the same `project.json`, or a project's own
   download, into any account, including production.
-- ✅ **Import b023 workbook** on the project list (WP-1.31) reads the `.xlsm`
+- ✅ **Import workbook** on the project list (WP-1.31) reads the `.xlsm`
   itself in the browser, with no Python: a Web Worker, progress per sheet,
   Cancel, a review, then the same `POST /projects/import`
-  ([ui.md § Import a b023 workbook](./ui.md#import-a-b023-workbook)). For
+  ([ui.md § Import a workbook](./ui.md#import-a-workbook)). For
   the client workbook it gives the same `project.json` as the Python, and
   the imported project's run summary is identical.
 - ✅ The importer reports whatever it could not map: hand-written transfer
