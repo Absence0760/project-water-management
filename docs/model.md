@@ -3076,7 +3076,7 @@ units only (0 up to float noise). Each rule's daily volume is its
 catchment by one transfer rule"). The EWR charge (§2.7b) never counts it
 as internal to a site's catchment, so it is an export charged to its
 source, like a rule into a unit outside the site's catchment; the licence
-impact board (§2.11b) counts it as use, as a demand object piped out is.
+impact board (§2.14a) counts it as use, as a demand object piped out is.
 Off unless set: every stored rule names a unit, so no existing result
 changes. Only a dam rule can leave: a river off-take delivers to a unit
 (§2.6a), and the save refuses one with no destination
@@ -5613,10 +5613,16 @@ each **pending the hydrologist**, listed in
   stops a cut taking a town below basic needs. A Priority user with a fixed
   restriction % c asks for D × (1 − c) on every day its level is above 0,
   whatever the level's cuts, marked "fixed %, no basic-needs floor"; every
-  other user keeps taking its demand. Its level is the shared one under
-  `total` and `dams` (the rule's `nodeIds` lists units and doesn't limit
-  it), and under `own` the EWR trigger's alone, as a unit without a dam:
-  a user has no dam to read. Decided on the review days, held and lifted
+  other user keeps taking its demand. That a level whose cuts are all 0 %
+  (a "watch" level) still applies the full % is provisional, pending the
+  hydrologist ([engine-audit.md P2](./engine-audit.md); the alternative
+  applies it only at a level that cuts something). Its level is the shared
+  one under `total` and `dams` (the rule's `nodeIds` lists units and
+  doesn't limit it), and under `own` the EWR trigger's alone, as a unit
+  without a dam: a user has no dam to read. Since the EWR trigger runs only
+  in a scenario (issue #523 B4, §2.9g), a baseline under `own` never
+  restricts a user, so there a Priority user's fixed % acts only through
+  the curtailment table (§2.7c). Decided on the review days, held and lifted
   with the units', and carried in a snapshot (`restrictionLevels`), so every
   user with a % is at the same level each day. A user with a % alone
   doesn't make a rule apply (one that cuts no unit isn't applied). This
