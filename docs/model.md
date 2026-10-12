@@ -3077,6 +3077,9 @@ catchment by one transfer rule"). The EWR charge (§2.7b) never counts it
 as internal to a site's catchment, so it is an export charged to its
 source, like a rule into a unit outside the site's catchment; the licence
 impact board (§2.14a) counts it as use, as a demand object piped out is.
+§2.12's modelled use M and the allocation cap (§2.12a) don't count it yet:
+a capped scenario doesn't limit it (provisional, pending the hydrologist,
+[engine-audit.md X1](./engine-audit.md)).
 Off unless set: every stored rule names a unit, so no existing result
 changes. Only a dam rule can leave: a river off-take delivers to a unit
 (§2.6a), and the save refuses one with no destination
@@ -9841,6 +9844,13 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   run that starts or ends inside a year doesn't shrink it, and a unit may take
   its volume early in the year and then go without (that is what a volume per
   year allows).
+
+  **A dam rule's transfer out of the catchment** (engine 1.86.0, §2.6) is
+  not surface use here, nor in §2.12's M: the cap doesn't limit it, though
+  the licence impact board (§2.14a) counts it as use. Provisional, pending
+  the hydrologist ([engine-audit.md X1](./engine-audit.md): counting it, as
+  a dam draw on the river and not again at a dam beside the river, is the
+  recommended fix).
 
   **A day with no licence in force** (engine ≥ 1.70.0, issue #393, #90 Q24;
   a provisional answer, pending the hydrologist): on a day none of the

@@ -172,6 +172,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Provisional (engine 1.86.0; Needs hydrologist)"
 	},
 	{
+		"id": "X1",
+		"source": "finding",
+		"severity": "Medium (capped scenarios and the Allocations tab for a unit whose dam sends water out of the catchment, engine 1.86.0)",
+		"title": "A transfer out of the catchment isn't its source unit's use for the allocations, while the licence impact board counts it as use",
+		"status": "Provisional (engine 1.86.0; Needs hydrologist)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

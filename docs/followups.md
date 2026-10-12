@@ -568,6 +568,24 @@ runs and accumulations are real) can't be decided without the client.
       cuts the users (`usersCut`), with the drought restriction self-check
       and the Python cross-check, and an `ENGINE_VERSION` bump.
       Trigger: the hydrologist's answer.
+- [ ] **Count a transfer out of the catchment as its source unit's use in
+      the allocations comparison and under the cap** (engine 1.86.0, issue
+      #523 B5, [engine-audit.md X1](./engine-audit.md), [model.md §2.6 and
+      §2.12a](./model.md); provisional, needs the hydrologist). Today §2.12's
+      modelled use M and the cap's surface use (G − GW) leave a dam rule's
+      water pumped out of the catchment out, so a capped scenario doesn't
+      limit it and the Allocations tab doesn't show it, while the licence
+      impact board (§2.14a) counts it as use. The durable fix (recommended):
+      count it as the source's surface use, in M (as a dam draw, for a dam on
+      the river; for a dam beside the river it was already counted at the
+      intake when diverted, so not again) and in the cap (the rule's volume
+      within the source's surface room, shared pro rata between its external
+      rules of one priority), with the self-checks and the Python cross-check.
+      Not built in #523: it changes the transfer rounds in `simulate.ts`, the
+      intake measure in `allocations/compare.ts` and their checks, and
+      whether water pumped out rides on the unit's licence or on a transfer
+      authorisation of its own is the hydrologist's call. Trigger: the
+      hydrologist's answer, or a catchment with a transfer out and a licence.
 - [ ] **A pump capacity on other water users (WP-3.8) to confirm** (engine
       1.58.0, [model.md §2.7c](./model.md); to put to the hydrologist through
       #90 / #46). Built off by default (null = no limit) on these choices;
