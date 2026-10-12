@@ -36,6 +36,13 @@ export interface GenOptions {
 	 * network; run.invariants.test.ts soaks seeds with it on.
 	 */
 	baseflow?: boolean;
+	/**
+	 * true: send some dam rules out of the catchment (toNodeId null, engine
+	 * 1.86.0, issue #523 B5, addExternalTransfers), from their own stream, so
+	 * the rest of each seed is unchanged. Off by default, so every seed pinned
+	 * before them keeps its network; run.invariants.test.ts soaks seeds with it on.
+	 */
+	externalTransfers?: boolean;
 }
 
 const monthly = (f: (m: number) => number): Monthly => Array.from({ length: 12 }, (_, m) => f(m)) as unknown as Monthly;
@@ -429,6 +436,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addUserRestrictions(new Rng(seed ^ 0x0d1c2b3a), nodes);
 	// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), from their own stream, only when asked for.
 	if (opts.baseflow) addBaseflow(new Rng(seed ^ 0x3a8f05c5), nodes);
+	// Dam rules out of the catchment (engine 1.86.0, issue #523 B5), from their own stream, only when asked for.
+	if (opts.externalTransfers) addExternalTransfers(new Rng(seed ^ 0x47b1e2d9), nodes, transfers);
 	return {
 		settings,
 		model: {
@@ -828,6 +837,36 @@ function addBaseflow(g: Rng, nodes: NetworkNode[]): void {
 		const which = g.int(0, 2);
 		if (which !== 1) n.baseflowLossM3Day = size();
 		if (which !== 0) n.baseflowGainM3Day = size();
+	}
+}
+
+/**
+ * Dam rules out of the catchment (engine 1.86.0, issue #523 B5, docs/model.md
+ * §2.6): a third of the dam rules (never a river off-take, which delivers to a
+ * unit) sent out instead, and in half the seeds one to two new ones from
+ * random farms (with a dam or not), each from a trickle to more than the dam
+ * holds, monthly rates now and then, tied priorities, some off.
+ */
+function addExternalTransfers(g: Rng, nodes: NetworkNode[], transfers: Transfer[]): void {
+	const kind = new Map(nodes.map((n) => [n.id, n.kind]));
+	for (const t of transfers) if (t.source !== 'river' && kind.get(t.fromNodeId) === 'farm' && g.bool(0.35)) t.toNodeId = null;
+	const farms = nodes.filter((n) => n.kind === 'farm').map((n) => n.id);
+	if (!farms.length || !g.bool(0.5)) return;
+	const count = g.int(1, 2);
+	for (let k = 0; k < count; k++) {
+		const t: Transfer = {
+			id: `x${k}`,
+			fromNodeId: g.pick(farms),
+			toNodeId: null,
+			months: g.bool(0.2) ? [...new Set(Array.from({ length: g.int(1, 8) }, () => g.int(1, 12)))] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+			maxRateM3s: g.pick([0, g.logFloat(1e-5, 0.05), g.logFloat(1e-3, 10)]),
+			dailyCapM3: g.bool(0.6) ? null : g.logFloat(1, 1e5),
+			minStoragePct: g.frac(0.3, 0.2),
+			enabled: g.bool(0.9),
+			priority: g.pick([0, 0, 1, k])
+		};
+		if (g.bool(0.2)) Object.assign(t, withMonthlyRates(Array.from({ length: 12 }, () => (g.bool(0.3) ? 0 : g.logFloat(1e-4, 1)))));
+		transfers.push(t);
 	}
 }
 

@@ -6,7 +6,7 @@
 //   FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz
 import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
-import { runModel } from './run';
+import { runModel, withVerification } from './run';
 import { OPERATING_DEFAULTS, upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput, Rng, withoutReachLosses, withoutRiverSources } from './testing/fuzz';
 import { hasMonthlyRates, transferRatesM3s, withMonthlyRates } from './network/transferRates';
@@ -543,5 +543,26 @@ describe('calibration statistic identities', () => {
 			const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
 			expect(calibrationStats(obs.map(() => mean * 86_400), obs).nse).toBeCloseTo(0, 9);
 		}
+	});
+});
+
+describe('dam rules out of the catchment with base flow (engine 1.86.0, issue #523 B5 and B1)', () => {
+	it('random networks with external transfers and base-flow losses and gains: every invariant holds, both water balances included', () => {
+		let seen = 0;
+		for (let seed = 1; seed < 400 && seen < 8; seed++) {
+			const x = randomInput(seed, { maxDays: 300, baseflow: true, externalTransfers: true });
+			if (!x.model.transfers.some((t) => t.toNodeId === null)) continue;
+			const out = withVerification(x, runModel(x));
+			const wb = out.summary.waterBalance!.total;
+			// Only the seeds where water actually left: an external rule that moved nothing proves little.
+			if (!((wb.externalTransferM3 ?? 0) > 0)) continue;
+			seen++;
+			expect(checkAll(x, seed), `seed ${seed}`).toBeNull();
+			// The water account's residual and the water balance's.
+			expect(checkWaterAccount(out), `seed ${seed}`).toBeNull();
+			const scale = Math.max(1, wb.naturalFlowM3, wb.baseflowGainM3 ?? 0, wb.openingStorageM3);
+			expect(Math.abs(wb.residualM3), `seed ${seed}`).toBeLessThan(1e-6 * scale);
+		}
+		expect(seen).toBe(8);
 	});
 });
