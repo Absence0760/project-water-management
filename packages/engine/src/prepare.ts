@@ -315,39 +315,8 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	// zero-run handling, and replaced after the accumulations are applied.
 	// settings.dataQuality (engine ≥ 1.20.0): its zero-run and low-vs-CHIRPS limits decide which rain is suspect, everywhere below.
 	const dq = settings.dataQuality;
-	const checks = { dq, chirps: series.rain_chirps_mm ?? null };
 	const doubleMass = doubleMassOf(series, settings.zeroRainRuns, dq);
-	const replaced = rainSourceSpans(settings.rainSource);
-	const isReplaced = (day: number) => replaced.some((w) => day >= w.from && day <= w.to);
-	const fitOpts = { fitPeriod: settings.chirpsFitPeriod, ...(replaced.length ? { replaced } : {}), dq };
-	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection, fitOpts);
-	const claimed = new Set<number>();
-	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
-	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day), isReplaced, checks);
-	const pinned = options.pinned;
-	// A pinned fit (a resumed run) stands in for the input's own; without a CHIRPS series there is nothing to correct.
-	const chirpsCorrection =
-		pinned?.chirpsCorrection && series.rain_chirps_mm
-			? clonePlain(pinned.chirpsCorrection)
-			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), {
-					...fitOpts,
-					// The gap map (engine ≥ 1.53.0, CR-23): fitted with the factors, on the same days.
-					...(settings.chirpsQuantileMap ? { quantileMap: settings.chirpsQuantileMap } : {})
-				});
-	const chirpsFit = options.captureFits && chirpsCorrection ? clonePlain(chirpsCorrection) : null;
-	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
-	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
-	const accumulation = acc ? applyAccumulations(acc, catchment, start) : null;
-	const rsFactors = settings.rainSource.length ? rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc), dq) : [];
-	const rsKeys = options.pinned || options.captureFits ? settings.rainSource.map((p) => stableStringify(p)) : [];
-	if (pinned) {
-		rsKeys.forEach((key, k) => {
-			const pin = pinned.rainSourceFactors.find((f) => f.key === key);
-			if (pin) rsFactors[k] = clonePlain(pin.factors);
-		});
-	}
-	const rsFit = options.captureFits ? rsKeys.map((key, k) => ({ key, factors: clonePlain(rsFactors[k]!) })) : [];
-	const rainSource = settings.rainSource.length ? applyRainSource(series, settings.rainSource, rsFactors, catchment, start) : null;
+	const { chirpsCorrection, chirpsFit, zeroRain, catchment, accumulation, rsFit, rainSource } = checkedRain(settings, series, start, days, options);
 	// CHIRPS has no negative rain: a value below 0 is a no-data code (the product's −9999), missing as the factor
 	// fit and the accumulation check already read it, so it neither blocks the forecast fallback nor runs as rain
 	// (engine ≥ 1.69.0, §2.4b). The series checks already warn about each negative value.
@@ -427,6 +396,113 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 		flowFill,
 		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit } } : {})
 	};
+}
+
+/** The catchment rain checks' outputs over a window (checkedRain). */
+export interface CheckedRain {
+	chirpsCorrection: ChirpsCorrection | null;
+	chirpsFit: ChirpsCorrection | null;
+	zeroRain: ZeroRainMask | null;
+	/** The catchment rain aligned to the window after §2.4c, §2.4d and §2.4e: null where it has no value or a check set the reading aside. */
+	catchment: (number | null)[];
+	accumulation: AccumulationRun | null;
+	rsFit: PreparedFits['rainSourceFactors'];
+	rainSource: ReturnType<typeof applyRainSource> | null;
+}
+
+/**
+ * The checked catchment rain over the window start … start + days − 1: the
+ * stored reading with §2.4c's suspect zero runs and listed missing periods
+ * set aside (null), §2.4d's accumulations spread or set aside, and §2.4e's
+ * rain-source periods written in. Every check reads the whole stored record,
+ * so a day's value doesn't depend on the window. The rain rule 2 of per-unit
+ * rain scales, and (issue #500, 1c) the rain the reference gauge's factors
+ * are fitted on.
+ */
+export function checkedRain(settings: ProjectSettings, series: ModelInput['series'], start: number, days: number, options: PrepareOptions = {}): CheckedRain {
+	const dq = settings.dataQuality;
+	const checks = { dq, chirps: series.rain_chirps_mm ?? null };
+	const replaced = rainSourceSpans(settings.rainSource);
+	const isReplaced = (day: number) => replaced.some((w) => day >= w.from && day <= w.to);
+	const fitOpts = { fitPeriod: settings.chirpsFitPeriod, ...(replaced.length ? { replaced } : {}), dq };
+	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection, fitOpts);
+	const claimed = new Set<number>();
+	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
+	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day), isReplaced, checks);
+	const pinned = options.pinned;
+	// A pinned fit (a resumed run) stands in for the input's own; without a CHIRPS series there is nothing to correct.
+	const chirpsCorrection =
+		pinned?.chirpsCorrection && series.rain_chirps_mm
+			? clonePlain(pinned.chirpsCorrection)
+			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), {
+					...fitOpts,
+					// The gap map (engine ≥ 1.53.0, CR-23): fitted with the factors, on the same days.
+					...(settings.chirpsQuantileMap ? { quantileMap: settings.chirpsQuantileMap } : {})
+				});
+	const chirpsFit = options.captureFits && chirpsCorrection ? clonePlain(chirpsCorrection) : null;
+	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
+	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
+	const accumulation = acc ? applyAccumulations(acc, catchment, start) : null;
+	const rsFactors = settings.rainSource.length ? rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc), dq) : [];
+	const rsKeys = options.pinned || options.captureFits ? settings.rainSource.map((p) => stableStringify(p)) : [];
+	if (pinned) {
+		rsKeys.forEach((key, k) => {
+			const pin = pinned.rainSourceFactors.find((f) => f.key === key);
+			if (pin) rsFactors[k] = clonePlain(pin.factors);
+		});
+	}
+	const rsFit = options.captureFits ? rsKeys.map((key, k) => ({ key, factors: clonePlain(rsFactors[k]!) })) : [];
+	const rainSource = settings.rainSource.length ? applyRainSource(series, settings.rainSource, rsFactors, catchment, start) : null;
+	return { chirpsCorrection, chirpsFit, zeroRain, catchment, accumulation, rsFit, rainSource };
+}
+
+/**
+ * The checked catchment rain (checkedRain) over the whole stored record: the
+ * catchment gauge's span and every rain-source period's days with a reading
+ * of its series. Null without either. Issue #500 decision 1c: the reference
+ * gauge's monthly factors (runoff/unitRain.ts referenceFit) are fitted on
+ * this, not on the series as stored. `fitExcludeAccumulations` blanks every
+ * accumulation window's days but a reading kept as recorded, as the §2.4b fit
+ * leaves them out (fitExcludedWindows): a spread window's days are shaped
+ * from CHIRPS, so fitting gauge against CHIRPS on them would pull a factor
+ * towards 1.
+ */
+export function checkedCatchmentRainRecord(settings: ProjectSettings, series: ModelInput['series'], opts: { fitExcludeAccumulations?: boolean } = {}): DailySeries | null {
+	let first = Infinity;
+	let last = -Infinity;
+	const s = series.rain_catchment_mm;
+	if (s && s.values.length) {
+		first = toEpochDay(s.startDate);
+		last = first + s.values.length - 1;
+	}
+	for (const p of settings.rainSource) {
+		const alt = series[p.series];
+		if (!alt || alt.values.length === 0) continue;
+		const d0 = toEpochDay(alt.startDate);
+		const a = Math.max(d0, toEpochDay(p.start));
+		const b = Math.min(d0 + alt.values.length - 1, toEpochDay(p.end));
+		if (a > b) continue;
+		first = Math.min(first, a);
+		last = Math.max(last, b);
+	}
+	if (!Number.isFinite(first)) return null;
+	const r = checkedRain(settings, series, first, last - first + 1);
+	if (opts.fitExcludeAccumulations) blankFitExcluded(r, first);
+	return { startDate: fromEpochDay(first), values: r.catchment };
+}
+
+/**
+ * Blank (in place) the days of `r.catchment` (aligned from epoch day `start`)
+ * in an accumulation window the §2.4b fit leaves out: every window but a
+ * reading kept as recorded (fitExcludedWindows' rule).
+ */
+export function blankFitExcluded(r: Pick<CheckedRain, 'catchment' | 'accumulation'>, start: number): void {
+	for (const w of r.accumulation?.info.windows ?? []) {
+		if (w.status === 'kept') continue;
+		const from = Math.max(toEpochDay(w.start), start);
+		const to = Math.min(toEpochDay(w.end), start + r.catchment.length - 1);
+		for (let d = from; d <= to; d++) r.catchment[d - start] = null;
+	}
 }
 
 /** Each record settings.flowGapFill fills, aligned to the run, with its warning; null when none is. */

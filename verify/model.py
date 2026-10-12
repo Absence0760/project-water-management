@@ -457,6 +457,8 @@ def prepare_rain(settings: dict, series: dict) -> dict:
         "pick": pick,
         "factors": factors if bias_on else [None] * 13,
         "fit_factors": factors,
+        # The days §2.4b leaves out for accumulations: window days and readings set aside after an outage.
+        "fit_window_days": window_days | set(outage_readings),
         "first": first,
         "last": last,
         "chirps": h,
@@ -695,7 +697,8 @@ def unsupported(doc: dict) -> list[str]:
 # Runoff from each unit's own rain (docs/model.md §2.4h)
 # --------------------------------------------------------------------------
 
-UNIT_MAP_MIN_YEARS = 5
+# Issue #500 item 4 (operator, 2026-10-09): a unit's CHIRPS mean needs 10 complete years in the MAP period (was 5).
+UNIT_MAP_MIN_YEARS = 10
 
 
 def _clamp(f: float, diag: dict) -> float:
@@ -705,12 +708,12 @@ def _clamp(f: float, diag: dict) -> float:
     return c
 
 
-def chirps_map_factor(hu: Series, map_mm: float, period: tuple[int, int], diag: dict):
-    """§2.4h rule 3: unit MAP ÷ the CHIRPS mean annual rain over the complete
-    calendar years (every day a reading) inside the MAP period; fewer than 5
-    there, every complete year of the record; none at all, None."""
+def complete_years(hu: Series, weight) -> list[tuple[int, float]]:
+    """The complete calendar years (every day a reading) of a unit's CHIRPS,
+    each with its total of v × weight(o) (v itself without a weight), added
+    up in date order."""
     if not hu:
-        return None
+        return []
     first = _dt.date.fromordinal(hu.start).year
     last = _dt.date.fromordinal(hu.end).year
     years: list[tuple[int, float]] = []
@@ -723,9 +726,18 @@ def chirps_map_factor(hu: Series, map_mm: float, period: tuple[int, int], diag: 
             if not valid(v):
                 ok = False
                 break
-            tot += v
+            tot += v if weight is None else v * weight(o)
         if ok:
             years.append((y, tot))
+    return years
+
+
+def unit_chirps_mean(hu: Series, period: tuple[int, int], weight, diag: dict):
+    """§2.4h: a unit's CHIRPS mean annual rain over the complete calendar
+    years inside the MAP period; with fewer than UNIT_MAP_MIN_YEARS (10, issue
+    #500 item 4) there, every complete year of the record; None with no
+    complete year at all."""
+    years = complete_years(hu, weight)
     if not years:
         return None
     inside = [(y, t) for y, t in years if _dt.date(y, 1, 1).toordinal() >= period[0] and _dt.date(y, 12, 31).toordinal() <= period[1]]
@@ -735,19 +747,103 @@ def chirps_map_factor(hu: Series, map_mm: float, period: tuple[int, int], diag: 
     mean = 0.0
     for _, t in use:
         mean += t
-    mean /= len(use)
-    if not mean > 0:
-        # No complete year with rain: nothing to level with, so the next sub-rule (probe unit-rain-map-period).
+    return mean / len(use)
+
+
+def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, diag: dict):
+    """How a unit's CHIRPS reading v on day o is levelled (§2.4h rule 3 and
+    *Reference gauge*, as decided on issue #500): a function (v, o) → rain,
+    or None when the CHIRPS is unusable (item 7a: complete years averaging
+    0 mm, so its chain skips this link).
+
+    With a reference gauge (item 1a): v × f[month] × k_unit, k_unit =
+    clamp(unit MAP ÷ the unit's mean annual (CHIRPS × f)), the mean as above;
+    without a MAP, or with no complete year yet, the factors alone (k = 1).
+    Without one: v × clamp(unit MAP ÷ the mean annual CHIRPS); without a MAP
+    or a complete year, the catchment's §2.4b factors, else raw.
+
+    The function's `kind` says what its level reaches, for a CHIRPS-GEFS
+    forecast day (item 5): 'map' (a MAP factor, or f × k_unit) brings the
+    unit to its MAP; 'shape' (the §2.4b factors, or f without k_unit) does
+    not, so the MAP ratio still applies on top; 'raw' knows no level."""
+
+    def kinded(fn, kind):
+        fn.kind = kind
+        return fn
+
+    if ref is not None:
+        f = ref[0]
+        diag["unit_chirps_reference"] += 1
+        mean = unit_chirps_mean(own_c, period, lambda o: f[cal_month(o)], diag)
+        if mean is not None and not mean > 0:
+            diag["unit_chirps_unusable"] += 1
+            return None
+        k = 1.0
+        kind = "shape"
+        if mean is not None and map_mm is not None:
+            k = _clamp(map_mm / mean, diag)
+            kind = "map"
+            diag["unit_k_from_map"] += 1
+        return kinded(lambda v, o, k=k: v * f[cal_month(o)] * k, kind)
+    mean = unit_chirps_mean(own_c, period, None, diag)
+    if mean is not None and not mean > 0:
+        diag["unit_chirps_unusable"] += 1
         return None
-    return _clamp(map_mm / mean, diag)
+    if mean is not None and map_mm is not None:
+        lev_f = _clamp(map_mm / mean, diag)
+        return kinded(lambda v, o: v * lev_f, "map")
+    if has_bias:
+        diag["unit_chirps_bias"] += 1
+
+        def biased(v, o):
+            fm = fac[cal_month(o)]
+            return v * fm if fm is not None else v
+
+        return kinded(biased, "shape")
+    return kinded(lambda v, o: v, "raw")
 
 
-def reference_factors(ur: dict, series: dict, units: list[dict], diag: dict):
+def unit_gauge_checked(settings: dict, series: dict, key: str, diag: dict | None, for_fit: bool = False):
+    """A unit's own gauge after the catchment gauge's checks (issue #500
+    item 6, engine 1.85.0), with the catchment's modes, fill threshold and
+    data-quality limits: §2.4c's zero runs and §2.4d's accumulations. The
+    dated lists (missing, keep-dry, kept readings, listed accumulations)
+    name days of the catchment gauge's record, so they don't apply. The
+    CHIRPS the checks compare with is the unit's own, else the catchment's.
+    A negative value is a no-data code, so a blank (§2.4h rule 1). Returns
+    o → the checked reading, None on a day the checks removed (or with no
+    reading); `for_fit` also None on the days §2.4b leaves out for
+    accumulations (the reference fit, item 1c)."""
+    raw = series.get(key)
+    if not raw:
+        return lambda o: None
+    uid = key.split("@", 1)[1]
+    g = {"startDate": raw["startDate"], "values": [v if valid(v) else None for v in raw["values"]]}
+    zr = {**settings["zeroRainRuns"], "missing": [], "keepDry": [], "keepReadings": [], "addAccumulations": []}
+    chirps = series.get(f"rain_chirps_mm@{uid}") or series.get("rain_chirps_mm")
+    prep = prepare_rain({**settings, "zeroRainRuns": zr}, {"rain_catchment_mm": g, "rain_chirps_mm": chirps})
+    out_of_fit = prep["fit_window_days"] if for_fit else set()
+    if diag is not None:
+        diag["unit_gauge_set_aside"] += prep["diag"]["zero_run_days_set_aside"]
+        diag["unit_gauge_windows"] += prep["diag"]["accumulation_windows"]
+
+    def checked(o):
+        v, src = prep["pick"](o)
+        return v if src == 0 and o not in out_of_fit else None
+
+    checked.fit_out = out_of_fit
+    return checked
+
+
+def reference_factors(ur: dict, settings: dict, series: dict, rain: dict, units: list[dict], diag: dict):
     """§2.4h *Reference gauge*: the 12 calendar-month factors (index 1..12),
     Σ gauge ÷ Σ CHIRPS cell over the days of the month both have a reading,
     over the whole stored records; 1 without 90 shared days and 50 mm of
-    CHIRPS; clamped to 0.25–4. Pinned factors replace the fit. None when
-    there is no reference, or its unit is not a land unit."""
+    CHIRPS; clamped to 0.25–4. The gauge is the checked gauge rain (issue
+    #500 item 1c): the catchment gauge as rule 2 reads it (after §2.4c–§2.4d,
+    before the CHIRPS infill), a unit's own after item 6's checks. Pinned
+    factors replace the fit. None when there is no reference, or its unit is
+    not a land unit."""
     ref = ur.get("reference")
     if not ref:
         return None
@@ -758,20 +854,36 @@ def reference_factors(ur: dict, series: dict, units: list[dict], diag: dict):
     pinned = ref.get("pinnedFactors")
     if pinned:
         return [None] + [float(x) for x in pinned], ref_unit
-    gauge = Series(series.get(ref["gauge"]))
+    if ref["gauge"] == "rain_catchment_mm":
+        out_of_fit = rain["fit_window_days"]
+
+        def gauge(o):
+            v, s_ = rain["pick"](o)
+            return v if s_ == 0 and o not in out_of_fit else None
+
+        stored = Series(series.get("rain_catchment_mm"))
+    else:
+        gauge = unit_gauge_checked(settings, series, ref["gauge"], None, for_fit=True)
+        out_of_fit = getattr(gauge, "fit_out", set())
+        stored = Series(series.get(ref["gauge"]))
     cell = Series(series.get("rain_chirps_cell_mm@" + ref["unitId"]))
     n = [0] * 13
     g = [0.0] * 13
     c = [0.0] * 13
-    if gauge and cell:
+    if cell:
         for o in range(cell.start, cell.end + 1):
             cv = cell.get(o)
-            gv = gauge.get(o)
+            gv = gauge(o)
             if valid(cv) and valid(gv):
                 m = cal_month(o)
                 n[m] += 1
                 g[m] += gv
                 c[m] += cv
+            elif valid(cv) and valid(stored.get(o)):
+                # A day the checks removed from the gauge (item 1c): out of the fit.
+                diag["unit_ref_days_checked_out"] += 1
+                if o in out_of_fit:
+                    diag["unit_ref_window_days_out"] += 1
     out = [None]
     for m in range(1, 13):
         if n[m] >= 90 and c[m] >= 50:
@@ -782,7 +894,7 @@ def reference_factors(ur: dict, series: dict, units: list[dict], diag: dict):
     return out, ref_unit
 
 
-def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], finals: list[float], p_used: list[float], units: list[dict], diag: dict) -> dict[str, list[float]]:
+def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: list[int], finals: list[float], sources: list, p_used: list[float], units: list[dict], forecast_source, diag: dict) -> dict[str, list[float]]:
     """Each land unit's daily rain (§2.4h): its rule, chosen from the records
     the input holds, then the rule's chain day by day; 0 mm where no link has
     a value, and never below 0 (GR4J's rain)."""
@@ -794,7 +906,9 @@ def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], final
     has_catchment = bool(c_raw) and any(v is not None and math.isfinite(v) for v in c_raw["values"])
     fac = rain["factors"]
     has_bias = any(f is not None for f in fac[1:])
-    ref = reference_factors(ur, series, units, diag)
+    ref = reference_factors(ur, settings, series, rain, units, diag)
+    # Issue #500 item 5: a CHIRPS-GEFS forecast is levelled like the unit's CHIRPS.
+    gefs = forecast_source == "chirps_gefs"
     out: dict[str, list[float]] = {}
     for u in units:
         uid = u["id"]
@@ -805,31 +919,18 @@ def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], final
         map_mm = u.get("mapMm")
         cond2 = gauge_map is not None and map_mm is not None and has_catchment
         ratio = _clamp(map_mm / gauge_map, diag) if cond2 else 1.0
-        # The unit's CHIRPS, levelled as in rule 3: its MAP factor, else the catchment's §2.4b factors, else raw;
-        # with a reference gauge, the reference's monthly factors × clamp(unit MAP ÷ the reference unit's MAP) instead.
-        ref_r = None
-        if ref is not None and has_c:
-            ref_map = ref[1].get("mapMm")
-            ref_r = _clamp(map_mm / ref_map, diag) if (map_mm is not None and ref_map is not None) else 1.0
-            diag["unit_chirps_reference"] += 1
-        lev_f = chirps_map_factor(own_c, map_mm, period, diag) if (has_c and map_mm is not None and ref_r is None) else None
-        if has_c and lev_f is None and ref_r is None and has_bias:
-            diag["unit_chirps_bias"] += 1
+        # The unit's CHIRPS, levelled (rule 3, or the reference's f × k_unit); None = unusable (item 7a).
+        level = unit_chirps_level(own_c, map_mm, period, ref, fac, has_bias, diag) if has_c else None
 
-        def lev(o, own_c=own_c, lev_f=lev_f, ref_r=ref_r):
+        def lev(o, own_c=own_c, level=level, ratio=ratio):
+            # A level that only shapes the unit's CHIRPS (§2.4b factors, f without k_unit) keeps the MAP ratio on top,
+            # so a gap in the gauge reads at the gauge days' level (issue #500, engine 1.85.0).
             v = own_c.get(o)
-            if not valid(v):
+            if not valid(v) or level is None:
                 return None
-            if ref_r is not None:
-                return v * ref[0][cal_month(o)] * ref_r
-            if lev_f is not None:
-                return v * lev_f
-            f = fac[cal_month(o)] if has_bias else None
-            return v * f if f is not None else v
+            return level(v, o) * (ratio if level.kind == "shape" else 1.0)
 
-        def own(o, own_g=own_g):
-            v = own_g.get(o)
-            return v if valid(v) else None
+        own = unit_gauge_checked(settings, series, f"rain_catchment_mm@{uid}", diag) if has_g else (lambda o: None)
 
         def gauge(o):
             v, src = rain["pick"](o)
@@ -864,9 +965,20 @@ def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], final
             if v is not None:
                 diag["unit_link_days"] += 1
             else:
-                # The catchment's rain (catchment ?? corrected CHIRPS ?? forecast) × the MAP ratio, else × 1.
+                # The catchment's rain (catchment ?? corrected CHIRPS ?? forecast) × the MAP ratio, else × 1;
+                # a CHIRPS-GEFS forecast day levelled like the unit's usable CHIRPS instead (item 5): a level that
+                # reaches the unit's MAP alone, one that only shapes it (§2.4b factors, f without k_unit) × the
+                # ratio too, a raw CHIRPS (no level known) the ratio alone.
                 cr = finals[i]
-                v = None if math.isnan(cr) else cr * ratio
+                if math.isnan(cr):
+                    v = None
+                elif gefs and sources[i] == 4 and level is not None and level.kind != "raw":
+                    v = level(cr, o) * (1.0 if level.kind == "map" else ratio)
+                    diag["unit_forecast_levelled"] += 1
+                    if level.kind == "shape" and ratio != 1.0:
+                        diag["unit_forecast_shape_ratio"] += 1
+                else:
+                    v = cr * ratio
                 if v is not None:
                     diag["unit_catchment_days"] += 1
             vals.append(0.0 if v is None or v < 0 else v)
@@ -901,7 +1013,11 @@ def run(doc: dict) -> dict:
                 unit_rule_gauge=0, unit_rule_gauge_map=0, unit_rule_chirps=0, unit_rule_catchment=0, unit_clamped=0,
                 unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0,
                 # The reference gauge (§2.4h, engine >= 1.80.0): units levelled by it, months fitted, references not on a land unit.
-                unit_chirps_reference=0, unit_ref_months_fitted=0, unit_ref_not_land=0)
+                unit_chirps_reference=0, unit_ref_months_fitted=0, unit_ref_not_land=0,
+                # Issue #500's decisions: k_unit from a MAP, unusable CHIRPS (7a), CHIRPS-GEFS forecast days levelled (5),
+                # a unit gauge's days set aside and accumulation windows (6), reference fit days the checks left out (1c).
+                unit_k_from_map=0, unit_chirps_unusable=0, unit_forecast_levelled=0, unit_forecast_shape_ratio=0, unit_gauge_set_aside=0,
+                unit_gauge_windows=0, unit_ref_days_checked_out=0, unit_ref_window_days_out=0)
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})
@@ -986,7 +1102,7 @@ def run(doc: dict) -> dict:
             exch.append(r["exchange"])
         rain_gr4j = p_used
     else:
-        forcing = unit_rain_forcing(ur, series, rain, days, finals, p_used, units, diag)
+        forcing = unit_rain_forcing(ur, settings, series, rain, days, finals, sources, p_used, units, doc.get("forecastRainSource"), diag)
         local = {}
         acc = {k: [0.0] * n for k in ("rain", "aet", "prod", "rout", "uh", "exch")}
         natural = [0.0] * n

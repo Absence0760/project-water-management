@@ -175,7 +175,7 @@ test('Settings switches rain for each unit on, with the gauge’s MAP and its so
 	// A short period notes, but saves.
 	await group.getByLabel('First year').fill('2018');
 	await group.getByLabel('First year').blur();
-	await expect(group.getByTestId('unit-rain-period-note')).toContainText('3 years: the MAP factor wants at least 5 complete years');
+	await expect(group.getByTestId('unit-rain-period-note')).toContainText('3 years: the MAP factor wants at least 10 complete years');
 	await expectNoViolations(page, { include: '[data-testid="unit-rain-settings"]' });
 	await saveSettings(page);
 	await expect(page.getByTestId('summary-flow')).toContainText('rain for each unit');

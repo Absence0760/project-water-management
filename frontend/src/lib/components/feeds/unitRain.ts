@@ -6,7 +6,7 @@ import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProduct, UnitRainP
 import { fmtNum } from '$lib/format/number';
 import { CHIRPS_PRODUCT_FIRST_DAY, healthMessage, STATE_LABELS, type FeedMeta, type FeedState } from './feeds';
 
-/** The product a new set of unit feeds reads unless the owner picks the other: rnl, the record from 1981 (provisional, issue #482 question 3; the server's DEFAULT_UNIT_PRODUCT). */
+/** The product a new set of unit feeds reads unless the owner picks the other: rnl, the record from 1981 (decided in issue #500, answer 3; the server's DEFAULT_UNIT_PRODUCT). */
 export const UNIT_RAIN_DEFAULT_PRODUCT: UnitRainProduct = 'rnl';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;

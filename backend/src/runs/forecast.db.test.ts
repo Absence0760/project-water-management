@@ -135,7 +135,10 @@ describe('POST /runs { forecast }', () => {
 		await withUser(owner.id, async (db) => {
 			const fin = await loadRunInput(db, f);
 			expect(JSON.parse(JSON.stringify(runForecastChecked(fin).summary))).toEqual(await summaryOf(f));
+			// The engine reads the forecast's source (engine ≥ 1.85.0, per-unit rain on CHIRPS-GEFS days): the stored input carries it.
+			expect(fin.forecastRainSource).toBe('other');
 			const oin = await loadRunInput(db, o);
+			expect(oin).not.toHaveProperty('forecastRainSource');
 			// The ordinary run stored its input without the tail.
 			expect(oin.series.rain_forecast_mm).toBeUndefined();
 			expect(oin.settings.simulationEnd).toBe('2022-11-04');

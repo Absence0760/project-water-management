@@ -20,7 +20,7 @@
 	import ProposalSource from '$lib/components/proposals/ProposalSource.svelte';
 	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { appliedNotice, candidateLabel, coverageLine, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
+	import { appliedNotice, candidateLabel, coverageLine, coveredText, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
 
 	let {
 		projectId,
@@ -153,9 +153,10 @@
 						</thead>
 						<tbody>
 							{#each data.units as u (u.nodeId)}
+								{@const cov = coveredText(u)}
 								<tr data-node={u.nodeId} data-same={u.same}>
 									<th scope="row"><a href="?tab=network&edit={encodeURIComponent(u.nodeId)}&section=area">{u.name}</a></th>
-									<td class="num">{fmtNum(u.mapMm)}</td>
+									<td class="num">{fmtNum(u.mapMm)}{#if cov}<span class="cov" data-testid="unit-map-covered"><span class="visually-hidden">{', '}</span>{cov}</span>{/if}</td>
 									<td class="num">{fmtNum(u.cells)}</td>
 									<td class="num" title={u.current.mapSource ?? undefined}>{currentText(u)}{#if u.same}<span class="visually-hidden">, the same</span>{/if}</td>
 								</tr>
@@ -163,6 +164,11 @@
 						</tbody>
 					</table>
 				</div>
+				{#if data.units.some((u) => coveredText(u))}
+					<p class="hint muted" data-testid="unit-map-partial">
+						Where the grid has values for only part of a unit’s parcel, its MAP is the mean over that part: check the rest of the parcel gets about the same rain.
+					</p>
+				{/if}
 				{#if data.uncovered.length}
 					<div class="small" data-testid="unit-map-uncovered">
 						<p>Not covered by this grid, so left as they are:</p>
@@ -221,6 +227,12 @@
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 		text-align: right;
+	}
+	/* The coverage under its MAP, so the number column stays narrow. */
+	.cov {
+		display: block;
+		font-size: var(--font-xs);
+		color: var(--text-2);
 	}
 	.slim {
 		padding: 0.5rem 0.75rem;
