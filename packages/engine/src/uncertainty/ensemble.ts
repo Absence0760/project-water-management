@@ -34,6 +34,7 @@ import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { referenceFit } from '../runoff/unitRain';
+import { checkedReferenceGauge } from '../runoff/unitGaugeChecks';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';
@@ -209,7 +210,8 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	const series = { ...Object.fromEntries(kept), rain_chirps_mm: { startDate: run.startDate, values } } as ModelInput['series'];
 	// The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h): the member has no gauge to fit them on, so it pins the
 	// base input's, as its catchment CHIRPS carries the base's §2.4b factors.
-	const ref = referenceFit(run.settings.unitRain, input.series, input.model.nodes, []);
+	const refGauge = run.settings.unitRain?.mode === 'perUnit' ? run.settings.unitRain.reference?.gauge : undefined;
+	const ref = referenceFit(run.settings.unitRain, input.series, input.model.nodes, [], refGauge ? checkedReferenceGauge(run.settings, input.series, refGauge) : undefined);
 	const unitRain = ref && run.settings.unitRain?.reference ? { ...run.settings.unitRain, reference: { ...run.settings.unitRain.reference, pinnedFactors: ref.months.map((m) => m.factor) } } : null;
 	return {
 		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, ...(unitRain ? { unitRain } : {}) }, series },

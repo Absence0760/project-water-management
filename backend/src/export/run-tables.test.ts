@@ -178,6 +178,7 @@ describe('summary sheet', () => {
 				mapMm: 600,
 				cellKey: 'rain_chirps_cell_mm@u0',
 				pinned: false,
+				gaugeChecked: true,
 				months: [{ ...month(1), sharedDays: 60, ownFactor: null, factor: 1, fitted: false }, ...Array.from({ length: 11 }, (_, i) => month(i + 2))]
 			}
 		};

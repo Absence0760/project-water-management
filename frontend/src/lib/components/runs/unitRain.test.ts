@@ -137,6 +137,7 @@ describe('the reference gauge (engine ≥ 1.80.0, issue #500)', () => {
 		mapMm: 600,
 		cellKey: 'rain_chirps_cell_mm@u0',
 		pinned: false,
+		gaugeChecked: true,
 		months: [month(1, { factor: 1, ownFactor: null, fitted: false }), month(2, { factor: 4, ownFactor: 5.5, clamped: true }), ...Array.from({ length: 10 }, (_, i) => month(i + 3))]
 	};
 	const levelled = unit({ rule: 'unitChirps', rainKey: 'rain_chirps_mm@u1', factor: null, factorSource: 'chirpsReference', chirps: { source: 'reference', factors: Array(12).fill(2), mapRatio: 1.5, mapOwnRatio: 1.5, mapClamped: false } });
