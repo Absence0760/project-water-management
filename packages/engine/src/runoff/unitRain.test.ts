@@ -151,33 +151,105 @@ describe('the forcing rule (§2.4h)', () => {
 		expect(o.summary.warnings.some((w) => /"Unit B": its MAP ÷ the gauge's MAP is 5\.2/.test(w) && /clamped/.test(w))).toBe(true);
 	});
 
-	it('rule 3: the unit’s CHIRPS × unit MAP ÷ its mean annual rain over the MAP period’s complete years', () => {
+	it('rule 3: the unit’s CHIRPS × unit MAP ÷ its mean annual rain over the MAP period’s complete years (ten of them)', () => {
 		const x = everyRule();
 		delete x.settings.unitRain!.gaugeMapMm;
 		delete x.settings.unitRain!.gaugeMapSource;
-		x.settings.unitRain!.mapPeriod = { start: '2015-01-01', end: '2019-12-31' };
+		// C's CHIRPS from 2005, sixteen whole years; the period 2006–2015 holds ten of them.
+		const from = toEpochDay('2005-01-01');
+		const long = Array.from({ length: toEpochDay('2021-01-01') - from }, (_, i) => (fromEpochDay(from + i) < '2010-01-01' ? 2 : 1) * ((i + 3) % 13 === 0 ? 15 : (i + 3) % 4 === 0 ? 1 : 0));
+		set(x, 'rain_chirps_mm@C', long, '2005-01-01');
+		x.settings.unitRain!.mapPeriod = { start: '2006-01-01', end: '2015-12-31' };
 		const o = runModel(x);
 		const c = unitOf(o, 'C');
 		const chirps = x.series['rain_chirps_mm@C']!;
-		const mean = chirpsMeanAnnual(chirps, { start: '2015-01-01', end: '2019-12-31' })!;
-		expect(mean.years).toEqual([2015, 2016, 2017, 2018, 2019]);
+		const mean = chirpsMeanAnnual(chirps, { start: '2006-01-01', end: '2015-12-31' })!;
+		expect(mean).toMatchObject({ years: [2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015], inPeriod: true });
 		expect(c).toMatchObject({ rule: 'unitChirps', rainKey: 'rain_chirps_mm@C', factorSource: 'chirpsMap' });
 		expect(c.factor).toBeCloseTo(750 / mean.meanAnnualMm, 12);
-		expect(c.chirps).toMatchObject({ source: 'map', years: [2015, 2016, 2017, 2018, 2019], inPeriod: true });
+		expect(c.chirps).toMatchObject({ source: 'map', years: mean.years, inPeriod: true, outsideBand: false, clamped: false });
+		expect(o.summary.warnings.some((w) => /"Unit C": its CHIRPS has fewer than/.test(w))).toBe(false);
 		const rain = col(o, 'rain_unit', 'C')!;
-		expect(rain[0]).toBe((chirps.values[0] as number) * c.factor!);
+		const day0 = toEpochDay(START) - from;
+		expect(rain[0]).toBe((chirps.values[day0] as number) * c.factor!);
 		// B and D have a MAP but no record of their own and no gauge MAP: the catchment rain as it is (rule 4).
 		expect(unitOf(o, 'D')).toMatchObject({ rule: 'catchment', factorSource: 'catchment', rainKey: null });
 		expect(o.summary.warnings.some((w) => /"Unit D" has no rain of its own/.test(w))).toBe(true);
+		// Nine years in the period are too few: every complete year of the record (sixteen), with a warning.
+		x.settings.unitRain!.mapPeriod = { start: '2006-01-01', end: '2014-12-31' };
+		const nine = runModel(x);
+		expect(unitOf(nine, 'C').chirps).toMatchObject({ source: 'map', inPeriod: false });
+		expect((unitOf(nine, 'C').chirps as { years: number[] }).years).toHaveLength(16);
+		expect(nine.summary.warnings).toContain(
+			'unit rain: "Unit C": its CHIRPS has fewer than 10 complete calendar years in the MAP period 2006-01-01 to 2014-12-31, so its MAP factor averages every complete year of the record (16, 2005–2020)'
+		);
 	});
 
-	it('rule 3 with fewer than five complete years in the period uses every complete year of the record, and warns', () => {
+	it('rule 3 with fewer than ten complete years in the period uses every complete year of the record, and warns', () => {
 		const x = everyRule();
 		delete x.settings.unitRain!.gaugeMapMm;
 		x.settings.unitRain!.mapPeriod = { start: '2018-01-01', end: '2030-12-31' };
 		const o = runModel(x);
 		expect(unitOf(o, 'C').chirps).toMatchObject({ source: 'map', years: [2015, 2016, 2017, 2018, 2019, 2020], inPeriod: false });
-		expect(o.summary.warnings.some((w) => /"Unit C": its CHIRPS has fewer than 5 complete calendar years in the MAP period/.test(w))).toBe(true);
+		expect(o.summary.warnings.some((w) => /"Unit C": its CHIRPS has fewer than 10 complete calendar years in the MAP period .*\(6, 2015–2020, still fewer than 10\)/.test(w))).toBe(true);
+	});
+
+	it('the 0.5–2 band: a MAP factor or gauge MAP ratio outside it warns and is used as it is; past 0.25–4 it is clamped', () => {
+		const x = everyRule();
+		x.model.nodes[2]!.mapMm = 1100; // B: 1100 ÷ 500 = 2.2
+		x.model.nodes[4]!.mapMm = 200; // D: 200 ÷ 500 = 0.4
+		const o = runModel(x);
+		expect(unitOf(o, 'B')).toMatchObject({ factor: 2.2, gaugeMapOwnFactor: 2.2, gaugeMapClamped: false, gaugeMapOutsideBand: true });
+		expect(unitOf(o, 'D')).toMatchObject({ factor: 0.4, gaugeMapClamped: false, gaugeMapOutsideBand: true });
+		expect(unitOf(o, 'C')).toMatchObject({ gaugeMapOutsideBand: false });
+		expect(o.summary.warnings).toContain('unit rain: "Unit B": its MAP ÷ the gauge\'s MAP is 2.2 (1100 ÷ 500 mm), outside 0.5–2: used as it is, but check the records it comes from');
+		expect(o.summary.warnings.some((w) => /"Unit C": its MAP ÷ the gauge's MAP/.test(w))).toBe(false);
+		expect(col(o, 'rain_unit', 'B')![0]).toBe(g[0]! * 2.2);
+		// Exactly 2 is inside the band.
+		x.model.nodes[2]!.mapMm = 1000;
+		expect(unitOf(runModel(x), 'B').gaugeMapOutsideBand).toBe(false);
+		// Rule 3's MAP factor: C's MAP 4 × its CHIRPS mean warns, unchanged; 5 × is clamped to 4.
+		const y = everyRule();
+		delete y.settings.unitRain!.gaugeMapMm;
+		const mean = chirpsMeanAnnual(y.series['rain_chirps_mm@C']!, { start: '1991-01-01', end: '2020-12-31' })!.meanAnnualMm;
+		y.model.nodes[3]!.mapMm = Math.round(mean * 3);
+		const band = unitOf(runModel(y), 'C').chirps as { factor: number; ownFactor: number; clamped: boolean; outsideBand: boolean };
+		expect(band).toMatchObject({ clamped: false, outsideBand: true });
+		expect(band.factor).toBe(band.ownFactor);
+		y.model.nodes[3]!.mapMm = Math.round(mean * 5);
+		const out5 = runModel(y);
+		expect(unitOf(out5, 'C').chirps).toMatchObject({ factor: 4, clamped: true, outsideBand: true });
+		expect(out5.summary.warnings.some((w) => /"Unit C": its MAP ÷ its CHIRPS mean annual rain is 5(\.\d+)? \(\d+ ÷ \d+ mm\), outside 0\.25–4; using 4 \(clamped\)/.test(w))).toBe(true);
+	});
+
+	it('a unit CHIRPS whose complete years all total 0 mm is unusable: skipped to the next link, with a warning', () => {
+		const zeros = () => new Array<number>(DAYS).fill(0);
+		// C on rule 3 (no gauge MAP): nothing else of its own, so the catchment rain (rule 4), not 0 mm days.
+		const x = everyRule();
+		delete x.settings.unitRain!.gaugeMapMm;
+		set(x, 'rain_chirps_mm@C', zeros());
+		const o = runModel(x);
+		const c = unitOf(o, 'C');
+		expect(c.chirps).toEqual({ source: 'unusable', meanAnnualMm: 0, years: [2015, 2016, 2017, 2018, 2019, 2020] });
+		expect(c).toMatchObject({ rule: 'catchment', factorSource: 'catchment' });
+		expect(col(o, 'rain_unit', 'C')).toEqual(col(o, 'rain_unit', 'D'));
+		expect(c.rainMm).toBeGreaterThan(0);
+		expect(o.summary.warnings).toContain(
+			'unit rain: "Unit C": its CHIRPS totals 0 mm in every complete calendar year (6, 2015–2020), which looks broken: it is not used, and the unit\'s days fall to the next source of its rule'
+		);
+		expect(o.summary.warnings.some((w) => /"Unit C" has no usable rain of its own/.test(w))).toBe(true);
+		// A gauge unit's zero CHIRPS is skipped on the gauge's gaps too: they fall to the catchment's rain, not 0 mm.
+		const y = everyRule();
+		set(y, 'rain_chirps_mm@A', zeros());
+		const a = runModel(y);
+		expect(unitOf(a, 'A').chirps!.source).toBe('unusable');
+		expect(unitOf(a, 'A').days).toMatchObject({ unitGauge: DAYS - 4, unitChirps: 0, catchment: 4 });
+		expect(col(a, 'rain_unit', 'A')![12]).toBe(g[12]!);
+		// Zeros with no complete year yet are not judged: the old path (raw here) stands.
+		const z = everyRule();
+		delete z.settings.unitRain!.gaugeMapMm;
+		set(z, 'rain_chirps_mm@C', zeros().slice(0, 200));
+		expect(unitOf(runModel(z), 'C').chirps!.source).toBe('raw');
 	});
 
 	it('rule 3 without a MAP: the catchment’s §2.4b monthly factors when there are any, else raw with a warning', () => {
@@ -223,6 +295,27 @@ describe('the forcing rule (§2.4h)', () => {
 		expect(col(o, 'rain_unit', 'B')!.slice(DAYS)).toEqual(tail.map((v) => v * (700 / 500)));
 		expect(col(o, 'rain_unit', 'A')!.slice(DAYS)).toEqual(tail);
 		expect(unitOf(o, 'A').days.forecast).toBe(10);
+		// An uploaded forecast ('other') is the same as one of unknown source.
+		const other = runModel({ ...x, forecastRainSource: 'other' });
+		expect(JSON.stringify(other)).toBe(JSON.stringify(o));
+	});
+
+	it('a CHIRPS-GEFS forecast takes each unit’s own CHIRPS level, so a CHIRPS unit has no step where the forecast starts', () => {
+		const x = everyRule();
+		const tail = Array.from({ length: 10 }, (_, i) => 5 + i);
+		set(x, 'rain_forecast_mm', tail, '2021-01-01');
+		const o = runModel({ ...x, forecastRainSource: 'chirps_gefs' });
+		// C (rule 2, a CHIRPS levelled by its MAP): its forecast × its MAP factor, the level its CHIRPS fills at, not × its gauge MAP ratio.
+		const k = (unitOf(o, 'C').chirps as { factor: number }).factor;
+		expect(k).not.toBeCloseTo(750 / 500, 3);
+		expect(col(o, 'rain_unit', 'C')!.slice(DAYS)).toEqual(tail.map((v) => v * k));
+		// B has no CHIRPS of its own: the MAP ratio as before. A's CHIRPS runs raw (no level known): × 1 as before.
+		expect(col(o, 'rain_unit', 'B')!.slice(DAYS)).toEqual(tail.map((v) => v * (700 / 500)));
+		expect(col(o, 'rain_unit', 'A')!.slice(DAYS)).toEqual(tail);
+		// The history is untouched.
+		const hist = runModel(x);
+		for (const id of ['A', 'B', 'C', 'D']) expect(col(o, 'rain_unit', id)!.slice(0, DAYS), id).toEqual(col(hist, 'rain_unit', id)!.slice(0, DAYS));
+		expect(checkForecastPrefix({ ...withForecastTail(everyRule(), 7), forecastRainSource: 'chirps_gefs' })).toBeNull();
 	});
 
 	it('the areal correction applies to rule-4 units only', () => {

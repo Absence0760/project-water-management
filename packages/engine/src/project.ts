@@ -1027,6 +1027,16 @@ export const unitRainReferenceGaugeOk = (v: unknown): v is string =>
  */
 export const AREAL_RAIN_FACTOR_MIN = 0.25;
 export const AREAL_RAIN_FACTOR_MAX = 4;
+/**
+ * The soft band on a per-unit rain factor (issue #500 decision 2, docs/model.md
+ * §2.4h): a reference monthly factor, a unit's k_unit, its CHIRPS MAP factor
+ * or its gauge MAP ratio whose own value lies outside 0.5–2 warns, without
+ * changing the value. Past AREAL_RAIN_FACTOR_MIN–MAX it is clamped (and warns).
+ */
+export const AREAL_RAIN_FACTOR_WARN_MIN = 0.5;
+export const AREAL_RAIN_FACTOR_WARN_MAX = 2;
+/** A factor's own value lies outside the soft band AREAL_RAIN_FACTOR_WARN_MIN–MAX. */
+export const outsideArealRainBand = (k: number): boolean => k < AREAL_RAIN_FACTOR_WARN_MIN || k > AREAL_RAIN_FACTOR_WARN_MAX;
 
 /** Why a stored `arealRain` can't be used, or null. The API applies the same rules. */
 export function arealRainError(raw: unknown): string | null {
@@ -2770,6 +2780,16 @@ export interface ModelInput {
 	 * and a land unit's own rain (issue #482) UnitRainSeriesKey.
 	 */
 	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries };
+	/**
+	 * Where the forecast rain (`rain_forecast_mm`) came from (engine ≥ 1.85.0,
+	 * docs/model.md §2.4h): 'chirps_gefs' when a CHIRPS-GEFS feed wrote every
+	 * forecast day, so under per-unit rain each unit's forecast days take its
+	 * own CHIRPS level (the reference factor × k_unit, its MAP factor or the
+	 * §2.4b factors), as its CHIRPS history does. Absent, null or 'other' (an
+	 * upload, maybe already at gauge level): the forecast × the unit's gauge
+	 * MAP ratio, as before.
+	 */
+	forecastRainSource?: 'chirps_gefs' | 'other' | null;
 }
 
 /** One daily output series. nodeId null = catchment level. */
@@ -3364,7 +3384,10 @@ export type UnitRainRule = (typeof UNIT_RAIN_RULES)[number];
 /**
  * How a unit's CHIRPS is levelled (§2.4h rule 3): × unit MAP ÷ the CHIRPS
  * mean annual rain over the MAP period (`map`), × the catchment's §2.4b
- * monthly factors (`bias`), or raw.
+ * monthly factors (`bias`), raw, × the reference gauge's monthly factors and
+ * the unit's k_unit (`reference`), or not at all because its complete years
+ * total 0 mm (`unusable`, engine ≥ 1.85.0: the unit's days fall to the next
+ * link of its chain, and the run warns).
  */
 export type UnitChirpsLevel =
 	| {
@@ -3374,6 +3397,8 @@ export type UnitChirpsLevel =
 			/** mapMm ÷ meanAnnualMm before the clamp. */
 			ownFactor: number;
 			clamped: boolean;
+			/** ownFactor lies outside the soft band AREAL_RAIN_FACTOR_WARN_MIN–MAX (it warns; engine ≥ 1.85.0). */
+			outsideBand: boolean;
 			/** The CHIRPS mean annual rain, mm, over `years`. */
 			meanAnnualMm: number;
 			/** The complete calendar years it was averaged over. */
@@ -3384,15 +3409,38 @@ export type UnitChirpsLevel =
 	| { source: 'bias' }
 	| { source: 'raw' }
 	| {
-			/** The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h *Reference gauge*), then the MAP ratio. */
+			/** The unit's CHIRPS totals 0 mm in every complete year it was averaged over (engine ≥ 1.85.0): unusable, so not read. */
+			source: 'unusable';
+			meanAnnualMm: 0;
+			/** The complete calendar years that total 0 mm. */
+			years: number[];
+	  }
+	| {
+			/** The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h *Reference gauge*), then k_unit (engine ≥ 1.85.0). */
 			source: 'reference';
 			/** The 12 factors applied, calendar months Jan–Dec (1 where the fit had too little). */
 			factors: number[];
-			/** clamp(unit MAP ÷ the reference unit's MAP); 1 without both MAPs. */
-			mapRatio: number;
-			/** unit MAP ÷ the reference unit's MAP before the clamp; null without both MAPs. */
-			mapOwnRatio: number | null;
-			mapClamped: boolean;
+			/**
+			 * k_unit = clamp(unit MAP ÷ the unit's mean annual CHIRPS × factor(month)
+			 * over the MAP period), so the unit's long-term yearly total is its MAP;
+			 * null (factors only) when the unit has no MAP or its CHIRPS no complete
+			 * calendar year.
+			 */
+			kUnit: {
+				/** The factor applied (clamped to AREAL_RAIN_FACTOR_MIN–MAX). */
+				factor: number;
+				/** unit MAP ÷ meanAnnualMm before the clamp. */
+				ownFactor: number;
+				clamped: boolean;
+				/** ownFactor lies outside the soft band AREAL_RAIN_FACTOR_WARN_MIN–MAX. */
+				outsideBand: boolean;
+				/** The mean annual of the unit's CHIRPS × the monthly factors, mm, over `years`. */
+				meanAnnualMm: number;
+				/** The complete calendar years it was averaged over. */
+				years: number[];
+				/** Whether `years` all lie inside the MAP period (false: too few did, so every complete year of the record was used). */
+				inPeriod: boolean;
+			} | null;
 	  };
 
 /** One calendar month of the reference gauge's fit (engine ≥ 1.80.0, §2.4h *Reference gauge*). */
@@ -3410,6 +3458,8 @@ export interface UnitRainReferenceMonth {
 	clamped: boolean;
 	/** Whether the month had the minimum sample (else factor 1). */
 	fitted: boolean;
+	/** A fitted month whose ownFactor lies outside the soft band AREAL_RAIN_FACTOR_WARN_MIN–MAX (it warns; engine ≥ 1.85.0). */
+	outsideBand: boolean;
 }
 
 /** settings.unitRain.reference as a run fitted it (summary.unitRain.reference). */
@@ -3421,6 +3471,10 @@ export interface UnitRainReferenceFit {
 	mapMm: number | null;
 	/** The cell series the fit read. */
 	cellKey: string;
+	/** Why that cell: the one nearest the reference unit's centre ('gaugeCell', the gauge's own cell, is reserved for later). */
+	cellReason: 'referenceUnitCentre';
+	/** Whether the fit read the gauge's checked rain (§2.4c–§2.4e) rather than the rain as stored. */
+	gaugeChecked: boolean;
 	/** Whether the factors were pinned (the uncertainty ensemble's CHIRPS-only member), not fitted. */
 	pinned: boolean;
 	months: UnitRainReferenceMonth[];
@@ -3460,6 +3514,8 @@ export interface UnitRainUnit {
 	/** unit MAP ÷ gauge MAP before the clamp; null with gaugeMapFactor. */
 	gaugeMapOwnFactor: number | null;
 	gaugeMapClamped: boolean;
+	/** gaugeMapOwnFactor lies outside the soft band AREAL_RAIN_FACTOR_WARN_MIN–MAX (it warns; engine ≥ 1.85.0). */
+	gaugeMapOutsideBand: boolean;
 	/** How the unit's own CHIRPS is levelled; null without one. */
 	chirps: UnitChirpsLevel | null;
 	/**

@@ -9,7 +9,7 @@ const chirpsLevel = (c: UnitChirpsLevel | null): { chirpsSource: UnitChirpsLevel
 	c
 		? {
 				chirpsSource: c.source,
-				chirpsFactor: c.source === 'map' ? c.factor : c.source === 'reference' ? c.mapRatio : null,
+				chirpsFactor: c.source === 'map' ? c.factor : c.source === 'reference' ? (c.kUnit?.factor ?? null) : null,
 				// The reference's monthly factors (engine ≥ 1.80.0), only on such a unit, so a fingerprint without them is as before.
 				...(c.source === 'reference' ? { chirpsFactors: [...c.factors] } : {})
 			}
@@ -36,8 +36,8 @@ export interface UnitRainFingerprint {
 		factorSource: UnitRainUnit['factorSource'];
 		gaugeMapFactor: number | null;
 		/** How the unit's own CHIRPS is levelled, whatever the rule (it fills a gauge's gaps too); absent on a fingerprint without it, null = no CHIRPS. */
-		chirpsSource?: 'map' | 'bias' | 'raw' | 'reference' | null;
-		/** The CHIRPS MAP factor (`map`) or the MAP ratio on the reference factors (`reference`); else null. */
+		chirpsSource?: 'map' | 'bias' | 'raw' | 'reference' | 'unusable' | null;
+		/** The CHIRPS MAP factor (`map`) or k_unit on the reference factors (`reference`, engine ≥ 1.85.0; the reference unit's MAP ratio before); else null. */
 		chirpsFactor?: number | null;
 		/** The 12 reference factors, calendar months (`reference` only). */
 		chirpsFactors?: number[];
@@ -127,7 +127,7 @@ export function unitRainFingerprintError(raw: unknown): string | null {
 		if (!x || typeof x !== 'object' || typeof x.nodeId !== 'string' || x.nodeId.length > 200) return 'a unit needs a node id';
 		if (!rules.includes(x.rule) || !sources.includes(x.factorSource)) return 'a unit has an unknown rule or factor source';
 		if (!(x.rainKey === null || (typeof x.rainKey === 'string' && x.rainKey.length <= 250)) || !num(x.factor) || !num(x.gaugeMapFactor)) return 'a unit has a bad record key or factor';
-		if (x.chirpsSource !== undefined && !(x.chirpsSource === null || ['map', 'bias', 'raw', 'reference'].includes(x.chirpsSource))) return 'a unit has an unknown CHIRPS level';
+		if (x.chirpsSource !== undefined && !(x.chirpsSource === null || ['map', 'bias', 'raw', 'reference', 'unusable'].includes(x.chirpsSource))) return 'a unit has an unknown CHIRPS level';
 		if (x.chirpsFactor !== undefined && !num(x.chirpsFactor)) return 'a unit has a bad CHIRPS factor';
 		if (x.chirpsFactors !== undefined && !(Array.isArray(x.chirpsFactors) && x.chirpsFactors.length === 12 && x.chirpsFactors.every((k) => typeof k === 'number' && Number.isFinite(k))))
 			return 'a unit has bad reference factors';

@@ -21,6 +21,7 @@ const unit = (over: Partial<UnitRainResultUnit> = {}): UnitRainResultUnit => ({
 	gaugeMapFactor: 1.25,
 	gaugeMapOwnFactor: 1.25,
 	gaugeMapClamped: false,
+	gaugeMapOutsideBand: false,
 	chirps: null,
 	days: { unitGauge: 0, gaugeMap: 3000, unitChirps: 40, catchment: 0, forecast: 0, none: 2 },
 	rainMm: 9100,
@@ -57,7 +58,7 @@ describe('the factor in words', () => {
 	it('marks a factor held at the bound by the rule that used it', () => {
 		expect(factorClamped(unit({ gaugeMapClamped: true }))).toBe(true);
 		expect(factorClamped(unit({ rule: 'unitChirps', gaugeMapClamped: true, chirps: { source: 'raw' } }))).toBe(false);
-		expect(factorClamped(unit({ rule: 'unitChirps', chirps: { source: 'map', factor: 4, clamped: true, ownFactor: 4.6, meanAnnualMm: 200, years: [2001], inPeriod: true } }))).toBe(true);
+		expect(factorClamped(unit({ rule: 'unitChirps', chirps: { source: 'map', factor: 4, clamped: true, ownFactor: 4.6, outsideBand: true, meanAnnualMm: 200, years: [2001], inPeriod: true } }))).toBe(true);
 	});
 
 	it('writes the MAP period as years', () => {
@@ -73,7 +74,7 @@ describe('unitRainNotes', () => {
 				unit({ nodeId: 'a', name: 'A', rule: 'catchment', factor: null, factorSource: 'catchment' }),
 				unit({ nodeId: 'b', name: 'B', rule: 'catchment', factor: null, factorSource: 'catchment' }),
 				unit({ nodeId: 'c', name: 'C', gaugeMapClamped: true }),
-				unit({ nodeId: 'd', name: 'D', rule: 'unitChirps', factorSource: 'chirpsMap', chirps: { source: 'map', factor: 1.1, clamped: false, ownFactor: 1.1, meanAnnualMm: 700, years: [2001, 2002, 2003], inPeriod: false } }),
+				unit({ nodeId: 'd', name: 'D', rule: 'unitChirps', factorSource: 'chirpsMap', chirps: { source: 'map', factor: 1.1, clamped: false, ownFactor: 1.1, outsideBand: false, meanAnnualMm: 700, years: [2001, 2002, 2003], inPeriod: false } }),
 				unit({ nodeId: 'e', name: 'E', rule: 'unitChirps', factor: null, factorSource: 'chirpsRaw', chirps: { source: 'raw' } })
 			])
 		);
@@ -129,22 +130,24 @@ describe('UnitRainPanel', () => {
 });
 
 describe('the reference gauge (engine ≥ 1.80.0, issue #500)', () => {
-	const month = (m: number, over = {}) => ({ month: m, sharedDays: 120, gaugeMm: 400, chirpsMm: 200, ownFactor: 2, factor: 2, clamped: false, fitted: true, ...over });
+	const month = (m: number, over = {}) => ({ month: m, sharedDays: 120, gaugeMm: 400, chirpsMm: 200, ownFactor: 2, factor: 2, clamped: false, fitted: true, outsideBand: false, ...over });
 	const reference = {
 		gauge: 'rain_catchment_mm',
 		unitId: 'u0',
 		unitName: 'Gauge unit',
 		mapMm: 600,
 		cellKey: 'rain_chirps_cell_mm@u0',
+		cellReason: 'referenceUnitCentre' as const,
+		gaugeChecked: false,
 		pinned: false,
 		months: [month(1, { factor: 1, ownFactor: null, fitted: false }), month(2, { factor: 4, ownFactor: 5.5, clamped: true }), ...Array.from({ length: 10 }, (_, i) => month(i + 3))]
 	};
-	const levelled = unit({ rule: 'unitChirps', rainKey: 'rain_chirps_mm@u1', factor: null, factorSource: 'chirpsReference', chirps: { source: 'reference', factors: Array(12).fill(2), mapRatio: 1.5, mapOwnRatio: 1.5, mapClamped: false } });
+	const levelled = unit({ rule: 'unitChirps', rainKey: 'rain_chirps_mm@u1', factor: null, factorSource: 'chirpsReference', chirps: { source: 'reference', factors: Array(12).fill(2), kUnit: { factor: 1.5, ownFactor: 1.5, clamped: false, outsideBand: false, meanAnnualMm: 600, years: [1991, 2020], inPeriod: true } } });
 
-	it('says a unit’s factor as the MAP ratio on the monthly factors, and holds a clamped ratio', () => {
-		expect(factorText(levelled)).toBe('the reference gauge’s monthly factors × 1.5 (unit MAP ÷ the reference unit’s MAP)');
+	it('says a unit’s factor as k_unit on the monthly factors, and holds a clamped k_unit', () => {
+		expect(factorText(levelled)).toBe('the reference gauge’s monthly factors × 1.5 (k_unit: unit MAP ÷ its mean annual CHIRPS × the factors)');
 		expect(factorClamped(levelled)).toBe(false);
-		expect(factorClamped({ ...levelled, chirps: { source: 'reference', factors: Array(12).fill(2), mapRatio: 4, mapOwnRatio: 5, mapClamped: true } })).toBe(true);
+		expect(factorClamped({ ...levelled, chirps: { source: 'reference', factors: Array(12).fill(2), kUnit: { factor: 4, ownFactor: 5, clamped: true, outsideBand: true, meanAnnualMm: 600, years: [1991, 2020], inPeriod: true } } })).toBe(true);
 	});
 
 	it('lists the factors, and notes the months with factor 1 and the held ones', () => {

@@ -15,18 +15,30 @@
 //                  the catchment's §2.4b factors, or raw), then the catchment's rain;
 //   4. catchment:  the catchment forcing exactly as without per-unit rain,
 //                  × settings.arealRain (which applies to rule 4 only).
-// Days after the record fall to the forecast through the catchment's rain,
-// so CHIRPS-GEFS stays catchment-wide × the MAP ratio (rule 2's) or × 1.
+// Days after the record fall to the forecast through the catchment's rain:
+// × the MAP ratio (rule 2's) or × 1, except that a CHIRPS-GEFS forecast
+// (ModelInput.forecastRainSource 'chirps_gefs', engine ≥ 1.85.0) takes the
+// unit's own CHIRPS level instead, so a unit levelled from CHIRPS has no step
+// where the forecast starts.
 //
 // With settings.unitRain.reference (engine ≥ 1.80.0, issue #500) every
 // unit's CHIRPS is levelled instead by 12 monthly factors fitted at one
 // reference gauge against the CHIRPS cell nearest the reference unit's
-// centre, then × clamp(unit MAP ÷ the reference unit's MAP) (referenceFit).
+// centre, then (engine ≥ 1.85.0) × k_unit = clamp(unit MAP ÷ the unit's mean
+// annual CHIRPS × factor), so its long-term yearly total is its MAP.
+//
+// Every factor here is clamped to 0.25–4 and warns past it; one whose own
+// value lies outside 0.5–2 warns too, unchanged (engine ≥ 1.85.0). A unit
+// whose CHIRPS totals 0 mm in every complete year is unusable: not read, its
+// days fall to the next link, with a warning (engine ≥ 1.85.0).
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import {
 	AREAL_RAIN_FACTOR_MAX,
 	AREAL_RAIN_FACTOR_MIN,
+	AREAL_RAIN_FACTOR_WARN_MAX,
+	AREAL_RAIN_FACTOR_WARN_MIN,
 	arealRainFactors,
+	outsideArealRainBand,
 	DEFAULT_UNIT_MAP_PERIOD,
 	MAP_MM_MAX,
 	referenceCellSeriesKey,
@@ -57,8 +69,12 @@ import { recipeLevel } from './unitRainFingerprint';
 export { isLandUnit, perUnitAreaKm2 } from './area';
 export * from './unitRainFingerprint';
 
-/** Complete calendar years a unit's CHIRPS MAP factor needs inside the MAP period before it stops warning (provisional, §2.4h). */
-export const UNIT_MAP_MIN_YEARS = 5;
+/**
+ * Complete calendar years a unit's CHIRPS MAP factor (or k_unit) needs inside
+ * the MAP period (§2.4h, issue #500 decision 4, engine ≥ 1.85.0; 5 before):
+ * with fewer it averages every complete year of the record, and warns.
+ */
+export const UNIT_MAP_MIN_YEARS = 10;
 
 /** The source codes of a unit's day (UnitForcing.source): which link of the chain gave its rain. */
 export const UNIT_RAIN_SOURCE = { unitGauge: 0, gaugeMap: 1, unitChirps: 2, catchment: 3, forecast: 4 } as const;
@@ -77,6 +93,8 @@ export interface UnitRainRecipe {
 	gaugeMapFactor: number | null;
 	gaugeMapOwnFactor: number | null;
 	gaugeMapClamped: boolean;
+	/** gaugeMapOwnFactor lies outside the soft band 0.5–2 (engine ≥ 1.85.0). */
+	gaugeMapOutsideBand: boolean;
 	chirps: UnitChirpsLevel | null;
 }
 
@@ -110,6 +128,8 @@ export interface UnitRainContext {
 	chirpsCorrection: ChirpsCorrection | null;
 	/** The run's historical days (before a forecast tail); counts and warnings read only these. */
 	historyDays?: number;
+	/** ModelInput.forecastRainSource: 'chirps_gefs' levels each unit's forecast days as its CHIRPS. */
+	forecastRainSource?: ModelInput['forecastRainSource'];
 }
 
 /** settings.unitRain is on: mode `perUnit`. */
@@ -121,14 +141,28 @@ const usableMap = (v: unknown): number | null => (typeof v === 'number' && Numbe
 const reading = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const hasReading = (s: DailySeries | undefined): boolean => !!s && s.values.some(reading);
 const fmt = (k: number) => (Math.round(k * 1000) / 1000).toString();
+const BAND = `${AREAL_RAIN_FACTOR_WARN_MIN}–${AREAL_RAIN_FACTOR_WARN_MAX}`;
+const CLAMP = `${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}`;
+/** The warning for a factor past the clamp (clamped) or, inside it, past the soft band (unchanged); null within the band. */
+const factorWarning = (what: string, own: number, used: number, how: string): string | null =>
+	used !== own
+		? `${what} is ${fmt(own)} (${how}), outside ${CLAMP}; using ${fmt(used)} (clamped)`
+		: outsideArealRainBand(own)
+			? `${what} is ${fmt(own)} (${how}), outside ${BAND}: used as it is, but check the records it comes from`
+			: null;
 
 /**
  * The CHIRPS MAP factor's mean annual rain: the mean total of the complete
  * calendar years (every day a reading) of `s` inside `period`, or, with fewer
  * than UNIT_MAP_MIN_YEARS there, of every complete year of the record.
- * Null without a complete year.
+ * `scale` multiplies each day's reading first (k_unit's mean of CHIRPS × the
+ * reference factor of its month). Null without a complete year.
  */
-export function chirpsMeanAnnual(s: DailySeries, period: { start: string; end: string }): { meanAnnualMm: number; years: number[]; inPeriod: boolean } | null {
+export function chirpsMeanAnnual(
+	s: DailySeries,
+	period: { start: string; end: string },
+	scale?: (epochDay: number) => number
+): { meanAnnualMm: number; years: number[]; inPeriod: boolean } | null {
 	const d0 = toEpochDay(s.startDate);
 	const totals = new Map<number, { days: number; mm: number }>();
 	for (let i = 0; i < s.values.length; i++) {
@@ -137,7 +171,7 @@ export function chirpsMeanAnnual(s: DailySeries, period: { start: string; end: s
 		const y = Number(fromEpochDay(d0 + i).slice(0, 4));
 		const t = totals.get(y) ?? totals.set(y, { days: 0, mm: 0 }).get(y)!;
 		t.days++;
-		t.mm += v;
+		t.mm += scale ? v * scale(d0 + i) : v;
 	}
 	const daysIn = (y: number) => toEpochDay(`${y + 1}-01-01`) - toEpochDay(`${y}-01-01`);
 	const complete = [...totals].filter(([y, t]) => t.days === daysIn(y)).sort(([a], [b]) => a - b);
@@ -200,7 +234,8 @@ export function referenceFit(u: UnitRainSettings | null | undefined, series: Mod
 		const fitted = days >= CHIRPS_FACTOR_MIN_DAYS && c[m]! >= CHIRPS_FACTOR_MIN_MM;
 		const own = fitted ? g[m]! / c[m]! : null;
 		const factor = pinned ? pinned[m]! : own === null ? 1 : clampFactor(own);
-		return { month: m + 1, sharedDays: days, gaugeMm: g[m]!, chirpsMm: c[m]!, ownFactor: own, factor, clamped: !pinned && own !== null && factor !== own, fitted };
+		const outsideBand = !pinned && own !== null && outsideArealRainBand(own);
+		return { month: m + 1, sharedDays: days, gaugeMm: g[m]!, chirpsMm: c[m]!, ownFactor: own, factor, clamped: !pinned && own !== null && factor !== own, fitted, outsideBand };
 	});
 	const unitName = node.name;
 	if (!pinned) {
@@ -211,13 +246,12 @@ export function referenceFit(u: UnitRainSettings | null | undefined, series: Mod
 				`unit rain: the reference gauge (${ref.gauge}) and the CHIRPS cell of "${unitName}" have too little in common in ${short.length === 12 ? 'every month' : short.map((x) => MONTH_NAMES[x.month - 1]).join(', ')} (fewer than ${CHIRPS_FACTOR_MIN_DAYS} shared days, or under ${CHIRPS_FACTOR_MIN_MM} mm of CHIRPS on them)${none ? `: ${none}` : ''}, so ${short.length === 1 ? 'that month’s factor is' : 'those months’ factors are'} 1`
 			);
 		}
-		for (const x of months)
-			if (x.clamped)
-				warnings.push(
-					`unit rain: the reference factor for ${MONTH_NAMES[x.month - 1]} is ${fmt(x.ownFactor!)} (${Math.round(x.gaugeMm)} ÷ ${Math.round(x.chirpsMm)} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(x.factor)} (clamped)`
-				);
+		for (const x of months) {
+			const w = x.ownFactor === null ? null : factorWarning(`unit rain: the reference factor for ${MONTH_NAMES[x.month - 1]}`, x.ownFactor, x.factor, `${Math.round(x.gaugeMm)} ÷ ${Math.round(x.chirpsMm)} mm`);
+			if (w) warnings.push(w);
+		}
 	}
-	return { gauge: ref.gauge, unitId: ref.unitId, unitName, mapMm: usableMap(node.mapMm), cellKey, pinned: !!pinned, months };
+	return { gauge: ref.gauge, unitId: ref.unitId, unitName, mapMm: usableMap(node.mapMm), cellKey, cellReason: 'referenceUnitCentre', gaugeChecked: false, pinned: !!pinned, months };
 }
 
 /** The catchment's §2.4b monthly factors exist: mode 'monthly' and some month has one. */
@@ -250,64 +284,84 @@ export function unitRainRecipes(
 	const reference = referenceFit(u, series, ctx.nodes, warnings);
 	if (fit) fit.reference = reference;
 	const refFactors = reference ? reference.months.map((x) => x.factor) : null;
-	if (reference && reference.mapMm === null && units.some((n) => hasReading(series[unitRainSeriesKey('rain_chirps_mm', n.id)])))
-		warnings.push(`unit rain: the reference unit "${reference.unitName}" has no MAP, so no unit's CHIRPS is scaled by its MAP ÷ the reference unit's MAP, only by the reference factors`);
 	return units.map((n) => {
 		const pin = pinned?.find((p) => p.nodeId === n.id);
 		if (pin) return structuredClone(pin);
 		const map = usableMap(n.mapMm);
 		const hasGauge = hasReading(series[unitRainSeriesKey('rain_catchment_mm', n.id)]);
 		const chirpsSeries = series[unitRainSeriesKey('rain_chirps_mm', n.id)];
-		const hasChirps = hasReading(chirpsSeries);
 		const unit = `unit rain: "${n.name}"`;
 		// Rule 2's ratio, whenever its conditions hold: it also scales the catchment rain and forecast filling the unit's gaps.
 		let gaugeMapFactor: number | null = null;
 		let gaugeMapOwnFactor: number | null = null;
 		let gaugeMapClamped = false;
+		let gaugeMapOutsideBand = false;
 		if (gaugeMap !== null && map !== null && gaugeRain) {
 			gaugeMapOwnFactor = map / gaugeMap;
 			gaugeMapFactor = clampFactor(gaugeMapOwnFactor);
 			gaugeMapClamped = gaugeMapFactor !== gaugeMapOwnFactor;
-			if (gaugeMapClamped)
-				warnings.push(`${unit}: its MAP ÷ the gauge's MAP is ${fmt(gaugeMapOwnFactor)} (${map} ÷ ${gaugeMap} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(gaugeMapFactor)} (clamped)`);
+			gaugeMapOutsideBand = outsideArealRainBand(gaugeMapOwnFactor);
+			const w = factorWarning(`${unit}: its MAP ÷ the gauge's MAP`, gaugeMapOwnFactor, gaugeMapFactor, `${map} ÷ ${gaugeMap} mm`);
+			if (w) warnings.push(w);
 		}
 		let chirps: UnitChirpsLevel | null = null;
-		if (hasChirps && reference && refFactors) {
-			// The reference factors, then × clamp(unit MAP ÷ the reference unit's MAP) (§2.4h, provisional decision 1a).
-			let mapRatio = 1;
-			let mapOwnRatio: number | null = null;
-			if (map !== null && reference.mapMm !== null) {
-				mapOwnRatio = map / reference.mapMm;
-				mapRatio = clampFactor(mapOwnRatio);
-				if (mapRatio !== mapOwnRatio)
-					warnings.push(`${unit}: its MAP ÷ the reference unit's MAP is ${fmt(mapOwnRatio)} (${map} ÷ ${reference.mapMm} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(mapRatio)} (clamped)`);
-			} else if (map === null && reference.mapMm !== null) warnings.push(`${unit}: it has no MAP, so its CHIRPS takes the reference factors without a MAP ratio`);
-			chirps = { source: 'reference', factors: [...refFactors], mapRatio, mapOwnRatio, mapClamped: mapOwnRatio !== null && mapRatio !== mapOwnRatio };
-		} else if (hasChirps) {
-			const mean = map !== null ? chirpsMeanAnnual(chirpsSeries!, period) : null;
-			if (map !== null && mean && mean.meanAnnualMm > 0) {
-				const own = map / mean.meanAnnualMm;
-				const factor = clampFactor(own);
-				chirps = { source: 'map', factor, ownFactor: own, clamped: factor !== own, meanAnnualMm: mean.meanAnnualMm, years: mean.years, inPeriod: mean.inPeriod };
-				const span = `${mean.years[0]}–${mean.years[mean.years.length - 1]}`;
-				if (!mean.inPeriod)
-					warnings.push(
-						`${unit}: its CHIRPS has fewer than ${UNIT_MAP_MIN_YEARS} complete calendar years in the MAP period ${period.start} to ${period.end}, so its MAP factor averages every complete year of the record (${mean.years.length}, ${span}${mean.years.length < UNIT_MAP_MIN_YEARS ? `, still fewer than ${UNIT_MAP_MIN_YEARS}` : ''})`
-					);
-				if (chirps.clamped)
-					warnings.push(`${unit}: its MAP ÷ its CHIRPS mean annual rain is ${fmt(own)} (${map} ÷ ${Math.round(mean.meanAnnualMm)} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(factor)} (clamped)`);
+		const tooFew = (mean: { years: number[]; inPeriod: boolean }, what: string) => {
+			if (mean.inPeriod) return;
+			const span = `${mean.years[0]}–${mean.years[mean.years.length - 1]}`;
+			warnings.push(
+				`${unit}: its CHIRPS has fewer than ${UNIT_MAP_MIN_YEARS} complete calendar years in the MAP period ${period.start} to ${period.end}, so ${what} averages every complete year of the record (${mean.years.length}, ${span}${mean.years.length < UNIT_MAP_MIN_YEARS ? `, still fewer than ${UNIT_MAP_MIN_YEARS}` : ''})`
+			);
+		};
+		if (hasReading(chirpsSeries)) {
+			// Its raw mean annual rain, for the 0 mm test (decision 7a): complete years that all total 0 mm mean a broken record, not a desert.
+			const raw = chirpsMeanAnnual(chirpsSeries!, period);
+			if (raw && raw.meanAnnualMm === 0) {
+				chirps = { source: 'unusable', meanAnnualMm: 0, years: raw.years };
+				warnings.push(
+					`${unit}: its CHIRPS totals 0 mm in every complete calendar year (${raw.years.length}, ${raw.years[0]}–${raw.years[raw.years.length - 1]}), which looks broken: it is not used, and the unit's days fall to the next source of its rule`
+				);
+			} else if (reference && refFactors) {
+				// The reference factors set the season's shape, then k_unit its level: the unit's MAP ÷ its mean annual CHIRPS × factor
+				// (§2.4h, decision 1a), after the factors so a clamped or defaulted month is made up in the yearly total. Without a
+				// MAP, or without a complete year to average, the factors alone (kUnit null): there is no level to rescale to.
+				let kUnit: Extract<UnitChirpsLevel, { source: 'reference' }>['kUnit'] = null;
+				const mean = map !== null ? chirpsMeanAnnual(chirpsSeries!, period, (day) => refFactors[monthOfEpochDay(day) - 1]!) : null;
+				if (map !== null && mean && mean.meanAnnualMm > 0) {
+					const own = map / mean.meanAnnualMm;
+					const factor = clampFactor(own);
+					kUnit = { factor, ownFactor: own, clamped: factor !== own, outsideBand: outsideArealRainBand(own), meanAnnualMm: mean.meanAnnualMm, years: mean.years, inPeriod: mean.inPeriod };
+					tooFew(mean, 'its k_unit');
+					const w = factorWarning(`${unit}: its k_unit (its MAP ÷ its mean annual CHIRPS × the reference factors)`, own, factor, `${map} ÷ ${Math.round(mean.meanAnnualMm)} mm`);
+					if (w) warnings.push(w);
+				} else if (map === null) warnings.push(`${unit}: it has no MAP, so its CHIRPS takes the reference factors without k_unit to level it`);
+				else warnings.push(`${unit}: its CHIRPS has no complete calendar year to compare its MAP with, so it takes the reference factors without k_unit to level it`);
+				chirps = { source: 'reference', factors: [...refFactors], kUnit };
 			} else {
-				if (map !== null) warnings.push(`${unit}: its CHIRPS has no complete calendar year with rain to compare its MAP with, so the MAP doesn't level it`);
-				chirps = bias ? { source: 'bias' } : { source: 'raw' };
-				if (!bias) warnings.push(`${unit}: its CHIRPS runs raw: ${map !== null ? 'its MAP can’t level it' : 'it has no MAP to level it'} and the catchment has no CHIRPS bias factors (§2.4b) to correct it with`);
+				const mean = map !== null ? raw : null;
+				if (map !== null && mean && mean.meanAnnualMm > 0) {
+					const own = map / mean.meanAnnualMm;
+					const factor = clampFactor(own);
+					chirps = { source: 'map', factor, ownFactor: own, clamped: factor !== own, outsideBand: outsideArealRainBand(own), meanAnnualMm: mean.meanAnnualMm, years: mean.years, inPeriod: mean.inPeriod };
+					tooFew(mean, 'its MAP factor');
+					const w = factorWarning(`${unit}: its MAP ÷ its CHIRPS mean annual rain`, own, factor, `${map} ÷ ${Math.round(mean.meanAnnualMm)} mm`);
+					if (w) warnings.push(w);
+				} else {
+					if (map !== null) warnings.push(`${unit}: its CHIRPS has no complete calendar year with rain to compare its MAP with, so the MAP doesn't level it`);
+					chirps = bias ? { source: 'bias' } : { source: 'raw' };
+					if (!bias) warnings.push(`${unit}: its CHIRPS runs raw: ${map !== null ? 'its MAP can’t level it' : 'it has no MAP to level it'} and the catchment has no CHIRPS bias factors (§2.4b) to correct it with`);
+				}
 			}
 		}
+		const hasChirps = chirps !== null && chirps.source !== 'unusable';
+		// An unusable CHIRPS (decision 7a) is skipped: a unit with nothing else falls to rule 4, the catchment rain.
 		const rule: UnitRainRule = hasGauge ? 'unitGauge' : gaugeMapFactor !== null ? 'gaugeMap' : hasChirps ? 'unitChirps' : 'catchment';
 		if (rule === 'catchment')
 			warnings.push(
-				`${unit} has no rain of its own (no rain gauge or CHIRPS series of its own, and no MAP to scale the catchment gauge by): it runs on the catchment rain${ctx.settings.arealRain ? ' × the areal correction' : ''}`
+				chirps?.source === 'unusable'
+					? `${unit} has no usable rain of its own (its CHIRPS totals 0 mm, no rain gauge of its own, and no MAP to scale the catchment gauge by): it runs on the catchment rain${ctx.settings.arealRain ? ' × the areal correction' : ''}`
+					: `${unit} has no rain of its own (no rain gauge or CHIRPS series of its own, and no MAP to scale the catchment gauge by): it runs on the catchment rain${ctx.settings.arealRain ? ' × the areal correction' : ''}`
 			);
-		return { nodeId: n.id, rule, hasGauge, gaugeMapFactor, gaugeMapOwnFactor, gaugeMapClamped, chirps };
+		return { nodeId: n.id, rule, hasGauge, gaugeMapFactor, gaugeMapOwnFactor, gaugeMapClamped, gaugeMapOutsideBand, chirps };
 	});
 }
 
@@ -362,18 +416,25 @@ export function unitRainForcing(
 		const gauge = r.hasGauge ? align(ctx.series[unitRainSeriesKey('rain_catchment_mm', n.id)]) : null;
 		// The unit's own forecast (a seasonal outlook member's season, unitForecastSeriesKey): read before the catchment's rain.
 		const ownForecast = ctx.series[unitForecastSeriesKey(n.id)] ? align(ctx.series[unitForecastSeriesKey(n.id)]) : null;
-		const chirps = r.chirps ? align(ctx.series[unitRainSeriesKey('rain_chirps_mm', n.id)]) : null;
+		// An unusable CHIRPS (all-zero years) is never read: its days fall to the next link.
+		const level = r.chirps && r.chirps.source !== 'unusable' ? r.chirps : null;
+		const chirps = level ? align(ctx.series[unitRainSeriesKey('rain_chirps_mm', n.id)]) : null;
 		const k2 = r.gaugeMapFactor;
-		const level = r.chirps;
+		// The level on a unit's CHIRPS day t: its MAP factor, the §2.4b factor of the day, or the reference factor of its month × k_unit.
+		const levelOn = (t: number): number => {
+			if (level!.source === 'map') return level!.factor;
+			if (level!.source === 'bias') return chirpsFactorOn(ctx.chirpsCorrection, d0 + t) ?? 1;
+			if (level!.source === 'reference') return level!.factors[monthOfEpochDay(d0 + t) - 1]! * (level!.kUnit?.factor ?? 1);
+			return 1;
+		};
 		const chirpsAt = (t: number): number | null => {
 			const v = chirps![t];
-			if (v == null) return null;
-			if (level!.source === 'map') return v * level!.factor;
-			if (level!.source === 'bias') return v * (chirpsFactorOn(ctx.chirpsCorrection, d0 + t) ?? 1);
-			if (level!.source === 'reference') return v * level!.factors[monthOfEpochDay(d0 + t) - 1]! * level!.mapRatio;
-			return v;
+			return v == null ? null : v * levelOn(t);
 		};
 		const kFill = k2 ?? 1;
+		// A CHIRPS-GEFS forecast is raw CHIRPS (§2.4f), so it takes the unit's CHIRPS level (decision 5); an uploaded one, which may
+		// already be at gauge level, the MAP ratio. A unit without a CHIRPS level (or raw: none known) keeps the ratio.
+		const gefsLevel = ctx.forecastRainSource === 'chirps_gefs' && level !== null && level.source !== 'raw';
 		for (let t = 0; t < days; t++) {
 			let v: number | null = null;
 			let code: number = NaN;
@@ -405,8 +466,9 @@ export function unitRainForcing(
 			if (v === null) {
 				const x = c[t] ?? ch[t] ?? f[t] ?? null;
 				if (x !== null) {
-					v = x * kFill;
-					code = c[t] != null || ch[t] != null ? UNIT_RAIN_SOURCE.catchment : UNIT_RAIN_SOURCE.forecast;
+					const forecast = c[t] == null && ch[t] == null;
+					v = x * (forecast && gefsLevel ? levelOn(t) : kFill);
+					code = forecast ? UNIT_RAIN_SOURCE.forecast : UNIT_RAIN_SOURCE.catchment;
 				}
 			}
 			if (v === null) continue;
@@ -491,6 +553,7 @@ export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing
 				gaugeMapFactor: r.gaugeMapFactor,
 				gaugeMapOwnFactor: r.gaugeMapOwnFactor,
 				gaugeMapClamped: r.gaugeMapClamped,
+				gaugeMapOutsideBand: r.gaugeMapOutsideBand ?? false,
 				chirps: r.chirps ? structuredClone(r.chirps) : null,
 				days,
 				rainMm,

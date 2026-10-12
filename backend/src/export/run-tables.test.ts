@@ -106,6 +106,7 @@ describe('summary sheet', () => {
 			gaugeMapFactor: null,
 			gaugeMapOwnFactor: null,
 			gaugeMapClamped: false,
+			gaugeMapOutsideBand: false,
 			days: { unitGauge: 0, gaugeMap: 0, unitChirps: 360, catchment: 6, forecast: 0, none: 0 },
 			rainMm: 700,
 			petMm: 1500,
@@ -123,7 +124,7 @@ describe('summary sheet', () => {
 			gaugeMapSource: null,
 			mapPeriod: { start: '1991-01-01', end: '2020-12-31' },
 			units: [
-				{ ...unit, nodeId: 'u1', name: 'Upper unit', mapMm: 800, rule: 'unitChirps', factor: 1.6, factorSource: 'chirpsMap', chirps: { source: 'map', factor: 1.6, ownFactor: 1.6, clamped: false, meanAnnualMm: 500, years: [1991, 2020], inPeriod: true } },
+				{ ...unit, nodeId: 'u1', name: 'Upper unit', mapMm: 800, rule: 'unitChirps', factor: 1.6, factorSource: 'chirpsMap', chirps: { source: 'map', factor: 1.6, ownFactor: 1.6, clamped: false, outsideBand: false, meanAnnualMm: 500, years: [1991, 2020], inPeriod: true } },
 				{ ...unit, nodeId: 'u2', name: 'Lower unit', mapMm: null, mapSource: null, rule: 'catchment', rainKey: null, factor: null, factorSource: 'catchment', chirps: null }
 			]
 		};
@@ -137,7 +138,7 @@ describe('summary sheet', () => {
 		expect(lines.filter((l) => l === '').length).toBe(21);
 	});
 
-	it('writes the reference gauge’s monthly factors (engine ≥ 1.80.0) after the units, and a unit’s MAP ratio on them', () => {
+	it('writes the reference gauge’s monthly factors (engine ≥ 1.80.0) after the units, and a unit’s k_unit on them (engine ≥ 1.85.0)', () => {
 		const s = structuredClone(summary);
 		const unit = {
 			nodeId: 'u1',
@@ -152,7 +153,12 @@ describe('summary sheet', () => {
 			gaugeMapFactor: null,
 			gaugeMapOwnFactor: null,
 			gaugeMapClamped: false,
-			chirps: { source: 'reference' as const, factors: Array(12).fill(2), mapRatio: 1.5, mapOwnRatio: 1.5, mapClamped: false },
+			gaugeMapOutsideBand: false,
+			chirps: {
+				source: 'reference' as const,
+				factors: Array(12).fill(2),
+				kUnit: { factor: 1.5, ownFactor: 1.5, clamped: false, outsideBand: false, meanAnnualMm: 600, years: Array.from({ length: 30 }, (_, i) => 1991 + i), inPeriod: true }
+			},
 			days: { unitGauge: 0, gaugeMap: 0, unitChirps: 366, catchment: 0, forecast: 0, none: 0 },
 			rainMm: 700,
 			petMm: 1500,
@@ -164,7 +170,7 @@ describe('summary sheet', () => {
 			runoffM3: 700_000,
 			runoffCoefficient: 0.1
 		};
-		const month = (m: number) => ({ month: m, sharedDays: 120, gaugeMm: 400, chirpsMm: 200, ownFactor: 2, factor: 2, clamped: false, fitted: true });
+		const month = (m: number) => ({ month: m, sharedDays: 120, gaugeMm: 400, chirpsMm: 200, ownFactor: 2, factor: 2, clamped: false, fitted: true, outsideBand: false });
 		s.unitRain = {
 			mode: 'perUnit',
 			gaugeMapMm: null,
@@ -177,13 +183,15 @@ describe('summary sheet', () => {
 				unitName: 'Gauge unit',
 				mapMm: 600,
 				cellKey: 'rain_chirps_cell_mm@u0',
+				cellReason: 'referenceUnitCentre' as const,
+				gaugeChecked: false,
 				pinned: false,
 				months: [{ ...month(1), sharedDays: 60, ownFactor: null, factor: 1, fitted: false }, ...Array.from({ length: 11 }, (_, i) => month(i + 2))]
 			}
 		};
 		const lines = [...summaryCsvLines(meta, s)];
 		expect(lines.find((l) => l.startsWith('Upper unit,'))).toBe(
-			"Upper unit,10,900,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.5,the reference gauge's monthly factors × unit MAP ÷ the reference unit's MAP,no,,,0,0,366,0,0,0,700,600,70,700000,0.1"
+			"Upper unit,10,900,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.5,the reference gauge's monthly factors × k_unit (unit MAP ÷ its mean annual CHIRPS × the factors),no,600,1991–2020 (30),0,0,366,0,0,0,700,600,70,700000,0.1"
 		);
 		const at = lines.indexOf('Reference gauge,rain_catchment_mm');
 		expect(at).toBeGreaterThan(0);

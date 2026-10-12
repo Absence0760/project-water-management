@@ -406,7 +406,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): each evaluation runs GR4J once per land
 	// unit, into buffers the plan reads as the units' local inflow, and natural flow is their sum, as runModel's.
 	const perUnit = unitRainForcing(
-		{ settings, series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays },
+		{ settings, series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays, forecastRainSource: input.forecastRainSource ?? null },
 		warnings,
 		settings.unitRain?.pinned ?? undefined
 	);

@@ -32,22 +32,22 @@ const FACTOR_SOURCE: Record<UnitRainResultUnit['factorSource'], string> = {
 	chirpsMap: 'unit MAP ÷ its CHIRPS mean',
 	chirpsBias: 'the catchment’s monthly CHIRPS factors',
 	chirpsRaw: 'none: CHIRPS as published',
-	chirpsReference: 'the reference gauge’s monthly factors × unit MAP ÷ the reference unit’s MAP',
+	chirpsReference: 'the reference gauge’s monthly factors',
 	catchment: 'the catchment’s rain, with its areal correction'
 };
 
 /** "× 1.18, unit MAP ÷ gauge MAP" or the source alone when the factor varies by day; on the reference factors, the MAP ratio on top of them. */
 export function factorText(u: Pick<UnitRainResultUnit, 'factor' | 'factorSource'> & { chirps?: UnitRainResultUnit['chirps'] }): string {
 	const src = FACTOR_SOURCE[u.factorSource] ?? u.factorSource;
-	if (u.factor === null && u.factorSource === 'chirpsReference' && u.chirps?.source === 'reference')
-		return `the reference gauge’s monthly factors × ${fmtNum(u.chirps.mapRatio, 2, true)} (unit MAP ÷ the reference unit’s MAP)`;
+	if (u.factor === null && u.factorSource === 'chirpsReference' && u.chirps?.source === 'reference' && u.chirps.kUnit)
+		return `the reference gauge’s monthly factors × ${fmtNum(u.chirps.kUnit.factor, 2, true)} (k_unit: unit MAP ÷ its mean annual CHIRPS × the factors)`;
 	return u.factor === null ? src : `× ${fmtNum(u.factor, 2, true)}, ${src}`;
 }
 
 /** Whether the unit's factor was held at the 0.25–4 bound. */
 export const factorClamped = (u: Pick<UnitRainResultUnit, 'gaugeMapClamped' | 'chirps' | 'rule'>): boolean =>
 	(u.rule === 'gaugeMap' && !!u.gaugeMapClamped) ||
-	(u.rule === 'unitChirps' && ((u.chirps?.source === 'map' && u.chirps.clamped) || (u.chirps?.source === 'reference' && u.chirps.mapClamped)));
+	(u.rule === 'unitChirps' && ((u.chirps?.source === 'map' && u.chirps.clamped) || (u.chirps?.source === 'reference' && !!u.chirps.kUnit?.clamped)));
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

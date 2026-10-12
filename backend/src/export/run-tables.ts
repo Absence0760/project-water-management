@@ -944,7 +944,7 @@ const UNIT_RAIN_FACTOR_TEXT: Record<UnitRainUnit['factorSource'], string> = {
 	chirpsMap: 'unit MAP ÷ its CHIRPS mean annual rain',
 	chirpsBias: "the catchment's monthly CHIRPS factors",
 	chirpsRaw: 'raw',
-	chirpsReference: "the reference gauge's monthly factors × unit MAP ÷ the reference unit's MAP",
+	chirpsReference: "the reference gauge's monthly factors × k_unit (unit MAP ÷ its mean annual CHIRPS × the factors)",
 	catchment: 'as the catchment forcing'
 };
 
@@ -982,7 +982,7 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 	for (const x of u.units) {
 		const map = x.chirps?.source === 'map' ? x.chirps : null;
 		const ref = x.chirps?.source === 'reference' ? x.chirps : null;
-		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : x.rule === 'unitChirps' ? (map?.clamped ?? ref?.mapClamped ?? false) : false;
+		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : x.rule === 'unitChirps' ? (map?.clamped ?? ref?.kUnit?.clamped ?? false) : false;
 		yield csvRow([
 			x.name,
 			x.areaKm2,
@@ -990,12 +990,12 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 			x.mapSource ?? '',
 			UNIT_RAIN_RULE_TEXT[x.rule],
 			x.rainKey ?? '',
-			// On the reference factors the factor varies by month: the column holds the MAP ratio on top of them.
-			x.factor ?? (x.rule === 'unitChirps' && ref ? ref.mapRatio : null),
+			// On the reference factors the factor varies by month: the column holds k_unit on top of them (empty without one).
+			x.factor ?? (x.rule === 'unitChirps' && ref ? (ref.kUnit?.factor ?? null) : null),
 			UNIT_RAIN_FACTOR_TEXT[x.factorSource],
 			clamped ? 'yes' : 'no',
-			map ? map.meanAnnualMm : null,
-			map ? `${map.years[0]}–${map.years[map.years.length - 1]} (${map.years.length}${map.inPeriod ? '' : ', outside the MAP period'})` : '',
+			map ? map.meanAnnualMm : ref?.kUnit ? ref.kUnit.meanAnnualMm : null,
+			((m) => (m ? `${m.years[0]}–${m.years[m.years.length - 1]} (${m.years.length}${m.inPeriod ? '' : ', outside the MAP period'})` : ''))(map ?? ref?.kUnit ?? null),
 			x.days.unitGauge,
 			x.days.gaugeMap,
 			x.days.unitChirps,
