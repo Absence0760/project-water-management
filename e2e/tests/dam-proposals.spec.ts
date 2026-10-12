@@ -1,10 +1,12 @@
 // Dams → "Proposed from the register and the map" (issue #326 B-dams; docs/ui.md
 // § Dams, docs/maps.md § Dams from the register and the map). A unit's dam on
-// the map proposes its capacity from the registered dams within 1 km (the
-// committed synthetic register, region Z) and its full-supply area from its
-// polygon, each row with its source; Use asks first and saves that one value,
-// and History names the source. A viewer reads the proposals but can't use
-// them. The table is read, never the map's pixels. Invented data only.
+// the map lists the registered dams within 1 km (the committed synthetic
+// register, region Z) with their capacities for reference only (the unit's
+// dam is its composite dam, its volume the user's: #523 C1), and proposes its
+// full-supply area from its polygon, each row with its source; Use asks first
+// and saves that one value, and History names the source. A viewer reads the
+// proposals but can't use them. The table is read, never the map's pixels.
+// Invented data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
@@ -67,7 +69,7 @@ test('the seeded Sandspruit: a dam’s registered capacity and its polygon’s a
 	await expectNoViolations(page, { include: '[data-testid="dam-proposals"]' });
 });
 
-test('an editor uses the map’s area, then the register’s capacity, one at a time; History names each source; a viewer can’t', async ({ page, owner, signIn }) => {
+test('an editor uses the map’s area; the register’s capacity is a reference only, never used; History names the source; a viewer can’t', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Dam proposals');
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!;
@@ -96,20 +98,20 @@ test('an editor uses the map’s area, then the register’s capacity, one at a 
 	expect((await model()).damAreaFullM2).toBeCloseTo(areaM2, 6);
 	expect((await model()).damCapacityM3).toBe(150_000);
 
+	// The registered capacity is listed with its source, for reference only: no Use, and the capacity stays the user's.
 	const cap = rowOf(page, 'Z100/07');
 	await expect(cap.getByTestId('dam-proposal-source')).toContainText('The register of dams, “synthetic”: SYNTHETIC');
-	await cap.getByRole('button', { name: 'Use the capacity of Z100/07' }).click();
-	await answerConfirm(page, true, /Set Upper farm’s dam capacity from the register\?\s*Upper farm’s dam capacity changes from 150\D000 m³ to 140\D000 m³/);
-	await expect(panel(page).getByTestId('dam-proposals-notice')).toHaveText(/^Upper farm’s dam capacity is now 140\D000 m³, from the register of dams \(Z100\/07\)\./);
-	await expect(cap.getByRole('cell').last()).toHaveText('Saved');
-	expect((await model()).damCapacityM3).toBe(140_000);
+	await expect(cap.getByRole('cell').nth(1)).toHaveText(/^140\D000 m³$/);
+	await expect(cap.getByTestId('dam-proposal-reference')).toHaveText('Reference only');
+	await expect(cap.getByRole('button')).toHaveCount(0);
+	await expect(panel(page)).toContainText('its volume is yours to enter');
+	expect((await model()).damCapacityM3).toBe(150_000);
 	await expectNoViolations(page, { include: '[data-testid="dam-proposals"]' });
 
-	// History names each source, newest first.
+	// History names the source.
 	await page.goto(`/projects/${project.id}?tab=history`);
 	const entries = page.getByTestId('history-entry');
-	await expect(entries.nth(0)).toContainText(/Dam capacity of Upper farm from the register of dams: Bo-dam \(Z100\/07, 140000 m³, \d+ m from “Upper dam”; SYNTHETIC/);
-	await expect(entries.nth(1)).toContainText(/Dam full-supply area of Upper farm from the map: “Upper dam” \(\d+ m², computed from its polygon\)/);
+	await expect(entries.nth(0)).toContainText(/Dam full-supply area of Upper farm from the map: “Upper dam” \(\d+ m², computed from its polygon\)/);
 
 	// A viewer reads the proposals, with their sources, and has no Use; on a phone nothing scrolls sideways.
 	const viewer = await signIn('Dam proposals viewer');

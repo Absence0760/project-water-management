@@ -57,9 +57,10 @@
 	// each click on a river an outlet: the map draws every click's incremental
 	// catchment, numbered by click, and Save keeps them as areas.
 	// On an empty model, editors can Start the model from the map (`start=1`,
-	// #326 C3, docs/design/start-from-map.md): units at the dams and
-	// abstraction points, their sub-catchments and order proposed and ticked
-	// value by value; the empty map leads with Delineate and Draw (D4).
+	// #326 C3, docs/design/start-from-map.md): units from the user's own
+	// boundaries (start-16), the dams and pumps inside each linked to it, their
+	// order proposed and ticked value by value; the empty map leads with
+	// Delineate and Draw (D4).
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -880,7 +881,7 @@
 		}
 	}
 
-	/** Where a dam stands against its river (194): Start and Divide place it by this, '' leaving it to its outline. */
+	/** Where a dam stands against its river (194): Start and Divide place a water user at the dam by this, '' leaving it to its outline. */
 	async function setDamPosition(f: MapFeature, value: string) {
 		busy = f.id;
 		rowError = null;
@@ -1124,13 +1125,13 @@
 	{/if}
 {/snippet}
 
-<!-- A dam outline's position against its river (194): a select for editors, else its words. Start and Divide place the dam by it. -->
+<!-- A dam outline's position against its river (194): a select for editors, else its words. Start and Divide place a water user at the dam by it (a dam that is part of a unit is never placed, start-16). -->
 {#snippet damPosition(f: MapFeature)}
 	{#if canEdit}
 		<select class="cap" aria-label="Where {featureName(f)} stands against its river" aria-describedby="{uid}-dam-position" value={f.damPosition ?? ''} disabled={busy === f.id} onchange={(e) => setDamPosition(f, e.currentTarget.value)} data-testid="map-dam-position">
 			{#each ['', 'on_channel', 'off_channel'] as const as v (v)}<option value={v}>{DAM_POSITION_LABEL[v]}</option>{/each}
 		</select>
-		<p class="hint muted" id="{uid}-dam-position">Start and Divide take only an off-channel dam’s own catchment into it, the river passing it by; unsaid, its outline decides.</p>
+		<p class="hint muted" id="{uid}-dam-position">For your records, and for a water user placed at the dam in Start or Divide; unsaid, its outline decides. Its unit’s composite dam takes the shares of upstream inflow and runoff you enter on the unit.</p>
 	{:else}
 		<span data-testid="map-dam-position">{DAM_POSITION_LABEL[f.damPosition ?? '']}</span>
 	{/if}
@@ -1290,7 +1291,7 @@
 			<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
 			{#if canStart}
 				<p class="empty-line small">
-					<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then your dams and abstraction points, and the app proposes the units, their areas and their order.
+					<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then each unit’s own boundary, and the app proposes their order and links the dams and pumps inside each.
 				</p>
 			{/if}
 		{/if}

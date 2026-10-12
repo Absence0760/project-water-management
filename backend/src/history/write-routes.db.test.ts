@@ -18,10 +18,9 @@ import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
-import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { fileURLToPath } from 'node:url';
-import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
+import { fixtureLonLat, OUTLET_CELL, valleyUnitRing } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
@@ -449,15 +448,6 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
-		// A dam's capacity from the register of dams: a revision whose reason names the registered dam.
-		route: `POST ${P}/nodes/:nodeId/dam-capacity-from-register`,
-		records: ['revision'],
-		call: async (c) => {
-			await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
-			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-capacity-from-register`, { registerNo: 'Z100/07' });
-		}
-	},
-	{
 		// A planted area from land cover (issue #326 B-landcover): a revision whose reason names the dataset, version and method.
 		route: `POST ${P}/nodes/:nodeId/crop-area-from-land-cover`,
 		records: ['revision'],
@@ -560,7 +550,9 @@ const WRITE_ROUTES: Entry[] = [
 			const [dlon, dlat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y - 99.5);
 			const gauge = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'gauge', name: 'Guard weir', lon: olon, lat: olat })).body.feature.id;
 			const dam = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'dam', name: 'Guard dam', lon: dlon, lat: dlat })).body.feature.id;
-			const body = { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] };
+			// The unit is its own boundary (start-16); the dam inside it is part of its composite dam.
+			const unit = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'other', name: 'Guard unit', geometry: { type: 'Polygon', coordinates: [valleyUnitRing(0, OUTLET_CELL.y - 80)] } })).body.feature.id;
+			const body = { outletFeatureId: gauge, points: [{ featureId: unit, role: 'unit' }, { featureId: dam, role: 'dam' }] };
 			const r = await c.owner.call('POST', `${sat}/map/start`, body);
 			c.startBody = body;
 			c.startId = (await c.owner.call('POST', `${sat}/map/start`, body)).body.proposal?.id;
@@ -575,7 +567,7 @@ const WRITE_ROUTES: Entry[] = [
 			const r = await c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId}/discard`);
 			const again = await c.owner.call('POST', `/projects/${c.startProject}/map/start`, c.startBody);
 			c.startId2 = again.body.proposal?.id;
-			c.startUnits = again.body.proposal?.plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: true, drainsInto: true, runoffToDam: true }));
+			c.startUnits = again.body.proposal?.plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: true, drainsInto: true, runoffToDam: false }));
 			return r;
 		}
 	},
@@ -590,7 +582,7 @@ const WRITE_ROUTES: Entry[] = [
 				rest: { include: true, name: 'Rest of the catchment', area: true }
 			})
 	},
-	// --- divide that model from the map (182): the dam's point stands for its unit now; the rest a new unit (a change, so a revision) ----
+	// --- divide that model from the map (182): the unit's boundary stands for its unit now; the rest a new unit (a change, so a revision) ----
 	{
 		route: `POST ${P}/map/divide`,
 		records: ['map.divide_proposed'],
@@ -598,9 +590,9 @@ const WRITE_ROUTES: Entry[] = [
 		call: async (c) => {
 			const sat = `/projects/${c.startProject}`;
 			const features = (await c.owner.call('GET', `${sat}/map/features`)).body.features as { id: string; kind: string; nodeId: string | null }[];
-			const dam = features.find((f) => f.kind === 'dam')!;
+			const unit = features.find((f) => f.kind === 'other' && f.nodeId)!;
 			const outlet = features.find((f) => f.kind === 'gauge')!;
-			const r = await c.owner.call('POST', `${sat}/map/divide`, { outletFeatureId: outlet.id, points: [{ featureId: dam.id, nodeId: dam.nodeId }] });
+			const r = await c.owner.call('POST', `${sat}/map/divide`, { outletFeatureId: outlet.id, points: [{ featureId: unit.id, nodeId: unit.nodeId }] });
 			c.divideId = r.body.proposal?.id;
 			c.divideUnits = r.body.proposal?.plan.units.map((u: { key: string }) => ({ key: u.key, area: true, drainsInto: true, runoffToDam: false, add: false }));
 			return r;

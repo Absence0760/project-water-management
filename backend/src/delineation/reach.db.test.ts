@@ -151,7 +151,7 @@ describe('Sub-catchments: the mapped river never places a click (issue #472)', (
 		await clearReaches();
 		const without = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, { clicks });
 		expect(without.status, JSON.stringify(without.body)).toBe(200);
-		expect(without.body.methodVersion).toBe('start-15');
+		expect(without.body.methodVersion).toBe('start-16');
 		for (const p of without.body.pieces) {
 			expect(p).not.toHaveProperty('reach');
 			expect(p).not.toHaveProperty('unmatched');

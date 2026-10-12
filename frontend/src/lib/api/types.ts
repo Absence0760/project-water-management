@@ -3228,8 +3228,20 @@ export interface PanReport {
 	method: string;
 }
 
-/** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
-export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
+/**
+ * What a feature on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md): `unit`, a
+ * hydrological unit drawn as its own boundary (start-16, #523 C1); `dam`, part of the composite dam of the unit whose boundary
+ * holds it; `abstraction`, that unit's river pump; `user` and `gauge`, in the order with no land. In a plan from before
+ * start-16, `dam` and `abstraction` were units of their own (at a dam, at an abstraction point).
+ */
+export type StartRole = 'unit' | 'dam' | 'abstraction' | 'user' | 'gauge';
+
+/** A dam (part of the composite dam) or an abstraction point (the river pump) inside a unit's boundary (start-16). */
+export interface StartMember {
+	featureId: string;
+	name: string;
+	role: 'dam' | 'abstraction';
+}
 
 /**
  * How a point of a start or division was put on the elevation model's channel (backend delineation/pointPlacement.ts): on the
@@ -3239,7 +3251,8 @@ export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
  * since start-15 (issue #472).
  */
 export interface PointPlacement {
-	placedBy: 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' | 'polygon' | 'boundary';
+	/** `unit`: a unit's boundary, at its most-drained cell above the outlet (start-16). */
+	placedBy: 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' | 'polygon' | 'boundary' | 'unit';
 	reach?: { dataset: string; reachId: number; upstreamKm2: number; chosen: boolean } | null;
 	/** Beside a much larger channel: that channel (Use that channel puts the point on it). */
 	larger: LargerChannel | null;
@@ -3261,10 +3274,17 @@ export interface StartUnit {
 	name: string;
 	point: MapPosition;
 	snapDistanceM: number | null;
-	/** Its own sub-catchment's area (m²) and outline; null without an elevation model, and for a water user or a gauge (they own no land). */
+	/**
+	 * Its own area (m²) and outline: a unit's boundary (start-16); before start-16 its own sub-catchment's, null without an
+	 * elevation model; null for a water user or a gauge (they own no land).
+	 */
 	areaM2: number | null;
 	totalAreaM2: number | null;
-	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null;
+	/** A unit (start-16), with an elevation model: what drains to its boundary's outflow and to no unit above it (m²), the check on its area. */
+	demAreaM2?: number | null;
+	/** A unit (start-16): its dams (the composite dam) and abstraction points (the river pump). */
+	members?: StartMember[];
 	/** The unit it drains into (its key), or null for the outflow gauge. */
 	drainsInto: string | null;
 	/** Whether drainsInto was proposed from the elevation model (false: only the default). */
@@ -3274,7 +3294,7 @@ export interface StartUnit {
 	/** Of its own area and its whole catchment, what drains into pans (m²; absent without an elevation model or before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
-	/** A dam marked on or off the river on the map (194): the dam shares proposed for its unit (backend start.ts damSharesOf). */
+	/** Plans before start-16: a dam marked on or off the river on the map (194), the dam shares proposed for its unit. Never proposed since. */
 	damShares?: DamShares;
 }
 
@@ -3299,7 +3319,8 @@ export interface StartPlan {
 	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null; placement?: PointPlacement | null };
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
-	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
+	/** Beside units' boundaries (start-16): the catchment less them, with no outline; `members` the dams and pumps in no unit's boundary. */
+	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number; members?: StartMember[] };
 	/** What of the catchment drains into pans (start-11; absent without an elevation model or before). */
 	pans?: PanReport;
 	/** `placement`: how a dropped point was put on the channel (start-7): one beside a larger channel can be moved there. */
@@ -3355,9 +3376,14 @@ export interface DivideUnit {
 	role: StartRole;
 	point: MapPosition;
 	snapDistanceM: number | null;
+	/** A unit's boundary's area and outline (start-16; before, its own piece's); null for a water user or a gauge. */
 	areaM2: number | null;
 	totalAreaM2: number | null;
-	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null;
+	/** A unit (start-16): what drains to its boundary's outflow and to no unit above it (m²), the check on its area. */
+	demAreaM2?: number | null;
+	/** A unit (start-16): the unlinked dams (its composite dam) and abstraction points (its river pump) inside its boundary, linked to it on apply. */
+	members?: StartMember[];
 	drainsInto: string | null;
 	current: DivideCurrent | null;
 	/** How its point was put on the channel (absent before start-7). */
@@ -3365,7 +3391,7 @@ export interface DivideUnit {
 	/** Of its own area and its whole catchment, what drains into pans (m²; absent before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
-	/** A dam marked on or off the river on the map (194): the dam shares proposed for its unit (backend start.ts damSharesOf). */
+	/** Plans before start-16: a dam marked on or off the river on the map (194), the dam shares proposed for its unit. Never proposed since. */
 	damShares?: DamShares;
 }
 

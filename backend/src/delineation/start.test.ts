@@ -1,48 +1,87 @@
-// The dam shares a dam marked on or off its river proposes for its unit (194; start.ts damSharesOf, docs/model.md §2.7).
+// The pure parts of Start from the map's units drawn as their boundaries (start-16, #523 C1; #90 "Abstraction points from
+// Start from the map / Divide"): which unit each dam and abstraction point is part of, the rest beside the boundaries, the
+// boundary's area against the elevation model's, and a stored plan from before.
 import { describe, expect, it } from 'vitest';
-import { damRunoff, damSharesOf, runoffShareFor, withDamShares } from './start.js';
+import type { Geometry } from '../geo/geojson.js';
+import { assignMembers, boundaryCheck, madeBeforeBoundaries, restBesideBoundaries } from './start.js';
 
-describe('damSharesOf', () => {
-	it('on the river: everything from upstream and all of its own runoff enters the dam', () => {
-		expect(damSharesOf({ role: 'dam', areaM2: 4e6, damPosition: 'on_channel' })).toEqual({ pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null, pctRunoffToDamEffective: 1 });
+const square = (x0: number, y0: number, x1: number, y1: number): Geometry => ({ type: 'Polygon', coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]] });
+const pt = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
+
+describe('assignMembers', () => {
+	const units = [
+		{ key: 'upper', geometry: square(20, -33.5, 21, -33) },
+		{ key: 'lower', geometry: square(20, -34, 21, -33.5) }
+	];
+	it('makes each dam part of the composite dam, and each abstraction point the river pump, of the unit whose boundary holds it', () => {
+		const r = assignMembers(
+			units,
+			[
+				{ featureId: 'd1', name: 'Top dam', role: 'dam', geometry: pt(20.5, -33.2) },
+				{ featureId: 'p1', name: 'Top pump', role: 'abstraction', geometry: pt(20.6, -33.3) },
+				// A dam drawn as its outline: by its centre.
+				{ featureId: 'd2', name: 'Low dam', role: 'dam', geometry: square(20.4, -33.8, 20.5, -33.7) }
+			],
+			null
+		);
+		expect(r.byUnit.get('upper')).toEqual([
+			{ featureId: 'd1', name: 'Top dam', role: 'dam' },
+			{ featureId: 'p1', name: 'Top pump', role: 'abstraction' }
+		]);
+		expect(r.byUnit.get('lower')).toEqual([{ featureId: 'd2', name: 'Low dam', role: 'dam' }]);
+		expect(r.rest).toEqual([]);
+		expect(r.dropped).toEqual([]);
 	});
 
-	it('off-channel: the river passes it by, and only its own catchment’s share of the unit’s runoff enters it', () => {
-		expect(damSharesOf({ role: 'dam', areaM2: 4e6, damPosition: 'off_channel', damCatchmentM2: 0.1e6 })).toEqual({ pctUpstreamToDam: 0, pctRunoffToDam: 0.025, damCatchmentM2: 0.1e6 });
-		// To 0.001, never past 1; a dam with no river below it owns its whole piece.
-		expect(damSharesOf({ role: 'dam', areaM2: 3e6, damPosition: 'off_channel', damCatchmentM2: 1e6 })!.pctRunoffToDam).toBe(0.333);
-		expect(damSharesOf({ role: 'dam', areaM2: 1e6, damPosition: 'off_channel', damCatchmentM2: 1.0000001e6 })!.pctRunoffToDam).toBe(1);
-		expect(damSharesOf({ role: 'dam', areaM2: 1e6, damPosition: 'off_channel' })).toEqual({ pctUpstreamToDam: 0, pctRunoffToDam: 1, damCatchmentM2: null });
-	});
-
-	it('proposes nothing for an unmarked dam (today’s plan) or any other unit', () => {
-		expect(damSharesOf({ role: 'dam', areaM2: 4e6 })).toBeNull();
-		expect(damSharesOf({ role: 'abstraction', areaM2: 4e6, damPosition: 'off_channel', damCatchmentM2: 1 })).toBeNull();
-		expect(withDamShares({ role: 'dam', areaM2: 4e6 })).toEqual({});
-		expect(withDamShares({ role: 'dam', areaM2: 4e6, damPosition: 'on_channel' })).toHaveProperty('damShares');
+	it('puts a point in no unit’s boundary with the rest of the catchment, and drops one outside the catchment boundary', () => {
+		const boundary = square(19, -35, 22, -32);
+		const r = assignMembers(
+			units,
+			[
+				{ featureId: 'in', name: 'Side pump', role: 'abstraction', geometry: pt(21.5, -33.5) },
+				{ featureId: 'out', name: 'Far dam', role: 'dam', geometry: pt(25, -33.5) }
+			],
+			boundary
+		);
+		expect(r.rest).toEqual([{ featureId: 'in', name: 'Side pump', role: 'abstraction' }]);
+		expect(r.dropped).toEqual([{ featureId: 'out', name: 'Far dam', reason: 'is outside the catchment boundary' }]);
+		// Without a catchment boundary nothing is outside it: the far dam is with the rest too.
+		expect(assignMembers(units, [{ featureId: 'out', name: 'Far dam', role: 'dam', geometry: pt(25, -33.5) }], null).rest).toHaveLength(1);
 	});
 });
 
-describe('the runoff share on the area taken (195)', () => {
-	it('is the dam’s catchment over the piece gross, and both less their pans effective', () => {
-		const s = damSharesOf({ role: 'dam', areaM2: 4e6, damPosition: 'off_channel', damCatchmentM2: 0.4e6, nonContributingM2: 1e6, damNonContributingM2: 0.1e6 })!;
-		expect(s.pctRunoffToDam).toBe(0.1);
-		// (0.4 − 0.1) / (4 − 1) km²: the same water reaches the dam whichever area the unit's runoff is generated over.
-		expect(s.pctRunoffToDamEffective).toBe(0.1);
-		expect(s.damNonContributingM2).toBe(0.1e6);
-		expect(runoffShareFor(s, 'gross')).toBe(0.1);
-		const t = damSharesOf({ role: 'dam', areaM2: 4e6, damPosition: 'off_channel', damCatchmentM2: 0.4e6, nonContributingM2: 1e6, damNonContributingM2: 0 })!;
-		expect(t.pctRunoffToDamEffective).toBe(0.133);
-		expect(damRunoff('Dam', t, 'effective')).toBe(0.133);
-		expect(damRunoff('Dam', t, 'gross')).toBe(0.1);
+describe('restBesideBoundaries', () => {
+	it('is the catchment less the units’ boundaries, never below nothing, and unknown without a catchment area', () => {
+		expect(restBesideBoundaries(100e6, [40e6, 50e6])).toEqual({ areaM2: 10e6, warning: null });
+		// A few per cent over (boundaries drawn a little past the ridge): nothing left, no warning.
+		expect(restBesideBoundaries(100e6, [50e6, 55e6])).toEqual({ areaM2: 0, warning: null });
+		expect(restBesideBoundaries(null, [40e6])).toEqual({ areaM2: null, warning: null });
 	});
+	it('warns when the boundaries add up past the catchment by more than a tenth', () => {
+		const r = restBesideBoundaries(100e6, [60e6, 60e6]);
+		expect(r.areaM2).toBe(0);
+		expect(r.warning).toBe('The units’ boundaries add up to 120.00 km², more than the catchment’s 100.00 km²: do they overlap, or reach past the catchment? Check them on the map.');
+	});
+});
 
-	it('is 1 for an unmarked dam and on the river, and refused effective without the figures (a plan from before)', () => {
-		expect(damRunoff('Dam', undefined, 'effective')).toBe(1);
-		expect(damRunoff('Dam', damSharesOf({ role: 'dam', areaM2: 4e6, damPosition: 'on_channel' })!, 'effective')).toBe(1);
-		const old = damSharesOf({ role: 'dam', areaM2: 4e6, damPosition: 'off_channel', damCatchmentM2: 0.4e6 })!;
-		expect(old).not.toHaveProperty('pctRunoffToDamEffective');
-		expect(damRunoff('Dam', old, 'gross')).toBe(0.1);
-		expect(() => damRunoff('Dam', old, 'effective')).toThrow(/^Dam’s share of runoff into its off-channel dam has no effective figure/);
+describe('boundaryCheck', () => {
+	it('says nothing within a tenth, or with no elevation model’s figure', () => {
+		expect(boundaryCheck('Upper', 10e6, 10.9e6)).toBeNull();
+		expect(boundaryCheck('Upper', 10e6, undefined)).toBeNull();
+		expect(boundaryCheck('Upper', null, 5e6)).toBeNull();
+	});
+	it('names the unit and both areas when they differ by more, the boundary’s kept', () => {
+		expect(boundaryCheck('Upper', 10e6, 12e6)).toBe(
+			'Upper’s boundary is 10.00 km², but what drains to its outflow and to no unit above it is 12.00 km² on the elevation model. The area follows your boundary; check it, and the units around it, against the map.'
+		);
+	});
+});
+
+describe('madeBeforeBoundaries', () => {
+	it('tells a stored plan with a unit at a dam or an abstraction point (before start-16) from one of boundaries', () => {
+		expect(madeBeforeBoundaries([{ role: 'dam' }, { role: 'gauge' }])).toBe(true);
+		expect(madeBeforeBoundaries([{ role: 'abstraction' }])).toBe(true);
+		expect(madeBeforeBoundaries([{ role: 'unit' }, { role: 'user' }, { role: 'gauge' }])).toBe(false);
+		expect(madeBeforeBoundaries([])).toBe(false);
 	});
 });

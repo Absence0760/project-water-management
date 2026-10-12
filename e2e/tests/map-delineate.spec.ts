@@ -90,7 +90,7 @@ test('an editor delineates the valley from its outlet, reviews it and accepts it
 	await expect(page.getByTestId('map-notice-next')).toHaveText('Divide the model');
 	await expect(page.getByTestId('map-notice-next')).toHaveAttribute('href', /[?&]divide=1(&|$)/);
 	const next = page.getByTestId('map-boundary-next');
-	await expect(next).toContainText('This boundary is on the map, not in the model yet. Divide the model splits it into each unit’s area at your dams, abstraction points and gauges, for you to tick.');
+	await expect(next).toContainText('This boundary is on the map, not in the model yet. Divide the model gives each unit its boundary’s area and order, for you to tick.');
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
 		await expectNoViolations(page);

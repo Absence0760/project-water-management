@@ -23,7 +23,6 @@ import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@wat
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
-import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
@@ -369,12 +368,7 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'PATCH /teams/:id/members/:userId': () => ({ params: { id: ctx.teamId, userId: ctx.viewer.id }, body: { role: 'member' } }),
 	// A run with the observed record in its inputs (the SAMPLE of PUT …/series replaces it with two days).
 	// One queued run of the rules per user (calibration/schema.ts AUTO_CALIBRATION_JOBS_PER_USER): clear the last one's job first.
-	// A dam polygon linked to the ladder's farm, round the synthetic register's Z100/07 (issue #326 B-dams, geo/damRoutes.ts).
-	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': async () => {
-		await ladderDam();
-		await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
-		return SAMPLE['POST /projects/:id/nodes/:nodeId/dam-capacity-from-register']!(ctx);
-	},
+	// A dam polygon linked to the ladder's farm (issue #326 B-dams, geo/damRoutes.ts).
 	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': async () => ({ body: { featureId: await ladderDam() } }),
 	// The ladder's parcel (Farm A's) lies in the synthetic land-cover grid's 0.5 block (issue #326 B-landcover, geo/croplandRoutes.ts).
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': async () => {

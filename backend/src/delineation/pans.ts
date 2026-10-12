@@ -506,7 +506,7 @@ const place = ([lon, lat]: Position) => `${Math.abs(lat).toFixed(3)}° ${lat < 0
  * The sentence a Start or Divide proposal shows when part of its catchment drains into pans: how much, where the largest is,
  * and which pieces hold it (`pieces`: each with any, by name). Null when none does.
  */
-export function panWarning(report: PanReport, catchmentM2: number, pieces: readonly { name: string; ncM2: number }[]): string | null {
+export function panWarning(report: PanReport, catchmentM2: number, pieces: readonly { name: string; ncM2: number }[], effectiveOffered = true): string | null {
 	const river = onRiverText(report);
 	if (!report.count || !(report.nonContributingM2 > 0)) return river;
 	const big = report.largest[0]!;
@@ -517,7 +517,7 @@ export function panWarning(report: PanReport, catchmentM2: number, pieces: reado
 		(report.count === 1
 			? `a pan (a closed depression on the elevation model, at ${place(big.at)}, ${km2Text(big.drainsM2)} draining into it). `
 			: `${report.count} pans (closed depressions on the elevation model; the largest at ${place(big.at)}, ${km2Text(big.drainsM2)} draining into it). `) +
-		`WR2012 counts such endoreic areas as non-contributing; the areas here still include them${held.length ? `: ${held.join(', ')} own area` : ''}. Choose the effective area beside an area’s tick if you model them as non-contributing.` +
+		`WR2012 counts such endoreic areas as non-contributing; the areas here still include them${held.length ? `: ${held.join(', ')} own area` : ''}. ${effectiveOffered ? 'Choose the effective area beside an area’s tick if you model them as non-contributing.' : 'Each unit keeps its boundary’s area (start-16): type a smaller one if you model them as non-contributing.'}` +
 		(river ? ` ${river}` : '')
 	);
 }

@@ -3171,11 +3171,12 @@ placed points. The server never trusts the browser with geometry:
 - Every **area is computed on the server** (`geo/area.ts`); a client's figure
   is never accepted. An area reaches the model only through
   `area-from-map`, an editor's explicit action recorded as a model revision;
-  a dam's capacity and full-supply area only through `dam-capacity-from-register`
-  and `dam-area-from-map` (issue #326 B-dams), which take a register number or
-  a feature id, never a value: the server re-derives the value (the register
-  entry must be within 1 km of the unit's own dam on the map; the polygon must
-  be a dam linked to that unit). A planted area from land cover only through
+  a dam's full-supply area only through `dam-area-from-map` (issue #326
+  B-dams), which takes a feature id, never a value: the server re-derives
+  the value (the polygon must be a dam linked to that unit). A dam's
+  capacity never comes from the map: the register of dams is a reference
+  only (#523 C1), and the accept that wrote a registered capacity
+  (`dam-capacity-from-register`) was removed. A planted area from land cover only through
   `crop-area-from-land-cover` (issue #326 B-landcover), which takes a crop, a
   dataset and optionally a parcel, never a value: the server sums the
   cropland in the unit's own linked parcels as they are now. Evaporation

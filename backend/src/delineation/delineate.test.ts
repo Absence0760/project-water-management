@@ -15,7 +15,7 @@ import {
 	tooLargeText,
 	type DelineationMethodFacts
 } from './delineate.js';
-import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_CELLS, FIXTURE_ZOOM, fixtureElevation, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
+import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_CELLS, FIXTURE_ZOOM, fixtureElevation, fixtureLonLat, OUTLET_CELL, PAN, valleyUnitRing } from './fixture.js';
 import { d8, DX, DY, edgeMask, fill, OUT } from './flow.js';
 import { ON_RIVER_METHOD, PAN_METHOD } from './pans.js';
 
@@ -210,6 +210,10 @@ describe('the e2e copy of the fixture’s points', () => {
 		expect(pair('FIXTURE_UPPER')).toEqual(at(DAM_CELL.x, DAM_CELL.y - 100));
 		expect(pair('FIXTURE_OFF_CHANNEL')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 60));
 		expect(pair('FIXTURE_OFF_TERRAIN')).toEqual(at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120));
+		// The units' boundaries (start-16).
+		const ring = (name: string) => JSON.parse(new RegExp(`${name}: \\[number, number\\]\\[\\] = (\\[.*\\]);`).exec(text)![1]!);
+		expect(ring('FIXTURE_UPPER_UNIT')).toEqual(valleyUnitRing(0, DAM_CELL.y + 5, 2, 10));
+		expect(ring('FIXTURE_LOWER_UNIT')).toEqual(valleyUnitRing(DAM_CELL.y + 5, 400, 2, 10));
 	});
 });
 

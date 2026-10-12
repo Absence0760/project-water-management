@@ -58,17 +58,16 @@ describe('damProposalRows', () => {
 });
 
 describe('confirmWords', () => {
-	it('names the unit, the old and new value and the source', () => {
+	it('names the unit, the old and new area and the source (a registered capacity is never used: #523 C1)', () => {
 		const p = proposals();
-		const [cap, , area] = damProposalRows(p);
-		const c = confirmWords(p, cap!);
-		expect(c.title).toBe('Set Upper farm’s dam capacity from the register?');
-		expect(c.message).toMatch(/^Upper farm’s dam capacity changes from 100\D000 m³ to 140\D000 m³, the registered capacity of Dam Z100\/07 \(Z100\/07\)\./);
-		expect(c.confirmLabel).toBe('Use this capacity');
-		const a = confirmWords(p, area!);
+		const area = damProposalRows(p).find((r) => r.kind === 'area')!;
+		if (area.kind !== 'area') throw new Error('no area row');
+		const a = confirmWords(p, area);
 		expect(a.message).toMatch(/^Upper farm’s dam has no area when full set \(the run estimates one from its capacity\); it becomes 39\D012 m² \(3[.,]9 ha\), the area of “Upper dam” computed on the server/);
 		const set = proposals({ current: { damCapacityM3: 100_000, damAreaFullM2: 20_000 } });
-		expect(confirmWords(set, damProposalRows(set)[2]!).message).toMatch(/^Upper farm’s dam area when full changes from 20\D000 m² \(2[.,]0 ha\) to 39\D012 m²/);
+		const setArea = damProposalRows(set)[2]!;
+		if (setArea.kind !== 'area') throw new Error('no area row');
+		expect(confirmWords(set, setArea).message).toMatch(/^Upper farm’s dam area when full changes from 20\D000 m² \(2[.,]0 ha\) to 39\D012 m²/);
 		expect(a.confirmLabel).toBe('Use this area');
 	});
 });

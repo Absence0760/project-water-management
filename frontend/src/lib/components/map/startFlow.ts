@@ -1,8 +1,11 @@
 // Start a model from the map (issue #326 C3, docs/design/start-from-map.md,
 // docs/ui.md § Map): the pure parts of the Map's Start sheet. Which step the
 // sheet is at (read from the server's state, never kept in the sheet), which
-// features can be units and what each is by default, the ticks (every value
-// unticked until the editor ticks it), and the body apply sends.
+// features can be in the model and what each is by default, the ticks (every
+// value unticked until the editor ticks it), and the body apply sends. The
+// units are the user's own boundaries (start-16, #523 C1): a dam or an
+// abstraction point is part of the unit whose boundary holds it (its
+// composite dam, its river pump), never a unit of its own.
 import type { DivideProposal, MapFeature, StartPlan, StartProposal, StartRole, StartState, StartTicks, StartUnit } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
 import type { PlacementChoices } from './placement';
@@ -29,8 +32,9 @@ export interface StartDraft {
 export type PointChoice = StartRole | 'none';
 
 export const ROLE_LABEL: Record<PointChoice, string> = {
-	dam: 'A unit with a dam',
-	abstraction: 'A unit at an abstraction point',
+	unit: 'A hydrological unit (this is its boundary)',
+	dam: 'Part of its unit’s composite dam',
+	abstraction: 'Its unit’s river pump',
 	user: 'Another water user (no land)',
 	gauge: 'A gauge in the network (no land)',
 	none: 'Not in the model'
@@ -65,21 +69,49 @@ export function startStep(s: StartState | null, features: readonly MapFeature[],
 	return hasBoundary || pointsAsked ? 'points' : 'boundary';
 }
 
-/** Features that can be units: dams (a point or a polygon), and gauge and other points. */
+const isArea = (f: MapFeature) => f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon';
+/** An area on the map that can be a unit's boundary (start-16): an other area or a parcel. */
+export const isUnitBoundary = (f: MapFeature): boolean => (f.kind === 'other' || f.kind === 'farm_parcel') && isArea(f);
+
+/** Features that can be in the model: units' boundaries (other areas, parcels), dams (a point or a polygon), and gauge and other points. */
 export function candidatePoints(features: readonly MapFeature[]): MapFeature[] {
-	return features.filter((f) => (f.kind === 'dam' && f.geometry.type !== 'LineString' && f.geometry.type !== 'MultiLineString') || ((f.kind === 'other' || f.kind === 'gauge') && f.geometry.type === 'Point'));
+	return features.filter((f) => isUnitBoundary(f) || (f.kind === 'dam' && f.geometry.type !== 'LineString' && f.geometry.type !== 'MultiLineString') || ((f.kind === 'other' || f.kind === 'gauge') && f.geometry.type === 'Point'));
 }
 
 /**
- * A point's default: a dam is a dam unit, an other point an abstraction
- * point, a gauge a gauge node in the network (the outlet's is the outlet:
- * proposeBody leaves it out). A gauge that doesn't drain to the outlet is
- * dropped by the server, saying so.
+ * A feature's default: an area is a unit's boundary, a dam part of its
+ * unit's composite dam, an other point its unit's river pump, a gauge a gauge
+ * node in the network (the outlet's is the outlet: proposeBody leaves it
+ * out). A gauge that doesn't drain to the outlet is dropped by the server,
+ * saying so.
  */
-export const defaultChoice = (f: MapFeature): PointChoice => (f.kind === 'dam' ? 'dam' : f.kind === 'other' ? 'abstraction' : 'gauge');
+export const defaultChoice = (f: MapFeature): PointChoice => (isUnitBoundary(f) ? 'unit' : f.kind === 'dam' ? 'dam' : f.kind === 'other' ? 'abstraction' : 'gauge');
 
-/** The choices a point offers: a gauge node only for a gauge (a gauge node stands for a gauge on the map). */
-export const choicesFor = (f: MapFeature): PointChoice[] => (f.kind === 'gauge' ? ['gauge', 'none'] : ['dam', 'abstraction', 'user', 'none']);
+/** The choices a feature offers: an area is a unit or nothing; a gauge node only for a gauge (a gauge node stands for a gauge on the map). */
+export function choicesFor(f: MapFeature): PointChoice[] {
+	if (isUnitBoundary(f)) return ['unit', 'none'];
+	if (f.kind === 'gauge') return ['gauge', 'none'];
+	return f.kind === 'dam' ? ['dam', 'user', 'none'] : ['abstraction', 'user', 'none'];
+}
+
+/** What the choices make: units (boundaries), gauges, other water users, and the dams and pumps that are parts of units. */
+export function choiceCounts(choices: readonly PointChoice[]): { units: number; gauges: number; users: number; parts: number } {
+	const n = (c: PointChoice) => choices.filter((x) => x === c).length;
+	return { units: n('unit'), gauges: n('gauge'), users: n('user'), parts: n('dam') + n('abstraction') };
+}
+
+/** The points step's count line. */
+export function countText(choices: readonly PointChoice[]): string {
+	const { units, gauges, users, parts } = choiceCounts(choices);
+	const s = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+	const head = units === 0 ? 'No units’ boundaries: the catchment becomes one unit' : s(units, 'unit');
+	const order = [...(gauges ? [s(gauges, 'gauge')] : []), ...(users ? [s(users, 'other water user')] : [])];
+	const tail = parts === 1 ? '; 1 dam or pump as part of the unit around it' : parts ? `; ${parts} dams and pumps as parts of the units around them` : '';
+	return `${head}${order.length ? `, ${order.join(' and ')}` : ''}${units ? ', plus the rest of the catchment' : ''}${tail}.`;
+}
+
+/** A stored plan from before start-16, which made a unit at each dam and abstraction point: it can't be applied, only proposed again. */
+export const planBeforeBoundaries = (p: { units: readonly { role: StartRole }[] }): boolean => p.units.some((u) => u.role === 'dam' || u.role === 'abstraction');
 
 /** The gauges that may be the outlet (points only). */
 export const outletGauges = (features: readonly MapFeature[]): MapFeature[] => features.filter((f) => f.kind === 'gauge' && f.geometry.type === 'Point');
@@ -99,21 +131,22 @@ export function proposeBody(choices: Record<string, PointChoice>, outlet: string
 	return { outletFeatureId: outlet || null, points };
 }
 
-/** Which values of a unit were proposed (only those can be ticked). */
+/**
+ * Which values of a unit were proposed (only those can be ticked). The composite dam's shares of runoff and of the upstream
+ * inflow are never proposed (start-16): they are the user's to enter on the unit.
+ */
 export const unitOffers = (u: StartUnit) => ({
 	area: u.areaM2 !== null && !!u.geometry,
-	drainsInto: u.drainsIntoProposed,
-	runoffToDam: u.role === 'dam' && u.drainsIntoProposed,
-	/** A dam marked on or off the river (194): its Upstream inflow to dam. */
-	upstreamToDam: !!u.damShares
+	drainsInto: u.drainsIntoProposed
 });
-export const restOffersArea = (p: StartPlan) => p.rest.areaM2 !== null && !!p.rest.geometry;
+/** The rest's area: with an outline (saved as its parcel) or, beside units' boundaries, the catchment less them (start-16). */
+export const restOffersArea = (p: StartPlan) => p.rest.areaM2 !== null;
 
 /** The ticks a proposal opens with: the proposed names, every value unticked (each is accepted explicitly). */
 export function initialTicks(p: StartPlan): StartTicks {
 	return {
 		outletName: p.outlet.name,
-		units: p.units.map((u) => ({ key: u.key, name: u.name, area: false, drainsInto: false, runoffToDam: false, ...(u.damShares ? { upstreamToDam: false } : {}) })),
+		units: p.units.map((u) => ({ key: u.key, name: u.name, area: false, drainsInto: false, runoffToDam: false })),
 		rest: { include: false, name: p.rest.name, area: false }
 	};
 }
@@ -125,7 +158,7 @@ export function tickAll(p: StartPlan, t: StartTicks): StartTicks {
 		outletName: t.outletName,
 		units: t.units.map((x) => {
 			const o = unitOffers(by.get(x.key)!);
-			return { ...x, area: o.area, drainsInto: o.drainsInto, runoffToDam: o.runoffToDam, ...(o.upstreamToDam ? { upstreamToDam: true } : {}) };
+			return { ...x, area: o.area, drainsInto: o.drainsInto, runoffToDam: false };
 		}),
 		rest: { ...t.rest, include: true, area: restOffersArea(p) }
 	};
@@ -161,7 +194,7 @@ export function applySummary(t: StartTicks): string {
 	const orders = t.units.filter((u) => u.drainsInto).length;
 	const effective = [...t.units.filter((u) => u.area && u.areaBasis === 'effective').map((u) => u.name.trim()), ...(t.rest.include && t.rest.area && t.rest.areaBasis === 'effective' ? [t.rest.name.trim()] : [])];
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-	return `The empty model gets ${s(nodes, 'hydrological unit')}, with ${s(areas, 'area')} (each saved as its unit’s parcel${effective.length ? `; ${effective.join(', ')} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
+	return `The empty model gets ${s(nodes, 'hydrological unit')}, with ${s(areas, 'area')} (a unit’s is its boundary on the map${effective.length ? `; ${effective.join(', ')} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Each unit’s dams and pump are linked to it, their sizes yours to enter. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
 }
 
 /** The body apply sends: an area's basis only with its area ticked (the server refuses an effective area not taken), else gross. */

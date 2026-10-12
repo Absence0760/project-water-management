@@ -138,7 +138,7 @@ describe('litPieces (lighting a piece on hover)', () => {
 });
 
 describe('a gauge in a start proposal', () => {
-	it('offers its order only: it owns no land, and has no dam', () => {
-		expect(unitOffers(unit('weir', { role: 'gauge', areaM2: null, geometry: null }))).toEqual({ area: false, drainsInto: true, runoffToDam: false, upstreamToDam: false });
+	it('offers its order only: it owns no land', () => {
+		expect(unitOffers(unit('weir', { role: 'gauge', areaM2: null, geometry: null }))).toEqual({ area: false, drainsInto: true });
 	});
 });
