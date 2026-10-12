@@ -367,8 +367,10 @@ export class ModelEditor {
 	// --- transfers ------------------------------------------------------
 	/** A new rule between the first two hydrological units (a gauge or an other water user can't take part). */
 	addTransfer() {
-		const [a, b] = this.model.nodes.filter((n) => n.kind === 'farm');
-		const t = newTransfer(a?.id ?? '', b?.id ?? a?.id ?? '');
+		const units = this.model.nodes.filter((n) => n.kind === 'farm');
+		const [a, b] = units;
+		// One unit: a rule out of the catchment (engine ≥ 1.86.0) from a unit with a dam, the only rule it can have.
+		const t = b ? newTransfer(a!.id, b.id) : newTransfer((units.find((n) => n.damCapacityM3 > 0) ?? a)?.id ?? '', a ? null : '');
 		// Served after the rules already there, as a new rule was before priorities (Q18).
 		if (this.model.transfers.length) t.priority = Math.max(...this.model.transfers.map((x) => x.priority)) + 1;
 		this.model.transfers.push(t);

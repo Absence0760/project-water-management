@@ -4851,11 +4851,13 @@ node table above).
 The rules under the section header, which counts them ("3
 transfer rules · 2 active", `workspace/context.ts`) and carries **Show on the
 Network** (the Network diagram, where transfers are dashed arrows; not the
-Map) and **+ Add transfer** (editors, with at least two hydrological units).
+Map) and **+ Add transfer** (editors, with two hydrological units, or one
+with a dam, whose only rule is one out of the catchment, engine ≥ 1.86.0).
 A new rule starts after the existing ones (the highest priority + 1), between
 the first two hydrological units (never the outflow gauge first in the
-list), and the cursor lands in its **From**, scrolled into view. With fewer
-than two units and no rule, the card says transfers need two and links the
+list), or with one unit from its dam to *Outside the catchment*, and the
+cursor lands in its **From**, scrolled into view. With neither and no rule,
+the card says transfers need two units or one with a dam and links the
 Network; a viewer is told the catchment has none instead.
 
 **Transfer rules** is one card per rule (`transfers/TransfersTab.svelte`),
