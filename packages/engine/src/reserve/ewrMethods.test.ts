@@ -356,8 +356,9 @@ describe('a month’s base flow is causal (engine ≥ 1.6.0)', () => {
 				expect(w.lowFlowMet).toBe(m.lowFlowMet);
 				compared++;
 			}
-			// Positive control: the whole-record filter (engine 1.3.0–1.5.x) did move a completed month.
-			const whole = (days: number) => lyneHollickBaseflow(q.slice(0, days));
+			// Positive control: the whole-record three-pass filter (engine 1.3.0–1.5.x) did move a
+			// completed month (its backward pass; one forward pass, the filter since issue #523 D3, can't).
+			const whole = (days: number) => lyneHollickBaseflow(q.slice(0, days), 0.995, 3);
 			const a = whole(n);
 			const b = whole(n + extra);
 			if (a.some((v, i) => v !== b[i])) moved++;

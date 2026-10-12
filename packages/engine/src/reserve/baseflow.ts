@@ -2,28 +2,32 @@
 // §2.9d): the Lyne–Hollick recursive digital filter, as South African
 // practice applies it to daily flows. Pure: no I/O.
 //
-// One pass over x (forward, or backward on a reversed series):
+// One forward pass over x:
 //   f_t = α·f_{t−1} + (1 + α)/2 · (x_t − x_{t−1}),  then 0 ≤ f_t ≤ x_t
 //   b_t = x_t − f_t
-// with f_0 = 0 (Lyne & Hollick 1979). Three passes, forward, backward,
-// forward, each filtering the last one's base flow (Nathan & McMahon 1990).
-// α = 0.995: the value Smakhtin & Watkins (1997, WRC Report 494/1/97) found
-// for daily flows in most South African catchments, and the one Hughes,
-// Hannart & Watkins (2003, Water SA 29(1)) build their separation on (the
-// international default, α = 0.925 from Nathan & McMahon, gives more quick
-// flow). The series is reflected by BASEFLOW_REFLECT_DAYS days at both ends
-// before filtering (Ladson et al. 2013), so the first and last days don't
-// carry the filter's start-up. Every choice here is pending the hydrologist
-// (plan.md question 17).
+// with f_0 = 0 (Lyne & Hollick 1979). That is Hughes, Hannart & Watkins
+// (2003, Water SA 29(1):43, their equations 1 and 2) at a daily step: β fixed
+// at 0.5 ("no reason to change the β parameter from the fixed value of 0.5"),
+// equation 1 applied once (they set Nathan & McMahon's repeated passes aside
+// because the number of passes "introduces a further parameter", and rejected
+// varying it), and α = 0.995, the value Smakhtin & Watkins (1997, WRC Report
+// 494/1/97) found for most South African daily records (Hughes et al. found
+// up to 0.997 in some catchments; "the differences are quite small"). Their
+// study recalibrated the Desktop Reserve Model's separation parameters.
+// Engines 1.3.0–1.86.0 passed three times, forward, backward, forward
+// (Nathan & McMahon 1990), until the paper was read (issue #523 D3). The
+// series is reflected by BASEFLOW_REFLECT_DAYS days at both ends before
+// filtering (Ladson et al. 2013), so the first days don't carry the filter's
+// start-up.
 //
-// Causal per month (engine ≥ 1.6.0): the backward pass makes a day's base
-// flow depend on the days after it, so filtering the whole record lets a
-// flood next month (or days appended to the record) change this month's base
-// flow. A month's base flow is therefore filtered over a window that ends on
-// its last day: the month and at most BASEFLOW_HISTORY_DAYS days before it,
-// reflected at both ends as above (monthBaseflowSum). Nothing after the month
-// reaches it, and a model-state snapshot that carries the window's days
-// resumes it exactly (../warmstart, docs/model.md §2.9d).
+// Causal per month (engine ≥ 1.6.0): a month's base flow is filtered over a
+// window that ends on its last day, the month and at most
+// BASEFLOW_HISTORY_DAYS days before it, reflected at both ends as above
+// (monthBaseflowSum). The three-pass filter's backward pass needed it, since
+// a day's base flow depended on the days after it; one forward pass depends
+// on nothing after a day anyway, and the window stays because a model-state
+// snapshot carries just those days, so a resumed run filters every month over
+// the same days as the uninterrupted one (../warmstart, docs/model.md §2.9d).
 //
 // The same plumbing (engine ≥ 1.55.0, filterBaseflow) runs the validation
 // signatures' two base-flow index filters (docs/model.md §2.10d, CR-16): the
@@ -31,10 +35,10 @@
 // Eckhardt's (2005) two-parameter filter. lyneHollickBaseflow is the β = 0.5
 // case, bit for bit what it was.
 
-/** Filter parameter (South African daily flows, Smakhtin & Watkins 1997). */
+/** Filter parameter (South African daily flows, Smakhtin & Watkins 1997; Hughes, Hannart & Watkins 2003). */
 export const BASEFLOW_ALPHA = 0.995;
-/** Passes: forward, backward, forward (Nathan & McMahon 1990). */
-export const BASEFLOW_PASSES = 3;
+/** Passes: one, forward (Hughes, Hannart & Watkins 2003); engines 1.3.0–1.86.0 used three (Nathan & McMahon 1990). */
+export const BASEFLOW_PASSES = 1;
 /** Days reflected at each end before filtering (Ladson et al. 2013). */
 export const BASEFLOW_REFLECT_DAYS = 30;
 /**
