@@ -1568,15 +1568,21 @@ were swept and who was mailed.
 `project` and `team`; provisional position (pre-counsel research,
 2026-10-01).
 
-- **`project.licence_outcome`** (`granted`, `refused`, `withdrawn`, NULL),
-  `licence_outcome_on`, `licence_expires_on` (exactly when granted, not
-  before the decision), `licence_outcome_reason`; **`record_closes_on`**
-  (generated: expiry or decision + 3 years); **`record_review_due_on`** (set
+- **`project.licence_outcome`** (NULL, or since 233 the authority's words,
+  D14: `licence_issued`, `licence_refused`, `application_rejected`,
+  `not_considered`, plus `application_withdrawn`, which the authority
+  doesn't decide; 161 said `granted`, `refused`, `withdrawn`, and 233 mapped
+  them), `licence_outcome_on`, `licence_expires_on` (exactly when
+  `licence_issued`, not before the decision), `licence_outcome_reason`;
+  **`record_closes_on`** (generated: expiry or the outcome's date + 3
+  years); **`record_review_due_on`** (set
   by `licence_record_start` when the project first issues a pack or
   nominates a run, + 5 years; backfilled for existing projects); the tick's
   bookkeeping `record_reminders_sent` (0–3), `record_reminded_at`,
   `record_close_notified_at`. Two partial indexes serve the tick.
-- Written only through **`app_set_licence_outcome`** and
+- Written only through **`app_set_licence_outcome`** (since 233 it still
+  takes 161's three words and stores the new ones, for a backend released
+  before 233; dropping them is in [followups.md](./followups.md)) and
   **`app_confirm_licence_record`** (SECURITY DEFINER, owners) and the
   tick's **`app_licence_record_due(limit)`** (marks and returns the due
   notices with the owners to tell); `licence_record_guard` and
@@ -1589,7 +1595,8 @@ were swept and who was mailed.
   `team_public_records_guard` refuse deleting its projects or the team, and
   moving a project out of it, until the disposal is confirmed
   (`app_project_public_records`).
-- Guards: `licence/licence-record.db.test.ts`.
+- Guards: `licence/licence-record.db.test.ts`, `db/migration-233.db.test.ts`
+  (161's words mapped, dates kept).
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 

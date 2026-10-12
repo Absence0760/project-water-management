@@ -417,7 +417,11 @@ cl. 3). The licensing ones are rows in
   is **Record the authority's decision**, with the authority's name, the
   decision letter's date, its reference and whether written reasons were
   received; the app says appeals run from the decision letter and computes
-  no deadline. Older decisions were mapped. *For counsel and the pilot
+  no deadline. Older decisions were mapped. *Built (233, issue #523 G9
+  (b)):* the project's licence record (161) records its outcome in the same
+  words, plus *Application withdrawn*, which the authority doesn't decide;
+  every outcome but an issued licence closes the record three years after
+  its date, as refused and withdrawn did. *For counsel and the pilot
   authority:* the exact labels (its house style), and whether the R267
   "rejection" stages need their own record.
 - [ ] **D15, the impact basis.** *Provisional position (pre-counsel

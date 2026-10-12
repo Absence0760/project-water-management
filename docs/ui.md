@@ -2096,9 +2096,12 @@ it scrolls, and isn't fitted to the window.
   how long the issued packs, nominated runs and the names they keep are kept
   ([evidence-pack.md § Retention](./evidence-pack.md#retention)). One line
   says where it stands (nothing to keep yet; the next review; the review is
-  due; granted and expiring, kept until; past its closing date, ask the
-  operator), as a warning when due. Owners record the outcome (Not recorded,
-  Granted with its expiry, Refused, Withdrawn), the date and why, and, while
+  due; issued and expiring, kept until; past its closing date, ask the
+  operator), as a warning when due. Owners record the outcome in the
+  authority's words since 233 (Not recorded, Licence issued with its expiry,
+  Licence refused, Application rejected (formal requirements), Not
+  considered: use already authorised, Application withdrawn), the date
+  (**Withdrawn on** for a withdrawal) and why, and, while
   no outcome is recorded and a review is set, **The record is still
   needed** (the next review five years on).
 - On the **Network** tab, a farm with linked farmers says how many in its
@@ -10626,7 +10629,7 @@ their own application's in [their own view](#the-applicants-pack-view).
   that the signer's name, registration and date are shown publicly on the
   verify page, even if the pack is withdrawn, for as long as the licence
   record it supports is kept (three years after the licence expires, or
-  after the application is refused or withdrawn; [evidence-pack.md §
+  after the application is refused, rejected, not considered or withdrawn; [evidence-pack.md §
   Retention](./evidence-pack.md#retention)). An editor chooses **You sign
   as**: "Specialist for the applicant" (the professional responsible for
   the evidence; what issue needs) or "Reviewed for the responsible

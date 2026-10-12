@@ -219,7 +219,7 @@
 			<strong>A project’s content and history</strong> (notes, sign-offs, published results, the record of changes): for as long
 			as the project exists, as its audit trail. Deleting a project deletes them, except that a project that has put a run forward
 			as evidence or issued a licensing evidence pack can’t be deleted: it is kept as that licence record until three years after
-			the licence expires, or three years after the application is refused or withdrawn. Until the outcome is recorded, the
+			the licence expires, or three years after the application is refused, rejected, not considered or withdrawn. Until the outcome is recorded, the
 			organisation must confirm every five years that the record is still needed. Then the record is deleted, once the
 			organisation responsible for the project confirms it. Model runs are pruned as a project goes on: its newest 12 published
 			results and 20 unpublished runs are kept.
@@ -251,8 +251,8 @@
 		Two things keep your name, because they are a signature or a record handed to others: a sign-off’s typed name and
 		registration, and the names printed in an evidence pack (who made its runs and, for an application, who applied), which
 		can’t be changed without breaking the pack’s seal. Both are kept only as long as the project they belong to, and in a
-		licence record only until three years after the licence expires, or three years after the application is refused or
-		withdrawn. Until the outcome is recorded, the organisation must confirm every five years that the record is still needed.
+		licence record only until three years after the licence expires, or three years after the application is refused,
+		rejected, not considered or withdrawn. Until the outcome is recorded, the organisation must confirm every five years that the record is still needed.
 		Then the record is deleted.
 	</p>
 	<p>

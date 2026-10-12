@@ -3073,12 +3073,13 @@ research, 2026-10-01).
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/licence-record` | – | `{ licenceRecord: LicenceRecord }` | editor |
-| PUT | `/projects/:id/licence-record` | `{ outcome: 'granted', outcomeOn, expiresOn, reason }`, `{ outcome: 'refused' \| 'withdrawn', outcomeOn, reason }` or `{ outcome: null, reason }` (strict; dates `YYYY-MM-DD`, `reason` 1–2 000) | `200 { licenceRecord }`; records `licence.outcome`. `400` for a grant without an expiry or one expiring before it was granted | owner |
+| PUT | `/projects/:id/licence-record` | `{ outcome: 'licence_issued', outcomeOn, expiresOn, reason }`, `{ outcome: 'licence_refused' \| 'application_rejected' \| 'not_considered' \| 'application_withdrawn', outcomeOn, reason }` or `{ outcome: null, reason }` (strict; dates `YYYY-MM-DD`, `reason` 1–2 000). The authority's words since 233 (D14, as a decision records them, plus the applicant's withdrawal); 161's `granted`, `refused` and `withdrawn` are still taken from an older web release and stored as `licence_issued`, `licence_refused` and `application_withdrawn` (to be dropped, [followups.md](./followups.md)) | `200 { licenceRecord }`; records `licence.outcome`. `400` for an issued licence without an expiry or one expiring before it was issued, or an expiry with any other outcome | owner |
 | POST | `/projects/:id/licence-record/confirm` | none, or `{}` (strict) | `200 { licenceRecord }`, the next review five years from today; records `licence.confirmed`. `409` once an outcome is recorded | owner |
 
-- `LicenceRecord = { outcome: 'granted' | 'refused' | 'withdrawn' | null,
+- `LicenceRecord = { outcome: 'licence_issued' | 'licence_refused' |
+  'application_rejected' | 'not_considered' | 'application_withdrawn' | null,
   outcomeOn, expiresOn, reason, closesOn, reviewDueOn }`: `closesOn` is the
-  expiry (granted) or the decision date, + 3 years; `reviewDueOn` the next
+  expiry (`licence_issued`) or the outcome's date, + 3 years; `reviewDueOn` the next
   5-yearly review while no outcome is recorded (null before the first issued
   pack or nomination).
 - `DELETE /projects/:id` and `DELETE /teams/:id` answer `409`
