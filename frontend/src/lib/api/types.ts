@@ -916,6 +916,17 @@ export interface RunSeriesRef {
 	unit: string;
 }
 
+/**
+ * A series GET …/runs/:runId leaves out of `series` for a viewer kept from
+ * each registered volume (issue #523 finding I): an allocation series, or any
+ * of a unit a cap or full-allocation run bound to its volume. Asked for by
+ * name it is 403 `allocation_series_withheld`.
+ */
+export interface WithheldSeriesRef {
+	nodeId: string | null;
+	key: string;
+}
+
 /** GET …/runs/:runId/day: one node's columns on one day, for the day trace. */
 export interface RunDay {
 	date: string;
@@ -945,6 +956,8 @@ export interface RunDay {
 		damSeepagePerDay: number | null;
 	};
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
+	/** Columns left out for a viewer kept from each registered volume (allocation series, #523 I); absent from an older API. */
+	withheld?: string[];
 }
 
 /** GET …/runs/:runId/day without a nodeId: the catchment's runoff-model day (docs/api.md). */
@@ -1047,6 +1060,12 @@ export interface Scenario {
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
 	ops: ScenarioOp[];
+	/**
+	 * How many of its changes a viewer the project keeps from each farm's
+	 * registered volume doesn't get (a registered volume set on a unit that isn't
+	 * an applicant's own; issue #523 G1): left out of `ops` and the check. Absent otherwise.
+	 */
+	withheldOps?: number;
 	/** SHA-256 of the ops as canonical JSON; a run of the scenario records the same hash. */
 	opsSha256: string;
 	/** The proposer's own nodes: ops on them are proposals, the rest baseline assumptions. */
@@ -1247,6 +1266,12 @@ export interface ScenarioCheck {
 	maskedRules?: MaskedRuleRef[];
 	/** Every problem line in its real words (164). Editors and up only, on an application; never to its applicant. */
 	assessorProblems?: string[];
+	/**
+	 * The rules keeping water for the EWR that the base run itself carries (issue #523 B4): a run from before
+	 * migration 220 kept them in its baseline, so the scenario runs with them without an op. One line each (a
+	 * contributor's name no unit). Absent from an older server; empty for a base from 220 on.
+	 */
+	baseEwrRules?: string[];
 }
 
 /** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */
@@ -1983,6 +2008,14 @@ export interface PackDetail {
 	manifest: PackManifest;
 	/** The stored manifest still hashes to its recorded SHA-256. */
 	manifestMatches: boolean;
+	/**
+	 * A viewer the project doesn't let read each farm's registered volume, on a
+	 * pack whose runs carry them (D3, issue #523 G1): `manifest` comes without
+	 * Appendix A.1's allocation rows and the summaries' per-unit part, so it no
+	 * longer hashes to `pack.manifestSha256`, and the reproduction bundle is
+	 * refused (403 `pack_volumes_withheld`).
+	 */
+	volumesWithheld: boolean;
 	signoffs: Signoff[];
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
@@ -2245,8 +2278,12 @@ export interface AllocationList {
 export interface AllocationTotal {
 	waterSource: 'surface' | 'groundwater';
 	holders: number;
-	registeredM3PerYear: number;
+	/** Null when the takes in force today are fewer than 5 registered users', or one or two of them dominate the sum (#523 G/O). */
+	registeredM3PerYear: number | null;
+	/** Null when none states one, or when withheld (`storageWithheld`). */
 	storageM3: number | null;
+	/** The storage in force today is fewer than 5 registered users', or dominated by one or two (#523 G/O). */
+	storageWithheld?: true;
 }
 
 /** A run's modelled use against the registered volumes, summed per water source and year (a viewer's view, 162). */
@@ -2256,7 +2293,10 @@ export interface AllocationComparisonTotals {
 		waterSource: 'surface' | 'groundwater';
 		holders: number;
 		units: number;
-		years: { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number; status: import('@water-management/engine').AllocationStatus }[];
+		/** No registered m³ (only today's totals carry it, #523 K/L/M) and no status per year (#523 round 6): the modelled use. */
+		years: { waterYear: number; partial: boolean; modelledM3: number }[];
+		/** One judgement for the whole run, when the same rows were in force all through and pass the 5-holder and dominance rules; else null. */
+		judgement: { wholeYears: number; within: number; outside: number } | null;
 	}[];
 }
 
@@ -2551,6 +2591,8 @@ export interface Outlook {
 	result?: OutlookResult | null;
 	/** Likewise; null without a review date. */
 	triggers?: OutlookTriggers | null;
+	/** For a viewer kept from each registered volume, on an outlook whose base caps or fully allocates (#523 I): `result` and `triggers` withheld (null). */
+	withheld?: string[];
 }
 
 /** POST /projects/:id/outlooks. Season and share absent: the project's settings. */
@@ -2600,7 +2642,9 @@ export interface YieldResult {
 	jobId: string | null;
 	kind: 'firm' | 'curve';
 	params: YieldParams;
-	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean };
+	/** Null for a viewer kept from each registered volume, on a yield computed on a cap or full-allocation run (`withheld`, #523 I). */
+	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean } | null;
+	withheld?: string[];
 	engineVersion: string;
 	createdBy: string | null;
 	createdAt: string;

@@ -1,9 +1,10 @@
 // Blank days and logger outages in the accumulation check (engine ≥ 1.70.0,
-// Q31 in issue #90, issue #393, docs/model.md §2.4d). A stretch of up to
-// ACC_MAX_BLANK_DAYS blank days counts towards a run like zeros; a longer one
-// is an outage that ends the run. A ≥ 20 mm reading straight after an outage
-// that passes the CHIRPS tests over it is set aside as missing. Expected
-// values are worked by hand from §2.4d; synthetic fixtures only.
+// Q31 in issue #90, issue #393, docs/model.md §2.4d). Engine ≥ 1.84.0 (issue
+// #523 A2): only blank days make a run, and a recorded 0 ends it. A stretch of
+// up to ACC_MAX_BLANK_DAYS blank days is a run; a longer one is an outage. A
+// ≥ 20 mm reading straight after an outage that passes the CHIRPS tests over
+// it is set aside as missing. Expected values are worked by hand from §2.4d;
+// synthetic fixtures only.
 import { describe, expect, it } from 'vitest';
 import {
 	ACC_MAX_BLANK_DAYS,
@@ -70,23 +71,26 @@ describe('blank stretches in the run (ACC_MAX_BLANK_DAYS)', () => {
 		expect(detect(c, h)).toEqual([{ from: day(r), to: day(r), readingMm: 60, runDays: 8, nearChirpsMm: 0, runChirpsMm: 70, outageDays: 8 }]);
 	});
 
-	it('blanks and zeros mixed, in different orders, each blank stretch ≤ 7: the whole mix is the run', () => {
+	it('engine 1.84.0: blanks and zeros mixed, only the blanks after the last recorded 0 are the run', () => {
+		// Zeros then 7 blanks: the window is the 7 blanks and the reading day.
+		const after = rec([...rep(5, 0), ...rep(7, B)], 60, 10);
+		expect(detect(after.c, after.h)).toEqual([{ from: day(after.r - 7), to: day(after.r), readingMm: 60, runDays: 7, nearChirpsMm: 0, runChirpsMm: 60 }]);
+		// Any 0 among the last 3 days: no run, so the reading stays on its day.
 		for (const gap of [
-			[...rep(5, 0), ...rep(7, B)],
 			[...rep(7, B), ...rep(5, 0)],
 			[...rep(4, B), 0, ...rep(4, B), 0, 0, 0],
-			[0, B, 0, B, B, 0, ...rep(7, B), 0]
+			[0, B, 0, B, B, 0, ...rep(7, B), 0],
+			[...rep(7, B), 0, B, B]
 		]) {
-			const { c, h, r } = rec(gap, 60, 10);
-			expect(detect(c, h)).toMatchObject([{ from: day(1), to: day(r), runDays: gap.length }]);
-			expect(detect(c, h)[0]!.outageDays).toBeUndefined();
+			const { c, h } = rec(gap, 60, 10);
+			expect(detect(c, h)).toEqual([]);
 		}
 	});
 
-	it('NaN counts as blank, and two short stretches split by a zero are two stretches (4 + 4 ≠ 8)', () => {
+	it('NaN counts as blank, and two short stretches split by a zero are two stretches (4 + 4 ≠ 8): only the last is the run', () => {
 		const gap = [...rep(4, Number.NaN), 0, ...rep(4, B)];
 		const { c, h, r } = rec(gap, 60, 10);
-		expect(detect(c, h)).toMatchObject([{ from: day(1), to: day(r), runDays: 9 }]);
+		expect(detect(c, h)).toEqual([{ from: day(r - 4), to: day(r), readingMm: 60, runDays: 4, nearChirpsMm: 0, runChirpsMm: 30 }]);
 		const nan8 = rec(rep(8, Number.NaN), 60, 10);
 		expect(detect(nan8.c, nan8.h)).toMatchObject([{ outageDays: 8 }]);
 	});
@@ -110,41 +114,47 @@ describe('blank stretches in the run (ACC_MAX_BLANK_DAYS)', () => {
 		expect(detect(merged.c, merged.h)).toMatchObject([{ outageDays: 22 }]);
 	});
 
-	it('a long outage before the reading with ≥ 3 days after it: the window is only those days and the reading day', () => {
-		const { c, h } = rec([...rep(20, B), 0, B, 0], 60, 10);
+	it('a long outage, a recorded 0, then ≥ 3 blanks before the reading: the window is only those blanks and the reading day', () => {
+		const { c, h } = rec([...rep(20, B), 0, B, B, B], 60, 10);
 		// The run's days are r-3 … r-1; CHIRPS on r-3 and r-2 (the day before left out) = 20 mm ≥ 30? No: 20 < 30.
 		expect(detect(c, h)).toEqual([]);
-		const big = rec([...rep(20, B), 0, B, 0], 30, 10); // 20 ≥ 15
+		const big = rec([...rep(20, B), 0, B, B, B], 30, 10); // 20 ≥ 15
 		expect(detect(big.c, big.h)).toEqual([{ from: day(big.r - 3), to: day(big.r), readingMm: 30, runDays: 3, nearChirpsMm: 0, runChirpsMm: 20 }]);
+		// The same with the 3 days entered as 0: nothing (engine 1.84.0; up to 1.83 a window over the zeros).
+		const zeros = rec([...rep(20, B), 0, 0, 0, 0], 30, 10);
+		expect(detect(zeros.c, zeros.h)).toEqual([]);
 	});
 
 	it('CHIRPS rain in or before the outage does not count towards a window after it', () => {
-		// 20 blank days that CHIRPS rains 50 mm a day on, then 3 zeros it is dry on: no window (0 < 15).
-		const { c, h, r } = rec([...rep(20, B), 0, 0, 0], 30, 50);
+		// 20 blank days that CHIRPS rains 50 mm a day on, a 0, then 3 blanks it is dry on: no window (0 < 15).
+		const { c, h, r } = rec([...rep(20, B), 0, B, B, B], 30, 50);
 		h[r - 3] = 0;
 		h[r - 2] = 0;
 		expect(detect(c, h)).toEqual([]);
 	});
 
-	it('a long outage in the middle of a zero run: the window is the zeros after it', () => {
-		const { c, h, r } = rec([...rep(40, 0), ...rep(10, B), ...rep(20, 0)], 60, 10);
-		expect(detect(c, h)).toEqual([{ from: day(r - 20), to: day(r), readingMm: 60, runDays: 20, nearChirpsMm: 0, runChirpsMm: 190 }]);
+	it('zeros after an outage are no run: neither a window nor an outage reading; blanks after a zero run are', () => {
+		const { c, h } = rec([...rep(40, 0), ...rep(10, B), ...rep(20, 0)], 60, 10);
+		expect(detect(c, h)).toEqual([]);
+		const blanks = rec([...rep(40, 0), ...rep(10, B), 0, ...rep(5, B)], 60, 10);
+		expect(detect(blanks.c, blanks.h)).toEqual([{ from: day(blanks.r - 5), to: day(blanks.r), readingMm: 60, runDays: 5, nearChirpsMm: 0, runChirpsMm: 40 }]);
 	});
 
-	it(`the ${ACC_MAX_RUN_DAYS}-day cap never reaches back into an outage: 10 blanks then 88 zeros is an 88-day window`, () => {
-		const { c, h, r } = rec([...rep(10, B), ...rep(88, 0)], 60, 1);
-		const [w] = detect(c, h);
-		expect(w).toMatchObject({ to: day(r), runDays: 88 });
-		expect(w!.to - w!.from).toBe(88);
+	it(`a zero run of any length is no run (the ${ACC_MAX_RUN_DAYS}-day cap now bounds only an outage's CHIRPS)`, () => {
+		for (const gap of [[...rep(10, B), ...rep(88, 0)], rep(150, 0), rep(3, 0)]) {
+			const { c, h } = rec(gap, 60, 10);
+			expect(detect(c, h)).toEqual([]);
+		}
 	});
 
 	it('an outage at the start of the record: blanks before the first reading count the same way', () => {
 		// 5 blanks then a reading: a 5-day window (the record's start ends the run).
 		const short = detect([...rep(5, B), 60, 5], [10, 10, 10, 10, 0, 0, 0]);
 		expect(short).toEqual([{ from: day(0), to: day(5), readingMm: 60, runDays: 5, nearChirpsMm: 0, runChirpsMm: 40 }]);
-		// 10 blanks then 4 zeros: the window is the zeros.
-		const after = detect([...rep(10, B), 0, 0, 0, 0, 60, 5], [...rep(13, 10), 0, 0, 0]);
-		expect(after).toMatchObject([{ from: day(10), to: day(14), runDays: 4 }]);
+		// 10 blanks, a 0, then 4 blanks: the window is the 4 blanks (10 blanks then 4 zeros: nothing).
+		const after = detect([...rep(10, B), 0, B, B, B, B, 60, 5], [...rep(14, 10), 0, 0, 0]);
+		expect(after).toEqual([{ from: day(11), to: day(15), readingMm: 60, runDays: 4, nearChirpsMm: 0, runChirpsMm: 30 }]);
+		expect(detect([...rep(10, B), 0, 0, 0, 0, 60, 5], [...rep(13, 10), 0, 0, 0])).toEqual([]);
 		// 10 blanks then the reading: an outage reading.
 		expect(detect([...rep(10, B), 60, 5], [...rep(9, 10), 0, 0, 0])).toMatchObject([{ from: day(10), to: day(10), outageDays: 10 }]);
 	});
@@ -295,17 +305,17 @@ describe('what a run does with an outage reading (rainAccumulations, spread, app
 	});
 
 	it('a window after an outage still drops when a listed missing period touches it', () => {
-		const { c, h, r } = rec([...rep(20, B), 0, 0, 0, 0], 60, 20);
+		const { c, h, r } = rec([...rep(20, B), 0, B, B, B, B], 60, 20);
 		const series = { rain_catchment_mm: ds(c), rain_chirps_mm: ds(h) };
 		expect(rainAccumulations(series, zr(), 'monthly')!.windows.map((w) => [w.start, w.status])).toEqual([[iso(r - 4), 'spread']]);
 		const touch = { start: iso(r - 2), end: iso(r - 2), reason: 'bad day' };
 		expect(rainAccumulations(series, zr({ missing: [touch] }), 'monthly')!.windows).toEqual([]);
-		// A listed day next to the outage joins it (listed days read as blank): the outage is 21 days and the
-		// window the 3 zeros after it, which no longer touch the listed day.
-		const next = { start: iso(r - 4), end: iso(r - 4), reason: 'bad day' };
-		expect(rainAccumulations(series, zr({ missing: [next] }), 'monthly')!.windows.map((w) => [w.start, w.runDays])).toEqual([[iso(r - 3), 3]]);
+		// Listing the 0 between them as missing (listed days read as blank) joins the outage and the blanks:
+		// a 25-day outage, so the reading is set aside.
+		const zero = { start: iso(r - 5), end: iso(r - 5), reason: 'bad day' };
+		expect(rainAccumulations(series, zr({ missing: [zero] }), 'monthly')!.windows.map((w) => [w.start, w.status, w.outageDays])).toEqual([[iso(r), 'setAside', 25]]);
 		// A missing period that ends on the outage's last day doesn't touch the window.
-		const before = { start: iso(1), end: iso(r - 5), reason: 'logger outage' };
+		const before = { start: iso(1), end: iso(r - 6), reason: 'logger outage' };
 		expect(rainAccumulations(series, zr({ missing: [before] }), 'monthly')!.windows).toHaveLength(1);
 	});
 
@@ -343,9 +353,9 @@ describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)'
 	};
 	const miss = (from: number, to: number) => ({ start: iso(from), end: iso(to), reason: 'invented: logger fault' });
 
-	it('positive control: unlisted, the 30 zeros are an ordinary 31-day window', () => {
-		const { series, r } = base();
-		expect(rainAccumulations(series, zr(), 'monthly')!.windows.map((w) => [w.start, w.status])).toEqual([[iso(r - 30), 'spread']]);
+	it('unlisted, the 30 zeros are no run (engine 1.84.0): nothing, and the 60 mm stays on its day', () => {
+		const { series } = base();
+		expect(rainAccumulations(series, zr(), 'monthly')!.windows).toEqual([]);
 	});
 
 	it('8 listed days straight before the reading: an outage, and the reading is judged over it (CHIRPS 7 × 4 = 28 mm)', () => {
@@ -368,7 +378,7 @@ describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)'
 		expect(fitExcludedWindows(acc)).toHaveLength(1);
 	});
 
-	it('7 listed days or fewer behave as before: the window reaches across them and is dropped because it touches them', () => {
+	it('7 listed days or fewer: from 3, a window over them that is dropped because it touches them; fewer, no run', () => {
 		const { series, r } = base();
 		for (const n of [1, 3, 7]) expect(rainAccumulations(series, zr({ missing: [miss(r - n, r - 1)] }), 'monthly')!.windows, `${n} days`).toEqual([]);
 	});
@@ -389,11 +399,15 @@ describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)'
 		expect(rainAccumulations(s2, zr({ missing: [miss(r - 3, r - 1)] }), 'monthly')!.windows).toEqual([]);
 	});
 
-	it('a listed stretch of more than 7 days ends a run: zeros after it form their own window, which doesn\'t touch it', () => {
+	it('a listed stretch of more than 7 days, then zeros: no run; then a 0 and blanks: the blanks are a window that doesn\'t touch it', () => {
 		const { series, r } = base();
-		// Listed: r-30 … r-11 (20 days). The run is the 10 zeros after it: CHIRPS 9 × 4 = 36 ≥ 30.
-		const acc = rainAccumulations(series, zr({ missing: [miss(r - 30, r - 11)] }), 'monthly')!;
-		expect(acc.windows.map((w) => [w.start, w.end, w.status, w.runDays])).toEqual([[iso(r - 10), iso(r), 'spread', 10]]);
+		expect(rainAccumulations(series, zr({ missing: [miss(r - 30, r - 11)] }), 'monthly')!.windows).toEqual([]);
+		// Listed: r-30 … r-11 (20 days). Blank r-6 … r-1: CHIRPS 5 × 4 = 20 ≥ 15 for a 30 mm reading.
+		const c = series.rain_catchment_mm!.values.slice();
+		for (let i = r - 6; i < r; i++) c[i] = null;
+		c[r] = 30;
+		const acc = rainAccumulations({ ...series, rain_catchment_mm: ds(c) }, zr({ missing: [miss(r - 30, r - 11)] }), 'monthly')!;
+		expect(acc.windows.map((w) => [w.start, w.end, w.status, w.runDays])).toEqual([[iso(r - 6), iso(r), 'spread', 6]]);
 	});
 
 	it('readings inside the listed period count as unknown too, and a reading day inside it is never judged', () => {
@@ -426,25 +440,30 @@ describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)'
 // Property tests over random records (seeded)
 // ---------------------------------------------------------------------------
 
-/** A random record: readings, zero runs and blank stretches of 1–20 days; CHIRPS wet or dry at random. */
+/** A random record: readings, zero runs and blank stretches of 1–20 days (often 3–7); CHIRPS wet or dry at random. */
 function randomRecord(seed: number, n = 400) {
 	const g = new Rng(seed);
 	const c: V[] = [];
 	const h: V[] = [];
 	while (c.length < n) {
 		const k = g.next();
-		const len = k < 0.35 ? 1 : k < 0.6 ? g.int(1, 12) : k < 0.8 ? g.int(1, 20) : g.int(1, 4);
+		const len = k < 0.35 ? 1 : k < 0.6 ? g.int(1, 12) : k < 0.8 ? (g.next() < 0.5 ? g.int(3, 7) : g.int(1, 20)) : g.int(1, 4);
 		const v: () => V = k < 0.35 ? () => (g.next() < 0.5 ? g.float(20, 150) : g.float(0.1, 19)) : k < 0.6 ? () => 0 : k < 0.8 ? () => (g.next() < 0.05 ? Number.NaN : null) : () => (g.next() < 0.5 ? 0 : null);
-		for (let i = 0; i < len && c.length < n; i++) c.push(v());
+		// CHIRPS is often wetter over a blank stretch (the rain an unread gauge missed), so windows pass its tests often enough.
+		const wet = k >= 0.6 && k < 0.8 ? 0.15 : 0.4;
+		for (let i = 0; i < len && c.length < n; i++) {
+			c.push(v());
+			h.push(g.next() < 0.03 ? null : g.next() < wet ? 0 : g.float(0, wet < 0.4 ? 25 : 15));
+		}
 	}
-	for (let i = 0; i < n; i++) h.push(g.next() < 0.03 ? null : g.next() < 0.4 ? 0 : g.float(0, 15));
 	return { c, h };
 }
 
 /**
  * The rule written independently, scanning back from each reading: the run is
- * the 0 or blank days before it back to a reading, the record's start, or a
- * blank stretch longer than ACC_MAX_BLANK_DAYS (measured whole).
+ * the blank days straight before it back to a reading (a recorded 0
+ * included, engine ≥ 1.84.0) or the record's start; more than
+ * ACC_MAX_BLANK_DAYS of them is an outage instead.
  */
 function reference(c: V[], h: V[]): AccumulationCandidate[] {
 	const blank = (v: V) => v == null || !Number.isFinite(v);
@@ -456,25 +475,11 @@ function reference(c: V[], h: V[]): AccumulationCandidate[] {
 	for (let i = 0; i < c.length; i++) {
 		const v = c[i]!;
 		if (blank(v) || v === 0 || !(v >= ACC_MIN_MM)) continue;
-		let j = i - 1;
-		let run = 0;
-		let outage = 0;
-		while (j >= 0 && (blank(c[j]!) || c[j] === 0)) {
-			if (c[j] === 0) {
-				run++;
-				j--;
-				continue;
-			}
-			let k = j;
-			while (k >= 0 && blank(c[k]!)) k--;
-			const len = j - k;
-			if (len > ACC_MAX_BLANK_DAYS) {
-				if (run === 0) outage = len;
-				break;
-			}
-			run += len;
-			j = k;
-		}
+		let k = i - 1;
+		while (k >= 0 && blank(c[k]!)) k--;
+		const len = i - 1 - k;
+		const outage = len > ACC_MAX_BLANK_DAYS ? len : 0;
+		const run = outage ? 0 : len;
 		if (run < ACC_MIN_RUN_DAYS && !outage) continue;
 		const hv = h[i];
 		if (hv == null || !Number.isFinite(hv) || hv < 0) continue;
@@ -514,11 +519,11 @@ describe('property: random records (200 seeds)', () => {
 			outages += got.filter((x) => x.outageDays).length;
 		}
 		// The generator reaches both kinds often enough for the comparison to mean something.
-		expect(windows).toBeGreaterThan(100);
+		expect(windows).toBeGreaterThan(40);
 		expect(outages).toBeGreaterThan(20);
 	});
 
-	it('windows never overlap, never hold a blank stretch over 7 days, and outage readings follow one', () => {
+	it('windows never overlap, hold 3 to 7 blank days and no 0, and outage readings follow an outage', () => {
 		for (const seed of SEEDS) {
 			const { c, h } = randomRecord(seed);
 			const found = detect(c, h);
@@ -533,14 +538,10 @@ describe('property: random records (200 seeds)', () => {
 					continue;
 				}
 				expect(r - a).toBeGreaterThanOrEqual(ACC_MIN_RUN_DAYS);
-				expect(r - a).toBeLessThanOrEqual(ACC_MAX_RUN_DAYS);
-				let stretch = 0;
-				for (let i = a; i < r; i++) {
-					const blank = c[i] == null || !Number.isFinite(c[i]!);
-					expect(blank || c[i] === 0).toBe(true);
-					stretch = blank ? stretch + 1 : 0;
-					expect(stretch).toBeLessThanOrEqual(ACC_MAX_BLANK_DAYS);
-				}
+				expect(r - a).toBeLessThanOrEqual(ACC_MAX_BLANK_DAYS);
+				// Engine ≥ 1.84.0: every run day is blank (no recorded 0), and the day before the window is not.
+				for (let i = a; i < r; i++) expect(c[i] == null || !Number.isFinite(c[i]!), `seed ${seed}`).toBe(true);
+				expect(a === 0 || !(c[a - 1] == null || !Number.isFinite(c[a - 1]!))).toBe(true);
 			}
 		}
 	});

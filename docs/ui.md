@@ -3006,12 +3006,16 @@ itself.
   **Edit the survey rows** and **Remove the curve**. Below: **Release rule**
   (none / pass inflow / fixed) with its monthly amounts (m³/day, Oct–Sep,
   *Use October's amount for every month*); under pass inflow a checkbox
-  keeps the EWR required at the node as the target. The hint under the rule
-  says what pass inflow costs (`damRelease.ts`, issue #507): with the box
-  ticked it releases water for the EWR, the unit's river pump, river
-  abstractions and river off-takes leave that flow too, and a baseline of
-  the river as used today normally leaves the rule at None (off by default;
-  no import sets one). The Dam group gains
+  keeps the EWR required at the node as the target. Keeping the EWR is a
+  scenario's (issue #523 B4, [scenarios.md § The EWR-keeping rules](./scenarios.md#the-ewr-keeping-rules-are-a-scenarios-issue-523-b4)):
+  choosing pass inflow starts from monthly amounts of 0 (*Pass inflow: keep
+  a set flow in the river below*), and the box is disabled while unticked,
+  with the note *Scenario only: in the baseline the EWR is assessed and
+  reported, never applied…* (`network/ewrScenarioOnly.ts`); one ticked from
+  before can only be unticked. The hint under the rule says what pass
+  inflow costs (`damRelease.ts`, issue #507): the unit's river pump, river
+  abstractions and river off-takes leave that flow too (off by default; no
+  import sets one). The Dam group gains
   **Seepage returning** (%) and **Outlet capacity** (m³/day, empty = no
   limit), one-node form only. **Paste survey rows** moves the focus into the
   box, and **Use these rows** / **Cancel** (which remove themselves) hand it
@@ -3066,7 +3070,10 @@ itself.
   (engine ≥ 1.32.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
   flow in the river, by month** opens twelve m³/day fields (Oct–Sep, with
   **Use October’s flow for every month**; unticked = none), and **Also leave
-  the EWR in the river** keeps the EWR required at the farm too. A line under
+  the EWR in the river** keeps the EWR required at the farm too: a
+  scenario's (issue #523 B4), so in the baseline the box is disabled while
+  unticked, with the scenario-only note under it (one ticked from before can
+  only be unticked). A line under
   them says in plain words what the farm leaves and before which of its takes
   (`handsOffPreview`, `handsOffTakers`): no hands-off flow (priority users only,
   not the EWR), else the amount ("150 m³/day", or "between 150 and 12 345.5
@@ -4901,7 +4908,8 @@ The card's body holds three top-aligned groups:
   rejoins the river (*The source* or a hydrological unit downstream of the
   source along the river; a saved unit that no longer qualifies shows as *not
   below the source*, and the model check refuses it), and switches for leaving
-  the EWR in the river and topping up the destination’s dam. The fields sit
+  the EWR in the river (a scenario's, issue #523 B4: disabled while off,
+  with the scenario-only note) and topping up the destination’s dam. The fields sit
   two to a row, not one tall column.
 
 Every field keeps its visible label and its ⓘ tip, and its accessible name
@@ -6103,8 +6111,9 @@ two.
   toggle named by its month, Oct … Sep, as Allocations' licence-condition
   months, with **All months** straight after them (issue #521); each keeps
   a 24 px target, 44 px on a phone): the months a
-  zero-flow stretch is trusted in, none by default, with a hint on the
-  river-stops rule (model.md §2.10h) and the months in words under them
+  zero-flow stretch is trusted over (up to 30 days beyond them on each
+  side, engine 1.84.0), none by default, with a hint on the river-stops
+  rule (model.md §2.10h) and the months in words under them
   ("None: a zero stretch is judged by its length alone" when none). The
   section's summary line adds "river stops Feb, Mar, Apr" once months are
   set. The data-quality panel's suspect row reads "Suspect (outlier, flat
@@ -8706,7 +8715,10 @@ see (WP-2.3); every place it shows says so.
   hydrological unit*, or a checkbox per unit); and the **EWR trigger**
   (*Also restrict when the EWR wasn't met the day before a review*, the
   site: the outlet or a gauge that is an EWR site, and the level: at least
-  which). An id the
+  which). The trigger is a scenario's (issue #523 B4): in Settings the box
+  is disabled while off, with the scenario-only note, and a rule that has
+  one (from before) blocks Save until it is unticked; the scenario form's
+  *Change a setting › Drought restriction rule* switches it on. An id the
   model hasn't got blocks Save with its name.
 - **Hydrological units → Drought restrictions** (`#res-restrictions`, its own
   panel and menu entry, before Other uses, for a run with the rule;
@@ -8747,7 +8759,7 @@ op); `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
 blocked save, edits saved whole, a viewer, off saves null, axe and the
 cards stacked at phone width) and `e2e/tests/drought-restrictions-run.spec.ts`
 (the scenario's "Change a setting", a rule from the published notice on
-each unit's own dam with an EWR trigger, the outlook's triggers replacing
+each unit's own dam, its EWR trigger disabled in Settings, the outlook's triggers replacing
 it after the question, a run's tables on Hydrological units with axe and no
 sideways scroll).
 
@@ -8866,7 +8878,10 @@ them scenarios).
   with no run.
 - **The banner**: "Based on run *X* (run date, published)", and that the base
   is kept while the scenario exists.
-- **Changes** (`OpList.svelte`): the ops in order, each in words against the
+- **Changes** (`OpList.svelte`): for a viewer the project keeps from each
+  registered volume, a line above (`scenario-withheld-ops`) says how many
+  changes set a farm's volume and aren't listed (`withheldOps`, issue #523
+  G1). The ops in order, each in words against the
   input it meets, so a second change to one value shows the first one's
   value as "was" (`ops.ts` `describeOp`, `stepInputs` over the base run's
   model and settings snapshot from `GET …/runs/:runId`). Each carries its
@@ -9096,7 +9111,27 @@ in this catchment* (`AllocationTotals.svelte`): per water source held by 5
 or more registered users, the holders, the volume registered today and the
 storage (`totalsSentence`), and the run's modelled use against the
 registered volumes summed per water year; "No total is shown" when no
-source has 5 holders. No unit, number, name or Download CSV. Owners get a
+source has 5 holders. A sum whose rows in force today are fewer than 5
+registered users', or mostly one or two users' (the dominance rule,
+provisional), isn't given: the sentence says the volume (or storage) in
+force today "isn't shown". The run's table by water year has the modelled
+use only (#523 K/L/M, round 6), and above it one sentence for the whole
+run, *Of n whole water years, k within ±t % … and m outside*, or why it
+isn't judged (`allocation-totals-judgement-<source>`, `judgementSentence`). For a cap or full-allocation run it
+says the run's use would show the volumes, and shows no table
+(`allocation-totals-years-mode`).
+No unit, number, name or Download CSV. On a cap or
+full-allocation scenario run such a viewer gets only the EWR verdicts and
+counts (issue #523 finding I, [api.md § Runs](./api.md#runs)): no charts,
+unit cards or tables, no use totals and no `.xlsx` sheets. The run's
+summary (Runs & results) and Hydrological units each say so in one line
+above the results, `WithheldUnitsNote.svelte` (`data-testid="verdicts-only"`,
+`runs/withheld.ts`); the evidence report says it under its first heading
+(`evidence-verdicts-only`), an outlook on such a base says its results are
+withheld (`outlook-withheld`), and the Yield panel says a yield on such a
+run is withheld (`yield-withheld`). On every report such a viewer reads,
+the licence-impact boards show each class's verdict without the waterfall
+(its empty state). Owners get a
 **What viewers see** card at the foot of the page, a checkbox *Viewers see
 each farm's registered volumes* with the note to switch it on only if every
 viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
@@ -10049,7 +10084,10 @@ baseline card links to the published run's report (**Report**, beside
   was asked for (and "This page checks again every few seconds." while it's
   pending, polling every 2 s), **Download the PDF** once ready (the same
   API route, a fresh one-minute S3 link per click) beside "PDFs are kept for
-  7 days.", after a failure a line pointing back to the
+  7 days." (not for a PDF printed with each farm's registered volume that
+  the reader, a viewer the project keeps from them, may not download: a
+  line, `report-volumes-withheld`, says so and to make their own; issue
+  #523 G1), after a failure a line pointing back to the
   report, and **Open the report in the app** and **Go to the run** (**Go to
   Runs & results** for a scheduled PDF of the latest run). The card's
   `data-state` is the report's state. Anyone else, or a PDF past its 7
@@ -10126,7 +10164,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     `licenceImpactAuthorised`, and under it the authorised volumes' mix
     (held as licence, verified existing lawful use, registration, claimed
     existing lawful use, general authorisation or Schedule 1, the volume,
-    whether it is an entitlement, and the totals) and when and on which
+    whether it is an entitlement, and the totals; a viewer kept from each
+    registered volume reads the folded mix since `evidence-17`: the kinds
+    held by fewer than 5 are one *Other ways of holding* line or merged
+    into the smallest line (*…, with the ways of holding too few hold to
+    show*), the total row reads *All the lines above* and a note
+    (`evidence-authorised-mix-left-out`) says how many users were left out,
+    at 5 or more, else that some were; since `evidence-18` each line is a
+    whole-percent *Share* with no m³, the total *100 %*, #523 H/J) and when and on which
     engine it was run; without one, a fixed *Not assessed* row says why
     (not run for this application run, no registered volumes, or out of
     date); a pack drafted before `evidence-14` says it isn't part of it.
@@ -10222,8 +10267,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     "Not capped" for the run that doesn't cap it. Units by their unit name,
     never the holder's, and only the applicant's own (`evidence-15`, D3):
     every other unit is one *Other registered users (n units)* row per water
-    source, left out below 5 units, and a note says which
-    (`evidence-allocations-others`). *Not assessed* when the runs carry no volumes, or
+    source, left out below 5 registered users (5 units before
+    `evidence-18`), and a note says which (`evidence-allocations-others`);
+    a year whose registered volume in force is fewer than 5 registered
+    users', or mostly one or two users', reads *not shown* (`evidence-18`,
+    #523 G/O), its modelled use kept, and the whole years count it as *not
+    shown*. A viewer kept from each volume reads every year of these totals
+    as *not shown*, with no status or count of years, with a note
+    (`evidence-allocations-others-withheld`, #523 K/L/M, round 6). *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
   - **6 The applicant's demand objects** (application only, report format
     `evidence-9`, issue #259): every demand object on the applicant's units
@@ -10318,6 +10369,12 @@ their own application's in [their own view](#the-applicants-pack-view).
   verify page), **Download reproduction bundle** once issued (the API's
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
+  neither download for a viewer the project keeps from each farm's
+  registered volume on a pack whose runs carry one (`volumesWithheld`,
+  issue #523 G1): a note (`pack-volumes-withheld`) says why and that an
+  editor or owner can give them both; for a pack drafted before
+  `evidence-15` that viewer gets the server's reason instead of the pack
+  (`pack-forbidden`),
   **Verify page** once issued, **Share link…** (an editor, once it was
   issued), **Send to the authority…** (an editor, while it is issued:
   `PackSendDialog.svelte`, a side sheet saying why the full pack goes to

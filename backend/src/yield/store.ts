@@ -168,6 +168,29 @@ export async function listYieldResults(
 	return rows;
 }
 
+/**
+ * The results among `ids` computed on a run that caps use at, or scales
+ * demand to, the registered volumes (#523 I): a run's own mode, or a
+ * scenario's (its mode op, or its base run's); a scenario the caller can't
+ * read counts as one.
+ */
+export async function yieldsOnCapOrFull(db: Db, ids: readonly string[]): Promise<string[]> {
+	const { rows } = await db.query<{ id: string }>(
+		`SELECT y.id FROM yield_result y
+		 LEFT JOIN model_run r ON r.id = y.run_id
+		 LEFT JOIN scenario s ON s.id = y.scenario_id
+		 LEFT JOIN model_run b ON b.id = s.base_run_id
+		 WHERE y.id = ANY($1::uuid[])
+		   AND (r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation')
+			OR (y.scenario_id IS NOT NULL AND (s.id IS NULL
+				OR b.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation')
+				OR EXISTS (SELECT 1 FROM jsonb_array_elements(s.ops) o
+					WHERE o->>'op' = 'settings.set' AND o->>'path' = 'allocationMode' AND o->>'value' IN ('cap', 'fullAllocation')))))`,
+		[ids]
+	);
+	return rows.map((r) => r.id);
+}
+
 /** A pending yield job with what it is for, read from its payload (the validated YieldRequest). */
 export interface YieldJob extends JobMeta {
 	target: { nodeId: string; runId: string | null; scenarioId: string | null; kind: 'firm' | 'curve'; params: YieldParams };

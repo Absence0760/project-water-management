@@ -7,6 +7,7 @@
 // the route too), that it reads the application's base run as the baseline, cites the
 // ensemble and recomputes the paired Reserve share, lists every start, and
 // refuses what isn't evidence.
+import { boardVerdicts } from '../allocations/verdictsOnly.js';
 import {
 	COMBINED_CONFLICT,
 	declaredRuleRequest,
@@ -231,7 +232,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-18');
 		expect(r.allocations.notAssessed).toBeNull();
 		// Baseline evidence has no applicant: Upper isn't the applicant's, and one unit is too few for a total, so § 5 names no unit.
 		expect(r.allocations.units).toEqual([]);
@@ -374,8 +375,11 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 				}
 			}
 		);
-		expect(r.licenceImpact).toEqual(expected);
+		// A viewer kept from each registered volume reads the board's verdicts without the waterfall (#523 I, round 5);
+		// the owner reads it whole (the positive control).
+		expect(r.licenceImpact).toEqual(boardVerdicts(expected));
 		expect(r.licenceImpact?.result.status).toBe('ok');
+		expect((await report(owner, appRun)).body.report.licenceImpact).toEqual(expected);
 	});
 
 	it('follows the project’s year-class method, and has no board for baseline evidence', async () => {
@@ -434,7 +438,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-18');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([

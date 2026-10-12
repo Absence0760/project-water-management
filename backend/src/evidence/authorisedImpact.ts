@@ -19,6 +19,7 @@
 //  POST /projects/:id/runs/:runId/authorised-impact   editor
 import {
 	authorisedMix,
+	foldedMix,
 	authorisedUnavailable,
 	ENGINE_VERSION,
 	licenceImpactBoard,
@@ -37,6 +38,7 @@ import { ApiError, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import { checkScenario, loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
+import { allocationHolderKeys } from '../allocations/holders.js';
 import { z } from 'zod';
 
 /** A run's catchment series as stored values (JSON has no NaN): null for a gap. */
@@ -103,14 +105,29 @@ export async function buildAuthorisedImpact(db: Db, projectId: string, runId: st
 	);
 	// How the volumes it held holders to are held (licence, verified ELU, registration, …), from the allocation rows as they are now.
 	const allocations = takes(full);
-	const { rows: held } = await db.query<{ id: string; authorisation: string }>('SELECT id::text, authorisation FROM allocation WHERE project_id = $1 AND id::text = ANY($2::text[])', [
-		projectId,
-		allocations.map((a) => a.id)
-	]);
-	const byId = new Map(held.map((h) => [h.id, h.authorisation]));
-	const mix = authorisedMix(allocations.map((a) => ({ volumeM3PerYear: a.volumeM3PerYear, waterUse: a.waterUse ?? null, authorisation: byId.get(a.id) ?? null })));
+	// Who held each when the baseline ran (219's keys frozen with the run, counted as app_allocation_volumes counts
+	// holders: the name, normalised; else another row's on the same unit; else the unit; else the row; a row no living
+	// holder had, one shared key). The folded mix gives no line of fewer
+	// than 5 holders' volume, and only as shares (evidence-18, #523 G1/H/J).
+	const { rows: kinds } = await db.query<{ id: string; authorisation: string }>(
+		'SELECT id::text, authorisation FROM allocation WHERE project_id = $1 AND id::text = ANY($2::text[])',
+		[projectId, allocations.map((a) => a.id)]
+	);
+	const kindOf = new Map(kinds.map((k) => [k.id, k.authorisation]));
+	const holders = await allocationHolderKeys(db, projectId, recorded.baseRunId, allocations);
+	const entries = allocations.map((a) => ({
+		volumeM3PerYear: a.volumeM3PerYear,
+		waterUse: a.waterUse ?? null,
+		authorisation: kindOf.get(a.id) ?? null,
+		holder: holders[a.id]!,
+		waterSource: a.waterSource
+	}));
+	// Both frozen: the full mix for editors, owners, the authority and the PDF; the folded shares (no m³, evidence-18) for
+	// a viewer kept from each registered volume (allocations/viewerUnits.ts redactReportAllocations).
+	const mix = authorisedMix(entries);
+	const mixFolded = foldedMix(entries);
 	const builtAt = new Date().toISOString();
-	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, builtAt, engineVersion: ENGINE_VERSION };
+	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, mixFolded, builtAt, engineVersion: ENGINE_VERSION };
 
 	// Newest wins: the run's older boards go (on any engine or settings), so one row per run is kept.
 	await db.query('DELETE FROM authorised_impact WHERE project_id = $1 AND application_run_id = $2', [projectId, runId]);

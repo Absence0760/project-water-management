@@ -8,6 +8,7 @@
 	import type { RunSummary } from '@water-management/engine';
 	import type { EwrHeadline } from '$lib/api/types';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import WithheldUnitsNote from './WithheldUnitsNote.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, outletEwrLine, SUPPLY_TARGET } from './results';
@@ -69,6 +70,8 @@
 	const otherUses = $derived(otherUsesHref ? otherUsesLink(summary) : null);
 </script>
 
+<!-- A cap or full-allocation run's units bound to a volume this reader can't see: left out, and said (issue #523 I). -->
+<WithheldUnitsNote {summary} />
 <!-- What to check before relying on the run, then how its data were handled (runs/credibility.ts). -->
 {#if groups.check.length}
 	<div class="alert alert-warning" role="status" data-testid="warnings-check">

@@ -797,7 +797,7 @@ runs and accumulations are real) can't be decided without the client.
       `rain_catchment_spread` column, the summary CSV block, Data-tab shading,
       run comparison and fit provenance.** Still open, for the hydrologist
       (engine-audit.md question 10): (1) confirm the thresholds (20 mm; 3 days;
-      CHIRPS ±1 day < 25 %; CHIRPS over the run ≥ 50 %; 92-day cap) against
+      CHIRPS ±1 day < 25 %; CHIRPS over the run ≥ 50 %; 3 to 7 blank days) against
       the station's observer logs or "accumulated" flags, if the source files
       have them; (2) some detected windows read far less than CHIRPS over
       them. An unread gauge loses catch to evaporation and overflow, so decide
@@ -808,6 +808,7 @@ runs and accumulations are real) can't be decided without the client.
       Trigger: the hydrologist's review of issue #2.
       **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the thresholds and the gauge total as recorded; confirming any one window needs the station's observer logs (client data).
       **Blank outages (issue #90 Q31, issue #393), built in engine 1.70.0:** a blank stretch counts towards a run only up to 7 days (`ACC_MAX_BLANK_DAYS`); days listed as missing count as blank; a ≥ 20 mm reading straight after a longer outage that passes the CHIRPS tests is set aside as missing (CHIRPS fills it, out of the fit, warned). Provisional (operator, 2026-10-03), to be confirmed by the hydrologist with the limit itself (it rests on reasoning, not a source; model.md §2.4d).
+      **Only blank days make a run (issue #90 *Multi-day rain accumulations*, issue #523 A2), built in engine 1.84.0:** a recorded 0 ends the run and is never part of a window, so 0 mm days followed by 20 mm or more is real rain on its day; the 92-day cap now bounds only an outage reading's CHIRPS test (model.md §2.4d). Threshold item (1) above no longer includes a cap on a window.
 - [x] **`verify/` follows the blank-outage rule (engine 1.70.0, model.md §2.4d).** *Done (issue #393): (1)–(3) and the probe are in `verify/` (`outage-reading-set-aside`, `short-blank-run-window`, three mutants); (4) stays out of scope while the harness refuses `keepReadings`/`addAccumulations`.*
       `verify/model.py` `detect_accumulations` counts every blank day back
       from a reading like a zero. It needs: (1) the run to stop at a stretch
@@ -3708,6 +3709,55 @@ from the WP:
       per water year to them, keeping its own seasonal shape (not the
       licence's months, which only the cap applies, below). Warm starts carry
       both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+- [x] **§ 5's other-units total counts units, not holders** (issue #523
+      G1 security review, finding 6; round 3 finding G, 2026-10-11, report
+      format `evidence-18`, migration 219). § 5's *Other registered users*
+      total is now gated on registered users (opaque per-row holder keys,
+      `app_allocation_holders`), and each water year's registered volume
+      only at 5 or more holders whose rows are in force that year; the
+      viewer's per-source totals today and a run's totals per water year
+      the same way (`app_allocation_volumes` returns each row's holder).
+      Pre-`evidence-18` packs with such a total are refused to a viewer
+      kept from the volumes. The folded authorised mix is served as shares
+      with no m³ (round 3 H and J). Round 4 (K–P): such a viewer reads
+      registered m³ only as today's per-source totals (dominance rule,
+      provisional, #92); run years and § 5's other-unit totals carry status
+      and modelled use only; each run freezes its rows' salted holder keys
+      (`run_allocation_holder`, 219).
+- [ ] **Totals read at different times can be differenced** (issue #523
+      G1 review finding 6's second half, round 3's accepted residuals).
+      Two pack versions' § 5 totals (a unit's rows added or ended between
+      them gives their volume), a run's totals before and after an
+      allocation is edited, and the folded mix's shares across boards, or
+      a frozen mix's share times a later live total. Also: with no dated
+      rows, a share times the sum of a viewer's totals estimates a line to
+      within 1 % of the mix's total ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
+      Today's total read on two days differs by the rows that started or
+      ended between them (often one holder's). Durable fix: round every
+      total a viewer kept from the volumes reads (to a band wide enough that
+      one holder's change moves no figure), or add bounded noise per
+      release, and coarsen the mix's shares to 5 %. Trigger: before a
+      project with outside viewers issues a second pack version, or counsel
+      asks for k-anonymity across releases.
+- [ ] **Confirm the viewer's status rule** (#523 round 6, provisional:
+      a viewer kept from each volume gets no status per water year, only
+      one judgement per run whose rows are today's total's all through it).
+      Pending the CISO and the D3 privacy review (#92). Trigger: that
+      review, or a client asking viewers to see the comparison by year.
+- [ ] **Confirm the dominance rule's limits** (#523 O, provisional: no
+      holder above 80 % of a total a restricted reader sees, no two above
+      90 %; `DOMINANCE_TOP1` / `DOMINANCE_TOP2`, engine
+      `allocations/holders.ts`). Pending the CISO and counsel's D3 review
+      (#92). Trigger: that review, or a client's catchment where the rule
+      withholds a total they need.
+- [x] **A full-allocation run's per-unit figures give the volume** (issue
+      #523 G1 security review, finding 7; real by the model's definition,
+      model.md §2.12a: demand is scaled per water year to the registered
+      volume, so a unit's demand and supply in `summary.farms`, `users[]` and
+      its daily series are its volume). Done 2026-10-11 with finding I
+      (below): for a viewer kept from the volumes a cap or full-allocation
+      run serves its EWR verdicts and counts only, everywhere it is served
+      ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
       dam and drawn out uses both volumes, where the comparison nets it
@@ -3785,17 +3835,49 @@ from the WP:
       volume or a name. Share views show no allocation figure today, so
       nothing leaks; this is the feature, to the rule. Trigger: a client
       asks for registered use on its public page.
-- [ ] **A capped run's per-unit series still bound a viewer's guess at the
-      volume** (D3). With viewers' switch off, a viewer reads no copy of the
-      volumes, but a cap run's daily `supplied` per unit is held to its
-      volume, and `allocation_left_*` (a capped source with licence
-      conditions) is the volume less use so far; a viewer's project
-      `model-input` also omits the volumes (RLS), so a fit they run in a cap
-      project runs uncapped. Durable fix: for a viewer with the switch off,
-      leave `allocation_left_*` out of the series routes and exports, and
-      say on a cap run's per-unit pages that its use is capped by a volume
-      they can't see. Trigger: a project with outside viewers runs in cap
-      mode, or counsel reads per-unit modelled use as personal information.
+- [x] **A capped run's per-unit series gave a viewer the volume exactly**
+      (D3; issue #523 security review round 3, finding I). Not a bound, as
+      this item first said: `allocation_room_*` on a licence's first in-force
+      day of each water year *is* the unit's volume (written for every
+      capped source, licence conditions or not), `allocation_left_*` is the
+      volume less use so far, and a year the cap binds adds the unit's use up
+      to it; a cap's licence-rate warning quoted it too. Any project running a
+      cap scenario with a viewer while the switch was off gave every capped
+      unit's volume through `…/series`, `…/series/bulk`, `…/day`, the CSV and
+      `.xlsx` exports. Done 2026-10-11: for that viewer no allocation series
+      on any run, and of a cap or full-allocation run its EWR verdicts and
+      counts only (next item), with the withheld ones named (`withheldSeries`,
+      `withheld`, `summary.allocations.verdictsOnly`,
+      `403 allocation_series_withheld`) and the run pages saying so; such a
+      run can't be published; the canary sweep runs a capped and a
+      full-allocation scenario run
+      ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql),
+      [api.md § Runs](./api.md#runs)). A viewer's project `model-input`
+      still omits the volumes (RLS), so a fit they run in a cap project runs
+      uncapped: by design.
+- [x] **A cap or full-allocation run's catchment totals less the units
+      shown** (D3; issue #523 finding I, round 4, High). The water balance
+      less the units still shown gave a bound unit's volume exactly, and the
+      evidence report's per-unit sections, a pre-213 published cap run's
+      farm view and an outlook on such a base gave the same. Done
+      2026-10-11, the operator's durable option, tightened after round 5
+      (a gauge's inflow less a dam-less unit's share of the natural flow gave
+      its supply exactly; the licence-impact boards' waterfalls gave use
+      totals): of a cap or full-allocation run a viewer kept from the
+      volumes reads an allowlist of EWR verdicts and counts only, no series,
+      volume, unit figure or use total, on every route that serves runs
+      (yields included); on every report the boards give verdicts only;
+      such a run can't be published or start an outlook, and an older one's
+      farm preview and outlook are withheld from that viewer
+      ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
+      Nothing is left as an accepted flow differencing. The modelled use
+      on `GET …/runs/:runId/allocations` for such a run (round 5, finding 3)
+      is fixed on `fix/523-g-holder-totals`. Still to do by the operator: run
+      the read-only check for cap or full-allocation publications in
+      production (`SELECT p.project_id, p.id, p.superseded_at FROM
+      run_publication p JOIN model_run r ON r.id = p.run_id WHERE
+      r.summary->'allocations'->>'mode' IN ('cap','fullAllocation')`, and
+      the same on `seasonal_outlook` by `base_run_id`); supersede any found.
 - [x] **Registration numbers in History** (2026-10-03): viewers read
       `allocation.created/changed/deleted` with `registrationNo` (a "unique
       identifier", POPIA s1) and `allocation.created` with the volume. Done:
@@ -5151,9 +5233,52 @@ assume, the questions for counsel); these are the actions, with triggers.
       public, static credits page (no API call), and no signed-in page lists
       the loaded datasets with their metadata, so the record is the
       operator's (the load log, or SQL as the owner).
+- [ ] **A WAF rate rule scoped to the elevation-model routes (access audit,
+      PR #368; operator decision 2026-10-11, issue #90: build in a later
+      round).** Delineation, Start from the map, Divide and the elevation and
+      water GETs read DEM or raster tiles on every call, so they cost more per
+      request than the rest of the API; today they share the API-wide WAF rate
+      limit. **Durable fix:** a WAF rate-based rule matching those paths with
+      a lower limit than the API's, in `infra/` (plan test in
+      `infra/tests/`). **Trigger:** the next infra round, or the elevation
+      routes showing in the WAF's request metrics or the API's cost.
+- [ ] **An idle-in-transaction timeout on RDS (access audit, PR #368;
+      operator decision 2026-10-11, issue #90: build in a later round).** A
+      connection left idle inside an open transaction holds its locks and a
+      pool slot until it is closed. **Durable fix:** set
+      `idle_in_transaction_session_timeout` in the RDS parameter group
+      (minutes, above the longest legitimate transaction: the 60-farm runs and
+      the reference loads), and check `withUser` surfaces the resulting
+      error as an ordinary 500. **Trigger:** the next infra round, or any
+      `idle in transaction` session seen in `pg_stat_activity` in
+      production.
 
 ## Housekeeping
 
+- [ ] **Three routes with no client call (round 4 reports; operator
+      decision 2026-10-11, issue #90).** `POST /projects/:id/jobs`, and the
+      farm `series` and `history` routes looked to have no caller in `frontend/src` (round 4 reports).
+      **Durable fix:** for each, find a caller (a script, e2e, a planned
+      screen) and say so where the route is defined, or remove it with its
+      tests, its line in docs/api.md and its row in the route-auth inventory
+      (`src/routes.test.ts`). **Trigger:** the next backend round; don't
+      leave them undecided past it.
+- [ ] **Update Vite to 8.3.4 or later (issue #90, 2026-10-11).** Vite 8.3.4
+      (#23662, fixing vitejs/vite#23652) makes every caller of the preload
+      helper wait for an in-flight stylesheet, which fixes the
+      CSS-before-render race in docs/upstream/sveltekit-css-before-render.md
+      at its source, so that report was not filed. **Trigger:** 2026-10-15,
+      when 8.3.4 passes `minimumReleaseAge` (or the Dependabot PR that
+      brings it). Then decide whether the root layout's `onNavigate(() =>
+      stylesheetsReady())` workaround stays (it is cheap and also guards a
+      slow link) or goes, and update the upstream doc either way.
+- [ ] **Two sources no one could check (from #259; moved from issue #90,
+      2026-10-11).** WR2012's own lake factors (the WR2012 resource centre
+      needs a login; used by #256) and Linsley, Kohler & Paulhus (1982)
+      "0.7–0.8 × Class-A pan" (not readable online; cited in #256,
+      docs/engine-audit.md, `packages/engine/src/project.ts` and the help
+      articles). **Trigger:** access to either original. Then check the
+      cited values against it and correct the citation or the value.
 - [x] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
       (found 2026-10-01, issue #326 round 3). "loads the committed env file and
       points both URLs at the checkout database" fails on any machine whose
@@ -6001,7 +6126,11 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       archive (`bin/tiles-dev.sh fonts`) is held to a SHA-256 in
       `bin/source-checksums.sha256` as well as its commit (maps.md §
       Checksums).
-- [ ] **CI's Postgres service image floats.** `ci.yml`'s two `services:
+- [x] **CI's Postgres service image floats.** Resolved (issue #521, 2026-10-11): CI no
+      longer has a Postgres `services:` entry; db-test and the e2e shards start
+      docker-compose.yml's own pinned image from a cached tarball
+      (`scripts/ci/service-image.sh`), so it can't drift from local dev's.
+      Originally: `ci.yml`'s two `services:
       postgres` (db-test, e2e) run `postgres:17-alpine` by tag, while
       docker-compose.yml pins it by digest, and Dependabot's github-actions
       ecosystem doesn't update service images. Durable fix: pin both to

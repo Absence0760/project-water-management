@@ -39,7 +39,7 @@
 	import IntervalPlot from './IntervalPlot.svelte';
 	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
 	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
-	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
+	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, registeredText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import LocalityMap from './LocalityMap.svelte';
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
@@ -151,6 +151,8 @@
 	const bandsA = $derived(report.uncertainty.baseline?.bands ?? null);
 	const paired = $derived(report.uncertainty.paired);
 	const al = $derived(report.allocations);
+	/** A total of other units whose registered m³ the server left out for this reader (#523 K/L/M). */
+	const hidesOthers = (u: { aggregate?: number }) => !!al.othersRegisteredWithheld && u.aggregate !== undefined;
 	const cum = $derived(report.cumulative);
 	// The authority's words (163_licensing_authority, evidence-13); a pack drafted before keeps its frozen approved / approved_with_conditions.
 	const OUTCOME: Record<string, string> = { licence_issued: 'licence issued', approved: 'approved', approved_with_conditions: 'approved with conditions' };
@@ -187,6 +189,12 @@
 			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
+				{#if report.withheld?.length}
+					<!-- A report on a cap or full-allocation run, read by a viewer kept from each registered volume (#523 I). -->
+					<p class="alert alert-info" role="note" data-testid="evidence-verdicts-only">
+						Only this report’s EWR verdicts and counts are shown: it rests on a run that caps use at, or scales demand to, the registered water volumes, which this project shows to its editors and owners only. No flow, volume, unit’s supply, registered-use comparison or run warning is given.
+					</p>
+				{/if}
 				<EvidenceSummary {report} {board} {boardNotFrozen} {authorisedBoard} {frozen} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				<!-- evidence-12: the locality map, frozen into the report from the project's map features (issue #326 A5). -->
@@ -628,9 +636,14 @@
 						<!-- evidence-15 (D3): only the applicant's own units one by one; the rest as totals at 5 or more units. -->
 						<p class="small muted" data-testid="evidence-allocations-others">
 							{app ? 'Only the applicant’s own units are listed one by one.' : 'No unit is listed one by one.'} Every other unit’s volume and use is in one total per water
-							source, “Other registered users”, when at least 5 units hold that source.{#if al.othersLeftOut}
-								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: fewer than 5 hold one
-								from that water source. The project’s editors see each unit on the Allocations tab.{/if}
+							source, “Other registered users”, when enough registered users hold that source; a year’s registered volume in that total is “not shown” when fewer
+							than 5 registered users hold one in force that year, or one or two hold most of it.{#if al.othersRegisteredWithheld}
+								{' '}<span data-testid="evidence-allocations-others-withheld">This project shows registered volumes to its editors and owners only: in these totals you read each year’s
+									modelled use, not the registered volume nor how the use compares with it.</span>{/if}{#if al.othersUseWithheld}
+								{' '}<span data-testid="evidence-allocations-others-use-withheld">A capped or full-allocation run holds use to the registered volume, so its modelled use in
+									these totals isn’t shown either.</span>{/if}{#if al.othersLeftOut}
+								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: too few registered
+								users hold one from that water source. The project’s editors see each unit on the Allocations tab.{/if}
 						</p>
 					{/if}
 					{#if useJudged}<p class="na">{useJudged}</p>{/if}
@@ -694,7 +707,7 @@
 											<tr>
 												<th scope="row">{u.name}<span class="sub">{SOURCE_LABEL[src.waterSource]}</span></th>
 												<td class="nowrap">{waterYearLabel(y.waterYear)}{#if partNote(y, app)}<span class="sub">{partNote(y, app)}</span>{/if}</td>
-												<td class="num">{m3(y.registeredA ?? y.registeredB)}{#if app && y.registeredA !== null && y.registeredB !== null && Math.abs(y.registeredA - y.registeredB) > 0.5}<span class="sub">application {m3(y.registeredB)}</span>{/if}</td>
+												<td class="num">{registeredText(y, app, hidesOthers(u)).main}{#if registeredText(y, app, hidesOthers(u)).sub}<span class="sub">{registeredText(y, app, hidesOthers(u)).sub}</span>{/if}</td>
 												<td class="num"
 													>{m3(y.modelledA)}<span class="sub">{ratioText(y.modelledA, y.registeredA)}</span>{#if measuredNote(src, y, 'A')}<span class="sub" data-testid="evidence-allocation-measured">{measuredNote(src, y, 'A')}</span>{/if}</td
 												>

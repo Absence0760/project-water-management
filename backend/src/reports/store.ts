@@ -61,6 +61,8 @@ export interface ReportView {
 	error: string | null;
 	/** How many people the link was emailed to (asked for; members only). */
 	emailed: number;
+	/** Printed with each farm's registered volume (218, #523 G1): a viewer kept from them can't download it unless they asked for it. */
+	withVolumes: boolean;
 }
 
 export interface ReportRow {
@@ -80,11 +82,13 @@ export interface ReportRow {
 	error: string | null;
 	createdAt: string;
 	finishedAt: string | null;
+	/** Printed with each farm's registered volume (218, report_enqueue sets it). */
+	withVolumes: boolean;
 }
 
 const REPORT_COLS = `r.id, r.project_id AS "projectId", r.run_id AS "runId", r.impact, r.against_run_id AS "againstRunId", r.job_id AS "jobId", r.schedule_id AS "scheduleId",
 	r.requested_by AS "requestedBy", r.email_to AS "emailTo", r.status, r.pages, r.bytes, r.error,
-	r.created_at AS "createdAt", r.finished_at AS "finishedAt"`;
+	r.created_at AS "createdAt", r.finished_at AS "finishedAt", r.with_volumes AS "withVolumes"`;
 
 /** A report of the project, by id (RLS: viewer). */
 export async function loadReport(db: Db, projectId: string, reportId: string): Promise<ReportRow | null> {
@@ -108,8 +112,8 @@ export function reportState(reportStatus: ReportRow['status'], jobStatus: JobSta
 	return 'queued';
 }
 
-/** A report by its job id (RLS: viewer), with its key for a download link. */
-export async function reportByJob(db: Db, projectId: string, jobId: string): Promise<(ReportView & { key: string }) | null> {
+/** A report by its job id (RLS: viewer), with its key for a download link and who asked for it. */
+export async function reportByJob(db: Db, projectId: string, jobId: string): Promise<(ReportView & { key: string; requestedBy: string }) | null> {
 	const { rows } = await db.query<ReportRow & { jobStatus: JobStatus | null; jobError: string | null }>(
 		`SELECT ${REPORT_COLS}, j.status AS "jobStatus", j.last_error AS "jobError"
 		 FROM report r LEFT JOIN job j ON j.id = r.job_id
@@ -135,7 +139,9 @@ export async function reportByJob(db: Db, projectId: string, jobId: string): Pro
 					? (r.jobError ?? (r.status === 'rendering' ? 'the renderer did not answer' : 'the render did not finish'))
 					: null,
 		emailed: r.emailTo.length,
-		key: reportKey(r.projectId, r.id)
+		withVolumes: r.withVolumes,
+		key: reportKey(r.projectId, r.id),
+		requestedBy: r.requestedBy
 	};
 }
 
@@ -156,12 +162,16 @@ export async function recentReportCount(db: Db, projectId: string): Promise<numb
  * Direct members of the project among `userIds` who can read its report
  * (viewer or above: never a farmer), with their addresses (RLS: viewer).
  */
-export async function membersAmong(db: Db, projectId: string, userIds: string[]): Promise<{ id: string; email: string }[]> {
+export async function membersAmong(db: Db, projectId: string, userIds: string[], o: { withVolumes?: boolean } = {}): Promise<{ id: string; email: string }[]> {
 	if (!userIds.length) return [];
+	// A report printed with each farm's volume (218, #523 G1) goes only to members who may read them: an editor or
+	// owner, or a viewer while the project lets viewers read each volume (162).
 	const { rows } = await db.query<{ id: string; email: string }>(
 		`SELECT u.id, u.email FROM project_member m JOIN app_user u ON u.id = m.user_id
-		 WHERE m.project_id = $1 AND m.user_id = ANY($2::uuid[]) AND m.role >= 'viewer' ORDER BY u.email`,
-		[projectId, userIds]
+		 WHERE m.project_id = $1 AND m.user_id = ANY($2::uuid[]) AND m.role >= 'viewer'
+		   AND (NOT $3 OR m.role >= 'editor' OR app_allocations_viewer_units(m.project_id))
+		 ORDER BY u.email`,
+		[projectId, userIds, o.withVolumes ?? false]
 	);
 	return rows;
 }
@@ -190,7 +200,8 @@ export async function finishReport(db: Db, report: ReportRow, r: { pages: number
 	);
 	const f = facts[0];
 	if (!f) return;
-	const to = await membersAmong(db, report.projectId, report.emailTo.filter((id) => id !== report.requestedBy));
+	// Not a viewer kept from the volumes, for a report printed with them (218, #523 G1): its link wouldn't open for them.
+	const to = await membersAmong(db, report.projectId, report.emailTo.filter((id) => id !== report.requestedBy), { withVolumes: report.withVolumes });
 	if (report.emailTo.includes(report.requestedBy)) to.unshift({ id: report.requestedBy, email: f.requesterEmail });
 	const link = sitePage(`/projects/${report.projectId}/reports/${report.jobId}`);
 	let failed = 0;

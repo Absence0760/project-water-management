@@ -56,7 +56,7 @@ export async function signSession(userId: string, scope?: RenderScope, amr: Amr 
 		? null
 		: isPackScope(scope)
 			? { p: scope.projectId, k: scope.packId, ...(scope.scenarioId ? { s: scope.scenarioId } : {}) }
-			: { p: scope.projectId, r: scope.runId, ...(scope.against ? { a: { p: scope.against.projectId, r: scope.against.runId } } : {}) };
+			: { p: scope.projectId, r: scope.runId, ...(scope.against ? { a: { p: scope.against.projectId, r: scope.against.runId } } : {}), ...(scope.redact ? { x: true } : {}) };
 	return new SignJWT({ iat_ms: Date.now(), ...(claim ? { scope: claim } : { amr: [...amr], ...(otpAt !== undefined && amr.includes('otp') ? { otp_at: otpAt } : {}) }) })
 		.setProtectedHeader({ alg: 'HS256' })
 		.setSubject(userId)
@@ -213,16 +213,18 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 			otpAt = payload.otp_at;
 		}
 		if (payload.scope !== undefined) {
-			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown; k?: unknown; s?: unknown } | null;
+			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown; k?: unknown; s?: unknown; x?: unknown } | null;
 			if (!s || typeof s.p !== 'string' || !UUID.test(s.p)) return null;
 			if (s.k !== undefined) {
 				// A pack's scope: a pack and nothing else (an applicant's copy: and the pack's application, 165).
-				if (typeof s.k !== 'string' || !UUID.test(s.k) || s.r !== undefined || s.a !== undefined) return null;
+				if (typeof s.k !== 'string' || !UUID.test(s.k) || s.r !== undefined || s.a !== undefined || s.x !== undefined) return null;
 				if (s.s !== undefined && (typeof s.s !== 'string' || !UUID.test(s.s))) return null;
 				scope = { projectId: s.p.toLowerCase(), packId: s.k.toLowerCase(), ...(typeof s.s === 'string' ? { scenarioId: s.s.toLowerCase() } : {}) };
 			} else {
 				if (typeof s.r !== 'string' || !UUID.test(s.r) || s.s !== undefined) return null;
-				const report: ReportScope = { projectId: s.p.toLowerCase(), runId: s.r.toLowerCase() };
+				// `x`: print without registered volumes (218); only `true`, or the token is invalid.
+				if (s.x !== undefined && s.x !== true) return null;
+				const report: ReportScope = { projectId: s.p.toLowerCase(), runId: s.r.toLowerCase(), ...(s.x === true ? { redact: true as const } : {}) };
 				if (s.a !== undefined) {
 					const a = s.a as { p?: unknown; r?: unknown } | null;
 					if (!a || typeof a.p !== 'string' || typeof a.r !== 'string' || !UUID.test(a.p) || !UUID.test(a.r)) return null;

@@ -198,13 +198,16 @@
 		{/if}
 		{#if mix}
 			<table class="data mix" data-testid="evidence-authorised-mix">
-				<caption class="small">The volumes it held holders to, by how they are held. Only a licence or a verified existing lawful use is an entitlement.</caption>
-				<thead><tr><th scope="col">Held as <HelpTip key="authorisation-type" label="About how a volume is held" /></th><th scope="col" class="num">Volume</th><th scope="col">Entitlement</th></tr></thead>
+				<caption class="small"
+					>The volumes it held holders to, by how they are held{mix.shares ? ', each as a share of the lines’ sum (registered volumes are shown to this project’s editors and owners only)' : ''}. Only a licence or a verified existing lawful use is an entitlement.</caption
+				>
+				<thead><tr><th scope="col">Held as <HelpTip key="authorisation-type" label="About how a volume is held" /></th><th scope="col" class="num">{mix.shares ? 'Share' : 'Volume'}</th><th scope="col">Entitlement</th></tr></thead>
 				<tbody>
 					{#each mix.lines as l (l.label)}<tr><th scope="row">{l.label}</th><td class="num">{l.volume}</td><td>{l.entitlement ? 'Yes' : 'No'}</td></tr>{/each}
-					<tr class="total"><th scope="row">All of it (entitlements: {mix.entitlement})</th><td class="num">{mix.total}</td><td></td></tr>
+					<tr class="total"><th scope="row">{mix.leftOut ? 'All the lines above' : 'All of it'} (entitlements: {mix.entitlement})</th><td class="num">{mix.total}</td><td></td></tr>
 				</tbody>
 			</table>
+			{#if mix.leftOut}<p class="small muted" data-testid="evidence-authorised-mix-left-out">{mix.leftOut}</p>{/if}
 		{/if}
 		{#if authorised.builtAt && authorised.engineVersion}
 			<p class="small muted">Run {fmtDate(authorised.builtAt)} on engine {authorised.engineVersion}.</p>

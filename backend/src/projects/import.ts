@@ -11,7 +11,7 @@ import { isFlowSiteKind, isUnitRainKind, siteProblem } from '../series/site.js';
 import { resolveFitRecord, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
-import { recordModelRevision } from '../history/record.js';
+import { REASON_MAX, recordModelRevision } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { projectName } from '../http/visibleName.js';
 import { saveModel } from '../model/store.js';
@@ -19,6 +19,7 @@ import { modelProblems } from '../model/validate.js';
 import { runLiveModel } from '../runs/execute.js';
 import { requireTeamRole } from '../teams/access.js';
 import { ProjectFile } from './document.js';
+import { normaliseBaselineEwrRules } from './ewrRules.js';
 import { importedAutoFitError, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds } from './settings.js';
 
 /**
@@ -97,11 +98,14 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	// Same rule and messages as POST /projects: 404 unless you're in the team,
 	// 403 for a team viewer. RLS (project_insert) enforces it as well.
 	if (opts.teamId) await requireTeamRole(db, opts.teamId, 'member', 'team not found');
-	const { model, ids } = freshIds(data.model as ProjectModel);
+	const { model: fresh, ids } = freshIds(data.model as ProjectModel);
 	const id = crypto.randomUUID();
 	const settings = importedSettings(data.settings, ids);
 	// Licence data never drives the baseline (issue #507): a file that caps or fully allocates it imports comparing only, and the import's revision says so.
 	const allocNote = normaliseBaselineAllocationMode(settings);
+	// Nor is the EWR applied in it (issue #523 B4): a file's rules that keep the EWR import switched off, and the revision says which.
+	const { model, note: ewrNote } = normaliseBaselineEwrRules(fresh, settings);
+	const note = [allocNote, ewrNote].filter((x): x is string => !!x).join(' ').slice(0, REASON_MAX) || null;
 	// Id generated here, not via RETURNING: RLS checks RETURNING rows against
 	// the SELECT policy before the AFTER trigger has made the importer owner.
 	await db.query(
@@ -141,7 +145,7 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 		);
 	}
 	// The project's history starts with the imported state (030_history.sql).
-	await recordModelRevision(db, id, { source: 'import', before: null, ...(allocNote ? { reason: allocNote } : {}) });
+	await recordModelRevision(db, id, { source: 'import', before: null, ...(note ? { reason: note } : {}) });
 	return id;
 }
 

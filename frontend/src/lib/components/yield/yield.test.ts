@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { YIELD_DEFAULT_TOLERANCE, type ScenarioOp, type YieldPoint } from '@water-management/engine';
 import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
-import { assuranceLabel, curveChart, engineDiffersNote, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
+import { assuranceLabel, curveChart, engineDiffersNote, jobStatus, jobToFollow, latestResults, modelRuns, yieldWithheld, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
 
 const job = (over: Partial<JobMeta>): JobMeta => ({
 	id: 'j',
@@ -132,5 +132,15 @@ describe('engineDiffersNote', () => {
 		expect(note).toBe(
 			'The stored yield below was worked out on engine 1.33.0 and this preview on engine 1.34.0, so the two can differ by what changed between those versions.'
 		);
+	});
+});
+
+describe('a yield withheld from a viewer kept from the volumes (#523 I)', () => {
+	it('is skipped as the latest result and said; a result with points is the positive control', () => {
+		const withheld = { id: 'w', kind: 'firm', points: null, withheld: ['points'] } as unknown as YieldResult;
+		const shown = { id: 's', kind: 'firm', points: { point: { yieldM3Day: 5 } } } as unknown as YieldResult;
+		expect(latestResults([withheld]).firm).toBeNull();
+		expect(latestResults([withheld, shown]).firm?.id).toBe('s');
+		expect([yieldWithheld([withheld]), yieldWithheld([shown])]).toEqual([true, false]);
 	});
 });

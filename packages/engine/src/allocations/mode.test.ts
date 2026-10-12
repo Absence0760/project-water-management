@@ -85,6 +85,12 @@ describe("allocationMode 'cap'", () => {
 		const both = runModelChecked(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume }, dam], 'cap'));
 		expect(col(both, 'a', 'supplied')).toEqual(col(out, 'a', 'supplied'));
 		expect(both.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		// A volume on a storage-only row is ignored, and its warning quotes no number (issue #523 G1: a run's
+		// warnings reach a viewer kept from each registered volume).
+		const odd = runModelChecked(withAllocations([{ ...dam, volumeM3PerYear: 123_457 }], 'cap'));
+		const said = odd.summary.warnings.filter((w) => w.includes('storage only (21b)'));
+		expect(said).toEqual(['allocation dam: it is storage only (21b), so its volume is not a take and is ignored']);
+		expect(odd.summary.warnings.join(' ')).not.toMatch(/123\D?457/);
 	});
 
 	it('publishes the room at the start of each day, falling by the day’s use and full again on 1 October', () => {

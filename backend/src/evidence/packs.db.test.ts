@@ -19,6 +19,7 @@
 // an erratum can be "found" after a pack was issued (132, errataFoundSince);
 // only the backend's imports see it, never the engine's own.
 import {
+	buildPackManifest,
 	checkPackBundle,
 	declaredRuleRequest,
 	ENGINE_VERSION,
@@ -31,6 +32,7 @@ import {
 	type ModelInput,
 	type PackManifest
 } from '@water-management/engine';
+import { boardVerdicts } from '../allocations/verdictsOnly.js';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -53,6 +55,7 @@ import { runTick } from '../jobs/runner.js';
 import { PackRenderRequestMessage, type PackRenderResult } from '../jobs/transport.js';
 import { outbox } from '../mail/transport.js';
 import { sendPackNotices } from './notices.js';
+import { packVolumesWithheld } from './packs.js';
 import { acceptPackRenderResult } from '../reports/schedule.js';
 import { packBundleKey, packPdfKey, packsBucket, putPackBundle, putPackPdf, resetStorageClient } from '../reports/storage.js';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -281,7 +284,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-16');
+		expect(manifest.report.version).toBe('evidence-18');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -492,12 +495,16 @@ describe('drafting a pack', () => {
 			[id, projectId, baseRun, sid, appRun, JSON.stringify(old), sha, now.engine.version, editor.id]
 		);
 		try {
-			const read = await viewer.call('GET', packPath(id));
+			// The editor reads it as frozen; a viewer kept from each registered volume the same but each licence-impact
+			// board's verdicts without its waterfall (#523 I, round 5: boardVerdicts).
+			const read = await editor.call('GET', packPath(id));
 			expect(read.status).toBe(200);
 			expect(read.body.manifestMatches).toBe(true);
 			expect(read.body.pack.manifestSha256).toBe(sha);
 			const got = read.body.manifest as PackManifest;
 			expect(got).toEqual(old);
+			const theirs = (await viewer.call('GET', packPath(id))).body.manifest as PackManifest;
+			expect(theirs).toEqual({ ...old, report: { ...old.report, licenceImpact: boardVerdicts(old.report.licenceImpact), licenceImpactAuthorised: boardVerdicts(old.report.licenceImpactAuthorised) } });
 			expect(got.report.cumulative).not.toHaveProperty('combined');
 			expect(got.report.rows.find((x) => x.id === 'otherApplications')?.label).toBe('Other applications on this baseline, summed');
 		} finally {
@@ -672,8 +679,10 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.manifestSha256).toBe(v1.manifestSha256);
 	});
 
-	it('serves the bundle to a viewer as a download whose bytes hash to bundleSha256 and reproduce the run', async () => {
+	it('serves the bundle as a download whose bytes hash to bundleSha256 and reproduce the run: to an editor and the owner, and to a viewer since its runs carry no registered volume (#523 G1; the refusal is below)', async () => {
 		const want = (await viewer.call('GET', packPath(v1.id))).body.pack.bundleSha256 as string;
+		expect((await viewer.call('GET', packPath(v1.id))).body.volumesWithheld).toBe(false);
+		for (const u of [editor, owner]) expect(bytesSha256((await downloadBundle(u, v1.id)).bytes)).toBe(want);
 		const { bytes, disposition } = await downloadBundle(viewer, v1.id);
 		expect(bytesSha256(bytes)).toBe(want);
 		expect(disposition).toBe(`attachment; filename="pack-${v1.shortCode}.zip"`);
@@ -1445,5 +1454,274 @@ describe.skipIf(!minio)('deleting a project with packs', () => {
 		const res = await owner.call('DELETE', at());
 		expect(res.status).toBe(409);
 		expect(res.body.error).toMatch(/evidence pack/);
+	});
+});
+
+describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)', () => {
+	const HOLDER = 'G1 Holder Person';
+	const VOLUME = 123_457;
+	let allocationId: string;
+	let volumesRun: string;
+	/** Draft packs planted as the owner, citing the run that carries a registered volume, by report format. */
+	let current: string;
+	let older: string;
+
+	/**
+	 * A draft pack of a run's report as `reportVersion` froze it, planted past the route (the run isn't the nominated
+	 * one): `volumesRun`'s by default, or a scenario run's (`scenario`), with `edit` applied to the report.
+	 */
+	async function plant(reportVersion: string, o: { scenario?: { id: string; runId: string }; edit?: (r: PackManifest['report']) => PackManifest['report'] } = {}) {
+		const runId = o.scenario?.runId ?? volumesRun;
+		const report = (await owner.call('GET', `${runPath(runId)}/evidence-report`)).body.report as PackManifest['report'];
+		const id = crypto.randomUUID();
+		const frozen = (o.edit ?? ((r) => r))({ ...report, version: reportVersion } as PackManifest['report']);
+		const manifest = buildPackManifest({ pack: { id, version: 1, supersedes: null }, project: report.identity.project, report: frozen, engine: { version: ENGINE_VERSION, build: null } });
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10)`,
+			[id, projectId, report.identity.baseline.runId, o.scenario?.id ?? null, o.scenario?.runId ?? null, JSON.stringify(manifest), sha256(packManifestText(manifest)), reportVersion, ENGINE_VERSION, editor.id]
+		);
+		planted.push(id);
+		return id;
+	}
+	const planted: string[] = [];
+	/** A team scenario on `base` with `ops` (farm-scoped ops on Upper), run; owning Upper. */
+	async function teamScenario(name: string, base: string, ops: Record<string, unknown>[]) {
+		const created = await owner.call('POST', `${at()}/scenarios`, { name, baseRunId: base, ops, ownedNodeIds: [farmId] });
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const ran = await owner.call('POST', `${at()}/scenarios/${created.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		return { id: created.body.scenario.id as string, runId: ran.body.run.id as string };
+	}
+	const viewerUnits = async (on: boolean) => expect((await owner.call('PUT', `${at()}/allocations/viewer-units`, { on })).status).toBe(200);
+	const withheld = (res: { status: number; body: { code?: string; error?: string } }) => {
+		expect(res.status, JSON.stringify(res.body)).toBe(403);
+		expect(res.body.code).toBe('pack_volumes_withheld');
+		expect(res.body.error).toMatch(/registered volume.*, which this project shows to its editors and owners only/);
+	};
+
+	beforeAll(async () => {
+		const created = await owner.call('POST', `${at()}/allocations`, {
+			nodeId: farmId,
+			registrationNo: 'REG-G1-1',
+			authorisation: 'registration',
+			holder: HOLDER,
+			waterSource: 'surface',
+			volumeM3PerYear: VOLUME
+		});
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		allocationId = created.body.allocation.id;
+		volumesRun = await newRun('With a registered volume');
+		current = await plant('evidence-17');
+		older = await plant('evidence-14');
+	}, 120_000);
+	afterAll(async () => {
+		await viewerUnits(false);
+		for (const id of planted) expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+		expect((await owner.call('DELETE', `${at()}/allocations/${allocationId}`)).status).toBe(204);
+	});
+
+	it('the run carries the volume in its input and its summary, which every report and manifest of it holds (the leak, as the owner reads it)', async () => {
+		const report = (await owner.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report;
+		expect(report.appendix.baselineInputs.model.allocations).toEqual([expect.objectContaining({ nodeId: farmId, volumeM3PerYear: VOLUME })]);
+		expect(report.summaries.baseline.allocations.nodes).toEqual([expect.objectContaining({ nodeId: farmId, name: 'Upper' })]);
+		const read = (await editor.call('GET', packPath(current))).body;
+		expect(read.volumesWithheld).toBe(false);
+		expect(read.manifestMatches).toBe(true);
+		expect(read.manifest.report.appendix.baselineInputs.model.allocations).toHaveLength(1);
+		expect(sha256(packManifestText(read.manifest))).toBe(read.pack.manifestSha256);
+	});
+
+	it('refuses a viewer the bundle (403 pack_volumes_withheld); an editor and the owner pass the check (here to the draft’s 409), and a viewer once the owner lets viewers read each volume', async () => {
+		withheld(await viewer.call('GET', `${packPath(current)}/bundle`));
+		withheld(await viewer.call('GET', `${packPath(older)}/bundle`));
+		for (const u of [editor, owner]) {
+			const res = await u.call('GET', `${packPath(current)}/bundle`);
+			expect(res.status).toBe(409);
+			expect(res.body.error).toMatch(/draft pack has no reproduction bundle/);
+		}
+		await viewerUnits(true);
+		try {
+			expect((await viewer.call('GET', `${packPath(current)}/bundle`)).status).toBe(409);
+		} finally {
+			await viewerUnits(false);
+		}
+		// Outsiders: contributors and farmers 403 without the code, a stranger 404, no session 401.
+		for (const u of [contributor, farmer]) {
+			const res = await u.call('GET', `${packPath(current)}/bundle`);
+			expect(res.status).toBe(403);
+			expect(res.body.code).toBeUndefined();
+		}
+		expect((await stranger.call('GET', `${packPath(current)}/bundle`)).status).toBe(404);
+		expect((await anon('GET', `${packPath(current)}/bundle`)).status).toBe(401);
+	});
+
+	it('refuses a viewer a pre-evidence-15 pack’s manifest and PDF, which name every farm in § 5; an editor reads it (positive control), and a viewer once allowed', async () => {
+		withheld(await viewer.call('GET', packPath(older)));
+		withheld(await viewer.call('GET', `${packPath(older)}/pdf`));
+		const read = await editor.call('GET', packPath(older));
+		expect(read.status).toBe(200);
+		expect(read.body.manifest.report.version).toBe('evidence-14');
+		// Past the check, the PDF route says why there is none: a draft was never issued.
+		expect((await editor.call('GET', `${packPath(older)}/pdf`)).status).toBe(409);
+		await viewerUnits(true);
+		try {
+			const allowed = await viewer.call('GET', packPath(older));
+			expect(allowed.status).toBe(200);
+			expect(allowed.body.volumesWithheld).toBe(false);
+			expect(allowed.body.manifest.report.appendix.baselineInputs.model.allocations).toHaveLength(1);
+			expect((await viewer.call('GET', `${packPath(older)}/pdf`)).status).toBe(409);
+		} finally {
+			await viewerUnits(false);
+		}
+	});
+
+	it('serves a viewer a newer pack without Appendix A.1’s allocation rows or the summaries’ per-unit part, saying so; the hash is still the stored manifest’s', async () => {
+		const res = await viewer.call('GET', packPath(current));
+		expect(res.status).toBe(200);
+		expect(res.body.volumesWithheld).toBe(true);
+		expect(res.body.manifestMatches).toBe(true);
+		const report = res.body.manifest.report;
+		expect(report.appendix.baselineInputs.model.allocations).toEqual([]);
+		expect(report.summaries.baseline.allocations.nodes).toEqual([]);
+		// The mode and counts stay; no volume, holder or registration number does.
+		expect(report.summaries.baseline.allocations.used).toBe(1);
+		const text = JSON.stringify(res.body);
+		for (const s of [String(VOLUME), HOLDER, 'REG-G1-1']) expect(text).not.toContain(s);
+		// Its PDF isn't refused: since evidence-15, § 5 prints only the applicant's own units (a draft has none: 409).
+		expect((await viewer.call('GET', `${packPath(current)}/pdf`)).status).toBe(409);
+	});
+
+	it('redacts the live evidence report for that viewer alike; the owner and an allowed viewer read it whole', async () => {
+		const live = (await viewer.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report;
+		expect(live.appendix.baselineInputs.model.allocations).toEqual([]);
+		expect(live.summaries.baseline.allocations.nodes).toEqual([]);
+		expect(JSON.stringify(live)).not.toContain(String(VOLUME));
+		await viewerUnits(true);
+		try {
+			expect((await viewer.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report.appendix.baselineInputs.model.allocations).toHaveLength(1);
+		} finally {
+			await viewerUnits(false);
+		}
+	});
+
+	it('refuses the bundle of an application pack whose scenario run carries a volume though its baseline doesn’t (both runs are checked)', async () => {
+		// The pack's baseline (the nominated run, from before any volume) carries none; the team's scenario sets one on Upper.
+		expect((await asOwner(`SELECT inputs->'model'->'allocations' AS a FROM model_run WHERE id = $1`, [baseRun]))[0]!.a ?? []).toEqual([]);
+		const sc = await teamScenario('G1 volume on Upper', baseRun, [
+			{ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: farmId, waterSource: 'surface', volumeM3PerYear: 4242 } }
+		]);
+		const pack = await plant('evidence-17', { scenario: sc });
+		withheld(await viewer.call('GET', `${packPath(pack)}/bundle`));
+		// Positive control: the editor passes the check (a draft: 409).
+		expect((await editor.call('GET', `${packPath(pack)}/bundle`)).status).toBe(409);
+	});
+
+	it('counts a run the viewer can’t read as carrying volumes (fail closed)', async () => {
+		const asViewer = (scenarioRunId: string | null) =>
+			withUser(viewer.id, (db) => packVolumesWithheld(db, projectId, { baselineRunId: baseRun, scenarioRunId }, 'viewer'));
+		// The baseline alone carries none: nothing withheld (the positive control) …
+		expect(await asViewer(null)).toBe(false);
+		// … but a run RLS doesn't show them (here one that isn't there at all) might.
+		expect(await asViewer(crypto.randomUUID())).toBe(true);
+	});
+
+	it('refuses a team scenario’s pack whose § 5 lists a unit one by one (before evidence-17), or whose changes touch a registered volume; serves one that does neither, redacted', async () => {
+		const sc = await teamScenario('G1 dam on Upper', volumesRun, [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 1000 }]);
+		// evidence-17: a team scenario's own units aren't listed (positive control: served, redacted).
+		const clean = await plant('evidence-17', { scenario: sc });
+		const read = await viewer.call('GET', packPath(clean));
+		expect(read.status, JSON.stringify(read.body)).toBe(200);
+		expect(read.body.volumesWithheld).toBe(true);
+		expect(read.body.manifest.report.identity.application.origin).toBe('team');
+		expect(read.body.manifest.report.allocations.units).toEqual([]);
+		// As an evidence-16 team pack froze it: its owned unit listed with its volume.
+		const listed = await plant('evidence-16', {
+			scenario: sc,
+			edit: (r) => ({ ...r, allocations: { ...r.allocations, units: [{ nodeId: farmId, name: 'Upper', kind: 'farm', own: true, onlyIn: null, sources: [] }] } })
+		});
+		withheld(await viewer.call('GET', packPath(listed)));
+		withheld(await viewer.call('GET', `${packPath(listed)}/pdf`));
+		expect((await editor.call('GET', packPath(listed))).status).toBe(200);
+		// A team scenario's change to a registered volume: Appendix A.2 prints the old one.
+		const changed = await teamScenario('G1 volume cut', volumesRun, [
+			{ op: 'allocation.set', allocation: { id: allocationId, nodeId: farmId, waterSource: 'surface', volumeM3PerYear: 1 } }
+		]);
+		withheld(await viewer.call('GET', packPath(await plant('evidence-17', { scenario: changed }))));
+	});
+
+	it('refuses a viewer a pack from before evidence-18 whose § 5 has an "Other registered users" total, gated then on units over every date (#523 G); serves one from evidence-18, and an editor reads both (positive control)', async () => {
+		/** § 5 as it froze one total of other units, with one water year's registered volume. */
+		const withTotal = (r: PackManifest['report']) =>
+			({
+				...r,
+				allocations: {
+					...r.allocations,
+					units: [
+						{
+							nodeId: 'others:surface',
+							name: 'Other registered users (5 units)',
+							aggregate: 5,
+							kind: 'farm',
+							own: false,
+							onlyIn: null,
+							sources: [{ waterSource: 'surface', years: [{ waterYear: 2021, days: 365, yearDays: 365, partialA: false, partialB: null, registeredA: VOLUME, modelledA: 1, statusA: 'under', registeredB: null, modelledB: null, statusB: null }], countsA: null, countsB: null, meanModelledA: null, meanRegisteredA: null, meanModelledB: null, meanRegisteredB: null }]
+						}
+					]
+				}
+			}) as PackManifest['report'];
+		const old = await plant('evidence-17', { edit: withTotal });
+		withheld(await viewer.call('GET', packPath(old)));
+		withheld(await viewer.call('GET', `${packPath(old)}/pdf`));
+		expect((await editor.call('GET', packPath(old))).status).toBe(200);
+		// Without such a total (§ 5 left the one unit out), the same format is served, redacted.
+		expect((await viewer.call('GET', packPath(current))).status).toBe(200);
+		// evidence-18 gates each year on the holders in force: served, but without the total's registered m³ (#523 K/L/M:
+		// the only registered m³ such a viewer reads is today's per-source total), and its PDF, which prints it, refused.
+		const now = await plant('evidence-18', { edit: withTotal });
+		const read = await viewer.call('GET', packPath(now));
+		expect(read.status, JSON.stringify(read.body)).toBe(200);
+		const al = read.body.manifest.report.allocations;
+		// Nor its status per year (#523 round 6); the modelled use stays.
+		expect([al.units[0].aggregate, al.othersRegisteredWithheld, al.units[0].sources[0].years[0].registeredA, al.units[0].sources[0].years[0].statusA, al.units[0].sources[0].years[0].modelledA]).toEqual([5, true, null, null, 1]);
+		expect(JSON.stringify(read.body)).not.toContain(String(VOLUME));
+		withheld(await viewer.call('GET', `${packPath(now)}/pdf`));
+		// Positive control: the editor reads the figure, and passes the PDF check (a draft: 409).
+		expect((await editor.call('GET', packPath(now))).body.manifest.report.allocations.units[0].sources[0].years[0].registeredA).toBe(VOLUME);
+		expect((await editor.call('GET', `${packPath(now)}/pdf`)).status).toBe(409);
+	});
+
+	it('serves a viewer page 1’s folded authorised volume mix in the full one’s place (none for a board built before), and refuses the PDF, which prints the full one (evidence-17)', async () => {
+		const full = { rows: [{ authorisation: 'licence', volumeM3PerYear: VOLUME, entitlement: true }], entitlementM3PerYear: VOLUME, totalM3PerYear: VOLUME };
+		const folded = { rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, someLeftOut: true };
+		const board = (withFolded: boolean) => (r: PackManifest['report']) =>
+			({
+				...r,
+				licenceImpactAuthorised: {
+					status: 'ok',
+					detail: null,
+					board: null,
+					builtAt: '2026-10-01T00:00:00.000Z',
+					engineVersion: ENGINE_VERSION,
+					mix: full,
+					...(withFolded ? { mixFolded: folded } : {})
+				}
+			}) as PackManifest['report'];
+		const before = await plant('evidence-17', { edit: board(false) });
+		const read = await viewer.call('GET', packPath(before));
+		expect(read.status).toBe(200);
+		expect(read.body.manifest.report.licenceImpactAuthorised.mix).toBeNull();
+		expect(JSON.stringify(read.body)).not.toContain(String(VOLUME));
+		withheld(await viewer.call('GET', `${packPath(before)}/pdf`));
+		const both = await plant('evidence-17', { edit: board(true) });
+		const got = (await viewer.call('GET', packPath(both))).body;
+		// An evidence-17 folded mix is in m³: served as its shares, with no m³ (evidence-18, #523 H/J).
+		expect(got.manifest.report.licenceImpactAuthorised.mix).toEqual({ rows: [], entitlementPct: 0, folded: true, shares: true, someLeftOut: true });
+		expect(got.manifest.report.licenceImpactAuthorised).not.toHaveProperty('mixFolded');
+		expect(JSON.stringify(got)).not.toContain(String(VOLUME));
+		withheld(await viewer.call('GET', `${packPath(both)}/pdf`));
+		// Positive controls: the editor reads the full mix and passes the PDF check (a draft: 409).
+		expect((await editor.call('GET', packPath(both))).body.manifest.report.licenceImpactAuthorised.mix).toEqual(full);
+		expect((await editor.call('GET', `${packPath(both)}/pdf`)).status).toBe(409);
 	});
 });

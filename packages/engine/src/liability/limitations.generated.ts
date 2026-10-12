@@ -53,6 +53,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Warned, engine 0.18.0 (CR-20)"
 	},
 	{
+		"id": "B4",
+		"source": "finding",
+		"severity": "Medium (catchments whose gauge was not read every day)",
+		"title": "Untagged multi-day accumulations put several days' rain on one day, and the zero-run fill counted it twice",
+		"status": "Fixed, engine 0.20.0 (issue #2)"
+	},
+	{
 		"id": "S1",
 		"source": "finding",
 		"severity": "Medium (dams with a sediment rate over a long record; units coming in part-way through one)",
@@ -156,13 +163,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"severity": "Low (units with a crop supply table, engine 1.73.0)",
 		"title": "A unit's crop demand split by share between its dam, the river and another unit's dam runs on choices the hydrologist hasn't confirmed",
 		"status": "Needs hydrologist (engine 1.73.0, issue #408)"
-	},
-	{
-		"id": "R4",
-		"source": "finding",
-		"severity": "Low (reaches with bed losses, engine 1.75.0; the natural flow net of them, engine 1.76.0)",
-		"title": "Bed losses in a reach run on choices the hydrologist hasn't confirmed, and the pragmatic EWR is passed down whole, so a site below a losing reach can fall short of it with no development",
-		"status": "Needs hydrologist (issue #444)"
 	},
 	{
 		"id": "Q3",

@@ -14,6 +14,7 @@ import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { normaliseBaselineAllocationMode } from '../projects/settings.js';
+import { normaliseBaselineEwrRules } from '../projects/ewrRules.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
@@ -249,10 +250,13 @@ async function restoreInputs(
 	const problems = modelProblems(parsed.data);
 	if (problems.length) throw new ApiError(409, "this version can't be restored: its model doesn't pass today's checks", problems);
 	const change = await beginModelChange(db, projectId);
-	await saveModel(db, projectId, parsed.data);
 	// A revision or a run's inputs from before 213 may cap or fully allocate: the baseline compares only (issue #507), and the restore's reason says so.
 	const settings: Record<string, unknown> = { ...((target.settings ?? {}) as Record<string, unknown>) };
-	const allocNote = normaliseBaselineAllocationMode(settings);
+	const allocModeNote = normaliseBaselineAllocationMode(settings);
+	// One from before 220, or a scenario run's, may keep water for the EWR: the baseline assesses it only (issue #523 B4).
+	const { model, note: ewrNote } = normaliseBaselineEwrRules(parsed.data, settings);
+	const allocNote = [allocModeNote, ewrNote].filter((x): x is string => !!x).join(' ') || null;
+	await saveModel(db, projectId, model);
 	mustChange(await db.query('UPDATE project SET settings = $2, updated_at = now() WHERE id = $1', [projectId, JSON.stringify(settings)]));
 	await recordDroppedLinks(db, projectId, change, 'restore');
 	const reason = (o.reason && allocNote ? `${o.reason}${/[.!?]$/.test(o.reason) ? '' : '.'} ${allocNote}` : (o.reason ?? allocNote ?? undefined))?.slice(0, REASON_MAX);

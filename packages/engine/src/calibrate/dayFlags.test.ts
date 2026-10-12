@@ -62,7 +62,8 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(got[40]).toBe('inRange');
 	});
 
-	// The river-stops rule (engine ≥ 1.81.0, issue #507 item 2, audit C3): zero stretches are trusted only by months, else up to 30 days.
+	// The river-stops rule (engine ≥ 1.81.0, issue #507 item 2, audit C3; revised 1.84.0, issue #523 A1): zero stretches are
+	// trusted over the months (up to 30 days beyond them on each side), else up to 30 days.
 	const at = (date: string) => toEpochDay(date) - d0;
 	const zeroOver = (values: (number | null)[], from: string, to: string) => {
 		for (let i = at(from); i <= at(to); i++) values[i] = 0;
@@ -82,27 +83,134 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(Array.from(zeroFlowSuspect({ startDate: start, values }).slice(at('2000-12-01'), at('2000-12-31') + 1)).every((v) => v === 1)).toBe(true);
 	});
 
-	it('with months listed, a stretch wholly inside them is trusted at any length; one running outside them is suspect whole, however short', () => {
+	it('with months listed, a stretch over them is trusted at any length; one wholly outside them is suspect whole, however short', () => {
 		const values: (number | null)[] = varying(400);
 		zeroOver(values, '2001-02-15', '2001-04-20'); // 65 days, all in Feb–Apr: the river stopping
-		zeroOver(values, '2000-11-10', '2000-11-12'); // 3 days in November: outside the months
-		zeroOver(values, '2001-01-25', '2001-02-05'); // 12 days from January into February: runs outside them
+		zeroOver(values, '2000-11-10', '2000-11-12'); // 3 days in November: wholly outside the months
+		zeroOver(values, '2001-01-25', '2001-02-05'); // 12 days from January into February: 7 days before them
 		const flags = (zeroFlowMonths?: number[]) =>
 			names(flowDayFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values }, start: d0, days: 400, ...(zeroFlowMonths ? { zeroFlowMonths } : {}) }));
 		const feb = flags([2, 3, 4]);
 		expect(feb.slice(at('2001-02-15'), at('2001-04-20') + 1).every((f) => f === 'inRange')).toBe(true);
 		expect(feb.slice(at('2000-11-10'), at('2000-11-12') + 1).every((f) => f === 'suspect')).toBe(true);
-		// The February days of the crossing stretch are suspect too: the stretch is judged whole.
-		expect(feb.slice(at('2001-01-25'), at('2001-02-05') + 1).every((f) => f === 'suspect')).toBe(true);
-		expect(feb[at('2001-02-06')]).toBe('inRange');
+		expect(feb[at('2000-11-09')]).toBe('inRange');
+		expect(feb[at('2000-11-13')]).toBe('inRange');
+		// Engine 1.84.0 (issue #523 A1): a stretch that overlaps the months is trusted, its January days included.
+		expect(feb.slice(at('2001-01-25'), at('2001-02-05') + 1).every((f) => f === 'inRange')).toBe(true);
 		// Positive control, no months: the length rule alone; the 65-day stretch is suspect, the short ones scored.
 		const none = flags();
 		expect(none.slice(at('2001-02-15'), at('2001-04-20') + 1).every((f) => f === 'suspect')).toBe(true);
 		expect(none.slice(at('2000-11-10'), at('2000-11-12') + 1).every((f) => f === 'inRange')).toBe(true);
 		expect(none.slice(at('2001-01-25'), at('2001-02-05') + 1).every((f) => f === 'inRange')).toBe(true);
-		// A stretch longer than 30 days that isn't wholly inside the months is suspect (Feb–Mar listed, the stretch runs into April).
+		// Feb–Mar listed: the 65-day stretch runs 20 days into April, within 30 days beyond them: trusted.
 		const febMar = flags([2, 3]);
-		expect(febMar.slice(at('2001-02-15'), at('2001-04-20') + 1).every((f) => f === 'suspect')).toBe(true);
+		expect(febMar.slice(at('2001-02-15'), at('2001-04-20') + 1).every((f) => f === 'inRange')).toBe(true);
+		// Dec listed: every stretch is wholly outside it, so all three are suspect, the 3-day one too.
+		const dec = flags([12]);
+		for (const [a, b] of [['2001-02-15', '2001-04-20'], ['2000-11-10', '2000-11-12'], ['2001-01-25', '2001-02-05']] as const)
+			expect(dec.slice(at(a), at(b) + 1).every((f) => f === 'suspect')).toBe(true);
+	});
+
+	// Engine 1.84.0 (issue #523 A1): a zero stretch over the months is trusted as long as it runs no more than 30 days
+	// beyond them on each side; the days before the first month and after the last are counted separately, not summed.
+	describe('the river-stops months allow 30 days beyond them on each side (engine 1.84.0)', () => {
+		/** Each listed stretch [from, to] alone in a varying record from `origin`; whether zeroFlowSuspect flags it (every day, or none). */
+		const judgeFrom = (origin: string) => (months: number[], ...stretches: (readonly [string, string])[]) => {
+			const at = (date: string) => toEpochDay(date) - toEpochDay(origin);
+			const values: (number | null)[] = varying(1500);
+			for (const [a, b] of stretches) for (let i = at(a); i <= at(b); i++) values[i] = 0;
+			const sus = zeroFlowSuspect({ startDate: origin, values }, months);
+			return stretches.map(([a, b]) => {
+				const days = Array.from(sus.slice(at(a), at(b) + 1));
+				expect(new Set(days).size).toBe(1); // judged whole
+				// The days either side are readings above zero, never flagged by this rule.
+				expect(sus[at(a) - 1]).toBe(0);
+				expect(sus[at(b) + 1]).toBe(0);
+				return days[0] === 1 ? 'suspect' : 'trusted';
+			});
+		};
+		const judge = judgeFrom(start);
+
+		it('trusts mid-January to mid-May with Feb–Apr (17 days before, 15 after); flags it with no months (a positive control)', () => {
+			expect(judge([2, 3, 4], ['2001-01-15', '2001-05-15'])).toEqual(['trusted']);
+			expect(judge([], ['2001-01-15', '2001-05-15'])).toEqual(['suspect']);
+		});
+
+		it('trusts 30 days beyond on a side and flags 31, before and after alike', () => {
+			expect(
+				judge(
+					[2, 3, 4],
+					['2001-01-02', '2001-03-10'], // 30 days of January before
+					['2002-01-01', '2002-03-10'], // 31 days before
+					['2003-03-01', '2003-05-30'], // 30 days of May after
+					['2004-03-01', '2004-05-31'] // 31 days after
+				)
+			).toEqual(['trusted', 'suspect', 'trusted', 'suspect']);
+		});
+
+		it('counts each side on its own: 30 days before and 30 after (60 in all) is trusted', () => {
+			expect(judge([2, 3, 4], ['2001-01-02', '2001-05-30'])).toEqual(['trusted']);
+			expect(judge([2, 3, 4], ['2001-01-01', '2001-05-30'])).toEqual(['suspect']);
+		});
+
+		it('flags a stretch wholly outside the months whatever its length, 3 days or 214', () => {
+			expect(judge([2, 3, 4], ['2000-11-10', '2000-11-12'], ['2001-06-01', '2001-12-31'], ['2002-05-01', '2002-05-30'])).toEqual(['suspect', 'suspect', 'suspect']);
+		});
+
+		it('with no months keeps the 30-day limit: 30 days scored, 31 suspect, wherever in the year', () => {
+			expect(judge([], ['2000-11-01', '2000-11-30'], ['2001-03-01', '2001-03-31'], ['2001-07-01', '2001-07-30'])).toEqual(['trusted', 'suspect', 'trusted']);
+		});
+
+		it('reads months that wrap the year end (Dec–Feb) day by day', () => {
+			expect(
+				judge(
+					[12, 1, 2],
+					['2001-11-15', '2002-03-10'], // 16 days of November before, 10 of March after
+					['2002-11-01', '2003-02-28'], // all 30 days of November before: trusted
+					['2003-10-31', '2004-01-10'], // 31 days before (31 Oct + November)
+					['2004-06-01', '2004-06-05'] // wholly outside
+				)
+			).toEqual(['trusted', 'trusted', 'suspect', 'suspect']);
+		});
+
+		it('holds the days between two in-month stretches to 30 days from one of them: a year at zero is suspect, a one-month gap between listed months is not', () => {
+			expect(judge([2, 3, 4], ['2001-02-01', '2002-04-30'])).toEqual(['suspect']);
+			expect(judge([1, 3], ['2001-01-01', '2001-03-31'])).toEqual(['trusted']);
+			// Jan and Apr listed: the 59 days of Feb–Mar 2001 are each within 30 days of January or April (2 × 30 = 60 is the
+			// longest such gap); Jan and May listed: the 89 days of Feb–Apr are not, so the stretch is suspect whole.
+			expect(judge([1, 4], ['2001-01-20', '2001-04-10'])).toEqual(['trusted']);
+			expect(judge([1, 5], ['2001-01-20', '2001-05-10'])).toEqual(['suspect']);
+		});
+
+		// Epoch days before 1970-01-01 are negative: a -1 "no in-month day yet" sentinel flagged every stretch there.
+		describe('before 1970 (negative epoch days), judged as after it', () => {
+			const judge60 = judgeFrom('1960-10-01');
+
+			it('trusts a stretch wholly inside the months and flags one wholly outside them', () => {
+				expect(judge60([2, 3, 4], ['1961-02-05', '1961-04-20'], ['1961-07-01', '1961-07-20'])).toEqual(['trusted', 'suspect']);
+			});
+
+			it('trusts 30 days beyond the months on each side and flags 31, before and after alike', () => {
+				expect(
+					judge60(
+						[2, 3, 4],
+						['1961-01-02', '1961-03-10'], // 30 days of January before
+						['1962-01-01', '1962-03-10'], // 31 days before
+						['1963-03-01', '1963-05-30'], // 30 days of May after
+						['1964-03-01', '1964-05-31'] // 31 days after
+					)
+				).toEqual(['trusted', 'suspect', 'trusted', 'suspect']);
+			});
+
+			it('holds an interior gap between listed months to 30 days from one of them', () => {
+				expect(judge60([1, 4], ['1961-01-20', '1961-04-10'])).toEqual(['trusted']);
+				expect(judge60([1, 5], ['1961-01-20', '1961-05-10'])).toEqual(['suspect']);
+			});
+
+			it('trusts a stretch across 1970-01-01 (negative days into positive ones) over Dec–Feb', () => {
+				expect(judgeFrom('1968-10-01')([12, 1, 2], ['1969-12-01', '1970-02-28'])).toEqual(['trusted']);
+			});
+		});
 	});
 
 	it('judges a zero stretch over the whole stored record, not the run window; a blank day ends a stretch; suspect: false leaves the rule out', () => {
@@ -298,7 +406,7 @@ describe('dayQuality (CR-22)', () => {
 		expect(q.use).toEqual({ aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
 	});
 
-	it('names zero flow held for more than 30 days inside the river-stops months as scored (engine ≥ 1.81.0), and not a shorter zero run', () => {
+	it('names zero flow held for more than 30 days over the river-stops months as scored (engine ≥ 1.81.0), and not a shorter zero run', () => {
 		const n = 200;
 		const flags = new Uint8Array(n).fill(code('inRange'));
 		const observed = new Float64Array(n).fill(4);
@@ -311,7 +419,7 @@ describe('dayQuality (CR-22)', () => {
 		expect(q.suspectZeroDays).toBe(0);
 		expect(q.scoredDays).toBe(n);
 		expect(q.zeroFlowMonths).toEqual([2, 3, 4]);
-		expect(q.notes.join('\n')).toMatch(/100 days are zero flow held for more than 30 days inside the months the river is known to stop \(Feb, Mar, Apr\)\. They are scored as a river that stopped flowing/);
+		expect(q.notes.join('\n')).toMatch(/100 days are zero flow held for more than 30 days in stretches over the months the river is known to stop \(Feb, Mar, Apr\), running at most 30 days beyond them\. They are scored as a river that stopped flowing/);
 		// The same stretch flagged suspect (no months): counted as suspect zero flow, not as a trusted long stretch.
 		const sus = flags.slice();
 		for (let t = 10; t < 110; t++) sus[t] = code('suspect');
@@ -320,7 +428,7 @@ describe('dayQuality (CR-22)', () => {
 		expect(q2.suspectZeroDays).toBe(100);
 		expect(q2.notes.join('\n')).toMatch(/100 of the suspect days are zero flow held for more than 30 days, with no months listed .* check with the client whether the river stopped or the logger failed/);
 		const q3 = dayQuality({ flowKind: 'flow_logger_m3s', settings: s, windowIdx, flags: sus, scoring: scoringDays(windowIdx, sus, s, null, n), observed, rainFlags: null, zeroRunMask: null });
-		expect(q3.notes.join('\n')).toMatch(/zero flow in stretches that run outside the months the river is known to stop \(Feb, Mar, Apr\)/);
+		expect(q3.notes.join('\n')).toMatch(/zero flow in stretches wholly outside the months the river is known to stop \(Feb, Mar, Apr\), or running more than 30 days beyond them/);
 	});
 
 	it('says what the record can’t support: no rating, suspect days left out, zero flow among them, and a large share left out', () => {

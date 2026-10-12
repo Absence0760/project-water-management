@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # A docker-compose.yml service's image, pulled once and handed between CI
-# jobs as a tarball, so the jobs that run it don't each pull it from Docker
-# Hub, whose anonymous pull limit refused CI's runners (issue #492).
+# jobs as a tarball, so the jobs that run it don't each pull it from its
+# registry: Docker Hub's anonymous pull limit refused CI's runners (issue
+# #492), and so did ECR Public's ("toomanyrequests: Data limit exceeded")
+# once every DB job and e2e shard pulled Postgres from it (issue #521).
 #
 #   save <service> <tar>  pull the image by docker-compose.yml's pinned
 #                         tag@digest, check the digest, write it to <tar>
@@ -32,12 +34,19 @@ name=${name_tag%:*}
 case "$cmd" in
 	save)
 		mkdir -p "$(dirname "$tar")"
-		# By digest, so whichever registry answers serves the same bytes:
-		# Google's Docker Hub mirror first, Docker Hub itself only if the
-		# mirror hasn't cached it (issue #492).
-		src="mirror.gcr.io/$name@$digest"
-		case "$name" in */*) ;; *) src="mirror.gcr.io/library/$name@$digest" ;; esac
-		docker pull "$src" || { src="$name@$digest"; docker pull "$src"; }
+		# By digest, so whichever registry answers serves the same bytes.
+		# A Docker Hub image, or ECR Public's copy of a Docker official one
+		# (docker/library, the same digest): Google's Docker Hub mirror first,
+		# the image's own registry only if the mirror hasn't cached it (issue
+		# #492). Any other registry's image (GHCR's Mailpit): its own registry.
+		case "$name" in
+			public.ecr.aws/docker/library/*) mirror="mirror.gcr.io/library/${name#public.ecr.aws/docker/library/}" ;;
+			*.*/*) mirror="" ;;
+			*/*) mirror="mirror.gcr.io/$name" ;;
+			*) mirror="mirror.gcr.io/library/$name" ;;
+		esac
+		src="$name@$digest"
+		if [ -n "$mirror" ] && docker pull "$mirror@$digest"; then src="$mirror@$digest"; else docker pull "$src"; fi
 		docker tag "$src" "$name_tag"
 		docker save -o "$tar" "$name_tag"
 		docker image inspect --format '{{.Id}}' "$name_tag" > "$tar.id"

@@ -20,6 +20,7 @@ import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { requireOwnSecondFactor, requireProjectStepUp } from '../auth/stepUp.js';
 import { checkCalibrationSite } from './calibrationSite.js';
+import { baselineSettingsEwrRefusal, normaliseBaselineEwrRules } from './ewrRules.js';
 import { autoFitRecordError, baselineAllocationModeError, dataQualityPatchError, ewrOutletTableError, mergeSettings, normaliseBaselineAllocationMode, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
 import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
@@ -354,6 +355,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// Licence data never drives the baseline (issue #507): a cap or a full allocation is a scenario's.
 			const allocError = baselineAllocationModeError(body.settings);
 			if (allocError) throw new ApiError(400, allocError);
+			// Nor does the baseline keep water for the EWR (issue #523 B4): the restriction's EWR trigger is a scenario's.
+			const ewrError = baselineSettingsEwrRefusal(body.settings);
+			if (ewrError) throw ewrError;
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
 			const dqError = settings && body.settings?.dataQuality ? dataQualityPatchError(settings) : null;
 			if (dqError) throw new ApiError(400, dqError);
@@ -485,10 +489,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 				if (hasTeamRole(rows[0]?.role, 'member')) teamId = src.team_id;
 			}
 			// Fresh node ids for the copy; settings that name a node (the EWR rule tables' sites) follow them.
-			const { model: copied, ids } = freshIds(await loadModel(db, srcId));
+			const { model: fresh, ids } = freshIds(await loadModel(db, srcId));
 			const copiedSettings = remapSettingNodeIds(src.settings ?? {}, ids) as Record<string, unknown>;
 			// A source stored before 213 may still cap or fully allocate its baseline: the copy compares only (issue #507).
 			const allocNote = normaliseBaselineAllocationMode(copiedSettings);
+			// And before 220 keep water for the EWR: the copy assesses it only (issue #523 B4).
+			const { model: copied, note: ewrNote } = normaliseBaselineEwrRules(fresh, copiedSettings);
 			await db.query(
 				`INSERT INTO project (id, name, description, settings, created_by, team_id, time_zone)
 				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, $6)`,
@@ -514,7 +520,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// as yourself, so keeping the author would mean bypassing it, and
 			// re-authoring as the copier would misattribute. The original keeps them.
 			// The copy's history starts with its first state; the original's stays with the original.
-			await recordModelRevision(db, newId, { source: 'copy', before: null, reason: [`Copied from "${src.name}"`, allocNote].filter(Boolean).join('. ').slice(0, 500) });
+			await recordModelRevision(db, newId, { source: 'copy', before: null, reason: [`Copied from "${src.name}"`, allocNote, ewrNote].filter((x): x is string => !!x).map((x) => x.replace(/\.$/, '')).join('. ').slice(0, 500) });
 			return c.json({ project: full(await getProject(db, newId)) }, 201);
 		});
 	})

@@ -65,6 +65,11 @@ describe('reportsApi', () => {
 			expect(await got('queued', hostile), hostile).toBeUndefined();
 		}
 	});
+
+	it('gives no link to a PDF printed with each farm’s registered volume that the reader may not see (218, #523 G1)', async () => {
+		const request = vi.fn(async () => ({ report: view({ status: 'done', volumesWithheld: true }) }) as never);
+		expect((await reportsApi(fakeApi(request), 'p').get('j')).url).toBeUndefined();
+	});
 });
 
 describe('describeReport', () => {

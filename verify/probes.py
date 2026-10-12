@@ -79,14 +79,19 @@ def room_while_sending() -> dict:
 
 
 def accumulation_window_run() -> dict:
-    """A 60 mm reading after 150 days of zeros. Bias-corrected CHIRPS has
-    100 mm early in the run but only 10 mm in its last 92 days, and none on
-    the reading day or either side of it. The run test reads the window's
-    run days (at most 92), so this is no accumulation and the 60 mm stays on
-    its day; reading the whole run would spread it."""
+    """A 60 mm reading after 150 blank days (an outage). Bias-corrected
+    CHIRPS has 100 mm early in the outage but only 10 mm in its last 92
+    days, and none on the reading day or either side of it. The run test
+    reads the outage's last 92 days, so the reading is not set aside and the
+    60 mm stays on its day; reading the whole outage would set it aside.
+    (Up to engine 1.83.0 this probe was 150 zeros and a window's run; since
+    1.84.0 zeros are no run and a window's run is at most 7 blank days, so
+    the 92-day limit bounds only an outage.)"""
     days = 200
     reading = 170
-    catch = [0.0] * days
+    catch = [None] * days
+    for j in range(reading - 150):
+        catch[j] = 0.0
     catch[reading] = 60.0
     for j in range(reading + 1, days):
         catch[j] = 1.0
@@ -402,10 +407,12 @@ def outage_reading_set_aside() -> dict:
 
 def short_blank_run_window() -> dict:
     """A 40 mm reading after 4 zeros and 7 blank days (a holiday gauge): the
-    blank stretch is 7 days, not more, so it counts like zeros and the 11-day
-    run is a window; the total is spread by CHIRPS (2 mm a day over the run,
-    none on the reading day ± 1). With 8 blanks it would be an outage and the
-    reading would be set aside instead."""
+    blank stretch is 7 days, not more, so it is a run, and (engine ≥ 1.84.0)
+    only those 7 blanks after the last 0: the 8-day window is spread by
+    CHIRPS (4 mm a day over the gap, none on the reading day ± 1). With 8
+    blanks it would be an outage and the reading would be set aside instead;
+    counting the zeros too (up to 1.83.0) would make 11 days, an outage
+    under that mutant."""
     days = 60
     reading = 30
     catch = [0.0] * days
@@ -414,7 +421,28 @@ def short_blank_run_window() -> dict:
     catch[reading] = 40.0
     ch = [0.0] * days
     for j in range(reading - 11, reading - 1):
-        ch[j] = 2.0
+        ch[j] = 4.0
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5)]
+    series = {
+        "rain_catchment_mm": {"startDate": "2020-01-01", "values": catch},
+        "rain_chirps_mm": {"startDate": "2020-01-01", "values": ch},
+    }
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def flagged_zero_run_outage() -> dict:
+    """A 40 mm reading after a 200-day zero run that §2.4c flags (no
+    climatology in a 400-day record, so 180 days in any season) and fills
+    from CHIRPS (3 mm a day over the run, none on the reading day or either
+    side). Engine ≥ 1.84.0 (issue #523 A2, provisional): the flagged zeros
+    read as blank for §2.4d, so more than 7 of them are an outage and the
+    reading is set aside: CHIRPS fills its day (0 mm) like the run's. Kept as
+    a reading the zeros would end the run, and the 40 mm would stay on its
+    day beside the run's CHIRPS fill, counting that rain twice."""
+    days = 400
+    reading = 200
+    catch = [0.0] * reading + [40.0] + [1.0] * (days - reading - 1)
+    ch = [3.0] * (reading - 1) + [0.0] * 3 + [0.0] * (days - reading - 2)
     nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5)]
     series = {
         "rain_catchment_mm": {"startDate": "2020-01-01", "values": catch},
@@ -700,6 +728,7 @@ PROBES = {
     "accumulation-window-run": accumulation_window_run(),
     "outage-reading-set-aside": outage_reading_set_aside(),
     "short-blank-run-window": short_blank_run_window(),
+    "flagged-zero-run-outage": flagged_zero_run_outage(),
     "low-vs-chirps-median": low_vs_chirps_median(),
     "negative-reading": negative_reading(),
     "zero-catchment-area": zero_catchment_area(),

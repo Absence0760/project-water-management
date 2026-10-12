@@ -223,7 +223,8 @@ function input(over: Partial<EvidenceInput> = {}): EvidenceInput {
 				] as never,
 				opsSha256: 'ops-sha',
 				ownedNodeIds: ['F2'],
-				classified: ['proposal', 'proposal']
+				classified: ['proposal', 'proposal'],
+				origin: 'applicant'
 			}
 		},
 		nominations: [{ withdrawn: false, runId: 'base', runLabel: 'base', runoffModel: 'gr4j', engineVersion: '1.30.0', reason: 'Calibrated baseline', nominatedAt: '2026-09-01T12:00:00.000Z', nominatedBy: 'Hydrologist' }],
@@ -331,7 +332,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-18');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -705,7 +706,7 @@ describe('both impact bases (evidence-14, licensing build item 8)', () => {
 		const r = evidenceReport(i);
 		expect(r.licenceImpactAuthorised).toEqual(authorisedImpact);
 		authorisedImpact.mix.rows[0]!.volumeM3PerYear = 1;
-		expect(r.licenceImpactAuthorised!.mix!.rows[0]!.volumeM3PerYear).toBe(50);
+		expect(r.licenceImpactAuthorised!.mix).toMatchObject({ rows: [{ volumeM3PerYear: 50 }] });
 		// The modelled-use board is still there, second.
 		expect(r.licenceImpact).toEqual(board);
 	});
@@ -920,6 +921,22 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.notMatchedA).toBe(0);
 	});
 
+	it('a team scenario’s own units are an editor’s choice, not an applicant’s farms: § 5 names none of them, and the identity says whose it is (evidence-17, #523 G1)', () => {
+		const team = withAllocations();
+		const t = evidenceReport({ ...team, application: { ...team.application!, scenario: { ...team.application!.scenario, origin: 'team' } } });
+		expect(t.identity.application?.origin).toBe('team');
+		expect(t.allocations.units).toEqual([]);
+		// Two units hold surface water: too few for a total, so both are left out.
+		expect(t.allocations.othersLeftOut).toBe(2);
+		expect(JSON.stringify(t.allocations)).not.toContain('Farm two');
+		// Absent reads as the team's.
+		const { origin: _o, ...noOrigin } = team.application!.scenario;
+		expect(evidenceReport({ ...team, application: { ...team.application!, scenario: noOrigin } }).allocations.units).toEqual([]);
+		// Positive control: the applicant's application lists their own unit.
+		expect(r.identity.application?.origin).toBe('applicant');
+		expect(r.allocations.units.map((u) => u.nodeId)).toEqual(['F2']);
+	});
+
 	it('says how the surface use was measured, per run: a dam on the river\'s losses beside the use, a dam beside the river\'s take at the intake with its draws (evidence-16, #516)', () => {
 		const s = r.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!;
 		const yb = comparisonOf(app, appOut, allocations).nodes.find((n) => n.nodeId === 'F2')!.surface.years;
@@ -1003,7 +1020,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-16');
+		expect(got.version).toBe('evidence-18');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1110,6 +1127,72 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const few = evidenceReport(input({ baseline: { ...i.baseline, allocations: four(baseOut, base) }, application: { ...i.application!, allocations: four(appOut, app) } }));
 		expect(few.allocations.units.map((u) => u.nodeId)).toEqual(['F2']);
 		expect(few.allocations.othersLeftOut).toBe(4);
+	});
+
+	describe('the other units’ total is gated on registered users, per water year (evidence-18, #523 G, G1 finding 6)', () => {
+		const others = ['O1', 'O2', 'O3', 'O4', 'O5'];
+		const VOL = 123_457;
+		/** Baseline evidence of five neighbour units, each with its own row; `from` their first days, `holder` who holds each. */
+		const evidenceOf = (from: (string | null)[], holder: (i: number) => string, other = 50_000) => {
+			const entries: AllocationEntry[] = others.map((id, i) => ({ id: `a-${id}`, nodeId: id, waterSource: 'surface', volumeM3PerYear: i === 0 ? VOL : other, validFrom: from[i] ?? null }));
+			const days = baseOut.series.find((x) => x.nodeId === 'F2' && x.key === 'supplied')!.values.length;
+			const c = compareAllocations({
+				startDate: START,
+				tolerance: 0.1,
+				allocations: entries,
+				nodes: others.map((id) => ({ nodeId: id, name: `Neighbour ${id}`, kind: 'farm' as const, supplied: new Array<number>(days).fill(5), groundwater: null, riverAbstraction: null }))
+			});
+			const i = input({ application: null });
+			const b = { ...i.baseline, inputs: { ...i.baseline.inputs, model: { ...i.baseline.inputs.model, allocations: entries } }, allocations: c, allocationHolders: Object.fromEntries(entries.map((e, k) => [e.id, holder(k)])) };
+			return evidenceReport({ ...i, baseline: b }).allocations;
+		};
+
+		it('withholds the registered volume of a year whose rows in force are fewer than 5 holders’, keeping its modelled use; an all-in-force year is the control', () => {
+			// The review's repro: one holder since before the run, four from 1993-10-01.
+			const al = evidenceOf([null, '1993-10-01', '1993-10-01', '1993-10-01', '1993-10-01'], (k) => `h${k}`);
+			const total = al.units.find((u) => u.nodeId === 'others:surface')!.sources[0]!;
+			const early = total.years.filter((y) => y.waterYear < 1993);
+			expect(early.length).toBeGreaterThan(0);
+			for (const y of early) {
+				expect([y.registeredA, y.statusA, y.withheldA]).toEqual([null, null, true]);
+				expect(y.modelledA).toBeGreaterThan(0);
+			}
+			// From 1993 all five hold one: the total is shown (positive control).
+			const shown = total.years.find((y) => y.waterYear === 1993)!;
+			expect(shown.withheldA).toBeUndefined();
+			expect(shown.registeredA).toBeCloseTo(VOL + 4 * 50_000, 6);
+			// No year's figure, nor the mean, is the lone holder's volume (or its pro-rated part of a year).
+			const text = canonicalJson(al);
+			expect(text).not.toMatch(new RegExp(`(^|\\D)${VOL}(\\D|$)`));
+			const whole = total.years.filter((y) => y.partialA === false);
+			const shownWhole = whole.filter((y) => !y.withheldA);
+			expect(total.countsA!.withheld).toBe(whole.length - shownWhole.length);
+			expect(total.countsA!.over + total.countsA!.within + total.countsA!.under + total.countsA!.noVolume).toBe(shownWhole.length);
+			expect(total.meanRegisteredA).toBeCloseTo(shownWhole.reduce((s, y) => s + y.registeredA!, 0) / shownWhole.length, 6);
+			// Control: every row in force from the start, nothing withheld.
+			const open = evidenceOf([null, null, null, null, null], (k) => `h${k}`).units.find((u) => u.nodeId === 'others:surface')!.sources[0]!;
+			expect(open.years.some((y) => y.withheldA)).toBe(false);
+			expect(open.countsA!.withheld).toBeUndefined();
+		});
+
+		it('#523 O: withholds a year one holder dominates, though five hold a volume in force (provisional 80 % rule)', () => {
+			const al = evidenceOf([null, null, null, null, null], (k) => `h${k}`, 1000);
+			const total = al.units.find((u) => u.nodeId === 'others:surface')!.sources[0]!;
+			expect(total.years.every((y) => y.withheldA === true && y.registeredA === null)).toBe(true);
+			expect(canonicalJson(al)).not.toMatch(new RegExp(`(^|\\D)${VOL + 4000}(\\D|$)`));
+		});
+
+		it('#523 N: rows whose holder key is gone share one key, so they add at most one holder', () => {
+			const al = evidenceOf([null, null, null, null, null], () => 'gone');
+			expect(al.units.map((u) => u.nodeId)).not.toContain('others:surface');
+		});
+
+		it('counts registered users, not units: one holder of five units is left out (finding 6)', () => {
+			const one = evidenceOf([null, null, null, null, null], () => 'same');
+			expect(one.units.map((u) => u.nodeId)).not.toContain('others:surface');
+			expect(one.othersLeftOut).toBe(5);
+			expect(canonicalJson(one)).not.toMatch(new RegExp(`(^|\\D)${VOL}(\\D|$)`));
+		});
 	});
 
 	it('is deterministic, and a changed volume changes the document', () => {
@@ -1564,7 +1647,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-18');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1620,7 +1703,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-18');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],

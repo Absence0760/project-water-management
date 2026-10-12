@@ -52,6 +52,31 @@ function roundTrips(b: ModelInput, after: ProjectModel) {
 }
 
 describe('diffModel', () => {
+	it('Override mode records the EWR-keeping switches a baseline refuses, with nothing blocking (issue #523 B4)', () => {
+		const b = base();
+		const e = editing(b);
+		expect(e.baseline).toBe(false);
+		node(e, UP).damReleaseRule = 'passInflow';
+		node(e, UP).damReleaseM3Day = null;
+		node(e, LO).handsOffEwr = true;
+		// The transfer's switch (on a dam transfer it's inert, but the form shows it and the op records it).
+		e.model.transfers[0]!.handsOffEwr = true;
+		// What OverrideEditor counts as blocking: none of the three.
+		expect(e.issues.filter((i) => /EWR/.test(i.message))).toEqual([]);
+		const ops = roundTrips(b, e.snapshot());
+		expect(ops).toEqual(
+			expect.arrayContaining([
+				{ op: 'node.set', nodeId: UP, field: 'damReleaseRule', value: 'passInflow' },
+				{ op: 'node.set', nodeId: LO, field: 'handsOffEwr', value: true },
+				{ op: 'transfer.set', transferId: T, field: 'handsOffEwr', value: true }
+			])
+		);
+		// Positive control: the project's own editor flags the same model.
+		const own = new ModelEditor({ baseline: true });
+		own.load(e.snapshot());
+		expect(own.issues.filter((i) => /a scenario’s rule/.test(i.message))).toHaveLength(3);
+	});
+
 	it('turns demand objects into demandObject.add / .set / .remove, and lets a removed unit take its objects (engine 1.45.0)', () => {
 		const b = base();
 		const e = editing(b);

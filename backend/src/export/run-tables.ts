@@ -825,11 +825,17 @@ export function* accumulationLines(a: RunSummary['rainAccumulation']): Generator
 	}
 	yield csvRow(['Accumulations', a.mode === 'spread' ? 'spread over the days they cover' : 'run as recorded']);
 	const c = a.criteria;
+	// Engine ≥ 1.84.0 (model.md §2.4d, issue #523 A2): only blank days make a run; a run saved before counted zeros too.
+	const blankOnly = (c as { blankOnly?: boolean }).blankOnly === true;
+	const near = `CHIRPS ±1 day < ${c.readingDayShare * 100} % of it; CHIRPS over the run ≥ ${c.runShare * 100} % of it`;
 	yield csvRow([
 		'Detected when',
-		`reading ≥ ${c.minMm} mm after ≥ ${c.minRunDays} days of 0 or blank; CHIRPS ±1 day < ${c.readingDayShare * 100} % of it; CHIRPS over the run ≥ ${c.runShare * 100} % of it; window ≤ ${c.maxRunDays} days + the reading day` +
-			// Engine ≥ 1.70.0 (model.md §2.4d): a longer blank stretch is an outage.
-			(c.maxBlankDays != null ? `; blank stretches count up to ${c.maxBlankDays} days; a longer one is an outage that ends the run and a reading straight after it is set aside` : '')
+		blankOnly
+			? `reading ≥ ${c.minMm} mm after ${c.minRunDays} to ${c.maxBlankDays} blank days (a recorded 0 ends the run); ${near}; window = the run + the reading day; ` +
+				`more than ${c.maxBlankDays} blank days is an outage: a reading straight after it is set aside (CHIRPS over the outage's last ${c.maxRunDays} days)`
+			: `reading ≥ ${c.minMm} mm after ≥ ${c.minRunDays} days of 0 or blank; ${near}; window ≤ ${c.maxRunDays} days + the reading day` +
+				// Engine ≥ 1.70.0 (model.md §2.4d): a longer blank stretch is an outage.
+				(c.maxBlankDays != null ? `; blank stretches count up to ${c.maxBlankDays} days; a longer one is an outage that ends the run and a reading straight after it is set aside` : '')
 	]);
 	if (a.windows.length) {
 		yield csvRow([
@@ -841,7 +847,7 @@ export function* accumulationLines(a: RunSummary['rainAccumulation']): Generator
 			'Days in the run',
 			'Recorded total (mm)',
 			'Reading (mm)',
-			'Zero or blank days before',
+			blankOnly ? 'Blank days before' : 'Zero or blank days before',
 			'CHIRPS around the reading (mm)',
 			'CHIRPS over the run (mm)',
 			'CHIRPS over the window (mm)',

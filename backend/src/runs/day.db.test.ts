@@ -115,7 +115,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 	it("gives River to dam by month's value for the day's month as divertCapacityM3Day (issue #204)", async () => {
 		// Water-year order Oct–Sep: January is index 3.
 		const byMonth = [50, 50, 50, 20, 50, 50, 50, 50, 50, 50, 50, 50];
-		const monthly = { ...farm, divertMonthlyM3Day: byMonth, handsOffM3Day: Array(12).fill(5), handsOffEwr: true };
+		const monthly = { ...farm, divertMonthlyM3Day: byMonth, handsOffM3Day: Array(12).fill(5) };
 		const model = { nodes: [outlet, monthly], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
 		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
 		try {

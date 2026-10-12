@@ -17,6 +17,7 @@ import { attributeChanges } from '../history/attribute.js';
 import { revisionsBetween, type RevisionItem } from '../history/routes.js';
 import { ApiError } from '../http/errors.js';
 import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
+import { seriesWithholding } from '../runs/withheldSeries.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { listNominations, runEvidence, type RunEvidence } from '../runs/evidence.js';
 import { resolveEwrHeadline } from '../projects/ewrHeadlineSettings.js';
@@ -97,11 +98,14 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 	if (!found) throw new ApiError(404, 'not found');
 	// A viewer who can't read each registered volume (162, D3): the run without its copy of them.
 	const row = (await allocationUnitsHidden(db, ref.projectId, role)) ? redactRunAllocations(found) : found;
-	const { rows: series } = await db.query<{ key: string; label: string; unit: string }>(
+	const { rows: listed } = await db.query<{ key: string; label: string; unit: string }>(
 		`SELECT key, meta->>'label' AS label, meta->>'unit' AS unit
 		 FROM run_series WHERE run_id = $1 AND node_id IS NULL ORDER BY key`,
 		[ref.runId]
 	);
+	// Without the catchment series a viewer kept from the volumes doesn't read of a cap or full-allocation run (#523 I).
+	const w = await seriesWithholding(db, ref.projectId, role, ref.runId);
+	const series = w ? listed.filter((s) => !w.withheld(null, s.key)) : listed;
 	const { projectName, projectEwrHeadline, scenarioName, ...rest } = row;
 	const run: LoadedRun = { ...rest, evidence: runEvidence(await listNominations(db, ref.projectId), ref.runId) };
 	const recorded = (row.inputs as { scenario?: RunScenarioSnapshot }).scenario;

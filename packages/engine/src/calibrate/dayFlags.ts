@@ -11,12 +11,16 @@
 //   (quality.ts seriesRowFlags, under the project's settings.dataQuality
 //   limits, the same the run warnings use), or a zero-flow stretch the
 //   river-stops rule doesn't trust (engine ≥ 1.81.0, issue #507 item 2,
-//   audit C3, zeroFlowSuspect): one that runs outside the months the river
-//   is known to stop (settings.qualityFlags.zeroFlowMonths), when any are
-//   listed, or one longer than ZERO_FLOW_TRUST_MAX_DAYS not wholly inside
-//   them. A stretch wholly inside the months is trusted as the river
-//   stopping and scored, as GSIM Part 2 flags only runs of one value above
-//   zero (Gudmundsson et al. 2018, ESSD 10, 787); a logger that fails also
+//   audit C3, zeroFlowSuspect). With the months the river is known to stop
+//   listed (settings.qualityFlags.zeroFlowMonths), a stretch wholly outside
+//   them is suspect at any length, and one that overlaps them is trusted as
+//   the river stopping and scored as long as it runs no more than
+//   ZERO_FLOW_TRUST_MAX_DAYS beyond them on each side (engine 1.84.0, issue
+//   #523 A1; 1.81.0 – 1.83.x trusted only a stretch wholly inside them).
+//   With none listed, a stretch longer than ZERO_FLOW_TRUST_MAX_DAYS is
+//   suspect. Trusting a zero stretch follows GSIM Part 2, which flags only
+//   runs of one value above zero (Gudmundsson et al. 2018, ESSD 10, 787); a
+//   logger that fails also
 //   reads zero, which is why the rest are "check with the client". Engine
 //   1.62.0 – 1.80.0 trusted every zero stretch (QF-3). An exclusion period
 //   stays the manual override;
@@ -104,35 +108,59 @@ export interface FlowFlagInput {
 
 /**
  * 1 on each stored value of `s` that is in a zero-flow stretch the
- * river-stops rule doesn't trust (engine ≥ 1.81.0, issue #507 item 2,
- * docs/model.md §2.10h). A stretch is a maximal run of consecutive readings
- * of exactly 0 (a blank, NaN or negative day ends it). It is trusted, as the
- * river stopping, when every one of its days falls in a month of `months`.
- * Otherwise it is suspect when `months` lists any month (it runs outside
- * them), or when it is longer than ZERO_FLOW_TRUST_MAX_DAYS; so with no
- * months only the length rule applies. Read over the whole stored record,
- * so a stretch's length doesn't depend on the run window.
+ * river-stops rule doesn't trust (engine ≥ 1.81.0, issue #507 item 2;
+ * revised engine 1.84.0, issue #523 A1; docs/model.md §2.10h). A stretch is
+ * a maximal run of consecutive readings of exactly 0 (a blank, NaN or
+ * negative day ends it), judged whole: all its days are suspect or none.
+ * - With `months` listed, a stretch with no day in them is suspect at any
+ *   length. One that overlaps them is trusted as the river stopping as long
+ *   as it runs no more than ZERO_FLOW_TRUST_MAX_DAYS beyond them on each
+ *   side: at most that many days before its first day in the months, and at
+ *   most that many after its last (counted per side, not in total, so
+ *   mid-January to mid-May is trusted with Feb–Apr). Inside the stretch,
+ *   every day outside the months must lie within ZERO_FLOW_TRUST_MAX_DAYS of
+ *   one of its days inside them, so a gap between two listed months (or a
+ *   whole year at zero) is judged the same way. Month membership is read day
+ *   by day, so months that wrap the year end (Dec–Feb) need nothing special.
+ * - With no months, a stretch longer than ZERO_FLOW_TRUST_MAX_DAYS is suspect.
+ * Read over the whole stored record, so a stretch's length doesn't depend on
+ * the run window. Engine 1.81.0 – 1.83.x trusted only a stretch wholly inside
+ * the months.
  */
 export function zeroFlowSuspect(s: DailySeries, months: readonly number[] = []): Uint8Array {
 	const out = new Uint8Array(s.values.length);
-	const inMonths = (m: number) => months.includes(m);
 	const d0 = toEpochDay(s.startDate);
 	const v = s.values;
+	const max = ZERO_FLOW_TRUST_MAX_DAYS;
 	for (let i = 0; i < v.length; ) {
 		if (v[i] !== 0) {
 			i++;
 			continue;
 		}
 		let j = i;
-		let inside = months.length > 0;
-		while (j < v.length && v[j] === 0) {
-			if (inside && !inMonths(monthOfEpochDay(d0 + j))) inside = false;
-			j++;
-		}
-		if (!inside && (months.length > 0 || j - i > ZERO_FLOW_TRUST_MAX_DAYS)) out.fill(1, i, j);
+		while (j < v.length && v[j] === 0) j++;
+		if (months.length === 0 ? j - i > max : !zeroStretchTrusted(d0 + i, d0 + j, months, max)) out.fill(1, i, j);
 		i = j;
 	}
 	return out;
+}
+
+/**
+ * Whether the zero stretch over epoch days [from, to) overlaps `months` and
+ * every day of it outside them lies within `max` days of one of its days
+ * inside them: at most `max` days before the first, at most `max` after the
+ * last, and a gap between two of its in-month days of at most 2 × `max`.
+ */
+function zeroStretchTrusted(from: number, to: number, months: readonly number[], max: number): boolean {
+	// The last in-month day seen, null = none yet. Not a -1 sentinel: an epoch day before 1970-01-01 is negative.
+	let lastIn: number | null = null;
+	for (let d = from; d < to; d++) {
+		if (!months.includes(monthOfEpochDay(d))) continue;
+		const gap = lastIn === null ? d - from : d - lastIn - 1;
+		if (gap > (lastIn === null ? max : 2 * max)) return false;
+		lastIn = d;
+	}
+	return lastIn !== null && to - 1 - lastIn <= max;
 }
 
 /** Each run day's flow class code (FLOW_FLAG_CODE). */
@@ -333,7 +361,8 @@ export interface DayQuality {
 	suspectZeroDays: number;
 	/**
 	 * Days in the window that are zero flow in a stretch longer than ZERO_FLOW_TRUST_MAX_DAYS that is trusted, and
-	 * so scored as a river that stopped (engine ≥ 1.81.0: only inside settings.qualityFlags.zeroFlowMonths; engine
+	 * so scored as a river that stopped (engine ≥ 1.81.0: only a stretch over settings.qualityFlags.zeroFlowMonths,
+	 * wholly inside them up to 1.83.x, overlapping them and at most ZERO_FLOW_TRUST_MAX_DAYS beyond on each side from 1.84.0; engine
 	 * 1.62.0 – 1.80.0: any zero stretch of the flow flat-line cap or longer). Absent on an older report.
 	 */
 	longZeroDays?: number;
@@ -375,7 +404,8 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 		flow[f]++;
 		if (f === 'suspect' && x.observed[t] === 0) suspectZeroDays++;
 	}
-	// Zero flow held for a long stretch and trusted (engine ≥ 1.81.0: inside the river-stops months): run days in a
+	// Zero flow held for a long stretch and trusted (engine ≥ 1.81.0: over the river-stops months; from 1.84.0, up to
+	// ZERO_FLOW_TRUST_MAX_DAYS beyond them on each side): run days in a
 	// run of consecutive zero readings longer than ZERO_FLOW_TRUST_MAX_DAYS whose class is a reading's.
 	const inLongZero = new Uint8Array(x.observed.length);
 	for (let t = 0; t < x.observed.length; ) {
@@ -439,7 +469,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 		if (suspectZeroDays && use.suspect === 'exclude') {
 			const months = x.settings.zeroFlowMonths ?? [];
 			const why = months.length
-				? `in stretches that run outside the months the river is known to stop (${zeroFlowMonthsText(months)})`
+				? `in stretches wholly outside the months the river is known to stop (${zeroFlowMonthsText(months)}), or running more than ${ZERO_FLOW_TRUST_MAX_DAYS} days beyond them`
 				: `held for more than ${ZERO_FLOW_TRUST_MAX_DAYS} days, with no months listed in which the river is known to stop`;
 			notes.push(
 				`${n(suspectZeroDays)} of the suspect days ${suspectZeroDays === 1 ? 'is' : 'are'} zero flow ${why}, so the fit leaves them out: check with the client whether the river stopped or the logger failed. ` +
@@ -449,7 +479,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 	}
 	if (longZeroDays) {
 		notes.push(
-			`${days(longZeroDays)} ${longZeroDays === 1 ? 'is' : 'are'} zero flow held for more than ${ZERO_FLOW_TRUST_MAX_DAYS} days inside the months the river is known to stop (${zeroFlowMonthsText(x.settings.zeroFlowMonths)}). They are scored as a river that stopped flowing. If the logger or gauge failed instead, leave those dates out with an exclusion period.`
+			`${days(longZeroDays)} ${longZeroDays === 1 ? 'is' : 'are'} zero flow held for more than ${ZERO_FLOW_TRUST_MAX_DAYS} days in stretches over the months the river is known to stop (${zeroFlowMonthsText(x.settings.zeroFlowMonths)}), running at most ${ZERO_FLOW_TRUST_MAX_DAYS} days beyond them. They are scored as a river that stopped flowing. If the logger or gauge failed instead, leave those dates out with an exclusion period.`
 		);
 	}
 	if (flow.infilled) {

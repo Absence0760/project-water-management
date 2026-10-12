@@ -9,6 +9,17 @@ import { farmOutlookProjection, type FarmOutlookProjection, type SeasonalOutlook
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { ALLOCATION_MODE_NOT_PUBLISHABLE } from '../publish/publish.js';
+
+/** Whether an outlook's base run caps use at, or scales demand to, the registered volumes (#523 I). */
+export async function outlookOnCapOrFull(db: Db, projectId: string, outlookId: string): Promise<boolean> {
+	const { rows } = await db.query(
+		`SELECT 1 FROM seasonal_outlook o JOIN model_run r ON r.id = o.base_run_id
+		 WHERE o.project_id = $1 AND o.id = $2 AND r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation')`,
+		[projectId, outlookId]
+	);
+	return !!rows[0];
+}
 
 export const PublishOutlookBody = z.object({ levelId: z.string().min(1).max(8) }).strict();
 
@@ -63,6 +74,8 @@ export async function publishOutlook(db: Db, projectId: string, outlookId: strin
 	);
 	const o = rows[0];
 	if (!o) throw new ApiError(404, 'not found');
+	// An outlook on a cap or full-allocation base (only one made before #523 I can be): never to farmers.
+	if (await outlookOnCapOrFull(db, projectId, outlookId)) throw new ApiError(409, ALLOCATION_MODE_NOT_PUBLISHABLE);
 	if (o.status !== 'complete' || !o.result) throw new ApiError(409, 'the outlook is still running: publish it once it is complete');
 	if (o.seasonEnd < (await projectToday(db, projectId))) throw new ApiError(409, `the outlook's season ended on ${o.seasonEnd}: there is nothing left of it to publish`);
 	const { rows: farms } = await db.query<{ id: string }>(`SELECT id FROM node WHERE project_id = $1 AND kind = 'farm' ORDER BY sort_order, name, id`, [projectId]);
@@ -104,12 +117,22 @@ export async function withdrawOutlookPublication(db: Db, projectId: string): Pro
  * project's own day, project.time_zone). RLS: a farmer reads
  * only their own farms' rows.
  */
-export async function farmOutlook(db: Db, projectId: string, nodeId: string, today: string): Promise<(FarmOutlookProjection & { publishedAt: string }) | null> {
+export async function farmOutlook(
+	db: Db,
+	projectId: string,
+	nodeId: string,
+	today: string,
+	/** A preview kept from each registered volume (#523 I): none from an outlook on a cap or full-allocation base, or one whose outlook is gone (its base unknown). */
+	keptFromVolumes = false
+): Promise<(FarmOutlookProjection & { publishedAt: string }) | null> {
 	const { rows } = await db.query<{ view: FarmOutlookProjection; publishedAt: Date }>(
 		`SELECT f.view, p.published_at AS "publishedAt" FROM outlook_publication p
 		 JOIN outlook_publication_farm f ON f.publication_id = p.id AND f.node_id = $2
-		 WHERE p.project_id = $1 AND p.ended_at IS NULL AND p.season_end >= $3::date`,
-		[projectId, nodeId, today]
+		 WHERE p.project_id = $1 AND p.ended_at IS NULL AND p.season_end >= $3::date
+		   AND NOT ($4::boolean AND (p.outlook_id IS NULL OR EXISTS (
+			SELECT 1 FROM seasonal_outlook o JOIN model_run r ON r.id = o.base_run_id
+			WHERE o.id = p.outlook_id AND r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation'))))`,
+		[projectId, nodeId, today, keptFromVolumes]
 	);
 	const r = rows[0];
 	return r ? { ...r.view, publishedAt: new Date(r.publishedAt).toISOString() } : null;

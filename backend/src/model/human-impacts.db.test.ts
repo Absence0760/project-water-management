@@ -384,14 +384,14 @@ describe('dam storage (WP-3.5)', () => {
 		const u = await signUp('HandsOff');
 		const projectId = await project(u, 'Hands-off flow');
 		const outlet = node('Outlet', null);
-		// Winter-only filling (water-year order Oct–Sep: May–Sep off) and a hands-off flow that keeps the EWR too.
+		// Winter-only filling (water-year order Oct–Sep: May–Sep off) and a set hands-off flow (keeping the EWR too is a scenario's, issue #523 B4).
 		const winter = [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800];
-		const farm = node('Upper', outlet.id, { divertCapacityM3Day: 500, supplyRule: 'riverFirst', pumpCapacityM3Day: 900, handsOffM3Day: monthly(150), handsOffEwr: true, divertMonthlyM3Day: winter });
+		const farm = node('Upper', outlet.id, { divertCapacityM3Day: 500, supplyRule: 'riverFirst', pumpCapacityM3Day: 900, handsOffM3Day: monthly(150), handsOffEwr: false, divertMonthlyM3Day: winter });
 		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
 		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 20_000 }], transfers: [] };
 		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
 		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
-		expect(got.find((n) => n.id === farm.id)).toMatchObject({ handsOffM3Day: monthly(150), handsOffEwr: true, divertMonthlyM3Day: winter, divertCapacityM3Day: 500 });
+		expect(got.find((n) => n.id === farm.id)).toMatchObject({ handsOffM3Day: monthly(150), handsOffEwr: false, divertMonthlyM3Day: winter, divertCapacityM3Day: 500 });
 		// Positive control for the defaults: a node saved without the fields reads back with them off.
 		expect(got.find((n) => n.id === outlet.id)).toMatchObject({ handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null });
 
@@ -452,8 +452,8 @@ describe('the drought restriction rule (engine 1.54.0, WP-3.8)', () => {
 		expect(await seriesKeys(u, projectId, run.body.run.id, null, ['restriction_level', 'restriction_cut@crops'])).toEqual(['restriction_level', 'restriction_cut@crops']);
 		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, ['restricted_demand'])).toEqual(['restricted_demand']);
 
-		// Engine 1.54.0: the listed dam, the listed unit and the outlet's EWR trigger, by name in the summary sheet.
-		const named = { ...rule, basis: 'dams', damNodeIds: [farm.id], nodeIds: [farm.id], ewrTrigger: { siteNodeId: null, level: 1 } };
+		// Engine 1.54.0: the listed dam and the listed unit, by name in the summary sheet (the EWR trigger is a scenario's, issue #523 B4).
+		const named = { ...rule, basis: 'dams', damNodeIds: [farm.id], nodeIds: [farm.id] };
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: named } })).status).toBe(200);
 		const namedRun = await u.call('POST', `/projects/${projectId}/runs`, { label: 'named' });
 		expect(namedRun.status).toBe(201);

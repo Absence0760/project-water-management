@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { trimRuns } from '../runs/execute.js';
+import { ALLOCATION_MODE_NOT_PUBLISHABLE } from './publish.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -198,6 +199,21 @@ describe('publishing', () => {
 		expect(orphan.status).toBe(409);
 		expect(orphan.body.error).toMatch(/^a scenario run cannot be published/);
 		expect(await asOwner('SELECT 1 FROM run_publication WHERE project_id = $1', [pid])).toEqual([]);
+		expect((await publish(owner, base, {}, pid)).status).toBe(201);
+	});
+
+	it('refuses a run made before 213 that caps or fully allocates (#507, #523 I); the same run comparing only is the positive control', async () => {
+		const pid = await makeProject(owner, 'Capped publish');
+		const base = await run(owner, pid);
+		const allocations = (mode: string) => JSON.stringify({ mode, tolerance: 0.1, used: 0, notMatched: 0, nodes: [] });
+		for (const mode of ['cap', 'fullAllocation']) {
+			// Such a run can only come from before 213: its mode as the engine recorded it.
+			await asOwner(`UPDATE model_run SET summary = jsonb_set(summary, '{allocations}', $2::jsonb) WHERE id = $1`, [base, allocations(mode)]);
+			const refused = await publish(owner, base, {}, pid);
+			expect([refused.status, refused.body.error]).toEqual([409, ALLOCATION_MODE_NOT_PUBLISHABLE]);
+		}
+		expect(await asOwner('SELECT 1 FROM run_publication WHERE project_id = $1', [pid])).toEqual([]);
+		await asOwner(`UPDATE model_run SET summary = jsonb_set(summary, '{allocations}', $2::jsonb) WHERE id = $1`, [base, allocations('none')]);
 		expect((await publish(owner, base, {}, pid)).status).toBe(201);
 	});
 

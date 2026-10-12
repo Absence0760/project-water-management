@@ -18,7 +18,8 @@ import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { requireStepUp } from '../auth/stepUp.js';
 import { recordAudit } from '../history/record.js';
-import { currentOutlookPublication, PublishOutlookBody, publishOutlook, withdrawOutlookPublication } from './publication.js';
+import { currentOutlookPublication, outlookOnCapOrFull, PublishOutlookBody, publishOutlook, withdrawOutlookPublication } from './publication.js';
+import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 import { CreateOutlookBody, OUTLOOK_JOBS_PER_USER } from './schema.js';
 import { createOutlook, getOutlook, listOutlooks, pendingOutlookJobs } from './store.js';
 
@@ -48,9 +49,13 @@ export const outlookRoutes = new Hono<AuthEnv>()
 		const outlookId = c.req.param('outlookId');
 		if (!UUID.test(outlookId)) throw new ApiError(404, 'not found');
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, c.req.param('id'), 'viewer');
+			const role = await requireRole(db, c.req.param('id'), 'viewer');
 			const outlook = await getOutlook(db, c.req.param('id'), outlookId);
 			if (!outlook) throw new ApiError(404, 'not found');
+			// On a cap or full-allocation base (made before #523 I) its figures per farm rest on the registered volumes:
+			// withheld from a viewer kept from them, and said.
+			if ((await allocationUnitsHidden(db, c.req.param('id'), role)) && (await outlookOnCapOrFull(db, c.req.param('id'), outlookId)))
+				return c.json({ outlook: { ...outlook, result: null, triggers: null, withheld: ['result', 'triggers'] } });
 			return c.json({ outlook });
 		});
 	})

@@ -41,18 +41,25 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { monthName } from '$lib/format/months';
 	import { monthDayText } from '@water-management/engine';
-	import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, restrictionShortSummary, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
+	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from '$lib/components/network/ewrScenarioOnly';
+	import { EWR_TRIGGER_BASELINE_ERROR, joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, restrictionShortSummary, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 	let {
 		value = $bindable(),
 		error = $bindable(null),
 		readonly = false,
+		baseline = false,
 		nodes = [],
 		projectId = null
 	}: {
 		value: DroughtRestrictionRule | null | undefined;
 		error?: string | null;
 		readonly?: boolean;
+		/**
+		 * The project's own rule (Settings), not a scenario's: its EWR trigger is a scenario's (issue #523 B4),
+		 * so the switch can only be turned off, with a note, and a rule that has one can't be saved.
+		 */
+		baseline?: boolean;
 		/** The model's nodes: the dams, units and EWR sites to pick from (none: those choices are hidden). */
 		nodes?: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'damCapacityM3' | 'downstreamNodeId' | 'ewrSite'>[];
 		/** The project, to start from its published restriction notice (none: no such button). */
@@ -66,7 +73,7 @@
 	const dams = $derived(farms.filter((n) => n.damCapacityM3 > 0));
 	const gauges = $derived(nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null && n.ewrSite !== false));
 	$effect(() => {
-		const e = restrictionFormError(value);
+		const e = restrictionFormError(value) ?? (baseline && value?.ewrTrigger ? EWR_TRIGGER_BASELINE_ERROR : null);
 		const n = !e && value && nodes.length ? droughtRestrictionNodeIssues(value, nodes)[0] : undefined;
 		error = e ?? (n ? `${n.message.charAt(0).toUpperCase()}${n.message.slice(1)}.` : null);
 	});
@@ -313,7 +320,16 @@
 			</fieldset>
 			<fieldset class="plain choice" data-testid="restriction-ewr">
 				<legend>EWR trigger</legend>
-				<label class="check"><input type="checkbox" disabled={readonly} checked={!!rule.ewrTrigger} onchange={(e) => setEwr(e.currentTarget.checked)} /> Also restrict when the EWR wasn’t met the day before a review</label>
+				<label class="check"
+					><input
+						type="checkbox"
+						disabled={ewrSwitchDisabled(readonly, !!rule.ewrTrigger, baseline)}
+						aria-describedby={baseline ? `${uid}-ewr-h` : undefined}
+						checked={!!rule.ewrTrigger}
+						onchange={(e) => setEwr(e.currentTarget.checked)}
+					/> Also restrict when the EWR wasn’t met the day before a review</label
+				>
+				{#if baseline}<p class="hint" id="{uid}-ewr-h" data-testid="restriction-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>{/if}
 				{#if rule.ewrTrigger}
 					{@const trig = rule.ewrTrigger}
 					<div class="date">

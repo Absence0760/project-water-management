@@ -55,3 +55,32 @@ describe('the drought restriction editor’s storage, units and EWR trigger (eng
 		expect(text(render(DroughtRestrictionFields, { props: { value: null, projectId: 'p' } }).body)).toContain('Start from the published notice');
 	});
 });
+
+// The EWR trigger is a scenario's (issue #523 B4): Settings' own rule (`baseline`) shows the switch
+// disabled with a note, and can only switch a stored one off; a scenario's form switches it on.
+describe('the EWR trigger in the baseline and in a scenario (issue #523 B4)', () => {
+	/** The EWR trigger's checkbox, as rendered. */
+	const ewrBox = (html: string) => {
+		const at = html.indexOf('Also restrict when the EWR');
+		const open = html.lastIndexOf('<input', at);
+		return html.slice(open, html.indexOf('>', open) + 1);
+	};
+	const off = { ...rule, ewrTrigger: undefined };
+
+	it('in Settings, the switch is disabled while off, with the scenario-only note', () => {
+		const html = render(DroughtRestrictionFields, { props: { value: off, nodes, baseline: true } }).body;
+		expect(ewrBox(html)).toMatch(/\bdisabled\b/);
+		expect(text(html)).toContain('Scenario only: in the baseline the EWR is assessed and reported, never applied.');
+	});
+
+	it('in Settings, one already on can still be switched off', () => {
+		const html = render(DroughtRestrictionFields, { props: { value: rule, nodes, baseline: true } }).body;
+		expect(ewrBox(html)).not.toMatch(/\bdisabled\b/);
+	});
+
+	it('positive control: a scenario’s form switches it on, with no note', () => {
+		const html = render(DroughtRestrictionFields, { props: { value: off, nodes } }).body;
+		expect(ewrBox(html)).not.toMatch(/\bdisabled\b/);
+		expect(text(html)).not.toContain('Scenario only');
+	});
+});

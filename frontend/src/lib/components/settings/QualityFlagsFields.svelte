@@ -143,12 +143,13 @@
 		</div>
 	</div>
 	</div>
-	<!-- Engine ≥ 1.81.0 (issue #507 item 2): absent on settings saved before it, read as none. -->
+	<!-- Engine ≥ 1.81.0 (issue #507 item 2): absent on settings saved before it, read as none. The rule as of engine 1.84.0 (issue #523 A1). -->
 	<div class="months" data-testid="zero-flow-months">
 		<p class="months-title" aria-hidden="true">Months the river stops</p>
 		<p class="hint explain" id="{uid}-months-hint">
-			A broken or blocked logger also reads zero flow. A zero-flow stretch wholly inside the months ticked here is trusted as the river stopping and
-			scored. With months ticked, any other zero stretch is suspect; with none, only a stretch longer than {ZERO_FLOW_TRUST_MAX_DAYS} days is. Suspect days
+			A broken or blocked logger also reads zero flow. A zero-flow stretch that overlaps the months ticked here is trusted as the river stopping and
+			scored, as long as it runs no more than {ZERO_FLOW_TRUST_MAX_DAYS} days beyond them on each side. With months ticked, a zero stretch wholly outside them
+			is suspect whatever its length; with none, only a stretch longer than {ZERO_FLOW_TRUST_MAX_DAYS} days is. Suspect days
 			follow “Suspect days” above: check them with the client, and record a logger failure as an exclusion period.
 		</p>
 		<!-- MonthPicker keeps each toggle a 24 px target, 44 px on a phone (WCAG 2.5.8). -->

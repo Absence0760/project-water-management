@@ -117,14 +117,17 @@ balanced by time rather than by count:
 
 1. **`e2e-build`** builds the site once (`pnpm -C e2e build:site`) and uploads
    it. Every CI runner is slot 0, so the build's API URL is :3101 for all.
-   It also pulls MinIO once (by `docker-compose.yml`'s digest, cached by that
-   file) and uploads it as `minio-image`: the shards load it instead of each
-   pulling it, since Docker Hub's anonymous pull limit refused 14 shards' pulls
-   (issue #492; `scripts/ci/service-image.sh`, which checks the loaded image is
-   the one pulled; it pulls by digest from Google's Docker Hub mirror first).
-   Mailpit comes from GHCR and Postgres from ECR Public's `docker/library`,
-   never Docker Hub.
-2. **Each shard** gets its own Postgres service, downloads the site and runs
+   It also pulls every service image once (Postgres, Mailpit, MinIO, by
+   `docker-compose.yml`'s digests, cached by that file and the script) and
+   uploads them as `service-images`: the shards and the DB job load them
+   instead of each pulling them. Docker Hub's anonymous pull limit refused 14
+   shards' pulls (issue #492), and ECR Public's refused Postgres once every job
+   pulled it ("toomanyrequests: Data limit exceeded", issue #521).
+   `scripts/ci/service-image.sh` pulls by digest, from Google's Docker Hub
+   mirror first for Docker Hub images and ECR Public's `docker/library` copies,
+   and checks the loaded image is the one pulled.
+2. **Each shard** starts its own Postgres (from `docker-compose.yml`, loaded, not
+   a job `services:` entry, which the runner always pulls), downloads the site and runs
    with `E2E_PREBUILT=1` (serve that build, don't rebuild). The config refuses a
    prebuilt site whose stamp (`e2e-api-url.txt`) names another API URL.
    It plans its tests first (`support/shard-list.ts N/14 <file>`, then

@@ -44,6 +44,12 @@ export function startingRule(): DroughtRestrictionRule {
 	};
 }
 
+/**
+ * Settings' own rule with an EWR trigger (issue #523 B4): only a scenario keeps the EWR, so the form
+ * can't save it (the API answers 400 ewr_rule_scenario_only). One stored before 220 never reaches here.
+ */
+export const EWR_TRIGGER_BASELINE_ERROR = 'The EWR trigger is a scenario’s: in the baseline the EWR is assessed and reported, never applied. Untick it to save.';
+
 /** The rule's first problem as a sentence for the form, or null when it can be saved (null = off, fine). */
 export function restrictionFormError(rule: DroughtRestrictionRule | null | undefined): string | null {
 	if (!rule) return null;

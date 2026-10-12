@@ -144,7 +144,7 @@ describe('multi-day accumulations (§2.4d)', () => {
 	// Background: catchment = ratio × CHIRPS every day (no zeros), so the final factors are exact.
 	const days = span('2015-10-01', '2020-09-30');
 	const d0 = days[0]!;
-	/** CHIRPS with a dry reading day ±1 and a wet run before it. */
+	/** CHIRPS with a dry reading day ±1 and a wet run before it; the catchment is blank (unread) over the run (engine ≥ 1.84.0: only blank days make a run). */
 	function withWindow(runFrom: string, reading: string, readingMm: number) {
 		const a = toEpochDay(runFrom);
 		const r = toEpochDay(reading);
@@ -152,19 +152,18 @@ describe('multi-day accumulations (§2.4d)', () => {
 		for (let d = a; d < r - 1; d++) ch[d - d0] = h(d) + 4; // CHIRPS saw the rain the gauge didn't read
 		for (const d of [r - 1, r, r + 1]) ch[d - d0] = 0.1;
 		const c: (number | null)[] = days.map((d) => ratio(monthOf(d)) * h(d));
-		for (let d = a; d < r; d++) c[d - d0] = 0;
-		c[a + 2 - d0] = null; // a blank day inside the run counts like a zero
+		for (let d = a; d < r; d++) c[d - d0] = null;
 		c[r - d0] = readingMm;
 		c[r + 1 - d0] = ratio(monthOf(r + 1)) * 0.1; // keeps the day after on the month's ratio
 		return { ch, c, a, r };
 	}
 
 	it('a window across the water-year boundary (Sep → Oct) is spread by CHIRPS × each month factor and sums to the reading', () => {
-		const { ch, c, a, r } = withWindow('2017-09-24', '2017-10-06', 60);
+		const { ch, c, a, r } = withWindow('2017-09-29', '2017-10-06', 60);
 		const out = runModel(catchment({ rain_catchment_mm: { startDate: fromEpochDay(d0), values: c as never }, rain_chirps_mm: { startDate: fromEpochDay(d0), values: ch } }));
 		const acc = out.summary.rainAccumulation!;
 		expect(acc.windows.length).toBe(1);
-		expect(acc.windows[0]!.start).toBe('2017-09-24');
+		expect(acc.windows[0]!.start).toBe('2017-09-29');
 		expect(acc.windows[0]!.end).toBe('2017-10-06');
 		const used = col(out, 'rain_used')!;
 		const w = (d: number) => ch[d - d0]! * ratio(monthOf(d));
@@ -184,8 +183,8 @@ describe('multi-day accumulations (§2.4d)', () => {
 		expect(spread[a - 1 - d0]).toBe(0);
 	});
 
-	it('a window across the calendar-year boundary (Dec → Jan) keeps its total; the run is not also filled as a zero run', () => {
-		const { ch, c, a, r } = withWindow('2017-12-20', '2018-01-05', 90);
+	it('a window across the calendar-year boundary (Dec → Jan) keeps its total; its blank days are not also filled from CHIRPS', () => {
+		const { ch, c, a, r } = withWindow('2017-12-30', '2018-01-05', 90);
 		const out = runModel(catchment({ rain_catchment_mm: { startDate: fromEpochDay(d0), values: c as never }, rain_chirps_mm: { startDate: fromEpochDay(d0), values: ch } }));
 		const used = col(out, 'rain_used')!;
 		let total = 0;
@@ -194,19 +193,20 @@ describe('multi-day accumulations (§2.4d)', () => {
 		expect(out.summary.zeroRainInfill?.days ?? 0).toBe(0);
 	});
 
-	it("mode 'asRecorded' leaves the reading on its day; keepReadings keeps a detection as recorded", () => {
-		const { ch, c, a, r } = withWindow('2017-12-20', '2018-01-05', 90);
+	it("mode 'asRecorded' leaves the reading on its day (the blank days CHIRPS-filled, so it warns of a double count); keepReadings keeps a detection as recorded", () => {
+		const { ch, c, a, r } = withWindow('2017-12-30', '2018-01-05', 90);
 		const series = { rain_catchment_mm: { startDate: fromEpochDay(d0), values: c as never }, rain_chirps_mm: { startDate: fromEpochDay(d0), values: ch } };
 		const rec = runModel(catchment(series, { zeroRainRuns: { mode: 'missing', keepDry: [], missing: [], accumulationMode: 'asRecorded' } }));
 		const u = col(rec, 'rain_used')!;
 		expect(u[r - d0]).toBe(90);
-		expect(u[a - d0]).toBe(0);
+		expect(u[a - d0]).toBeCloseTo(ratio(12) * ch[a - d0]!, 10);
+		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (2018-01-05)');
 		const kept = runModel(catchment(series, { zeroRainRuns: { mode: 'missing', keepDry: [], missing: [], keepReadings: [{ start: '2018-01-05', end: '2018-01-05', reason: 'invented thunderstorm' }] } }));
 		expect(col(kept, 'rain_used')![r - d0]).toBe(90);
 	});
 
 	it('a window that starts before the run window: only its in-run days are used, at the whole-window shares', () => {
-		const { ch, c, a, r } = withWindow('2017-12-20', '2018-01-05', 90);
+		const { ch, c, a, r } = withWindow('2017-12-30', '2018-01-05', 90);
 		const series = { rain_catchment_mm: { startDate: fromEpochDay(d0), values: c as never }, rain_chirps_mm: { startDate: fromEpochDay(d0), values: ch } };
 		const whole = runModel(catchment(series));
 		const part = runModel(catchment(series, { simulationStart: '2018-01-01', simulationEnd: '2018-01-31' }));
@@ -215,7 +215,7 @@ describe('multi-day accumulations (§2.4d)', () => {
 		expect(a).toBeLessThan(s);
 	});
 
-	it('a zero run longer than 92 days ending in an accumulation: the window takes the last 92 days, the zero-run fill the rest, no double count', () => {
+	it('engine 1.84.0: a flagged zero run ending in a large reading is an outage: the reading is set aside, so the run is filled once', () => {
 		const ch = days.map(h);
 		const c: number[] = days.map((d) => ratio(monthOf(d)) * h(d));
 		const a = toEpochDay('2017-11-01');
@@ -224,29 +224,38 @@ describe('multi-day accumulations (§2.4d)', () => {
 		for (let d = a; d < r; d++) c[d - d0] = 0;
 		c[r - d0] = 150;
 		const out = runModel(catchment({ rain_catchment_mm: { startDate: fromEpochDay(d0), values: c }, rain_chirps_mm: { startDate: fromEpochDay(d0), values: ch } }));
+		// §2.4c flags the zero run and sets it aside, so its days read as blank for §2.4d (provisional, issue #523 A2): more than 7 is an outage.
+		expect(out.summary.rainAccumulation!.windows.map((w) => [w.end, w.status, w.outageDays])).toEqual([[fromEpochDay(r), 'setAside', r - a]]);
 		const used = col(out, 'rain_used')!;
-		const from = r - 92;
-		let win = 0;
-		for (let d = from; d <= r; d++) win += used[d - d0]!;
-		expect(win).toBeCloseTo(150, 9);
-		for (let d = a; d < from; d++) expect(used[d - d0]).toBeCloseTo(ratio(monthOf(d)) * h(d), 12);
+		expect(used[r - d0]).toBeLessThan(1);
 		const miss = col(out, 'rain_catchment_missing')!;
-		expect(miss[from - 1 - d0]).toBe(1);
-		expect(miss[from - d0]).toBe(0);
+		// Every zero day CHIRPS reads more than 2 mm on is set aside and filled (all but the dry day before the reading).
+		for (let d = a; d < r - 1; d++) expect(miss[d - d0]).toBe(1);
+		expect(miss[r - 1 - d0]).toBe(0);
+		expect(used[r - 1 - d0]).toBe(0);
+		expect(col(out, 'rain_catchment_spread') ?? []).not.toContain(1);
+		// Counted once: the run and the reading day hold the CHIRPS fill, not the fill and the 150 mm too.
+		let fill = 0;
+		for (let d = a; d <= r; d++) fill += used[d - d0]!;
+		let want = 0;
+		for (let d = a; d < r; d++) want += ratio(monthOf(d)) * h(d);
+		expect(fill).toBeLessThan(want * 1.1);
+		expect(fill + 150).toBeGreaterThan(want * 1.1); // the bound would catch the reading kept whole too
+		expect(out.summary.warnings.some((x) => x.includes('after an outage set aside as missing'))).toBe(true);
 	});
 });
 
 describe('accumulation detection thresholds, at their edges (§2.4d table)', () => {
 	// A 30-day record: too little overlap for any CHIRPS factor, so detection reads raw CHIRPS (factor 1).
-	function run(catchmentHead: number[], chirpsHead: number[]) {
+	function run(catchmentHead: (number | null)[], chirpsHead: number[]) {
 		const c = [...catchmentHead, ...new Array(30 - catchmentHead.length).fill(1)];
 		const ch = [...chirpsHead, ...new Array(30 - chirpsHead.length).fill(1)];
 		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2020-01-01', values: c }, rain_chirps_mm: { startDate: '2020-01-01', values: ch } }));
 		return { out, windows: out.summary.rainAccumulation?.windows ?? [], used: col(out, 'rain_used')! };
 	}
 
-	it('20 mm after 3 zero days, CHIRPS 50 % over the run and < 25 % near the reading: detected and spread', () => {
-		const { windows, used } = run([0, 0, 0, 20, 0.5], [5, 5, 4.9, 0, 0.09]);
+	it('20 mm after 3 blank days, CHIRPS 50 % over the run and < 25 % near the reading: detected and spread', () => {
+		const { windows, used } = run([null, null, null, 20, 0.5], [5, 5, 4.9, 0, 0.09]);
 		expect(windows.length).toBe(1);
 		expect(windows[0]!.status).toBe('spread');
 		const w = [5, 5, 4.9, 0];
@@ -255,15 +264,20 @@ describe('accumulation detection thresholds, at their edges (§2.4d table)', () 
 		expect(used[0]! + used[1]! + used[2]! + used[3]!).toBeCloseTo(20, 12);
 	});
 
-	it('not detected: near-reading CHIRPS exactly 25 %, run CHIRPS just under 50 %, a reading just under 20 mm, or only 2 zero days', () => {
-		expect(run([0, 0, 0, 20, 0.5], [5, 5, 4.9, 0, 0.1]).windows.length).toBe(0);
-		expect(run([0, 0, 0, 20, 0.5], [5, 4.99, 4.9, 0, 0.09]).windows.length).toBe(0);
-		expect(run([0, 0, 0, 19.99, 0.5], [5, 5, 4.9, 0, 0.09]).windows.length).toBe(0);
-		expect(run([1, 0, 0, 20, 0.5], [5, 5, 4.9, 0, 0.09]).windows.length).toBe(0);
+	it('not detected: near-reading CHIRPS exactly 25 %, run CHIRPS just under 50 %, a reading just under 20 mm, only 2 blank days, or 3 days of 0', () => {
+		expect(run([null, null, null, 20, 0.5], [5, 5, 4.9, 0, 0.1]).windows.length).toBe(0);
+		expect(run([null, null, null, 20, 0.5], [5, 4.99, 4.9, 0, 0.09]).windows.length).toBe(0);
+		expect(run([null, null, null, 19.99, 0.5], [5, 5, 4.9, 0, 0.09]).windows.length).toBe(0);
+		expect(run([1, null, null, 20, 0.5], [5, 5, 4.9, 0, 0.09]).windows.length).toBe(0);
+		expect(run([0, null, null, 20, 0.5], [5, 5, 4.9, 0, 0.09]).windows.length).toBe(0);
+		// Engine ≥ 1.84.0: a recorded 0 is a reading, so 3 days of 0 then 20 mm is real rain on its day.
+		const zeros = run([0, 0, 0, 20, 0.5], [5, 5, 4.9, 0, 0.09]);
+		expect(zeros.windows.length).toBe(0);
+		expect(zeros.used[3]).toBe(20);
 	});
 
 	it('a reading day without a CHIRPS value is never judged', () => {
-		const c = [0, 0, 0, 20, ...new Array(26).fill(1)];
+		const c = [null, null, null, 20, ...new Array(26).fill(1)];
 		const ch: (number | null)[] = [5, 5, 4.9, null, 0.09, ...new Array(25).fill(1)];
 		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2020-01-01', values: c }, rain_chirps_mm: { startDate: '2020-01-01', values: ch as never } }));
 		expect(out.summary.rainAccumulation?.windows ?? []).toEqual([]);

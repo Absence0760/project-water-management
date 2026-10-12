@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 115 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 117 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -402,7 +402,7 @@ and written into docs/model.md:
 | --- | --- | --- |
 | `band-and-room` | Engine ≥ 1.70.0: within one priority the source's reserve bands come first (pro rata to what each rule asks), then the receiver's room, pro rata to what the sources gave, in rounds while a receiver fills. Before 1.70.0 the room came first (pro rata to MIN(limit, the rule's free water)) and the bands after, which this probe pinned then | §2.6 |
 | `room-while-sending` | A receiver's room is counted from yesterday's storage: what it sends at a lower priority the same day doesn't make room | §2.6 |
-| `accumulation-window-run` | The accumulation run test reads CHIRPS over the window's run days (the run's last 92 at most), not the whole run | §2.4d |
+| `accumulation-window-run` | An outage reading's run test reads CHIRPS over the outage's last 92 days, not the whole outage (up to engine 1.83.0 a zero run's window; since 1.84.0 zeros are no run and a window's run is at most 7 blank days) | §2.4d |
 | `low-vs-chirps-median` | The usual low-vs-CHIRPS ratio of an even number of years is the mean of the middle two | §2.10a |
 | `negative-reading` | A negative catchment reading is a reading: it blocks the CHIRPS fallback, shows as recorded in `rain_final`, and runs as 0 mm | §2.4b |
 | `zero-catchment-area` | A run with no catchment area (farm areas summing to 0 and no `catchmentAreaKm2`) is refused | §2.4a |
@@ -429,8 +429,13 @@ beside a full one into one receiver, the full one filling the room; one
 source into three receivers whose rooms fill one after another, its water
 offered again twice: §2.6, engine 1.70.0, issue #90 Q25/Q26),
 `outage-reading-set-aside` (a 30 mm reading after 150 blank days is set aside and CHIRPS fills its day, §2.4d, engine 1.70.0, issue #90 Q31)
-and `short-blank-run-window` (7 blank days still count like zeros, so the
-reading is spread; its mutant moves the limit by one), `unit-rain-forecast-warmup`
+and `short-blank-run-window` (7 blank days after 4 zeros are still a run, so the
+reading is spread over the 7 blanks only, engine 1.84.0, issue #523 A2; its mutants
+move the limit by one and count the zeros too), `flagged-zero-run-outage` (a
+40 mm reading after a 200-day zero run §2.4c flags and fills: the flagged zeros
+read as blank, so it is an outage and the reading is set aside rather than
+kept beside the run's CHIRPS fill, engine 1.84.0, issue #523 A2, provisional;
+its mutant lets the flagged zeros end the run), `unit-rain-forecast-warmup`
 (each unit's warm-up cycles its historical days only, §2.4h, §2.4f) and `unit-rain-rules`
 (§2.4h: one farm per point of the forcing rule, with gaps that walk each
 chain to its end, a clamped MAP ratio, a negative catchment reading on a

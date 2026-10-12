@@ -20,6 +20,8 @@ export interface ReportView {
 	finishedAt: string | null;
 	error: string | null;
 	emailed: number;
+	/** Printed with each farm's registered volume, which this reader may not see (218, #523 G1): no download for them. */
+	volumesWithheld?: boolean;
 }
 
 export interface ReportStatus {
@@ -86,7 +88,7 @@ export function reportsApi(api: Pick<Api, 'request' | 'reports'>, projectId: str
  */
 function withLink(s: ReportStatus, url: string): ReportStatus {
 	const { url: _ignored, ...rest } = s;
-	return rest.report.status === 'done' ? { ...rest, url } : rest;
+	return rest.report.status === 'done' && !rest.report.volumesWithheld ? { ...rest, url } : rest;
 }
 
 /** Still in hand: poll again. */

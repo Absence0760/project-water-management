@@ -27,6 +27,9 @@ import { plantDelineationProposal, plantStartProposal } from '../__tests__/route
 import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 
+/** Project tables (with a project_id) the app role has no grant on: owner-only, read only through definer functions (migration 219; run_allocation_holder is keyed by run). */
+const OWNER_ONLY_TABLES = ['allocation_holder_salt'] as const;
+
 type User = Awaited<ReturnType<typeof signUp>>;
 const ORIGIN = 'http://localhost:7777';
 const MARKER = `nbr${crypto.randomUUID().slice(0, 8)}`;
@@ -212,9 +215,22 @@ async function inventory() {
 			`SELECT c.table_name FROM information_schema.columns c
 			 JOIN information_schema.tables t USING (table_schema, table_name)
 			 WHERE c.table_schema = 'public' AND c.column_name = 'project_id' AND t.table_type = 'BASE TABLE'
+			   AND has_table_privilege('water_app', format('%I.%I', c.table_schema, c.table_name), 'SELECT')
 			 ORDER BY 1`
 		)
 	).map((r) => r.table_name as string);
+	// The app role can't read these at all (owner-only, read through definer functions, #523 G): nothing to sweep.
+	// Any other table it can't read is a lost grant, not a pass.
+	const unreadable = (
+		await asOwner(
+			`SELECT c.table_name FROM information_schema.columns c
+			 JOIN information_schema.tables t USING (table_schema, table_name)
+			 WHERE c.table_schema = 'public' AND c.column_name = 'project_id' AND t.table_type = 'BASE TABLE'
+			   AND NOT has_table_privilege('water_app', format('%I.%I', c.table_schema, c.table_name), 'SELECT')
+			 ORDER BY 1`
+		)
+	).map((r) => r.table_name as string);
+	expect(unreadable).toEqual([...OWNER_ONLY_TABLES]);
 	const refs = new Map<string, Set<string>>();
 	const add = (t: string, c: string) => refs.set(t, (refs.get(t) ?? new Set()).add(c));
 	for (const r of await asOwner(

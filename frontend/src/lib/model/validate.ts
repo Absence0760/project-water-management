@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -159,7 +159,7 @@ export function withUnitMap(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>, mm: num
  * screen, so the unit form warns and a run caps it, engine ≥ 1.72.0;
  * returnFlowHint in network/fields.ts.)
  */
-export function validateModel(model: ProjectModel): ModelIssue[] {
+export function validateModel(model: ProjectModel, opts: { baseline?: boolean } = {}): ModelIssue[] {
 	const issues: ModelIssue[] = [];
 	const { nodes, crops, cropAreas, transfers } = model;
 	const nodeIds = new Set(nodes.map((n) => n.id));
@@ -434,6 +434,17 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 				issues.push({ area: 'transfers', itemId: t.id, message: `${label}: the seepage can rejoin the river only below the source or a hydrological unit downstream of it.` });
 		}
 	});
+
+	// The rules that keep water for the EWR are a scenario's (issue #523 B4), as the API refuses them in the
+	// baseline (400 ewr_rule_scenario_only); a scenario's Override mode sets them.
+	for (const r of opts.baseline ? baselineEwrRules({ model: { nodes, transfers } }) : []) {
+		const what = r.kind === 'damPassInflow' ? 'passing up to the EWR below the dam' : 'leaving the EWR in the river';
+		issues.push({
+			area: r.kind === 'offtakeHandsOff' ? 'transfers' : 'network',
+			...(r.id ? { itemId: r.id } : {}),
+			message: `${r.where.replace(/^unit /, '')}: ${what} is a scenario’s rule: in the baseline the EWR is assessed and reported, never applied. Untick it, or make a scenario that keeps it.`
+		});
+	}
 
 	return issues;
 }

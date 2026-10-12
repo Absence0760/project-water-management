@@ -96,7 +96,8 @@ describe('model store', () => {
 			cropRiverPoolM3: 123_456.789,
 			// Hands-off flow and River to dam by month (engine 1.32.0, 114_node_operating_rules, issue #204), awkward numbers.
 			handsOffM3Day: [0.1 + 0.2, 0, 0, 1e-7, 250.5, 250.5, 250.5, 250.5, 250.5, 250.5, 123_456.789, 0],
-			handsOffEwr: true,
+			// Keeping the EWR is a scenario's (issue #523 B4: a save refuses it); the column's own round trip is baselineEwrRules.db.test.ts.
+			handsOffEwr: false,
 			divertMonthlyM3Day: [4320, 4320, 4320, 4320, 4320, 4320, 0, 0, 0, 0, 0, 1 / 3],
 			// Development over the run (engine 1.30.0, 110_node_development): a leap day survives as a date.
 			damSurveyDate: '2012-02-29',
@@ -152,7 +153,7 @@ describe('model store', () => {
 					monthlyRateM3s: [0.25e-2, 0.01, 0.02, 0.015, 0, 0, 0, 0, 0, 0, 0, 0],
 					source: 'river',
 					handsOffM3Day: 250.5,
-					handsOffEwr: true,
+					handsOffEwr: false,
 					lossPct: 0.15,
 					sizing: 'capacity',
 					topUpDam: true,

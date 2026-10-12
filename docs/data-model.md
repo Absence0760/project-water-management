@@ -815,6 +815,12 @@ the result change?", and put back any earlier version.
   `settings.allocation_mode_reset` (213, issue #507: a stored baseline that
   capped or fully allocated was moved to compare only, `{ from, to }`; no
   actor, written by the migration),
+  `model.ewr_rules_reset` (220, issue #523 B4: the stored rules that kept
+  water for the EWR were switched off, `{ rules: [...] }`, each
+  `{ kind: 'damPassInflow' | 'unitHandsOff', id, name }`,
+  `{ kind: 'offtakeHandsOff', id, from, to }` or
+  `{ kind: 'restrictionEwrTrigger', siteNodeId, level }`; no actor, written
+  by the migration),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
   registration numbers, file name and hash, counts; never a holder's name;
   a viewer reads `allocation.created/changed/deleted` without the
@@ -1630,6 +1636,29 @@ water-use volumes per farm or water user.
   the holder's name ignoring case and spacing, else a name another row of the same unit carries, else the unit, else the row):
   water source, holder count, node, volume, storage, water use, validity;
   never a name, number or property. The API sums them (`allocations/viewerUnits.ts`).
+  Since 219 each row also carries `holder`, a salted key (`md5` of the
+  project's random salt in `allocation_holder_salt` and the holder key;
+  the salt is made with the project, owner-only, never leaves the
+  database), so the API gives a sum only when the rows in it (in force
+  today) are 5 or more holders' and none dominates it (#523 G/O).
+  `run_allocation_holder` (owner-only, 219) keeps each run's rows' keys as
+  they were when it was stored (trigger `model_run_allocation_holders` on
+  `model_run` insert; `gone` for a row no living holder had; existing runs
+  filled by 219 from the rows then living), and
+  `app_run_allocation_holders(project, run, ids)` (`SECURITY DEFINER`,
+  viewer and up) returns the keys of the given rows of one run, no volume:
+  the evidence report's § 5 gate and the authorised mix count holders by
+  them, the same for every reader, and only for a run the caller can read
+  (`model_run_select`'s rule, #523 N/P). When a holder's name leaves the
+  project (its last `allocation_holder` row with that name deleted or
+  renamed), trigger `allocation_holder_erased` resets the runs' frozen keys
+  of it to `gone` (POPIA erasure; the lookup is indexed,
+  `allocation_holder_norm_idx` on `(project_id, allocation_holder_norm(user_display))`,
+  about 70 ms locally to undo 2 500 rows of a 5 000-row project). All read `app_allocation_holder_keys`
+  (219, internal, not granted; one window pass per project), and 219's
+  backfill computes each project's keys once and joins them to the runs, so
+  its cost is the runs' allocation rows plus the projects' rows (not runs ×
+  rows²).
 - **No personal identifiers.** No ID-number, phone or email column exists;
   the importer refuses files that carry them ([security.md](./security.md)).
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`
@@ -3509,6 +3538,27 @@ string but `'none'`) to `'none'` and records the move on its History as a
 Stored runs and model revisions keep the mode they ran or were saved with
 (records of the past); a capped run of before stays readable as one.
 
+### The baseline keeps no water for the EWR (220_baseline_ewr_rules_scenario_only.sql)
+
+Issue #523 B4, decided by the client's hydrologist and the operator
+(2026-10-11, #90 R4, #507 § Principle): in the baseline the EWR is assessed
+and reported, never applied. The rules that keep water for it run only in a
+scenario ([scenarios.md § The EWR-keeping rules](./scenarios.md#the-ewr-keeping-rules-are-a-scenarios-issue-523-b4)):
+`node.dam_release_rule = 'passInflow'` with `dam_release_m3_day` NULL (a
+release up to the EWR), `node.hands_off_ewr`, `transfer.hands_off_ewr` and
+`project.settings.droughtRestriction.ewrTrigger`. `PUT …/model` and `PATCH
+/projects/:id` refuse them (400 `ewr_rule_scenario_only`,
+[api.md](./api.md)); an import, a copy or a restore switches them off, with
+a note in the revision's reason (`backend/src/projects/ewrRules.ts`); and the
+input a baseline run reads drops them (`runs/execute.ts`). 220 switched off
+every stored one (the release rule to `'none'`, `hands_off_ewr` false, the
+`ewrTrigger` key removed; inert ones too) and records, per project, one
+`model.ewr_rules_reset` audit event listing each with what it was, with no
+actor, so the owner can rebuild it as a scenario. Set flows
+(`hands_off_m3_day`, a pass-inflow release with amounts) stay. Stored runs
+and model revisions keep the rules they ran or were saved with; restoring
+one switches them off again.
+
 ### Legacy runoff settings removed (064_remove_legacy_runoff.sql)
 
 Engine 1.0.0 removed the legacy b023 recession runoff model (issue #16,
@@ -3842,8 +3892,8 @@ refuses one.
 
 | Table | Holds |
 | --- | --- |
-| `render_token` | The headless renderer's way in: `purpose` (`report`, or `pack` since 119), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project; NULL for a pack's token), `against_run_id` (082: an impact report's baseline, any run the issuer can read; `ON DELETE CASCADE`), `pack_id` (119: an issued evidence pack of that project the issuer reads; `ON DELETE CASCADE`; the purpose follows it, and `render_token_target` keeps exactly one target per purpose), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at` |
-| `report` | One requested PDF: `project_id`, `run_id` (`ON DELETE SET NULL`: a trimmed run fails a queued report), `job_id` (its `report_render` job, unique, `SET NULL` once purged; the API addresses a report by it), `schedule_id` (null on demand), `requested_by`, `email_to` (user ids, ≤ 50, resolved to current members' addresses at send time), `impact` + `against_run_id` (082: an impact report of the run against a baseline, which may be another project's run the requester can read; `ON DELETE SET NULL` with `impact` kept, so a report whose baseline went fails rather than printing the plain report; fixed at insert), `status` (`queued` → `rendering` → `done`, or `failed` when the production renderer answers with a failure), `pages`, `bytes`, `error` (our own text, ≤ 500), `created_at`, `finished_at` (set exactly when done or failed). The PDF is at `reports/<project_id>/<id>.pdf` in the bucket: derived, never stored |
+| `render_token` | The headless renderer's way in: `purpose` (`report`, or `pack` since 119), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project; NULL for a pack's token), `against_run_id` (082: an impact report's baseline, any run the issuer can read; `ON DELETE CASCADE`), `pack_id` (119: an issued evidence pack of that project the issuer reads; `ON DELETE CASCADE`; the purpose follows it, and `render_token_target` keeps exactly one target per purpose), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at`, `redact_allocations` (218, issue #523 G1: the report job sets it to `NOT report.with_volumes`; the render session it opens reads every project as a viewer kept from each registered volume, so the print is at the visibility fixed when the report was queued) |
+| `report` | One requested PDF: `project_id`, `run_id` (`ON DELETE SET NULL`: a trimmed run fails a queued report), `job_id` (its `report_render` job, unique, `SET NULL` once purged; the API addresses a report by it), `schedule_id` (null on demand), `requested_by`, `email_to` (user ids, ≤ 50, resolved to current members' addresses at send time), `impact` + `against_run_id` (082: an impact report of the run against a baseline, which may be another project's run the requester can read; `ON DELETE SET NULL` with `impact` kept, so a report whose baseline went fails rather than printing the plain report; fixed at insert), `status` (`queued` → `rendering` → `done`, or `failed` when the production renderer answers with a failure), `pages`, `bytes`, `error` (our own text, ≤ 500), `created_at`, `finished_at` (set exactly when done or failed), `with_volumes` (218, issue #523 G1: printed with each farm's registered volume, set by `report_enqueue`: the requester reads each one, an editor or owner or a viewer with `allocations_viewer_units` on, and a run of the project or the baseline carries one; existing rows true; never for an impact report against another project's baseline, which prints without any volumes. A viewer kept from the volumes is refused its PDF unless they asked for it, and isn't emailed its link). The PDF is at `reports/<project_id>/<id>.pdf` in the bucket: derived, never stored |
 | `report_schedule` | `frequency` (`weekly` with `weekday` 1–7, or `monthly` with `month_day` 1–28), `hour` 0–23 in `timezone` (IANA), `enabled`, `acting_user_id` (the editor who last saved it; `SET NULL` when that account goes, then skipped), `created_by`, `created_at`, `updated_at`, `anchor_at` (fires only for times after this; reset when the timing or `enabled` changes), `last_fired_for` (the scheduled time last queued), `last_error` (fixed text: why a due time queued nothing) |
 | `report_schedule_recipient` | `(schedule_id, user_id)`: who a schedule's PDF goes to |
 

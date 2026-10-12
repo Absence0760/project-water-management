@@ -62,8 +62,11 @@
 		ownEfficiency = false,
 		transfersLine = null,
 		transfersHref = null,
-		section = null
+		section = null,
+		baseline = false
 	}: {
+		/** The project's own model (issue #523 B4): its EWR-keeping switches are a scenario's. False in Override mode. */
+		baseline?: boolean;
 		node: NetworkNode;
 		nodes: NetworkNode[];
 		/** Computed flow share (0–1) with the current method; null for gauges. */
@@ -349,10 +352,10 @@
 				<legend class="visually-hidden">{SECTION_TITLE[sec]}</legend>
 				{#if sec === 'damSurvey'}
 					<!-- A dam's development fields (engine ≥ 1.30.0) also show on a node without a dam that still carries them, so they can be cleared. -->
-					{#if hasDam(node)}<DamStorageFields {node} {readonly} />{/if}
+					{#if hasDam(node)}<DamStorageFields {node} {readonly} {baseline} />{/if}
 					<DevelopmentFields {node} {readonly} part="dam" />
 				{:else if sec === 'supply'}
-					<SupplyFields {node} {nodes} {readonly} />
+					<SupplyFields {node} {nodes} {readonly} {baseline} />
 				{:else if sec === 'demand'}
 					<!-- A unit's; one left on a node turned into a gauge or user is shown so it can be removed (the save refuses it). -->
 					<DemandObjectFields {node} objects={demandObjects} {readonly} onadd={onadddemand} onremove={onremovedemand} />

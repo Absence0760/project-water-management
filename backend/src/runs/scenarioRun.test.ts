@@ -21,7 +21,8 @@ const SRC = fileURLToPath(new URL('..', import.meta.url));
 const OTHER_TABLES = new Map<string, string>([
 	['notes/routes.ts|n', 'note.scenario_id: a note on a scenario'],
 	['projects/document.ts|n', 'note.scenario_id: the project document leaves out notes on scenarios'],
-	['evidence/report.ts|m', 'assessment_member.scenario_id: a member copied from a team scenario since deleted']
+	['evidence/report.ts|m', 'assessment_member.scenario_id: a member copied from a team scenario since deleted'],
+	['yield/store.ts|y', 'yield_result.scenario_id: a yield computed on a scenario, its mode read from the scenario (#523 I)']
 ]);
 
 /** The hits in one file that no OTHER_TABLES entry explains. */

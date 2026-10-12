@@ -18,6 +18,8 @@ export interface SweepMemberRow {
 	position: number;
 	name: string;
 	ops: ScenarioOp[];
+	/** Ops left out for a viewer kept from each registered volume (routes.ts sweepForViewer); absent otherwise. */
+	withheldOps?: number;
 	opsSha256: string;
 	status: SweepMemberStatus;
 	/** Why it didn't run: each op that doesn't apply, or the engine's refusal. Empty when done. */
@@ -33,6 +35,8 @@ export interface SweepMemberRow {
 	 * only when done.
 	 */
 	series?: StoredSeries[] | null;
+	/** What a viewer kept from each registered volume doesn't get of a cap or full-allocation member (`series`, #523 I); absent otherwise. */
+	withheld?: string[];
 }
 
 /** A RunSeries as JSON stores it: NaN (no value) is null. */

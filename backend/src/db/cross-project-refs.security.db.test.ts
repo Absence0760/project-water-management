@@ -287,6 +287,10 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		reason: 'written only by the note_revision trigger, from the edited note itself (its project_id is the note’s); water_app has no INSERT or UPDATE (115)',
 		premise: 'not writable'
 	},
+	'run_allocation_holder.run_id': {
+		reason: 'no project_id of its own: the row is its run’s, written only by the model_run_allocation_holders trigger from that run’s own input; owner-only, water_app has no grant (219)',
+		premise: 'no project_id'
+	},
 	'api_key_throttle.key_id': { reason: 'no project_id of its own: the row is its key’s, in the key’s project', premise: 'no project_id' },
 	'data_feed_run_now.feed_id': { reason: 'no project_id of its own: the row is its feed’s “Run now” bucket, written only by app_feed_take_run_now', premise: 'no project_id' },
 	'report_schedule_recipient.schedule_id': {
