@@ -265,7 +265,7 @@ MUTANTS = [
     # Other water users (§2.7c).
     ("a junior user takes the seniors' water", 'river = H if x.get("userPriority", "senior") != "junior" else max(0.0, H - zs_in)', "river = H"),
     ("a user returns nothing", 'T = (x.get("userReturnPct") or 0.0) * G', "T = 0.0"),
-    ("farms pass nothing for senior users", "need = min(zs, H + I)", "need = 0.0"),
+    ("farms pass nothing for senior users", "need = min(zs, H + Ib)", "need = 0.0"),
     # Supply rules and the river pump (§2.7e).
     ("the trigger rule has no stop level", "on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap", "on = s_prev < trig * cap"),
     ("the river pump has no capacity", 'pc = math.inf if pc is None else pc', "pc = math.inf"),

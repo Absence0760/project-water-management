@@ -1149,7 +1149,7 @@ def pool_storage_only() -> dict:
     ]
     crops, areas = _crop("f", 80000)
     s = _settings(apanMm=[300] * 12, lakeEvapFactor=1, effectiveRainFraction=0)
-    rain = [25.0 if t % 15 == 0 else 0.0 for t in range(90)]
+    rain = [60.0 if t % 15 == 0 else 0.0 for t in range(90)]
     return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []},
             "series": {"rain_catchment_mm": {"startDate": "2020-01-01", "values": rain}}}
 
