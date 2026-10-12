@@ -119,6 +119,7 @@ import type {
 	AssessorQuestion,
 	ApplicantResultsRun,
 	DecideRequest,
+	AppealRequest,
 	ScenarioStatus,
 	ScenarioWithCheck,
 	ShareLink,
@@ -1002,11 +1003,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			) => request<ScenarioWithCheck>('PATCH', `${p(id)}/scenarios/${enc(sid)}`, body),
 			remove: (id: string, sid: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}`),
 			/** Run it on its base run's stored input; counts toward the project's run cap like any run. */
-			run: (id: string, sid: string, label?: string) =>
+			/** `terms: 'licensed'`: the terms of its licence in force (231/232) instead of its own changes. */
+			run: (id: string, sid: string, label?: string, terms?: 'licensed') =>
 				request<{ run: Run; removedRunIds?: string[]; applied: ScenarioCheck['applied']; classified: ScenarioCheck['classified'] }>(
 					'POST',
 					`${p(id)}/scenarios/${enc(sid)}/runs`,
-					label ? { label } : {}
+					{ ...(label ? { label } : {}), ...(terms ? { terms } : {}) }
 				).then((r) => ({ ...r, removedRunIds: r.removedRunIds ?? [] })),
 			/** Re-apply the ops to another base run: `problems` lists what no longer applies. `dryRun` checks without saving. */
 			rebase: (id: string, sid: string, baseRunId: string, dryRun = false) =>
@@ -1028,6 +1030,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 * the authority, who didn't make the application. `authority` defaults to settings.responsibleAuthority.
 			 */
 			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
+			/** Record what followed the decision (232): an appeal lodged, upheld, set aside or varied. */
+			appeal: (id: string, sid: string, body: AppealRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/appeals`, body),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>
 				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),

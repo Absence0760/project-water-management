@@ -453,6 +453,23 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const outcome = DECISION_WORDS[str(s.outcome)];
 			return outcome ? `Recorded ${str(s.authority) || 'the responsible authority'}’s decision on ${what}: ${outcome}` : `Decided ${what}: ${str(s.outcome).replaceAll('_', ' ')}`;
 		}
+		case 'scenario.appeal_recorded': {
+			// 232_decision_events: what followed a decision; the event's kind, forum and date, never its note.
+			const forum = s.forum === 'court' ? 'court' : 'Water Tribunal';
+			const on = `the decision on “${str(s.name)}”`;
+			switch (s.kind) {
+				case 'lodged':
+					return `Recorded an appeal lodged with the ${forum} against ${on}`;
+				case 'upheld':
+					return `Recorded that the ${forum} upheld ${on}`;
+				case 'set_aside':
+					return `Recorded that the ${forum} set aside ${on}`;
+				case 'varied':
+					return `Recorded that the ${forum} varied ${on}, with new licence terms`;
+				default:
+					return `Recorded what followed ${on}`;
+			}
+		}
 		case 'scenario.shared':
 			return 'Shared an application with another applicant';
 		case 'scenario.unshared':

@@ -1102,6 +1102,15 @@ export interface Scenario {
 	decisionDate?: string | null;
 	decisionReference?: string;
 	reasonsReceived?: boolean | null;
+	/**
+	 * The licence's granted terms (231, issue #523 G3): set exactly when the
+	 * outcome is licence_issued. `asApplied`: the changes applied for, written out.
+	 */
+	grantedTerms?: LicenceTerms | null;
+	/** What followed the decision (232, #523 G4): appeals lodged and their outcomes, in order. */
+	decisionEvents?: DecisionEvent[];
+	/** Whether its licence counts now, and from what (the decision, or the newest set aside or varied event); null until decided with an outcome. */
+	licence?: LicenceStanding | null;
 	/** Who else reads an application: the applicant's consultant or client. */
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
@@ -1126,6 +1135,62 @@ export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
 	application_rejected: 'Application rejected (formal requirements)',
 	not_considered: 'Not considered: use already authorised'
 };
+/** A licence's granted terms (231): the changes as licensed, their hash and names, and its conditions in words. */
+export interface LicenceTerms {
+	ops: ScenarioOp[];
+	opsSha256: string;
+	opNames: { id: string; name: string }[];
+	conditions: string;
+	/** The changes applied for, unchanged. */
+	asApplied: boolean;
+	/** How many changes a viewer kept from each farm's volume doesn't get (as Scenario.withheldOps). */
+	withheldOps?: number;
+}
+
+export type DecisionEventKind = 'lodged' | 'upheld' | 'set_aside' | 'varied';
+export type DecisionEventForum = 'water_tribunal' | 'court';
+export const DECISION_EVENT_KINDS: readonly DecisionEventKind[] = ['lodged', 'upheld', 'set_aside', 'varied'];
+export const DECISION_EVENT_LABEL: Record<DecisionEventKind, string> = {
+	lodged: 'Appeal lodged',
+	upheld: 'Decision upheld',
+	set_aside: 'Decision set aside',
+	varied: 'Decision varied'
+};
+export const DECISION_EVENT_FORUM_LABEL: Record<DecisionEventForum, string> = { water_tribunal: 'Water Tribunal', court: 'Court' };
+
+/** One event after a decision (232): an appeal lodged, or its outcome; `terms` only on `varied`. */
+export interface DecisionEvent {
+	id: string;
+	position: number;
+	kind: DecisionEventKind;
+	forum: DecisionEventForum;
+	eventDate: string;
+	reference: string;
+	note: string;
+	terms: LicenceTerms | null;
+	recordedBy: string | null;
+	recordedAt: string;
+}
+
+/** Whether a decided scenario's licence counts in cumulative impact now (app_scenario_licence, 232). */
+export interface LicenceStanding {
+	inForce: boolean;
+	from: 'decision' | 'event';
+	eventId: string | null;
+	/** An appeal is lodged and not yet decided: nothing changes until it is. */
+	appealPending: boolean;
+}
+
+/** POST …/appeals: "Record what followed the decision" (232). `terms` with `varied` only. */
+export interface AppealRequest {
+	kind: DecisionEventKind;
+	forum: DecisionEventForum;
+	eventDate: string;
+	reference?: string;
+	note?: string;
+	terms?: { ops: ScenarioOp[]; conditions?: string };
+}
+
 /** POST …/decide: "Record the authority's decision" (163). */
 export interface DecideRequest {
 	outcome: ScenarioOutcome;
@@ -1137,6 +1202,8 @@ export interface DecideRequest {
 	reference?: string;
 	reasonsReceived: boolean;
 	note?: string;
+	/** With licence_issued only (231): the granted terms; `ops` left out, granted as applied for. */
+	granted?: { ops?: ScenarioOp[]; conditions?: string };
 }
 
 /** The outcome's basis in the Act or the regulations, printed beside the choice. */
