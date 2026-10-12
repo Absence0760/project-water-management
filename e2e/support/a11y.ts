@@ -29,9 +29,20 @@ export interface ScanScope {
 	tags?: string[];
 	/** Named axe rules to run instead of tags. */
 	rules?: string[];
-	/** Scan only this part of the page (a CSS selector). */
+	/** Scan only this part of the page (a CSS selector). Default: the open modal dialog if there is one, else the page. */
 	include?: string;
 }
+
+/**
+ * A modal <dialog> (showModal) makes the rest of the page inert, and axe then
+ * scans only the dialog. axe-core guesses modality by probing just outside the
+ * dialog, which a dialog filling the viewport (a sheet on a phone) defeats: it
+ * then scans the inert map behind the sheet too, and a marker that happens to
+ * sit under the sheet's buttons reads as an obscured target (issue #523). So a
+ * scan with no `include` of its own covers the open modal dialog when the
+ * browser says one is open (`:modal`), as axe does when its guess works.
+ */
+const MODAL = 'dialog:modal';
 
 export async function expectNoViolations(page: Page, scope: ScanScope = {}) {
 	expect(await violations(page, scope)).toEqual([]);
@@ -45,7 +56,8 @@ export async function violations(page: Page, { tags = WCAG_TAGS, rules, include 
 	const builder = new AxeBuilder({ page }).options({ resultTypes: ['violations'] }).setLegacyMode();
 	if (rules) builder.withRules(rules);
 	else builder.withTags(tags);
-	if (include) builder.include(include);
+	const scope = include ?? ((await page.locator(MODAL).count()) > 0 ? MODAL : undefined);
+	if (scope) builder.include(scope);
 	const results = await builder.analyze();
 	return results.violations.map((v) => ({
 		id: v.id,

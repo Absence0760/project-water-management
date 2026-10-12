@@ -3510,9 +3510,16 @@ map" card) stays the schematic; this is the geography.
   Layers (until 2026-10-02 a full-width line above the map: it is an
   operator's matter, and a deployed site has a basemap).
 - **Search** (`MapSearch.svelte`, `mapSearch.ts`; issue #523 C5; anyone who
-  sees the Map, once the map is drawn): a search box heads the Map card,
-  above the map ("Find a town, farm, river, gauge, dam or quaternary", its
-  label "Find a place on the map", a `role="search"` form with **Find**).
+  sees the Map, once the map is drawn): a search box over the map's top
+  edge, right of the tools and clear of the zoom buttons, so the map keeps
+  the window (a row above the map until 2026-10-12, which pushed the map
+  down the window; `map-layout.spec.ts`) ("Find a town, farm, river, gauge, dam
+  or quaternary", its label "Find a place on the map", a `role="search"`
+  form with **Find**). Its live line and the places' credit are small chips
+  under it, and the picked name and the tool strip start under those
+  (`--map-inset-top`); the list of matches covers what's under it while
+  open. On a narrow map (46rem or less, a phone) Layers moves down under the
+  search's lines too, and the picked name stops short of it.
   Enter or Find lists the matches under it: the map's layers first (gauging
   stations, registered dams, quaternaries), then places from the gazetteer,
   each a button with its name over what and where ("Gauging station Z1H002 ·

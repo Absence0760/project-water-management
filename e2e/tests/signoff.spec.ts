@@ -25,9 +25,14 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	const validation = page.locator('#rep-validation');
 	await expect(validation.getByRole('heading', { name: 'Known limitations' })).toBeVisible();
 	await expect(validation.getByRole('rowheader', { name: 'B3', exact: true })).toBeVisible();
-	// The Reserve method's open choices are on it too (engine-audit A1–A7, issue #71).
-	await expect(validation.getByRole('rowheader', { name: 'A1', exact: true })).toBeVisible();
-	await expect(validation.getByText(/^Below a rule table.s driest point the requirement is scaled down with the flow/)).toBeVisible();
+	// The Reserve method's choices still open are on it too (engine-audit A4, A6, A7, issue #71): the charge, high-flow events.
+	await expect(validation.getByRole('rowheader', { name: 'A4', exact: true })).toBeVisible();
+	await expect(validation.getByText(/^The daily EWR charge, curtailment and the water account follow the pragmatic EWR by default/)).toBeVisible();
+	await expect(validation.getByRole('rowheader', { name: 'A6', exact: true })).toBeVisible();
+	// One the client's hydrologist confirmed is not (A1, scaling below a table's driest point, #90 EWR assurance rules, 2026-10-10).
+	await expect(validation.getByRole('rowheader', { name: 'A1', exact: true })).toHaveCount(0);
+	await expect(validation.getByText(/^Below a rule table.s driest point the requirement is scaled down with the flow/)).toHaveCount(0);
+	// The calibration ratings carry Moriasi et al.'s caveat (thresholds set for monthly flows, the run scored daily).
 	await expect(validation.getByText(/set for monthly flows/)).toBeVisible();
 	// The methodology statement by version and hash, and the errata of this run's engine (none known for the current one).
 	await expect(validation.getByText('Methodology statement', { exact: true })).toBeVisible();
