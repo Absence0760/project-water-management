@@ -1817,6 +1817,17 @@ it.
   So nothing is assigned to a crop until the modeller chooses one, and the
   confirmation says so. A unit with several crops on one parcel splits the
   area by typing afterwards; the proposal never splits it.
+- **Labelled as satellite cropland, not irrigated area** (#90 Land-cover
+  proposals, issue #523 C4). The box opens with a warning
+  (`cropland-caution`, `CAUTION` in `crops/croplandProposals.ts`): "This is
+  cultivated land mapped from satellite, including dryland and fallow
+  fields, not the irrigated area: check it before you use it." The
+  confirmation repeats it, and the help entry (`cultivated-area`) says the
+  same. The area is never applied without the modeller pressing **Use** and
+  confirming (the one write path is `POST …/crop-area-from-land-cover`; no
+  start, import or run applies it), and it is used as it stands, with no
+  fixed discount for the irrigated share: where only part is irrigated, the
+  modeller types the irrigated area over it.
 - **Pre-summarised at import, local-first.** The app never reads a raster.
   The operator's `pnpm import:land-cover` (`backend/scripts/import-land-cover.ts`,
   `geo/loadCropland.ts`) reads each GeoTIFF tile itself (no GDAL, no

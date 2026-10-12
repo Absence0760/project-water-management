@@ -55,6 +55,10 @@ test('an editor uses the parcels’ cultivated area as a crop’s planted area; 
 
 	await openBox(page, project.id, upper.id, 'Upper farm');
 	await expect(panel(page).getByTestId('cropland-synthetic')).toContainText('Synthetic test data.');
+	// #90 Land-cover proposals: labelled as satellite cropland, not irrigated area, to check before use.
+	await expect(panel(page).getByTestId('cropland-caution')).toHaveText(
+		'This is cultivated land mapped from satellite, including dryland and fallow fields, not the irrigated area: check it before you use it.'
+	);
 	const parcels = panel(page).getByTestId('cropland-parcels');
 	await expect(parcels.locator('tbody tr')).toHaveCount(2);
 	// Half of each parcel is cultivated in the synthetic grid.
@@ -75,7 +79,11 @@ test('an editor uses the parcels’ cultivated area as a crop’s planted area; 
 	await row.getByRole('button', { name: /^Use / }).click();
 	// The page reloads the model after the save; the notice must outlive that reload (it used to be cleared by it).
 	const reloaded = page.waitForResponse((r) => r.request().method() === 'GET' && r.url().endsWith(`/projects/${project.id}/model`));
-	await answerConfirm(page, true, /Set Orchard’s planted area on Upper farm from land cover\?\s*Orchard on Upper farm changes from 20 ha to [\d.,]+ ha, the cultivated area the land cover \(synthetic, synthetic 1\) shows in Upper farm’s parcels\./);
+	await answerConfirm(
+		page,
+		true,
+		/Set Orchard’s planted area on Upper farm from land cover\?\s*Orchard on Upper farm changes from 20 ha to [\d.,]+ ha, the cultivated area the land cover \(synthetic, synthetic 1\) shows in Upper farm’s parcels\. This is cultivated land mapped from satellite, including dryland and fallow fields, not the irrigated area: check it before you use it\./
+	);
 	await expect(panel(page).getByTestId('cropland-notice')).toHaveText(/^Orchard’s planted area on Upper farm is now [\d.,]+ ha, from land cover\. Run the model to see its effect\.$/);
 	// Run model lives on Runs & results: the notice links there.
 	await expect(panel(page).getByTestId('cropland-notice').getByRole('link', { name: 'Run the model' })).toHaveAttribute('href', '?tab=runs');

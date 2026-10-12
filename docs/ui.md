@@ -4563,8 +4563,11 @@ saves the catchment's model, and override mode there edits the scenario's
   the sources and method in [maps.md § Cultivated area from land
   cover](./maps.md#cultivated-area-from-land-cover)): under the areas, for a
   hydrological unit (not another user) that is saved in the model (an
-  unsaved one says "Save the model to see …"). It is in the drawer, not on
-  the Crops page, because the page is sized to the window and a panel below
+  unsaved one says "Save the model to see …"). Under its intro a warning
+  (`cropland-caution`) labels the figure: "This is cultivated land mapped
+  from satellite, including dryland and fallow fields, not the irrigated
+  area: check it before you use it." (#90 Land-cover proposals). It is in
+  the drawer, not on the Crops page, because the page is sized to the window and a panel below
   it would sit out of sight; every page that names a unit opens it. A table
   lists each farm parcel on the map linked to the unit, largest cultivated
   area first, with **Cultivated** ("51.7 ha of 103 ha") and **Share**, and
@@ -4580,8 +4583,9 @@ saves the catchment's model, and override mode there edits the scenario's
   2026-10-01", or "Typed over since: …" once the area no longer matches),
   and **Use**, or "Saved" when the crop already holds the chosen area.
   **Use** asks first (`confirmWords`: the crop, the unit, the old and new
-  area, the dataset, and that the land cover doesn't say what grows there or
-  whether it is irrigated; "Use this area"), saves that one value on the
+  area, the dataset, the same satellite-cropland warning, that the land
+  cover doesn't say what grows there, and that the area is used as it
+  stands, with no discount; "Use this area"), saves that one value on the
   server, shows a notice ("Orchard’s planted area on Upper farm is now
   51.73 ha, from land cover. Run the model to see its effect.", which takes
   the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the

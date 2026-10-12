@@ -1858,7 +1858,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'cultivated-area',
 		term: 'Cultivated area from land cover',
-		short: 'The cropland ESA WorldCover maps in a unit’s parcels, proposed as one crop’s planted area. It never says which crop, or if irrigated.',
+		short: 'Cultivated land from satellite in a unit’s parcels, dryland and fallow included: not irrigated area. Check it before you use it.',
 		units: 'ha',
 		category: 'data'
 	},

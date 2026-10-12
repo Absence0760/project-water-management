@@ -5,8 +5,11 @@
 	unit's parcels on the map, their sum, and the catchment's for reference,
 	with the dataset, version and method cited. The modeller picks an area (all
 	parcels, or one) and the crop it is planted to: the land cover never says
-	which crop. Use (editors) asks first, then saves that one value to the model
-	as a revision citing the dataset. Nothing is applied by itself.
+	which crop. A caution says it is cultivated land from satellite, dryland and
+	fallow included, not irrigated area, to check before use (#90 Land-cover
+	proposals). Use (editors) asks first, then saves that one value to the model,
+	as it stands with no discount, as a revision citing the dataset. Nothing is
+	applied by itself.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
@@ -17,7 +20,7 @@
 	import ProposalSource from '$lib/components/proposals/ProposalSource.svelte';
 	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
-	import { areaChoices, confirmWords, cropRows, fmtHa, type CropRow } from './croplandProposals';
+	import { areaChoices, CAUTION, confirmWords, cropRows, fmtHa, type CropRow } from './croplandProposals';
 
 	let {
 		projectId,
@@ -131,9 +134,10 @@
 	onretry={() => load(nodeId)}
 >
 	{#snippet intro()}<p class="hint muted">
-		The area a land-cover map shows as cropland in this unit’s parcels on the map. It shows where land is cultivated, not what grows there
-		or whether it is irrigated, so you choose the crop. Nothing changes until you use a value.
-	</p>{/snippet}
+			The area a land-cover map shows as cropland in this unit’s parcels on the map. It shows where land is cultivated, not what grows there,
+			so you choose the crop. Nothing changes until you use a value and confirm it.
+		</p>
+		<p class="alert alert-warning slim" data-testid="cropland-caution">{CAUTION}</p>{/snippet}
 
 	{#if data}
 		{#if !data.dataset}
