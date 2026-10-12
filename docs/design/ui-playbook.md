@@ -1663,6 +1663,13 @@ Interaction details that bit:
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
   (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`,
   `scenarios.ts`, `allocations.ts`).
+- **A full-screen modal sheet defeats axe's modal check.** axe scans only an
+  open modal dialog by probing just outside it; a sheet filling a phone's
+  viewport leaves nothing outside, so axe scanned the inert map behind it and
+  failed a marker under the sheet's buttons as an obscured target.
+  `expectNoViolations` (`e2e/support/a11y.ts`) therefore scans the open
+  `dialog:modal` itself when the browser reports one (issue #523). Pass
+  `include` to scan something else.
 - **Playwright counts a visually hidden box as visible.** `.visually-hidden`
   leaves a 1 × 1 px box, which `toBeVisible()` passes and `toBeHidden()`
   fails ("from the file" kept as a row's description in Upload GeoJSON):
