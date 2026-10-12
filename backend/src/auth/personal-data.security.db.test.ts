@@ -156,6 +156,8 @@ beforeAll(async () => {
 	// member.authority names them in the log (pseudonymised on deletion, 048). An owner can't be in an
 	// applying party any more (163's conflict guard), which member.party used to stand in for here.
 	await actForAuthority(owner, projectId, subject.id);
+	// Acting for it, they add the owner, confirmed at once: authority_delegate.proposed_by and confirmed_by (233), cleared on deletion.
+	await call(subject, 'POST', `/projects/${projectId}/authority-delegates`, { userId: owner.id });
 	await call(subject, 'POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farm.id] });
 	runId = (await call(owner, 'POST', `/projects/${projectId}/runs`, { label: 'r' })).run.id;
 	await call(subject, 'PATCH', `/projects/${projectId}/runs/${runId}`, { notes: 'checked' });

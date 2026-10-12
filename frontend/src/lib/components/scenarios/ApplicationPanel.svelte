@@ -63,8 +63,8 @@
 		/** The applicant who made it: they submit, withdraw, reopen and share it. */
 		isOwner: boolean;
 		/**
-		 * An editor who isn't its owner and whom the project's owner marks as
-		 * acting for the responsible authority (163): they record its decision
+		 * An editor who isn't its owner and whom the responsible authority
+		 * confirmed as acting for it (163, 233): they record its decision
 		 * once submitted.
 		 */
 		canDecide: boolean;
@@ -441,7 +441,7 @@
 		</form>
 	{:else if assessor && s.status === 'submitted'}
 		<p class="hint" data-testid="application-decide-who">
-			Only a member the project’s owner marks as acting for the responsible authority records its decision (Members).
+			Only a member the responsible authority has confirmed as acting for it records its decision (Project page, Acts for the authority).
 		</p>
 	{/if}
 

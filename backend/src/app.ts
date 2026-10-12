@@ -58,6 +58,7 @@ import { runRoutes } from './runs/routes.js';
 import { scenarioRoutes } from './scenarios/routes.js';
 import { participationRoutes } from './scenarios/participation.js';
 import { registrationCheckRoutes } from './signoffs/registrationCheck.js';
+import { authorityDelegateRoutes } from './projects/authorityDelegates.js';
 import { questionRoutes } from './scenarios/questions.js';
 import { uncertaintyRoutes } from './runs/uncertainty.js';
 import { seriesRoutes } from './series/routes.js';
@@ -187,6 +188,7 @@ export function createApp() {
 	projects.route('/', questionRoutes);
 	projects.route('/', signoffRoutes);
 	projects.route('/', registrationCheckRoutes);
+	projects.route('/', authorityDelegateRoutes);
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);

@@ -457,7 +457,7 @@ export const EndorseBody = z
  * Endorse a published baseline for the responsible authority (163_licensing_authority;
  * s41(2): the authority decides what evidence it accepts). Once per
  * publication, current or superseded (an application may rest on either);
- * the caller's right (editor, marked as acting for the authority) is checked
+ * the caller's right (editor, confirmed as acting for the authority, 233) is checked
  * by the route and again by run_publication_endorse.
  */
 export async function endorsePublication(db: Db, projectId: string, pubId: string, note: string): Promise<PublicationMeta> {

@@ -415,7 +415,8 @@ const INNER_JOINS = new Map<string, string>([
 	['evidence/notices.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the pack notice’s recipient, 133)'],
 	['errata/notices.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the erratum notice’s recipient, 153)'],
 	['licence/record.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the licence-record mail’s owner, 161)'],
-	['evidence/packSend.ts JOIN app_user u ON u.id = m.user_id', 'current project members (those acting for the authority, 163)']
+	['evidence/packSend.ts JOIN app_user u ON u.id = a.user_id', 'current editors and owners acting for the authority (app_authority_members, 233)'],
+	['projects/authorityDelegates.ts JOIN app_user u ON u.id = d.user_id', 'who acts for the authority: a delegation goes with its account (authority_delegate.user_id cascades, 233)']
 ]);
 
 describe('inner joins to app_user', () => {

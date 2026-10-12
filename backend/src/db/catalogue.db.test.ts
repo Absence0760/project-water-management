@@ -45,8 +45,11 @@ const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespa
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
-	// A membership's project, user and join date are fixed; an owner changes its role, party, authority flag (163_licensing_authority.sql) and specialist flag (167_signers.sql).
-	project_member: ['acts_for_authority', 'party', 'role', 'specialist'],
+	// A membership's project, user and join date are fixed; an owner changes its role, party and specialist flag (167_signers.sql).
+	// The authority flag (163) is no longer the app's to set: authority_delegate replaced it (233_authority_delegates.sql).
+	project_member: ['party', 'role', 'specialist'],
+	// A proposal changes only by being confirmed, once (233_authority_delegates.sql, authority_delegate_guard).
+	authority_delegate: ['confirmed_at'],
 	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
@@ -270,6 +273,10 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'api_key.created_by': 'set null',
 	'api_key.revoked_by': 'set null',
 	'audit_event.actor_user_id': 'set null',
+	// Who acts for the authority (233): the delegation goes with the account; who proposed or confirmed it is cleared.
+	'authority_delegate.confirmed_by': 'set null',
+	'authority_delegate.proposed_by': 'set null',
+	'authority_delegate.user_id': 'cascade',
 	'data_feed.acting_user_id': 'set null',
 	'data_feed.created_by': 'set null',
 	'account_mail_quota.user_id': 'cascade',

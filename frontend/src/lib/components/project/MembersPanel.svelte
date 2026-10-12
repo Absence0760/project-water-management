@@ -17,7 +17,8 @@
 		team = null,
 		isOwner,
 		currentUserId,
-		onLeftProject
+		onLeftProject,
+		authorityVersion = 0
 	}: {
 		projectId: string;
 		/** The owning team, if any: its members have access too (not listed here). */
@@ -25,6 +26,8 @@
 		isOwner: boolean;
 		currentUserId: string;
 		onLeftProject: () => void;
+		/** Bumped after a change in Acts for the authority (233): the list reloads, quietly, so its authority lines follow. */
+		authorityVersion?: number;
 	} = $props();
 
 	// Last-seen list first (no loading flash when returning to the tab).
@@ -63,6 +66,9 @@
 		}
 	}
 	onMount(() => load(hadCache));
+	$effect(() => {
+		if (authorityVersion > 0) untrack(() => load(true));
+	});
 
 	async function add(e: SubmitEvent) {
 		e.preventDefault();
@@ -127,22 +133,6 @@
 			busy = null;
 		}
 	}
-	// Who acts for the responsible authority (163_licensing_authority): as an editor or owner they record its decisions and endorse a baseline.
-	async function setAuthority(m: Member, on: boolean) {
-		if (on === (m.actsForAuthority ?? false)) return;
-		busy = m.userId;
-		error = null;
-		try {
-			const updated = await api.members.setActsForAuthority(projectId, m.userId, on);
-			members = members.map((x) => (x.userId === m.userId ? updated : x));
-		} catch (err) {
-			error = msg(err);
-			await load();
-		} finally {
-			busy = null;
-		}
-	}
-
 	async function remove(m: Member) {
 		const self = m.userId === currentUserId;
 		const ok = await confirmDialog(
@@ -259,23 +249,12 @@
 								{:else if m.specialist}
 									<span class="badge small">Specialist for {m.party}</span>
 								{/if}
-								{#if m.role === 'editor' || m.role === 'owner'}
-									{#if isOwner}
-										<div class="tip-row">
-											<label class="check small">
-												<input
-													type="checkbox"
-													checked={m.actsForAuthority ?? false}
-													disabled={busy === m.userId}
-													onchange={(e) => setAuthority(m, e.currentTarget.checked)}
-												/>
-												Acts for the responsible authority
-											</label>
-											<HelpTip key="responsible-authority" label="About acting for the responsible authority" />
-										</div>
-									{:else if m.actsForAuthority}
-										<span class="muted small authority">Acts for the responsible authority</span>
-									{/if}
+								<!-- Who acts for the responsible authority is the authority's own call (233_authority_delegates): shown
+								     here, managed in Acts for the authority below. A proposal grants nothing until it is confirmed. -->
+								{#if m.authority === 'confirmed' && m.actsForAuthority}
+									<span class="badge small authority" data-testid="member-authority">Acts for the responsible authority</span>
+								{:else if m.authority === 'proposed'}
+									<span class="muted small authority" data-testid="member-authority">Proposed to act for the responsible authority (not confirmed)</span>
 								{/if}
 							</td>
 							<td role="cell" class="act" class:none={!canAct}>
@@ -434,7 +413,7 @@
 			clip-path: inset(50%);
 			white-space: nowrap;
 		}
-		/* A role with more under it (the applying party, the authority tick) takes the full width under the name. */
+		/* A role with more under it (the applying party, the authority line) takes the full width under the name. */
 		.member-rows tr.extras :is(th, td.role) {
 			grid-column: 1 / -1;
 		}
@@ -464,11 +443,5 @@
 		.act.none {
 			display: none;
 		}
-	}
-	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
-	.tip-row {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 	}
 </style>

@@ -16,7 +16,7 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, confirmAsOperator, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { fileURLToPath } from 'node:url';
@@ -160,6 +160,26 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['registration.requirement'],
 		call: (c) => c.owner.call('PUT', `${at(c)}/registration-check-required`, { required: false })
 	},
+	// Who acts for the authority (233, written by the database's authority_delegate_audit): the owner proposes the
+	// editor, the owner (confirmed by the operator, the bootstrap) confirms them, then removes them, before they leave below.
+	{
+		route: `POST ${P}/authority-delegates`,
+		records: ['authority.proposed'],
+		call: (c) => c.owner.call('POST', `${at(c)}/authority-delegates`, { userId: c.member.id })
+	},
+	{
+		route: `POST ${P}/authority-delegates/:userId/confirm`,
+		records: ['authority.confirmed'],
+		call: async (c) => {
+			await confirmAsOperator(c.projectId, c.owner.id);
+			return c.owner.call('POST', `${at(c)}/authority-delegates/${c.member.id}/confirm`, {});
+		}
+	},
+	{
+		route: `DELETE ${P}/authority-delegates/:userId`,
+		records: ['authority.removed'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/authority-delegates/${c.member.id}`)
+	},
 	{
 		route: `DELETE ${P}/members/:userId`,
 		records: ['member.removed'],
@@ -258,10 +278,10 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	{
 		route: `POST ${P}/publication/:pubId/endorse`,
-		records: ['publication.endorsed', 'member.authority'],
+		records: ['publication.endorsed'],
 		call: async (c) => {
-			// Marking the owner as acting for the authority is its own recorded change (member.authority, 163).
-			expect((await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true })).status).toBe(200);
+			// The owner acts for the authority: confirmed by the operator above (authority-delegates entries, 233).
+			await confirmAsOperator(c.projectId, c.owner.id);
 			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
 		}
 	},
@@ -625,7 +645,7 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.decided'],
 		call: async (c) => {
 			expect((await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)).status).toBe(200);
-			await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true });
+			await confirmAsOperator(c.projectId, c.owner.id);
 			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		}
 	},
@@ -823,7 +843,7 @@ const WRITE_ROUTES: Entry[] = [
 		call: async (c) => {
 			const assessor = await signUp('Gauthority');
 			expect((await c.owner.call('POST', `/projects/${c.packProjectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
-			expect((await c.owner.call('PATCH', `/projects/${c.packProjectId}/members/${assessor.id}`, { actsForAuthority: true })).status).toBe(200);
+			await actForAuthority(c.owner, c.packProjectId as string, assessor.id);
 			return c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/send`, {});
 		},
 		projectOf: (c) => c.packProjectId as string,

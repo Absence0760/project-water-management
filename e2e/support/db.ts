@@ -515,3 +515,14 @@ export async function plantRunEngine(runId: string, engineVersion: string): Prom
 		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
 	});
 }
+
+/**
+ * The operator's confirmation that `userId` acts for the project's responsible
+ * authority (233_authority_delegates, authority_confirm_by_operator), as the
+ * schema owner on the authority's letter: the only way to confirm the first
+ * delegate of a project (docs/deployment.md runbook). Confirms a proposal, or
+ * adds the person confirmed; they must be an editor or owner of the project.
+ */
+export async function confirmAuthorityDelegate(projectId: string, userId: string, reference = 'Synthetic authority letter 1'): Promise<void> {
+	await withDb((db) => db.query('SELECT authority_confirm_by_operator($1, $2, $3)', [projectId, userId, reference]));
+}

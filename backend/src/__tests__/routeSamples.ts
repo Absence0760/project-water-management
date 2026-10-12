@@ -55,6 +55,10 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 		}
 	}),
 	'PUT /projects/:id/registration-check-required': () => ({ body: { required: true } }),
+	// Who acts for the authority (233): the ladder's editor, proposed by an owner (the editor's own call is refused by the route's rules).
+	'POST /projects/:id/authority-delegates': (c) => ({ body: { userId: c.editor.id } }),
+	'POST /projects/:id/authority-delegates/:userId/confirm': (c) => ({ params: { userId: c.editor.id } }),
+	'DELETE /projects/:id/authority-delegates/:userId': (c) => ({ params: { userId: c.editor.id } }),
 	'PUT /projects/:id/model': (c) => ({ body: c.model }),
 	'PUT /projects/:id/series': () => ({ body: { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-01-01', values: [1, 2] } }),
 	'PATCH /projects/:id/series/:seriesId': () => ({ body: { product: 'Ladder gauge', productVersion: '1' } }),

@@ -5,7 +5,7 @@
 // only as "Farm 1", raises their dam, runs it, sees their own view of the
 // results (their farm, nothing downstream, no catchment flows below five farm
 // holders), queues a yield of their own dam and submits it. The assessor (the
-// project's owner, marked as acting for the responsible authority) finds it
+// project's owner, confirmed as acting for the responsible authority) finds it
 // in the Applications tab and records the authority's decision; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
@@ -229,37 +229,78 @@ for (const colorScheme of ['light', 'dark'] as const) {
 	});
 }
 
-test('the owner names the responsible authority and marks who acts for it: only they record its decision and endorse the baseline', async ({ page, owner, signIn }) => {
+test('the authority confirms who acts for it: a host owner proposes, an authority member confirms; only then the editor decides and endorses', async ({ page, owner, signIn }) => {
 	void owner;
 	const applicant = await signIn('Authority applicant');
 	const editor = await signIn('Authority editor');
+	const host = await signIn('Authority host');
+	// `page`'s owner acts for the authority (confirmed by the operator, the bootstrap, 233); `host` is a second owner who doesn't.
 	const { project, runId, upper } = await seedApplicantProject(page, 'Applications authority', applicant.user);
 	await addMember(page.request, project.id, editor.user.email, 'editor');
+	await addMember(page.request, project.id, host.user.email, 'owner');
 	const sid = await submitApplication(applicant.context.request, project.id, runId, upper, NAME);
 
-	// An editor nobody marked reads the application but gets no decision form (163_licensing_authority).
+	// An editor nobody confirmed reads the application but gets no decision form.
 	const e = editor.page;
 	await e.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
-	await expect(e.getByTestId('application-decide-who')).toContainText('Only a member the project’s owner marks as acting for the responsible authority');
+	await expect(e.getByTestId('application-decide-who')).toContainText('Only a member the responsible authority has confirmed as acting for it');
 	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toHaveCount(0);
 
-	// The owner's Project page: the authority as named, and the tick box on the editor's row.
-	await page.goto(`/projects/${project.id}?tab=project`);
-	await expect(page.getByRole('region', { name: 'Responsible authority' }).getByLabel('Authority name')).toHaveValue(AUTHORITY.name);
-	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/members/${editor.user.id}`));
-	await page.getByRole('region', { name: 'Members' }).getByRole('row', { name: new RegExp(editor.user.displayName) }).getByLabel('Acts for the responsible authority').check();
-	expect((await saved).status()).toBe(200);
+	// The host proposes the editor on the Project page: listed as proposed, granting nothing.
+	const h = host.page;
+	await h.goto(`/projects/${project.id}?tab=project`);
+	await expect(h.getByRole('region', { name: 'Responsible authority' }).getByLabel('Authority name')).toHaveValue(AUTHORITY.name);
+	const hostPanel = h.getByRole('region', { name: 'Acts for the authority' });
+	await hostPanel.getByLabel('Propose someone').selectOption({ label: `${editor.user.displayName} (editor)` });
+	await hostPanel.getByRole('button', { name: 'Propose', exact: true }).click();
+	const proposedRow = hostPanel.getByRole('list', { name: 'Proposed, not confirmed' }).getByRole('listitem');
+	await expect(proposedRow).toContainText(editor.user.displayName);
+	await expect(proposedRow).toContainText('Proposed');
+	// The host may withdraw it, but has no Confirm.
+	await expect(proposedRow.getByRole('button', { name: `Withdraw ${editor.user.displayName}` })).toBeVisible();
+	await expect(proposedRow.getByRole('button', { name: /^Confirm/ })).toHaveCount(0);
+	await expect(h.getByRole('region', { name: 'Members' }).getByRole('row', { name: new RegExp(editor.user.displayName) }).getByTestId('member-authority')).toHaveText(
+		'Proposed to act for the responsible authority (not confirmed)'
+	);
+	await expectNoViolations(h);
+	await e.reload();
+	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toHaveCount(0);
 
-	// Marked, the editor gets the form; and endorses the published baseline, once.
+	// The owner acting for the authority confirms it.
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const panel = page.getByRole('region', { name: 'Acts for the authority' });
+	const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/authority-delegates/${editor.user.id}/confirm`));
+	await panel.getByRole('button', { name: `Confirm ${editor.user.displayName}` }).click();
+	expect((await saved).status()).toBe(200);
+	const confirmedList = panel.getByRole('list', { name: 'Confirmed' });
+	await expect(confirmedList.getByRole('listitem').filter({ hasText: editor.user.displayName })).toContainText('Confirmed');
+	await expect(panel.getByRole('list', { name: 'Proposed, not confirmed' })).toHaveCount(0);
+
+	// Confirmed, the host can no longer remove them: only the authority can.
+	await h.reload();
+	const hostConfirmed = h.getByRole('region', { name: 'Acts for the authority' }).getByRole('list', { name: 'Confirmed' }).getByRole('listitem').filter({ hasText: editor.user.displayName });
+	await expect(hostConfirmed).toBeVisible();
+	await expect(hostConfirmed.getByRole('button')).toHaveCount(0);
+	await expect(confirmedList.getByRole('listitem').filter({ hasText: editor.user.displayName }).getByRole('button', { name: `Remove ${editor.user.displayName}` })).toBeVisible();
+
+	// Confirmed, the editor gets the form; and endorses the published baseline, once.
 	await e.reload();
 	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toBeVisible();
 	await e.goto(`/projects/${project.id}?tab=runs`);
-	const panel = e.getByRole('region', { name: /^Publication/ });
-	await expect(panel.getByTestId('publication-endorsement')).toContainText('Not endorsed by the responsible authority.');
-	const endorse = panel.getByRole('form', { name: 'Endorse this baseline' });
+	const pub = e.getByRole('region', { name: /^Publication/ });
+	await expect(pub.getByTestId('publication-endorsement')).toContainText('Not endorsed by the responsible authority.');
+	const endorse = pub.getByRole('form', { name: 'Endorse this baseline' });
 	await endorse.getByLabel(/^Endorsement note/).fill('Accepted as the baseline for this season.');
 	await endorse.getByRole('button', { name: 'Endorse as the responsible authority' }).click();
-	await expect(panel.getByTestId('publication-endorsement')).toContainText('Endorsed for the responsible authority');
-	await expect(panel.getByTestId('publication-endorsement')).toContainText('by Authority editor');
+	await expect(pub.getByTestId('publication-endorsement')).toContainText('Endorsed for the responsible authority');
+	await expect(pub.getByTestId('publication-endorsement')).toContainText('by Authority editor');
 	await expect(endorse).toHaveCount(0);
+
+	// The authority removes them: confirmed on the dialog, then gone, and the History says each step.
+	await panel.getByRole('button', { name: `Remove ${editor.user.displayName}` }).click();
+	await answerConfirm(page, true);
+	await expect(confirmedList.getByRole('listitem').filter({ hasText: editor.user.displayName })).toHaveCount(0);
+	const history = await page.request.get(`${API_URL}/projects/${project.id}/history?kind=authority&limit=50`);
+	const kinds = ((await history.json()) as { items: { kind?: string }[] }).items.map((ev) => ev.kind ?? '').filter((k) => k.startsWith('authority.'));
+	expect(kinds).toEqual(expect.arrayContaining(['authority.proposed', 'authority.confirmed', 'authority.removed']));
 });
