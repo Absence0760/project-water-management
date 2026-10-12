@@ -2236,6 +2236,16 @@ Every step is an ordinary app action by an owner unless it says "operator".
     the authority doesn't recognise; until it answers, the grandfathered
     delegates keep acting. Record what was sent, the answers and the
     removals in the operator log.
+19. **List the projects whose series pick moves** (operator, before the
+    backend release that orders series picks by byte, issue #523;
+    data-model.md § Which series a run reads). Production sorted names
+    linguistically until then, so a project whose series of one kind (at
+    one site) differ in case or punctuation order will run on another
+    series once it deploys. Read only, as the schema owner:
+    `SELECT project_id, kind, site_node_id, array_agg(name ORDER BY name) AS was, array_agg(name ORDER BY name COLLATE "C") AS will FROM time_series GROUP BY 1, 2, 3 HAVING count(*) > 1 AND (array_agg(name ORDER BY name))[1] <> (array_agg(name ORDER BY name COLLATE "C"))[1];`
+    For each row, tell the project's owner which series its runs will
+    read; rename a series (so the one they mean sorts first) if they
+    want the old pick. Record the list in the operator log.
 
 ## Rollback
 

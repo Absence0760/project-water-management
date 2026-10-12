@@ -221,7 +221,12 @@ document (`fit-sweep`, `pan-sensitivity`, `import:project --fit`;
 `backend/scripts/fit-project.ts` `inputSeriesOf`). Lists shown to people
 (the Data tab, the export) keep the database's order; only the pick is
 pinned. An API key may not add a second outlet series of a kind
-(100_key_series_kind.sql), since it could name one to sort first.
+(100_key_series_kind.sql), since it could name one to sort first. The local
+and CI databases already sort by byte, so no DB test fails if `COLLATE "C"`
+is dropped: `series/pickOrder.test.ts` checks the two queries' text instead.
+Before a release that carries this, list the production projects whose pick
+moves (series of one kind whose linguistic and byte orders differ;
+deployment.md runbook).
 
 ### Series provenance (032_series_provenance.sql)
 
