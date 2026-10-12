@@ -8,10 +8,13 @@
 // steps are unit-tested (fit-project.test.ts).
 import {
 	calibrate,
+	compareSeriesNames,
 	CALIBRATION_FLOW_KINDS,
 	DEFAULT_STARTS,
 	ENGINE_VERSION,
 	fitRecordFromReport,
+	gaugeSeriesKey,
+	unitRainSeriesKey,
 	type CalibrationFlowKind,
 	type CalibrationReport,
 	modelRuleProblems,
@@ -20,17 +23,54 @@ import {
 	withMonthlyRates,
 	type ModelInput,
 	type ProjectSettings,
-	type Transfer
+	type Transfer,
+	type UnitRainKind
 } from '@water-management/engine';
 import { patchSettings, SettingsPatch } from '../src/projects/settings.js';
+import { isUnitRainKind } from '../src/series/site.js';
 
 /** A project document as the importer reads it (scripts/wbt-import output, or an export). */
 export interface ProjectDocument {
 	name?: string;
 	settings?: Record<string, unknown>;
 	model: ModelInput['model'];
-	series?: { kind: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null }[];
+	series?: DocumentSeries[];
 	[k: string]: unknown;
+}
+
+/** One series of a project document, as the export and the workbook importer write it. */
+export interface DocumentSeries {
+	kind: string;
+	name?: string;
+	startDate: string;
+	values: (number | null)[];
+	product?: string | null;
+	productVersion?: string | null;
+	siteNodeId?: string | null;
+}
+
+/**
+ * A document's series as the engine reads them, picked exactly as a run in the
+ * app picks them (runs/execute.ts loadLiveInput): of the series with no site,
+ * the first of each kind by name; a site's series, the first of each kind per
+ * site, keyed `<kind>@<node id>` (a land unit's own rain, or a gauge node's
+ * own record). "By name" is the byte order of the name (engine
+ * compareSeriesNames, the run's `COLLATE "C"`), whatever the locale or the
+ * database's collation. A project may hold several series of one kind (001: unique by kind
+ * and name), so taking the last of each kind, as these scripts did before,
+ * could fit on a different series from the one the app runs (issue #523 F2: a
+ * short logger beside the catchment's long rain record).
+ */
+export function inputSeriesOf(series: readonly DocumentSeries[]): ModelInput['series'] {
+	// Each key takes its first series in name order, so ordering the whole list by name is enough.
+	const ordered = [...series].sort((a, b) => compareSeriesNames(a.name ?? '', b.name ?? ''));
+	const out: Record<string, { startDate: string; values: (number | null)[] }> = {};
+	for (const s of ordered) {
+		const key =
+			s.siteNodeId == null ? s.kind : isUnitRainKind(s.kind) ? unitRainSeriesKey(s.kind as UnitRainKind, s.siteNodeId) : gaugeSeriesKey(s.kind as CalibrationFlowKind, s.siteNodeId);
+		if (!(key in out)) out[key] = { startDate: s.startDate, values: s.values };
+	}
+	return out as ModelInput['series'];
 }
 
 /**
@@ -92,13 +132,13 @@ export interface FitOptions {
 	now?: Date;
 }
 
-/** The engine input for a document: its merged settings, its model and its series by kind. */
+/** The engine input for a document: its merged settings, its model and its series, picked as a run picks them (inputSeriesOf). */
 export function modelInputOf(doc: ProjectDocument): ModelInput {
 	const settings = patchSettings(doc.settings ?? {}, {});
 	return {
 		settings: settings as unknown as ModelInput['settings'],
 		model: doc.model,
-		series: Object.fromEntries((doc.series ?? []).map((s) => [s.kind, { startDate: s.startDate, values: s.values }])) as ModelInput['series']
+		series: inputSeriesOf(doc.series ?? [])
 	};
 }
 

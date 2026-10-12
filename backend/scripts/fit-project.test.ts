@@ -4,7 +4,7 @@
 import { calibrate, fitRecordStatus, runModel, type ModelInput } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { FitRecord, mergeSettings } from '../src/projects/settings.js';
-import { fitDocument, fitSummary, modelInputOf, withSettingsPatch, withTransferPatch, type ProjectDocument } from './fit-project.js';
+import { fitDocument, fitSummary, inputSeriesOf, modelInputOf, withSettingsPatch, withTransferPatch, type ProjectDocument } from './fit-project.js';
 
 function doc(): ProjectDocument {
 	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0 };
@@ -114,5 +114,28 @@ describe('fitDocument', () => {
 		const { report, doc: fitted } = fitDocument(d, { seed: 1, starts: 1, budget: 20 });
 		expect(report.independentRecord?.flowKind).toBe('flow_logger_m3s');
 		expect((fitted.settings as Record<string, any>).fitRecord.validationRecord).toBe('flow_logger_m3s');
+	});
+});
+
+describe('inputSeriesOf: the series a run picks (issue #523 F2)', () => {
+	const s = (kind: string, name: string, v: number, siteNodeId?: string) => ({ kind, name, startDate: '2020-01-01', values: [v], ...(siteNodeId ? { siteNodeId } : {}) });
+	it('takes the first of each kind by name, wherever it sits in the file, as the app does', () => {
+		// The bug: a short logger listed after the catchment's long record replaced it, so the fit ran on CHIRPS.
+		const series = [s('rain_catchment_mm', 'Average catchment rainfall', 1), s('rain_catchment_mm', 'RAIN-B logger', 2)];
+		expect(inputSeriesOf(series).rain_catchment_mm!.values).toEqual([1]);
+		expect(inputSeriesOf([...series].reverse()).rain_catchment_mm!.values).toEqual([1]);
+	});
+	it('orders names by their bytes, as the run’s COLLATE "C" does, not linguistically', () => {
+		// "R" (0x52) comes before "a" (0x61): byte order takes the logger, where an en-US collation would take the gauge.
+		expect(inputSeriesOf([s('rain_catchment_mm', 'average gauge', 1), s('rain_catchment_mm', 'RAIN-B logger', 2)]).rain_catchment_mm!.values).toEqual([2]);
+		// A non-ASCII letter sorts after every ASCII one.
+		expect(inputSeriesOf([s('rain_catchment_mm', 'Ärea', 1), s('rain_catchment_mm', 'Zeta', 2)]).rain_catchment_mm!.values).toEqual([2]);
+	});
+	it('keys a site’s series by kind and node, apart from the outlet’s', () => {
+		const unit = crypto.randomUUID();
+		const out = inputSeriesOf([s('rain_catchment_mm', 'Unit gauge', 3, unit), s('rain_catchment_mm', 'Catchment', 1), s('flow_logger_m3s', 'Logger', 4, unit)]);
+		expect(out.rain_catchment_mm!.values).toEqual([1]);
+		expect((out as Record<string, { values: unknown }>)[`rain_catchment_mm@${unit}`]!.values).toEqual([3]);
+		expect((out as Record<string, { values: unknown }>)[`flow_logger_m3s@${unit}`]!.values).toEqual([4]);
 	});
 });
