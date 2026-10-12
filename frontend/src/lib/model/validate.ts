@@ -95,7 +95,7 @@ export function operatingIssues(n: Pick<NetworkNode, 'kind' | 'handsOffM3Day' | 
  */
 export function cropSupplyProblems(model: Pick<ProjectModel, 'nodes' | 'transfers'>): { nodeId: string; message: string }[] {
 	const out: { nodeId: string; message: string }[] = [];
-	const offtakes = model.transfers.filter((t) => t.enabled && isRiverOfftake(t));
+	const offtakes = model.transfers.filter((t): t is typeof t & { toNodeId: string } => t.enabled && isRiverOfftake(t) && t.toNodeId !== null);
 	cropSupplyIssues(model.nodes, offtakes, (key, message) => {
 		const nodeId = key.slice(key.indexOf(':') + 1);
 		const n = model.nodes.find((x) => x.id === nodeId);
@@ -396,14 +396,18 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 	// Transfers
 	transfers.forEach((t, i) => {
 		const label = `Transfer ${i + 1}`;
-		if (!nodeIds.has(t.fromNodeId) || !nodeIds.has(t.toNodeId)) {
+		// To null: out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6), a dam rule only.
+		const outside = t.toNodeId === null;
+		if (!nodeIds.has(t.fromNodeId) || (!outside && !nodeIds.has(t.toNodeId!))) {
 			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: choose both a source and a destination hydrological unit.` });
+		} else if (outside && isRiverOfftake(t)) {
+			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: a river off-take delivers to a hydrological unit, so it can't send water outside the catchment; take it from the source’s dam instead.` });
 		} else if (t.fromNodeId === t.toNodeId) {
 			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: source and destination are the same hydrological unit.` });
 		} else {
 			// Both ends a hydrological unit (the API refuses an other water user; the engine skips a gauge's rule
 			// with only a run warning, so it is refused here before it saves as a rule that does nothing).
-			for (const id of [t.fromNodeId, t.toNodeId]) {
+			for (const id of outside ? [t.fromNodeId] : [t.fromNodeId, t.toNodeId!]) {
 				const end = nodes.find((n) => n.id === id)!;
 				if (end.kind === 'user') issues.push({ area: 'transfers', itemId: t.id, message: `${label}: "${nodeName(id)}" is an other water user; transfers run between hydrological units’ dams.` });
 				else if (end.kind === 'gauge') issues.push({ area: 'transfers', itemId: t.id, message: `${label}: "${nodeName(id)}" is a gauge, which can't send or receive water; choose a hydrological unit.` });

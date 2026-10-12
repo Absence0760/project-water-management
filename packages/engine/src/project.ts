@@ -2130,7 +2130,16 @@ export interface CropArea {
 export interface Transfer {
 	id: string;
 	fromNodeId: string;
-	toNodeId: string;
+	/**
+	 * The unit the water goes to, or null: outside the catchment (engine ≥
+	 * 1.86.0, issue #523 B5, docs/model.md §2.6). An external rule runs as any
+	 * dam rule (its months, rates, priority and the source dam's reserve) but
+	 * the water leaves the model, like a demand object piped out
+	 * (destination 'external'): it is counted as water leaving the catchment
+	 * in the water balance (`externalTransferM3`). Only a dam rule (source
+	 * 'dam') can send water out; a river off-take needs a unit to deliver to.
+	 */
+	toNodeId: string | null;
 	/** Calendar months 1–12 in which the transfer runs. */
 	months: number[];
 	maxRateM3s: number;
@@ -3960,7 +3969,7 @@ export interface WaterBalanceRow {
 	returnFlowM3: number;
 	/** Supplied − return flow: the water that leaves the river. */
 	consumptiveUseM3: number;
-	/** Net transfers across all farms; 0 up to float noise. */
+	/** Net transfers between the units; 0 up to float noise (what transfer rules send out of the catchment, engine ≥ 1.86.0, is `externalTransferM3`). */
 	transfersM3: number;
 	/** Rain falling on the dams' surface (engine ≥ 0.16.0, audit N2); absent on older runs. */
 	rainOnDamsM3?: number;
@@ -3986,10 +3995,12 @@ export interface WaterBalanceRow {
 	conveyanceLossM3?: number;
 	/** Lost into the river bed in the reaches between nodes (engine ≥ 1.75.0, docs/model.md §2.6b), a loss from the catchment; absent without bed losses. */
 	reachLossM3?: number;
+	/** Sent out of the catchment by transfer rules (engine ≥ 1.86.0, issue #523 B5, docs/model.md §2.6), out of the source dams; absent without such a rule. `transfersM3` is then the transfers between units only. */
+	externalTransferM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − bed losses − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − bed losses − transfers out of the catchment − outflow − closing. */
 	residualM3: number;
 }
 

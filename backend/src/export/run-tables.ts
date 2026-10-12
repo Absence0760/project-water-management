@@ -1526,6 +1526,9 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Runoff removed by land cover (m³)', (r) => r.landCoverReductionM3 ?? null, true],
 	['Dam seepage lost from the catchment (m³)', (r) => r.damSeepageLostM3 ?? null, true],
 	['Released below dams (part of outflow) (m³)', (r) => r.damReleaseM3 ?? null, true],
+	['River off-takes: lost on the way (m³)', (r) => r.conveyanceLossM3 ?? null, true],
+	['Bed losses in the reaches (m³)', (r) => r.reachLossM3 ?? null, true],
+	['Transferred out of the catchment (m³)', (r) => r.externalTransferM3 ?? null, true],
 	['Spill (m³)', (r) => r.spillM3],
 	['Outflow (m³)', (r) => r.outflowM3],
 	['Dam storage at end (m³)', (r) => r.closingStorageM3],
@@ -1538,7 +1541,11 @@ const OPTIONAL_TERMS: [keyof WaterBalanceRow, 'in' | 'out', string][] = [
 	['storageSetM3', 'in', 'storage set'],
 	['otherUseM3', 'out', 'other users’ use'],
 	['streamDepletionM3', 'out', 'stream depletion'],
-	['damSeepageLostM3', 'out', 'seepage lost']
+	['damSeepageLostM3', 'out', 'seepage lost'],
+	['poolEvaporationM3', 'out', 'pool evaporation'],
+	['conveyanceLossM3', 'out', 'off-take losses'],
+	['reachLossM3', 'out', 'bed losses'],
+	['externalTransferM3', 'out', 'transferred out of the catchment']
 ];
 
 /** The equation the rows close, naming only the terms this run has, so every term in it is a column. */

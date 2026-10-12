@@ -133,7 +133,14 @@ describe('field specs cover the engine’s op catalogue', () => {
 		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
 		expect(formatValue(spec, null)).toBe('the source');
 		expect(transferFieldError('lossReturnNodeId', null)).toBeNull();
-		expect(parseValue(TRANSFER_FIELD_SPECS.toNodeId.spec, '')).toEqual({ ok: false, error: 'pick a hydrological unit' });
+		expect(parseValue(TRANSFER_FIELD_SPECS.fromNodeId.spec, '')).toEqual({ ok: false, error: 'pick a hydrological unit' });
+	});
+
+	it('reads an empty destination as out of the catchment (engine 1.86.0)', () => {
+		const spec = TRANSFER_FIELD_SPECS.toNodeId.spec;
+		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
+		expect(formatValue(spec, null)).toBe('outside the catchment');
+		expect(transferFieldError('toNodeId', null)).toBeNull();
 	});
 });
 

@@ -396,12 +396,12 @@ function replay(input: ModelInput, out: ModelOutput): string | null {
 		// Each demand-sized rule's share of its destination's need (fixed before the day).
 		const need = new Map<string, number>();
 		const capInto = new Map<string, number>();
-		for (const tr of rules) if (tr.sizing === 'demand') capInto.set(tr.toNodeId, (capInto.get(tr.toNodeId) ?? 0) + capOf(tr, m));
+		for (const tr of rules) if (tr.sizing === 'demand') capInto.set(tr.toNodeId!, (capInto.get(tr.toNodeId!) ?? 0) + capOf(tr, m));
 		for (const tr of rules) {
 			if (tr.sizing !== 'demand') continue;
 			const cap = capOf(tr, m);
 			if (!(cap > 0)) continue;
-			const dst = nodes.get(tr.toNodeId)!;
+			const dst = nodes.get(tr.toNodeId!)!;
 			let n = s(dst.id, 'demand')[t]!;
 			if (tr.topUpDam && dst.damCapacityM3 > 0) {
 				// No rain, evaporation, seepage or dam rules here: the dam holds yesterday's storage.
@@ -411,7 +411,7 @@ function replay(input: ModelInput, out: ModelOutput): string | null {
 				if (floor > 0) reached.floor++;
 				n += Math.max(0, dst.damCapacityM3 - q + floor);
 			}
-			need.set(tr.id, (n * cap) / capInto.get(tr.toNodeId)!);
+			need.set(tr.id, (n * cap) / capInto.get(tr.toNodeId!)!);
 		}
 		for (const src of new Set(rules.map((r) => r.fromNodeId))) {
 			const mine = rules.filter((r) => r.fromNodeId === src);
@@ -443,7 +443,7 @@ function replay(input: ModelInput, out: ModelOutput): string | null {
 			}
 		}
 		// Destinations: in = Σ v(1 − l) in rule-id order, exactly; used = MIN(in, D); the top-up share into the dam.
-		for (const dst of new Set(rules.map((r) => r.toNodeId))) {
+		for (const dst of new Set(rules.map((r) => r.toNodeId!))) {
 			const into = rules.filter((r) => r.toNodeId === dst).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 			let xin = 0;
 			let xdam = 0;
@@ -562,7 +562,7 @@ describe('deep: random networks against the documented off-take sharing (§2.6a)
 			const { input, natural } = randomCase(seed);
 			const g = new Rng(seed ^ 0x5bd1e995);
 			const src = input.model.transfers[0]!;
-			const sib = ot('zz-sibling', src.fromNodeId, src.toNodeId, g.float(1, 1500), { priority: src.priority, handsOffM3Day: g.pick([null, g.float(0, 1500)]) });
+			const sib = ot('zz-sibling', src.fromNodeId, src.toNodeId!, g.float(1, 1500), { priority: src.priority, handsOffM3Day: g.pick([null, g.float(0, 1500)]) });
 			const withSib: ModelInput = { ...input, model: { ...input.model, transfers: [...input.model.transfers, sib] } };
 			// Only capacity-sized rules into other units are free of the need split the sibling would change.
 			const a = raw(input, natural);

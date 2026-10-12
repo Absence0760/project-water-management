@@ -211,7 +211,8 @@ export function nodeFields(kind: NodeKind): { field: NodeSetField; label: string
 
 export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
 	fromNodeId: { label: 'Source', spec: { t: 'node' } },
-	toNodeId: { label: 'Destination', spec: { t: 'node' } },
+	// Empty: out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6), a dam rule only.
+	toNodeId: { label: 'Destination', spec: { t: 'node', nullLabel: 'outside the catchment' } },
 	months: { label: 'Months it runs', spec: { t: 'months' } },
 	maxRateM3s: { label: 'Maximum rate', spec: num('m³/s') },
 	dailyCapM3: { label: 'Daily cap', spec: num('m³', { nullable: true, nullLabel: 'no cap' }) },

@@ -178,6 +178,11 @@ export function planOfftakes(
 	const out: PlanOfftake[] = [];
 	for (const tr of rules) {
 		const from = index.get(tr.fromNodeId);
+		// A river off-take can't send water out of the catchment (engine ≥ 1.86.0, modelRules refuses one on save).
+		if (tr.toNodeId === null) {
+			warnings.push(`river off-take ${tr.id} has no unit to deliver to (outside the catchment); skipped. Only a dam transfer can send water out of the catchment`);
+			continue;
+		}
 		const to = index.get(tr.toNodeId);
 		if (from === undefined || to === undefined) {
 			warnings.push(`river off-take ${tr.id} references a hydrological unit that does not exist; skipped`);

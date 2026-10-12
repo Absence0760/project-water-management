@@ -91,7 +91,7 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 	let checked = 0;
 	for (const src of new Set(rules.map((r) => r.fromNodeId))) {
 		const mine = rules.filter((r) => r.fromNodeId === src);
-		if (mine.some((r) => r.sizing === 'demand' && onRiver(r.toNodeId))) continue;
+		if (mine.some((r) => r.sizing === 'demand' && onRiver(r.toNodeId!))) continue;
 		const outflow = opt(out, src, 'outflow')!;
 		const ret = opt(out, src, 'offtake_loss_return');
 		const xout = opt(out, src, 'offtake_out')!;
@@ -110,7 +110,7 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 			// A top-up destination that both sends and receives by dam rules today: the run's `transfer` column is
 			// the net, so the receipts its room counts (engine ≥ 1.69.0, deep.regressions) can't be read back.
 			const sendsToo = (id: string) => input.model.transfers.some((x) => x.enabled && x.fromNodeId === id && !isRiverOfftake(x));
-			const dubious = mine.some((tr) => tr.sizing === 'demand' && tr.topUpDam && sendsToo(tr.toNodeId) && (opt(out, tr.toNodeId, 'transfer')?.[t] ?? 0) !== 0);
+			const dubious = mine.some((tr) => tr.sizing === 'demand' && tr.topUpDam && sendsToo(tr.toNodeId!) && (opt(out, tr.toNodeId!, 'transfer')?.[t] ?? 0) !== 0);
 			if (dubious) continue;
 			const spec = mine.map((tr) => {
 				const cap = capOf(tr, m);
@@ -119,7 +119,7 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 					// need × cap ÷ Σ cap of the demand-sized rules into the destination today (every source's).
 					const into = planned.filter((x) => x.toNodeId === tr.toNodeId && x.sizing === 'demand' && nodes.get(x.fromNodeId)?.kind === 'farm');
 					const capInto = into.reduce((s, x) => s + (opt(out, x.fromNodeId, `transfer_rule@${x.id}`) ? capOf(x, m) : 0), 0);
-					const dst = nodes.get(tr.toNodeId)!;
+					const dst = nodes.get(tr.toNodeId!)!;
 					let need = (opt(out, dst.id, 'restricted_demand') ?? opt(out, dst.id, 'demand')!)[t]!;
 					// Under an allocation cap, the demand the cap still allows: at most the surface room today, blank in
 					// a water year the source isn't capped in (engine ≥ 1.70.0, §2.6a, §2.12a, #90 Q28).

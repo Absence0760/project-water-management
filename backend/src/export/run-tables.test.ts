@@ -1089,6 +1089,27 @@ describe('water balance block', () => {
 		expect(lines.find((l) => l.startsWith('Water year,'))).toContain('Storage set into (+) / out of (−) the dams by a storage reset (m³)');
 	});
 
+	it('adds what transfer rules sent out of the catchment as an out term only when a run has it (engine 1.86.0)', () => {
+		const header = (w: WaterBalance) => [...waterBalanceLines(w)].find((l) => l.startsWith('Water year,'))!;
+		expect(header(wb)).not.toContain('out of the catchment');
+		const out: WaterBalance = { ...wb, total: row(null, { externalTransferM3: 500 }) };
+		const lines = [...waterBalanceLines(out)];
+		expect(lines[1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + transferred out of the catchment + outflow + end storage + residual; the residual should be 0'
+		);
+		expect(header(out)).toContain('Transferred out of the catchment (m³)');
+		expect(lines.at(-1)).toContain(',500,');
+	});
+
+	it('names every loss the engine’s residual counts: pool evaporation, off-take and bed losses', () => {
+		const lossy: WaterBalance = { ...wb, total: row(null, { poolEvaporationM3: 4, conveyanceLossM3: 6, reachLossM3: 70 }) };
+		const lines = [...waterBalanceLines(lossy)];
+		expect(lines[1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + pool evaporation + off-take losses + bed losses + outflow + end storage + residual; the residual should be 0'
+		);
+		expect(lines.find((l) => l.startsWith('Water year,'))).toContain('River off-takes: lost on the way (m³),Bed losses in the reaches (m³)');
+	});
+
 	it('says an old run has none', () => {
 		expect([...waterBalanceLines(undefined)][1]).toMatch(/before engine 0\.12\.0/);
 	});

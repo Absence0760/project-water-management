@@ -52,7 +52,7 @@ function crossedCases(count: number): Crossed[] {
 		}
 		const sites = siteCatchments(input);
 		const moved = input.model.transfers.filter((r) => find(out, r.fromNodeId, transferRuleKey(r.id))?.values.some((v) => v > 0));
-		const crossed = new Set(sites.flatMap((up, si) => (moved.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)) ? [si] : [])));
+		const crossed = new Set(sites.flatMap((up, si) => (moved.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId!)) ? [si] : [])));
 		if (!crossed.size) continue;
 		const hit = out.series
 			.filter((s) => s.key === EWR_BINDING_SERIES.key)

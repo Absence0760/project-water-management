@@ -57,7 +57,8 @@
 
 	const nodes = $derived(editor.model.nodes);
 	const transfers = $derived(editor.model.transfers);
-	const name = (id: string) => nodes.find((n) => n.id === id)?.name || '(unnamed)';
+	// null: a rule out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6).
+	const name = (id: string | null) => (id === null ? 'Outside the catchment' : nodes.find((n) => n.id === id)?.name || '(unnamed)');
 	// A transfer runs between hydrological units' dams (or a unit's river): a gauge or an other water user can't take part.
 	const units = $derived(nodes.filter((n) => n.kind === 'farm'));
 	const canAdd = $derived(!readonly && units.length >= 2);
@@ -248,18 +249,22 @@
 							</div>
 							<div class="route">
 								{#each [['From', 'fromNodeId'], ['To', 'toNodeId']] as const as [word, key], k (key)}
+									{@const outside = key === 'toNodeId' && t.toNodeId === null}
 									{#if k}<span class="arrow" aria-hidden="true">→</span>{/if}
 									<label class="end">
 										<span class="end-l" aria-hidden="true">{word}</span>
 										<!-- Hydrological units only; a saved end that isn't one stays, named so, until it is changed. -->
-										<select aria-label="{word}, {label}" disabled={readonly} aria-invalid={problems.length && !units.some((n) => n.id === t[key]) ? 'true' : undefined} bind:value={t[key]}>
-											{#if !nodes.some((n) => n.id === t[key])}<option value={t[key]}>— choose —</option>
-											{:else if !units.some((n) => n.id === t[key])}<option value={t[key]}>{name(t[key])} (not a hydrological unit)</option>{/if}
+										<select aria-label="{word}, {label}" disabled={readonly} aria-invalid={problems.length && !outside && !units.some((n) => n.id === t[key]) ? 'true' : undefined} bind:value={t[key]}>
+											{#if !outside && !nodes.some((n) => n.id === t[key])}<option value={t[key]}>— choose —</option>
+											{:else if !outside && !units.some((n) => n.id === t[key])}<option value={t[key]}>{name(t[key])} (not a hydrological unit)</option>{/if}
 											{#each units as n (n.id)}<option value={n.id}>{n.name || '(unnamed)'}</option>{/each}
+											<!-- Out of the catchment (engine ≥ 1.86.0, §2.6): a dam rule only, so not offered to a river off-take. -->
+											{#if key === 'toNodeId' && (!river || outside)}<option value={null}>Outside the catchment</option>{/if}
 										</select>
 									</label>
 								{/each}
 								<HelpTip key="transfer.fromNodeId" />
+								<HelpTip key="transfer.toNodeId" />
 							</div>
 							<div class="rule-acts">
 								<!-- A switch with its word beside it, "Enabled", which its name starts with; the off state is said in words in the rule's heading. -->
@@ -304,7 +309,7 @@
 										<!-- The source's dam (§2.6) or the river leaving the source unit today: a river off-take (engine ≥ 1.14.0, §2.6a). -->
 										<select aria-label="Takes from, {label}" disabled={readonly} value={t.source ?? 'dam'} onchange={(e) => (t.source = e.currentTarget.value as TransferSource)}>
 											<option value="dam">The source’s dam</option>
-											<option value="river">The river (an off-take)</option>
+											<option value="river" disabled={t.toNodeId === null}>The river (an off-take){t.toNodeId === null ? ', needs a unit to deliver to' : ''}</option>
 										</select>
 									</div>
 									{#if river}

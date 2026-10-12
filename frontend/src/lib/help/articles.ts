@@ -524,6 +524,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['transfer-months', 'transfer-rate', 'transfer-min-storage'],
 		source: 'b023 Help (Transfers sheet); docs/model.md §2.6'
 	},
+	'transfer-outside': {
+		long: 'Pick **Outside the catchment** as a transfer’s **To** (engine 1.86.0). The rule runs as any dam transfer: in its months, up to its rates and daily cap, by its priority, and only while the source dam is above its **minimum storage** (and the dam’s own minimum operating level). The water leaves the model: no hydrological unit receives it, and the water balance shows it as **transferred out of the catchment**. Rules of one priority from the same dam share what it has free in proportion to what each asks, whether their water stays in the catchment or not.\n\nWhich to use: a **transfer** out of the catchment for pumping out while a dam is above a level (a scheme that takes a dam’s surplus); a **demand object** piped out (category External) for a draw on a schedule, such as a town’s, which the unit supplies like its own demand, short when the dam is short. Only a dam transfer can send water out: a river off-take delivers to a hydrological unit.',
+		aliases: ['external transfer', 'inter-basin transfer', 'export', 'pumped out', 'out of the catchment'],
+		related: ['transfer', 'transfer-min-storage', 'transfer-priority'],
+		source: 'docs/model.md §2.6'
+	},
 	'transfer-months': {
 		long: 'Often a winter-filling scheme: move water while the source dam spills, not in the irrigation season. Each month has its own maximum rate, so a pipe that runs at half capacity in spring and full in winter is one rule. A blank (0) month is off. A b023 workbook gives one rate and the months it runs in; that reads as the same rate in each of those months and runs exactly as before until you change a month (engine 1.14.0).',
 		related: ['transfer'],

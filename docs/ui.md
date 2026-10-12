@@ -4855,7 +4855,15 @@ number ("Transfer N", a heading, with an **off** pill when the rule is
 switched off), **From → To** (two selects listing hydrological units only: a
 gauge or an other water user can't take part, and a saved end that isn't a
 unit shows as "<name> (not a hydrological unit)" and is a problem until
-changed), an **Enabled** switch (a checkbox with `role="switch"`, its word
+changed; **To** also offers **Outside the catchment**, engine ≥ 1.86.0,
+issue #523 B5, [model.md §2.6](./model.md#26-transfers-transfers): the water
+leaves the model, and the rule still keeps its months, rates, priority and
+the source dam's minimum storage. It isn't offered to a river off-take, and
+**Takes from**'s *The river* is disabled on a rule out of the catchment,
+which a river off-take can't be. The **To** tip says when to use which: a
+transfer for pumping out while a dam is above a level, a demand object piped
+out for a draw on a schedule, such as a town's), an **Enabled** switch (a
+checkbox with `role="switch"`, its word
 beside it and part of the tap target; the off state is said in the heading)
 and **Remove** (named "Remove transfer N (From → To)"). Remove asks first
 (the app's confirm dialog) when the rule has anything set besides its ends

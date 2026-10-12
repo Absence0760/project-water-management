@@ -21,8 +21,9 @@
 //   fallback.
 // - **Use** is the water account's consumptive use (§2.11b): irrigation
 //   supplied less its return flow, plus other water users' take less what
-//   they return. It is what the river loses to the users; the gross
-//   abstraction is larger by the return flows.
+//   they return, plus what transfer rules send out of the catchment (engine
+//   ≥ 1.86.0, as a demand object piped out counts). It is what the river
+//   loses to the users; the gross abstraction is larger by the return flows.
 // - **Other** closes the waterfall: natural − existing − proposed − left.
 //   It is the rest of the application run's water account (dam evaporation
 //   and seepage lost, storage change, land cover, groundwater, transfers,
@@ -143,7 +144,8 @@ function accountYears(run: LicenceImpactRun, which: string): Map<number, WaterAc
 	return out;
 }
 
-const use = (r: WaterAccountRow) => r.consumptiveIrrigationM3 + r.otherUseM3;
+// A transfer out of the catchment (engine ≥ 1.86.0) is use, as a demand object piped out is (its take is in the consumptive irrigation).
+const use = (r: WaterAccountRow) => r.consumptiveIrrigationM3 + r.otherUseM3 + (r.externalTransferM3 ?? 0);
 const hasSite = (run: LicenceImpactRun, siteNodeId: string | null) => !!run.summary.ewrAssurance?.some((s) => (siteNodeId === null ? s.isOutlet : s.nodeId === siteNodeId));
 
 /** Build the board: one entry per class of the background run's natural flow, driest first. */

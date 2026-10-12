@@ -372,7 +372,8 @@ export type TransferSetField = (typeof TRANSFER_SET_FIELDS)[number];
 
 const TRANSFER_FIELD_CHECKS: Record<TransferSetField, Check> = {
 	fromNodeId: id,
-	toNodeId: id,
+	// null: out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6); a dam rule only (modelRuleIssues).
+	toNodeId: nullable(id),
 	months,
 	maxRateM3s: nonNeg,
 	dailyCapM3: nullable(nonNeg),

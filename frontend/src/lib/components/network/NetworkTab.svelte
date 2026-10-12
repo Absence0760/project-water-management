@@ -529,7 +529,7 @@
 		const id = editing.id;
 		const mine = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id);
 		if (!mine.length) return null;
-		const ends = mine.map((t) => (t.fromNodeId === id ? `to ${labelOf(t.toNodeId)}` : `from ${labelOf(t.fromNodeId)}`));
+		const ends = mine.map((t) => (t.fromNodeId === id ? `to ${t.toNodeId === null ? 'outside the catchment' : labelOf(t.toNodeId)}` : `from ${labelOf(t.fromNodeId)}`));
 		return `${mine.length} transfer${mine.length === 1 ? '' : 's'}, ${ends.join(', ')}`;
 	});
 	/** The farm drawer over the map, in place of the sheet. */

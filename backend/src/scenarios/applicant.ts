@@ -117,7 +117,7 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 			nodes,
 			crops,
 			cropAreas,
-			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || own.has(t.toNodeId)),
+			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || (t.toNodeId !== null && own.has(t.toNodeId))),
 			landCover: (m.landCover ?? []).filter((p) => own.has(p.nodeId)),
 			// Their own farm's boreholes are theirs to see (as the table's RLS lets them, 045).
 			boreholes: (m.boreholes ?? []).filter((b) => own.has(b.nodeId)),

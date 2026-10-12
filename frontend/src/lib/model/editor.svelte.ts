@@ -21,7 +21,8 @@ export function newCrop(): CropDef {
 	return { id: crypto.randomUUID(), name: '', cropFactor: new Array(12).fill(0) };
 }
 
-export function newTransfer(fromNodeId: string, toNodeId: string): Transfer {
+/** A new dam rule; `toNodeId` null sends it out of the catchment (engine ≥ 1.86.0). */
+export function newTransfer(fromNodeId: string, toNodeId: string | null): Transfer {
 	return {
 		id: crypto.randomUUID(),
 		fromNodeId,

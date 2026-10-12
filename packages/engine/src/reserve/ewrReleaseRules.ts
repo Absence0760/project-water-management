@@ -110,7 +110,7 @@ export function ewrReleaseRules(project: EwrReleaseRulesInput): EwrReleaseRule[]
 		const flow = positive(tr.handsOffM3Day) ? (tr.handsOffM3Day as number) : null;
 		const keepsEwr = tr.handsOffEwr === true;
 		if (!flow && !keepsEwr) continue;
-		const where = `transfer "${nameOf(byId.get(tr.fromNodeId), tr.fromNodeId)} → ${nameOf(byId.get(tr.toNodeId), tr.toNodeId)}"`;
+		const where = `transfer "${nameOf(byId.get(tr.fromNodeId), tr.fromNodeId)} → ${tr.toNodeId === null ? 'outside the catchment' : nameOf(byId.get(tr.toNodeId), tr.toNodeId)}"`;
 		const inert = !isRiverOfftake(tr) ? 'a dam transfer: the hands-off fields apply to a river off-take only' : tr.enabled === false ? 'the transfer is switched off' : null;
 		push(out, { kind: 'offtakeHandsOff', id: tr.id, where, target: keepsEwr ? (flow ? 'ewrOrSetFlow' : 'ewr') : 'setFlow', setFlowM3Day: flow, inert });
 	}

@@ -522,6 +522,31 @@ def dam_rules_rationing_and_release() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": _dry(4)}
 
 
+def transfer_out_of_catchment() -> dict:
+    """Engine 1.86.0 (issue #523 B5, §2.6): a dam rule out of the catchment
+    (toNodeId null) runs as any dam rule, but no unit receives it, so it has
+    no room to fill. From a full 1 000 m³ dam keeping 50 %: rule xo (out, 300
+    m³/day) and rule xi (into x's empty dam, 300 m³/day) share the 500 m³
+    above the reserve pro rata, 250 each on day 0, nothing after. A second
+    source t (1 000 m³, full) sends out at priority 0, 400 m³/day keeping 20 %,
+    and into y (room 100) at priority 1: day 0 out 400 and y 100 (its room);
+    day 1 out the 300 left above the reserve, y nothing (no room, none free)."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=1),
+        _node("x", "farm", "o", areaKm2=1, damCapacityM3=100000, damInitialPct=0),
+        _node("t", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=1),
+        _node("y", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=0.9),
+    ]
+    rules = [
+        _rule("xo", "s", None, 300, 0.5),
+        _rule("xi", "s", "x", 300, 0.5),
+        _rule("to", "t", None, 400, 0.2),
+        _rule("ty", "t", "y", 400, 0.2, priority=1),
+    ]
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": rules}, "series": _dry(4)}
+
+
 # Runoff from each unit's own rain (§2.4h, engine >= 1.78.0).
 
 
@@ -744,6 +769,7 @@ PROBES = {
     "full-allocation-gap-year": full_allocation_gap_year(),
     "offtake-release-keep-and-floor": offtake_release_keep_and_floor(),
     "dam-rules-rationing-and-release": dam_rules_rationing_and_release(),
+    "transfer-out-of-catchment": transfer_out_of_catchment(),
     "unit-rain-rules": unit_rain_rules(),
     "unit-rain-forecast-warmup": unit_rain_forecast_warmup(),
     "unit-rain-map-period": unit_rain_map_period(),

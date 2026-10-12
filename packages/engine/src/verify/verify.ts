@@ -9,6 +9,7 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import { capacityScaleOf } from '../network/development';
 import { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolEvaporationKey } from '../network/riverSource';
 import { REACH_LOSS_SERIES } from '../network/reachLoss';
+import { canMove, externalRules, transferRuleKey } from '../network/transferSeries';
 import {
 	type ModelInput,
 	type ModelOutput,
@@ -191,13 +192,24 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			poolEvap[t]! += ev[t] ?? 0;
 		}
 	}
+	// Transfers out of the catchment (engine ≥ 1.86.0, issue #523 B5): each rule's own volume, an out term. Its
+	// source's `transfer` counts it out, so the farms' net transfer is −(this), and the row adds it back.
+	const extRules = externalRules(input.model.transfers, input.model.nodes).filter(canMove);
+	let extOut: Float64Array | null = null;
+	if (extRules.length) {
+		extOut = new Float64Array(out.days);
+		for (const tr of extRules) {
+			const v = farm(tr.fromNodeId, transferRuleKey(tr.id));
+			for (let t = 0; t < out.days; t++) extOut[t]! += v[t] ?? 0;
+		}
+	}
 	const farmStorage = (t: number) => (t < 0 ? initialStorage + poolStart : hasPools ? fStorage![t]! + poolStorage[t]! : fStorage![t]!);
 
 	const row = (waterYear: number | null, from: number, to: number): WaterBalanceRow => {
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { set: 0, natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, poolEvap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0, conveyance: 0, reach: 0 };
+		const r = { set: 0, natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, poolEvap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0, conveyance: 0, reach: 0, external: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -223,6 +235,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			if (fSet) r.set += fSet[t]!;
 			if (fOtOut) r.conveyance += fOtRet ? fOtOut[t]! - fOtIn![t]! - fOtRet[t]! : fOtOut[t]! - fOtIn![t]!;
 			if (reachOut) r.reach += reachOut[t]!;
+			if (extOut) r.external += extOut[t]!;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;
@@ -232,6 +245,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		const opening = farmStorage(from - 1);
 		const closing = farmStorage(to);
 		const consumptive = r.supplied - r.ret;
+		// The net of the transfers between units; the farms' own sum also counts what left the catchment (engine ≥ 1.86.0).
+		const between = r.transfer + r.external;
 		const hasRain = !!rain && rainDays > 0;
 		const naturalFlowMm = area ? r.natural / (area * 1000) : null;
 		let runoff: WaterBalanceRow['runoff'] = null;
@@ -253,7 +268,9 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			suppliedM3: r.supplied,
 			returnFlowM3: r.ret,
 			consumptiveUseM3: consumptive,
-			transfersM3: r.transfer,
+			// Between units only: what left the catchment is its own out term (engine ≥ 1.86.0).
+			transfersM3: between,
+			...(extOut ? { externalTransferM3: r.external } : {}),
 			...(hasDamLosses ? { rainOnDamsM3: r.rainOnDams, damEvaporationM3: r.evap } : {}),
 			...(hasPools ? { poolEvaporationM3: r.poolEvap } : {}),
 			...(users.length ? { otherUseM3: r.otherUse } : {}),
@@ -267,7 +284,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,
-			residualM3: (fSet ? opening + r.runoff + r.transfer + r.rainOnDams + r.gw + r.set : opening + r.runoff + r.transfer + r.rainOnDams + r.gw) - consumptive - r.evap - r.poolEvap - r.otherUse - r.dep - r.seepLost - r.conveyance - r.reach - r.outflow - closing
+			residualM3: (fSet ? opening + r.runoff + between + r.rainOnDams + r.gw + r.set : opening + r.runoff + between + r.rainOnDams + r.gw) - r.external - consumptive - r.evap - r.poolEvap - r.otherUse - r.dep - r.seepLost - r.conveyance - r.reach - r.outflow - closing
 		};
 	};
 

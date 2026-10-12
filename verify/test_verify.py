@@ -66,6 +66,7 @@ MUTANTS = [
         "if n >= ACC_MAX_BLANK_DAYS:",
     ),
     ("transfers ignore the receiver's room (N4)", "room_left[dst] = max(0.0, rm)", "room_left[dst] = math.inf"),
+    ("a transfer out of the catchment moves nothing, as if outside had no room (engine 1.86.0, issue #523 B5)", "room_left[None] = math.inf", "room_left[None] = 0.0"),
     (
         "a source's rules share one pool down to the lowest reserve (N6, before engine 1.36.0)",
         'elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]',

@@ -279,6 +279,43 @@ describe('model store', () => {
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});
 
+	it('round-trips a transfer out of the catchment (toNodeId null, engine 1.86.0, migration 224); a river off-take can’t be one', async () => {
+		const u = await signUp('ExternalTransfer');
+		const projectId = await newProject(u, 'Transfer out of the catchment');
+		const outlet = node('Outlet', null);
+		const farm = node('Farm', outlet.id, { sortOrder: 1, damCapacityM3: 50_000 });
+		const out = {
+			id: crypto.randomUUID(),
+			fromNodeId: farm.id,
+			toNodeId: null,
+			months: [1, 2, 3],
+			maxRateM3s: 0.01,
+			dailyCapM3: null,
+			minStoragePct: 0.6,
+			enabled: true,
+			priority: 0,
+			monthlyRateM3s: null,
+			source: 'dam',
+			handsOffM3Day: null,
+			handsOffEwr: false,
+			lossPct: 0,
+			sizing: 'demand',
+			topUpDam: false,
+			lossReturnPct: 0,
+			lossReturnNodeId: null
+		};
+		const put = (transfers: Record<string, unknown>[]) => u.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers });
+		expect((await put([out])).status).toBe(200);
+		const got = await withUser(u.id, (db) => loadModel(db, projectId));
+		expect(got.transfers).toEqual([out]);
+		// A river off-take delivers to a unit: the API refuses one with no destination (modelRuleIssues) …
+		const river = await put([{ ...out, source: 'river' }]);
+		expect(river.status).toBe(400);
+		expect(JSON.stringify(river.body)).toMatch(/can't send water out of the catchment/);
+		// … and migration 224's CHECK below it.
+		await expect(asOwner(`UPDATE transfer SET source = 'river' WHERE id = $1`, [out.id])).rejects.toMatchObject({ code: '23514', constraint: 'transfer_external_from_dam' });
+	});
+
 	it('round-trips a crop’s irrigation system (an older document’s own efficiency becoming one, engine 1.72.0) and the monthly effective-rain fraction (issue #54)', async () => {
 		const u = await signUp('CropDemand');
 		const projectId = await newProject(u, 'Crop demand options');

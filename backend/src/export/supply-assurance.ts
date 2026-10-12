@@ -125,6 +125,7 @@ const ACCOUNT_COLUMNS: [header: string, value: (r: WaterAccountRow) => Cell][] =
 	['OUT evaporation from river abstractions’ pools (m³)', (r) => r.poolEvaporationM3 ?? null],
 	['OUT dam seepage lost from the catchment (m³)', (r) => r.damSeepageLostM3 ?? null],
 	['OUT stream depletion from pumping (m³)', (r) => r.streamDepletionM3],
+	['OUT transferred out of the catchment (m³)', (r) => r.externalTransferM3 ?? null],
 	['OUT outflow at the outlet (m³)', (r) => r.outflowM3],
 	['Total out (m³)', (r) => r.outM3],
 	['Dam storage at start (m³)', (r) => r.openingStorageM3],

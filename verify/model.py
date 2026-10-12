@@ -15,7 +15,8 @@ documented), GR4J, crop demand with the soil-water store and efficiency /
 return share (N1), the farm dam balance (evaporation, rain on the dam,
 seepage and its return share, minimum operating level, spill), routing down
 the tree, dam-to-dam transfers (priority, bands at each rule's reserve, pro
-rata, the receiver's room) and the EWR at sites with its attribution (Q17).
+rata, the receiver's room; and, engine 1.86.0, a dam rule out of the
+catchment, which has no receiver) and the EWR at sites with its attribution (Q17).
 Phase 2a adds boreholes and stream depletion (§2.7d), allocations, the
 licence cap and full-allocation runs (§2.12a, with the summary's capReached,
 limitBound and scaled rows), demand factors (§2.3 item 4a), demand objects
@@ -1443,6 +1444,11 @@ def run(doc: dict) -> dict:
     for t in model.get("transfers", []):
         if not t.get("enabled", True):
             continue
+        # Out of the catchment (engine >= 1.86.0, §2.6): toNodeId null, a dam rule from a unit only.
+        if t["toNodeId"] is None:
+            if t["fromNodeId"] in by_id and by_id[t["fromNodeId"]]["kind"] == "farm" and t.get("source", "dam") != "river":
+                rules.append(t)
+            continue
         if t["fromNodeId"] not in by_id or t["toNodeId"] not in by_id:
             continue
         if by_id[t["fromNodeId"]]["kind"] != "farm" or by_id[t["toNodeId"]]["kind"] != "farm":
@@ -1668,9 +1674,10 @@ def run(doc: dict) -> dict:
                 src = by_id[t["fromNodeId"]]
                 reserve[t["id"]] = src["damCapacityM3"] * max(t.get("minStoragePct") or 0.0, src.get("damMinPct") or 0.0)
                 rem[t["id"]] = lim
-            # Each receiver's room.
+            # Each receiver's room. Outside the catchment (engine >= 1.86.0, §2.6) no unit receives the water:
+            # its room is endless, so only the source's free water and the rule's own limit hold a rule back.
             room_left = {}
-            for dst in sorted({t["toNodeId"] for t, _ in group}):
+            for dst in sorted({t["toNodeId"] for t, _ in group if t["toNodeId"] is not None}):
                 f = by_id[dst]
                 area, pd, e_raw, sp_raw = pre[dst]
                 after = storage[dst] + pd - e_raw - sp_raw
@@ -1682,6 +1689,8 @@ def run(doc: dict) -> dict:
                 rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
                 room_left[dst] = max(0.0, rm)
             full = {d for d, v in room_left.items() if not v > 0}
+            if any(t["toNodeId"] is None for t, _ in group):
+                room_left[None] = math.inf
             vol = {t["id"]: 0.0 for t, _ in group}
             taken = {}
             while True:
@@ -1709,7 +1718,7 @@ def run(doc: dict) -> dict:
                 # (2) Each receiver's room, pro rata to what the sources gave; a receiver given more is full.
                 basis = given
                 filled = False
-                for dst in sorted(room_left):
+                for dst in sorted(room_left, key=lambda d: (d is None, d or "")):
                     if dst in full:
                         continue
                     into = [t for t, _ in group if t["toNodeId"] == dst and rem[t["id"]] > 0]
@@ -1737,9 +1746,11 @@ def run(doc: dict) -> dict:
                 v = vol[t["id"]]
                 rule_vol[t["id"]][i] = v
                 J[t["fromNodeId"]] -= v
-                J[t["toNodeId"]] += v
                 drawn[t["fromNodeId"]] += v
-                sched[t["toNodeId"]] += v
+                # Out of the catchment: it leaves the source's dam and the model.
+                if t["toNodeId"] is not None:
+                    J[t["toNodeId"]] += v
+                    sched[t["toNodeId"]] += v
 
         # River off-takes (§2.6a): each rule's share of its destination's
         # need, fixed before the day runs.
@@ -2344,7 +2355,9 @@ def run(doc: dict) -> dict:
         site_series[site_key] = (members, [0.0] * n, [0.0] * n)
     legs = []  # (from, to, volume series): the internal legs a site may count
     for t in rules:
-        legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
+        # A rule out of the catchment is never internal to a site: an export, charged to its source.
+        if t["toNodeId"] is not None:
+            legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
     for t in offtakes:
         legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
         lp = t.get("lossPct") or 0.0
@@ -2434,7 +2447,7 @@ def run(doc: dict) -> dict:
     intake_ids = {f["id"] for f in farms if at_intake(f)}
     given: dict[tuple, list] = {}
     for t in rules:
-        if t["fromNodeId"] != t["toNodeId"] and can_move(t):
+        if t["toNodeId"] is not None and t["fromNodeId"] != t["toNodeId"] and can_move(t):
             given.setdefault((t["toNodeId"], t["fromNodeId"] in intake_ids), []).append(rule_vol[t["id"]])
     for fid in sorted(remote):
         given.setdefault((fid, remote[fid]["from"] in intake_ids), []).append(col[fid]["remote_dam_in"])

@@ -684,7 +684,9 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const t = op.transfer;
 			if (typeof t?.id !== 'string') fail('the new transfer needs an id');
 			if (m.transfers.some((x) => x.id === t.id)) fail(`transfer id ${t.id} is already in use`);
-			for (const k of ['fromNodeId', 'toNodeId'] as const) if (!m.nodes.some((n) => n.id === t[k])) fail(`${k} ${t[k]} not found`);
+			if (!m.nodes.some((n) => n.id === t.fromNodeId)) fail(`fromNodeId ${t.fromNodeId} not found`);
+			// null: out of the catchment (engine ≥ 1.86.0).
+			if (t.toNodeId !== null && !m.nodes.some((n) => n.id === t.toNodeId)) fail(`toNodeId ${t.toNodeId} not found`);
 			for (const k of ['months', 'maxRateM3s', 'dailyCapM3', 'minStoragePct', 'enabled', 'priority'] as const) {
 				const e = transferFieldError(k, t[k]);
 				if (e) fail(`${k} ${e}`);
@@ -707,7 +709,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const field = allowed(TRANSFER_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a transfer field a scenario can set`);
 			const e = transferFieldError(field, op.value);
 			if (e) fail(`${field} ${e}`);
-			if ((field === 'fromNodeId' || field === 'toNodeId' || (field === 'lossReturnNodeId' && op.value !== null)) && !m.nodes.some((n) => n.id === op.value)) fail(`hydrological unit ${String(op.value)} not found`);
+			if ((field === 'fromNodeId' || ((field === 'toNodeId' || field === 'lossReturnNodeId') && op.value !== null)) && !m.nodes.some((n) => n.id === op.value)) fail(`hydrological unit ${String(op.value)} not found`);
 			// Monthly rates (engine ≥ 1.14.0) also set the months and max rate kept beside them; months or a max rate
 			// on a rule with monthly rates would disagree with them, which the save rules (modelRuleIssues) refuse.
 			if (field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
@@ -1136,15 +1138,16 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 			return ok(new Set(addedCropIds).has(op.cropId));
 		case 'transfer.add':
 			// The unit its seepage rejoins below (engine ≥ 1.42.0) is credited that water, so it must be the proposal's too.
-			return ok(mine(op.transfer.fromNodeId) && mine(op.transfer.toNodeId) && (!op.transfer.lossReturnNodeId || mine(op.transfer.lossReturnNodeId)));
+			// Out of the catchment (engine ≥ 1.86.0, toNodeId null): no other unit is reached.
+			return ok(mine(op.transfer.fromNodeId) && (op.transfer.toNodeId === null || mine(op.transfer.toNodeId)) && (!op.transfer.lossReturnNodeId || mine(op.transfer.lossReturnNodeId)));
 		case 'transfer.set': {
 			const t = input?.model.transfers.find((x) => x.id === op.transferId);
-			const newEnd = op.field === 'fromNodeId' || op.field === 'toNodeId' || (op.field === 'lossReturnNodeId' && op.value !== null) ? mine(op.value as string) : true;
-			return ok(!!t && mine(t.fromNodeId) && mine(t.toNodeId) && newEnd);
+			const newEnd = op.field === 'fromNodeId' || ((op.field === 'toNodeId' || op.field === 'lossReturnNodeId') && op.value !== null) ? mine(op.value as string) : true;
+			return ok(!!t && mine(t.fromNodeId) && (t.toNodeId === null || mine(t.toNodeId)) && newEnd);
 		}
 		case 'transfer.remove': {
 			const t = input?.model.transfers.find((x) => x.id === op.transferId);
-			return ok(!!t && mine(t.fromNodeId) && mine(t.toNodeId));
+			return ok(!!t && mine(t.fromNodeId) && (t.toNodeId === null || mine(t.toNodeId)));
 		}
 		case 'landCover.add':
 			return ok(mine(op.patch.nodeId));

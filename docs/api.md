@@ -1551,7 +1551,14 @@ downstream of it along the river. A run with off-takes stores `offtake_out` on e
 each rule's `transfer_rule@<id>` (what it took, before losses), and
 `offtake_loss_return` on each unit seepage rejoins below (engine ≥ 1.42.0);
 `summary.waterBalance` and the water account gain `conveyanceLossM3` (what
-was lost, net of the seepage returned);
+was lost, net of the seepage returned). A dam transfer may send its water
+out of the catchment (engine ≥ 1.86.0, migration 224, [model.md
+§2.6](./model.md)): `toNodeId` `null`. `PUT` refuses a river off-take with no
+destination; a run with such a rule stores its `transfer_rule@<id>` on the
+source, and `summary.waterBalance` and the water account gain
+`externalTransferM3` (their `transfersM3` is then the transfers between
+units only). A scenario's `transfer.add` and `transfer.set` take `toNodeId`
+`null` the same way;
 nodes carry `irrigationEfficiency`, `returnFlowFraction` (engine ≥ 1.71.0: the share of the water supplied returning, at most 1 − the unit's blended efficiency, accepted above it and capped by the run, which warns; a document with 0.16.0–1.70.0's `lossReturnFraction` β, a share of the losses, is read as β(1 − e)), `damAreaFullM2`
 (nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node
 with a larger value from before loads and runs, with a warning, and must be

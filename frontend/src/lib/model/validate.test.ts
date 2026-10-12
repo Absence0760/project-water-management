@@ -137,6 +137,20 @@ describe('validateModel', () => {
 		expect(messages(model([g, f], { transfers: [{ ...t, priority: 2 }] }))).not.toContain('Transfer 1: priority must be a whole number.');
 	});
 
+	it('lets a dam rule send water out of the catchment (To empty, engine 1.86.0), not a river off-take, as the API does', () => {
+		const g = node('g', 'Gauge', null);
+		const f = node('f', 'F', 'g');
+		const t = { id: 't', fromNodeId: 'f', toNodeId: null, months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0.5, enabled: true, priority: 0 };
+		const ok = model([g, f], { transfers: [t] });
+		expect(messages(ok)).toEqual([]);
+		expect(modelRuleIssues(ok).size).toBe(0);
+		const river = model([g, f], { transfers: [{ ...t, source: 'river' as const }] });
+		expect(messages(river)).toEqual(["Transfer 1: a river off-take delivers to a hydrological unit, so it can't send water outside the catchment; take it from the source’s dam instead."]);
+		expect([...modelRuleIssues(river).values()].join()).toMatch(/can't send water out of the catchment/);
+		// A gauge can't send it either.
+		expect(messages(model([g, f], { transfers: [{ ...t, fromNodeId: 'g' }] }))).toEqual(['Transfer 1: "Gauge" is a gauge, which can\'t send or receive water; choose a hydrological unit.']);
+	});
+
 	it('flags a transfer to or from a gauge or an other water user, whatever its source (the engine skips such a rule)', () => {
 		const g = node('g', 'Gauge', null);
 		const f = node('f', 'F', 'g');

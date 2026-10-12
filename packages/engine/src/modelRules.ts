@@ -106,7 +106,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	// The crop supply tables (engine ≥ 1.73.0, docs/model.md §2.7k): shares that add up, and a remote dam the run can draw on.
 	cropSupplyIssues(
 		m.nodes,
-		m.transfers.filter((tr) => tr.enabled && tr.source === 'river'),
+		m.transfers.filter((tr): tr is typeof tr & { toNodeId: string } => tr.enabled && tr.source === 'river' && tr.toNodeId !== null),
 		add
 	);
 	for (const n of m.nodes) {
@@ -173,9 +173,11 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	}
 	const nodeIndex = new Map(m.nodes.map((n, i) => [n.id, i]));
 	for (const t of m.transfers) {
-		if (!byId.has(t.fromNodeId) || !byId.has(t.toNodeId)) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown hydrological unit`);
+		// A destination outside the catchment (engine ≥ 1.86.0, issue #523 B5): toNodeId null, a dam rule only.
+		if (!byId.has(t.fromNodeId) || (t.toNodeId !== null && !byId.has(t.toNodeId))) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown hydrological unit`);
+		if (t.toNodeId === null && isRiverOfftake(t)) add(`trExternalRiver:${t.id}`, `transfer ${t.id}: a river off-take delivers to a unit, so it can't send water out of the catchment; send it from the dam instead`);
 		// A user has no dam to send from or fill (WP-1.33).
-		if (byId.get(t.fromNodeId)?.kind === 'user' || byId.get(t.toNodeId)?.kind === 'user')
+		if (byId.get(t.fromNodeId)?.kind === 'user' || (t.toNodeId !== null && byId.get(t.toNodeId)?.kind === 'user'))
 			add(`trUser:${t.id}`, `transfer ${t.id} involves an other water user: transfers run between farm dams`);
 		if (t.fromNodeId === t.toNodeId) add(`trSelf:${t.id}`, `transfer ${t.id} goes from a hydrological unit to itself`);
 		// Monthly rates (engine ≥ 1.14.0): what runs, so the months and max rate kept beside them must agree.
@@ -185,7 +187,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// source (the engine simulates the destination after its source), losses below 100 %.
 		if (isRiverOfftake(t)) {
 			const a = byId.get(t.fromNodeId);
-			const b = byId.get(t.toNodeId);
+			const b = t.toNodeId === null ? undefined : byId.get(t.toNodeId);
 			if (a && b && (a.kind !== 'farm' || b.kind !== 'farm')) add(`trRiverKind:${t.id}`, `river off-take ${t.id}: it runs from one unit to another, not from or to a ${a.kind !== 'farm' ? a.kind : b.kind}`);
 			else if (t.enabled && a && b && a !== b && drainsInto(m, b.id, a.id, t.id)) add(`trRiverLoop:${t.id}`, `river off-take "${a.name}" → "${b.name}": its destination drains into its source (along the river or through other off-takes), so it would take water before it arrives`);
 			const loss = t.lossPct ?? 0;
@@ -228,7 +230,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
  */
 function drainsInto(m: ProjectModel, from: string, to: string, except: string): boolean {
 	const next = new Map<string, string[]>(m.nodes.map((n) => [n.id, n.downstreamNodeId ? [n.downstreamNodeId] : []]));
-	for (const t of m.transfers) if (t.enabled && isRiverOfftake(t) && t.id !== except) next.get(t.fromNodeId)?.push(t.toNodeId);
+	for (const t of m.transfers) if (t.enabled && isRiverOfftake(t) && t.id !== except && t.toNodeId !== null) next.get(t.fromNodeId)?.push(t.toNodeId);
 	const seen = new Set<string>();
 	const stack = [from];
 	while (stack.length) {

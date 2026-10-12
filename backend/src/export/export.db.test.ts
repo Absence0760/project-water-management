@@ -729,7 +729,7 @@ function normalize(d: ProjectDocument) {
 		transfers: d.model.transfers.map(({ id: _id, fromNodeId, toNodeId, ...t }) => ({
 			...t,
 			from: nodeName.get(fromNodeId),
-			to: nodeName.get(toNodeId)
+			to: nodeName.get(toNodeId!)
 		}))
 	};
 }

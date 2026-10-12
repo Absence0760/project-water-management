@@ -108,6 +108,8 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 		case 'crop.add':
 			return t('A new crop, “{name}”', { name: op.crop.name });
 		case 'transfer.add':
+			// Out of the catchment (engine ≥ 1.86.0): no unit receives it.
+			if (op.transfer.toNodeId === null) return t('A new transfer from {from} out of the catchment', { from: unit(op.transfer.fromNodeId) });
 			return t('A new transfer from {from} to {to}', { from: unit(op.transfer.fromNodeId), to: unit(op.transfer.toNodeId) });
 		case 'transfer.set':
 			return t('A transfer changed: {field}', { field: op.field });

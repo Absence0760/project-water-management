@@ -70,7 +70,7 @@ function normalize(d: ProjectDocument) {
 		cropAreas: d.model.cropAreas
 			.map((a) => ({ node: nodeName.get(a.nodeId), crop: cropName.get(a.cropId), areaM2: a.areaM2 }))
 			.sort((a, b) => `${a.node}/${a.crop}`.localeCompare(`${b.node}/${b.crop}`)),
-		transfers: d.model.transfers.map(({ id: _id, fromNodeId, toNodeId, ...t }) => ({ ...t, from: nodeName.get(fromNodeId), to: nodeName.get(toNodeId) })),
+		transfers: d.model.transfers.map(({ id: _id, fromNodeId, toNodeId, ...t }) => ({ ...t, from: nodeName.get(fromNodeId), to: nodeName.get(toNodeId!) })),
 		landCover: (d.model.landCover ?? []).map(({ id: _id, nodeId, ...p }) => ({ ...p, node: nodeName.get(nodeId) }))
 	};
 }

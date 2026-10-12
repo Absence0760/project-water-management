@@ -92,6 +92,14 @@ describe('water account view', () => {
 		expect(b.outBar.reduce((s, x) => s + x.pct, 0)).toBeCloseTo(100, 10);
 	});
 
+	it('what transfer rules sent out of the catchment is an out line and segment (engine 1.86.0)', () => {
+		// 40 of the outflow pumped out of the catchment instead.
+		const r: WaterAccountRow = { ...t, outflowM3: 471, externalTransferM3: 40 };
+		expect(accountLines([r]).map((l) => l.key)).toContain('externalTransferM3');
+		expect(accountBars(r).outBar.map((s) => [s.label, s.m3])).toContainEqual(['Transferred out of the catchment', 40]);
+		expect(accountLines([t]).map((l) => l.key)).not.toContain('externalTransferM3');
+	});
+
 	it('a dam that ran down supplies water: storage goes on the in side', () => {
 		const r: WaterAccountRow = { ...t, storageChangeM3: -50, naturalFlowM3: 550 };
 		const b = accountBars(r);

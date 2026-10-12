@@ -321,12 +321,13 @@ function transferVolumes(
 	days: number
 ): { rules: { from: number; to: number; volume: Float64Array }[]; approximate: boolean } {
 	const perRule = storedRules(run, days);
-	if (perRule) return { rules: perRule.rules.map((r, k) => ({ from: index.get(r.fromNodeId)!, to: index.get(r.toNodeId)!, volume: perRule.volumes[k]! })), approximate: false };
+	if (perRule) return { rules: perRule.rules.map((r, k) => ({ from: index.get(r.fromNodeId)!, to: index.get(r.toNodeId!)!, volume: perRule.volumes[k]! })), approximate: false };
 	const pairs = new Map<string, [number, number]>();
 	for (const tr of run.transfers) {
 		if (!tr.enabled) continue;
 		const a = index.get(tr.fromNodeId);
-		const b = index.get(tr.toNodeId);
+		// A rule out of the catchment (engine ≥ 1.86.0) is never a leg: the engine charges it to its source as an export.
+		const b = tr.toNodeId === null ? undefined : index.get(tr.toNodeId);
 		if (a === undefined || b === undefined || a === b) continue;
 		if (run.nodes[a]!.kind !== 'farm' || run.nodes[b]!.kind !== 'farm') continue;
 		const [lo, hi] = a < b ? [a, b] : [b, a];
@@ -594,7 +595,7 @@ export function curtailmentSeriesKeys(
 	const inRule = new Set<string>();
 	for (const tr of transfers) {
 		const a = byId.get(tr.fromNodeId);
-		const b = byId.get(tr.toNodeId);
+		const b = tr.toNodeId === null ? undefined : byId.get(tr.toNodeId);
 		if (tr.enabled && a && b && a !== b && a.kind === 'farm' && b.kind === 'farm') inRule.add(a.id).add(b.id);
 	}
 	const rules = farmRules(transfers, nodes);

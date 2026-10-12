@@ -43,7 +43,7 @@ export const BALANCE_COLUMNS: BalanceColumn[] = [
 	{ key: 'opening', label: 'Start storage', title: 'Σ dam storage at the start (Mm³)', value: (r) => r.openingStorageM3 * MM3 },
 	// "Unit runoff": the wording rule's short name (ui-playbook § 3), so the heading wraps to a column as narrow as its figures.
 	{ key: 'runoff', label: 'Unit runoff', title: 'Σ hydrological unit runoff (I), Mm³', value: (r) => r.farmRunoffM3 * MM3 },
-	{ key: 'transfers', label: 'Transfers', title: 'Net transfers across all hydrological units; 0 up to float noise (Mm³)', value: (r) => r.transfersM3 * MM3 },
+	{ key: 'transfers', label: 'Transfers', title: 'Net transfers between hydrological units; 0 up to float noise (Mm³). What leaves the catchment is Transferred out', value: (r) => r.transfersM3 * MM3 },
 	{ key: 'groundwater', label: 'Groundwater pumped', title: 'Groundwater pumped into supply and the dams, a gain to the river network (Mm³)', value: (r) => opt(r.groundwaterM3), optional: true },
 	{ key: 'storageSet', label: 'Storage set', title: 'Storage set into (+) or out of (−) the dams by a storage reset (Mm³)', value: (r) => opt(r.storageSetM3), optional: true },
 	{ key: 'rainOnDams', label: 'Rain on dams', title: 'Rain falling on the dams’ surface (Mm³); blank for runs before engine 0.16.0', value: (r) => (r.rainOnDamsM3 === undefined ? null : r.rainOnDamsM3 * MM3) },
@@ -55,6 +55,7 @@ export const BALANCE_COLUMNS: BalanceColumn[] = [
 	{ key: 'poolEvaporation', label: 'Pool evaporation', title: 'Evaporation from the river abstractions’ pools (Mm³); their storage is in the start and end storage', value: (r) => opt(r.poolEvaporationM3), optional: true },
 	{ key: 'conveyanceLoss', label: 'Off-take losses', title: 'River off-takes: taken − delivered, lost from the catchment on the way (Mm³)', value: (r) => opt(r.conveyanceLossM3), optional: true },
 	{ key: 'reachLoss', label: 'Bed losses', title: 'Lost into the river bed in the reaches between hydrological units, out of the catchment (Mm³)', value: (r) => opt(r.reachLossM3), optional: true },
+	{ key: 'externalTransfer', label: 'Transferred out', title: 'Sent out of the catchment by transfer rules, out of the source dams (Mm³)', value: (r) => opt(r.externalTransferM3), optional: true },
 	{ key: 'outflow', label: 'Outflow', title: 'Simulated outflow at the outlet (Mm³)', value: (r) => r.outflowM3 * MM3 },
 	{ key: 'closing', label: 'End storage', title: 'Σ dam storage at the end (Mm³)', value: (r) => r.closingStorageM3 * MM3 },
 	{ key: 'residual', label: 'Residual (m³)', title: 'The equation’s left side − its right side (every gain − every loss − the change in storage); should be 0', value: (r) => r.residualM3 }
@@ -70,7 +71,7 @@ export function balanceEquation(cols: readonly BalanceColumn[]): string {
 	const plus = (k: string, w: string) => (has(k) ? ` + ${w}` : '');
 	return (
 		`Start storage + hydrological unit runoff + transfers${plus('groundwater', 'groundwater')}${plus('storageSet', 'storage set')} + rain on dams = ` +
-		`consumptive use${plus('otherUse', 'other users’ use')}${plus('streamDepletion', 'stream depletion')} + dam evaporation${plus('poolEvaporation', 'pool evaporation')}${plus('seepageLost', 'seepage lost')}${plus('conveyanceLoss', 'off-take losses')}${plus('reachLoss', 'bed losses')} + outflow + end storage`
+		`consumptive use${plus('otherUse', 'other users’ use')}${plus('streamDepletion', 'stream depletion')} + dam evaporation${plus('poolEvaporation', 'pool evaporation')}${plus('seepageLost', 'seepage lost')}${plus('conveyanceLoss', 'off-take losses')}${plus('reachLoss', 'bed losses')}${plus('externalTransfer', 'transferred out')} + outflow + end storage`
 	);
 }
 

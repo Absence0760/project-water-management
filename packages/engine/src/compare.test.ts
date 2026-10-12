@@ -133,7 +133,7 @@ function copyWithFreshIds(s: RunInputsSnapshot): RunInputsSnapshot {
 	for (const t of c.model.transfers) {
 		t.id = fresh(t.id);
 		t.fromNodeId = fresh(t.fromNodeId);
-		t.toNodeId = fresh(t.toNodeId);
+		t.toNodeId = fresh(t.toNodeId!);
 	}
 	return c;
 }

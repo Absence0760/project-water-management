@@ -338,7 +338,8 @@
 
 	function transferPath(t: Transfer): string {
 		const a = pos.get(t.fromNodeId);
-		const b = pos.get(t.toNodeId);
+		// A rule out of the catchment (engine ≥ 1.86.0) has no unit to draw to.
+		const b = t.toNodeId === null ? undefined : pos.get(t.toNodeId);
 		if (!a || !b || t.fromNodeId === t.toNodeId) return '';
 		const others = symbols.filter((s) => s.id !== t.fromNodeId && s.id !== t.toNodeId).map((s) => s.box);
 		return transferPathData(a, b, [...labels, ...others], { x0: 0, y0: 0, x1: width, y1: height }, riverSegments).d;
@@ -429,7 +430,7 @@
 			{@const d = transferPaths.get(t.id)}
 			{#if d}
 				<path class="transfer" class:off={!t.enabled} d={d} marker-end="url(#{id}-transfer)">
-					<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId)}{t.enabled ? '' : ' (disabled)'}</title>
+					<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId!)}{t.enabled ? '' : ' (disabled)'}</title>
 				</path>
 			{/if}
 		{/each}

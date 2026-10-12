@@ -80,7 +80,7 @@ const node = (id: string) => `node:${id}`;
 
 /** The item's own node(s), in the base or added by an earlier op of the same scenario: what an op on the item depends on. */
 function itemNodes(model: ProjectModel, earlier: readonly ScenarioOp[], kind: string, id: string): string[] {
-	type Ends = { nodeId?: string | null; fromNodeId?: string; toNodeId?: string; lossReturnNodeId?: string | null };
+	type Ends = { nodeId?: string | null; fromNodeId?: string; toNodeId?: string | null; lossReturnNodeId?: string | null };
 	const fromModel = (): Ends | undefined => {
 		switch (kind) {
 			case 'transfer':

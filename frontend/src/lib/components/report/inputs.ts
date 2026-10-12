@@ -150,7 +150,7 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
 		.sort((a, b) => a.priority - b.priority)
 		.map((t) => [
 			`${name.get(t.fromNodeId) ?? '–'}${isRiverOfftake(t) ? ' (river off-take)' : ''}`,
-			name.get(t.toNodeId) ?? '–',
+			t.toNodeId === null ? 'Outside the catchment' : (name.get(t.toNodeId) ?? '–'),
 			describeMonths(t.months),
 			// A rule with its own rate per month (engine ≥ 1.14.0) lists each month it runs in with its rate.
 			hasMonthlyRates(t) && new Set(transferRatesM3s(t).filter((r) => r > 0)).size > 1

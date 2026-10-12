@@ -62,6 +62,27 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 	await expect(page.getByLabel('Enabled, transfer 1', { exact: true })).not.toBeChecked();
 });
 
+test('To offers Outside the catchment for a dam rule (engine 1.86.0, issue #523 B5), not for a river off-take, and it saves', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers out of the catchment');
+	await putModel(page.request, project.id, sampleModel());
+	await openTransfers(page, project.id);
+	const to = page.getByLabel('To, transfer 1', { exact: true });
+	const takesFrom = page.getByLabel('Takes from, transfer 1', { exact: true });
+	await to.selectOption({ label: 'Outside the catchment' });
+	await expect(to.locator('option:checked')).toHaveText('Outside the catchment');
+	// A river off-take delivers to a unit: the river source is disabled on a rule out of the catchment.
+	await expect(takesFrom.getByRole('option', { name: /^The river/ })).toBeDisabled();
+	// The rule keeps the source dam's minimum storage.
+	await expect(page.getByLabel('Min source storage of transfer 1, %', { exact: true })).toBeVisible();
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toBeHidden();
+	await page.reload();
+	await expect(page.getByLabel('To, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Outside the catchment');
+	await expectNoViolations(page);
+});
+
 test('each month has its own rate: a workbook rule shows its rate in its months, an edit changes that month only', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });

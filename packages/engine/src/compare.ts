@@ -1639,9 +1639,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 	}
 
 	// --- transfers: by id, then by "from → to" route (A's route in B's names) ---
-	const route = (m: typeof na, t: Transfer) => `${m.node(t.fromNodeId)} → ${m.node(t.toNodeId)}`;
+	// A rule out of the catchment (engine ≥ 1.86.0) has no destination unit.
+	const OUTSIDE = 'outside the catchment';
+	const route = (m: typeof na, t: Transfer) => `${m.node(t.fromNodeId)} → ${t.toNodeId === null ? OUTSIDE : m.node(t.toNodeId)}`;
 	const routeInB = (t: Transfer) =>
-		`${nodeRename.get(t.fromNodeId) ?? na.node(t.fromNodeId)} → ${nodeRename.get(t.toNodeId) ?? na.node(t.toNodeId)}`;
+		`${nodeRename.get(t.fromNodeId) ?? na.node(t.fromNodeId)} → ${t.toNodeId === null ? OUTSIDE : (nodeRename.get(t.toNodeId) ?? na.node(t.toNodeId))}`;
 	const tm = matchByIdThenName(
 		a.transfers.map((t) => ({ t, key: routeInB(t) })),
 		b.transfers.map((t) => ({ t, key: route(nb, t) })),

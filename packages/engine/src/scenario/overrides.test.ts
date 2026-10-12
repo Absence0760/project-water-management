@@ -1387,6 +1387,22 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(applyScenario(b, [{ op: 'node.move', nodeId: 'C', downstreamNodeId: 'B' }]).problems[0]).toMatch(/^op 1 \(node\.move\): river off-take "Farm B" → "Farm C": its destination drains into its source/);
 	});
 
+	it('adds and sets a dam rule out of the catchment (toNodeId null, engine 1.86.0); a river off-take can’t be one', () => {
+		const out = { id: 'x1', fromNodeId: 'A', toNodeId: null, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.5, enabled: true, priority: 0 };
+		const added = one({ op: 'transfer.add', transfer: out });
+		expect(added.problems).toEqual([]);
+		expect(added.input.model.transfers.find((t) => t.id === 'x1')!.toNodeId).toBeNull();
+		const b = base();
+		b.model.transfers = [{ ...out, toNodeId: 'B' }];
+		const set = applyScenario(b, [{ op: 'transfer.set', transferId: 'x1', field: 'toNodeId', value: null }]);
+		expect(set.problems).toEqual([]);
+		expect(set.input.model.transfers[0]!.toNodeId).toBeNull();
+		// Made a river off-take, it has no unit to deliver to: the op is skipped with that rule as its problem.
+		const river = applyScenario(set.input, [{ op: 'transfer.set', transferId: 'x1', field: 'source', value: 'river' }]);
+		expect(river.problems[0]).toMatch(/can't send water out of the catchment/);
+		expect(river.input.model.transfers[0]!.source ?? 'dam').toBe('dam');
+	});
+
 	it('sets where an off-take’s canal seepage rejoins (engine 1.42.0): below the source or a farm below it, and a removed unit returns none', () => {
 		const b = base();
 		b.model.transfers = [{ id: 'r1', fromNodeId: 'C', toNodeId: 'B', months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river', lossPct: 0.2 }];

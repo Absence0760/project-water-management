@@ -108,6 +108,18 @@ describe('changeRows', () => {
 		]);
 	});
 
+	it('words a new transfer out of the catchment (engine 1.86.0) without a destination unit', () => {
+		const t = { id: 'x', fromNodeId: OWN, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.5, enabled: true, priority: 0 };
+		const ops: ScenarioOp[] = [
+			{ op: 'transfer.add', transfer: { ...t, toNodeId: null } },
+			{ op: 'transfer.add', transfer: { ...t, id: 'y', toNodeId: 'n-other' } }
+		];
+		expect(changeRows(scenario({ ops, classified: null })).map((r) => sp(r.text))).toEqual([
+			'A new transfer from Rooikloof out of the catchment',
+			'A new transfer from Rooikloof to another hydrological unit'
+		]);
+	});
+
 	it('words the demand-object ops (engine ≥ 1.45.0) without an object’s name, since one may be on another unit', () => {
 		const o = { id: 'd', nodeId: 'n-other', name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' } as const;
 		const ops: ScenarioOp[] = [

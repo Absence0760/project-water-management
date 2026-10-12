@@ -207,6 +207,8 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 /** A node or crop id that neither the base nor any name source knows. */
 export const UNKNOWN_NODE = 'a hydrological unit the base run doesn’t have';
 export const UNKNOWN_CROP = 'a crop the base run doesn’t have';
+/** A transfer's destination: a unit's name, or null, out of the catchment (engine ≥ 1.86.0). */
+const outsideOr = (id: string | null, name: (id: string) => string) => (id === null ? 'outside the catchment' : name(id));
 
 const KIND_WORD: Record<string, string> = { farm: 'hydrological unit', user: 'other water user', gauge: 'gauge' };
 const ha = (m2: number) => `${fmtNum(m2 / 10_000, 2, true)} ha`;
@@ -231,7 +233,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 	const cropName = (id: string) => m?.crops.find((c) => c.id === id)?.name ?? names.get(id) ?? UNKNOWN_CROP;
 	const transferName = (id: string) => {
 		const t = m?.transfers.find((x) => x.id === id);
-		return t ? `the transfer ${nodeName(t.fromNodeId)} → ${nodeName(t.toNodeId)}` : 'a transfer';
+		return t ? `the transfer ${nodeName(t.fromNodeId)} → ${outsideOr(t.toNodeId, nodeName)}` : 'a transfer';
 	};
 	switch (op.op) {
 		case 'node.set': {
@@ -281,7 +283,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'transfer.add': {
 			const t = op.transfer;
 			const cap = t.dailyCapM3 != null ? `, at most ${fmtNum(t.dailyCapM3)} m³/day` : '';
-			return `Add a transfer ${nodeName(t.fromNodeId)} → ${nodeName(t.toNodeId)} (${monthsText(t.months)}, up to ${fmtNum(t.maxRateM3s, 4, true)} m³/s${cap})`;
+			return `Add a transfer ${nodeName(t.fromNodeId)} → ${outsideOr(t.toNodeId, nodeName)} (${monthsText(t.months)}, up to ${fmtNum(t.maxRateM3s, 4, true)} m³/s${cap})`;
 		}
 		case 'transfer.set': {
 			const f = TRANSFER_FIELD_SPECS[op.field as TransferSetField];

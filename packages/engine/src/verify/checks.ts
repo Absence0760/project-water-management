@@ -18,7 +18,7 @@ import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../ne
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
-import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
+import { canMove, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { reachLossDay, reachLossOf, REACH_LOSS_SERIES, SENIOR_REACH_LOSS_SERIES } from '../network/reachLoss';
@@ -515,14 +515,26 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	const sim = get.get('null|simulated_outflow')!;
 	const outletU = get.get(`${outlet.id}|outflow`)!;
 	const farmJ = nodes.filter((n) => n.kind === 'farm').map((n) => get.get(`${n.id}|transfer`)!);
+	// Transfers out of the catchment (engine ≥ 1.86.0): each rule's own volume, which its source's J counts out.
+	const extVol = externalRules(input.model.transfers, nodes)
+		.filter(canMove)
+		.map((tr) => get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`));
+	if (extVol.some((v) => !v)) return 'a transfer rule out of the catchment has no stored volume';
 	const catEwr = get.get('null|ewr')!;
 	const catShort = get.get('null|ewr_shortfall')!;
 	for (let t = 0; t < out.days; t++) {
 		if (sim[t] !== outletU[t]) return `day ${t}: simulated outflow ≠ the outlet's outflow`;
 		totOut += sim[t]!;
+		let ext = 0;
+		for (const v of extVol) {
+			if (!(v![t]! >= 0)) return `day ${t}: a transfer out of the catchment moved ${v![t]}, must be ≥ 0`;
+			ext += v![t]!;
+		}
+		// What left the catchment is an out term; the rest of the transfers move water between units.
+		totOut += ext;
 		let Jsum = 0;
 		for (const a of farmJ) Jsum += a[t]!;
-		if (Math.abs(Jsum) > 1e-6) return `day ${t}: transfers do not net to 0 (${Jsum})`;
+		if (Math.abs(Jsum + ext) > 1e-6) return `day ${t}: transfers between units do not net to 0 (${Jsum + ext}${ext ? `, ${ext} sent out of the catchment` : ''})`;
 		const e = catEwr[t]!;
 		const sh = catShort[t]!;
 		if (sh > 0 || Math.abs(sh - Math.min(sim[t]! - e, 0)) > 1e-12 * Math.max(Math.abs(sim[t]!), Math.abs(e))) return `day ${t}: catchment EWR shortfall ${sh}`;
@@ -675,8 +687,14 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 	return null;
 }
 
+/** Rule.to of a rule out of the catchment (engine ≥ 1.86.0): no node has this id. */
+const OUTSIDE = '\u0000outside';
+/** The destination a rule out of the catchment is checked against: a farm with endless room, never a node. */
+const OUTSIDE_NODE = { id: OUTSIDE, kind: 'farm' } as const;
+
 interface Rule {
 	from: string;
+	/** The receiving farm's id, or OUTSIDE: out of the catchment (engine ≥ 1.86.0). */
 	to: string;
 	/** Whether the rule runs, by calendar month (index 1–12). */
 	on: Uint8Array;
@@ -719,7 +737,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const ruleDefs: Transfer[] = [];
 	for (const tr of input.model.transfers) {
 		const a = byId.get(tr.fromNodeId);
-		const b = byId.get(tr.toNodeId);
+		// Out of the catchment (engine ≥ 1.86.0): a destination with endless room, so only the source's limits apply.
+		const b = tr.toNodeId === null ? OUTSIDE_NODE : byId.get(tr.toNodeId);
 		// River off-takes (engine ≥ 1.14.0) have their own limits (checkOfftakes, below).
 		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm' || a === b || isRiverOfftake(tr)) continue;
 		// The month's own rate (engine ≥ 1.14.0), or the one max rate in the listed months.
@@ -745,6 +764,17 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		return { active, ins: farms.map((f) => active.filter((r) => r.to === f.id)), outs: farms.map((f) => active.filter((r) => r.from === f.id)) };
 	});
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
+	// Each farm's rules out of the catchment and their stored volumes (engine ≥ 1.86.0); null when one is missing.
+	const outsideSent = (id: string, t: number): number | null => {
+		let v = 0;
+		for (const tr of ruleDefs) {
+			if (tr.toNodeId !== null || tr.fromNodeId !== id || !canMove(tr)) continue;
+			const x = get.get(`${id}|${transferRuleKey(tr.id)}`)?.[t];
+			if (x === undefined) return null;
+			v += x;
+		}
+		return v;
+	};
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
 	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.54.0).
 	// A unit with river abstractions (engine ≥ 1.65.0): its dam side's part of it only, as the dam serves no other.
@@ -804,20 +834,21 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			const outs = outsOf[fi]!;
 			if (outs.length === 0 || insOf[fi]!.length) continue;
 			const dests = new Set(outs.map((r) => r.to));
-			if ([...dests].some((d) => active.some((r) => (r.to === d && r.from !== f.id) || r.from === d))) continue;
+			// The outside (engine ≥ 1.86.0) is shared by every source without limiting any: its room is endless.
+			if ([...dests].some((d) => d !== OUTSIDE && active.some((r) => (r.to === d && r.from !== f.id) || r.from === d))) continue;
 			const sent = -get.get(`${f.id}|transfer`)![t]!;
-			const got = [...dests].reduce((s, d) => s + get.get(`${d}|transfer`)![t]!, 0);
+			// What left the catchment is read from its rules' own volumes (none stored before engine 1.6.0: skip the source).
+			const outside = dests.has(OUTSIDE) ? outsideSent(f.id, t) : 0;
+			if (outside === null) continue;
+			const got = [...dests].reduce((s, d) => s + (d === OUTSIDE ? outside : get.get(`${d}|transfer`)![t]!), 0);
 			const where = `${f.id} day ${t}`;
 			if (Math.abs(sent - got) > tol(sent)) return `${where}: sent ${sent} but its destinations got ${got}`;
 			const prev = storage(f.id, t);
 			// What the destinations could take: per destination MIN(Σ limits into it, its room).
 			let limit = 0;
 			for (const d of dests) {
-				const di = farmIndex.get(d)!;
-				limit += Math.min(
-					outs.filter((r) => r.to === d).reduce((s, r) => s + r.maxDaily, 0),
-					Math.max(0, roomOf(di, t))
-				);
+				const into = outs.filter((r) => r.to === d).reduce((s, r) => s + r.maxDaily, 0);
+				limit += d === OUTSIDE ? into : Math.min(into, Math.max(0, roomOf(farmIndex.get(d)!, t)));
 			}
 			const floor = Math.min(limit, Math.max(prev - capOn(f.id, t) * Math.max(...outs.map((r) => r.reserve)), 0));
 			if (sent < floor - tol(Math.max(floor, prev))) return `${where}: sent only ${sent}; the rules and the destinations' room allowed ${floor} (storage ${prev})`;
@@ -948,7 +979,7 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 	const byId = new Map(input.model.nodes.map((n) => [n.id, n]));
 	const warnings: string[] = [];
 	const rules = input.model.transfers
-		.filter((tr) => tr.enabled && isRiverOfftake(tr) && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm' && tr.fromNodeId !== tr.toNodeId)
+		.filter((tr): tr is Transfer & { toNodeId: string } => tr.enabled && isRiverOfftake(tr) && tr.toNodeId !== null && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm' && tr.fromNodeId !== tr.toNodeId)
 		.map((tr) => ({ tr, o: offtakeOf(tr, 0, 0, '', '', warnings), volume: get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`) }));
 	if (!rules.length) return null;
 	// Where each rule's returned seepage rejoins (engine ≥ 1.42.0), as planOfftakes resolves it; −1 = none returns.
@@ -2191,14 +2222,17 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		return set;
 	};
 	const rules = farmRules(input.model.transfers, nodes);
+	// Rules out of the catchment (engine ≥ 1.86.0), after the farm-to-farm ones so a rule's index k is the same in both.
+	const outside = externalRules(input.model.transfers, nodes);
+	const allRules = [...rules, ...outside];
 	const col = (id: string, k: string) => get.get(`${id}|${k}`)!;
 	// Each rule's daily volume (engine ≥ 1.6.0: a series for every rule that can move water; null for an older run, which stores none).
-	const movable = rules.filter(canMove);
+	const movable = allRules.filter(canMove);
 	const storedRules = movable.filter((r) => get.has(`${r.fromNodeId}|${transferRuleKey(r.id)}`)).length;
 	if (storedRules > 0 && storedRules < movable.length) return `transfer rules: ${storedRules} of the ${movable.length} that can move water have a stored volume`;
-	const ruleVol = readRuleVolumes(rules, out.days, (id, k) => get.get(`${id}|${k}`));
+	const ruleVol = readRuleVolumes(allRules, out.days, (id, k) => get.get(`${id}|${k}`));
 	if (ruleVol) {
-		const err = checkRuleVolumes(rules, ruleVol, farms, get, out.days);
+		const err = checkRuleVolumes(allRules, ruleVol, farms, get, out.days);
 		if (err) return err;
 	}
 	const byRule = input.settings.ewrChargeSource === 'ruleTable';
@@ -2223,7 +2257,8 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		const key = si === 0 ? 'null' : s.id;
 		// A rule with one end inside counts at neither end here: without the per-rule volumes it can't be told apart from the farm's other transfers.
 		// A river off-take (engine ≥ 1.14.0) isn't in the farms' J: with one, the per-rule volumes always count.
-		const crossed = rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)) || rules.some(isRiverOfftake) || remoteLegs.length > 0;
+		// A rule out of the catchment (engine ≥ 1.86.0) from upstream is an export, charged to its source as one to a farm outside is.
+		const crossed = rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)) || outside.some((r) => up.has(r.fromNodeId)) || rules.some(isRiverOfftake) || remoteLegs.length > 0;
 		return {
 			name: s.id,
 			key,

@@ -167,7 +167,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 			z.object({
 				id: uuid,
 				fromNodeId: uuid,
-				toNodeId: uuid,
+				// null: out of the catchment (engine ≥ 1.86.0, migration 224, docs/model.md §2.6); a dam rule only (modelRuleIssues).
+				toNodeId: uuid.nullable(),
 				months: z.array(z.number().int().min(1).max(12)).max(12),
 				maxRateM3s: nonNeg,
 				dailyCapM3: nonNeg.nullable(),

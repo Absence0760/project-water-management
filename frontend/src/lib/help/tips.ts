@@ -984,7 +984,14 @@ export const TIPS: HelpTipText[] = [
 		term: 'Transfer',
 		short: 'Water moved from one hydrological unit’s dam to another hydrological unit (pipeline or canal), in chosen months and up to a maximum rate.',
 		category: 'transfers',
-		fields: ['transfer.fromNodeId', 'transfer.toNodeId', 'transfer.enabled', 'run.transfer']
+		fields: ['transfer.fromNodeId', 'transfer.enabled', 'run.transfer']
+	},
+	{
+		id: 'transfer-outside',
+		term: 'Transfer out of the catchment',
+		short: 'Pumped out of the source dam while it is above its minimum storage, then gone. For a draw on a schedule, use a piped-out demand object.',
+		category: 'transfers',
+		fields: ['transfer.toNodeId']
 	},
 	{
 		id: 'transfer-months',

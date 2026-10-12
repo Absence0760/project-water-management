@@ -2525,6 +2525,17 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 
 ## UI
 
+- [ ] **A one-unit catchment can't add a transfer out of the catchment**
+      (issue #523 B5, engine 1.86.0). The Transfers page offers **+ Add
+      transfer** only with two hydrological units (`TransfersTab.svelte`
+      `canAdd`), from when every rule ran unit to unit; a rule out of the
+      catchment needs one unit with a dam. The engine, API and scenario ops
+      already take one. Fix: offer **+ Add transfer** with one unit, the new
+      rule's **To** starting at *Outside the catchment*
+      (`editor.addTransfer`), and reword the empty state ("Transfers need at
+      least two hydrological units", `transfers-page.spec.ts` › empty
+      states). Trigger: a one-unit project that pumps out of the catchment,
+      or the next Transfers page change.
 - [x] **"Unit" wording, the smaller choices** (from #54; operator, #93).
       Should engine run warnings and API errors say "unit" in the
       workspace, should the xlsx summary sheets say "Unit summary", and

@@ -2873,6 +2873,40 @@ month the rule runs in (moving nothing, as before), while a monthly 0 is off.
 The self-check (`checkTransferLimits`) holds every rule to its month's limit. Anything the hydrologist has written that doesn't fit this
 shape has to be raised with them (see §3).
 
+**A transfer out of the catchment (engine ≥ 1.86.0, issue #523 B5, #90
+Q22).** A dam rule's destination may be **outside the catchment**:
+`toNodeId` null (migration 224: `transfer.to_node_id` NULL, a dam rule
+only). It runs as any dam rule: in its months, up to its month's limit, by
+its priority, and only above its reserve, `cap[src] × MAX(minPct,
+damMinPct[src])`, so it moves water only while the source dam is above its
+minimum storage. No unit receives it, so it has no room to fill: in the
+rounds above it is a receiver whose room is endless, and only its source's
+free water and its own limit hold it back. Within one priority it shares
+its source's bands with the source's other rules pro rata to what each
+asks, as any rule does. Its volume leaves the source's dam (the source's
+`transfer` J counts it out, as for any rule) and the model: the water
+balance (`summary.waterBalance`) and the water account
+(`summary.supplyAssurance.waterAccount`) count it as an out term,
+`externalTransferM3`, and their `transfersM3` is the transfers between
+units only (0 up to float noise). Each rule's daily volume is its
+`transfer_rule@<id>` series on the source ("Transferred out of the
+catchment by one transfer rule"). The EWR charge (§2.7b) never counts it
+as internal to a site's catchment, so it is an export charged to its
+source, like a rule into a unit outside the site's catchment; the licence
+impact board (§2.11b) counts it as use, as a demand object piped out is.
+Off unless set: every stored rule names a unit, so no existing result
+changes. Only a dam rule can leave: a river off-take delivers to a unit
+(§2.6a), and the save refuses one with no destination
+(`modelRuleIssues`). Which to use: a **transfer** out of the catchment for
+pumping out while a dam is above a level (a scheme taking a dam's surplus);
+a **demand object** with destination `external` (§2.7f) for a draw on a
+schedule, such as a town's, which the unit supplies like its own demand.
+Worked example (`run.externalTransfer.test.ts`): a full 1 000 m³ dam
+keeping 50 %, one rule out at 100 m³/day: 100 a day for five days, then
+nothing, the dam at 500 m³; with a second rule of the same priority into
+another unit, both keeping 80 % and asking 100 and 300, the 200 m³ free is
+shared 50 : 150.
+
 ### 2.6a River off-takes (engine ≥ 1.14.0, issue #54)
 
 **Why.** A §2.6 transfer draws on the source's *dam* (yesterday's storage)
@@ -9133,7 +9167,7 @@ the run, volumes in m³, summed over every node per day in node-id order.
 
 - **In:** natural flow, rain on the dams (§2.7a), groundwater pumped (§2.7d;
   to the crops and users, and from engine 0.36.0 into the dams, WP-3.9),
-  net transfers (0 up to float noise).
+  net transfers between units (0 up to float noise).
 - **Out:** runoff removed by land cover (§2.5a); natural flow not allocated to
   any farm (natural − Σ farm runoff − land cover, non-zero only when the flow
   shares don't sum to 1); **consumptive irrigation** G − T = G(1 − β(1 − e))
@@ -9141,8 +9175,10 @@ the run, volumes in m³, summed over every node per day in node-id order.
   users' take − return; dam evaporation; dam seepage **lost from the
   catchment** (engine ≥ 0.35.0, the share §2.7a's seepage destination sends
   out, `damSeepageLostM3`); stream depletion; bed losses in the reaches
-  (engine ≥ 1.75.0, §2.6b, `reachLossM3`, only on a run with them); outflow
-  at the outlet.
+  (engine ≥ 1.75.0, §2.6b, `reachLossM3`, only on a run with them); what
+  transfer rules send out of the catchment (engine ≥ 1.86.0, §2.6,
+  `externalTransferM3`, only on a run with such a rule); outflow at the
+  outlet.
 - **Δ storage:** Σ farm dam storage at the end − at the start.
 - **Residual** = in − out − Δ storage: float noise. `scaleM3` is Σ of the
   terms' magnitudes; the invariant (`checkWaterAccount`) is |residual| ≤
@@ -9989,7 +10025,7 @@ the **application** run. Each run is `Pick<ModelOutput, 'startDate' | 'series' |
   | Step | What it is |
   | --- | --- |
   | natural | the background run's `naturalFlowM3` |
-  | existing use | the background run's consumptive use: `consumptiveIrrigationM3 + otherUseM3` (irrigation supplied less its return flow, plus other users' take less what they return) |
+  | existing use | the background run's consumptive use: `consumptiveIrrigationM3 + otherUseM3 + externalTransferM3` (irrigation supplied less its return flow, plus other users' take less what they return, plus what transfer rules sent out of the catchment, engine ≥ 1.86.0, as a demand object piped out counts in the irrigation) |
   | proposed | the application's consumptive use − the background's (negative when it uses less) |
   | other | natural − existing − proposed − left, broken down in `otherParts` |
   | left | the application run's `outflowM3` (memo: the background's, `backgroundLeftM3`) |

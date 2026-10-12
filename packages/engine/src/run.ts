@@ -45,7 +45,7 @@ import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIE
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
 import { flowShares, overAllocationError } from './network/shares';
-import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
+import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
 import { INTAKE_SERIES, intakeTakes } from './allocations/intake';
@@ -591,7 +591,8 @@ function runNetwork(
 		// losses are charged to its destination, for which the water was taken.
 		// A crop supply table's remote share (engine ≥ 1.73.0) moves water from the supplying dam to the receiving unit, as a transfer does.
 		transfers: [
-			...plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
+			// A rule out of the catchment (engine ≥ 1.86.0) is never inside a site's catchment: an export charged to its source.
+			...plan.transfers.flatMap((tr, k) => (tr.to === EXTERNAL_TO ? [] : [{ from: tr.from, to: tr.to, volume: sim.transfers[k]! }])),
 			...(plan.offtakes ?? []).map((o, k) => ({ from: o.from, to: o.to, volume: sim.offtakes![k]! })),
 			...plan.nodes.flatMap((n, i) => (n.remote ? [{ from: n.remote.from, to: i, volume: sim.nodes[i]!.remoteIn! }] : []))
 		],
@@ -612,7 +613,7 @@ function runNetwork(
 	// attribution counts a rule only at the sites with both its ends upstream,
 	// which the farms' net `transfer` series can't tell apart.
 	plan.transfers.forEach((tr, k) => {
-		if (tr.seriesKey) push(nodes[tr.from]!.id, tr.seriesKey, TRANSFER_RULE_SERIES.label(nodes[tr.to]!.name), TRANSFER_RULE_SERIES.unit, sim.transfers[k]!);
+		if (tr.seriesKey) push(nodes[tr.from]!.id, tr.seriesKey, tr.to === EXTERNAL_TO ? TRANSFER_RULE_SERIES.externalLabel : TRANSFER_RULE_SERIES.label(nodes[tr.to]!.name), TRANSFER_RULE_SERIES.unit, sim.transfers[k]!);
 	});
 	// A river off-take's (engine ≥ 1.14.0): what it took from the river, before losses, under the same key.
 	(plan.offtakes ?? []).forEach((o, k) => {
@@ -1059,6 +1060,14 @@ function runNetwork(
 
 	// Assurance of supply, stress classes and the water account (engine ≥ 0.32.0, WP-3.4): new outputs only.
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	// What each unit's dam sent out of the catchment by transfer rules (engine ≥ 1.86.0), rules in plan (id) order.
+	const externalOut: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	plan.transfers.forEach((tr, k) => {
+		if (tr.to !== EXTERNAL_TO) return;
+		const a = (externalOut[tr.from] ??= new Float64Array(days));
+		const v = sim.transfers[k]!;
+		for (let t = 0; t < days; t++) a[t] = a[t]! + v[t]!;
+	});
 	const assurance = assuranceOf?.({
 		startDate,
 		days,
@@ -1097,6 +1106,7 @@ function runNetwork(
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
 				...(r.offtakeReturn ? { offtakeReturn: r.offtakeReturn } : {}),
 				...(r.reachLoss ? { reachLoss: r.reachLoss } : {}),
+				...(externalOut[i] ? { externalOut: externalOut[i] } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),
@@ -1532,12 +1542,18 @@ export function buildNetworkPlan(
 		// River off-takes (engine ≥ 1.14.0) are planned below.
 		if (!tr.enabled || isRiverOfftake(tr)) continue;
 		const from = indexById.get(tr.fromNodeId);
-		const to = indexById.get(tr.toNodeId);
+		// Outside the catchment (engine ≥ 1.86.0, issue #523 B5): toNodeId null, planned with `to` = EXTERNAL_TO.
+		const to = tr.toNodeId === null ? EXTERNAL_TO : indexById.get(tr.toNodeId);
 		if (from === undefined || to === undefined) {
 			warnings.push(`transfer ${tr.id} references a hydrological unit that does not exist; skipped`);
 			continue;
 		}
-		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
+		if (to === EXTERNAL_TO) {
+			if (nodes[from]!.kind !== 'farm') {
+				warnings.push(`transfer ${nodes[from]!.name} → outside the catchment: transfers run from a unit's dam; skipped`);
+				continue;
+			}
+		} else if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
 			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between units; skipped`);
 			continue;
 		}
@@ -1548,7 +1564,7 @@ export function buildNetworkPlan(
 			continue;
 		}
 		if (tr.monthlyRateM3s != null && !validMonthlyRates(tr.monthlyRateM3s))
-			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: its monthly rates aren't twelve numbers ≥ 0 (m³/s, Oct–Sep); its max rate in its months is used`);
+			warnings.push(`transfer ${nodes[from]!.name} → ${to === EXTERNAL_TO ? 'outside the catchment' : nodes[to]!.name}: its monthly rates aren't twelve numbers ≥ 0 (m³/s, Oct–Sep); its max rate in its months is used`);
 		// b023 "Transfer capacity max" = max rate m³/s × 86400 (the workbook rounds it), or the month's own
 		// rate (engine ≥ 1.14.0, ./network/transferRates.ts); an explicit daily cap can only lower it.
 		transfers.push({

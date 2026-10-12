@@ -378,7 +378,7 @@
 					}}
 				>
 					<option value="" disabled>Pick a transfer</option>
-					{#each input.model.transfers as t, i (t.id)}<option value={t.id}>{i + 1}: {nodeName(t.fromNodeId)} → {nodeName(t.toNodeId)}</option>{/each}
+					{#each input.model.transfers as t, i (t.id)}<option value={t.id}>{i + 1}: {nodeName(t.fromNodeId)} → {t.toNodeId === null ? 'Outside the catchment' : nodeName(t.toNodeId)}</option>{/each}
 				</select>
 			</div>
 		{:else if d.kind === 'borehole.add'}

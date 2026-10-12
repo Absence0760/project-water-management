@@ -277,7 +277,8 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		const flaggedIds = new Set(flagged.map((n) => n.id));
 		for (const t of modelTransfers) {
 			const src = byId.get(t.fromNodeId)!;
-			const dst = byId.get(t.toNodeId)!;
+			// The importer only ever names a unit (b023 has no transfer out of the catchment).
+			const dst = byId.get(t.toNodeId!)!;
 			if (!flaggedIds.has(src.id) || dst.kind !== 'farm' || dst.damCapacityM3 > 0 || demanding.has(dst.id)) continue;
 			Object.assign(t, IMPORTED_OFFTAKE);
 			report.note('transfer-river-offtake', offtakeNote(src.name, dst.name, t.maxRateM3s, t.enabled), { sheet: 'Transfers', element: src.name });
