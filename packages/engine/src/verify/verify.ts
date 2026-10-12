@@ -7,7 +7,7 @@
 import { upgradeLegacyInput } from '../demand';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { capacityScaleOf } from '../network/development';
-import { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolEvaporationKey } from '../network/riverSource';
+import { CROPS_TAKE_KEY, RIVER_TAKE_SERIES } from '../network/riverSource';
 import { REACH_LOSS_SERIES } from '../network/reachLoss';
 import {
 	type ModelInput,
@@ -174,22 +174,17 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 	}
 	// A dam whose capacity changes (engine ≥ 1.30.0) starts at its share of the first day's capacity.
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3 * (capacityScaleOf(n, toEpochDay(out.startDate), out.days, [])?.[0] ?? 1), 0);
-	// The river abstractions' pools (engine ≥ 1.65.0, docs/model.md §2.7j): their storage joins the dams', their
-	// evaporation is a loss beside the dams'. A pool starts full.
+	// The river abstractions' pools (engine ≥ 1.65.0, docs/model.md §2.7j): their storage joins the dams'. A pool
+	// starts full and is storage only (engine ≥ 1.86.0, issue #523 B2): no evaporation.
 	const poolKeys = out.series.filter((s) => s.nodeId && s.key.startsWith(RIVER_TAKE_SERIES.pool.prefix));
 	const hasPools = poolKeys.length > 0;
 	const poolStorage = new Float64Array(out.days);
-	const poolEvap = new Float64Array(out.days);
 	let poolStart = 0;
 	for (const s of poolKeys) {
 		const key = s.key.slice(RIVER_TAKE_SERIES.pool.prefix.length);
 		const n = farms.find((f) => f.id === s.nodeId);
 		poolStart += (n && key === CROPS_TAKE_KEY ? n.cropRiverPoolM3 : (input.model.demandObjects ?? []).find((o) => o.id === key)?.riverPoolM3) ?? 0;
-		const ev = series.get(`${s.nodeId}|${riverPoolEvaporationKey(key)}`) ?? [];
-		for (let t = 0; t < out.days; t++) {
-			poolStorage[t]! += s.values[t]!;
-			poolEvap[t]! += ev[t] ?? 0;
-		}
+		for (let t = 0; t < out.days; t++) poolStorage[t]! += s.values[t]!;
 	}
 	const farmStorage = (t: number) => (t < 0 ? initialStorage + poolStart : hasPools ? fStorage![t]! + poolStorage[t]! : fStorage![t]!);
 
@@ -197,7 +192,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { set: 0, natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, poolEvap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0, conveyance: 0, reach: 0 };
+		const r = { set: 0, natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0, conveyance: 0, reach: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -213,7 +208,6 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			r.spill += fSpill![t]!;
 			r.rainOnDams += fRainOnDam![t]!;
 			r.evap += fEvap![t]!;
-			if (hasPools) r.poolEvap += poolEvap[t]!;
 			r.otherUse += userUse[t]!;
 			r.gw += gwIn[t]!;
 			r.dep += depOut[t]!;
@@ -255,7 +249,6 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			consumptiveUseM3: consumptive,
 			transfersM3: r.transfer,
 			...(hasDamLosses ? { rainOnDamsM3: r.rainOnDams, damEvaporationM3: r.evap } : {}),
-			...(hasPools ? { poolEvaporationM3: r.poolEvap } : {}),
 			...(users.length ? { otherUseM3: r.otherUse } : {}),
 			...(gwNodes.length ? { groundwaterM3: r.gw, streamDepletionM3: r.dep } : {}),
 			...(fSet ? { storageSetM3: r.set } : {}),
@@ -267,7 +260,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,
-			residualM3: (fSet ? opening + r.runoff + r.transfer + r.rainOnDams + r.gw + r.set : opening + r.runoff + r.transfer + r.rainOnDams + r.gw) - consumptive - r.evap - r.poolEvap - r.otherUse - r.dep - r.seepLost - r.conveyance - r.reach - r.outflow - closing
+			residualM3: (fSet ? opening + r.runoff + r.transfer + r.rainOnDams + r.gw + r.set : opening + r.runoff + r.transfer + r.rainOnDams + r.gw) - consumptive - r.evap - r.otherUse - r.dep - r.seepLost - r.conveyance - r.reach - r.outflow - closing
 		};
 	};
 

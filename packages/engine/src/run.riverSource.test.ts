@@ -3,12 +3,12 @@
 // an optional pool. Hand-worked cases on a fixed natural flow, the default
 // (no water source) running to the bit as before, and a resumed run.
 import { describe, expect, it } from 'vitest';
-import { estimatedDamAreaM2, type DemandObject, type ModelInput, type NetworkNode } from './project';
+import { type DemandObject, type ModelInput, type NetworkNode } from './project';
 import { runModelWith, runModelWithoutChecks, withVerification } from './run';
 import { randomInput } from './testing/fuzz';
 import { sameOutput } from './testing/invariants';
 import { checkResume } from './testing/warmstartInvariants';
-import { poolLosses, riverSourcesOf } from './network/riverSource';
+import { riverSourcesOf } from './network/riverSource';
 import { diffInputs } from './compare';
 import { modelRuleIssues } from './modelRules';
 import { applyScenario } from './scenario/overrides';
@@ -196,7 +196,7 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 	});
 
 	it('draws its pool down once the flow it may take is used, and refills it from the flow left', () => {
-		// A pool of 1000 m³ (no A-pan, so no evaporation), a demand of 500 a day, no pump limit.
+		// A pool of 1000 m³ (storage only, engine 1.86.0), a demand of 500 a day, no pump limit.
 		const town = obj('town', 500, { waterSource: 'river', riverPumpM3Day: null, riverPoolM3: 1000 });
 		const o = run(input({}, [town], 0, 5), [200, 0, 0, 2000, 1200]);
 		passed(o);
@@ -204,7 +204,7 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		// day 3: 500 from the flow, then 1000 refills the pool and 500 flows on; day 4: 500, the pool full, 700 on.
 		close(col(o, 'A', 'river_take@town'), [500, 500, 200, 500, 500]);
 		close(col(o, 'A', 'river_pool@town'), [700, 200, 0, 1000, 1000]);
-		close(col(o, 'A', 'river_pool_evaporation@town'), [0, 0, 0, 0, 0]);
+		expect(col(o, 'A', 'river_pool_evaporation@town')).toBeUndefined();
 		close(col(o, 'A', 'outflow'), [0, 0, 0, 500, 700]);
 		const f = o.summary.farms.find((x) => x.nodeId === 'A')!;
 		expect(f.riverTakes![0]!.poolM3).toBe(1000);
@@ -213,24 +213,28 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		expect(Math.abs(o.summary.waterBalance!.total.residualM3)).toBeLessThan(1e-6);
 		expect(o.summary.waterBalance!.total.openingStorageM3).toBeCloseTo(1000, 9);
 		expect(o.summary.waterBalance!.total.closingStorageM3).toBeCloseTo(1000, 9);
-		expect(o.summary.waterBalance!.total.poolEvaporationM3).toBe(0);
+		expect(o.summary.waterBalance!.total).not.toHaveProperty('poolEvaporationM3');
 	});
 
-	it('a pool evaporates from the surface its start-of-day storage covers, estimated from its capacity', () => {
+	it('a pool is storage only: no rain, no evaporation, no surface (engine 1.86.0, issue #523 B2)', () => {
 		const pool = riverSourcesOf(node('A', 'farm', 'G', { cropWaterSource: 'river', cropRiverPoolM3: 50_000 }), undefined, []).river!.takes[0]!.pool!;
-		expect(pool).toEqual({ capM3: 50_000, areaFullM2: estimatedDamAreaM2(50_000) });
-		const [A, E] = poolLosses(pool, 25_000, 6);
-		expect(A).toBeCloseTo(pool.areaFullM2 * Math.pow(0.5, 0.7), 9);
-		expect(E).toBeCloseTo((6 * A) / 1000, 9);
-		// Never more than it holds, nothing from an empty one.
-		expect(poolLosses(pool, 1e-6, 1e6)[1]).toBe(1e-6);
-		expect(poolLosses(pool, 0, 6)).toEqual([0, 0]);
-		// In a run: crops on the river (the January A-pan, so the pool evaporates), checked by the self-checks.
-		const o = run(input({ cropWaterSource: 'river', cropRiverPumpM3Day: 1000, cropRiverPoolM3: 50_000 }, [], 2000, 4), [0, 0, 3000, 0]);
+		expect(pool).toEqual({ capM3: 50_000 });
+		// Crops on the river with a 2000 mm/day A-pan and 30 mm of rain every day: engines 1.65.0–1.85.x took
+		// evaporation off the pool; now it loses only what the pump draws (1000 a day) and refills from the flow.
+		const i = input({ cropWaterSource: 'river', cropRiverPumpM3Day: 1000, cropRiverPoolM3: 50_000 }, [], 2000, 4);
+		i.series.rain_catchment_mm!.values = [30, 30, 30, 30];
+		const o = run(i, [0, 0, 3000, 0]);
 		passed(o);
-		expect(col(o, 'A', 'river_pool_evaporation@crops')![0]!).toBeGreaterThan(0);
-		expect(o.summary.waterBalance!.total.poolEvaporationM3!).toBeGreaterThan(0);
-		expect(Math.abs(o.summary.waterBalance!.total.residualM3)).toBeLessThan(1e-6);
+		close(col(o, 'A', 'river_take@crops'), [1000, 1000, 1000, 1000]);
+		close(col(o, 'A', 'river_pool@crops'), [49_000, 48_000, 50_000, 49_000]);
+		expect(o.series.some((x) => x.key.startsWith('river_pool_evaporation@'))).toBe(false);
+		const wb = o.summary.waterBalance!.total;
+		expect(wb).not.toHaveProperty('poolEvaporationM3');
+		expect(Math.abs(wb.residualM3)).toBeLessThan(1e-6);
+		// The supply assurance's water account carries no pool evaporation term either, and still closes.
+		const acc = o.summary.supplyAssurance!.waterAccount.total;
+		expect(acc).not.toHaveProperty('poolEvaporationM3');
+		expect(Math.abs(acc.residualM3)).toBeLessThan(1e-6);
 	});
 
 	it('a run resumed part-way keeps each pool where it was, to the bit', () => {
@@ -299,6 +303,23 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		expect(again.summary.verification!.passed).toBe(false);
 	});
 
+	it('the self-checks catch a pool that loses water it didn’t pump, and a pool evaporation column (engine 1.86.0: storage only)', () => {
+		const i = () => input({}, [obj('town', 500, { waterSource: 'river', riverPumpM3Day: null, riverPoolM3: 1000 })], 0, 3);
+		const o = run(i(), [200, 0, 0]);
+		passed(o);
+		const recheck = (x: typeof o) => withVerification(i(), { ...x, summary: { ...x.summary, verification: undefined } }).summary.verification!.passed;
+		// The old evaporation: 10 m³ more off the pool on day 1 than the abstraction drew.
+		const lossy = structuredClone(o);
+		const pool = lossy.series.find((x) => x.key === 'river_pool@town')!;
+		pool.values[1] = pool.values[1]! - 10;
+		pool.values[2] = Math.max(0, pool.values[2]! - 10);
+		expect(recheck(lossy)).toBe(false);
+		// An engine 1.65.0–1.85.x evaporation column beside it is stray.
+		const legacy = structuredClone(o);
+		legacy.series.push({ ...legacy.series.find((x) => x.key === 'river_pool@town')!, key: 'river_pool_evaporation@town', values: [0, 0, 0] });
+		expect(recheck(legacy)).toBe(false);
+	});
+
 	it('save rules: a known source, sizes ≥ 0, the crops’ source on a unit only; a scenario sets and the run comparison lists them', () => {
 		const ok = input({ cropWaterSource: 'river', cropRiverPumpM3Day: 0, cropRiverPoolM3: null }, [obj('mill', 40, { waterSource: 'river', riverPumpM3Day: 480, riverPoolM3: 3000 })], 0, 2);
 		expect([...modelRuleIssues(ok.model).values()]).toEqual([]);
@@ -321,13 +342,16 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 });
 
 describe('a run with no A-pan on any day warns that open water evaporates nothing (engine 1.67.0, persona-hydrologist round 4)', () => {
-	const WARN = /A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation/;
+	const WARN = /A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation/;
 	const warned = (i: ModelInput) => runModelWith(i, () => ({ naturalFlowM3Day: [1000, 1000] })).summary.warnings.some((w) => WARN.test(w));
 
-	it('on a unit with a dam, or a river abstraction with a pool', () => {
+	it('on a unit with a dam', () => {
 		expect(warned(input(dam, [], 0, 2))).toBe(true);
-		expect(warned(input({}, [obj('town', 100, { waterSource: 'river', riverPumpM3Day: null, riverPoolM3: 500 })], 0, 2))).toBe(true);
-		expect(warned(input({ cropWaterSource: 'river', cropRiverPumpM3Day: null, cropRiverPoolM3: 500 }, [], 0, 2))).toBe(true);
+	});
+
+	it('not for a river abstraction’s pool, which is storage only (engine 1.86.0, issue #523 B2)', () => {
+		expect(warned(input({}, [obj('town', 100, { waterSource: 'river', riverPumpM3Day: null, riverPoolM3: 500 })], 0, 2))).toBe(false);
+		expect(warned(input({ cropWaterSource: 'river', cropRiverPumpM3Day: null, cropRiverPoolM3: 500 }, [], 0, 2))).toBe(false);
 	});
 
 	it('not with an A-pan on some day, nor without a dam or a pool', () => {

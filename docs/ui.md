@@ -3098,8 +3098,9 @@ itself.
   pump calculator, capacity and pool, each label naming the demand (**Number
   of pumps for the crops**, **River pump capacity for the crops** (m³/day,
   blank = no limit, which the run warns about), **Pool at the pump for the
-  crops** (m³, blank = none; its hint says it starts full and its surface
-  is estimated from the capacity)), so they read apart from the unit's own
+  crops** (m³, blank = none; its hint says it starts full and holds up to
+  its capacity with no rain or evaporation, engine ≥ 1.86.0, issue #523
+  B2)), so they read apart from the unit's own
   pump in the same group; each has its history line. The pump and pool are
   kept when the source goes back to the unit's supply, unused. The unit's
   pump, an other water user's and each abstraction's share one
@@ -3623,7 +3624,7 @@ map" card) stays the schematic; this is the geography.
   which asks first ("The empty model gets 3 hydrological units, with 2 areas (each saved
   as its unit’s parcel; Valley dam without what drains into pans) … It is
   saved now as one change in History."). **Data and the first run**: links
-  to rain from the boundary, observed flow, evaporation (the A-pan the dams and pools lose, to Settings' Demand group), the dams' capacities, cultivated
+  to rain from the boundary, observed flow, evaporation (the A-pan the dams lose, to Settings' Demand group), the dams' capacities, cultivated
   area, the Network and **Run the model**. With nodes typed in, the sheet
   says the model isn't started from the map and points to Divide the model.
   With the sheet closed, a piece (or its number) under the pointer shows

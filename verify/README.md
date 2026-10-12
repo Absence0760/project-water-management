@@ -162,7 +162,7 @@ the ranks within one (engine ≥ 1.64.0),
 - **River abstractions** (§2.7j, engine ≥ 1.65.0): the crops or a demand
   object on a river pump of their own beside the dam, the dam side serving
   the rest, the takes by supply level from the flow passing the dam above
-  what must pass, pools drawn after the flow, refilled last and evaporating.
+  what must pass, pools drawn after the flow, refilled last; storage only from engine 1.86.0 (no evaporation).
   Not the pump-limited measure of engine 1.66.0 (`river_pump_limited@`): the
   model doesn't write it, so the comparison notes it as engine-only; the
   engine's own self-checks (`checkWorkings`, `checkReportTotals`) bound it.
