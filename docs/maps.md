@@ -2153,8 +2153,8 @@ units' `mapMm` / `mapSource` only when an editor uses it.
   grid's and is never touched by an apply that leaves its unit out.
 - **Coverage shown below 100 %** (issue #500 item 8). A unit covered over
   90–100 % of its parcel gets a MAP from the part the grid has values on, so
-  the panel shows its coverage beside the proposal ("712 mm, 93 %
-  covered"): the MAP stands for the whole parcel, and a missing strip on a
+  the panel shows its coverage under the proposed MAP ("93.3 % covered",
+  rounded down so a partial unit never reads 100 %): the MAP stands for the whole parcel, and a missing strip on a
   ridge can read it low. A unit covered in full shows no figure.
 - **The MAP's own period.** A grid's MAP is a long-term mean over its own
   years, not 1991–2020; a unit's CHIRPS level (k_unit) carries the
