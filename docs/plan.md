@@ -455,7 +455,7 @@ lives in [infra/README.md](../infra/README.md). The intent:
 ### 6c. CI/CD
 
 - ✅ CI (`.github/workflows/ci.yml`) runs on PRs and on `main`, including the
-  DB tests against a Postgres service container. `CI gate` is a required
+  DB tests against docker-compose.yml's Postgres (loaded from a cached image). `CI gate` is a required
   check on `main`.
 - ✅ Deploy workflows: turn on the release trigger. Add a **migrate** step
   (a one-off Lambda invocation or a CI job with DB access) that runs before the

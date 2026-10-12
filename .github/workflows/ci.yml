@@ -119,20 +119,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        # The image and digest docker-compose.yml runs (pnpm check:pins, serviceImageProblems).
-        image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
-        env:
-          # Throwaway CI-only credentials, same as docker-compose.yml.
-          POSTGRES_USER: water
-          POSTGRES_PASSWORD: water
-          POSTGRES_DB: water
-        ports:
-          - 5434:5432
-        options: >-
-          --health-cmd "pg_isready -U water -d water"
-          --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -149,10 +135,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Create app role and test database
+      # Postgres and MinIO from the tarballs e2e-build caches by
+      # docker-compose.yml's pinned digests, so this job pulls nothing from a
+      # registry: Docker Hub's anonymous limit (issue #492) and ECR Public's
+      # ("toomanyrequests: Data limit exceeded", issue #521) both refused
+      # CI's runners. A job `services:` entry is always pulled, so Postgres
+      # starts from docker-compose.yml instead, on the local-dev port (:5434);
+      # its first boot runs dev/postgres/00-roles.sql (the app role and the
+      # test database). On a cache miss, the same mirror-first pull e2e-build
+      # makes.
+      - name: Restore the service images
+        id: service-images
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/service-images
+          key: service-images-${{ hashFiles('docker-compose.yml', 'scripts/ci/service-image.sh') }}
+
+      - name: Start Postgres and MinIO
         env:
-          PGPASSWORD: water
-        run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
+          CACHED: ${{ steps.service-images.outputs.cache-hit }}
+        run: |
+          for svc in postgres minio; do
+            [ "$CACHED" = "true" ] || bash scripts/ci/service-image.sh save "$svc" ~/service-images/"$svc".tar
+            bash scripts/ci/service-image.sh load "$svc" ~/service-images/"$svc".tar
+          done
+          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.postgres.yml" -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait postgres minio
 
       # The vitest files that drive real Chromium run in this job, the one
       # vitest job with a browser: reports/render.db.test.ts (Chromium +
@@ -199,27 +206,6 @@ jobs:
           fi
           find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t ~/apt-debs/ {} +
 
-      # MinIO comes from Docker Hub only (pgsty/minio), whose anonymous pull
-      # limit refused CI's runners (issue #492): the image e2e-build saves,
-      # by its pinned digest, when the cache has it; else one pull here.
-      - name: Restore the MinIO image
-        id: minio-image
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/service-images
-          key: minio-image-${{ hashFiles('docker-compose.yml') }}
-
-      # The report PDF store for render.db.test.ts, from docker-compose.yml
-      # on the local-dev port (:9002). Mail is in-memory under vitest.
-      - name: Start MinIO
-        env:
-          CACHED: ${{ steps.minio-image.outputs.cache-hit }}
-        run: |
-          # On a miss, the same mirror-first pull e2e-build makes, never compose's own (from Docker Hub).
-          [ "$CACHED" = "true" ] || bash scripts/ci/service-image.sh save minio ~/service-images/minio.tar
-          bash scripts/ci/service-image.sh load minio ~/service-images/minio.tar
-          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio
-
       - name: DB tests
         run: pnpm test:backend:db
 
@@ -250,26 +236,32 @@ jobs:
       - name: Build the e2e site
         run: pnpm -C e2e build:site
 
-      # MinIO for every shard, pulled once per run here instead of once per
-      # shard: Docker Hub's anonymous pull limit refused 14 shards' pulls
-      # (issue #492). Pulled by docker-compose.yml's pinned digest, saved,
-      # cached by that file (so an unchanged pin pulls nothing), and handed
-      # to the shards and the DB job, which load it and never pull.
-      - name: Cache the MinIO image
-        id: minio-image
+      # Every service image the shards and the DB job run (Postgres, Mailpit,
+      # MinIO), pulled once here instead of once per job: Docker Hub's
+      # anonymous pull limit refused 14 shards' pulls (issue #492), and ECR
+      # Public's refused Postgres ("toomanyrequests: Data limit exceeded",
+      # issue #521). Pulled by docker-compose.yml's pinned digests, saved,
+      # cached by that file and the script (so an unchanged pin pulls
+      # nothing), and handed to the shards and the DB job, which load them and
+      # never pull.
+      - name: Cache the service images
+        id: service-images
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/service-images
-          key: minio-image-${{ hashFiles('docker-compose.yml') }}
+          key: service-images-${{ hashFiles('docker-compose.yml', 'scripts/ci/service-image.sh') }}
 
-      - name: Pull the MinIO image
-        if: steps.minio-image.outputs.cache-hit != 'true'
-        run: bash scripts/ci/service-image.sh save minio ~/service-images/minio.tar
+      - name: Pull the service images
+        if: steps.service-images.outputs.cache-hit != 'true'
+        run: |
+          for svc in postgres mailpit minio; do
+            bash scripts/ci/service-image.sh save "$svc" ~/service-images/"$svc".tar
+          done
 
-      - name: Upload the MinIO image
+      - name: Upload the service images
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: minio-image
+          name: service-images
           path: ~/service-images/
           if-no-files-found: error
           retention-days: 1
@@ -293,20 +285,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-    services:
-      postgres:
-        # The image and digest docker-compose.yml runs (pnpm check:pins, serviceImageProblems).
-        image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
-        env:
-          # Throwaway CI-only credentials, same as docker-compose.yml.
-          POSTGRES_USER: water
-          POSTGRES_PASSWORD: water
-          POSTGRES_DB: water
-        ports:
-          - 5434:5432
-        options: >-
-          --health-cmd "pg_isready -U water -d water"
-          --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -376,26 +354,24 @@ jobs:
           name: e2e-site
           path: frontend/build-e2e/
 
-      - name: Create app role
-        env:
-          PGPASSWORD: water
-        run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
-
-      - name: Download the MinIO image
+      - name: Download the service images
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: minio-image
+          name: service-images
           path: ${{ runner.temp }}/service-images/
 
-      # Server-side PDF reports (server-report.spec.ts): the worker stores the
-      # PDF in MinIO and mails through Mailpit, both from docker-compose.yml
-      # on the same ports as local dev. That spec never skips in CI. MinIO is
-      # the image e2e-build pulled (loaded, never pulled here, issue #492);
-      # Mailpit comes from GHCR.
-      - name: Start MinIO and Mailpit
+      # Postgres, and for server-side PDF reports (server-report.spec.ts, which
+      # never skips in CI) MinIO for the PDF and Mailpit for the mail, all from
+      # docker-compose.yml on local dev's ports, from the images e2e-build
+      # pulled: loaded, never pulled here (issues #492, #521). A job
+      # `services:` entry is always pulled, so Postgres isn't one; its first
+      # boot runs dev/postgres/00-roles.sql (the app role).
+      - name: Start Postgres, MinIO and Mailpit
         run: |
-          bash scripts/ci/service-image.sh load minio "$RUNNER_TEMP/service-images/minio.tar"
-          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio mailpit
+          for svc in postgres minio mailpit; do
+            bash scripts/ci/service-image.sh load "$svc" "$RUNNER_TEMP/service-images/$svc.tar"
+          done
+          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.postgres.yml" -f "$RUNNER_TEMP/compose.minio.yml" -f "$RUNNER_TEMP/compose.mailpit.yml" up -d --wait postgres minio mailpit
 
       # Shards are packed by time, not count (e2e/README.md § CI): each one
       # plans the whole suite from `--list` and e2e/shard-timings.json and runs

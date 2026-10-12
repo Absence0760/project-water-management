@@ -6126,7 +6126,11 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       archive (`bin/tiles-dev.sh fonts`) is held to a SHA-256 in
       `bin/source-checksums.sha256` as well as its commit (maps.md §
       Checksums).
-- [ ] **CI's Postgres service image floats.** `ci.yml`'s two `services:
+- [x] **CI's Postgres service image floats.** Resolved (issue #521, 2026-10-11): CI no
+      longer has a Postgres `services:` entry; db-test and the e2e shards start
+      docker-compose.yml's own pinned image from a cached tarball
+      (`scripts/ci/service-image.sh`), so it can't drift from local dev's.
+      Originally: `ci.yml`'s two `services:
       postgres` (db-test, e2e) run `postgres:17-alpine` by tag, while
       docker-compose.yml pins it by digest, and Dependabot's github-actions
       ecosystem doesn't update service images. Durable fix: pin both to
