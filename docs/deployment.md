@@ -2219,6 +2219,23 @@ Every step is an ordinary app action by an owner unless it says "operator".
     `authority.removed`). Locally the same is `pnpm dev:authority:confirm
     <project-id> <email> --reference "<letter>"`. Record the request, how
     it was checked and the outcome in the operator log.
+18. **Each authority reviews the delegates 229 grandfathered** (operator,
+    once, after the deploy that runs 229; issue #523 G5). 229 carried every
+    "acts for the authority" flag an owner had set (on someone still an
+    editor or above) over as a **confirmed** delegate, so no decision in
+    progress stopped, but the host chose those people, not the authority.
+    List them per project, as the schema owner:
+    `SELECT p.name, u.email, e.created_at, e.subject FROM audit_event e JOIN project p ON p.id = e.project_id JOIN app_user u ON u.id = (e.subject->>'userId')::uuid WHERE e.kind = 'authority.grandfathered' ORDER BY p.name;`
+    (each project's History shows the same `authority.grandfathered`
+    events, naming the owner who ticked the flag). Send each project's
+    responsible authority its list in writing and ask it to confirm each
+    person or remove them: a delegate removes anyone in the app
+    (Responsible authority › Acts for the authority), or, at its written
+    request, the operator does as in step 17 (`DELETE FROM
+    authority_delegate …`, logged as `authority.removed`). Remove anyone
+    the authority doesn't recognise; until it answers, the grandfathered
+    delegates keep acting. Record what was sent, the answers and the
+    removals in the operator log.
 
 ## Rollback
 
