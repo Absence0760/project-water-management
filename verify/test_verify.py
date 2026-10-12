@@ -311,27 +311,55 @@ MUTANTS = [
     ("the catchment's GR4J series weight every unit alike", 'acc["rain"][i] += a * pu[i]', 'acc["rain"][i] += pu[i] * area_km2 / len(units)'),
     ("a unit's warm-up cycles the forecast tail", "                i = k % hist if hist > 0 else 0\n                gu.step", "                i = k % n if n > 0 else 0\n                gu.step"),
     ("a unit's gauge record of blanks and no-data codes picks rule 1", "has_g = any(valid(v) for v in own_g.values)", "has_g = bool(own_g)"),
-    ("a unit's own negative gauge value is a reading", "            v = own_g.get(o)\n            return v if valid(v) else None", "            v = own_g.get(o)\n            return v"),
+    ("a unit's own negative gauge value is a reading", 'g = {"startDate": raw["startDate"], "values": [v if valid(v) else None for v in raw["values"]]}', 'g = {"startDate": raw["startDate"], "values": list(raw["values"])}'),
     ("a unit with CHIRPS takes it before the gauge × its MAP ratio", "        elif cond2:\n            rule = 2", "        elif cond2 and not has_c:\n            rule = 2"),
     ("the gauge MAP ratio isn't clamped", "ratio = _clamp(map_mm / gauge_map, diag) if cond2", "ratio = map_mm / gauge_map if cond2"),
-    ("the CHIRPS MAP factor isn't clamped", "    return _clamp(map_mm / mean, diag)", "    return map_mm / mean"),
+    ("the CHIRPS MAP factor isn't clamped", "lev_f = _clamp(map_mm / mean, diag)", "lev_f = map_mm / mean"),
     ("the CHIRPS MAP factor ignores the MAP period", "use = inside if len(inside) >= UNIT_MAP_MIN_YEARS else years", "use = years"),
     ("the CHIRPS MAP factor takes the period's years however few", "use = inside if len(inside) >= UNIT_MAP_MIN_YEARS else years", "use = inside or years"),
-    ("the CHIRPS MAP factor counts incomplete years", "            if not valid(v):\n                ok = False\n                break\n            tot += v", "            if not valid(v):\n                continue\n            tot += v"),
-    ("a CHIRPS mean of 0 mm clamps the MAP factor to 4", "        return None\n    return _clamp(map_mm / mean, diag)", "        return FACTOR_MAX\n    return _clamp(map_mm / mean, diag)"),
+    ("the CHIRPS MAP factor counts incomplete years", "            if not valid(v):\n                ok = False\n                break\n", "            if not valid(v):\n                continue\n"),
     ("a unit's CHIRPS without a MAP runs raw (no §2.4b factors)", "has_bias = any(f is not None for f in fac[1:])", "has_bias = False"),
     ("rule 1 skips the unit's CHIRPS", "chain = [own, lev] +", "chain = [own] +"),
     ("rule 2 never falls to the unit's CHIRPS", "else v * r, lev]", "else v * r]"),
     ("the gauge rain G includes the CHIRPS infill", "            return v if src == 0 else None", "            return v"),
     ("a negative catchment reading lets the unit's CHIRPS fill a gauge-MAP day", "            return v if src == 0 else None", "            return v if src == 0 and v >= 0 else None"),
-    ("the catchment's rain fills a unit's gap × 1, not × its MAP ratio", "v = None if math.isnan(cr) else cr * ratio", "v = None if math.isnan(cr) else cr"),
+    ("the catchment's rain fills a unit's gap × 1, not × its MAP ratio", "                    v = cr * ratio", "                    v = cr"),
     # The reference gauge (§2.4h, engine 1.80.0, issue #500).
     ("the reference factor isn't clamped", "out.append(_clamp(g[m] / c[m], diag))", "out.append(g[m] / c[m])"),
     ("the reference fit takes 89 shared days", "if n[m] >= 90 and c[m] >= 50:", "if n[m] >= 89 and c[m] >= 50:"),
     ("the reference fit takes a month under 50 mm of CHIRPS", "if n[m] >= 90 and c[m] >= 50:", "if n[m] >= 90:"),
     ("a no-data code is a reading in the reference fit", "if valid(cv) and valid(gv):", "if cv is not None and gv is not None:"),
-    ("no MAP ratio on the reference factors (issue #500 item 1a)", "return v * ref[0][cal_month(o)] * ref_r", "return v * ref[0][cal_month(o)]"),
     ("a reference unit without land still sets the factors (1)", '        diag["unit_ref_not_land"] += 1\n        return None', '        return [None] + [1.0] * 12, {}'),
+    # Issue #500's decisions (operator, 2026-10-09).
+    ("no k_unit on the reference factors (item 1a)", "return lambda v, o, k=k: v * f[cal_month(o)] * k", "return lambda v, o, k=k: v * f[cal_month(o)]"),
+    ("k_unit from the raw CHIRPS mean, not CHIRPS × f (item 1a)", "mean = unit_chirps_mean(own_c, period, lambda o: f[cal_month(o)], diag)", "mean = unit_chirps_mean(own_c, period, None, diag)"),
+    ("k_unit isn't clamped (item 2)", "k = _clamp(map_mm / mean, diag)", "k = map_mm / mean"),
+    ("the CHIRPS mean takes the MAP period from 9 complete years (item 4: 10)", "UNIT_MAP_MIN_YEARS = 10", "UNIT_MAP_MIN_YEARS = 9"),
+    ("the CHIRPS mean needs 11 complete years in the MAP period (item 4: 10)", "UNIT_MAP_MIN_YEARS = 10", "UNIT_MAP_MIN_YEARS = 11"),
+    (
+        "CHIRPS averaging 0 mm is levelled by the old fallback, not skipped (item 7a, no reference)",
+        '    mean = unit_chirps_mean(own_c, period, None, diag)\n    if mean is not None and not mean > 0:\n        diag["unit_chirps_unusable"] += 1\n        return None\n',
+        "    mean = unit_chirps_mean(own_c, period, None, diag)\n    if mean is not None and not mean > 0:\n        mean = None\n",
+    ),
+    (
+        "CHIRPS averaging 0 mm runs on the reference factors alone (item 7a, with a reference)",
+        '        if mean is not None and not mean > 0:\n            diag["unit_chirps_unusable"] += 1\n            return None\n',
+        "        if mean is not None and not mean > 0:\n            mean = None\n",
+    ),
+    (
+        "only a unit with a MAP can have unusable CHIRPS (item 7a)",
+        "    mean = unit_chirps_mean(own_c, period, None, diag)\n    if mean is not None and not mean > 0:",
+        "    mean = unit_chirps_mean(own_c, period, None, diag)\n    if mean is not None and not mean > 0 and map_mm is not None:",
+    ),
+    ("a CHIRPS-GEFS forecast keeps the MAP ratio (item 5)", 'gefs = forecast_source == "chirps_gefs"', "gefs = False"),
+    ("an uploaded forecast is levelled like CHIRPS too (item 5)", 'gefs = forecast_source == "chirps_gefs"', "gefs = forecast_source is not None"),
+    (
+        "a unit's own gauge is read as recorded, without the catchment's checks (item 6)",
+        'own = unit_gauge_checked(settings, series, f"rain_catchment_mm@{uid}", diag) if has_g else (lambda o: None)',
+        "own = (lambda o, s_=own_g: v if valid(v := s_.get(o)) else None) if has_g else (lambda o: None)",
+    ),
+    ("a unit gauge's accumulations aren't spread (item 6)", 'prep = prepare_rain(settings, {"rain_catchment_mm": g,', 'prep = prepare_rain({**settings, "zeroRainRuns": {**settings["zeroRainRuns"], "accumulationMode": "asRecorded"}}, {"rain_catchment_mm": g,'),
+    ("the reference fit reads the gauge as stored (item 1c)", "gv = gauge(o)", "gv = stored.get(o)"),
 ]
 
 
@@ -382,6 +410,9 @@ class CrossCheck(unittest.TestCase):
             "unit_rule_gauge", "unit_rule_gauge_map", "unit_rule_chirps", "unit_rule_catchment", "unit_clamped",
             "unit_map_all_years", "unit_chirps_bias", "unit_link_days", "unit_catchment_days",
             "unit_chirps_reference", "unit_ref_months_fitted", "unit_ref_not_land",
+            # Issue #500's decisions.
+            "unit_k_from_map", "unit_chirps_unusable", "unit_forecast_levelled", "unit_gauge_set_aside",
+            "unit_gauge_windows", "unit_ref_days_checked_out",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 
