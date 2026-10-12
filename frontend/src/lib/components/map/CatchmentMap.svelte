@@ -709,6 +709,17 @@
 		frame(boundsOf(g), g.type === 'Point' ? 15 : 14);
 	}
 
+	/** Frame a box (west, south, east, north), closest at `maxZoom`: a search match (MapSearch.svelte), a point when west = east and south = north. */
+	export function frameBox(b: readonly [number, number, number, number], maxZoom = 13) {
+		frame(
+			[
+				[b[0], b[1]],
+				[b[2], b[3]]
+			],
+			maxZoom
+		);
+	}
+
 	/** Give the map the keyboard focus (entering drawing mode, so Enter adds a corner at once). */
 	export function focusMap() {
 		map?.getCanvas().focus();

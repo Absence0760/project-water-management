@@ -1776,6 +1776,26 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   proposal), `loaded_at`. Global: loaded by the operator as the schema owner
   (`pnpm import:gauge-stations`), SELECT for anyone signed in, read-only to
   `water_app` (the catalogue guard's `READ_ONLY`).
+- **`gazetteer_reference`** (`225_gazetteer.sql`, issue #523 C5): the
+  named places the Map's search finds after the map's own layers
+  ([maps.md § Search](./maps.md#search)). Keyed `(dataset, place_id)`
+  (GeoNames' geonameid); `name` (1–200, one line), `search_name` (the name
+  folded by `geo/gazetteer.ts` `searchKey`: lower case, accents and
+  punctuation dropped; a trigram GIN index, `pg_trgm`, on `' ' ||
+  search_name` serves the search's word-start test, one `LIKE '% ' || word
+  || '%'` per word, so a search never reads the whole table; 225 creates the
+  `pg_trgm` extension, trusted like 001's `citext`),
+  `feature` (GeoNames' class and code, `P.PPL`, `S.FRM`), `admin1` (the
+  province code, `''` when not given), `lon`, `lat`, `dataset` (`synthetic`
+  for the committed fixture), `source` (1–500, the credit shown with every
+  match), `loaded_at`. Global: loaded by the operator as the schema owner
+  (`pnpm import:gazetteer`, or a production load of kind `gazetteer`),
+  read-only to `water_app` (the catalogue guard's `READ_ONLY`). Its read
+  policy is `USING (true)`, like `language`'s, not "a user is set": a
+  policy's condition runs before a non-leakproof one of the query, and `LIKE`
+  isn't leakproof, so that policy kept the search off its index (a read of
+  every row). The data is public; who may search is the route's check. Migration 225 also adds `gazetteer` to
+  `reference_load`'s kinds.
 - **RLS**: viewers read `geo_source` and `map_feature`, editors write. A
   farmer or contributor reads the boundary, gauges and rivers and the
   features tied to their own linked nodes (`app_farm_nodes`), never another
@@ -3718,10 +3738,11 @@ the restored one.
 
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
-of a map dataset read (`land-cover`, `evaporation`, `rivers`) and the
+of a map dataset read (`land-cover`, `evaporation`, `rivers`, and since
+225 `gazetteer`) and the
 SHA-256 it was checked against. Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
-`replaceEvaporationDataset`, `replaceRivers`, through
+`replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`, through
 `geo/referenceOrigin.ts`), and deleted by any other replace of that
 dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like

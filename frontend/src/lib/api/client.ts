@@ -169,6 +169,7 @@ import type {
 	QuaternaryLayer,
 	RiverLayer,
 	GaugeStationLookup,
+	MapSearchAnswer,
 	DamProposals,
 	DelineationProposal,
 	DelineationRequest,
@@ -1176,7 +1177,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
 				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
-			}
+			},
+			/** The Map's search (issue #523 C5): gauges, registered dams and quaternaries by name or code, then the gazetteer's places; our own tables only. */
+			search: (id: string, q: string) => request<MapSearchAnswer>('GET', `${p(id)}/map/search?${new URLSearchParams({ q })}`)
 		},
 		/** A catchment delineated from a click on the Map (issue #326 B-delineate, docs/api.md § Delineation): proposed, then accepted or rejected. */
 		delineation: {

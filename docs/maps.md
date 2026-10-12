@@ -1441,6 +1441,91 @@ these lines draw is one a click can go on, both at 1 km²).
   that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
   309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
 
+## Search
+
+A search box heads the Map card, above the map, once the map is drawn
+(issue #523 C5, from the hydrologist's answer to #90 Q23, which reverses
+#326 D-C3; `MapSearch.svelte`, `GET /projects/:id/map/search?q=`): for
+finding the area before drawing, delineating or **Start the model from the
+map**. **Find** (or Enter) asks our own backend, never a third-party
+geocoder, so what is typed leaves the app for no one.
+
+- **What it searches, in this order** (`backend/src/geo/gazetteer.ts`
+  `searchMap`): the map's own layers first, then the gazetteer.
+  1. gauging stations, by code or name (`gauge_station_reference`,
+     [§ Gauging stations](#gauging-stations)), at most 5;
+  2. the register of dams, by register number or name
+     (`dam_register_reference`, [§ The register of dams](#the-register-of-dams)), at most 5;
+  3. quaternary catchments, by code (`quaternary_reference`), at most 5;
+  4. places from the gazetteer: towns, farms, rivers, pans, peaks and areas
+     (`gazetteer_reference`, 225, [§ Gazetteer](#gazetteer)), at most 10.
+  The project's own features aren't searched: the feature list beside the
+  map already holds them.
+- **The match rule.** Every word typed starts some word of the name, in any
+  order (case, accents and punctuation ignored: "morester" finds Môrester,
+  "sandlaagte oos" Sandlaagte-Oos, "klein vaal" Klein Vaalbank Dam; "aalbank"
+  finds nothing). A code matches from its start, spaces ignored ("z1h 00"
+  finds Z1H001…, "A21" the quaternaries A21A…). Within each group the whole
+  name comes first, then names that start with what was typed, then the rest
+  by name; among places, towns before farms before rivers and water. A group
+  with more matches than it lists says so ("type more to narrow it").
+- **Moving the view.** One match moves the map to it at once; several are
+  listed, each a button with what and where ("Gauging station Z1H002 ·
+  Wilgerivier", "Farm · Western Cape"), and picking one moves the map and
+  closes the list (Escape closes it too). A quaternary is framed whole; a
+  point is centred, at zoom 14 for a gauge or dam and 13 for a place. The
+  map's centre is then the match, so a Delineate or a placed point from the
+  keyboard (Enter at the crosshair) lands on it. Nothing is drawn or saved:
+  the view moves.
+- **Credits.** Whenever the answer holds places, listed or a single one
+  picked at once, their credit shows under the box ("Place names: GeoNames
+  (geonames.org), CC BY 4.0", linking to the Data sources page's
+  `#geonames`), and stays after a pick until the next search; the invented fixtures' matches are marked "(sample)".
+- **Who can search.** A viewer's read, like the station proposals (the tables
+  are global, the route a project's): a farmer gets 403, a non-member 404.
+  A query is 2 to 100 characters with a letter or digit; at most six words
+  are compared. Without WebGL there is no map to move, so there is no box.
+
+### Gazetteer
+
+The search's places come from `gazetteer_reference` (225), which the
+**operator** loads as the schema owner; the app never writes it.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/gazetteer.synthetic.txt`
+  holds eleven invented places in GeoNames' dump format (ids 9000001…,
+  every one made up): four in the synthetic DEM's valley (**Kwartsvallei** at
+  its outlet, where the e2e find-then-start delineates from), five round
+  region Z's stations and dams, and a school and a railway the loader leaves
+  out. `pnpm import:gazetteer` with no argument loads it (`pnpm setup` does)
+  as dataset `synthetic`, each place's source "SYNTHETIC test data…".
+- **Real data: GeoNames' South Africa dump** (CC BY 4.0, § Sources):
+  `ZA.zip` from <https://download.geonames.org/export/dump/>, unzipped, loads
+  with `pnpm import:gazetteer ZA.txt --dataset GeoNames-ZA-2026-10` (the
+  source defaults to "GeoNames (geonames.org), CC BY 4.0"; `--source`
+  overrides it). Never commit the file.
+- **What a load keeps** (`backend/src/geo/loadGazetteer.ts`): GeoNames'
+  feature classes A (administrative areas), H (rivers, dams, pans), L (areas),
+  P (towns, settlements) and T (peaks, hills), and of S (spots, buildings)
+  only farms (`FRM`, `FRMS`, `FRMT`); roads, railways, schools and the rest
+  are left out and counted. A place whose country code isn't `ZA` is left
+  out and counted apart, with a warning (a file holding other countries,
+  `allCountries.txt` or a neighbour's dump, is the wrong file). A line
+  without a place id, a feature class or a WGS84 position is skipped and
+  listed. The name is stored as published and
+  folded for the search (`search_name`: lower case, accents and punctuation
+  dropped), with a trigram index (`pg_trgm`) the word-start match goes
+  through, so a search reads only the rows the index offers, not the whole
+  table (about 150 000 rows for South Africa; `geo/search.db.perf.test.ts`
+  holds a budget on that many). A load
+  replaces every row of its dataset in one transaction.
+- **Production loading** goes through the reference-dataset path
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),
+  kind `gazetteer`: the dump gzipped (`gzip -k ZA.txt`) under
+  `reference/gazetteer/`, at most 64 MB (128 MB unzipped).
+- **Later:** the Surveyor-General's farm-name register (farm names and
+  numbers, as the title deeds give them), once its reuse licence is confirmed
+  in writing (§ Sources).
+
 ## Start from the map
 
 On an empty model, editors get **Start the model from the map** (issue #326
@@ -2322,6 +2407,9 @@ fixtures only.
 | ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
+| GeoNames gazetteer, South Africa (`ZA.txt`: place and farm names, feature class, province, position): the Map's search ([§ Search](#search)) | GeoNames ([geonames.org](https://www.geonames.org), [download.geonames.org/export/dump](https://download.geonames.org/export/dump/)) | **CC BY 4.0**: "This work is licensed under a Creative Commons Attribution 4.0 License" (the dump's `readme.txt`, read 2026-10-12); commercial use allowed with attribution | "GeoNames (geonames.org), CC BY 4.0", stored on every place and shown under every search that lists one, and on the Data sources and credits page (`/data-sources#geonames`) | the operator's download date (`--dataset GeoNames-ZA-<date>`) | daily dumps; refreshed when the operator re-loads | **Allowed.** The operator's own download, never committed; built and tested against the synthetic gazetteer |
+| Surveyor-General's farm names (registered farm names and numbers), considered for the search | Chief Surveyor-General, Department of Agriculture, Land Reform and Rural Development | **Unconfirmed**: no reuse terms for a commercial service found in writing | – | – | – | **Blocked: licence unconfirmed.** Not loaded; a later dataset once its reuse licence is confirmed in writing, recorded here with the date |
+| Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
 
 ### Credits on the map

@@ -51,6 +51,16 @@ describe('which kinds load', () => {
 		expect(parseLoadRequest({ ...rivers, minOrder: 3 })).toEqual({ ...rivers, minOrder: 3 });
 		const evaporation = { kind: 'evaporation', key: 'reference/evaporation/dpet-1991-2020.json.gz', sha256: 'c'.repeat(64), dataset: 'dPET-1991-2020' };
 		expect(parseLoadRequest(evaporation)).toEqual({ ...evaporation, source: null, minOrder: 1 });
+		const gazetteer = { kind: 'gazetteer', key: 'reference/gazetteer/za-2026-10.txt.gz', sha256: 'd'.repeat(64), dataset: 'GeoNames-ZA-2026-10' };
+		expect(parseLoadRequest(gazetteer)).toEqual({ ...gazetteer, source: null, minOrder: 1 });
+	});
+
+	it('the gazetteer takes a GeoNames dump (.txt) only, under its own caps', () => {
+		for (const key of ['reference/gazetteer/ZA.zip', 'reference/gazetteer/places.json']) {
+			const e = thrown(() => parseLoadRequest({ kind: 'gazetteer', key, sha256: 'd'.repeat(64), dataset: 'GeoNames' }));
+			expect(e.publicReason).toMatch(/GeoNames country dump/);
+		}
+		expect(limitsFor('gazetteer').object).toBeLessThan(MAX_OBJECT_BYTES);
 	});
 
 	it('evaporation takes the JSON grid of monthly means only, never the NetCDF years', () => {
@@ -78,7 +88,7 @@ describe('which kinds load', () => {
 
 	it('an unknown kind is refused with the list, not the input', () => {
 		const e = thrown(() => parseLoadRequest({ ...ok, kind: 'sanlc<script>' }));
-		expect(e.publicReason).toMatch(/^kind must be one of land-cover, evaporation, rivers, quaternaries/);
+		expect(e.publicReason).toMatch(/^kind must be one of land-cover, evaporation, rivers, gazetteer, quaternaries/);
 		expect(e.publicReason).not.toContain('sanlc');
 		expect(thrown(() => parseLoadRequest({ ...ok, kind: '__proto__' })).code).toBe('refused');
 		expect(thrown(() => parseLoadRequest({ ...ok, kind: 'toString' })).code).toBe('refused');

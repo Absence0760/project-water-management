@@ -1785,6 +1785,7 @@ Lambda's list against the Sources table):
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
 | `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
+| `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt` (gzip it); the kinds the search doesn't keep (roads, schools, …) are left out at load | download `ZA.zip` from download.geonames.org/export/dump/, unzip, `gzip -k ZA.txt` (maps.md § Gazetteer) |
 | `quaternaries`, `dam-register`, `gauge-stations`, `map-grid` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
 ```bash
@@ -1797,7 +1798,10 @@ Evaporation is the same with `kind=evaporation` and a key under
 `reference/evaporation/`; the file carries dPET's source, version and
 attribution (`-f source=…` overrides the source). For rivers add `-f source="<the attribution line>"` (the one
 `bin/tiles-dev.sh` uses, `RIVERS_SOURCE`) and, to keep only the larger
-streams, `-f min_order=<n>`. Approve the run in the `production`
+streams, `-f min_order=<n>`. The gazetteer is `kind=gazetteer` with a key under
+`reference/gazetteer/` (e.g. `za-2026-10-12.txt.gz`) and a dataset such as
+`GeoNames-ZA-2026-10`; `-f source=…` overrides GeoNames' attribution, which
+is the default. Approve the run in the `production`
 environment. Never load the synthetic fixtures into production (the label
 `synthetic` is refused).
 
@@ -1811,7 +1815,9 @@ grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
 HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
 32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
 Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
-Africa about 50 MB, so anything bigger is the wrong file. A load costs cents (3 GB × a few
+Africa about 50 MB, so anything bigger is the wrong file. So has the
+gazetteer, 64 MiB uploaded and 128 MiB unzipped: South Africa's dump is
+about 20 MB of text, all of GeoNames' about 1.6 GB. A load costs cents (3 GB × a few
 minutes of Lambda) and runs one at a time (reserved concurrency 1, the
 workflow's concurrency group). Migrations use the same memory and timeout,
 billed only while they run. Don't run a load while a backend deploy is

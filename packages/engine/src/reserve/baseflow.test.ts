@@ -4,8 +4,31 @@ import { Rng } from '../random';
 import { BASEFLOW_ALPHA, BASEFLOW_HISTORY_DAYS, BASEFLOW_PASSES, BASEFLOW_REFLECT_DAYS, ECKHARDT_FILTER, filterBaseflow, HUGHES_FILTER, lyneHollickBaseflow, monthBaseflowSum } from './baseflow';
 
 describe('lyneHollickBaseflow', () => {
-	it('uses the South African daily parameter, three passes and a 30-day reflection', () => {
-		expect([BASEFLOW_ALPHA, BASEFLOW_PASSES, BASEFLOW_REFLECT_DAYS]).toEqual([0.995, 3, 30]);
+	it('uses the South African daily parameter, one pass and a 30-day reflection', () => {
+		expect([BASEFLOW_ALPHA, BASEFLOW_PASSES, BASEFLOW_REFLECT_DAYS]).toEqual([0.995, 1, 30]);
+	});
+
+	it('is Hughes, Hannart & Watkins (2003) at a daily step: their eq. 1 once, forward, β 0.5, α 0.995 (issue #523 D3)', () => {
+		expect({ kind: 'quickflow', alpha: BASEFLOW_ALPHA, beta: 0.5, passes: BASEFLOW_PASSES }).toEqual(HUGHES_FILTER);
+		const rng = new Rng(523);
+		const q = Array.from({ length: 300 }, () => (rng.bool(0.05) ? rng.logFloat(10, 1e5) : rng.logFloat(1e-3, 10)));
+		expect(Array.from(lyneHollickBaseflow(q))).toEqual(Array.from(filterBaseflow(q, HUGHES_FILTER)));
+		// By hand, no reflection: β(1 + α) = 0.9975; a rise of 99 is quick flow
+		// 98.7525 (base flow 1.2475), which decays by α a day while the flow stays.
+		const b = lyneHollickBaseflow([1, 100, 100, 1], BASEFLOW_ALPHA, BASEFLOW_PASSES, 0);
+		expect(b[0]).toBe(1);
+		expect(b[1]).toBeCloseTo(100 - 0.9975 * 99, 12);
+		expect(b[2]).toBeCloseTo(100 - 0.995 * 0.9975 * 99, 12);
+		// The fall clamps the quick flow at 0: the day is all base flow.
+		expect(b[3]).toBe(1);
+	});
+
+	it('is causal: a flood after a day never moves that day’s base flow', () => {
+		const rng = new Rng(5231);
+		const q = Array.from({ length: 200 }, () => rng.logFloat(0.1, 20));
+		const flood = [...q];
+		flood[150] = 1e4;
+		expect(Array.from(lyneHollickBaseflow(flood).slice(0, 150))).toEqual(Array.from(lyneHollickBaseflow(q).slice(0, 150)));
 	});
 
 	it('is all base flow for a steady river, and empty for an empty series', () => {

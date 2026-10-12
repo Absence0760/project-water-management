@@ -9,7 +9,7 @@
 import type pg from 'pg';
 
 /** The kinds a production load takes (referenceLoad.ts REFERENCE_KINDS' allowed ones). */
-export type ReferenceLoadKind = 'land-cover' | 'evaporation' | 'rivers';
+export type ReferenceLoadKind = 'land-cover' | 'evaporation' | 'rivers' | 'gazetteer';
 
 /** The object a load read: its key in the reference bucket and the SHA-256 it was checked against. */
 export interface ReferenceOrigin {

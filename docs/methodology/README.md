@@ -24,7 +24,8 @@ Anyone holding a pack can hash the file at the engine's tag and compare.
 | [v4](./v4.md) | 2026-10-09 | 1.78.0 – 1.79.0 | §2, §3, §8: runoff from each unit's own rain, opt-in (issue #482) |
 | [v5](./v5.md) | 2026-10-10 | 1.80.0 – 1.84.0 | §2: a reference rain gauge's monthly factors level every unit's CHIRPS, then the MAP ratio (issue #500, provisional) |
 | [v6](./v6.md) | 2026-10-12 | 1.85.0 | §2: the reference factors fitted on the checked gauge rain, then each unit rescaled to its own MAP (k_unit); 10-year means, the 0.5–2 warning band, unusable all-zero CHIRPS, a unit's gauge checked, CHIRPS-GEFS levelled per unit (issue #500) |
-| [v7](./v7.md) | 2026-10-12 | ≥ 1.86.0 | §3, §4, §8: a unit's base-flow loss and gain; a dam's transfer out of the catchment; river abstraction pools storage only; a Priority user's fixed restriction % (issue #523) |
+| [v7](./v7.md) | 2026-10-12 | 1.86.0 | §3, §4, §8: a unit's base-flow loss and gain; a dam's transfer out of the catchment; river abstraction pools storage only; a Priority user's fixed restriction % (issue #523) |
+| [v8](./v8.md) | 2026-10-12 | ≥ 1.87.0 | §5: low flows judged on base flow (an option) use one pass of the filter, as Hughes, Hannart & Watkins (2003) (issue #523 D3) |
 
 The highest version is the current one: new sign-offs and packs cite it.
 

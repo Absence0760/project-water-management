@@ -112,6 +112,8 @@
 	import DrawBar from './draw/DrawBar.svelte';
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import MapRainLink from './MapRainLink.svelte';
+	import MapSearch from './MapSearch.svelte';
+	import { frameFor } from './mapSearch';
 	import MapSetupPill from './MapSetupPill.svelte';
 	import { mapSetupSteps, type RainReads } from './mapSetup';
 	import MapToolPalette from './MapToolPalette.svelte';
@@ -949,7 +951,7 @@
 		}
 	}
 
-	let mapRef = $state<{ showAll: () => void; frameGeometry: (g: MapGeometry) => void; focusMap: () => void }>();
+	let mapRef = $state<{ showAll: () => void; frameGeometry: (g: MapGeometry) => void; focusMap: () => void; frameBox: (b: readonly [number, number, number, number], maxZoom?: number) => void }>();
 
 	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
 	let dark = $state(appIsDark());
@@ -1353,6 +1355,17 @@
 		{#if data}
 			<div class="map-layout" class:empty={!features.length} bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
+					{#if mapState === 'ready'}
+						<!-- Find the area before drawing or starting (issue #523 C5): our own reference tables only; the view moves, nothing is saved.
+						     Once the map is drawn (there is a view to move); without WebGL there is none, and the list carries on. -->
+						<MapSearch
+							{projectId}
+							onpick={(h) => {
+								const f = frameFor(h);
+								mapRef?.frameBox(f.bbox, f.maxZoom);
+							}}
+						/>
+					{/if}
 					{#if measure.active}
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}

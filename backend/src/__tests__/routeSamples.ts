@@ -150,6 +150,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/nodes/:nodeId/area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	'GET /projects/:id/map/quaternary': () => ({ query: { lon: '21.35', lat: '-33.65' } }),
 	'GET /projects/:id/map/quaternaries': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
+	// The Map's search (issue #523 C5, geo/searchRoutes.ts): a code the synthetic stations and quaternaries start with.
+	'GET /projects/:id/map/search': () => ({ query: { q: 'Z1' } }),
 	// The river network (issue #345, geo/rivers.ts): a bbox round the synthetic network, and one of its reaches.
 	'GET /projects/:id/map/rivers': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
 	'GET /projects/:id/map/map-grid': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),

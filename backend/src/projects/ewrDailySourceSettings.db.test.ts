@@ -71,4 +71,23 @@ describe('settings.ewrDailySource', () => {
 		// Whole: the TAB flows went with the patch, nothing merged from the stored source.
 		expect(back.body.project.settings.ewrDailySource).toEqual(pragmatic);
 	});
+
+	it('a source saved with the MAR ratio keeps it after the default moved to the area ratio (issue #523 D2, #90 B2)', async () => {
+		const owner = await signUp('DailyEwrMarKept');
+		const id = await project(owner);
+		// A new project has no source: the pragmatic EWR, so the area-ratio default reaches no stored settings.
+		expect((await owner.call('GET', `/projects/${id}`)).body.project.settings.ewrDailySource).toBeNull();
+		const mar = { ...tab, scaling: 'mar', tableMarMm3: 25, tableAreaKm2: 40 };
+		expect((await owner.call('PATCH', `/projects/${id}`, { settings: { ewrDailySource: mar } })).status).toBe(200);
+		// An unrelated settings save leaves the stored choice alone.
+		expect((await owner.call('PATCH', `/projects/${id}`, { settings: { apanMm: monthly(140) } })).status).toBe(200);
+		expect((await owner.call('GET', `/projects/${id}`)).body.project.settings.ewrDailySource).toEqual(mar);
+
+		const run = await owner.call('POST', `/projects/${id}/runs`, { label: 'MAR ratio' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		const info = run.body.run.summary.catchment.outletEwr;
+		// Scaled by the MAR although the table area is entered too: the stored scaling, not the default, decides.
+		expect(info).toMatchObject({ method: 'tab', scaling: 'mar', tableMarMm3: 25 });
+		expect(info.scale).toBeCloseTo(info.modelMarMm3 / 25, 12);
+	});
 });
