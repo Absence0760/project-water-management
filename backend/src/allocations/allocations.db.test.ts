@@ -25,7 +25,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 }));
 
 import { figuresAt, holdsFigure } from '../__tests__/figures.js';
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { reportRenderHandler } from '../jobs/handlers/report-render.js';
 import { computeSweep } from '../sweeps/store.js';
 import { buildPackManifest, ENGINE_VERSION, packManifestText } from '@water-management/engine';
@@ -977,7 +977,11 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 	const STORAGE_CANARY = 765_432_189;
 	/** A sweep member's own registered volume on another farm. */
 	const SWEEP_CANARY = 654_321_879;
-	const CANARIES = [CANARY, SCENARIO_CANARY, STORAGE_CANARY, SWEEP_CANARY];
+	/** An issued licence's granted terms set this on Farm B, not the application's own unit (227, #523 G3). */
+	const GRANTED_CANARY = 543_218_769;
+	/** A variation on appeal sets this on Farm B (228, #523 G4). */
+	const VARIED_CANARY = 432_187_659;
+	const CANARIES = [CANARY, SCENARIO_CANARY, STORAGE_CANARY, SWEEP_CANARY, GRANTED_CANARY, VARIED_CANARY];
 	/** The ladder run's last, partial water year: 400 days from 1 October 2021, so 35 days of 2022's. */
 	const PARTIAL_DAYS = 35;
 	/**
@@ -1019,6 +1023,9 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 	let baseRun: string;
 	let scenarioRun: string;
 	let sid: string;
+	/** The applicant's application issued with GRANTED_CANARY and varied to VARIED_CANARY, and its run of the varied terms. */
+	let licenceSid: string;
+	let licensedRun: string;
 	let reportJob: string;
 	/** Team scenario runs of the base that cap use at, and scale demand to, the registered volumes (#523 I). */
 	let capRun: string;
@@ -1161,6 +1168,32 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 				)
 			).rows[0]!.id
 		);
+		// A licence's terms (G3) and a variation's (G4) carry volumes too: an applicant's application, issued with granted
+		// terms that set Farm B's volume, then varied on appeal to terms that set another. The applicant is linked to no
+		// farm (an applicant's own units' volumes are theirs to read, and Farm A's and B's carry the other canaries), so
+		// a viewer kept from volumes reads neither (viewerOps.ts): not on the scenario, its decision events, its
+		// licensed-terms run, the evidence report's other applications and combined row, or the pack below.
+		await actForAuthority(ctx.owner, ctx.projectId, ctx.editor.id);
+		const applied = await ctx.contributor.call('POST', `${at}/scenarios`, { name: 'Canary licence', baseRunId: baseRun, ops: [] });
+		expect(applied.status, JSON.stringify(applied.body)).toBe(201);
+		licenceSid = applied.body.scenario.id as string;
+		expect((await ctx.contributor.call('POST', `${at}/scenarios/${licenceSid}/submit`, {})).status).toBe(200);
+		const farmBVolume = (n: number) => ({ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: ctx.otherFarmId, waterSource: 'surface', volumeM3PerYear: n } });
+		const decided = await ctx.editor.call('POST', `${at}/scenarios/${licenceSid}/decide`, {
+			...DECISION,
+			outcome: 'licence_issued',
+			granted: { ops: [{ op: 'node.set', nodeId: ctx.otherFarmId, field: 'damCapacityM3', value: 1500 }, farmBVolume(GRANTED_CANARY)], conditions: 'Release in dry months.' }
+		});
+		expect(decided.status, JSON.stringify(decided.body)).toBe(200);
+		const appeal = async (body: unknown) => {
+			const res = await ctx.editor.call('POST', `${at}/scenarios/${licenceSid}/appeals`, body);
+			expect(res.status, JSON.stringify(res.body)).toBe(201);
+			return res.body.scenario;
+		};
+		await appeal({ kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-02', reference: 'WT canary' });
+		const varied = await appeal({ kind: 'varied', forum: 'water_tribunal', eventDate: '2026-10-05', terms: { ops: [farmBVolume(VARIED_CANARY)], conditions: 'As varied.' } });
+		expect(varied.licence).toMatchObject({ inForce: true, from: 'event' });
+		licensedRun = (await post(`/scenarios/${licenceSid}/runs`, { terms: 'licensed' })).run.id;
 		// An evidence pack of the base run, planted as a draft (a pack of a run that isn't nominated can't be drafted through the route).
 		const ev = (await ctx.owner.call('GET', `${at}/runs/${baseRun}/evidence-report`)).body.report;
 		const packId = crypto.randomUUID();
@@ -1190,6 +1223,10 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		const sweep = (await get(ctx.editor, `${at}/sweeps/${ids.sweepId}`)).text;
 		expect(seen(sweep, CANARY) && seen(sweep, SWEEP_CANARY)).toBe(true);
 		expect(seen((await get(ctx.editor, `${at}/sweeps`)).text, SWEEP_CANARY)).toBe(true);
+		// The licence's granted terms and its variation, on the scenario (G3/G4).
+		const licence = (await get(ctx.editor, `${at}/scenarios/${licenceSid}`)).text;
+		expect(seen(licence, GRANTED_CANARY) && seen(licence, VARIED_CANARY)).toBe(true);
+		expect(seen((await get(ctx.editor, `${at}/runs/${licensedRun}`)).text, VARIED_CANARY)).toBe(true);
 		// § 5's groundwater total of other units carries its registered figures for the editor (control for registeredFigures).
 		expect(registeredFigures((await get(ctx.editor, `${at}/runs/${baseRun}/evidence-report`)).text).some((p) => p.startsWith('report.allocations.units'))).toBe(true);
 	});
@@ -1217,6 +1254,27 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		}
 		expect(leaks).toEqual([]);
 		expect(refused).toEqual([]);
+	}, 300_000);
+
+	// G3/G4 (#523): the issued application's own routes and its licensed-terms run, swept as the viewer. The routes'
+	// statuses differ from a team scenario's (an application's results, questions, packs …), so only what each answer
+	// holds is checked here; the scenario itself must answer, with its terms and events, or the sweep proves nothing.
+	it('no viewer GET of the issued application or its licensed-terms run carries its granted or varied volumes', async () => {
+		const at = `/projects/${ctx.projectId}`;
+		const s = (await ctx.viewer.call('GET', `${at}/scenarios/${licenceSid}`)).body.scenario;
+		expect(s.grantedTerms).toMatchObject({ withheldOps: 1, ops: [{ op: 'node.set', nodeId: ctx.otherFarmId }] });
+		expect(s.decisionEvents.map((e: { kind: string }) => e.kind)).toEqual(['lodged', 'varied']);
+		expect(s.decisionEvents[1].terms).toMatchObject({ withheldOps: 1, ops: [] });
+		const leaks: string[] = [];
+		const answered: string[] = [];
+		for (const route of routes.filter((r) => r.includes(':sid') || r.includes(':runId'))) {
+			const path = pathOf(route, { sid: licenceSid, runId: licensedRun });
+			const r = await get(ctx.viewer, path);
+			if (r.status === 200) answered.push(route);
+			for (const n of CANARIES) for (const w of where(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n} at ${w}`);
+		}
+		expect(leaks).toEqual([]);
+		expect(answered).toEqual(expect.arrayContaining(['/projects/:id/scenarios/:sid', '/projects/:id/runs/:runId/evidence-report']));
 	}, 300_000);
 
 	// Finding I (#523): a capped run's room on a licence's first day is the unit's volume, and a full allocation scales the
