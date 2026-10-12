@@ -1759,14 +1759,20 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   ([maps.md § Search](./maps.md#search)). Keyed `(dataset, place_id)`
   (GeoNames' geonameid); `name` (1–200, one line), `search_name` (the name
   folded by `geo/gazetteer.ts` `searchKey`: lower case, accents and
-  punctuation dropped; indexed `text_pattern_ops` for a match on its start),
+  punctuation dropped; a trigram GIN index, `pg_trgm`, on `' ' ||
+  search_name` serves the search's word-start test, one `LIKE '% ' || word
+  || '%'` per word, so a search never reads the whole table; 225 creates the
+  `pg_trgm` extension, trusted like 001's `citext`),
   `feature` (GeoNames' class and code, `P.PPL`, `S.FRM`), `admin1` (the
   province code, `''` when not given), `lon`, `lat`, `dataset` (`synthetic`
   for the committed fixture), `source` (1–500, the credit shown with every
   match), `loaded_at`. Global: loaded by the operator as the schema owner
   (`pnpm import:gazetteer`, or a production load of kind `gazetteer`),
-  SELECT for anyone signed in, read-only to `water_app` (the catalogue
-  guard's `READ_ONLY`). Migration 225 also adds `gazetteer` to
+  read-only to `water_app` (the catalogue guard's `READ_ONLY`). Its read
+  policy is `USING (true)`, like `language`'s, not "a user is set": a
+  policy's condition runs before a non-leakproof one of the query, and `LIKE`
+  isn't leakproof, so that policy kept the search off its index (a read of
+  every row). The data is public; who may search is the route's check. Migration 225 also adds `gazetteer` to
   `reference_load`'s kinds.
 - **RLS**: viewers read `geo_source` and `map_feature`, editors write. A
   farmer or contributor reads the boundary, gauges and rivers and the

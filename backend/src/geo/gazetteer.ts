@@ -131,13 +131,18 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 				[code, SEARCH_LAYER_LIMIT + 1]
 			)
 		: { rows: [] };
+	// One word-start test per word, each on its own, so every one goes through
+	// the trigram index on ' ' || search_name (225): the expression must be
+	// that index's. everyWordStarts' bool_and over the array would read every
+	// row of the gazetteer (about 150 000 in production).
+	const placeWords = words.map((_, i) => `(' ' || search_name) LIKE '% ' || $${i + 3}::text || '%'`).join(' AND ');
 	const places = await db.query<{ place_id: string; name: string; feature: string; admin1: string; lon: number; lat: number; dataset: string; source: string }>(
 		`SELECT place_id, name, feature, admin1, lon, lat, dataset, source FROM gazetteer_reference
-		 WHERE ${everyWordStarts('search_name', '$1')}
-		 ORDER BY ${closeness('search_name', '$2')},
+		 WHERE ${placeWords}
+		 ORDER BY ${closeness('search_name', '$1')},
 			CASE split_part(feature, '.', 1) WHEN 'P' THEN 0 WHEN 'S' THEN 1 WHEN 'H' THEN 2 ELSE 3 END, name, dataset, place_id
-		 LIMIT $3`,
-		[words, phrase, SEARCH_PLACE_LIMIT + 1]
+		 LIMIT $2`,
+		[phrase, SEARCH_PLACE_LIMIT + 1, ...words]
 	);
 
 	const hits: SearchHit[] = [

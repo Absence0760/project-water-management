@@ -52,7 +52,8 @@ sides share.
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
   engine's) and `perf-db` (wall-clock budgets against Postgres,
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
-  query's, the RLS role check's and the Step 2 60-farm load checks).
+  query's, the RLS role check's, the Step 2 60-farm load checks and the
+  Map search over 150 000 gazetteer places).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome` and `/welcome/af`, prerendered once per language, architecture.md), Vite, TypeScript, uPlot
@@ -147,7 +148,7 @@ pnpm test:coverage          # unit tests with v8 coverage, then a table of what 
 pnpm test:backend:db:coverage  # the same for the DB tests (needs dev:db:up; the weekly Coverage workflow runs both)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets and the V8 deopt stress run of the assurance of supply (issue #192; same caveat)
-pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check; 60-farm runs < 10 s, ~4 min); needs dev:db:up, alone, never beside test:backend:db
+pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check; 60-farm runs < 10 s; map search over 150 000 places < 40 ms, through its index; ~4 min); needs dev:db:up, alone, never beside test:backend:db
 pnpm test:backend:v8-osr    # does this Node still miscompile the pre-fix assurance loop (issue #232)? [--rev <rev>] [--node <bin>] [-- <V8 flags>]; alone, minutes, not in CI
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts and mfa-email-mailpit.spec.ts dev:mail:up)
 

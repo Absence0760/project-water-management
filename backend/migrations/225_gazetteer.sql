@@ -11,7 +11,8 @@
 --    (gauge codes, the register's dam names, quaternary codes) to move the
 --    view to a match. Searches go to our backend only, never a third-party
 --    geocoder. Global, not per project: any signed-in user reads it; water_app
---    never writes it (like gauge_station_reference, 156).
+--    never writes it (like gauge_station_reference, 156). Its read policy is
+--    USING (true), not gauge_station_reference's "a user is set": see RLS below.
 --  * The repo ships only an invented, synthetic dataset
 --    (backend/fixtures/geo/gazetteer.synthetic.txt, in GeoNames' dump
 --    format). Production loads GeoNames' South Africa dump (CC BY 4.0, credit
@@ -19,10 +20,20 @@
 --  * search_name is the name as the search compares it (lower case, accents
 --    and punctuation folded, one space between words: geo/gazetteer.ts
 --    searchKey), written by the loader so the query compares like with like.
---    A search matches the start of the whole name (the index below) or of any
---    word in it.
+--    A search matches when every word typed starts some word of the name:
+--    (' ' || search_name) LIKE '% ' || word || '%', one test per word.
+--  * The index for that: a trigram GIN index (pg_trgm) on ' ' || search_name.
+--    pg_trgm reads the space before the word in the pattern as a word start,
+--    so even a one-letter word narrows the scan, and a search reads only the
+--    rows the index offers, not the whole table (South Africa's dump is about
+--    150 000 places; geo/search.db.perf.test.ts holds the budget). pg_trgm is
+--    a trusted extension (PostgreSQL 13+), on RDS's list for PostgreSQL 17
+--    and in the docker image's contrib, so the schema owner creates it here,
+--    as 001 does citext.
 --  * reference_load (192) records which bucket file a production load read,
 --    by kind: 'gazetteer' joins its kinds.
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE gazetteer_reference (
 	-- Which load it came from: 'synthetic' (the repo's invented fixture) or the operator's label ('GeoNames-ZA-2026-10').
@@ -42,8 +53,8 @@ CREATE TABLE gazetteer_reference (
 	loaded_at    timestamptz NOT NULL DEFAULT now(),
 	PRIMARY KEY (dataset, place_id)
 );
--- A match on the start of the whole name; the any-word match reads the table (a country's dump is about 150 000 rows).
-CREATE INDEX gazetteer_reference_search_idx ON gazetteer_reference (search_name text_pattern_ops);
+-- The search's word-start test, every word through this index (geo/gazetteer.ts searchMap): the query must use the same expression, ' ' || search_name.
+CREATE INDEX gazetteer_reference_search_trgm_idx ON gazetteer_reference USING gin ((' ' || search_name) gin_trgm_ops);
 
 COMMENT ON TABLE gazetteer_reference IS
 	'Named places (towns, farms, rivers, peaks) for the Map''s search, loaded by the operator (pnpm import:gazetteer, or load-reference.yml), read-only to the app (225, issue #523 C5). The repo ships a synthetic dataset only.';
@@ -52,8 +63,13 @@ COMMENT ON TABLE gazetteer_reference IS
 -- RLS
 -- ---------------------------------------------------------------------------
 ALTER TABLE gazetteer_reference ENABLE ROW LEVEL SECURITY;
--- Public reference data: anyone signed in reads it; the app never writes it.
-CREATE POLICY gazetteer_reference_select ON gazetteer_reference FOR SELECT USING (app_current_user_id() IS NOT NULL);
+-- Public reference data (GeoNames, CC BY 4.0): water_app reads it, the app never writes it (no write policy, no write grant).
+-- USING (true), like 080's language, and not "app_current_user_id() IS NOT NULL": a policy's condition runs before any
+-- condition of the query that isn't leakproof, and LIKE (textlike) isn't, so with that policy the search's word tests
+-- could not use the trigram index and every search read all ~150 000 rows, calling the plpgsql function once a row
+-- (only a superuser can mark a function leakproof, which RDS never grants). Who may search is the route's check
+-- (a project viewer, geo/searchRoutes.ts), which stays.
+CREATE POLICY gazetteer_reference_select ON gazetteer_reference FOR SELECT USING (true);
 
 GRANT SELECT ON gazetteer_reference TO water_app;
 

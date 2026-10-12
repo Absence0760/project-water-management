@@ -1512,8 +1512,10 @@ The search's places come from `gazetteer_reference` (225), which the
   without a place id, a feature class or a WGS84 position is skipped and
   listed. The name is stored as published and
   folded for the search (`search_name`: lower case, accents and punctuation
-  dropped), with an index for a match on the whole name's start; a match on a
-  later word reads the table (about 150 000 rows for South Africa). A load
+  dropped), with a trigram index (`pg_trgm`) the word-start match goes
+  through, so a search reads only the rows the index offers, not the whole
+  table (about 150 000 rows for South Africa; `geo/search.db.perf.test.ts`
+  holds a budget on that many). A load
   replaces every row of its dataset in one transaction.
 - **Production loading** goes through the reference-dataset path
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),
