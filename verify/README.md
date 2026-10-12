@@ -244,9 +244,10 @@ network is unchanged):
   - *5*: with `forecastRainSource` 'chirps_gefs', a unit whose chain falls
     to the catchment's rain on a forecast day (the catchment's rain from
     `rain_forecast_mm`) and has usable CHIRPS of its own takes the forecast
-    levelled like that CHIRPS (f × k_unit, or rule 3's MAP factor, §2.4b
-    factors or raw without a reference); otherwise, and for 'other' or
-    absent, × the MAP ratio as before.
+    levelled like that CHIRPS: a level that reaches the unit's MAP (f ×
+    k_unit, rule 3's MAP factor) alone; one that only shapes it (§2.4b
+    factors, f without k_unit) × the MAP ratio too; raw CHIRPS, and
+    otherwise, and for 'other' or absent, × the MAP ratio as before.
   - *6*: a unit's own gauge (negative values blanked as no-data codes) goes
     through `prepare_rain`, the catchment's §2.4c zero runs and §2.4d
     accumulations, with the catchment's modes, fill threshold and

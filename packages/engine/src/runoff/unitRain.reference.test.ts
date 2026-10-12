@@ -490,6 +490,22 @@ describe('the forecast on the reference factors (decision 5)', () => {
 		}
 	});
 
+	it('a unit on the factors without k_unit keeps its gauge MAP ratio on the forecast: factor(month) × the ratio, no step', () => {
+		// B: MAP 900 under a gauge MAP of 500 (ratio 1.8, rule 2), and a CHIRPS with no complete calendar year: no k_unit.
+		const x = withTail('chirps_gefs');
+		x.settings.unitRain = { ...x.settings.unitRain!, gaugeMapMm: 500, gaugeMapSource: 'invented' };
+		const b = chirpsOf(x, 'B') as (number | null)[];
+		for (const yr of [2015, 2016, 2017, 2018, 2019, 2020]) b[toEpochDay(`${yr}-06-15`) - D0] = null;
+		const o = runModel(x);
+		expect(unitOf(o, 'B')).toMatchObject({ rule: 'gaugeMap', gaugeMapFactor: 1.8 });
+		expect(refLevel(o, 'B').kUnit).toBeNull();
+		const jan = o.summary.unitRain!.reference!.months[0]!.factor;
+		col(o, 'rain_unit', 'B').slice(DAYS).forEach((v, i) => expect(v, `day ${i}`).toBeCloseTo(tail[i]! * jan * 1.8, 9));
+		// C has k_unit: the level alone, not × its ratio too.
+		const c = refLevel(o, 'C').kUnit!.factor;
+		col(o, 'rain_unit', 'C').slice(DAYS).forEach((v, i) => expect(v, `C day ${i}`).toBeCloseTo(tail[i]! * jan * c, 9));
+	});
+
 	it('an uploaded forecast, or one of unknown source, keeps the MAP ratio (× 1 here: no gauge MAP)', () => {
 		for (const source of [undefined, null, 'other'] as const) {
 			const o = runModel(withTail(source));

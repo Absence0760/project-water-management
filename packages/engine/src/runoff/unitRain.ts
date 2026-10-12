@@ -448,8 +448,14 @@ export function unitRainForcing(
 		};
 		const kFill = k2 ?? 1;
 		// A CHIRPS-GEFS forecast is raw CHIRPS (§2.4f), so it takes the unit's CHIRPS level (decision 5); an uploaded one, which may
-		// already be at gauge level, the MAP ratio. A unit without a CHIRPS level (or raw: none known) keeps the ratio.
-		const gefsLevel = ctx.forecastRainSource === 'chirps_gefs' && level !== null && level.source !== 'raw';
+		// already be at gauge level, the MAP ratio. Per level, on a CHIRPS-GEFS day:
+		//   map, reference with k_unit: the level alone (it already brings the unit to its MAP);
+		//   bias, reference without k_unit: the level × the MAP ratio (the level sets the catchment gauge's or the season's
+		//     shape, not the unit's MAP, so the ratio still carries the unit to its MAP, as its history's gauge × ratio does);
+		//   raw, unusable, no CHIRPS: the MAP ratio alone, as an uploaded forecast.
+		const gefs = ctx.forecastRainSource === 'chirps_gefs' && level !== null && level.source !== 'raw';
+		const levelReachesMap = level !== null && (level.source === 'map' || (level.source === 'reference' && level.kUnit !== null && level.kUnit !== undefined));
+		const forecastLevel = (t: number): number => (gefs ? levelOn(t) * (levelReachesMap ? 1 : kFill) : kFill);
 		for (let t = 0; t < days; t++) {
 			let v: number | null = null;
 			let code: number = NaN;
@@ -482,7 +488,7 @@ export function unitRainForcing(
 				const x = c[t] ?? ch[t] ?? f[t] ?? null;
 				if (x !== null) {
 					const forecast = c[t] == null && ch[t] == null;
-					v = x * (forecast && gefsLevel ? levelOn(t) : kFill);
+					v = x * (forecast ? forecastLevel(t) : kFill);
 					code = forecast ? UNIT_RAIN_SOURCE.forecast : UNIT_RAIN_SOURCE.catchment;
 				}
 			}

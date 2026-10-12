@@ -760,7 +760,17 @@ def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, d
     clamp(unit MAP ÷ the unit's mean annual (CHIRPS × f)), the mean as above;
     without a MAP, or with no complete year yet, the factors alone (k = 1).
     Without one: v × clamp(unit MAP ÷ the mean annual CHIRPS); without a MAP
-    or a complete year, the catchment's §2.4b factors, else raw."""
+    or a complete year, the catchment's §2.4b factors, else raw.
+
+    The function's `kind` says what its level reaches, for a CHIRPS-GEFS
+    forecast day (item 5): 'map' (a MAP factor, or f × k_unit) brings the
+    unit to its MAP; 'shape' (the §2.4b factors, or f without k_unit) does
+    not, so the MAP ratio still applies on top; 'raw' knows no level."""
+
+    def kinded(fn, kind):
+        fn.kind = kind
+        return fn
+
     if ref is not None:
         f = ref[0]
         diag["unit_chirps_reference"] += 1
@@ -769,17 +779,19 @@ def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, d
             diag["unit_chirps_unusable"] += 1
             return None
         k = 1.0
+        kind = "shape"
         if mean is not None and map_mm is not None:
             k = _clamp(map_mm / mean, diag)
+            kind = "map"
             diag["unit_k_from_map"] += 1
-        return lambda v, o, k=k: v * f[cal_month(o)] * k
+        return kinded(lambda v, o, k=k: v * f[cal_month(o)] * k, kind)
     mean = unit_chirps_mean(own_c, period, None, diag)
     if mean is not None and not mean > 0:
         diag["unit_chirps_unusable"] += 1
         return None
     if mean is not None and map_mm is not None:
         lev_f = _clamp(map_mm / mean, diag)
-        return lambda v, o: v * lev_f
+        return kinded(lambda v, o: v * lev_f, "map")
     if has_bias:
         diag["unit_chirps_bias"] += 1
 
@@ -787,8 +799,8 @@ def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, d
             fm = fac[cal_month(o)]
             return v * fm if fm is not None else v
 
-        return biased
-    return lambda v, o: v
+        return kinded(biased, "shape")
+    return kinded(lambda v, o: v, "raw")
 
 
 def unit_gauge_checked(settings: dict, series: dict, key: str, diag: dict | None, for_fit: bool = False):
@@ -952,13 +964,17 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
                 diag["unit_link_days"] += 1
             else:
                 # The catchment's rain (catchment ?? corrected CHIRPS ?? forecast) × the MAP ratio, else × 1;
-                # a CHIRPS-GEFS forecast day levelled like the unit's usable CHIRPS instead (item 5).
+                # a CHIRPS-GEFS forecast day levelled like the unit's usable CHIRPS instead (item 5): a level that
+                # reaches the unit's MAP alone, one that only shapes it (§2.4b factors, f without k_unit) × the
+                # ratio too, a raw CHIRPS (no level known) the ratio alone.
                 cr = finals[i]
                 if math.isnan(cr):
                     v = None
-                elif gefs and sources[i] == 4 and level is not None:
-                    v = level(cr, o)
+                elif gefs and sources[i] == 4 and level is not None and level.kind != "raw":
+                    v = level(cr, o) * (1.0 if level.kind == "map" else ratio)
                     diag["unit_forecast_levelled"] += 1
+                    if level.kind == "shape" and ratio != 1.0:
+                        diag["unit_forecast_shape_ratio"] += 1
                 else:
                     v = cr * ratio
                 if v is not None:
@@ -998,7 +1014,7 @@ def run(doc: dict) -> dict:
                 unit_chirps_reference=0, unit_ref_months_fitted=0, unit_ref_not_land=0,
                 # Issue #500's decisions: k_unit from a MAP, unusable CHIRPS (7a), CHIRPS-GEFS forecast days levelled (5),
                 # a unit gauge's days set aside and accumulation windows (6), reference fit days the checks left out (1c).
-                unit_k_from_map=0, unit_chirps_unusable=0, unit_forecast_levelled=0, unit_gauge_set_aside=0,
+                unit_k_from_map=0, unit_chirps_unusable=0, unit_forecast_levelled=0, unit_forecast_shape_ratio=0, unit_gauge_set_aside=0,
                 unit_gauge_windows=0, unit_ref_days_checked_out=0, unit_ref_window_days_out=0)
 
     def put(node_id, key, values):

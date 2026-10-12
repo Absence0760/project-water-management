@@ -331,7 +331,7 @@ MUTANTS = [
     ("a no-data code is a reading in the reference fit", "if valid(cv) and valid(gv):", "if cv is not None and gv is not None:"),
     ("a reference unit without land still sets the factors (1)", '        diag["unit_ref_not_land"] += 1\n        return None', '        return [None] + [1.0] * 12, {}'),
     # Issue #500's decisions (operator, 2026-10-09).
-    ("no k_unit on the reference factors (item 1a)", "return lambda v, o, k=k: v * f[cal_month(o)] * k", "return lambda v, o, k=k: v * f[cal_month(o)]"),
+    ("no k_unit on the reference factors (item 1a)", "return kinded(lambda v, o, k=k: v * f[cal_month(o)] * k, kind)", "return kinded(lambda v, o, k=k: v * f[cal_month(o)], kind)"),
     ("k_unit from the raw CHIRPS mean, not CHIRPS × f (item 1a)", "mean = unit_chirps_mean(own_c, period, lambda o: f[cal_month(o)], diag)", "mean = unit_chirps_mean(own_c, period, None, diag)"),
     ("k_unit isn't clamped (item 2)", "k = _clamp(map_mm / mean, diag)", "k = map_mm / mean"),
     ("the CHIRPS mean takes the MAP period from 9 complete years (item 4: 10)", "UNIT_MAP_MIN_YEARS = 10", "UNIT_MAP_MIN_YEARS = 9"),
@@ -353,6 +353,11 @@ MUTANTS = [
     ),
     ("a CHIRPS-GEFS forecast keeps the MAP ratio (item 5)", 'gefs = forecast_source == "chirps_gefs"', "gefs = False"),
     ("an uploaded forecast is levelled like CHIRPS too (item 5)", 'gefs = forecast_source == "chirps_gefs"', "gefs = forecast_source is not None"),
+    (
+        "a CHIRPS-GEFS forecast on a level short of the MAP drops the MAP ratio (item 5)",
+        'v = level(cr, o) * (1.0 if level.kind == "map" else ratio)',
+        "v = level(cr, o)",
+    ),
     (
         "a unit's own gauge is read as recorded, without the catchment's checks (item 6)",
         'own = unit_gauge_checked(settings, series, f"rain_catchment_mm@{uid}", diag) if has_g else (lambda o: None)',
@@ -415,7 +420,7 @@ class CrossCheck(unittest.TestCase):
             "unit_map_all_years", "unit_chirps_bias", "unit_link_days", "unit_catchment_days",
             "unit_chirps_reference", "unit_ref_months_fitted", "unit_ref_not_land",
             # Issue #500's decisions.
-            "unit_k_from_map", "unit_chirps_unusable", "unit_forecast_levelled", "unit_gauge_set_aside",
+            "unit_k_from_map", "unit_chirps_unusable", "unit_forecast_levelled", "unit_forecast_shape_ratio", "unit_gauge_set_aside",
             "unit_gauge_windows", "unit_ref_days_checked_out", "unit_ref_window_days_out",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")

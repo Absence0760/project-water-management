@@ -2124,11 +2124,14 @@ or the CHIRPS-GEFS feed (WP-2.10). Forecast rain is not bias-corrected (§2.4b).
 Under per-unit rain (§2.4h, engine ≥ 1.85.0, issue #500 item 5) a unit
 corrects it when it is CHIRPS-GEFS: the input's
 `forecastRainSource` (`'chirps_gefs'`, set by the backend from the series'
-source) makes each land unit's forecast days the catchment forecast ×
-the unit's f[month] × k_unit, the same correction as its historical CHIRPS,
-so its rain doesn't drop where the forecast starts. An uploaded forecast
-(`'other'`, or the field absent) keeps the unit's MAP ratio (unit MAP ÷ gauge
-MAP, × 1 without them), because it may already be at gauge level. The
+source) makes each land unit's forecast days the catchment forecast × the
+unit's own CHIRPS level, the same correction as its historical CHIRPS, so its
+rain doesn't step where the forecast starts. Per level (§2.4h *Forecast
+days*): a MAP factor, or f[month] × k_unit, alone; the §2.4b factors, or
+f[month] without k_unit, × the MAP ratio too; raw, unusable or no CHIRPS of
+its own, the MAP ratio alone. An uploaded forecast (`'other'`, or the field
+absent) keeps the unit's MAP ratio (unit MAP ÷ gauge MAP, × 1 without them),
+because it may already be at gauge level. The
 catchment's own forecast days stay uncorrected either way.
 Each GEFS issue replaces the one before from its issue date on, so the series
 may keep an older issue's first day before today's; after the last observed
@@ -2364,11 +2367,26 @@ on the catchment's rain warns how many.
   through the catchment's rain. The forecast is one catchment-wide series.
   When it is CHIRPS-GEFS (`forecastRainSource: 'chirps_gefs'` in the input,
   engine ≥ 1.85.0, issue #500 item 5), a unit's forecast days are corrected
-  as its CHIRPS is, × f[month] × k_unit: CHIRPS-GEFS is raw CHIRPS level
-  (§2.4f), so without it the rain would drop where the forecast starts.
-  An uploaded forecast (`'other'`, or absent) may already be at gauge
-  level, so it keeps the MAP ratio: × unit MAP ÷ gauge MAP when rule 2's
-  conditions hold, else × 1. The forecast
+  as its CHIRPS is: CHIRPS-GEFS is raw CHIRPS level (§2.4f), so without it
+  the rain would step where the forecast starts. The multiplier on the
+  catchment forecast, by the unit's CHIRPS level (`summary.unitRain.units[].chirps`):
+
+  | CHIRPS level | Forecast day × |
+  | --- | --- |
+  | `map` (its MAP factor) | the MAP factor |
+  | `reference` with k_unit | f[month] × k_unit |
+  | `reference` without k_unit (no MAP, or no complete year) | f[month] × the MAP ratio |
+  | `bias` (the catchment's §2.4b factors) | the day's §2.4b factor × the MAP ratio |
+  | `raw` | the MAP ratio |
+  | `unusable` (7a), or no CHIRPS of its own | the MAP ratio |
+
+  A level that reaches the unit's MAP (its MAP factor, or k_unit) stands
+  alone; one that only shapes the season or brings CHIRPS to the catchment
+  gauge (f without k_unit, the §2.4b factors) keeps the MAP ratio on top, as
+  the unit's history on rule 2 reads at gauge × ratio. The MAP ratio is
+  unit MAP ÷ gauge MAP when rule 2's conditions hold, else 1. An uploaded
+  forecast (`'other'`, or absent) may already be at gauge level, so it
+  takes the MAP ratio alone, whatever the level. The forecast
   tail (§2.4f) is still where the catchment's rain turns to forecast, so a
   run with a tail and one without agree on every historical day, to the bit
   (`checkForecastPrefix` on per-unit inputs).
@@ -2703,7 +2721,12 @@ for each unit](./maps.md#map-for-each-unit).
 - the run window still follows the catchment's rain series (§2.1), so a
   project needs a catchment series or a set simulation period;
 - the EWR split and the land cover's low-flow threshold stay on the flow
-  shares, while each unit's runoff is its own (engine-audit.md U1).
+  shares, while each unit's runoff is its own (engine-audit.md U1);
+- the reference fit reads the checked catchment rain over its whole record,
+  including the days a §2.4e rain-source period sets from an alternate
+  series or the reanalysis fallback: the fit then compares that series, not
+  the gauge, with the cell on those days. Whether to leave them out is the
+  hydrologist's call ([followups.md § Hydrologist](./followups.md#hydrologist)).
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 

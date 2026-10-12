@@ -868,6 +868,11 @@ def _forecast_doc(reference: bool) -> dict:
     zero = [0.0] * n
     zero[n - 3] = None
     series["rain_chirps_mm@d"] = {"startDate": start.isoformat(), "values": zero}
+    # s: a MAP (so a MAP ratio) but a CHIRPS with a gap in every year, so no complete year: no k_unit, no MAP factor.
+    gappy = _wave(start, n, 6, 0.6)
+    for y in range(6):
+        gappy[y * 365 + 100] = None
+    series["rain_chirps_mm@s"] = {"startDate": start.isoformat(), "values": gappy}
     src = {"mapSource": "invented"}
     nodes = [
         _node("o", "gauge", None),
@@ -876,6 +881,7 @@ def _forecast_doc(reference: bool) -> dict:
         _node("b", "farm", "o", areaKm2=1, mapMm=400, **src),
         _node("d", "farm", "o", areaKm2=1, mapMm=500, **src),
         _node("e", "farm", "o", areaKm2=1.5),
+        _node("s", "farm", "o", areaKm2=1.2, mapMm=750, **src),
     ]
     ur: dict = {"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"}
     if reference:
@@ -891,8 +897,11 @@ def unit_rain_forecast_gefs() -> dict:
     turn of the year. r and a (rule 2, CHIRPS of their own) take the
     forecast × f[month] × k_unit, December's and January's factor each on
     its days, not × their MAP ratio; e (rule 3, no MAP) × f[month] alone;
-    b (rule 2, no CHIRPS) and d (unusable CHIRPS, item 7a) keep × the MAP
-    ratio. The historical days are unchanged by the setting."""
+    s (rule 2, a MAP but no complete CHIRPS year, so no k_unit) × f[month]
+    × its MAP ratio, the factors shaping the season and the ratio setting
+    the level its history's gauge × ratio reads at; b (rule 2, no CHIRPS)
+    and d (unusable CHIRPS, item 7a) keep × the MAP ratio. The historical
+    days are unchanged by the setting."""
     return _forecast_doc(True)
 
 
@@ -901,6 +910,7 @@ def unit_rain_forecast_gefs_noref() -> dict:
     like the unit's CHIRPS" read as the unit's rule-3 levelling, whatever it
     is. r and a: × their CHIRPS MAP factor (unit MAP ÷ the mean annual
     CHIRPS); e (no MAP): × the catchment's §2.4b factor for the day's month;
+    s (a MAP, no complete CHIRPS year): × the §2.4b factor × its MAP ratio;
     b and d: × the MAP ratio as before. A reading of item 5 for units
     without a reference (the issue speaks of f × k_unit only), so a
     disagreement here is a point for the docs to settle, not a defect."""
