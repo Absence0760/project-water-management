@@ -697,7 +697,7 @@
 		flex-basis: 100%;
 		order: 1;
 		margin: 0 0 0.25rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.check-row {
