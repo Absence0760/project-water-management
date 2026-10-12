@@ -22,11 +22,17 @@ export function sig(v: number | null | undefined): string {
 	return fmtNum(v, a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : 3);
 }
 
-/** "12 – 30" (5th – 95th percentile); "–" when the band has no percentiles. */
-export const rangeText = (b: Band, f: (v: number) => string = sig) => (b.p5 === null || b.p95 === null ? '–' : `${f(b.p5)} – ${f(b.p95)}`);
+/**
+ * "12 – 30" (5th – 95th percentile); "–" when the band has no percentiles, or
+ * is withheld: a viewer kept from the registered volumes reads a cap or
+ * full-allocation run's ensembles, and a paired band with such a run on
+ * either side, as EWR counts and rates only, the flow bands null or absent
+ * (#523 I, G1c; docs/security.md).
+ */
+export const rangeText = (b: Band | null | undefined, f: (v: number) => string = sig) => (!b || b.p5 === null || b.p95 === null ? '–' : `${f(b.p5)} – ${f(b.p95)}`);
 
-/** A band's three numbers for a table row, "–" for each when gated. */
-export const bandCells = (b: Band, f: (v: number) => string = sig) => [b.p5, b.p50, b.p95].map((v) => (v === null ? '–' : f(v)));
+/** A band's three numbers for a table row, "–" for each when gated or withheld (as rangeText). */
+export const bandCells = (b: Band | null | undefined, f: (v: number) => string = sig) => (b ? [b.p5, b.p50, b.p95] : [null, null, null]).map((v) => (v === null ? '–' : f(v)));
 
 /** A share as a whole %, "–" for null. */
 export const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '–' : `${fmtNum(v * 100, 0)} %`);

@@ -3020,7 +3020,10 @@ database:
   (`403 allocation_series_withheld`), `…/series/bulk`, `…/day` (a unit's and
   the catchment's), the daily, all-farms and summary CSVs and the `.xlsx`
   workbook, the compare route, History, sweep members (`withheld:
-  ["series"]`), uncertainty ensembles, yields computed on such a run or
+  ["series"]`), uncertainty ensembles (a paired band when **either** run
+  is one, the run it is listed under or its baseline ensemble's: the band is
+  the difference of the two runs' members, so either side's figures give the
+  other's back; `ensemblesAsSeen` in `runs/uncertainty.ts`, #523 G1c), yields computed on such a run or
   scenario (`points: null`, `withheld`), the evidence report live, in a
   pack's served manifest (its PDF refused, `packWithheldPart`) and in a
   report PDF printed without the volumes. The summary is marked

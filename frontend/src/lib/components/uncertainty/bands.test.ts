@@ -52,6 +52,9 @@ describe('band text', () => {
 		expect(bandCells(b)).toEqual(['2.95', '20.5', '38.1']);
 		expect(rangeText(gated)).toBe('–');
 		expect(bandCells(gated)).toEqual(['–', '–', '–']);
+		// Withheld from a viewer kept from the volumes (#523 I, G1c): null in an ensemble's bands, absent from a paired band's.
+		expect([rangeText(null), rangeText(undefined)]).toEqual(['–', '–']);
+		expect([bandCells(null), bandCells(undefined)]).toEqual([['–', '–', '–'], ['–', '–', '–']]);
 	});
 	it('rounds to about three significant figures', () => {
 		expect([sig(1234.5), sig(12.34), sig(1.234), sig(0.01234), sig(null)]).toEqual(['1\u202f235', '12.3', '1.23', '0.012', '–']);
