@@ -39,7 +39,7 @@ import { createFeed, listFeeds, updateFeed, type FeedMeta } from './store.js';
 
 /** The series a unit's feed writes: its own CHIRPS (the reference rainfall), sited at the unit. */
 export const UNIT_TARGET_KIND = 'rain_chirps_mm';
-/** The product a unit's feed reads unless told otherwise: `rnl`, from 1981 (a hydrologist's question in #482, provisional). */
+/** The product a unit's feed reads unless told otherwise: `rnl`, from 1981, which covers the whole 1991–2020 MAP period k_unit needs (decided in #500, answer 3; the catchment CHIRPS feed's default stays `sat`). */
 export const DEFAULT_UNIT_PRODUCT: ChirpsDailyProduct = 'rnl';
 /** The most units one request takes (the model holds at most 500 nodes; a project at most MAX_FEEDS feeds). */
 const MAX_UNITS = 500;

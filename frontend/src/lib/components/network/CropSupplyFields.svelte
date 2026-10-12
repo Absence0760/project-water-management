@@ -99,7 +99,7 @@
 					<div class="field">
 						<label for={id('pool')}>Pool at the pump for the crops <span class="u">(m³)</span></label>
 						<NumberInput id={id('pool')} min={0} grouped nullable placeholder="no pool" disabled={readonly} aria-describedby="{id('pool')}-h" value={node.cropRiverPoolM3 ?? null} onchange={(v) => (node.cropRiverPoolM3 = v)} />
-						<span class="hint" id="{id('pool')}-h">Starts full; its surface is estimated from the capacity, for its evaporation.</span>
+						<span class="hint" id="{id('pool')}-h">Starts full and holds up to this volume; no rain or evaporation.</span>
 						<FieldHistoryLine field="node:{node.id}:cropRiverPoolM3" {unit} />
 					</div>
 				{/if}
