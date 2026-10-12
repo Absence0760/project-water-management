@@ -1,0 +1,167 @@
+// Read-only production checks (docs/deployment.md § Read-only production
+// checks). RDS is private and has no bastion, so a question the operator must
+// ask of production data goes through the migrate Lambda, the one function
+// that can reach the database as the schema owner: an event
+// `{ "check": "<name>" }` runs the named query of the registry below, and
+// nothing else. The event names a check; it never carries SQL, parameters or
+// any other field (parseCheckRequest refuses one that does), so the Lambda
+// can't be made to run a query that isn't reviewed here.
+//
+// Each check runs inside a READ ONLY transaction (any write, sequence or
+// function that writes fails, SQLSTATE 25006) with a statement timeout, and
+// answers with ids, engine versions, modes and dates only: never a name, an
+// email, a volume, a note or any other figure, so its answer is safe to paste
+// into an issue. A check lists at most CHECK_ROWS_MAX rows and says whether
+// it held back more (`truncated`, `count` is the total).
+//
+// Adding a check: one entry below, its SQL selecting only `columns`, a DB
+// test planting a row it must find and one it must not
+// (readOnlyChecks.db.test.ts), and its command and meaning in deployment.md.
+import type pg from 'pg';
+
+export interface ReadOnlyCheck {
+	/** What it finds, for the CloudWatch log. */
+	readonly about: string;
+	/** The query: SELECT only, no parameters, its columns exactly `columns`. */
+	readonly sql: string;
+	/** The columns returned, in order; ids, versions, modes, dates and flags only. */
+	readonly columns: readonly string[];
+	/** The ORDER BY of the outer query (the subquery's own order isn't kept). */
+	readonly orderBy: string;
+}
+
+/** The most rows a check returns; `count` is the total either way. */
+export const CHECK_ROWS_MAX = 500;
+/** Each check's statement timeout. The Lambda's own is 900 s. */
+export const CHECK_STATEMENT_TIMEOUT = '120s';
+
+export const CHECKS = {
+	// Issue #500: engines 1.80.0–1.84.0 levelled a unit's CHIRPS with a reference
+	// gauge set by × unit MAP ÷ the reference unit's MAP, replaced by k_unit in
+	// 1.85.0 (engine-audit.md U1). docs/followups.md § Blocking releases.
+	'unit-rain-reference-runs': {
+		about: 'runs on engines 1.80.0–1.84.0 with per-unit rain levelled by a reference gauge (issue #500)',
+		sql: `SELECT r.id AS run_id, r.project_id, r.engine_version, r.created_at
+			FROM model_run r
+			WHERE r.engine_version IN ('1.80.0', '1.81.0', '1.82.0', '1.83.0', '1.84.0')
+			  AND r.inputs->'settings'->'unitRain'->>'mode' = 'perUnit'
+			  AND jsonb_typeof(r.inputs->'settings'->'unitRain'->'reference') = 'object'`,
+		columns: ['run_id', 'project_id', 'engine_version', 'created_at'],
+		orderBy: 'created_at, run_id'
+	},
+	// Issue #523 finding I: a run that caps use at, or scales demand to, the
+	// registered volumes (allocationMode cap or fullAllocation) rests on them
+	// everywhere, so its farm views carry each farm's figures worked out from
+	// its volume. Since 213 the baseline compares only and the API refuses to
+	// publish such a run or start an outlook on one, so only one from before
+	// 213 can be found here (the check doesn't filter on a date: one from after
+	// would be a bug, and should show). One row per run publication, outlook
+	// and outlook publication on such a run; `current` is whether farmers see
+	// it now (a publication not superseded, an outlook publication not ended,
+	// an outlook with a current publication). An outlook publication whose
+	// outlook was trimmed (outlook_id SET NULL) has lost its run and can't be
+	// found.
+	'pre-213-cap-runs': {
+		about: 'cap or full-allocation runs published, or used as an outlook’s base (issue #523 finding I)',
+		sql: `WITH capped AS (
+				SELECT id, project_id, engine_version, created_at, summary->'allocations'->>'mode' AS mode
+				FROM model_run
+				WHERE summary->'allocations'->>'mode' IN ('cap', 'fullAllocation')
+			)
+			SELECT 'run_publication' AS kind, p.id, c.project_id, c.id AS run_id, c.mode, c.engine_version,
+				c.created_at AS run_created_at, p.published_at AS at, p.superseded_at IS NULL AS current
+			FROM run_publication p JOIN capped c ON c.id = p.run_id
+			UNION ALL
+			SELECT 'seasonal_outlook', o.id, c.project_id, c.id, c.mode, c.engine_version,
+				c.created_at, o.created_at,
+				EXISTS (SELECT 1 FROM outlook_publication op WHERE op.outlook_id = o.id AND op.ended_at IS NULL)
+			FROM seasonal_outlook o JOIN capped c ON c.id = o.base_run_id
+			UNION ALL
+			SELECT 'outlook_publication', op.id, c.project_id, c.id, c.mode, c.engine_version,
+				c.created_at, op.published_at, op.ended_at IS NULL
+			FROM outlook_publication op
+			JOIN seasonal_outlook o ON o.id = op.outlook_id
+			JOIN capped c ON c.id = o.base_run_id`,
+		columns: ['kind', 'id', 'project_id', 'run_id', 'mode', 'engine_version', 'run_created_at', 'at', 'current'],
+		orderBy: 'current DESC, project_id, at, id'
+	}
+} as const satisfies Record<string, ReadOnlyCheck>;
+
+export type CheckName = keyof typeof CHECKS;
+
+export type CheckErrorCode = 'refused' | 'check_failed';
+
+/** A failed check. `message` goes to CloudWatch; `publicReason` is fixed text, safe to print. */
+export class CheckError extends Error {
+	constructor(
+		message: string,
+		readonly code: CheckErrorCode,
+		readonly publicReason: string | null = null
+	) {
+		super(message);
+		this.name = 'CheckError';
+	}
+}
+
+const refused = (reason: string) => new CheckError(reason, 'refused', reason);
+
+/**
+ * The check an event asks for. The event is exactly `{ check: "<name>" }`
+ * with a name in `registry`: any other field (`sql`, `params`, `load`, …),
+ * a name that isn't a string, or an unknown name is refused before anything
+ * connects.
+ */
+export function parseCheckRequest<R extends Record<string, ReadOnlyCheck>>(event: unknown, registry: R = CHECKS as unknown as R): keyof R & string {
+	if (!event || typeof event !== 'object' || Array.isArray(event)) throw refused('the event is not an object');
+	const keys = Object.keys(event);
+	if (keys.length !== 1 || keys[0] !== 'check') throw refused('a check event has one field, check, naming the check; it takes no SQL or parameters');
+	const name = (event as { check: unknown }).check;
+	if (typeof name !== 'string' || !Object.hasOwn(registry, name)) {
+		throw refused(`check must be one of ${Object.keys(registry).join(', ')}`);
+	}
+	return name;
+}
+
+export interface CheckResult {
+	check: string;
+	/** Every row the query found (also when `rows` holds fewer). */
+	count: number;
+	truncated: boolean;
+	rows: Record<string, string | boolean | null>[];
+}
+
+/** A column's value as the answer carries it: a date as ISO 8601, a flag as itself, anything else as text. */
+function cell(v: unknown): string | boolean | null {
+	if (v === null || v === undefined) return null;
+	if (v instanceof Date) return v.toISOString();
+	if (typeof v === 'boolean' || typeof v === 'string') return v;
+	return String(v);
+}
+
+/**
+ * Run one check of `registry` on `client` inside a READ ONLY transaction,
+ * always rolled back. `client` is connected and idle (no transaction open).
+ */
+export async function runCheck<R extends Record<string, ReadOnlyCheck>>(client: pg.ClientBase, name: keyof R & string, registry: R = CHECKS as unknown as R): Promise<CheckResult> {
+	const check = registry[name]!;
+	await client.query('BEGIN TRANSACTION READ ONLY');
+	try {
+		await client.query(`SET LOCAL statement_timeout = '${CHECK_STATEMENT_TIMEOUT}'`);
+		// Belt and braces: the transaction refuses writes, or nothing runs.
+		const { rows: ro } = await client.query<{ transaction_read_only: string }>('SHOW transaction_read_only');
+		if (ro[0]?.transaction_read_only !== 'on') throw new CheckError('the transaction is not read only', 'check_failed');
+		const cols = check.columns.map((c) => `q.${c}`).join(', ');
+		const { rows } = await client.query<Record<string, unknown>>(
+			`SELECT ${cols}, count(*) OVER () AS total_ FROM (${check.sql}) q ORDER BY ${check.orderBy} LIMIT ${CHECK_ROWS_MAX}`
+		);
+		const count = rows.length ? Number(rows[0]!.total_) : 0;
+		return {
+			check: name,
+			count,
+			truncated: count > rows.length,
+			rows: rows.map((r) => Object.fromEntries(check.columns.map((c) => [c, cell(r[c])])))
+		};
+	} finally {
+		await client.query('ROLLBACK');
+	}
+}

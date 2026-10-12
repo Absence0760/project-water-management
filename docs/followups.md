@@ -41,14 +41,35 @@ The checklist for these is issue #62; the history scrub is #63.
       reference gauge set by × unit MAP ÷ the reference unit's MAP, which the
       operator's 2026-10-09 decisions replaced with k_unit (engine 1.85.0;
       engine-audit.md U1 says why it is not an erratum). Per-unit rain is off
-      by default, but that doesn't prove no production run used it. Run, on
-      production (operator; read-only):
-      `SELECT project_id, id, engine_version, created_at FROM model_run WHERE engine_version IN ('1.80.0','1.81.0','1.82.0','1.83.0','1.84.0') AND inputs->'settings'->'unitRain'->>'mode' = 'perUnit' AND jsonb_typeof(inputs->'settings'->'unitRain'->'reference') = 'object';`
-      If it returns no rows, tick this. If it returns any, add an errata
+      by default, but that doesn't prove no production run used it. Run the
+      read-only check `unit-rain-reference-runs` on production (operator; the
+      one-line `aws lambda invoke` in
+      [deployment.md § Read-only production checks](./deployment.md#read-only-production-checks),
+      which runs `SELECT project_id, id, engine_version, created_at FROM model_run WHERE engine_version IN ('1.80.0','1.81.0','1.82.0','1.83.0','1.84.0') AND inputs->'settings'->'unitRain'->>'mode' = 'perUnit' AND jsonb_typeof(inputs->'settings'->'unitRain'->'reference') = 'object'`
+      in a read-only transaction through the migrate Lambda).
+      If it answers `count: 0`, tick this. If it returns any, add an errata
       row to docs/engine-errata.md (keyed `run`, 1.80.0 to 1.84.0, fixed
       1.85.0, condition: `settings.unitRain.reference` set) and follow
       docs/legal/known-defect-procedure.md. Trigger: before the release that
       ships engine 1.85.0.
+- [ ] **Cap or full-allocation runs published or outlooked before 213
+      (issue #523 finding I).** Before migration 213 a project's baseline
+      could cap use at, or scale demand to, the registered volumes; such a
+      run's farm views carry each farm's figures worked out from its volume.
+      The API now refuses to publish one or start an outlook on one, and
+      withholds an older one's farm previews and outlook from viewers kept
+      from the volumes, but a publication or outlook publication made before
+      213 can still be what farmers see. Run the read-only check
+      `pre-213-cap-runs` on production (operator; the one-line `aws lambda
+      invoke` in
+      [deployment.md § Read-only production checks](./deployment.md#read-only-production-checks)).
+      `count: 0`: tick this. For each row with `current: true`: a
+      `run_publication`, run the model on that project (it compares only
+      since 213) and publish the new run, which supersedes it; an
+      `outlook_publication`, withdraw it (and start and publish a new
+      outlook on a compare-only run if farmers need one). Rows with
+      `current: false` need nothing. Trigger: before the release that ships
+      #527 (issue #523's operator list).
 - [ ] **GitHub variables for the background Lambdas (2026-09-25).** The
       backend release preflight (`deploy-backend.yml`, `REQUIRED_CONFIG`)
       refuses every `backend@` release until these repository variables
@@ -4022,12 +4043,9 @@ from the WP:
       ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
       Nothing is left as an accepted flow differencing. The modelled use
       on `GET …/runs/:runId/allocations` for such a run (round 5, finding 3)
-      is fixed on `fix/523-g-holder-totals`. Still to do by the operator: run
-      the read-only check for cap or full-allocation publications in
-      production (`SELECT p.project_id, p.id, p.superseded_at FROM
-      run_publication p JOIN model_run r ON r.id = p.run_id WHERE
-      r.summary->'allocations'->>'mode' IN ('cap','fullAllocation')`, and
-      the same on `seasonal_outlook` by `base_run_id`); supersede any found.
+      is fixed on `fix/523-g-holder-totals`. Still to do by the operator: the
+      read-only check `pre-213-cap-runs` in production, tracked under
+      [§ Blocking releases](#blocking-releases-operator).
 - [x] **Registration numbers in History** (2026-10-03): viewers read
       `allocation.created/changed/deleted` with `registrationNo` (a "unique
       identifier", POPIA s1) and `allocation.created` with the volume. Done:

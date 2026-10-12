@@ -4112,6 +4112,14 @@ key there would let any read-only principal forge any user's session.
   Its answer and its failure summary carry counts, codes and fixed text
   only, since the Actions log is public; the file's problems go to
   CloudWatch.
+- **Read-only production checks** (deployment.md § Read-only production
+  checks) go through the same function, invoked by the operator's SSO
+  session: an event `{ "check": "<name>" }` runs one query of a reviewed
+  registry (`backend/src/checks/readOnlyChecks.ts`). The event takes no SQL
+  and no other field (refused before anything connects), the query runs in
+  a `READ ONLY` transaction that is always rolled back, and the answer
+  carries ids, engine versions, modes, dates and flags only (a unit test
+  holds the column allowlist; a DB test shows a write inside fails).
 - **No role can write either bucket** but the operator's own SSO session;
   the deploy role touches neither, and a guardrail test (`guardrails.tftest.hcl`) fails if any other role policy names either bucket. Uploading to the tiles bucket is itself
   publishing (the behaviour serves what is there), so the licence steps come

@@ -1837,6 +1837,87 @@ afterwards rather than climbing back, the instance is too small for the data:
 move `db_instance_class` to `db.t4g.small` (2 GiB). On this single-AZ
 instance the resize restarts it, a few minutes down.
 
+## Read-only production checks
+
+Some follow-ups need a question asked of production's data, and RDS is
+private with no bastion. The migrate Lambda, which already reads the
+owner's credentials, answers a fixed set of them: an event
+`{ "check": "<name>" }` runs that one named query from the registry in
+`backend/src/checks/readOnlyChecks.ts` and nothing else. The event never
+carries SQL: one with any other field, or a name not in the registry, is
+refused (`code: "refused"`) before anything connects. The query runs as
+the owner inside a `READ ONLY` transaction (any write fails, SQLSTATE
+25006) with a 120 s statement timeout, and is always rolled back. It runs
+no migration and no role sync, and needs no new permission: the operator's
+SSO session invokes the function, and the function reads only the secret
+it already reads.
+
+The answer is `{ check, count, truncated, rows }`: ids, engine versions,
+allocation modes, dates and flags only, never a name, an email, a volume or
+a note, so it can be pasted into an issue. At most 500 rows come back;
+`count` is the total and `truncated` says whether more were held back. A
+failure is a `CheckFailed` error whose message is `{ code, reason,
+logStream, requestId }`; the detail is in the function's CloudWatch log
+(`/aws/lambda/water-management-migrate`). The migrate function runs one at
+a time (reserved concurrency 1), so don't run a check while a backend
+deploy is migrating or a reference load is running: the second invocation
+is throttled, and running it again afterwards is safe.
+
+Run each from any directory after `aws sso login --profile
+water-management`; the answer is written to the named file, then printed:
+
+- **`unit-rain-reference-runs`** (issue #500,
+  [followups.md § Blocking releases](./followups.md#blocking-releases-operator)):
+  runs on engines 1.80.0–1.84.0 whose `settings.unitRain` is `perUnit` with
+  a `reference` gauge object, the rejected reference-gauge formula. Each
+  row is `run_id`, `project_id`, `engine_version`, `created_at`.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"unit-rain-reference-runs"}' --cli-read-timeout 300 --region af-south-1 --profile water-management unit-rain-reference-runs.json && jq . unit-rain-reference-runs.json
+  ```
+
+  `count: 0`: no production run used the formula; tick the follow-up. Any
+  rows: add the errata row the follow-up describes to
+  [engine-errata.md](./engine-errata.md) and follow
+  [legal/known-defect-procedure.md](./legal/known-defect-procedure.md) for
+  those runs.
+
+- **`pre-213-cap-runs`** (issue #523 finding I,
+  [security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)):
+  every publication, outlook and outlook publication resting on a run that
+  caps use at, or scales demand to, the registered volumes
+  (`summary.allocations.mode` `cap` or `fullAllocation`). Since 213 the API
+  refuses to make one, so only one from before 213 can show. Each row is
+  `kind` (`run_publication`, `seasonal_outlook` or `outlook_publication`),
+  its `id`, `project_id`, `run_id`, `mode`, `engine_version`,
+  `run_created_at`, `at` (published or created) and `current` (farmers see
+  it now: a publication not superseded, an outlook publication not ended,
+  an outlook with a current publication).
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"pre-213-cap-runs"}' --cli-read-timeout 300 --region af-south-1 --profile water-management pre-213-cap-runs.json && jq . pre-213-cap-runs.json
+  ```
+
+  `count: 0`: nothing to do; tick the follow-up. For each `current` row:
+  a `run_publication`: run the model on that project (it compares only
+  now) and publish the new run, which supersedes it (`POST
+  /projects/:id/publication`, **Publish this run** in the run's
+  Publication panel); an
+  `outlook_publication` (and its `seasonal_outlook`): withdraw it (`DELETE
+  /projects/:id/outlook-publication`, **Withdraw** in the outlook's
+  Farmers section) and, if
+  farmers need an outlook, start a new one on a compare-only run and
+  publish that. Rows with `current: false` need nothing: viewers kept from
+  the volumes already get none of their figures (farm previews refused,
+  farm history drops them). An outlook publication whose outlook was
+  trimmed has lost its link to the run and can't be found by this check.
+
+Adding a check is a code change: an entry in the registry (a `SELECT`
+with no parameters, its columns from the allowlist its unit test holds), a
+DB test that plants a row it must find and one it must not
+(`checks/readOnlyChecks.db.test.ts`), and its command here, shipped by a
+`backend@` release.
+
 ## Who can sign up
 
 `signup_open = false` (the default) sets `SIGNUP_OPEN=false` on the API, and
