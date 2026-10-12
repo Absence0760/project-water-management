@@ -15,9 +15,9 @@
 // warning and can't be decided. Axe on
 // both views, light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember } from '../support/api.ts';
+import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { AUTHORITY, seedApplicantProject, submitApplication } from '../support/applications.ts';
-import { tamperRunSummary } from '../support/db.ts';
+import { plantDwsGaugeRecord, tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
@@ -365,4 +365,30 @@ test('the authority confirms who acts for it: a host owner proposes, an authorit
 	const history = await page.request.get(`${API_URL}/projects/${project.id}/history?kind=authority&limit=50`);
 	const kinds = ((await history.json()) as { items: { kind?: string }[] }).items.map((ev) => ev.kind ?? '').filter((k) => k.startsWith('authority.'));
 	expect(kinds).toEqual(expect.arrayContaining(['authority.proposed', 'authority.confirmed', 'authority.removed']));
+});
+
+// Small catchments (#523 G8, 232_small_catchments): observed flow at a DWS gauging station is published by DWS, so an
+// applicant sees the baseline's record however few farms the catchment has, while the outflow stays withheld.
+test('an applicant sees the published DWS gauge record in a catchment with two farms', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Gauge applicant');
+	const project = await seedRunnableProject(page.request, 'DWS gauge record');
+	await plantDwsGaugeRecord(project.id, 'X0H000');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	await addMember(page.request, project.id, applicant.user.email, 'contributor');
+	const a = applicant.page;
+	const created = await a.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: 'Gauge check', baseRunId: runId, ops: [] } });
+	expect(created.status(), await created.text()).toBe(201);
+	const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+	expect((await a.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/runs`, { data: {} })).status()).toBe(201);
+
+	await a.goto(`/projects/${project.id}?scenario=${sid}`);
+	const results = a.getByTestId('applicant-results');
+	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	await expect(results.getByTestId('applicant-catchment').getByRole('rowheader', { name: 'Flow at the outlet' })).toHaveCount(0);
+	const gauge = results.getByTestId('applicant-gauge-records');
+	await expect(gauge).toContainText('Observed flow at DWS gauging station X0H000, in the published baseline');
+	await expect(gauge.getByText('Observed flow at the outlet · DWS gauge record')).toBeVisible();
+	await expectNoViolations(a);
 });

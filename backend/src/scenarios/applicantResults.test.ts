@@ -209,6 +209,17 @@ describe('projectResultsForApplicant', () => {
 		expect(projectResultsForApplicant(scenario([damRaise], raised, { series })).catchment.series).toEqual({ ewr: series.ewr, outflow: series.outflow });
 	});
 
+	it('passes a published DWS gauge record through below 5 holders and with a baseline assumption (#523 G8; none given, none shown)', () => {
+		const gaugeRecords = [{ key: 'observed_flow' as const, label: 'Observed flow', station: 'A2H012', series: { startDate: '2020-01-01', values: [4, 5] } }];
+		const few = projectResultsForApplicant(scenario([damRaise], raised, { farmHoldersOk: false, gaugeRecords }));
+		expect(few.catchment.withheld).toBe('few_farm_holders');
+		expect(few.gaugeRecords).toEqual(gaugeRecords);
+		const assumed = projectResultsForApplicant(scenario([{ op: 'node.set', nodeId: BELOW, field: 'damCapacityM3', value: 0 }], raised, { allProposals: false, gaugeRecords }));
+		expect(assumed.catchment.figures).toBeNull();
+		expect(assumed.gaugeRecords).toEqual(gaugeRecords);
+		expect(projectResultsForApplicant(scenario([damRaise], raised)).gaugeRecords).toEqual([]);
+	});
+
 	it('shows an item their ops added under a hidden item’s id by the id they gave it (the run holds it under a fresh one)', () => {
 		const ops: ScenarioOp[] = [
 			{ op: 'crop.add', crop: { id: LUCERNE, name: 'Pecans', cropFactor: monthly(0.8) } },

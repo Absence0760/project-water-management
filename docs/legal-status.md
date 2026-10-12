@@ -349,9 +349,13 @@ cl. 3). The licensing ones are rows in
   practice, not a statutory number). *Built (164):* share links and
   applicants see natural flow and the EWR always; outflow, observed flow
   below the farms, the EWR shortfall and the volume rows stay at five
-  holders. A dominance rule (one holder taking most of the use) is a
-  tracked follow-up. *For counsel:* whether 5 is defensible, and whether a
-  dominance rule is needed before go-live.
+  holders. *Built (232, #523 G8):* the dominance rule beside k (the use
+  withheld when one holder takes more than 80 % of the run's supply, or two
+  more than 90 %; the registered volumes' provisional limits), and a
+  published DWS gauge record (a record a DWS feed wrote whole) shown at any
+  holder count, since DWS publishes it (the licensing assessors' review).
+  *For counsel:* whether 5 is defensible, and whether the dominance limits
+  are (with the CISO, #92).
 - [ ] **Rules broken by hidden farms.** *Provisional position (pre-counsel
   research, 2026-10-01):* a validation refusal the applicant can't fix
   blind is a fairness problem; an aggregate over five or more holders

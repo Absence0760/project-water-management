@@ -1296,8 +1296,17 @@ export interface ApplicantUnitFigures {
 	damLowM3: number | null;
 }
 
-/** Why the catchment figures or the per-unit figures are left out. */
+/** Why the catchment figures or the per-unit figures are left out. 'few_farm_holders': fewer than 5 farm holders, or one or two of them take most of the water (the dominance rule, 232). */
 export type ApplicantWithheld = 'baseline_assumptions' | 'few_farm_holders';
+
+/** A published DWS gauge record at the outlet, the published baseline's, shown at any holder count (#523 G8, 232). */
+export interface ApplicantGaugeRecord {
+	key: 'observed_flow' | 'observed_flow_other';
+	label: string;
+	/** The DWS station code, e.g. A2H012. */
+	station: string;
+	series: { startDate: string; values: (number | null)[] };
+}
 
 interface ApplicantSeriesPair {
 	base: { startDate: string; values: (number | null)[] };
@@ -1334,6 +1343,8 @@ export interface ApplicantResults {
 		/** Demand objects on their units (engine ≥ 1.45.0: a demandObject.add under a hidden object's id is shown by the id they gave). */
 		demandObjects?: { id: string; nodeId: string; name: string }[];
 	};
+	/** The published DWS gauge records at the outlet, always (#523 G8); [] when the baseline has none. */
+	gaugeRecords: ApplicantGaugeRecord[];
 }
 
 export interface ApplicantResultsRun {

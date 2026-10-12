@@ -202,7 +202,7 @@
 					{#if ready.months}
 						<FlowChart months={recentMonths(ready.months)} />
 					{:else}
-						<p class="fine" role={ready.chartFailed ? 'status' : undefined}>{ready.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.')}</p>
+						<p class="fine" role={ready.chartFailed ? 'status' : undefined}>{ready.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, or with one or two of them using most of the water, the river’s flows could reveal a hydrological unit’s water use.')}</p>
 					{/if}
 
 					<section class="card" aria-labelledby="about-h">

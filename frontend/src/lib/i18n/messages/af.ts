@@ -1305,8 +1305,8 @@ export const af: Catalogue = {
 	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Couldn’t load the flow chart just now.
 	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
-	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
-	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
+	// The flow chart isn’t shown for this catchment: with so few hydrological units, or with one or two of them using most of the water, the river’s flows could reveal a hydrological unit’s water use.
+	'0b3c4f73': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede, of met een of twee van hulle wat die meeste van die water gebruik, kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
 	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
 	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
@@ -1341,8 +1341,8 @@ export const af: Catalogue = {
 	'a1de2fdd': 'Verandering',
 	// Not assessed
 	'a0119bb9': 'Nie beoordeel nie',
-	// Flow volumes aren’t shown for this catchment: with so few hydrological units, or with a change to the shared baseline, they could reveal a hydrological unit’s water use.
-	'ab7c31f2': 'Vloeivolumes word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede, of met ’n verandering aan die gedeelde basislyn, kan hulle ’n hidrologiese eenheid se watergebruik verklap.',
+	// Flow volumes aren’t shown for this catchment: with so few hydrological units, with one or two of them using most of the water, or with a change to the shared baseline, they could reveal a hydrological unit’s water use.
+	'209e4f40': 'Vloeivolumes word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede, met een of twee van hulle wat die meeste van die water gebruik, of met ’n verandering aan die gedeelde basislyn, kan hulle ’n hidrologiese eenheid se watergebruik verklap.',
 	// Days below the EWR by month
 	'0fb6d799': 'Dae onder die EWR per maand',
 	// The change this application makes to the days below the EWR at the outlet, each calendar month.

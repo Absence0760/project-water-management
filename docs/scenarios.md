@@ -1615,7 +1615,13 @@ scenario is `'team'`, and behaves exactly as above).
     (the use: natural minus outflow is the farms' take), only at five or
     more farm holders (the k rule of the share links and the contributor's
     series, split in 164; provisional position, pre-counsel research,
-    2026-10-01); read under the caller's own RLS;
+    2026-10-01) and when no one holder takes more than 80 % of the run's
+    supply, nor two more than 90 % (the dominance rule, over the run and
+    its base, 232, provisional, #92); read under the caller's own RLS;
+  - the outlet's **published DWS gauge record** (`gaugeRecords`, #523 G8),
+    the published base run's, at any holder count and whatever the ops: DWS
+    publishes it, and no op changes it (a record is one only when a DWS
+    river-gauge feed wrote every reading of it, security.md § Share links);
   - their **own units** (their farm links as they read them now) and the
     units their `node.add` ops add, in full: demand, supply, share met, EWR
     charge, the dam;

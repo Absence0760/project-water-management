@@ -7,7 +7,7 @@
 import type { ProjectModel, RunSummary, ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { projectResultsForApplicant, type ApplicantResults, type ApplicantSeries } from './applicantResults.js';
+import { projectResultsForApplicant, type ApplicantGaugeRecord, type ApplicantResults, type ApplicantSeries } from './applicantResults.js';
 import { checkScenario, loadBaseInput, type ScenarioRow } from './execute.js';
 
 /** A run of the application as its results carry it. */
@@ -67,6 +67,8 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
 
 	// The river's series at any holder count, the outflow past the k rule only (164; RLS holds the same line).
 	const series = r.allProposals ? await catchmentSeries(db, projectId, runId, r.startDate, r.baseRunId, r.baseStartDate, r.farmHoldersOk) : null;
+	// A published DWS gauge record always (232, #523 G8): the base's, whatever the ops.
+	const gaugeRecords = await publishedGaugeRecords(db, projectId, r.baseRunId, r.baseStartDate);
 	const results = projectResultsForApplicant({
 		base,
 		baseSummary: r.baseSummary,
@@ -76,7 +78,8 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
 		ownNodeIds: s.ownedNodeIds,
 		allProposals: r.allProposals,
 		farmHoldersOk: r.farmHoldersOk,
-		series
+		series,
+		gaugeRecords
 	});
 	return {
 		run: {
@@ -115,4 +118,23 @@ async function catchmentSeries(db: Db, projectId: string, runId: string, runStar
 	const eb = get(baseRunId, 'ewr', baseStart);
 	const ea = get(runId, 'ewr', runStart);
 	return { outflow: ob && oa ? { base: ob, application: oa } : null, ewr: eb && ea ? { base: eb, application: ea } : null };
+}
+
+/**
+ * The published DWS gauge records at the outlet of the base run, read under
+ * the caller's RLS (run_series_select_contributor, 232: a series the run
+ * marked `publishedBy: 'DWS'`, of a published run, at any holder count).
+ * Only marked series are asked for, so a reader who may see more (an editor)
+ * gets the same.
+ */
+async function publishedGaugeRecords(db: Db, projectId: string, baseRunId: string, baseStart: string): Promise<ApplicantGaugeRecord[]> {
+	const { rows } = await db.query<{ key: ApplicantGaugeRecord['key']; label: string | null; station: string | null; values: (number | null)[] }>(
+		`SELECT key, meta->>'label' AS label, meta->>'station' AS station, "values" FROM run_series
+		 WHERE project_id = $1 AND run_id = $2 AND node_id IS NULL AND key IN ('observed_flow', 'observed_flow_other') AND meta->>'publishedBy' = 'DWS'
+		 ORDER BY key`,
+		[projectId, baseRunId]
+	);
+	return rows
+		.filter((x) => x.station)
+		.map((x) => ({ key: x.key, label: x.label ?? 'Observed flow', station: x.station!, series: { startDate: baseStart, values: x.values } }));
 }

@@ -562,6 +562,17 @@ counts, never names; a viewer reads the allocation events without the
 registration number and volume until an owner switches **What viewers see**
 on (`app_audit_subject`, 190), as they read the rows themselves.
 
+The catchment's series follow the same two limits for share links and
+applicants (232_small_catchments, issue #523 G8, provisional, #92): the
+use's series and volumes (the outflow, the observed flow, the EWR
+shortfall, a link's or a pack's volume rows) show only at 5 or more farm
+holders and when no one holder takes more than 80 % of the run's modelled
+supply, nor two more than 90 % (`app_run_use_shown`, one rule with the
+registered totals' `totalShown`). Natural flow and the EWR show always, and
+so does a **published DWS gauge record**: an outlet flow record a DWS feed
+wrote whole is DWS's own publication, shown at any holder count; a private
+logger isn't ([security.md § Share links](./security.md#share-links)).
+
 ## Still to build (WP-3.10)
 
 Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):

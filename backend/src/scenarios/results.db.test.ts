@@ -20,7 +20,7 @@ let farmer: User;
 let projectId: string;
 let published: string;
 
-// Gauge ← Waterval ← Rooikloof (A's); four more farms straight to the gauge: six farm holders.
+// Gauge ← Waterval ← Rooikloof (A's); four more farms straight to the gauge: six farm holders, each watering a crop.
 const outlet = node('Gauge', null);
 const waterval = node('Waterval', outlet.id, { damCapacityM3: 60_000 });
 const rooikloof = node('Rooikloof', waterval.id, { damCapacityM3: 20_000 });
@@ -57,9 +57,11 @@ beforeAll(async () => {
 	const model = {
 		nodes: [outlet, waterval, rooikloof, ...others],
 		crops: [citrus, lucerne],
+		// Every farm waters a crop, so no one or two of them take most of the supply (the dominance rule, 232).
 		cropAreas: [
 			{ nodeId: rooikloof.id, cropId: citrus.id, areaM2: 80_000 },
-			{ nodeId: waterval.id, cropId: lucerne.id, areaM2: 120_000 }
+			{ nodeId: waterval.id, cropId: lucerne.id, areaM2: 120_000 },
+			...others.map((o) => ({ nodeId: o.id, cropId: lucerne.id, areaM2: 100_000 }))
 		],
 		transfers: []
 	};

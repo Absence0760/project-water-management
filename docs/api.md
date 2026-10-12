@@ -2794,8 +2794,10 @@ below work on it too, for an editor.
   null with `withheld: 'baseline_assumptions'`. Within them the k rule is
   split (164): natural flow and the `ewr` series at any holder count; the
   outlet flow (`meanSimulatedOutflowM3Day`), the `outflow` series and every
-  `deficitM3` only at five or more farm holders, else null with
-  `withheld: 'few_farm_holders'`. `units[]`: their own units
+  `deficitM3` only at five or more farm holders and past the dominance
+  rule over the run and its base (no holder above 80 % of the run's
+  supply, no two above 90 %; `app_run_use_shown`, 232, provisional, #92),
+  else null with `withheld: 'few_farm_holders'`. `units[]`: their own units
   (their farm links as they read them now) and the ones the ops add
   (`added`), `{ nodeId, name, kind, base, application }` with demand,
   supply, share met, EWR charge and dam figures. `downstream[]`: every other
@@ -2807,6 +2809,12 @@ below work on it too, for an editor.
   what ran on their units (nodes, crops, crop areas, transfers, land cover,
   boreholes, demand objects), an item an op added under a hidden item's id
   shown by that id (the run holds it under a fresh one, `check.reIds`).
+  `gaugeRecords[]` (#523 G8, 232): the published base run's DWS gauge
+  records at the outlet, `{ key: 'observed_flow' | 'observed_flow_other',
+  label, station, series: { startDate, values } }` (m³/day), always, whatever
+  the holders or the ops; `[]` when the baseline has none (a record is one
+  only when a DWS river-gauge feed wrote every reading of it,
+  [security.md § Share links](./security.md#share-links)).
 - A contributor linked to a farm also reads its farm view
   (`GET /projects/:id/farm…`) as a farmer would.
 
@@ -3320,12 +3328,16 @@ never a farm's row, name or id.
   user count once, an unlinked farm on its own; design
   [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)):
   in a smaller catchment natural flow minus outflow would reveal the farms'
-  use (164).
+  use (164), and when no one holder takes more than 80 % of the run's
+  supply, nor two more than 90 % (the dominance rule, 232, provisional,
+  #92). `observed_flow` also answers at any holder count when it is a
+  published DWS gauge record (a record a DWS river-gauge feed wrote whole,
+  232, #523 G8; [security.md § Share links](./security.md#share-links)).
 - Every dead link answers the same `404 { error: "not found" }`: unknown,
   malformed, revoked or expired token, or nothing published. `/share/series`
   answers the same `404` for a key off the allowlist (every farm key), a key
   the run doesn't have (`observed_flow` without observed data), and a use
-  key below `k` holders. A body without `token` (or `key`) is `400`.
+  key below `k` holders or under the dominance rule. A body without `token` (or `key`) is `400`.
   When the published run is a forecast run, the series stops the day before
   its first forecast day (190): the monthly means and the last 365 days are
   the record's, never forecast rain read as the river's flow.

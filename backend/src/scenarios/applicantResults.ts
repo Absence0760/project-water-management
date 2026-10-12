@@ -100,7 +100,26 @@ export interface ApplicantDownstream {
 	supplyChangePct: number | null;
 }
 
-/** Why the catchment figures or the per-unit figures are left out. */
+/**
+ * A published DWS gauge record at the outlet (#523 G8, 232): the published
+ * base run's, at any holder count and whatever the application's ops, since
+ * DWS publishes it and no op changes it.
+ */
+export interface ApplicantGaugeRecord {
+	/** The run series it is stored as: the calibration record, or the other one. */
+	key: 'observed_flow' | 'observed_flow_other';
+	label: string;
+	/** The DWS station code, e.g. A2H012. */
+	station: string;
+	series: ApplicantSeries;
+}
+
+/**
+ * Why the catchment figures or the per-unit figures are left out.
+ * 'few_farm_holders': the use's figures fail the k rule (fewer than 5 farm
+ * holders) or the dominance rule (one holder over 80 % of the run's supply,
+ * or two over 90 %; app_run_use_shown, 232).
+ */
 export type ApplicantWithheld = 'baseline_assumptions' | 'few_farm_holders';
 
 export interface ApplicantResults {
@@ -125,6 +144,8 @@ export interface ApplicantResults {
 	unitsWithheld: ApplicantWithheld | null;
 	/** What ran on their units (the application run's model as the base projection shows a model), by the ids the applicant gave. */
 	model: Omit<ProjectModel, 'nodes'> & { nodes: NetworkNode[] };
+	/** The published DWS gauge records at the outlet, always (#523 G8); [] when the base has none. */
+	gaugeRecords: ApplicantGaugeRecord[];
 }
 
 export interface ApplicantResultsInput {
@@ -140,8 +161,10 @@ export interface ApplicantResultsInput {
 	ownNodeIds: readonly string[];
 	/** app_run_all_proposals. */
 	allProposals: boolean;
-	/** At least 5 farm holders (the k rule). */
+	/** The use may show: at least 5 farm holders (the k rule) and the dominance rule, over the run and its base (232). */
 	farmHoldersOk: boolean;
+	/** The base run's published DWS gauge records, read under the caller's RLS (232); absent = none. */
+	gaugeRecords?: ApplicantGaugeRecord[];
 	/** The catchment series, read under the caller's RLS; null when not read. */
 	series: {
 		outflow: { base: ApplicantSeries; application: ApplicantSeries } | null;
@@ -330,6 +353,7 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 		units,
 		downstream,
 		unitsWithheld: i.allProposals ? null : 'baseline_assumptions',
-		model
+		model,
+		gaugeRecords: i.gaugeRecords ?? []
 	};
 }

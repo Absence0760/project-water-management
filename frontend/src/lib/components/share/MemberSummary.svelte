@@ -88,7 +88,7 @@
 			</svg>
 			<p class="fine">{flowCaption(shown)} {flowVerdict(shown)}</p>
 		{:else}
-			<p class="fine">{chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.')}</p>
+			<p class="fine">{chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, or with one or two of them using most of the water, the river’s flows could reveal a hydrological unit’s water use.')}</p>
 		{/if}
 	</section>
 

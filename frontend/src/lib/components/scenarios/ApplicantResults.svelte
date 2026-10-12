@@ -71,6 +71,13 @@
 		return parts.filter(Boolean).join('; ');
 	}
 
+	/** The published DWS gauge records (#523 G8), one line each, shown at any holder count. */
+	const gaugeSeries = $derived(
+		results?.gaugeRecords?.length
+			? results.gaugeRecords.map((r, i) => ({ ...r.series, label: `${r.label} (DWS ${r.station})`, color: i ? '--series-2' : '--series-1' }))
+			: null
+	);
+
 	const chartSeries = $derived.by(() => {
 		const s = results?.catchment.series;
 		if (!s || (!s.outflow && !s.ewr)) return null;
@@ -188,8 +195,9 @@
 						</div>
 						{#if results.catchment.withheld === 'few_farm_holders'}
 							<p class="muted small" data-testid="applicant-catchment-withheld">
-								The natural flow and the EWR are shown. The flow at the outlet is shown once the catchment has five or more farm holders,
-								since natural flow less the outflow is what the farms use, and that can't be traced back to one farm.
+								The natural flow and the EWR are shown. The flow at the outlet is shown once the catchment has five or more farm holders
+								and no one or two of them take most of the water, since natural flow less the outflow is what the farms use, and that
+								mustn't trace back to one farm.
 							</p>
 						{/if}
 						{#if chartSeries}
@@ -207,6 +215,21 @@
 						{/if}
 					{:else}
 						<p class="muted small" data-testid="applicant-catchment-withheld">Not shown for a run with a baseline assumption (above).</p>
+					{/if}
+					{#if gaugeSeries}
+						<!-- A published DWS gauge record (#523 G8): DWS publishes it, so it shows however few farms the catchment has. -->
+						<div data-testid="applicant-gauge-records">
+							<p class="muted small">
+								Observed flow at {results.gaugeRecords.length === 1 ? 'DWS gauging station' : 'DWS gauging stations'}
+								<strong>{results.gaugeRecords.map((r) => r.station).join(', ')}</strong>, in the published baseline, as DWS Hydrological
+								Services publishes it. It is public, so it is shown however few farms the catchment has.
+							</p>
+							<Lazy load={loadChart}>
+								{#snippet children(LineChart)}
+									<LineChart title="Observed flow at the outlet · DWS gauge record" unit="m³/day" series={gaugeSeries} logToggle height={220} />
+								{/snippet}
+							</Lazy>
+						</div>
 					{/if}
 				</section>
 
