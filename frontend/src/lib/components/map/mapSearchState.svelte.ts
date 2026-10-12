@@ -2,7 +2,7 @@
 // component MapSearch.svelte): what was found, whether the list is open, the
 // match the view moved to, the live line, and the places' credit. Kept apart
 // from the markup so the flow is tested without a DOM
-// (mapSearch.svelte.test.ts).
+// (mapSearchState.svelte.test.ts).
 import type { MapSearchAnswer, MapSearchHit } from '$lib/api/types';
 import { hitName, placeCredits, resultLine } from './mapSearch';
 

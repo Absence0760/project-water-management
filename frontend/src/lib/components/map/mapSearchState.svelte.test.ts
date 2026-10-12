@@ -1,11 +1,11 @@
-// The Map's search box's flow (MapSearchState, mapSearch.svelte.ts): one match
+// The Map's search box's flow (MapSearchState, mapSearchState.svelte.ts): one match
 // moves the view at once and lists nothing, several open the list, a pick or
 // Escape closes it; the places' credit (CC BY 4.0) holds for as long as the
 // answer has places, list open or not. The browser flow is
 // e2e/tests/map-search.spec.ts.
 import { describe, expect, it, vi } from 'vitest';
 import type { MapSearchAnswer, MapSearchHit } from '$lib/api/types';
-import { MapSearchState } from './mapSearch.svelte';
+import { MapSearchState } from './mapSearchState.svelte';
 
 const GEONAMES = 'GeoNames (geonames.org), CC BY 4.0';
 const place = (name: string, source = GEONAMES, synthetic = false): MapSearchHit => ({

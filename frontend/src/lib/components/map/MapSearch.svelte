@@ -8,14 +8,14 @@
 	that moves the view to it (`onpick`) and closes the list. Whenever the
 	answer holds places, listed or picked at once, their credit (GeoNames, CC BY
 	4.0) shows under the box, linking to the Data sources page. The state is
-	mapSearch.svelte.ts.
+	mapSearchState.svelte.ts.
 	Escape closes the list. Nothing is saved, nothing is drawn: the view moves.
 -->
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { api, type MapSearchHit } from '$lib/api';
 	import { hitDetail, hitName } from './mapSearch';
-	import { MapSearchState } from './mapSearch.svelte';
+	import { MapSearchState } from './mapSearchState.svelte';
 
 	let { projectId, onpick }: { projectId: string; onpick: (hit: MapSearchHit) => void } = $props();
 
