@@ -358,7 +358,11 @@ MUTANTS = [
         'own = unit_gauge_checked(settings, series, f"rain_catchment_mm@{uid}", diag) if has_g else (lambda o: None)',
         "own = (lambda o, s_=own_g: v if valid(v := s_.get(o)) else None) if has_g else (lambda o: None)",
     ),
-    ("a unit gauge's accumulations aren't spread (item 6)", 'prep = prepare_rain(settings, {"rain_catchment_mm": g,', 'prep = prepare_rain({**settings, "zeroRainRuns": {**settings["zeroRainRuns"], "accumulationMode": "asRecorded"}}, {"rain_catchment_mm": g,'),
+    ("a unit gauge's accumulations aren't spread (item 6)", 'zr = {**settings["zeroRainRuns"], "missing": []', 'zr = {**settings["zeroRainRuns"], "accumulationMode": "asRecorded", "missing": []'),
+    ("the catchment's listed missing periods blank a unit gauge's days (engine 1.85.0)", 'zr = {**settings["zeroRainRuns"], "missing": [], ', 'zr = {**settings["zeroRainRuns"], '),
+    ("a unit gauge without CHIRPS of its own is checked against none (engine 1.85.0)", 'or series.get("rain_chirps_mm")\n', "\n"),
+    ("the reference fit keeps the catchment gauge's accumulation windows (engine 1.85.0)", 'out_of_fit = rain["fit_window_days"]', "out_of_fit = set()"),
+    ("the reference fit keeps a unit gauge's accumulation windows (engine 1.85.0)", 'out_of_fit = prep["fit_window_days"] if for_fit else set()', "out_of_fit = set()"),
     ("the reference fit reads the gauge as stored (item 1c)", "gv = gauge(o)", "gv = stored.get(o)"),
 ]
 
@@ -412,7 +416,7 @@ class CrossCheck(unittest.TestCase):
             "unit_chirps_reference", "unit_ref_months_fitted", "unit_ref_not_land",
             # Issue #500's decisions.
             "unit_k_from_map", "unit_chirps_unusable", "unit_forecast_levelled", "unit_gauge_set_aside",
-            "unit_gauge_windows", "unit_ref_days_checked_out",
+            "unit_gauge_windows", "unit_ref_days_checked_out", "unit_ref_window_days_out",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 

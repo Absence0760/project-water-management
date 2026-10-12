@@ -457,6 +457,8 @@ def prepare_rain(settings: dict, series: dict) -> dict:
         "pick": pick,
         "factors": factors if bias_on else [None] * 13,
         "fit_factors": factors,
+        # The days §2.4b leaves out for accumulations: window days and readings set aside after an outage.
+        "fit_window_days": window_days | set(outage_readings),
         "first": first,
         "last": last,
         "chirps": h,
@@ -789,27 +791,35 @@ def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, d
     return lambda v, o: v
 
 
-def unit_gauge_checked(settings: dict, series: dict, key: str, diag: dict | None):
+def unit_gauge_checked(settings: dict, series: dict, key: str, diag: dict | None, for_fit: bool = False):
     """A unit's own gauge after the catchment gauge's checks (issue #500
-    item 6), with the catchment's settings: §2.4c's zero runs and §2.4d's
-    accumulations (and the listed missing periods), against the unit's own
-    CHIRPS. A negative value is a no-data code, so a blank (§2.4h rule 1).
-    Returns o → the checked reading, None on a day the checks removed (or
-    with no reading)."""
+    item 6, engine 1.85.0), with the catchment's modes, fill threshold and
+    data-quality limits: §2.4c's zero runs and §2.4d's accumulations. The
+    dated lists (missing, keep-dry, kept readings, listed accumulations)
+    name days of the catchment gauge's record, so they don't apply. The
+    CHIRPS the checks compare with is the unit's own, else the catchment's.
+    A negative value is a no-data code, so a blank (§2.4h rule 1). Returns
+    o → the checked reading, None on a day the checks removed (or with no
+    reading); `for_fit` also None on the days §2.4b leaves out for
+    accumulations (the reference fit, item 1c)."""
     raw = series.get(key)
     if not raw:
         return lambda o: None
     uid = key.split("@", 1)[1]
     g = {"startDate": raw["startDate"], "values": [v if valid(v) else None for v in raw["values"]]}
-    prep = prepare_rain(settings, {"rain_catchment_mm": g, "rain_chirps_mm": series.get(f"rain_chirps_mm@{uid}")})
+    zr = {**settings["zeroRainRuns"], "missing": [], "keepDry": [], "keepReadings": [], "addAccumulations": []}
+    chirps = series.get(f"rain_chirps_mm@{uid}") or series.get("rain_chirps_mm")
+    prep = prepare_rain({**settings, "zeroRainRuns": zr}, {"rain_catchment_mm": g, "rain_chirps_mm": chirps})
+    out_of_fit = prep["fit_window_days"] if for_fit else set()
     if diag is not None:
         diag["unit_gauge_set_aside"] += prep["diag"]["zero_run_days_set_aside"]
         diag["unit_gauge_windows"] += prep["diag"]["accumulation_windows"]
 
     def checked(o):
         v, src = prep["pick"](o)
-        return v if src == 0 else None
+        return v if src == 0 and o not in out_of_fit else None
 
+    checked.fit_out = out_of_fit
     return checked
 
 
@@ -833,14 +843,16 @@ def reference_factors(ur: dict, settings: dict, series: dict, rain: dict, units:
     if pinned:
         return [None] + [float(x) for x in pinned], ref_unit
     if ref["gauge"] == "rain_catchment_mm":
+        out_of_fit = rain["fit_window_days"]
 
         def gauge(o):
             v, s_ = rain["pick"](o)
-            return v if s_ == 0 else None
+            return v if s_ == 0 and o not in out_of_fit else None
 
         stored = Series(series.get("rain_catchment_mm"))
     else:
-        gauge = unit_gauge_checked(settings, series, ref["gauge"], None)
+        gauge = unit_gauge_checked(settings, series, ref["gauge"], None, for_fit=True)
+        out_of_fit = getattr(gauge, "fit_out", set())
         stored = Series(series.get(ref["gauge"]))
     cell = Series(series.get("rain_chirps_cell_mm@" + ref["unitId"]))
     n = [0] * 13
@@ -858,6 +870,8 @@ def reference_factors(ur: dict, settings: dict, series: dict, rain: dict, units:
             elif valid(cv) and valid(stored.get(o)):
                 # A day the checks removed from the gauge (item 1c): out of the fit.
                 diag["unit_ref_days_checked_out"] += 1
+                if o in out_of_fit:
+                    diag["unit_ref_window_days_out"] += 1
     out = [None]
     for m in range(1, 13):
         if n[m] >= 90 and c[m] >= 50:
@@ -985,7 +999,7 @@ def run(doc: dict) -> dict:
                 # Issue #500's decisions: k_unit from a MAP, unusable CHIRPS (7a), CHIRPS-GEFS forecast days levelled (5),
                 # a unit gauge's days set aside and accumulation windows (6), reference fit days the checks left out (1c).
                 unit_k_from_map=0, unit_chirps_unusable=0, unit_forecast_levelled=0, unit_gauge_set_aside=0,
-                unit_gauge_windows=0, unit_ref_days_checked_out=0)
+                unit_gauge_windows=0, unit_ref_days_checked_out=0, unit_ref_window_days_out=0)
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})

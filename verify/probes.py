@@ -972,6 +972,34 @@ def unit_rain_gauge_checks() -> dict:
     return _net(nodes, series, unitRain={"mode": "perUnit"}, chirpsBiasCorrection="none")
 
 
+def unit_rain_gauge_catchment_settings() -> dict:
+    """What a unit gauge's checks take from the catchment (engine 1.85.0,
+    issue #500 item 6). u1 (its own gauge and CHIRPS): the catchment's
+    listed missing period, 2016-03-01 to 2016-03-31, names days of the
+    catchment gauge's record, not u1's, so u1 keeps its readings there
+    (the catchment's own rain does take CHIRPS on them). u2 has a gauge with
+    the flagged wet-season zero run and no CHIRPS of its own: the checks
+    compare with the catchment's CHIRPS, so a run day where it reads 1 mm
+    (at most the 2 mm threshold) keeps u2's 0, and the rest (3 mm) are set
+    aside and fall to the catchment's rain."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    ch = _run_chirps(start, n, 1)
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": _season(start, n, 0)},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": ch},
+        "rain_catchment_mm@u1": {"startDate": start.isoformat(), "values": _season(start, n, 2, 1.3)},
+        "rain_chirps_mm@u1": {"startDate": start.isoformat(), "values": _season(start, n, 4, 0.6)},
+        "rain_catchment_mm@u2": {"startDate": start.isoformat(), "values": _zero_run_gauge(start, n, 3, 1.1)},
+    }
+    nodes = [_node("o", "gauge", None), _node("u1", "farm", "o", areaKm2=2), _node("u2", "farm", "o", areaKm2=1)]
+    zr = {
+        "mode": "missing", "keepDry": [], "accumulationMode": "spread", "keepReadings": [], "addAccumulations": [],
+        "missing": [{"start": "2016-03-01", "end": "2016-03-31", "reason": "invented"}],
+    }
+    return _net(nodes, series, unitRain={"mode": "perUnit"}, chirpsBiasCorrection="none", zeroRainRuns=zr)
+
+
 def unit_rain_reference_checked() -> dict:
     """The reference fit reads the checked gauge rain (issue #500 item 1c):
     the catchment gauge has the flagged wet-season zero run, which §2.4c sets
@@ -980,13 +1008,27 @@ def unit_rain_reference_checked() -> dict:
     read as stored, the run's zeros against 3 mm would pull December's,
     January's and February's factors well below 2; checked, those days are
     out. Every fifth run day, CHIRPS at 1 mm (at most the 2 mm threshold),
-    keeps the gauge's 0 and so stays in the fit, 0 against 1 mm."""
+    keeps the gauge's 0 and so stays in the fit, 0 against 1 mm. In June
+    2018 a 60 mm reading after five blanks is an accumulation, spread 15 mm
+    a day over four of them against a cell of 40 mm; the fit leaves the
+    window's days out as §2.4b does (engine 1.85.0), so June stays at 2."""
     start = dt.date(2014, 1, 1)
     n = (dt.date(2019, 12, 31) - start).days + 1
     gauge = _zero_run_gauge(start, n, 0, 1.0)
     ch = _run_chirps(start, n, 1)
     run = range(_idx(start, 2015, 12, 16), _idx(start, 2016, 3, 1))
-    cell = [ch[i] if i in run else round(g * 0.5, 2) for i, g in enumerate(gauge)]
+    # The accumulation (engine 1.85.0: its window is out of the fit, as in §2.4b).
+    r = _idx(start, 2018, 6, 10)
+    for j in range(r - 5, r):
+        gauge[j] = None
+    gauge[r] = 60.0
+    gauge[r - 6] = 0.0
+    for j in range(r - 5, r - 1):
+        ch[j] = 40.0
+    for j in (r - 1, r, r + 1):
+        ch[j] = 0.0
+    window = range(r - 5, r + 2)
+    cell = [ch[i] if (i in run or i in window) else round(g * 0.5, 2) for i, g in enumerate(gauge)]
     series: dict = {
         "rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge},
         "rain_chirps_mm": {"startDate": start.isoformat(), "values": ch},
@@ -1002,9 +1044,10 @@ def unit_rain_reference_checked() -> dict:
 def unit_rain_reference_unit_gauge_checked() -> dict:
     """The same with a unit's own gauge as the reference (items 1c and 6):
     unit g's gauge has the flagged zero run (its own CHIRPS reads 3 mm
-    there), the catchment gauge is clean. The fit leaves the run's filled
-    days out, and g's own chain takes its levelled CHIRPS (f × k_unit) on
-    them."""
+    there) and the June 2018 accumulation, the catchment gauge is clean. The
+    fit leaves the run's filled days and the window out, and g's own chain
+    takes its levelled CHIRPS (f × k_unit) on the filled days and the spread
+    rain on the window."""
     doc = unit_rain_reference_checked()
     s = doc["series"]
     start = dt.date(2014, 1, 1)
@@ -1054,6 +1097,7 @@ PROBES = {
     "unit-rain-forecast-gefs-noref": unit_rain_forecast_gefs_noref(),
     "unit-rain-forecast-other": unit_rain_forecast_other(),
     "unit-rain-gauge-checks": unit_rain_gauge_checks(),
+    "unit-rain-gauge-catchment-settings": unit_rain_gauge_catchment_settings(),
     "unit-rain-reference-checked": unit_rain_reference_checked(),
     "unit-rain-reference-unit-gauge-checked": unit_rain_reference_unit_gauge_checked(),
 }

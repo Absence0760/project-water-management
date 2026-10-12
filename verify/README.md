@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 128 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 132 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -237,7 +237,9 @@ network is unchanged):
     levelled the same way.
   - *1c*: the reference fit reads the checked gauge rain: the catchment
     gauge as rule 2 reads it (after §2.4c and §2.4d, before the CHIRPS
-    infill), a unit's own gauge after item 6's checks.
+    infill), a unit's own gauge after item 6's checks, and leaves the
+    accumulation windows (and readings set aside after an outage) out, as
+    §2.4b does.
   - *4*: `UNIT_MAP_MIN_YEARS` = 10, for the MAP factor and k_unit alike.
   - *5*: with `forecastRainSource` 'chirps_gefs', a unit whose chain falls
     to the catchment's rain on a forecast day (the catchment's rain from
@@ -246,10 +248,11 @@ network is unchanged):
     factors or raw without a reference); otherwise, and for 'other' or
     absent, × the MAP ratio as before.
   - *6*: a unit's own gauge (negative values blanked as no-data codes) goes
-    through `prepare_rain`, the catchment's §2.4c zero runs, §2.4d
-    accumulations and listed missing periods, with the catchment's settings
-    and the unit's own CHIRPS as the CHIRPS they compare with; a day the
-    checks remove falls to the next link of rule 1 (own CHIRPS, levelled).
+    through `prepare_rain`, the catchment's §2.4c zero runs and §2.4d
+    accumulations, with the catchment's modes, fill threshold and
+    data-quality limits but none of its dated lists, against the unit's own
+    CHIRPS, else the catchment's; a day the checks remove falls to the next
+    link of rule 1 (own CHIRPS, levelled).
   - *7a*: a unit's CHIRPS whose complete years average 0 mm (with a MAP or
     without one) is unusable: every link reading it is skipped, with or
     without a reference.
@@ -257,16 +260,27 @@ network is unchanged):
 Compared: each land unit's `rain_unit` and `runoff_natural`, and every
 series downstream of them.
 
-Points of issue #500 the decisions leave open, read here one way and each
-pinned by a probe, so a disagreement once the engine change lands is a
-documentation point to settle (§ The independence rule), not a harness
-fault: which CHIRPS a unit gauge's checks read (its own here, so a unit
-gauge with no CHIRPS of its own gets no CHIRPS fill threshold or
-accumulation test), whether the catchment's listed missing periods apply to
-a unit's gauge (yes here), whether a unit without a MAP can have unusable
-CHIRPS (yes: probe `unit-rain-unusable-chirps`, unit c0), and how a
-CHIRPS-GEFS forecast is levelled on a unit without a reference (rule 3's
-levelling: probe `unit-rain-forecast-gefs-noref`). The run summary's `unitRain` block (rules,
+Points of issue #500 the decisions left open, each now pinned by a probe
+and settled by engine 1.85.0 (§2.4h):
+
+- **A unit gauge's checks and the catchment's dated lists.** The listed
+  missing periods, keep-dry periods, kept readings and listed accumulations
+  name days of the catchment gauge's record, so they don't apply to a unit's
+  gauge; the modes, the fill threshold and the data-quality limits do
+  (probe `unit-rain-gauge-catchment-settings`, unit u1). This harness first
+  applied the missing periods too.
+- **Which CHIRPS those checks read.** The unit's own, else the catchment's
+  `rain_chirps_mm` (the same probe, unit u2). This harness first gave a
+  unit without CHIRPS of its own none, so no fill threshold and no
+  accumulation test.
+- **Accumulation windows in the reference fit.** Left out, as §2.4b leaves
+  them out, for the catchment gauge and a unit gauge alike (probes
+  `unit-rain-reference-checked` and `unit-rain-reference-unit-gauge-checked`,
+  June 2018). This harness first fitted on the spread rain.
+- **Unusable CHIRPS without a MAP**: yes (probe `unit-rain-unusable-chirps`,
+  unit c0), and **a CHIRPS-GEFS forecast on a unit without a reference**:
+  rule 3's levelling (probe `unit-rain-forecast-gefs-noref`). The engine
+  agreed with this harness's reading on both. The run summary's `unitRain` block (rules,
 factors, day counts, per-unit balances) is a reduction of these and not
 compared; the engine's `checkRunoffBalance` closes it. The areal correction
 (§2.4g) stays unsupported, so a rule-4 unit runs on the catchment rain × 1.
@@ -326,7 +340,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (128
+`test_verify.py` breaks `model.py` one documented rule at a time (132
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -374,12 +388,15 @@ CHIRPS without a MAP raw; rule 1 skipping the unit's CHIRPS, rule 2 never
 reaching it; G with the CHIRPS infill, or a negative G letting the CHIRPS
 in; the catchment's rain filling a gap × 1. The reference gauge's five:
 the clamp, 89 shared days, no 50 mm test, a no-data code read, a reference
-without land setting the factors. Issue #500's 13: no k_unit, k_unit from
+without land setting the factors. Issue #500's 17: no k_unit, k_unit from
 raw CHIRPS, k_unit unclamped, the year minimum at 9 or 11, CHIRPS averaging
 0 mm levelled by the old fallback (with and without a reference) or only
 unusable with a MAP, a CHIRPS-GEFS forecast at the MAP ratio, an uploaded
 one levelled too, a unit's gauge read as recorded or its accumulations not
-spread, and the reference fit reading the gauge as stored. Each mutant must disagree with the engine somewhere on the examples,
+spread, the catchment's missing periods blanking a unit's gauge, a unit
+gauge without CHIRPS checked against none, the reference fit reading the
+gauge as stored, and it keeping the catchment's or a unit gauge's
+accumulation windows. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
@@ -503,11 +520,22 @@ written from §2.4h's text alone; `test_verify.py` with its six new mutants
 passes. Nothing in §2.4h *Reference gauge* needed a probe to settle.
 
 Issue #500's decisions, 2026-10-12 (written ahead of the engine change, on
-branch `test/500-verify`): `model.py` follows the decision table (§ What
-per-unit rain covers), `generate.py` adds them on a stream of their own,
-and eight probes pin them. The cross-check against the engine is pending
-the engine change; until it lands, these probes and the per-unit random
-networks disagree with engine 1.83.0 by design.
+branch `test/500-verify`, then checked on `feat/500-unit-rain`):
+`model.py` follows the decision table (§ What per-unit rain covers),
+`generate.py` adds them on a stream of their own, and nine probes pin them.
+Against engine 1.85.0 on 2026-10-12, after the three readings above were
+settled: the examples, the 37 probes and 100 random and 100 dense networks
+(seed 1000) agree on every compared column (85 column kinds, one case
+refused by both sides; largest difference 3e-14 mm on `rain_unit` and
+2e-9 m³/day on `runoff_natural`). The networks reach every new rule
+(unit-days or units, in how many networks): k_unit from a MAP 68 (36),
+unusable CHIRPS 35 (30), CHIRPS-GEFS forecast days levelled 114 (9), unit
+gauge days set aside 391 (12), unit gauge accumulation windows 4 (4),
+reference fit days the checks left out 2 502 (21), of them in a window 2
+(2). The non-engine tests pass (`test_verify.Generator`, `Gr4jPieces`).
+The cross-check found no engine departure from the decisions; the three
+disagreements were this harness's readings of points the decisions left
+open.
 
 | Probe | What it pins |
 | --- | --- |
@@ -517,5 +545,6 @@ networks disagree with engine 1.83.0 by design.
 | `unit-rain-forecast-gefs-noref` | The same without a reference: × rule 3's levelling (MAP factor, or the §2.4b factor without a MAP) |
 | `unit-rain-forecast-other` | An uploaded forecast (`'other'`) keeps × the MAP ratio |
 | `unit-rain-gauge-checks` | A unit's own gauge: a flagged wet-season zero run filled from its CHIRPS (kept at 0 where CHIRPS ≤ 2 mm), an accumulation spread over its blanks |
-| `unit-rain-reference-checked` | The reference fit leaves the catchment gauge's set-aside zero-run days out |
+| `unit-rain-gauge-catchment-settings` | A catchment's listed missing period doesn't blank a unit gauge's days (u1); a unit gauge without CHIRPS of its own is checked against the catchment's (u2: a run day at 1 mm keeps its 0) |
+| `unit-rain-reference-checked` | The reference fit leaves the catchment gauge's set-aside zero-run days and its accumulation window out |
 | `unit-rain-reference-unit-gauge-checked` | The same with a unit's own gauge as the reference, and that unit's filled days on its levelled CHIRPS |
