@@ -435,6 +435,7 @@ export function unitRainForcing(
 		const level = r.chirps && r.chirps.source !== 'unusable' ? r.chirps : null;
 		const chirps = level ? align(ctx.series[unitRainSeriesKey('rain_chirps_mm', n.id)]) : null;
 		const k2 = r.gaugeMapFactor;
+		const kFill = k2 ?? 1;
 		// The level on a unit's CHIRPS day t: its MAP factor, the §2.4b factor of the day, or the reference factor of its month × k_unit.
 		const levelOn = (t: number): number => {
 			if (level!.source === 'map') return level!.factor;
@@ -442,20 +443,19 @@ export function unitRainForcing(
 			if (level!.source === 'reference') return level!.factors[monthOfEpochDay(d0 + t) - 1]! * (level!.kUnit?.factor ?? 1);
 			return 1;
 		};
+		// A level that reaches the unit's MAP (its MAP factor, or f × k_unit) stands alone. One that only shapes it (the §2.4b
+		// factors, which bring CHIRPS to the catchment gauge; f without k_unit, the season) keeps the gauge MAP ratio on top
+		// (engine ≥ 1.85.0), so a unit whose gauge days read at gauge × ratio has no step where a gap, or the forecast, starts.
+		const shapeOnly = level !== null && (level.source === 'bias' || (level.source === 'reference' && !level.kUnit));
+		const levelled = (t: number): number => levelOn(t) * (shapeOnly ? kFill : 1);
 		const chirpsAt = (t: number): number | null => {
 			const v = chirps![t];
-			return v == null ? null : v * levelOn(t);
+			return v == null ? null : v * levelled(t);
 		};
-		const kFill = k2 ?? 1;
-		// A CHIRPS-GEFS forecast is raw CHIRPS (§2.4f), so it takes the unit's CHIRPS level (decision 5); an uploaded one, which may
-		// already be at gauge level, the MAP ratio. Per level, on a CHIRPS-GEFS day:
-		//   map, reference with k_unit: the level alone (it already brings the unit to its MAP);
-		//   bias, reference without k_unit: the level × the MAP ratio (the level sets the catchment gauge's or the season's
-		//     shape, not the unit's MAP, so the ratio still carries the unit to its MAP, as its history's gauge × ratio does);
-		//   raw, unusable, no CHIRPS: the MAP ratio alone, as an uploaded forecast.
+		// A CHIRPS-GEFS forecast is raw CHIRPS (§2.4f), so it takes the unit's CHIRPS level as its CHIRPS days do (decision 5);
+		// an uploaded one, which may already be at gauge level, the MAP ratio. A raw, unusable or absent CHIRPS: the ratio alone.
 		const gefs = ctx.forecastRainSource === 'chirps_gefs' && level !== null && level.source !== 'raw';
-		const levelReachesMap = level !== null && (level.source === 'map' || (level.source === 'reference' && level.kUnit !== null && level.kUnit !== undefined));
-		const forecastLevel = (t: number): number => (gefs ? levelOn(t) * (levelReachesMap ? 1 : kFill) : kFill);
+		const forecastLevel = (t: number): number => (gefs ? levelled(t) : kFill);
 		for (let t = 0; t < days; t++) {
 			let v: number | null = null;
 			let code: number = NaN;

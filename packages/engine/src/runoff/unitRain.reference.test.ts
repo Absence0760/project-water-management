@@ -323,6 +323,34 @@ describe('every unit’s CHIRPS takes the reference factors, then k_unit: the re
 		expect(nine.summary.warnings.some((w) => /"Unit B": its CHIRPS has fewer than 10 complete calendar years in the MAP period 2006-01-01 to 2014-12-31, so its k_unit averages every complete year of the record \(16, 2005–2020\)$/.test(w))).toBe(true);
 	});
 
+	it('rule 2’s gaps on a unit with the factors but no k_unit keep its MAP ratio: no step where a gap starts or ends', () => {
+		// B: MAP 900 under a gauge MAP of 500 (ratio 1.8); its CHIRPS is the gauge × 0.5 (the reference cell's level, so the
+		// January factor 2 brings it back to the gauge) with a blank each June, so no complete year and no k_unit.
+		const y = withReference();
+		y.settings.unitRain = { mode: 'perUnit', gaugeMapMm: 500, gaugeMapSource: 'invented', reference: REF };
+		const b = rainOf(0.5) as (number | null)[];
+		for (const yr of [2015, 2016, 2017, 2018, 2019, 2020]) b[toEpochDay(`${yr}-06-15`) - D0] = null;
+		y.series['rain_chirps_mm@B' as never] = { startDate: START, values: b };
+		const gapDays = [8, 13, 26, 377, 390].filter((t) => monthOf(t) === 1);
+		expect(gapDays.length).toBeGreaterThan(3);
+		const gauge = y.series.rain_catchment_mm!.values;
+		const g = [...gauge] as number[];
+		for (const t of gapDays) gauge[t] = null;
+		const o = runModel(y);
+		expect(unitOf(o, 'B')).toMatchObject({ rule: 'gaugeMap', gaugeMapFactor: 1.8 });
+		expect(refLevel(o, 'B').kUnit).toBeNull();
+		expect(o.summary.unitRain!.reference!.months[0]!.factor).toBeCloseTo(2, 12);
+		const rain = col(o, 'rain_unit', 'B');
+		for (const t of gapDays) {
+			expect(g[t]).toBeGreaterThan(0);
+			expect(rain[t], `day ${t}`).toBeCloseTo(g[t]! * 1.8, 9);
+		}
+		expect(rain[1]).toBe(g[1]! * 1.8);
+		// Positive control: C (MAP 600, ratio 1.2) has k_unit, which already brings it to its MAP: its gap days take f × k_unit alone.
+		const c = refLevel(o, 'C').kUnit!.factor;
+		for (const t of gapDays) expect(col(o, 'rain_unit', 'C')[t]).toBeCloseTo(chirpsOf(y, 'C')[t]! * 2 * c, 9);
+	});
+
 	it('it levels a gauge unit’s backup CHIRPS too, and leaves rule 2’s gauge × MAP ratio alone', () => {
 		const y = withReference();
 		y.settings.unitRain = { mode: 'perUnit', gaugeMapMm: 500, gaugeMapSource: 'invented', reference: REF };

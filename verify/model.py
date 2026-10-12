@@ -922,11 +922,13 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
         # The unit's CHIRPS, levelled (rule 3, or the reference's f × k_unit); None = unusable (item 7a).
         level = unit_chirps_level(own_c, map_mm, period, ref, fac, has_bias, diag) if has_c else None
 
-        def lev(o, own_c=own_c, level=level):
+        def lev(o, own_c=own_c, level=level, ratio=ratio):
+            # A level that only shapes the unit's CHIRPS (§2.4b factors, f without k_unit) keeps the MAP ratio on top,
+            # so a gap in the gauge reads at the gauge days' level (issue #500, engine 1.85.0).
             v = own_c.get(o)
             if not valid(v) or level is None:
                 return None
-            return level(v, o)
+            return level(v, o) * (ratio if level.kind == "shape" else 1.0)
 
         own = unit_gauge_checked(settings, series, f"rain_catchment_mm@{uid}", diag) if has_g else (lambda o: None)
 

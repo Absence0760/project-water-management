@@ -854,6 +854,9 @@ def _forecast_doc(reference: bool) -> dict:
     start = dt.date(2014, 1, 1)
     n = (dt.date(2019, 12, 25) - start).days + 1
     gauge = _wave(start, n, 0)
+    # A few gauge gaps, filled on rule-2 units from their own CHIRPS: s's at its factors × its MAP ratio.
+    for j in (40, 41, 42, 400, 401, 800, 1200, 1201, 1202, 1203):
+        gauge[j] = None
     series: dict = {
         "rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge},
         "rain_chirps_mm": {"startDate": start.isoformat(), "values": [round(v * 0.6, 2) for v in _wave(start, n, 1)]},
@@ -861,7 +864,7 @@ def _forecast_doc(reference: bool) -> dict:
         "rain_forecast_mm": {"startDate": "2019-12-26", "values": [3.0, 0.0, 8.0, 1.5, 0.0, 12.0, 4.0, 0.0, 6.5, 2.0]},
     }
     if reference:
-        cell = [round(g * (0.4 if (start + dt.timedelta(days=i)).month in (12, 1) else 0.8), 2) for i, g in enumerate(gauge)]
+        cell = [None if g is None else round(g * (0.4 if (start + dt.timedelta(days=i)).month in (12, 1) else 0.8), 2) for i, g in enumerate(gauge)]
         series["rain_chirps_cell_mm@r"] = {"startDate": start.isoformat(), "values": cell}
     for k, uid in enumerate(["r", "a", "e"]):
         series[f"rain_chirps_mm@{uid}"] = {"startDate": start.isoformat(), "values": _wave(start, n, k + 2, 0.5 + 0.2 * k)}
@@ -899,7 +902,8 @@ def unit_rain_forecast_gefs() -> dict:
     its days, not × their MAP ratio; e (rule 3, no MAP) × f[month] alone;
     s (rule 2, a MAP but no complete CHIRPS year, so no k_unit) × f[month]
     × its MAP ratio, the factors shaping the season and the ratio setting
-    the level its history's gauge × ratio reads at; b (rule 2, no CHIRPS)
+    the level its history's gauge × ratio reads at (and so on the gauge's
+    gap days, which it fills from its CHIRPS × f × the ratio); b (rule 2, no CHIRPS)
     and d (unusable CHIRPS, item 7a) keep × the MAP ratio. The historical
     days are unchanged by the setting."""
     return _forecast_doc(True)
@@ -910,7 +914,8 @@ def unit_rain_forecast_gefs_noref() -> dict:
     like the unit's CHIRPS" read as the unit's rule-3 levelling, whatever it
     is. r and a: × their CHIRPS MAP factor (unit MAP ÷ the mean annual
     CHIRPS); e (no MAP): × the catchment's §2.4b factor for the day's month;
-    s (a MAP, no complete CHIRPS year): × the §2.4b factor × its MAP ratio;
+    s (a MAP, no complete CHIRPS year): × the §2.4b factor × its MAP ratio,
+    on the forecast and on the gauge's gap days alike;
     b and d: × the MAP ratio as before. A reading of item 5 for units
     without a reference (the issue speaks of f × k_unit only), so a
     disagreement here is a point for the docs to settle, not a defect."""

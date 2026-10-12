@@ -354,6 +354,11 @@ MUTANTS = [
     ("a CHIRPS-GEFS forecast keeps the MAP ratio (item 5)", 'gefs = forecast_source == "chirps_gefs"', "gefs = False"),
     ("an uploaded forecast is levelled like CHIRPS too (item 5)", 'gefs = forecast_source == "chirps_gefs"', "gefs = forecast_source is not None"),
     (
+        "a gauge gap filled from a level short of the MAP drops the MAP ratio",
+        'return level(v, o) * (ratio if level.kind == "shape" else 1.0)',
+        "return level(v, o)",
+    ),
+    (
         "a CHIRPS-GEFS forecast on a level short of the MAP drops the MAP ratio (item 5)",
         'v = level(cr, o) * (1.0 if level.kind == "map" else ratio)',
         "v = level(cr, o)",

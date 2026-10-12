@@ -285,6 +285,36 @@ describe('the forcing rule (§2.4h)', () => {
 		expect(o.summary.warnings.some((w) => /"Unit B" ran 2 of its \d+ days on the catchment's rain × its MAP ratio 1\.4/.test(w))).toBe(true);
 	});
 
+	it('rule 2’s gaps on a unit levelled by the §2.4b factors keep its MAP ratio: no step where a gap starts or ends', () => {
+		// C: MAP 750 under a gauge MAP of 500 (ratio 1.5); its CHIRPS is the gauge × 0.5 over a part of 2015 only (no complete
+		// year), so it takes the catchment's §2.4b factors (gauge ÷ CHIRPS = 2), which bring it to the gauge, not to C's MAP.
+		const x = everyRule();
+		set(x, 'rain_chirps_mm', rainOf(0.5));
+		const gauge = x.series.rain_catchment_mm!.values;
+		const from = 60;
+		set(x, 'rain_chirps_mm@C', rainOf(0.5).slice(from, from + 200), fromEpochDay(toEpochDay(START) + from));
+		const gapDays = [65, 78, 91, 104, 117, 130];
+		for (const t of gapDays) gauge[t] = null;
+		const o = runModel(x);
+		expect(unitOf(o, 'C')).toMatchObject({ rule: 'gaugeMap', gaugeMapFactor: 1.5 });
+		expect(unitOf(o, 'C').chirps).toEqual({ source: 'bias' });
+		const rain = col(o, 'rain_unit', 'C')!;
+		// A gap day reads what the gauge would have given × 1.5, as the gauge days around it do: CHIRPS × 2 × 1.5.
+		for (const t of gapDays) {
+			expect(g[t]).toBeGreaterThan(0);
+			expect(rain[t], `day ${t}`).toBeCloseTo(g[t]! * 1.5, 9);
+		}
+		for (const t of [64, 66, 77, 79]) expect(rain[t]).toBe(g[t]! * 1.5);
+		expect(unitOf(o, 'C').days.unitChirps).toBe(gapDays.length);
+		// Positive control: a CHIRPS levelled to the unit's MAP (its MAP factor, everyRule's C) fills alone, without the ratio.
+		const y = everyRule();
+		for (const t of gapDays) y.series.rain_catchment_mm!.values[t] = null;
+		const p = runModel(y);
+		const k = (unitOf(p, 'C').chirps as { source: string; factor: number }).factor;
+		expect(unitOf(p, 'C').chirps!.source).toBe('map');
+		for (const t of gapDays) expect(col(p, 'rain_unit', 'C')![t]).toBe((y.series['rain_chirps_mm@C']!.values[t] as number) * k);
+	});
+
 	it('forecast days after the record: the catchment forecast × the MAP ratio on rule 2, × 1 on the unit’s own path', () => {
 		const x = everyRule();
 		const tail = Array.from({ length: 10 }, (_, i) => 5 + i);

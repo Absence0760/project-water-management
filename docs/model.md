@@ -2338,10 +2338,21 @@ in this order:
 
 | Rule | Chain |
 | --- | --- |
-| 1 | own gauge → own CHIRPS (levelled as in rule 3) → catchment gauge × the MAP ratio (when rule 2's conditions hold) → the catchment's rain × the MAP ratio |
-| 2 | catchment gauge × the MAP ratio → own CHIRPS (levelled) → the catchment's rain × the MAP ratio |
+| 1 | own gauge → own CHIRPS (levelled as in rule 3, × the MAP ratio on a level that stops short of the MAP, below) → catchment gauge × the MAP ratio (when rule 2's conditions hold) → the catchment's rain × the MAP ratio |
+| 2 | catchment gauge × the MAP ratio → own CHIRPS (levelled, × the MAP ratio on a level that stops short of the MAP) → the catchment's rain × the MAP ratio |
 | 3 | own CHIRPS (levelled) → the catchment's rain |
 | 4 | the catchment forcing (catchment ?? corrected CHIRPS ?? forecast) × the areal factor |
+
+**Own CHIRPS on a gauge's gaps** (engine ≥ 1.85.0, issue #500: "both paths
+sit at the unit's MAP level, so no step appears where a gap starts or
+ends"). A CHIRPS level that reaches the unit's MAP (its MAP factor, or f ×
+k_unit) fills alone. One that stops short of it, the catchment's §2.4b
+factors (which bring CHIRPS to the catchment gauge) or the reference
+factors without k_unit (the season's shape only), keeps the MAP ratio on
+top when rule 2's conditions hold, as the gauge days around the gap read
+at gauge × the ratio. Without those conditions the ratio is 1, so rule 3
+is unchanged. A raw CHIRPS (no level known) fills as it is. Before 1.85.0
+the level alone filled every gap.
 
 "The catchment's rain" is the catchment's rain used before the areal
 correction (catchment ?? corrected CHIRPS ?? forecast), × the unit's MAP
@@ -2383,7 +2394,9 @@ on the catchment's rain warns how many.
   A level that reaches the unit's MAP (its MAP factor, or k_unit) stands
   alone; one that only shapes the season or brings CHIRPS to the catchment
   gauge (f without k_unit, the §2.4b factors) keeps the MAP ratio on top, as
-  the unit's history on rule 2 reads at gauge × ratio. The MAP ratio is
+  the unit's history on rule 2 reads at gauge × ratio: the same multiplier
+  its CHIRPS takes on a gauge's gaps (*Own CHIRPS on a gauge's gaps*,
+  above), except that a raw CHIRPS level gives the forecast the ratio. The MAP ratio is
   unit MAP ÷ gauge MAP when rule 2's conditions hold, else 1. An uploaded
   forecast (`'other'`, or absent) may already be at gauge level, so it
   takes the MAP ratio alone, whatever the level. The forecast
