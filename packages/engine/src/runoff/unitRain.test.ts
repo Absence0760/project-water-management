@@ -318,6 +318,25 @@ describe('the forcing rule (§2.4h)', () => {
 		expect(checkForecastPrefix({ ...withForecastTail(everyRule(), 7), forecastRainSource: 'chirps_gefs' })).toBeNull();
 	});
 
+	it('a CHIRPS-GEFS forecast on a unit whose CHIRPS level is the catchment’s §2.4b factors keeps its MAP ratio on top: no step', () => {
+		// C has a MAP and a gauge MAP ratio (750 ÷ 500), but its CHIRPS holds no complete calendar year, so it is levelled by the
+		// catchment's §2.4b factors (gauge ÷ CHIRPS = 2), which bring it to the catchment gauge, not to C's MAP.
+		const x = everyRule();
+		set(x, 'rain_chirps_mm', rainOf(0.5));
+		const from = toEpochDay('2015-03-01') - toEpochDay(START);
+		set(x, 'rain_chirps_mm@C', rainOf(0.5, 3).slice(from, from + 200), '2015-03-01');
+		const tail = Array.from({ length: 10 }, (_, i) => 5 + i);
+		set(x, 'rain_forecast_mm', tail, '2021-01-01');
+		const o = runModel({ ...x, forecastRainSource: 'chirps_gefs' });
+		expect(unitOf(o, 'C')).toMatchObject({ rule: 'gaugeMap', gaugeMapFactor: 1.5 });
+		expect(unitOf(o, 'C').chirps).toEqual({ source: 'bias' });
+		// History: gauge × 1.5. Forecast: GEFS × the bias factor (2) × 1.5, the same level, not × 2 alone.
+		const rain = col(o, 'rain_unit', 'C')!;
+		expect(rain[0]).toBe(g[0]! * 1.5);
+		rain.slice(DAYS).forEach((v, i) => expect(v, `day ${i}`).toBeCloseTo(tail[i]! * 2 * 1.5, 9));
+		expect(checkForecastPrefix({ ...withForecastTail(x, 7), forecastRainSource: 'chirps_gefs' })).toBeNull();
+	});
+
 	it('the areal correction applies to rule-4 units only', () => {
 		const areal: ArealRain = { factors: new Array(12).fill(2) as never, method: 'map', source: 'invented' };
 		const x = everyRule();
@@ -414,6 +433,23 @@ describe('fit provenance and run comparison', () => {
 		expect(unitRainFingerprintError(record.forcing!.unitRain)).toBeNull();
 		const plain = catchment('absent');
 		expect(fitRecordFromReport(calibrate(plain, { budget: 10, seed: 1 }), { ...ctx, settings: prepareRun(plain).settings }).forcing!.unitRain).toBeUndefined();
+	});
+
+	it('marks a gauge unit’s checked gauge (engine ≥ 1.85.0), so a fit from before the checks reads "forcing changed"', () => {
+		const fp = record.forcing!.unitRain!;
+		expect(fp.units.find((u) => u.nodeId === 'A')).toMatchObject({ rule: 'unitGauge', gaugeChecked: true });
+		expect(fp.units.filter((u) => u.nodeId !== 'A').every((u) => u.gaugeChecked === undefined)).toBe(true);
+		expect(unitRainFingerprintError(JSON.parse(JSON.stringify(fp)))).toBeNull();
+		expect(unitRainFingerprintError({ ...fp, units: [{ ...fp.units[0]!, gaugeChecked: false }] })).toMatch(/gauge checks marker/);
+		// A fit made by 1.78.0–1.84.0 recorded no marker: its gauge was read as recorded.
+		const old = structuredClone(fp);
+		delete old.units[0]!.gaugeChecked;
+		expect(unitRainFingerprintChanged(fp, old)).toBe(true);
+		expect(unitRainFingerprintChanged(old, fp)).toBe(true);
+		expect(unitRainFingerprintChanged(fp, structuredClone(fp))).toBe(false);
+		const settings = prepareRun(input).settings;
+		expect(fitRecordStatus(settings, { ...record, forcing: { ...record.forcing!, unitRain: old } }, { unitRain: unitRainFingerprintOfSummary(runModel(input).summary.unitRain) }).forcingChanged).toBe(true);
+		expect(fitRecordStatus(settings, record, { unitRain: unitRainFingerprintOfSummary(runModel(input).summary.unitRain) }).forcingChanged).toBe(false);
 	});
 
 	it('flags the forcing as changed when per-unit rain is turned on or off, or a unit’s factor moves', () => {

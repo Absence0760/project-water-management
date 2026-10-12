@@ -974,8 +974,9 @@ export interface UnitRainSettings {
 	/**
 	 * The reference rain gauge and unit (engine ≥ 1.80.0, issue #500, docs/model.md
 	 * §2.4h *Reference gauge*): 12 monthly factors, gauge ÷ CHIRPS at the cell
-	 * nearest the reference unit's centre, scale every unit's CHIRPS (then ×
-	 * unit MAP ÷ the reference unit's MAP). Absent or null = off.
+	 * nearest the reference unit's centre, scale every unit's CHIRPS, then
+	 * (engine ≥ 1.85.0) × the unit's k_unit, which rescales it to its own MAP.
+	 * Absent or null = off.
 	 */
 	reference?: UnitRainReference | null;
 	/**
@@ -998,7 +999,7 @@ export interface UnitRainReference {
 	 * issue #500 decision 1c).
 	 */
 	gauge: string;
-	/** The reference unit: a land unit whose centre picks the CHIRPS cell (REFERENCE_CELL_KIND@unitId), and whose MAP the other units' MAPs are divided by. */
+	/** The reference unit: a land unit whose centre picks the CHIRPS cell (REFERENCE_CELL_KIND@unitId). Its MAP plays no part in the other units' levels (engine ≥ 1.85.0: each unit's k_unit uses its own MAP). */
 	unitId: string;
 	/**
 	 * Engine-only (never stored by the API): the 12 factors (calendar months,
