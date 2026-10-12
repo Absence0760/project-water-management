@@ -465,6 +465,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
 		return { ...(await scenario(['submit'])), body: { outcome: 'licence_issued', authority: 'Mass CMA', decisionDate: '2026-09-30', reasonsReceived: true } };
 	},
+	// What followed a decision (232): a fresh decided scenario, so the legit call lodges its first appeal.
+	'POST /projects/:id/scenarios/:sid/appeals': async () => {
+		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		const s = await scenario(['submit']);
+		await ok(ctx.owner.call('POST', `${at()}/scenarios/${s.params.sid}/decide`, { outcome: 'licence_issued', authority: 'Mass CMA', decisionDate: '2026-09-30', reasonsReceived: true }));
+		return { ...s, body: { kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-01' } };
+	},
 	// An applicant shares their own application with someone of their party (049).
 	'POST /projects/:id/scenarios/:sid/members': async () => {
 		const app = await ok(ctx.contributor.call('POST', `${at()}/scenarios`, { name: `Mass application ${crypto.randomUUID()}`, baseRunId: ctx.runId, ops: [] }));

@@ -71,9 +71,22 @@ export async function baseNames(db: Db, projectId: string, runId: string, role: 
  * on it, is dropped: the projection anonymises those nodes. Fails closed: a
  * gauge a rebase dropped then reads as unknown to an applicant.
  */
-export function applicantOpNames<T extends { opNames: OpName[]; ownedNodeIds: string[] }>(s: T, role: Role): T {
+export function applicantOpNames<T extends { opNames: OpName[]; ownedNodeIds: string[] } & Partial<WithTerms>>(s: T, role: Role): T {
 	if (role !== 'contributor') return s;
-	return ownNames(s);
+	const own = new Set(s.ownedNodeIds);
+	const terms = <X extends { opNames: OpName[] } | null>(t: X): X => (t ? { ...t, opNames: t.opNames.filter((x) => own.has(x.id)) } : t);
+	return {
+		...ownNames(s),
+		// The licence's terms (231) and a variation's (232) name nodes the same way: only the application's own.
+		...(s.grantedTerms !== undefined ? { grantedTerms: terms(s.grantedTerms) } : {}),
+		...(s.decisionEvents ? { decisionEvents: s.decisionEvents.map((e) => ({ ...e, terms: terms(e.terms) })) } : {})
+	};
+}
+
+/** What applicantOpNames filters besides op_names: a licence's terms and its variations' (231, 232). */
+interface WithTerms {
+	grantedTerms: { opNames: OpName[] } | null;
+	decisionEvents: { terms: { opNames: OpName[] } | null }[];
 }
 
 /**

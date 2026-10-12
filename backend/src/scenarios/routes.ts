@@ -46,7 +46,8 @@ import {
 } from './execute.js';
 import { loadApplicantResults, newestApplicationRun } from './results.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
-import { CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
+import { AppealBody, CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
+import type { ScenarioOp } from '@water-management/engine';
 
 /**
  * What the editor shows beside the ops: which applied, which don't, and how
@@ -147,6 +148,30 @@ interface DecisionRecord {
 	decisionDate: string;
 	reference: string;
 	reasonsReceived: boolean;
+	/** With licence_issued (231): the granted terms' ops (null: as applied for, which the guard writes out) and conditions. */
+	granted: { terms: CheckedTerms | null; conditions: string } | null;
+}
+
+/** Granted terms (231) or a variation's (232) as stored: the ops, their hash and their names. */
+interface CheckedTerms {
+	ops: ScenarioOp[];
+	opsSha256: string;
+	opNames: OpName[];
+}
+
+/**
+ * A licence's granted terms, checked as the scenario's own ops are (231,
+ * 232): every op applies to its base run, an application's under its
+ * applicant's mask (so terms can't name a farm the applicant can't see, and
+ * the applicant reads them in their own namespace), else 422 with the
+ * assessors' words; the names stored as op_names are (namesToStore).
+ */
+async function checkTerms(db: Db, projectId: string, s: ScenarioRow, role: Role, ops: ScenarioOp[]): Promise<CheckedTerms> {
+	const base = await loadBaseInput(db, projectId, s.baseRunId, role);
+	const check = checkScenario(base, { ops, ownedNodeIds: s.ownedNodeIds, origin: s.origin }, await hiddenHolders(db, s));
+	if (check.problems.length)
+		throw new ApiError(422, "the licence's terms don't all apply to the scenario's base run", { problems: isApplication(s) ? check.assessorProblems : check.problems });
+	return { ops, opsSha256: opsSha256(ops), opNames: namesToStore(s, opNames(ops, base.model, s.opNames), s.ownedNodeIds) };
 }
 
 async function move(db: Db, projectId: string, s: ScenarioRow, to: ScenarioStatus, decision: DecisionRecord | null = null) {
@@ -157,11 +182,27 @@ async function move(db: Db, projectId: string, s: ScenarioRow, to: ScenarioStatu
 	const { rowCount } = await db.query(
 		decision
 			? `UPDATE scenario SET status = $3, outcome = $5, decision_note = $6, decision_authority = $7, decision_date = $8::date,
-					decision_reference = $9, reasons_received = $10
+					decision_reference = $9, reasons_received = $10,
+					granted_ops = $11::jsonb, granted_ops_sha256 = $12, granted_op_names = $13::jsonb, granted_conditions = $14
 				 WHERE project_id = $1 AND id = $2 AND status = $4`
 			: 'UPDATE scenario SET status = $3 WHERE project_id = $1 AND id = $2 AND status = $4',
 		decision
-			? [projectId, s.id, to, s.status, decision.outcome, decision.note, decision.authority, decision.decisionDate, decision.reference, decision.reasonsReceived]
+			? [
+					projectId,
+					s.id,
+					to,
+					s.status,
+					decision.outcome,
+					decision.note,
+					decision.authority,
+					decision.decisionDate,
+					decision.reference,
+					decision.reasonsReceived,
+					decision.granted?.terms ? JSON.stringify(decision.granted.terms.ops) : null,
+					decision.granted?.terms?.opsSha256 ?? null,
+					decision.granted?.terms ? JSON.stringify(decision.granted.terms.opNames) : null,
+					decision.granted?.conditions ?? ''
+				]
 			: [projectId, s.id, to, s.status]
 	);
 	if (!rowCount) {
@@ -393,6 +434,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	.post('/:id/scenarios/:sid/runs', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = ScenarioRunBody.parse(await readJson(c, { optional: true }));
+		// `terms: 'licensed'`: the terms of its licence in force (231/232), 409 without one (runOps).
 		// A team scenario: an editor runs it. An application: whoever reads it
 		// as its owner or a shared member, and the assessors; never a viewer.
 		// Checked when the run is read and again when it is stored (runScenario).
@@ -421,7 +463,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META_SQL.meta}, r.summary ${RUN_META_SQL.from} WHERE r.id = $1`, [runId]);
 			return { run: rows[0], removedRunIds, ...checkView(check, role) };
-		}).catch(runFailure); // As POST …/runs: engine problems with the input are the user's to fix.
+		}, undefined, body.terms).catch(runFailure); // As POST …/runs: engine problems with the input are the user's to fix.
 		return c.json(result, 201);
 	})
 	.post('/:id/scenarios/:sid/rebase', async (c) => {
@@ -517,16 +559,86 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				throw runUnverified(
 					`this scenario can't be decided: ${unverified.length} of its runs (unverifiedRunIds) weren't stored by the model run itself (a server stamp missing or no longer matching its results); delete them and run it again`
 				);
+			// A licence issued records its granted terms (231): changed ops checked as the scenario's own; none, as applied for.
+			const issued = body.outcome === 'licence_issued';
+			const terms = issued && body.granted?.ops ? await checkTerms(db, id, s, role, body.granted.ops) : null;
 			await move(db, id, s, 'decided', {
 				outcome: body.outcome,
 				note: body.note,
 				authority,
 				decisionDate: body.decisionDate,
 				reference: body.reference,
-				reasonsReceived: body.reasonsReceived
+				reasonsReceived: body.reasonsReceived,
+				granted: issued ? { terms, conditions: body.granted?.conditions ?? '' } : null
 			});
-			await recordAudit(db, id, 'scenario.decided', subject(s, { outcome: body.outcome, authority, decisionDate: body.decisionDate }, true));
-			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
+			const decided = await loadScenario(db, id, sid);
+			await recordAudit(
+				db,
+				id,
+				'scenario.decided',
+				subject(
+					s,
+					{
+						outcome: body.outcome,
+						authority,
+						decisionDate: body.decisionDate,
+						...(decided.grantedTerms ? { granted: decided.grantedTerms.asApplied ? 'as_applied' : 'changed', grantedOpsSha256: decided.grantedTerms.opsSha256 } : {})
+					},
+					true
+				)
+			);
+			return c.json(await withCheck(db, id, decided, role));
+		});
+	})
+	// Record what followed the decision (232_decision_events): an appeal lodged
+	// with the Water Tribunal or a court, then upheld, set aside or varied (new
+	// granted terms, checked as the decision's are). Append-only: the decision
+	// never changes. The members who record the decision record these.
+	.post('/:id/scenarios/:sid/appeals', async (c) => {
+		const { id, sid } = c.req.param();
+		const body = AppealBody.parse(await readJson(c, { optional: true }));
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'editor');
+			await requireStepUp(db);
+			await requireActsForAuthority(db, id);
+			const s = await loadScenario(db, id, scenarioId(sid));
+			if (isApplication(s) && s.ownerUserId === c.get('userId')) throw new ApiError(403, 'an applicant doesn’t record what followed the decision on their own application');
+			if (s.status !== 'decided' || !s.outcome) throw new ApiError(409, 'an appeal follows a recorded decision, and this scenario has none');
+			// The sequence, said here in words; decision_event_guard holds it under a lock.
+			const last = s.decisionEvents.at(-1);
+			if (body.kind === 'lodged' && last?.kind === 'lodged') throw new ApiError(409, 'an appeal is already lodged; record its outcome first');
+			if (body.kind !== 'lodged') {
+				if (last?.kind !== 'lodged') throw new ApiError(409, 'no appeal is open: record the appeal lodged first');
+				if (body.forum !== last.forum) throw new ApiError(409, `the open appeal was lodged with the ${last.forum === 'court' ? 'court' : 'Water Tribunal'}, which decides it`);
+			}
+			const after = last?.eventDate ?? s.decisionDate;
+			if (after && body.eventDate < after) throw new ApiError(400, `the date is before the ${last ? 'previous event' : 'decision letter'} (${after})`);
+			if (body.eventDate > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) throw new ApiError(400, 'the date is in the future');
+			const terms = body.terms ? await checkTerms(db, id, s, role, body.terms.ops) : null;
+			const { rows } = await db.query<{ id: string }>(
+				`INSERT INTO decision_event (project_id, scenario_id, position, kind, forum, event_date, reference, note, ops, ops_sha256, op_names, conditions)
+				 VALUES ($1, $2, 1, $3, $4, $5::date, $6, $7, $8::jsonb, $9, $10::jsonb, $11) RETURNING id`,
+				[
+					id,
+					s.id,
+					body.kind,
+					body.forum,
+					body.eventDate,
+					body.reference,
+					body.note,
+					terms ? JSON.stringify(terms.ops) : null,
+					terms?.opsSha256 ?? null,
+					terms ? JSON.stringify(terms.opNames) : null,
+					body.terms?.conditions ?? ''
+				]
+			);
+			await recordAudit(
+				db,
+				id,
+				'scenario.appeal_recorded',
+				subject(s, { eventId: rows[0]!.id, kind: body.kind, forum: body.forum, eventDate: body.eventDate, ...(terms ? { opsSha256: terms.opsSha256 } : {}) }, true)
+			);
+			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role), 201);
 		});
 	})
 	// --- sharing an application with a consultant or client (scenario_member) ----------

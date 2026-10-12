@@ -254,10 +254,22 @@ async function loadPublications(db: Db, projectId: string, baseline: RunRow): Pr
 }
 
 /**
- * § 4's cumulative table: every other scenario on the baseline that is
- * submitted, or decided with a licence issued, with its newest run of its current
- * ops (the ops' hash the run recorded equals the scenario's) on this
- * baseline. Under the reader's RLS: the scenario and run policies decide
+ * Which other scenarios count on the baseline, and with which ops' hash: a
+ * submitted one with its own ops, a decided one only while its licence is in
+ * force (app_scenario_licence: issued and not set aside, 231/232), with the
+ * licence's terms (the granted ones, or the newest variation's), never the
+ * ops applied for. `lic` is the scenario's app_scenario_licence row.
+ */
+const COUNTS_SQL = `(s.status = 'submitted' OR (s.status = 'decided' AND coalesce((lic.l->>'inForce')::boolean, false)))`;
+const COUNTED_SHA_SQL = `CASE WHEN s.status = 'decided' THEN lic.l->'terms'->>'opsSha256' ELSE s.ops_sha256 END`;
+const LICENCE_JOIN_SQL = `LEFT JOIN LATERAL (SELECT app_scenario_licence(s.id) AS l) lic ON true`;
+
+/**
+ * § 4's cumulative table: every other scenario on the baseline that counts
+ * (COUNTS_SQL: submitted, or with a licence in force), with its newest run of
+ * the ops it counts with (the hash the run recorded equals COUNTED_SHA_SQL:
+ * an issued licence's run of its licensed terms, POST …/runs `terms:
+ * 'licensed'`) on this baseline. Under the reader's RLS: the scenario and run policies decide
  * which applications appear (a submitted application to the project's
  * editors, a draft to its applicant only), so the report never names one the
  * reader couldn't open. The newest 50, and whether there were more. Only the two measures the table reads leave the
@@ -285,12 +297,13 @@ async function loadOtherApplications(db: Db, projectId: string, baselineRunId: s
 			(r.summary->'catchment'->>'ewrDaysNotMet')::float8 AS "ewrDaysNotMet",
 			jsonb_path_query_first(r.summary, '$.ewrAssurance[*] ? (@.isOutlet == true).overall') AS "reserveOutlet"
 		 FROM scenario s
+		 ${LICENCE_JOIN_SQL}
 		 JOIN model_run r ON r.scenario_id = s.id AND r.project_id = s.project_id
 		 WHERE s.project_id = $1
 			AND ($3::uuid IS NULL OR s.id <> $3::uuid)
-			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome = 'licence_issued'))
+			AND ${COUNTS_SQL}
 			AND r.inputs->'scenario'->>'baseRunId' = $2
-			AND r.inputs->'scenario'->>'opsSha256' = s.ops_sha256
+			AND r.inputs->'scenario'->>'opsSha256' = ${COUNTED_SHA_SQL}
 		 ORDER BY s.id, r.created_at DESC, r.id) newest
 		 ORDER BY "runCreatedAt" DESC, "scenarioId"
 		 LIMIT $4`,
@@ -320,8 +333,9 @@ interface OwnApplication {
 
 /**
  * Page 1's combined row (evidence-11, finding C26, WP-3.11): every other
- * application the reader can see that is submitted, or decided with a licence
- * issued, and based on this baseline, put together with this one.
+ * application the reader can see that counts (COUNTS_SQL: submitted, or with a
+ * licence in force, on its licensed terms) and is based on this baseline, put
+ * together with this one.
  *
  * The figure is read from a completed cumulative assessment of exactly these
  * applications with these ops on this baseline (assessments/, which ran the
@@ -357,10 +371,11 @@ async function loadCombined(
 ): Promise<EvidenceCombinedInput> {
 	const none: EvidenceCombinedInput = { others: [], unavailable: null, conflicts: [], problems: [], assessment: null, pending: false };
 	const { rows: others } = await db.query<{ scenarioId: string; scenarioName: string; status: 'submitted' | 'decided'; outcome: string | null; opsSha256: string }>(
-		`SELECT s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome, s.ops_sha256 AS "opsSha256"
+		`SELECT s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome, ${COUNTED_SHA_SQL} AS "opsSha256"
 		 FROM scenario s
+		 ${LICENCE_JOIN_SQL}
 		 WHERE s.project_id = $1 AND s.base_run_id = $2 AND ($3::uuid IS NULL OR s.id <> $3::uuid)
-			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome = 'licence_issued'))
+			AND ${COUNTS_SQL}
 		 ORDER BY s.name, s.id
 		 LIMIT $4`,
 		[projectId, baselineRunId, own?.id ?? null, APPLICATION_RUNS_MAX + 1]
@@ -400,8 +415,10 @@ async function loadCombined(
 	if (stale) return { ...none, others: listed, unavailable: stale };
 
 	// No assessment of exactly these: check that they combine at all, so a conflict is named now.
+	// Each with the ops it counts with: a licence in force's terms (231/232), else its own.
 	const { rows: full } = await db.query<{ id: string; name: string; origin: ScenarioOrigin; ops: ScenarioOp[]; ownedNodeIds: string[] }>(
-		`SELECT s.id, s.name, s.origin, s.ops, s.owned_node_ids::text[] AS "ownedNodeIds" FROM scenario s WHERE s.project_id = $1 AND s.id = ANY($2::uuid[])`,
+		`SELECT s.id, s.name, s.origin, CASE WHEN s.status = 'decided' THEN lic.l->'terms'->'ops' ELSE s.ops END AS ops, s.owned_node_ids::text[] AS "ownedNodeIds"
+		 FROM scenario s ${LICENCE_JOIN_SQL} WHERE s.project_id = $1 AND s.id = ANY($2::uuid[])`,
 		[projectId, others.map((o) => o.scenarioId)]
 	);
 	const byId = new Map(full.map((r) => [r.id, r]));

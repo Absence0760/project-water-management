@@ -119,6 +119,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'run_publication.updated_by': { excluded: 'the project’s publication; its last editor only' },
 	'run_uncertainty.created_by': { excluded: 'the project’s ensemble; its maker only' },
 	'scenario.decided_by': { excluded: 'the project’s application decision; its assessor only' },
+	// What followed a decision (232_decision_events): the project's record; scenario.appeal_recorded is in auditEvents.
+	'decision_event.recorded_by': { excluded: 'the project’s record of an appeal on a decision; who recorded it only, and scenario.appeal_recorded is in auditEvents' },
 	'scenario.owner_user_id': { excluded: 'the project’s scenario; scenario.created is in auditEvents' },
 	'scenario_member.added_by': { excluded: 'people the person added to a scenario; its maker only' },
 	'assessment.created_by': { excluded: 'the project’s cumulative assessment; who asked only' },

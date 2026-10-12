@@ -267,6 +267,8 @@ beforeAll(async () => {
 	const comment = await call(subject, 'POST', `/projects/${projectId}/notes`, { body: `application comment ${tag}`, scenarioId: sid });
 	await call(subject, 'PATCH', `/projects/${projectId}/notes/${comment.note.id}`, { body: `application comment ${tag}, edited` });
 	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_refused', note: 'Too little left in dry years.' });
+	// An appeal on that decision they recorded (232): recorded_by is SET NULL when they go; the event stays.
+	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/appeals`, { kind: 'lodged', forum: 'water_tribunal', eventDate: DECISION.decisionDate });
 	// A sweep, an outlook and a yield result they asked for; the workers aren't under test.
 	// The rows as the subject makes them (their stamp triggers set created_by), without the jobs.
 	await withUser(subject.id, async (tx) => {

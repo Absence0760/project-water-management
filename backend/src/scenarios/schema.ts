@@ -217,7 +217,12 @@ export const parsePatchOps = (raw: unknown, stored: readonly ScenarioOp[]): Scen
 
 export const RebaseBody = z.object({ baseRunId: z.string().uuid(), dryRun: z.boolean().default(false) }).strict();
 
-export const ScenarioRunBody = z.object({ label: z.string().trim().max(200).optional() }).strict();
+/**
+ * POST …/runs: `terms: 'licensed'` runs the terms of the scenario's licence in
+ * force (231/232) instead of its own ops: the run the evidence report's other
+ * applications read for an issued licence.
+ */
+export const ScenarioRunBody = z.object({ label: z.string().trim().max(200).optional(), terms: z.enum(['applied', 'licensed']).default('applied') }).strict();
 
 /**
  * The responsible authority's decision on an application, in the National
@@ -230,6 +235,27 @@ export const ScenarioRunBody = z.object({ label: z.string().trim().max(200).opti
 export const SCENARIO_OUTCOMES = ['licence_issued', 'licence_refused', 'application_rejected', 'not_considered'] as const;
 export type ScenarioOutcome = (typeof SCENARIO_OUTCOMES)[number];
 
+const isoDay = z
+	.string()
+	.regex(/^\d{4}-\d{2}-\d{2}$/, 'a date as YYYY-MM-DD')
+	.refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d, 'not a real date');
+
+/** A licence's conditions in words, as its licence gives them (231): ≤ 4000, trimmed. */
+const conditions = z
+	.string()
+	.trim()
+	.max(4000)
+	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
+
+/**
+ * A licence's granted terms (231_licence_terms, issue #523 G3): the "as
+ * licensed" revision of the ops (`ops`, checked as any scenario's ops are,
+ * then by the route against the base run) and its conditions in words. `ops`
+ * left out: granted as applied for, which the database writes out.
+ */
+export const GrantedTermsBody = z.object({ ops: Ops.optional(), conditions: conditions.default('') }).strict();
+export type GrantedTermsBody = z.infer<typeof GrantedTermsBody>;
+
 /**
  * POST …/decide ("Record the authority's decision"): the outcome, the
  * authority's name (default: settings.responsibleAuthority.name), the date on
@@ -241,12 +267,38 @@ export const DecideBody = z
 	.object({
 		outcome: z.enum(SCENARIO_OUTCOMES),
 		authority: z.string().trim().min(1).max(200).optional(),
-		decisionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a date as YYYY-MM-DD').refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d, 'not a real date'),
+		decisionDate: isoDay,
 		reference: z.string().trim().max(200).default(''),
 		reasonsReceived: z.boolean(),
-		note: description.default('')
+		note: description.default(''),
+		/** With licence_issued only (231): the granted terms; left out, granted as applied for. */
+		granted: GrantedTermsBody.optional()
 	})
-	.strict();
+	.strict()
+	.refine((b) => b.outcome === 'licence_issued' || b.granted === undefined, { message: 'granted terms go with a licence issued', path: ['granted'] });
+
+/** What can follow a decision (232_decision_events, issue #523 G4): an appeal lodged, then its outcome. */
+export const DECISION_EVENT_KINDS = ['lodged', 'upheld', 'set_aside', 'varied'] as const;
+/** Where: the Water Tribunal (NWA s148, s149) or a court (s149(4), review). */
+export const DECISION_EVENT_FORUMS = ['water_tribunal', 'court'] as const;
+
+/**
+ * POST …/appeals ("Record what followed the decision", 232): the kind, the
+ * forum, the date on the lodging or the order, its reference and a note;
+ * `terms` (the new granted terms, G3's shape) with `varied` and only then.
+ */
+export const AppealBody = z
+	.object({
+		kind: z.enum(DECISION_EVENT_KINDS),
+		forum: z.enum(DECISION_EVENT_FORUMS),
+		eventDate: isoDay,
+		reference: z.string().trim().max(200).refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters').default(''),
+		note: description.default(''),
+		terms: z.object({ ops: Ops, conditions: conditions.default('') }).strict().optional()
+	})
+	.strict()
+	.refine((b) => (b.kind === 'varied') === (b.terms !== undefined), { message: 'a variation records its new terms (terms), and only a variation does', path: ['terms'] });
+export type AppealBody = z.infer<typeof AppealBody>;
 
 /**
  * POST …/members: whom to share an application with. `userId`, one of the
