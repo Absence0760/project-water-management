@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withApiKey, withUser, type Db } from './tx.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL, valleyUnitRing } from '../delineation/fixture.js';
 
@@ -81,6 +81,10 @@ interface World {
 	issuedPackId: string;
 	successorPackId: string;
 	series: { id: string; sha256: string; kind: string; startDate: string };
+	/** An application with a recorded decision (163), planted: what an appeal follows (decision_event, 228). */
+	decidedApplicationId: string;
+	/** An editor of this project only, whom its owner may propose to act for the authority (229). */
+	editorId: string;
 }
 
 /** The dual editor: owner of A and of B. */
@@ -89,6 +93,8 @@ let dual: User;
 let viewer: User;
 /** A farmer of both. */
 let farmer: User;
+/** An editor of both, confirmed to act for each one's responsible authority (229): records what followed a decision (228). */
+let authority: User;
 let A: World;
 let B: World;
 
@@ -136,6 +142,10 @@ async function world(name: string): Promise<World> {
 	expect(key.status).toBe(201);
 	expect((await dual.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
 	expect((await dual.call('POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farm.id] })).status).toBe(201);
+	expect((await dual.call('POST', `/projects/${projectId}/members`, { email: authority.email, role: 'editor' })).status).toBe(201);
+	await actForAuthority(dual, projectId, authority.id);
+	const editor = await signUp(`Editor${name.replace(/\W/g, '')}`);
+	expect((await dual.call('POST', `/projects/${projectId}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
 
 	const [rev] = await asOwner('SELECT max(id)::text AS id FROM model_revision WHERE project_id = $1', [projectId]);
 	const [series] = await asOwner(
@@ -174,6 +184,13 @@ async function world(name: string): Promise<World> {
 				`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin, status, submitted_at)
 				 VALUES ($1, 'Submitted application', $2, repeat('a', 64), $3, 'applicant', 'submitted', now())`,
 				[projectId, runId, u]
+			),
+			decidedApplicationId: await one(
+				`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin, status, submitted_at, decided_at, decided_by,
+					outcome, decision_authority, decision_date, decision_reference, reasons_received)
+				 VALUES ($1, 'Decided application', $2, repeat('a', 64), $3, 'applicant', 'decided', now(), now(), $4,
+					'licence_refused', 'Test catchment management agency', '2026-09-30', 'WU-TEST-1', true)`,
+				[projectId, runId, u, authority.id]
 			),
 			sweepId: await one(`INSERT INTO scenario_sweep (project_id, base_run_id, name, created_by, status) VALUES ($1, $2, 'Sweep', $3, 'pending')`, [projectId, runId, u]),
 			assessmentJobId: await job('assessment'),
@@ -233,6 +250,7 @@ async function world(name: string): Promise<World> {
 		run2Id,
 		revisionId: rev!.id as string,
 		apiKeyId: key.body.key.id,
+		editorId: editor.id,
 		series: series as World['series'],
 		...ids,
 		...packs
@@ -357,6 +375,8 @@ interface Case {
 	insert: (home: World, refId: string, db: Db) => Stmt | Promise<Stmt>;
 	/** Run as `home`'s API key instead of the dual editor (no RETURNING: a key reads no audit event back). */
 	asKey?: true;
+	/** Run as this user instead of the dual editor (one who also edits both projects). */
+	asUser?: () => string;
 	/** The stored value isn't the ref (a row the case makes): the control need only succeed, the attack must be refused. */
 	mustRefuse?: true;
 }
@@ -728,6 +748,13 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.runId,
 		insert: (h, ref) => [`INSERT INTO yield_result (project_id, run_id, node_id, kind, params, points, engine_version) VALUES ($1, $2, $3, 'firm', '{}', '{}', 'x')`, [h.projectId, ref, h.farmId]]
 	},
+	// What followed a decision (228): an appeal lodged, recorded by a member acting for the authority of both projects.
+	// decision_event_same_project and the guard's lookup within the row's project refuse another project's application.
+	'decision_event.scenario_id': {
+		ref: (w) => w.decidedApplicationId,
+		asUser: () => authority.id,
+		insert: (h, ref) => [`INSERT INTO decision_event (project_id, scenario_id, position, kind, forum, event_date) VALUES ($1, $2, 1, 'lodged', 'court', '2026-10-01')`, [h.projectId, ref]]
+	},
 	'yield_result.scenario_id': {
 		ref: (w) => w.scenarioId,
 		insert: (h, ref) => [
@@ -769,7 +796,7 @@ async function attempt(key: string, c: Case, home: World, refId: string, update:
 		throw new Rollback();
 	};
 	try {
-		await (c.asKey ? withApiKey(home.apiKeyId, body) : withUser(dual.id, body));
+		await (c.asKey ? withApiKey(home.apiKeyId, body) : withUser(c.asUser?.() ?? dual.id, body));
 		throw new Error('unreachable');
 	} catch (err) {
 		if (err instanceof Rollback) return { ok: true, stored };
@@ -782,7 +809,7 @@ async function attempt(key: string, c: Case, home: World, refId: string, update:
 let inventory: Fk[] = [];
 
 beforeAll(async () => {
-	[dual, viewer, farmer] = await Promise.all([signUp('Dual'), signUp('DualViewer'), signUp('DualFarmer')]);
+	[dual, viewer, farmer, authority] = await Promise.all([signUp('Dual'), signUp('DualViewer'), signUp('DualFarmer'), signUp('DualAuthority')]);
 	A = await world('Project A');
 	B = await world('Project B');
 	inventory = (await asOwner(FK_SQL)) as unknown as Fk[];
@@ -1005,6 +1032,8 @@ async function judgeByGauge(h: World, r: World): Promise<Res> {
 /** Write routes whose body names another row, each sent with A's row (control) and B's (attack). */
 const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'PATCH /projects/:id settings.ewrHeadline.siteNodeId': judgeByGauge,
+	// A person, not a row: the other project's editor isn't one of this project's, so app_authority_candidate refuses them (409).
+	'POST /projects/:id/authority-delegates userId': (h, r) => dual.call('POST', `/projects/${h.projectId}/authority-delegates`, { userId: r.editorId }),
 	'POST /projects/:id/scenarios baseRunId': (h, r) => dual.call('POST', `/projects/${h.projectId}/scenarios`, { name: `S ${randomUUID()}`, baseRunId: r.runId }),
 	'POST /projects/:id/publication runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/publication`, { runId: r.run2Id }),
 	'POST /projects/:id/evidence runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/evidence`, { runId: r.runId, reason: 'Cross-project sweep' }),
@@ -1202,6 +1231,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'projects/ewrHeadlineSettings.ts:siteNodeId': ['PATCH /projects/:id settings.ewrHeadline.siteNodeId'],
 	'projects/settings.ts:calibrationSiteNodeId': 'checkCalibrationSite: projects/calibrationSite.db.test.ts refuses another project’s node',
 	'projects/document.ts:siteNodeId': 'a node of the file’s own model, moved to its fresh id on import (projectFileProblems refuses any other): series/site.db.test.ts',
+	'projects/authorityDelegates.ts:userId': ['POST /projects/:id/authority-delegates userId'],
 	'projects/routes.ts:teamId': 'a team, not a project row: teams/teams.security.db.test.ts',
 	'publish/publish.ts:runId': ['POST /projects/:id/publication runId'],
 	'reports/routes.ts:runId': ['POST /projects/:id/reports runId'],
