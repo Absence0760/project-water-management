@@ -44,6 +44,18 @@ export const toChange = (p: UnitMapProposal) => p.units.filter((u) => !u.same);
 /** The share of a parcel with values, as a percentage. */
 export const pctText = (share: number) => `${fmtNum(Math.floor(share * 1000) / 10, 1, true)} %`;
 
+/**
+ * How much of a proposed unit's parcel the grid has values for, when that is
+ * below 100 % (issue #500 answer 8): "93 % covered", else null. A unit needs
+ * MIN_UNIT_COVERAGE (90 %) to be proposed at all, so this only ever reads
+ * 90–99.9 %; the MAP is the mean over the covered part. Below a millionth
+ * short is float error on a parcel the grid covers whole.
+ */
+export function coveredText(u: Pick<UnitMapProposal['units'][number], 'coveredShare'>): string | null {
+	if (!(u.coveredShare < 1 - 1e-6)) return null;
+	return `${pctText(u.coveredShare)} covered`;
+}
+
 /** What the unit's form holds now, in a cell. */
 export function currentText(u: UnitMapProposal['units'][number]): string {
 	if (u.current.mapMm === null) return 'None';

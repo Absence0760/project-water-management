@@ -212,7 +212,7 @@
 							<option value="" disabled>Pick the unit the gauge stands in</option>
 							{#each land as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 						</select>
-						<span class="hint explain" id="{uid}-runit-h">The CHIRPS cell at this unit’s centre is what the gauge is compared with, and every unit’s MAP is divided by this unit’s MAP.</span>
+						<span class="hint explain" id="{uid}-runit-h">The CHIRPS cell at this unit’s centre is what the gauge is compared with.</span>
 						{#if problem?.field === 'reference'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
 						{#if refGone}<span class="err" data-testid="unit-rain-reference-gone">The reference unit is no longer a unit with land: runs ignore the reference until another is picked.</span>{/if}
 					</div>
@@ -220,8 +220,8 @@
 			</div>
 			<span class="hint explain" id="{uid}-ref-h">
 				With a reference gauge, every unit’s CHIRPS is scaled by 12 monthly factors, the gauge’s rain ÷ the CHIRPS at the reference unit’s cell on the days
-				both have a reading, then by the unit’s MAP ÷ the reference unit’s MAP. A month with fewer than 90 shared days, or under 50 mm of CHIRPS, keeps a
-				factor of 1. The MAP period above then no longer applies.
+				both have a reading, then rescaled so each unit’s long-term yearly total over the MAP period above is its own MAP. A month with fewer than 90 shared
+				days, or under 50 mm of CHIRPS, keeps a factor of 1.
 			</span>
 		</fieldset>
 	{/if}

@@ -28,10 +28,10 @@ import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSup
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
-import { hasPumpLimit, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
+import { hasPumpLimit, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
+import { DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -140,10 +140,16 @@ interface RiverColumns {
 	objOnRiver: Uint8Array;
 	got: number[][];
 	pool: (number[] | null)[];
-	evap: (number[] | null)[];
 	/** The pump-limited column (engine ≥ 1.66.0), exactly with a pump capacity; null without one. */
 	pumpLimited: (number[] | null)[];
 }
+
+/**
+ * The prefix of the pool evaporation column engines 1.65.0–1.85.x published.
+ * A pool is storage only from engine 1.86.0 (issue #523 B2), so such a
+ * column is always stray.
+ */
+const LEGACY_POOL_EVAPORATION_PREFIX = 'river_pool_evaporation@';
 
 /**
  * A unit's river abstractions as the model states them and the run's columns
@@ -152,7 +158,7 @@ interface RiverColumns {
  */
 function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): RiverColumns | string | null {
 	const river = riverSourcesOf(n, demandObjectsByNode(input.model, []).get(n.id), []).river;
-	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, RIVER_TAKE_SERIES.poolEvaporation.prefix, RIVER_TAKE_SERIES.pumpLimited.prefix];
+	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, LEGACY_POOL_EVAPORATION_PREFIX, RIVER_TAKE_SERIES.pumpLimited.prefix];
 	const stray = out.series.find(
 		(x) =>
 			x.nodeId === n.id &&
@@ -160,24 +166,22 @@ function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: Mo
 			!river?.takes.some(
 				(k) =>
 					x.key === riverTakeKey(k.key) ||
-					(k.pool && (x.key === riverPoolKey(k.key) || x.key === riverPoolEvaporationKey(k.key))) ||
+					(k.pool && x.key === riverPoolKey(k.key)) ||
 					(hasPumpLimit(k) && x.key === riverPumpLimitedKey(k.key))
 			)
 	);
 	if (stray) return `${n.id}: a ${stray.key} column without the river abstraction behind it`;
 	if (!river) return null;
-	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, cropShare: river.cropShare, objOnRiver: river.objOnRiver, got: [], pool: [], evap: [], pumpLimited: [] };
+	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, cropShare: river.cropShare, objOnRiver: river.objOnRiver, got: [], pool: [], pumpLimited: [] };
 	for (const k of river.takes) {
 		const g = get.get(`${n.id}|${riverTakeKey(k.key)}`);
 		const p = k.pool ? get.get(`${n.id}|${riverPoolKey(k.key)}`) : null;
-		const e = k.pool ? get.get(`${n.id}|${riverPoolEvaporationKey(k.key)}`) : null;
-		if (!g || (k.pool && (!p || !e))) return `${n.id}: river abstraction ${k.key} has no ${!g ? 'take' : 'pool'} column`;
+		if (!g || (k.pool && !p)) return `${n.id}: river abstraction ${k.key} has no ${!g ? 'take' : 'pool'} column`;
 		// Its pump's limit (engine ≥ 1.66.0): exactly with a pump capacity.
 		const pl = hasPumpLimit(k) ? get.get(`${n.id}|${riverPumpLimitedKey(k.key)}`) : null;
 		if (!pl && hasPumpLimit(k)) return `${n.id}: river abstraction ${k.key} has a pump capacity and no pump-limited column`;
 		cols.got.push(g);
 		cols.pool.push(p ?? null);
-		cols.evap.push(e ?? null);
 		cols.pumpLimited.push(pl ?? null);
 	}
 	return cols;
@@ -448,7 +452,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		// A crop supply table's remote share (engine ≥ 1.73.0): into this unit's crops, out of this unit's dam.
 		const RIN = get.get(`${n.id}|${REMOTE_SERIES.in.key}`);
 		const ROUT = get.get(`${n.id}|${REMOTE_SERIES.out.key}`);
-		// River abstractions' pools (engine ≥ 1.65.0): their change and evaporation leave the unit's balance; each starts full.
+		// River abstractions' pools (engine ≥ 1.65.0): their change leaves the unit's balance; each starts full. Storage only (engine ≥ 1.86.0): no evaporation.
 		const riv = riverColumns(input, n, get, out);
 		if (typeof riv === 'string') return riv;
 		const poolPrev = riv ? riv.takes.map((k) => k.pool?.capM3 ?? 0) : [];
@@ -466,8 +470,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 					const v = p[t]!;
 					const capP = riv.takes[a]!.pool!.capM3;
 					if (v < -1e-9 || v > capP + tol(capP)) return `${n.id} day ${t}: pool of river abstraction ${riv.takes[a]!.key} holds ${v}, outside [0, ${capP}]`;
-					if (riv.evap[a]![t]! < 0) return `${n.id} day ${t}: pool evaporation ${riv.evap[a]![t]} < 0`;
-					pools += v - poolPrev[a]! + riv.evap[a]![t]!;
+					pools += v - poolPrev[a]!;
 					poolPrev[a] = v;
 				}
 			}
@@ -1610,15 +1613,12 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					heldAfter[a] = 0;
 					if (x.pool) {
 						const vp = rivPrev[a]!;
-						const area = vp > 0 ? x.pool.areaFullM2 * Math.pow(Math.min(vp / x.pool.capM3, 1), DAM_AREA_EXPONENT) : 0;
-						const evWant = Math.min((evapMmDay[t]! * area) / 1000, Math.max(vp, 0));
-						const ev = riv.evap[a]![t]!;
-						if (!near(ev, evWant, vp)) return `${where}: pool of river abstraction ${x.key} evaporated ${ev}, not ${evWant} (its start-of-day surface ${area} m²)`;
+						// Storage only (engine ≥ 1.86.0): the pool loses only what its abstraction draws.
 						const vq = riv.pool[a]![t]!;
-						const drawn = Math.max(0, vp - ev - vq);
+						const drawn = Math.max(0, vp - vq);
 						fromFlow[a] = v - drawn;
-						heldAfter[a] = Math.min(vq, vp - ev);
-						poolChg += vq - vp + ev;
+						heldAfter[a] = Math.min(vq, vp);
+						poolChg += vq - vp;
 						rivPrev[a] = vq;
 					}
 				}

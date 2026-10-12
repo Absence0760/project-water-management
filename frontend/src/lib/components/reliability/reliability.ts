@@ -107,6 +107,7 @@ export const ACCOUNT_LINES: AccountLine[] = [
 	{ key: 'consumptiveIrrigationM3', label: 'Consumptive irrigation', side: 'out' },
 	{ key: 'otherUseM3', label: 'Other users (taken − returned)', side: 'out', optional: true },
 	{ key: 'damEvaporationM3', label: 'Dam evaporation', side: 'out', optional: true },
+	// Runs of engines 1.65.0–1.85.x only: a pool is storage only from 1.86.0 (issue #523 B2), so a newer account has no such row.
 	{ key: 'poolEvaporationM3', label: 'Evaporation from river abstractions’ pools', side: 'out', optional: true },
 	{ key: 'damSeepageLostM3', label: 'Dam seepage lost from the catchment', side: 'out', optional: true },
 	{ key: 'streamDepletionM3', label: 'Stream depletion (boreholes)', side: 'out', optional: true },

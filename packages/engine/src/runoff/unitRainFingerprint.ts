@@ -9,11 +9,17 @@ const chirpsLevel = (c: UnitChirpsLevel | null): { chirpsSource: UnitChirpsLevel
 	c
 		? {
 				chirpsSource: c.source,
-				chirpsFactor: c.source === 'map' ? c.factor : c.source === 'reference' ? c.mapRatio : null,
+				chirpsFactor: c.source === 'map' ? c.factor : c.source === 'reference' ? (c.kUnit?.factor ?? null) : null,
 				// The reference's monthly factors (engine ≥ 1.80.0), only on such a unit, so a fingerprint without them is as before.
 				...(c.source === 'reference' ? { chirpsFactors: [...c.factors] } : {})
 			}
 		: { chirpsSource: null, chirpsFactor: null };
+
+/**
+ * Rule 1's gauge is read after the catchment's §2.4c/§2.4d checks (engine ≥ 1.85.0, issue #500 decision 6): marked on a
+ * unitGauge unit, so a fit made when it was read as recorded (1.78.0–1.84.0, no marker) reads "Forcing changed since fit".
+ */
+const gaugeChecked = (rule: UnitRainRule): { gaugeChecked?: true } => (rule === 'unitGauge' ? { gaugeChecked: true } : {});
 
 const usableMap = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= MAP_MM_MIN && v <= MAP_MM_MAX ? v : null);
 
@@ -36,11 +42,13 @@ export interface UnitRainFingerprint {
 		factorSource: UnitRainUnit['factorSource'];
 		gaugeMapFactor: number | null;
 		/** How the unit's own CHIRPS is levelled, whatever the rule (it fills a gauge's gaps too); absent on a fingerprint without it, null = no CHIRPS. */
-		chirpsSource?: 'map' | 'bias' | 'raw' | 'reference' | null;
-		/** The CHIRPS MAP factor (`map`) or the MAP ratio on the reference factors (`reference`); else null. */
+		chirpsSource?: 'map' | 'bias' | 'raw' | 'reference' | 'unusable' | null;
+		/** The CHIRPS MAP factor (`map`) or k_unit on the reference factors (`reference`, engine ≥ 1.85.0; the reference unit's MAP ratio before); else null. */
 		chirpsFactor?: number | null;
 		/** The 12 reference factors, calendar months (`reference` only). */
 		chirpsFactors?: number[];
+		/** A unitGauge unit's own gauge was read after the catchment's checks (engine ≥ 1.85.0); absent before, and on other rules. */
+		gaugeChecked?: true;
 	}[];
 }
 
@@ -72,7 +80,7 @@ export function unitRainFingerprint(u: UnitRainSettings | null | undefined, reci
 		gaugeMapMm: usableMap(u.gaugeMapMm),
 		mapPeriod: { ...(u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD) },
 		...(u.reference ? { reference: { gauge: u.reference.gauge, unitId: u.reference.unitId } } : {}),
-		units: recipes.map((r) => ({ nodeId: r.nodeId, rule: r.rule, ...recipeLevel(r), gaugeMapFactor: r.gaugeMapFactor, ...chirpsLevel(r.chirps) }))
+		units: recipes.map((r) => ({ nodeId: r.nodeId, rule: r.rule, ...recipeLevel(r), gaugeMapFactor: r.gaugeMapFactor, ...chirpsLevel(r.chirps), ...gaugeChecked(r.rule) }))
 	};
 }
 
@@ -84,7 +92,7 @@ export function unitRainFingerprintOfSummary(s: UnitRainSummary | null | undefin
 		gaugeMapMm: s.gaugeMapMm,
 		mapPeriod: { ...s.mapPeriod },
 		...(s.reference ? { reference: { gauge: s.reference.gauge, unitId: s.reference.unitId } } : {}),
-		units: s.units.map((x) => ({ nodeId: x.nodeId, rule: x.rule, rainKey: x.rainKey, factor: x.factor, factorSource: x.factorSource, gaugeMapFactor: x.gaugeMapFactor, ...chirpsLevel(x.chirps) }))
+		units: s.units.map((x) => ({ nodeId: x.nodeId, rule: x.rule, rainKey: x.rainKey, factor: x.factor, factorSource: x.factorSource, gaugeMapFactor: x.gaugeMapFactor, ...chirpsLevel(x.chirps), ...gaugeChecked(x.rule) }))
 	};
 }
 
@@ -105,7 +113,9 @@ export function unitRainFingerprintChanged(a: UnitRainFingerprint | null | undef
 			x.chirpsSource !== undefined &&
 			y.chirpsSource !== undefined &&
 			(x.chirpsSource !== y.chirpsSource || !near(x.chirpsFactor ?? null, y.chirpsFactor ?? null) || months(x.chirpsFactors, y.chirpsFactors));
-		return x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps;
+		// The gauge checks' marker: present on one side only is a change (a fit from before the checks, issue #500 decision 6).
+		const checks = (x.gaugeChecked === true) !== (y.gaugeChecked === true);
+		return x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps || checks;
 	});
 }
 
@@ -127,10 +137,11 @@ export function unitRainFingerprintError(raw: unknown): string | null {
 		if (!x || typeof x !== 'object' || typeof x.nodeId !== 'string' || x.nodeId.length > 200) return 'a unit needs a node id';
 		if (!rules.includes(x.rule) || !sources.includes(x.factorSource)) return 'a unit has an unknown rule or factor source';
 		if (!(x.rainKey === null || (typeof x.rainKey === 'string' && x.rainKey.length <= 250)) || !num(x.factor) || !num(x.gaugeMapFactor)) return 'a unit has a bad record key or factor';
-		if (x.chirpsSource !== undefined && !(x.chirpsSource === null || ['map', 'bias', 'raw', 'reference'].includes(x.chirpsSource))) return 'a unit has an unknown CHIRPS level';
+		if (x.chirpsSource !== undefined && !(x.chirpsSource === null || ['map', 'bias', 'raw', 'reference', 'unusable'].includes(x.chirpsSource))) return 'a unit has an unknown CHIRPS level';
 		if (x.chirpsFactor !== undefined && !num(x.chirpsFactor)) return 'a unit has a bad CHIRPS factor';
 		if (x.chirpsFactors !== undefined && !(Array.isArray(x.chirpsFactors) && x.chirpsFactors.length === 12 && x.chirpsFactors.every((k) => typeof k === 'number' && Number.isFinite(k))))
 			return 'a unit has bad reference factors';
+		if (x.gaugeChecked !== undefined && x.gaugeChecked !== true) return 'a unit has a bad gauge checks marker';
 	}
 	return null;
 }

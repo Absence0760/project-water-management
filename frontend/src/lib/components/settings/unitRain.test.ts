@@ -50,9 +50,11 @@ describe('the MAP period in whole years', () => {
 		expect(DEFAULT_UNIT_MAP_PERIOD).toEqual({ start: '1991-01-01', end: '2020-12-31' });
 	});
 
-	it('notes a period shorter than five years or starting before CHIRPS, without blocking Save', () => {
+	it('notes a period shorter than ten years or starting before CHIRPS, without blocking Save', () => {
 		expect(mapPeriodNote({ mode: 'perUnit' })).toBeNull();
-		expect(mapPeriodNote(withMapPeriodYears({ mode: 'perUnit' }, 2010, 2012))).toMatch(/^3 years: .* at least 5 complete years/);
+		expect(mapPeriodNote(withMapPeriodYears({ mode: 'perUnit' }, 2010, 2012))).toMatch(/^3 years: .* at least 10 complete years/);
+		expect(mapPeriodNote(withMapPeriodYears({ mode: 'perUnit' }, 2010, 2018))).toMatch(/^9 years: .* at least 10 complete years/);
+		expect(mapPeriodNote(withMapPeriodYears({ mode: 'perUnit' }, 2010, 2019))).toBeNull();
 		expect(mapPeriodNote(withMapPeriodYears({ mode: 'perUnit' }, 2010, 2010))).toMatch(/^1 year:/);
 		expect(mapPeriodNote(withMapPeriodYears({ mode: 'perUnit' }, 1975, 2000))).toMatch(/^CHIRPS begins in 1981/);
 		expect(mapPeriodNote({ mode: 'catchment' })).toBeNull();

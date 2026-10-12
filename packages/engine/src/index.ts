@@ -65,7 +65,7 @@ export { REACH_LOSS_FRAC_MAX, REACH_LOSS_SERIES, reachLossDay } from './network/
 export { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES } from './network/baseflow';
 export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, fromSupplyOrder, objectMonthlyM3Day, objectRank, objectSuppliedKey, parseDemandObjectKey, supplyLevels, supplyOrder } from './network/demandObjects';
 export { onRiverDam } from './network/supply';
-export { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverTakeKey } from './network/riverSource';
+export { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolKey, riverPumpLimitedKey, riverTakeKey } from './network/riverSource';
 export { cropDamShareOf, cropRiverShareOf, cropSupplyIssues, hasCropShares, REMOTE_SERIES, SHARE_SUM_TOLERANCE } from './network/cropSupply';
 export { demandBySource, demandSourceShares, type DemandSourceShare } from './network/demandSources';
 export { DEMAND_SCHEDULE_MAX_EASTER_OFFSET, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, easterSunday, isoWeekday, scheduleFactors, scheduleWindowProblem } from './network/demandSchedule';

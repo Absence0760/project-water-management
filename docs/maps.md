@@ -986,8 +986,12 @@ unit, averaged over the unit's own polygon, so that under
   sited at the unit ([data-model.md § Unit rain
   series](./data-model.md#unit-rain-series-209_unit_rain_seriessql)). The
   product is `rnl` (from 1981) unless asked otherwise or the units' feeds
-  already read `sat` (a provisional call; the hydrologist's question 3 in
-  #482); the start date is the product's first day. One History entry names
+  already read `sat`; the start date is the product's first day. `rnl` is
+  the decided product for units (the operator, 2026-10-09, issue #500 item
+  3): it covers the whole 1991–2020 MAP period a unit's level is computed
+  over, where `sat` starts in 1998, at the cost of a newest day two to
+  eight weeks old ([model.md §2.4h *Why `rnl`*](./model.md#reference-gauge-engine--1800-issue-500)).
+  A catchment feed still defaults to `sat`. One History entry names
   every unit set up.
 - **No splicing.** As for the boundary: a unit's feed takes new cells (its
   parcel was redrawn) or another product only while its series holds no days;
@@ -1015,7 +1019,12 @@ unit, averaged over the unit's own polygon, so that under
   one-cell feed would write it. The unit's feed caches that cell whenever
   the centre lies inside the parcel; a cell nobody has fetched (a concave
   parcel whose centroid falls outside it) gives no series, and the run warns
-  that every month's factor is 1.
+  that every month's factor is 1. The operator's decision (issue #500 item
+  1b) is the cell the reference gauge sits in, with the unit's centre only
+  when the gauge has no location; rain gauges have no map point yet, so the
+  centre is always used and the run says so (`cellReason:
+  'referenceUnitCentre'`; the gauge's own cell is a follow-up,
+  [followups.md](./followups.md)).
 
 ## Quaternary lookup
 
@@ -2114,8 +2123,9 @@ units' `mapMm` / `mapSource` only when an editor uses it.
   cell's area on the ellipsoid (which carries the cos latitude), as the
   evaporation from the map averages over the boundary; cells without a value
   are left out of both sums, and the result is rounded to whole mm. A unit
-  with values over less than 90 % of its parcel (`MIN_UNIT_COVERAGE`, a
-  provisional call) is not covered by that grid; nor is one whose bounding
+  with values over less than 90 % of its parcel (`MIN_UNIT_COVERAGE`, kept
+  by the operator on 2026-10-09, issue #500 item 8) is not covered by that
+  grid; nor is one whose bounding
   box spans more than 100 000 of its cells (a 100 m grid over a unit about
   30 km across), which is refused before any read; nor are the units past
   1 000 000 cells of one grid in one request (their boxes summed); nor is
@@ -2141,6 +2151,17 @@ units' `mapMm` / `mapSource` only when an editor uses it.
   line) is refused (`grid_mixed`): use the grid that covers every unit, or
   clear that unit's MAP on its form first. A MAP typed in by hand is no
   grid's and is never touched by an apply that leaves its unit out.
+- **Coverage shown below 100 %** (issue #500 item 8). A unit covered over
+  90–100 % of its parcel gets a MAP from the part the grid has values on, so
+  the panel shows its coverage under the proposed MAP ("93.3 % covered",
+  rounded down so a partial unit never reads 100 %): the MAP stands for the whole parcel, and a missing strip on a
+  ridge can read it low. A unit covered in full shows no figure.
+- **The MAP's own period.** A grid's MAP is a long-term mean over its own
+  years, not 1991–2020; a unit's CHIRPS level (k_unit) carries the
+  difference ([model.md §2.4h *The MAP's own
+  period*](./model.md#reference-gauge-engine--1800-issue-500)). Name the
+  grid and its study in the dataset's source, so a unit's MAP source line
+  says which surface it came from.
 - **The synthetic grid** proposes invented values, marked as such; the
   units' MAP from it is for development and tests only.
 

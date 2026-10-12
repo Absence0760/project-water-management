@@ -5,21 +5,21 @@
 // optional pool, beside the dam. Pure; the simulation (./simulate.ts), the
 // run (../run.ts) and the self-checks (../verify/checks.ts) read a demand's
 // source through these, so a stored value means the same thing to each.
-import { DAM_AREA_EXPONENT, estimatedDamAreaM2, type DemandObject, type NetworkNode } from '../project';
+import type { DemandObject, NetworkNode } from '../project';
 import { cropSharesOf, type PlanCropShare } from './cropSupply';
 
 /**
  * A pool at a river abstraction's pump (engine ≥ 1.65.0, after draft PR
  * #341's run-of-river pool): in-channel storage the pump draws down once the
  * flow it may take is used, refilled from the flow above what must pass the
- * unit. It starts the run full; its surface area is estimated from its
- * capacity, as an unknown dam area is (§2.7a).
+ * unit. It starts the run full. Storage only (engine ≥ 1.86.0, issue #523
+ * B2): it holds up to its capacity with no rain and no evaporation, so it has
+ * no surface area; engines 1.65.0–1.85.x estimated one from the capacity and
+ * took the pool's evaporation off it.
  */
 export interface PlanPool {
 	/** Capacity, m³ (> 0). */
 	capM3: number;
-	/** Surface area when full, m²: A = areaFullM2 × (storage / capacity)^DAM_AREA_EXPONENT. */
-	areaFullM2: number;
 }
 
 /** One river abstraction as the simulation runs it. */
@@ -60,14 +60,12 @@ export const CROPS_TAKE_KEY = 'crops';
 export const RIVER_TAKE_SERIES = {
 	take: { prefix: 'river_take@', label: (name: string) => `River abstraction "${name}": pumped (part of supplied)`, unit: 'm³/day' },
 	pool: { prefix: 'river_pool@', label: (name: string) => `River abstraction "${name}": pool storage (end of the day)`, unit: 'm³' },
-	poolEvaporation: { prefix: 'river_pool_evaporation@', label: (name: string) => `River abstraction "${name}": evaporation from the pool`, unit: 'm³/day' },
 	/** Engine ≥ 1.66.0, only with a pump capacity: the demand its pump left unmet although the river (or its pool) had it. */
 	pumpLimited: { prefix: 'river_pump_limited@', label: (name: string) => `River abstraction "${name}": demand the pump capacity left unmet (the river or its pool had it)`, unit: 'm³/day' }
 } as const;
 
 export const riverTakeKey = (key: string): string => `${RIVER_TAKE_SERIES.take.prefix}${key}`;
 export const riverPoolKey = (key: string): string => `${RIVER_TAKE_SERIES.pool.prefix}${key}`;
-export const riverPoolEvaporationKey = (key: string): string => `${RIVER_TAKE_SERIES.poolEvaporation.prefix}${key}`;
 export const riverPumpLimitedKey = (key: string): string => `${RIVER_TAKE_SERIES.pumpLimited.prefix}${key}`;
 
 /** Whether a river abstraction publishes its pump-limited series (engine ≥ 1.66.0): only with a pump capacity (a finite one; 0 = no pump). */
@@ -94,14 +92,14 @@ function pumpOf(raw: unknown, who: string, warnings: string[]): number {
 	return Infinity;
 }
 
-/** A pool as the run uses it: none for null / absent / 0, else its capacity and estimated area; one that isn't a size runs as none, with a warning. */
+/** A pool as the run uses it: none for null / absent / 0, else its capacity; one that isn't a size runs as none, with a warning. */
 function poolOf(raw: unknown, who: string, warnings: string[]): PlanPool | undefined {
 	if (raw === null || raw === undefined || raw === 0) return undefined;
 	if (!finite(raw) || raw < 0) {
 		warnings.push(`${who}: pool capacity ${String(raw)} m³ is not a size ≥ 0; no pool`);
 		return undefined;
 	}
-	return { capM3: raw, areaFullM2: estimatedDamAreaM2(raw) };
+	return { capM3: raw };
 }
 
 /**
@@ -144,17 +142,6 @@ export function riverSourcesOf(n: NetworkNode, objects: readonly DemandObject[] 
 	});
 	if (!takes.length) return {};
 	return { river: { takes, cropsOnRiver, cropShare, objOnRiver } };
-}
-
-/**
- * A pool's surface area and evaporation today, from its start-of-day storage
- * `prev` (A = A_full × (prev / capacity)^b, the dams' small-reservoir
- * exponent b), at most what it holds. Returns [area, evaporation].
- */
-export function poolLosses(pool: PlanPool, prev: number, evapMmDay: number): [number, number] {
-	if (!(prev > 0)) return [0, 0];
-	const A = pool.areaFullM2 * Math.pow(Math.min(prev / pool.capM3, 1), DAM_AREA_EXPONENT);
-	return [A, Math.min((evapMmDay * A) / 1000, prev)];
 }
 
 /** What riverTakesDay writes per abstraction (index = take). */
@@ -211,7 +198,7 @@ function notePumpLimited(takes: readonly PlanTake[], level: ArrayLike<number>, l
  * the unit's dam side: by supply level (0 first), each abstraction wants
  * MIN(its demand `want`, what is left of its pump); the level shares the
  * flow it may take, `free`, pro rata to what each wants, and what the flow
- * can't give each draws from its own pool (`held`, after evaporation), all
+ * can't give each draws from its own pool (`held`), all
  * within the surface allocation room `room` (Infinity without a cap). Then
  * each pool refills from the flow left, pro rata to its room, up to its
  * capacity. An abstraction whose pump ran out first records what was still

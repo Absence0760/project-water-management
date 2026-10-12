@@ -259,6 +259,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_irrigation_systems(random.Random(seed * 104729 + 3), doc, dense)
     add_unit_rain(random.Random(seed * 15485863 + 11), doc, start, days, dense)
     add_baseflow(random.Random(seed * 2750159 + 7), doc, dense)
+    add_unit_rain_decisions(random.Random(seed * 32452843 + 7), doc)
     return doc
 
 
@@ -357,6 +358,42 @@ def add_unit_rain_reference(rng: random.Random, doc: dict, start: dt.date, days:
     if cell["values"] and rng.random() < 0.2:
         cell["values"][rng.randrange(len(cell["values"]))] = -9999.0
     series[f"rain_chirps_cell_mm@{ref_unit['id']}"] = cell
+
+
+def add_unit_rain_decisions(rng: random.Random, doc: dict) -> None:
+    """Issue #500's decisions (operator, 2026-10-09), from their own stream
+    so the rest of a per-unit network is unchanged: the forecast's source
+    (`forecastRainSource` 'chirps_gefs', 'other' or absent, item 5) where
+    there is a forecast; now and then a unit's CHIRPS reading 0 mm on every
+    day (unusable, item 7a); and in a unit's own gauge a long run of zeros or
+    a big reading after a few blank days, for the catchment's checks to find
+    or not (item 6, and 1c when it is the reference gauge)."""
+    ur = doc["settings"].get("unitRain") or {}
+    if ur.get("mode") != "perUnit":
+        return
+    series = doc["series"]
+    if "rain_forecast_mm" in series:
+        src = rng.choice(["chirps_gefs", "chirps_gefs", "other", None])
+        if src is not None:
+            doc["forecastRainSource"] = src
+    for f in (x for x in doc["model"]["nodes"] if x["kind"] == "farm"):
+        ch = series.get(f"rain_chirps_mm@{f['id']}")
+        if ch and rng.random() < 0.12:
+            ch["values"] = [None if v is None else (v if v < 0 else 0.0) for v in ch["values"]]
+        g = series.get(f"rain_catchment_mm@{f['id']}")
+        if not g or len(g["values"]) < 400:
+            continue
+        vals = g["values"]
+        if rng.random() < 0.35:
+            a = rng.randrange(len(vals) - 200)
+            for j in range(a, a + rng.randint(70, 180)):
+                vals[j] = 0.0
+        if rng.random() < 0.35:
+            for _ in range(rng.randint(1, 3)):
+                r = rng.randrange(20, len(vals))
+                for j in range(r - rng.randint(3, 10), r):
+                    vals[j] = None
+                vals[r] = round(rng.uniform(20, 90), 1)
 
 
 SABI_SYSTEMS = [("drip", "Drip", 0.9), ("micro", "Micro-sprinkler", 0.82), ("pivot", "Centre pivot / linear move", 0.85), ("sprinkler", "Sprinkler (permanent)", 0.8), ("movable", "Sprinkler (movable)", 0.75), ("surface", "Flood / furrow", 0.7)]
