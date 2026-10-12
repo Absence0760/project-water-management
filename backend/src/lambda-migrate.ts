@@ -27,6 +27,12 @@
 // (geo/referenceLoad.ts, which refuses every kind docs/maps.md § Sources
 // doesn't mark allowed). It answers with counts only.
 //
+// And it runs the read-only production checks (docs/deployment.md § Read-only
+// production checks): an event `{ "check": "<name>" }` runs no migration and
+// no role sync; it runs that one named query of checks/readOnlyChecks.ts (the
+// event never carries SQL) in a READ ONLY transaction as the owner, and
+// answers with ids, engine versions, modes and dates only.
+//
 // The deploy workflow's logs are public (the repo is), so a failure's
 // payload is a summary too: a stable code, migration names and where the
 // detail is. The detail itself (Postgres's error text, which can quote SQL or
@@ -38,6 +44,7 @@ import { assertLambdaEnv } from './config/production.js';
 import { loadRuntimeSecrets } from './config/runtimeSecrets.js';
 import { getSecretString } from './config/secretsManager.js';
 import { migrate, MigrateError, type MigrateErrorCode } from '../scripts/migrate.js';
+import { CheckError, parseCheckRequest, runCheck, type CheckErrorCode, type CheckResult } from './checks/readOnlyChecks.js';
 import { LoadError, loadReferenceText, parseLoadRequest, readReferenceText, type LoadErrorCode, type LoadResult, type ReadObject } from './geo/referenceLoad.js';
 
 // Its runtime secret (the water_app password) once per cold start
@@ -244,7 +251,51 @@ export async function loadReference(raw: unknown, context?: LogContext, read: Re
 	}
 }
 
-export async function handler(event?: unknown, context?: LogContext): Promise<MigrateResult | LoadResult> {
+/** What a failed check returns (the thrown error's message, JSON): a code, a fixed reason, and where the detail is. */
+export interface CheckFailure {
+	code: CheckErrorCode;
+	reason: string | null;
+	logGroup: string | null;
+	logStream: string | null;
+	requestId: string | null;
+}
+
+export function checkFailureSummary(err: unknown, context?: LogContext): CheckFailure {
+	const c = err instanceof CheckError ? err : null;
+	return {
+		code: c?.code ?? 'check_failed',
+		reason: c?.publicReason ?? null,
+		logGroup: context?.logGroupName ?? null,
+		logStream: context?.logStreamName ?? null,
+		requestId: context?.awsRequestId ?? null
+	};
+}
+
+/** One read-only production check (docs/deployment.md § Read-only production checks). `event` is the whole event. */
+export async function readOnlyCheck(event: unknown, context?: LogContext): Promise<CheckResult> {
+	try {
+		// Refused before the secret is read or anything connects.
+		const name = parseCheckRequest(event);
+		const client = new pg.Client({ connectionString: ownerUrl(await readMasterSecret(requireEnv('MASTER_SECRET_ARN'))) });
+		await client.connect();
+		try {
+			const result = await runCheck(client, name);
+			console.log(`check ${name}: ${result.count} row(s)${result.truncated ? ` (first ${result.rows.length} returned)` : ''}`);
+			return result;
+		} finally {
+			await client.end();
+		}
+	} catch (err) {
+		console.error('check failed:', err);
+		const failure = new Error(JSON.stringify(checkFailureSummary(err, context)));
+		failure.name = 'CheckFailed';
+		failure.stack = `${failure.name}: ${failure.message}`;
+		throw failure;
+	}
+}
+
+export async function handler(event?: unknown, context?: LogContext): Promise<MigrateResult | LoadResult | CheckResult> {
+	if (event && typeof event === 'object' && 'check' in event) return readOnlyCheck(event, context);
 	if (event && typeof event === 'object' && 'load' in event) return loadReference((event as { load: unknown }).load, context);
 	try {
 		return await run();

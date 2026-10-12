@@ -184,3 +184,38 @@ describe('scramSha256Verifier', () => {
 		expect(v).not.toContain('pencil');
 	});
 });
+
+describe('a read-only check (docs/deployment.md § Read-only production checks)', () => {
+	it('an unknown check is refused before the secret is read, with the stable code and a fixed reason', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', '');
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const err = (await handler({ check: 'all-the-emails' }, context).catch((e: Error) => e)) as Error;
+		expect(err.name).toBe('CheckFailed');
+		expect(JSON.parse(err.message)).toEqual({
+			code: 'refused',
+			reason: 'check must be one of unit-rain-reference-runs, pre-213-cap-runs',
+			logGroup: context.logGroupName,
+			logStream: context.logStreamName,
+			requestId: context.awsRequestId
+		});
+		expect(String(logged.mock.calls[0]?.[1])).not.toContain('MASTER_SECRET_ARN');
+	});
+
+	it('SQL in the event is refused, never run, and the event never migrates', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', '');
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		for (const event of [{ check: 'unit-rain-reference-runs', sql: 'DELETE FROM model_run' }, { check: 'SELECT 1' }, { check: 'pre-213-cap-runs', load: {} }]) {
+			const err = (await handler(event, context).catch((e: Error) => e)) as Error;
+			expect(JSON.parse(err.message)).toMatchObject({ code: 'refused' });
+		}
+	});
+
+	it('a known check fails on its own path (the secret), as check_failed with no detail', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', '');
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const err = (await handler({ check: 'pre-213-cap-runs' }, context).catch((e: Error) => e)) as Error;
+		expect(JSON.parse(err.message)).toMatchObject({ code: 'check_failed', reason: null });
+		expect(err.message).not.toContain('MASTER_SECRET_ARN');
+		expect(String(logged.mock.calls[0]?.[1])).toContain('MASTER_SECRET_ARN is not set');
+	});
+});
