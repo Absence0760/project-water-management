@@ -139,6 +139,31 @@ describe('POST /projects/:id/yield', () => {
 		expect(s).toMatchObject({ scenarioId: sid, runId: null });
 		expect(s.points.point.capacityM3).toBe(200_000);
 		expect(s.points.point.yieldM3Day).toBeGreaterThan(b.points.point.yieldM3Day);
+		// Each records the allocation mode it ran with (221, #523 G1c): here compare only.
+		const modes = await asOwner('SELECT id, allocation_mode FROM yield_result WHERE id = ANY($1::uuid[])', [[b.id, s.id]]);
+		expect(modes.map((m) => (m as { allocation_mode: string }).allocation_mode)).toEqual(['none', 'none']);
+	});
+
+	it('records the allocation mode the scenario ran with (221, #523 G1c): cap, kept when the op is later dropped', async () => {
+		const owner = await signUp('YieldMode');
+		const c = await catchment(owner);
+		const at = `/projects/${c.projectId}`;
+		const made = await owner.call('POST', `${at}/scenarios`, {
+			name: 'Capped',
+			baseRunId: c.runId,
+			ops: [{ op: 'settings.set', path: 'allocationMode', value: 'cap' }]
+		});
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const sid = made.body.scenario.id as string;
+		const res = await owner.call('POST', `${at}/yield`, { nodeId: c.dam.id, scenarioId: sid, kind: 'firm' });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		await tick();
+		expect(await job(res.body.jobId)).toMatchObject({ status: 'done', last_error: null });
+		const read = async () => (await asOwner('SELECT allocation_mode FROM yield_result WHERE scenario_id = $1', [sid])) as { allocation_mode: string }[];
+		expect(await read()).toEqual([{ allocation_mode: 'cap' }]);
+		// The scenario dropping its op later doesn't rewrite what the yield ran with.
+		expect((await owner.call('PATCH', `${at}/scenarios/${sid}`, { ops: [] })).status).toBe(200);
+		expect(await read()).toEqual([{ allocation_mode: 'cap' }]);
 	});
 
 	it('at most 2 queued or running yield jobs per user (429 for a third, never for a repeat)', async () => {

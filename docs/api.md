@@ -3909,6 +3909,12 @@ scenario (its ops on its base run's inputs), never the live model.
   failureDays, failedYears, boundM3Day, probes }` (model.md §2.13).
   `monotone: false` says the yield falls somewhere as the dam grows, which
   can be real (evaporation, a dam starting below its minimum level).
+  To a viewer the project keeps from each registered volume, a result that
+  ran with `allocationMode` `cap` or `fullAllocation` comes with
+  `points: null, withheld: ["points"]` (#523 I), judged by the mode the job
+  recorded it ran with (`yield_result.allocation_mode`, 221), not by the
+  scenario's current ops; a scenario's result from before 221 (mode
+  unknown) is withheld too ([security.md](./security.md)).
 - The job's `error` when it fails: `the model can't run this input: …`,
   `the yield search failed: …` (the engine's words, e.g. `this node has no
   irrigation demand to shape the draft; use a constant pattern`),

@@ -3238,6 +3238,7 @@ No job table of its own: `job` holds status, progress and errors.
 | `params` | The request's parameters with their defaults: `pattern`, `assurance`, `tolerance`, `points` (≤ 4 KB) |
 | `points` | `{ point }` for `firm`, `{ baseCapacityM3, assurance, points, monotone }` for `curve`, engine `YieldPoint`s (≤ 64 KB) |
 | `engine_version`, `created_by`, `created_at` | `created_by` and `created_at` are stamped by the insert trigger |
+| `allocation_mode` | The `settings.allocationMode` of the input the yield ran on (`none`, `cap`, `fullAllocation`; 221, #523 G1c), written by the job. A viewer kept from the volumes gets a `cap` or `fullAllocation` result without its points; NULL = a result from before 221, judged on a run by the run's own mode and withheld on a scenario (`yield/store.ts` `yieldsOnCapOrFull`) |
 
 - **RLS**: SELECT for viewers (farmers read nothing: listed in the catalogue
   guard's `FARMERS_NEVER_READ`), INSERT and DELETE for editors. No UPDATE

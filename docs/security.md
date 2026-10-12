@@ -3021,7 +3021,11 @@ database:
   the catchment's), the daily, all-farms and summary CSVs and the `.xlsx`
   workbook, the compare route, History, sweep members (`withheld:
   ["series"]`), uncertainty ensembles, yields computed on such a run or
-  scenario (`points: null`, `withheld`), the evidence report live, in a
+  scenario (`points: null`, `withheld`; judged by the mode the yield job
+  recorded it ran with, `yield_result.allocation_mode` from 221, #523 G1c,
+  so dropping a scenario's cap op afterwards doesn't release one; a
+  scenario's yield from before 221 has no mode and is withheld, a run's is
+  judged by the run's own mode, which never changes), the evidence report live, in a
   pack's served manifest (its PDF refused, `packWithheldPart`) and in a
   report PDF printed without the volumes. The summary is marked
   `allocations.verdictsOnly` with `withheld` naming the fields left out, the

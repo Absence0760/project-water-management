@@ -170,22 +170,19 @@ export async function listYieldResults(
 
 /**
  * The results among `ids` computed on a run that caps use at, or scales
- * demand to, the registered volumes (#523 I): a run's own mode, or a
- * scenario's (its mode op, or its base run's); a scenario the caller can't
- * read counts as one.
+ * demand to, the registered volumes (#523 I): the mode the yield recorded it
+ * ran with (221, #523 G1c), never the scenario's current state. A result from
+ * before 221 (NULL) is judged conservatively: one on a run by the run's own
+ * mode (its input never changes), one on a scenario counts as capped.
  */
 export async function yieldsOnCapOrFull(db: Db, ids: readonly string[]): Promise<string[]> {
 	const { rows } = await db.query<{ id: string }>(
 		`SELECT y.id FROM yield_result y
 		 LEFT JOIN model_run r ON r.id = y.run_id
-		 LEFT JOIN scenario s ON s.id = y.scenario_id
-		 LEFT JOIN model_run b ON b.id = s.base_run_id
 		 WHERE y.id = ANY($1::uuid[])
-		   AND (r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation')
-			OR (y.scenario_id IS NOT NULL AND (s.id IS NULL
-				OR b.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation')
-				OR EXISTS (SELECT 1 FROM jsonb_array_elements(s.ops) o
-					WHERE o->>'op' = 'settings.set' AND o->>'path' = 'allocationMode' AND o->>'value' IN ('cap', 'fullAllocation')))))`,
+		   AND (y.allocation_mode IN ('cap', 'fullAllocation')
+			OR (y.allocation_mode IS NULL AND (y.scenario_id IS NOT NULL
+				OR r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation'))))`,
 		[ids]
 	);
 	return rows.map((r) => r.id);

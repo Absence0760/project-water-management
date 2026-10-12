@@ -9,7 +9,7 @@
 // with the job's progress reported (outside its transaction) between them.
 // A cancel (app_cancel_job) stops it at the next report: dead, "cancelled",
 // nothing stored.
-import { ENGINE_VERSION, firmYield, isMonotone, prepareYield, storageYieldCapacities, type YieldPoint, type YieldProblem } from '@water-management/engine';
+import { ENGINE_VERSION, firmYield, isMonotone, prepareYield, resolveAllocationMode, storageYieldCapacities, type YieldPoint, type YieldProblem } from '@water-management/engine';
 import { ApiError } from '../../http/errors.js';
 import { requireRole } from '../../projects/access.js';
 import { YIELD_RESULTS_KEPT, yieldInputFor, YieldPayload, type YieldPoints } from '../../yield/store.js';
@@ -57,10 +57,12 @@ export const yieldHandler = defineHandler({
 			throw new JobError(`the yield search failed: ${(err as Error).message}`, { retry: false });
 		}
 		const target = payload.runId ? { col: 'run_id', id: payload.runId } : { col: 'scenario_id', id: payload.scenarioId! };
+		// The mode it ran with (221): what a viewer kept from the volumes is gated on, not the scenario's later state (#523 G1c).
+		const allocationMode = resolveAllocationMode(input.settings.allocationMode, []);
 		await db.query(
-			`INSERT INTO yield_result (project_id, ${target.col}, node_id, job_id, kind, params, points, engine_version)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			[job.projectId, target.id, payload.nodeId, job.id, payload.kind, JSON.stringify(payload.params), JSON.stringify(points), ENGINE_VERSION]
+			`INSERT INTO yield_result (project_id, ${target.col}, node_id, job_id, kind, params, points, engine_version, allocation_mode)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			[job.projectId, target.id, payload.nodeId, job.id, payload.kind, JSON.stringify(payload.params), JSON.stringify(points), ENGINE_VERSION, allocationMode]
 		);
 		await db.query(
 			`DELETE FROM yield_result WHERE id IN (
