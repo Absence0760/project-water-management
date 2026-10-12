@@ -1555,7 +1555,8 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   geodesic area, never the elevation model's. A dam or an abstraction point
   is **never a unit of its own**: each unit has one composite dam (the total
   of all its farm dams), and the dams inside a unit's boundary (a polygon by
-  its centre) are its parts, linked to the unit on apply; the abstraction
+  a point inside its outline, never its centre, which for a long or concave
+  dam can lie outside it) are its parts, linked to the unit on apply; the abstraction
   points inside it are its river pump, linked too. A dam or point in no
   unit's boundary goes with the rest of the catchment (linked to it when it
   is added), and one outside the catchment boundary is dropped. Nothing

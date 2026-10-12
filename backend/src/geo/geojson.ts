@@ -664,6 +664,49 @@ export function centerOf(g: Geometry): Position {
 	}
 }
 
+/**
+ * A point inside a polygon (holes kept out): the middle of the widest stretch of the horizontal line through the largest
+ * part's outer-ring centroid that lies inside the polygon. Inside by construction, unlike a crescent's or an L's centroid
+ * or vertex average. Null when the ring is degenerate. Parity: the same algorithm as the frontend's `interiorPoint`
+ * (frontend/src/lib/components/map/pieces.ts, where a piece's number goes); a change to one is made to both.
+ */
+export function interiorPoint(g: Extract<Geometry, { type: 'Polygon' | 'MultiPolygon' }>): Position | null {
+	const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+	let best: Position[][] | null = null;
+	let bestArea = -1;
+	for (const p of polys) {
+		const a = Math.abs(planarArea(p[0] ?? []));
+		if (a > bestArea) (bestArea = a), (best = p);
+	}
+	if (!best || bestArea <= 0) return null;
+	const outer = best[0]!;
+	let cy = 0;
+	let wsum = 0;
+	for (let i = 0; i + 1 < outer.length; i++) {
+		const [x0, y0] = outer[i]!;
+		const [x1, y1] = outer[i + 1]!;
+		const cross = x0 * y1 - x1 * y0;
+		cy += (y0 + y1) * cross;
+		wsum += cross;
+	}
+	const y = wsum ? cy / (3 * wsum) : outer[0]![1];
+	const xs: number[] = [];
+	for (const ring of best) {
+		for (let i = 0; i + 1 < ring.length; i++) {
+			const [ax, ay] = ring[i]!;
+			const [bx, by] = ring[i + 1]!;
+			if (ay > y !== by > y) xs.push(ax + ((y - ay) * (bx - ax)) / (by - ay));
+		}
+	}
+	xs.sort((a, b) => a - b);
+	let mid: number | null = null;
+	let width = -1;
+	for (let k = 0; k + 1 < xs.length; k += 2) {
+		if (xs[k + 1]! - xs[k]! > width) (width = xs[k + 1]! - xs[k]!), (mid = (xs[k]! + xs[k + 1]!) / 2);
+	}
+	return mid === null ? null : [mid, y];
+}
+
 /** Whether a point lies in a Polygon or MultiPolygon (inside its outer ring and outside its holes). */
 export function pointInGeometry(p: Position, g: Geometry): boolean {
 	const inPolygon = (rings: readonly Position[][]) => pointInRing(p, rings[0]!) && !rings.slice(1).some((h) => pointInRing(p, h));

@@ -2,8 +2,9 @@
 // Start from the map / Divide"): which unit each dam and abstraction point is part of, the rest beside the boundaries, the
 // boundary's area against the elevation model's, and a stored plan from before.
 import { describe, expect, it } from 'vitest';
-import type { Geometry } from '../geo/geojson.js';
-import { assignMembers, boundaryCheck, madeBeforeBoundaries, restBesideBoundaries } from './start.js';
+import type { Geometry, Position } from '../geo/geojson.js';
+import { pointInGeometry } from '../geo/geojson.js';
+import { assignMembers, boundaryCheck, madeBeforeBoundaries, pointOf, restBesideBoundaries } from './start.js';
 
 const square = (x0: number, y0: number, x1: number, y1: number): Geometry => ({ type: 'Polygon', coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]] });
 const pt = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
@@ -19,7 +20,7 @@ describe('assignMembers', () => {
 			[
 				{ featureId: 'd1', name: 'Top dam', role: 'dam', geometry: pt(20.5, -33.2) },
 				{ featureId: 'p1', name: 'Top pump', role: 'abstraction', geometry: pt(20.6, -33.3) },
-				// A dam drawn as its outline: by its centre.
+				// A dam drawn as its outline: by a point inside it.
 				{ featureId: 'd2', name: 'Low dam', role: 'dam', geometry: square(20.4, -33.8, 20.5, -33.7) }
 			],
 			null
@@ -47,6 +48,49 @@ describe('assignMembers', () => {
 		expect(r.dropped).toEqual([{ featureId: 'out', name: 'Far dam', reason: 'is outside the catchment boundary' }]);
 		// Without a catchment boundary nothing is outside it: the far dam is with the rest too.
 		expect(assignMembers(units, [{ featureId: 'out', name: 'Far dam', role: 'dam', geometry: pt(25, -33.5) }], null).rest).toHaveLength(1);
+	});
+});
+
+describe('a dam drawn as its outline (pointOf)', () => {
+	// lon = 20 + x / 10, lat = -34 + y / 10: a plan drawn in tenths of a degree.
+	const at = (pts: [number, number][]): Position[] => pts.map(([x, y]) => [20 + x / 10, -34 + y / 10]);
+	const ring = (pts: [number, number][]): Geometry => ({ type: 'Polygon', coordinates: [at([...pts, pts[0]!])] });
+	// A concave valley unit (an L) and the unit filling its notch.
+	const units = [
+		{ key: 'valley', geometry: ring([[0, 0], [4, 0], [4, 1.5], [1.5, 1.5], [1.5, 4], [0, 4]]) },
+		{ key: 'notch', geometry: ring([[1.5, 1.5], [4, 1.5], [4, 4], [1.5, 4]]) }
+	];
+
+	it('puts an L-shaped dam in the unit that holds it, though its vertex average lies outside it, in the next unit', () => {
+		const dam = ring([[0.2, 0.2], [3.5, 0.2], [3.5, 1], [1, 1], [1, 3.5], [0.2, 3.5]]);
+		const vertices = (dam as Extract<Geometry, { type: 'Polygon' }>).coordinates[0]!.slice(0, -1);
+		const average: Position = [vertices.reduce((s, p) => s + p[0], 0) / vertices.length, vertices.reduce((s, p) => s + p[1], 0) / vertices.length];
+		// The bug's premise: the vertex average is outside the dam and in the notch unit.
+		expect(pointInGeometry(average, dam)).toBe(false);
+		expect(pointInGeometry(average, units[1]!.geometry)).toBe(true);
+		expect(pointInGeometry(pointOf(dam), dam)).toBe(true);
+		const r = assignMembers(units, [{ featureId: 'L', name: 'Long dam', role: 'dam', geometry: dam }], null);
+		expect(r.byUnit.get('valley')).toEqual([{ featureId: 'L', name: 'Long dam', role: 'dam' }]);
+		expect(r.byUnit.get('notch')).toEqual([]);
+	});
+
+	it('lands inside a U-shaped dam, not in the gap between its arms, and beside a hole, not in it', () => {
+		const u = ring([[0.2, 0.2], [1.4, 0.2], [1.4, 1.4], [1.0, 1.4], [1.0, 0.6], [0.6, 0.6], [0.6, 1.4], [0.2, 1.4]]);
+		expect(pointInGeometry(pointOf(u), u)).toBe(true);
+		const holed: Geometry = { type: 'Polygon', coordinates: [at([[0, 0], [3, 0], [3, 3], [0, 3], [0, 0]]), at([[1, 1], [2, 1], [2, 2], [1, 2], [1, 1]])] };
+		expect(pointInGeometry(pointOf(holed), holed)).toBe(true);
+	});
+
+	it('control: a convex dam is placed at its middle, as before', () => {
+		const square = ring([[2, 2], [3, 2], [3, 3], [2, 3]]);
+		const [x, y] = pointOf(square);
+		expect(x).toBeCloseTo(20.25, 7);
+		expect(y).toBeCloseTo(-33.75, 7);
+		expect(assignMembers(units, [{ featureId: 's', name: 'Square dam', role: 'dam', geometry: square }], null).byUnit.get('notch')).toEqual([
+			{ featureId: 's', name: 'Square dam', role: 'dam' }
+		]);
+		// A point stays itself.
+		expect(pointOf({ type: 'Point', coordinates: [20.1, -33.9] })).toEqual([20.1, -33.9]);
 	});
 });
 
