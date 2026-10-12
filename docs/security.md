@@ -3060,8 +3060,14 @@ database:
   (`allocations/verdictsOnly.test.ts`), and a sweep, an
   uncertainty ensemble, a (draft) evidence pack, an impact report, an
   assessment and a delineation request as fixtures; no answer may hold any
-  of the numbers in m³ a year, megalitres, m³ a day or the run's partial
-  water year's share. A route whose `:param` has no fixture fails the test,
+  of the numbers, of either sign, in m³ a year (in figures or grouped in
+  words, within 0.5) or as a share matched by closeness: megalitres, a
+  day's (÷ 365 or 366, in m³ or ML), a second's, or the run's partial water
+  year's, each printed with 6 or more significant digits and agreeing to its
+  printed precision (a part in ten million at full precision). The values
+  under id keys and the digits of uuids and hashes are skipped, so the
+  closeness can be that tight without an id matching (#523 G1c,
+  `__tests__/figures.ts`, unit-tested beside it). A route whose `:param` has no fixture fails the test,
   and every answer must succeed or be one of its listed refusals (with the
   reason). An editor reads each number where it is (positive control).
   What it doesn't cover: routes outside `/projects/:id` (`/teams/:id/portfolio`,
