@@ -74,20 +74,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Fixed, engine 1.22.0 (issue #66; provisional decision 2026-10-01 keeps the defaults, the hydrologist's confirmation pending; zero-flow stretches changed in engine 1.62.0, C3)"
 	},
 	{
-		"id": "A1",
-		"source": "finding",
-		"severity": "Medium (Reserve rule-table sites whose natural flow falls below the table's driest point: (100 − P_last) % of months with the percentile from the run, 1 % at the DRM's 99 % point; more with the gazette's curve when the model runs drier)",
-		"title": "Below a rule table's driest point the requirement is scaled down with the flow, not held at the drought flow",
-		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
-	},
-	{
-		"id": "A2",
-		"source": "finding",
-		"severity": "Low",
-		"title": "A rule table is interpolated linearly between its % points; Sawunyama & Hughes (2010) interpolate on a log scale",
-		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
-	},
-	{
 		"id": "A4",
 		"source": "finding",
 		"severity": "Medium (sites with a Reserve rule table)",

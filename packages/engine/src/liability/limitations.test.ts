@@ -24,9 +24,9 @@ describe('KNOWN_LIMITATIONS (generated from docs/engine-audit.md)', () => {
 		const ids = KNOWN_LIMITATIONS.map((l) => l.id);
 		// Open today: a decided-but-pending finding, a warned one, a pending quirk.
 		for (const id of ['B3', 'Q6']) expect(ids).toContain(id);
-		// The Reserve method's open choices (model.md §2.9c–§2.9d; issue #71): below the driest
-		// point, interpolation, the charge, high-flow events.
-		for (const id of ['A1', 'A2', 'A4', 'A6', 'A7']) expect(ids).toContain(id);
+		// The Reserve method's open choices (model.md §2.9c–§2.9d; issue #71):
+		// the charge, high-flow events.
+		for (const id of ['A4', 'A6', 'A7']) expect(ids).toContain(id);
 		// Fixed or removed: never a limitation (H1: the legacy runoff model, removed in engine 1.0.0; N1: decided by
 		// the client's hydrologist, 2026-10-03, engine 1.71.0–1.72.0).
 		for (const id of ['N1', 'H1', 'E1', 'E2', 'R1', 'G1', 'P1', 'T1', 'Q1', 'Q7', 'Q14']) expect(ids).not.toContain(id);
@@ -35,6 +35,8 @@ describe('KNOWN_LIMITATIONS (generated from docs/engine-audit.md)', () => {
 		// Confirmed or settled 2026-10-10 – 2026-10-12 (#90 B3, R2; #507 item 6 and the filter
 		// checked against Hughes, Hannart & Watkins 2003, #523 D3): closed.
 		for (const id of ['A3', 'A5', 'R2']) expect(ids).not.toContain(id);
+		// The scaling below a table's driest point and linear interpolation (#90 EWR assurance rules, 2026-10-10): closed.
+		for (const id of ['A1', 'A2']) expect(ids).not.toContain(id);
 		for (const l of KNOWN_LIMITATIONS) {
 			expect(l.title.length, l.id).toBeGreaterThan(5);
 			expect(l.status.length, l.id).toBeGreaterThan(5);
