@@ -8,13 +8,14 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RunInputsSnapshot } from '../compare';
 import { canonicalJson } from '../manifest';
-import { packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
+import { headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
 import { ENGINE_VERSION } from '../version';
 import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
 	BUNDLE_ZIP_LIMITS,
 	buildPackBundle,
 	checkPackBundle,
+	HEADLINE_NOT_INCLUDED,
 	PACK_BUNDLE_VERSION,
 	parseSeriesCsv,
 	runResultsDigest,
@@ -69,7 +70,10 @@ describe('buildPackBundle + checkPackBundle', () => {
 		const r = await checkPackBundle(built.bytes, { hash, expectManifestSha256: manifestSha256 });
 		expect(failing(r)).toEqual([]);
 		expect(r.ok).toBe(true);
-		expect(r.checks.map((c) => c.id)).toEqual(['archive', 'files', 'manifest', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'reproduce:baseline', 'reproduce:application']);
+		expect(r.checks.map((c) => c.id)).toEqual(['archive', 'files', 'manifest', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'reproduce:baseline', 'reproduce:application', 'headline']);
+		// No headline board in this report: said, not failed (#523 G2).
+		expect(r.checks.find((c) => c.id === 'headline')!.detail).toBe('no headline board to re-run (the report has none)');
+		expect(r.headline).toBe('none');
 		expect(r.pack).toEqual(built.index.pack);
 		expect(r.engine).toEqual({ here: ENGINE_VERSION, runs: [ENGINE_VERSION, ENGINE_VERSION] });
 		// manifest.json IS the manifest's canonical text: its SHA-256 is the pack's hash.
@@ -111,7 +115,7 @@ describe('buildPackBundle + checkPackBundle', () => {
 			const built = await buildPackBundle(packBundleFixture(hash, { locality: true }), hash);
 			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
 			expect(failing(r)).toEqual([]);
-			expect(r.checks.map((c) => c.id)).toEqual(['archive', 'files', 'manifest', 'figure:locality', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application']);
+			expect(r.checks.map((c) => c.id)).toEqual(['archive', 'files', 'manifest', 'figure:locality', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'headline']);
 			expect(r.checks.find((c) => c.id === 'figure:locality')!.detail).toMatch(/^the locality map drawn again from the manifest's 4 map features hashes to [0-9a-f]{64}, the SHA-256 the manifest names$/);
 			const archive = await ZipArchive.open(built.bytes);
 			expect(new TextDecoder().decode(await archive.read('README.md'))).toContain('`figure:locality`');
@@ -323,6 +327,100 @@ describe('buildPackBundle + checkPackBundle', () => {
 				expect(failing(r)).toEqual(['structure']);
 			});
 		});
+	});
+});
+
+describe('the headline board’s full-allocation pair (bundle-2, evidence-19, issue #523 G2)', () => {
+	it('records both digests in bundle.json, re-derives the pair from the baseline input and scenario.json, re-runs it and checks the digests, the board and the mix', async () => {
+		const input = await headlinePackFixture(hash);
+		const built = await buildPackBundle(input, hash);
+		const rec = input.manifest.report.licenceImpactAuthorised!.reproduction!;
+		expect(built.index.version).toBe('bundle-2');
+		expect(built.index.headline).toEqual({ baselineResultsSha256: rec.baselineResultsSha256, applicationResultsSha256: rec.applicationResultsSha256 });
+		// The pair isn't the stored runs: different digests (every holder at their registered volume).
+		expect(rec.baselineResultsSha256).not.toBe(built.index.runs.baseline!.resultsSha256);
+		// As at the baseline: one entry per take (the s21b row takes nothing), sorted by id.
+		expect(rec.kinds).toEqual(Object.entries(HEADLINE_KINDS).map(([allocationId, authorisation]) => ({ allocationId, authorisation })));
+		const r = await checkPackBundle(built.bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(r.checks.map((c) => c.id).slice(-2)).toEqual(['headline', 'reproduce:headline']);
+		expect(r.checks.find((c) => c.id === 'reproduce:headline')!.detail).toMatch(/both results digests and the headline board are the same/);
+		expect(r.headline).toBe('checked');
+		const readme = new TextDecoder().decode(await (await ZipArchive.open(built.bytes)).read('README.md'));
+		expect(readme).toContain(rec.baselineResultsSha256);
+		expect(readme).toContain('`reproduce:headline`');
+	});
+
+	it('with rerun: false checks the record and the mix, and re-runs nothing', async () => {
+		const r = await checkPackBundle((await buildPackBundle(await headlinePackFixture(hash), hash)).bytes, { hash, rerun: false });
+		expect(failing(r)).toEqual([]);
+		expect(r.checks.map((c) => c.id).at(-1)).toBe('headline');
+		expect(r.headline).toBe('checked');
+	});
+
+	it('a recorded digest the pair doesn’t give (the manifest consistent): reproduce:headline fails alone, naming the run', async () => {
+		const input = await headlinePackFixture(hash);
+		input.manifest.report.licenceImpactAuthorised!.reproduction!.applicationResultsSha256 = 'd'.repeat(64);
+		const r = await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash });
+		expect(failing(r)).toEqual(['reproduce:headline']);
+		expect(r.ok).toBe(false);
+		expect(r.checks.find((c) => c.id === 'reproduce:headline')!.detail).toContain(`the full-allocation application's results digest is`);
+		expect(r.checks.find((c) => c.id === 'reproduce:headline')!.detail).toContain(`not ${'d'.repeat(64)}`);
+	});
+
+	it('a headline digest tampered in bundle.json (its hashes fixed): headline fails', async () => {
+		const built = await buildPackBundle(await headlinePackFixture(hash), hash);
+		const tampered = await rezip(built.bytes, (f) => {
+			const index = JSON.parse(f.get('bundle.json')!) as PackBundleIndex;
+			index.headline!.baselineResultsSha256 = 'e'.repeat(64);
+			f.set('bundle.json', canonicalJson(index));
+		});
+		const r = await checkPackBundle(tampered, { hash, rerun: false });
+		expect(failing(r)).toEqual(['headline']);
+		expect(r.checks.find((c) => c.id === 'headline')!.detail).toContain("bundle.json's headline digests aren't the ones the manifest records");
+	});
+
+	it('a kind recorded other than the mix it gave: headline fails on the mix', async () => {
+		const input = await headlinePackFixture(hash);
+		input.manifest.report.licenceImpactAuthorised!.reproduction!.kinds[1]!.authorisation = 'licence';
+		const r = await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash, rerun: false });
+		expect(failing(r)).toEqual(['headline']);
+		expect(r.checks.find((c) => c.id === 'headline')!.detail).toMatch(/the mix from the baseline's volumes and the recorded kinds isn't the manifest's/);
+	});
+
+	it('a board other than the pair gives: reproduce:headline fails on the board', async () => {
+		const input = await headlinePackFixture(hash);
+		(input.manifest.report.licenceImpactAuthorised!.board as { siteFellBack: boolean }).siteFellBack = true;
+		const r = await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash });
+		expect(failing(r)).toEqual(['reproduce:headline']);
+		expect(r.checks.find((c) => c.id === 'reproduce:headline')!.detail).toMatch(/the board built again isn't the manifest's \(siteFellBack\)/);
+	});
+
+	it('a board built before its pair was recorded: the headline isn’t included, said, and the pack verifies as it did', async () => {
+		const built = await buildPackBundle(await headlinePackFixture(hash, { legacy: true }), hash);
+		expect(built.index.headline).toBeNull();
+		const r = await checkPackBundle(built.bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(r.checks.find((c) => c.id === 'headline')!.detail).toContain(HEADLINE_NOT_INCLUDED);
+		expect(r.checks.some((c) => c.id === 'reproduce:headline')).toBe(false);
+		expect(r.headline).toBe('older');
+	});
+
+	it('an older bundle (bundle-1, a pack issued before): checked as it was, the headline not included (older pack)', async () => {
+		const built = await buildPackBundle(await headlinePackFixture(hash, { legacy: true }), hash);
+		const older = await rezip(built.bytes, (f) => {
+			const index = JSON.parse(f.get('bundle.json')!) as PackBundleIndex & { headline?: unknown };
+			delete index.headline;
+			f.set('bundle.json', canonicalJson({ ...index, version: 'bundle-1' }));
+		});
+		const r = await checkPackBundle(older, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(r.ok).toBe(true);
+		expect(r.checks.find((c) => c.id === 'headline')!.detail).toMatch(/^headline not included \(older pack\): its bundle \(bundle-1\)/);
+		expect(r.headline).toBe('older');
+		// An unknown layout is still refused (control).
+		const unknown = await rezip(built.bytes, (f) => f.set('bundle.json', canonicalJson({ ...(JSON.parse(f.get('bundle.json')!) as object), version: 'bundle-9' })));
+		expect(failing(await checkPackBundle(unknown, { hash, rerun: false }))).toEqual(['archive']);
 	});
 });
 

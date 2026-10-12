@@ -2957,7 +2957,10 @@ database:
   freezes its rows' keys when it is stored (`run_allocation_holder`,
   owner-only, written by a trigger, read only through
   `app_run_allocation_holders` for the given rows of one run the caller can
-  read under `model_run_select`'s rule), so rows
+  read under `model_run_select`'s rule; since 230 the table also freezes each
+  row's authorisation, read the same way through `app_run_allocation_kinds`,
+  no volume or holder, for the headline board's mix as at the baseline,
+  #523 G2), so rows
   deleted later can't count as new holders (#523 N; a row no living
   holder had, one a scenario op adds, shares one key `gone`). A key is a
   pseudonym of the holder's name: it can't be turned back without the
@@ -3054,8 +3057,13 @@ database:
   authorised one, which runs at full allocation on every application) give
   each year class's verdict and months or days below only, no waterfall
   (existing use, the application's, storage change) and no class bounds
-  (`boardVerdicts`; round 5, finding 1). Nothing of such a run is served
-  as a flow, so no flow differencing is left to accept.
+  (`boardVerdicts`; round 5, finding 1), and the authorised one without its
+  pair's reproduction record (`authorisedVerdicts`, #523 G2: both results
+  digests, which would let a guess at the volumes be confirmed by re-running
+  it, and each registered volume's authorisation by allocation id; they are
+  for re-running the pair from the reproduction bundle, which that viewer is
+  refused). Nothing of such a run is served as a flow, so no flow
+  differencing is left to accept.
 
   **The canary sweep** (`allocations.db.test.ts`): every `GET /projects/:id/…`
   route in `app.routes` (and `/me/alerts/:projectId`, and two comparisons)

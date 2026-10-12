@@ -127,8 +127,18 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * document; a viewer kept from each volume gets no manifest or PDF of one
  * whose § 5 has a total of other units (backend evidence/packs.ts), and an
  * evidence-17 folded mix is served as its shares.
+ * evidence-19 (issue #523 G2): page 1's headline board against full
+ * authorised use records how to re-derive its pair and what the pair gives
+ * (`EvidenceAuthorisedImpact.reproduction`, evidence/authorisedPair.ts): the
+ * baseline input at `fullAllocation` with the application's ops on it, both
+ * runs' results digests, the outcome settings, and how each registered volume
+ * was held **as at the baseline run** (the authorisation frozen with it), not
+ * as the allocation rows are when the board is built. The reproduction bundle
+ * (`bundle-2`) re-runs the pair and checks it. A board without the record is
+ * stale (run it again); a pack drafted before keeps its document, and its
+ * bundle says the headline isn't included.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-18';
+export const EVIDENCE_REPORT_VERSION = 'evidence-19';
 
 // ---------------------------------------------------------------------------
 // What the backend reads

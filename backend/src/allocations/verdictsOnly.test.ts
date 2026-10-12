@@ -8,7 +8,7 @@ import { licenceImpactBoard, runModelChecked, type ModelInput, type ModelOutput 
 import { randomInput } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
 import { testCatchment } from '../../../packages/engine/src/outlook/testCatchment.js';
-import { ALLOCATION_SERIES_KEYS, boardVerdicts, ensembleVerdicts, reportVerdictsOnly, verdictsOnly, verdictsReport, verdictsSummary } from './verdictsOnly.js';
+import { ALLOCATION_SERIES_KEYS, authorisedVerdicts, boardVerdicts, ensembleVerdicts, reportVerdictsOnly, verdictsOnly, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 import { redactRunAllocations } from './viewerUnits.js';
 import { sweepForViewer } from '../sweeps/routes.js';
 import type { SweepRow } from '../sweeps/store.js';
@@ -107,6 +107,18 @@ describe('the round-5 board probe', () => {
 				expect(mine.result.impact.classes.map((c) => c.verdict)).toEqual(board.result.status === 'ok' ? board.result.impact.classes.map((c) => c.verdict) : []);
 			}
 		});
+});
+
+describe('the authorised board as that viewer reads it (#523 G2)', () => {
+	it('drops the pair’s reproduction record (digests, kinds by allocation id) beside boardVerdicts; a board without one is unchanged but for its verdicts', () => {
+		const board = { classes: [{ classId: 'dry', label: 'Dry', verdict: 'noChange', waterfall: { existingUseM3: VOL }, lowerM3: 1, upperM3: 2 }] };
+		const lia = { status: 'ok', board, reproduction: { baselineResultsSha256: 'a'.repeat(64), kinds: [{ allocationId: 'x', authorisation: 'licence' }] } };
+		const mine = authorisedVerdicts(lia);
+		expect(mine).not.toHaveProperty('reproduction');
+		expect(mine).toEqual({ status: 'ok', board: boardVerdicts(board) });
+		expect(authorisedVerdicts({ status: 'ok', board })).toEqual(boardVerdicts({ status: 'ok', board }));
+		expect(authorisedVerdicts(null)).toBeNull();
+	});
 });
 
 describe('a run summary as that viewer reads it', () => {

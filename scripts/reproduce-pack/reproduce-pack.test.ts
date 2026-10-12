@@ -10,7 +10,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildPackBundle } from '../../packages/engine/src/evidence/bundle';
 import { packManifestText } from '../../packages/engine/src/evidence/pack';
-import { packBundleFixture } from '../../packages/engine/src/testing/packBundle';
+import { headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
+import { canonicalJson } from '../../packages/engine/src/manifest';
 import { zip, ZipArchive } from '../../packages/engine/src/zip';
 import { main, parseArgs } from './reproduce-pack';
 
@@ -110,6 +111,47 @@ describe('reproduce:pack', () => {
 		expect(bad.out).toMatch(/FAIL\s+figure:locality\s+the locality map drawn again hashes to [0-9a-f]{64}, not the d{64}/);
 		// Positive control for an older pack: the good bundle above has no figure, and no such check.
 		expect((await run([good, '--no-run'])).out).not.toContain('figure:locality');
+	});
+
+	describe('the headline board’s full-allocation pair (bundle-2, issue #523 G2)', () => {
+		it('re-derives and re-runs the pair: exit 0, both checks ok, the verdict says so', async () => {
+			await writeFile(join(dir, 'headline.zip'), (await buildPackBundle(await headlinePackFixture(hash), hash)).bytes);
+			const { code, out } = await run(['headline.zip']);
+			expect(code, out).toBe(0);
+			expect(out).toMatch(/ok\s+headline\s+the manifest records the full-allocation pair: baseline [0-9a-f]{64}, application [0-9a-f]{64}/);
+			expect(out).toMatch(/ok\s+reproduce:headline\s+re-derived and re-run with engine /);
+			expect(out).toContain('and so does the headline pair at full allocation.');
+		});
+
+		it('a tampered headline digest fails: exit 1, the check named', async () => {
+			const input = await headlinePackFixture(hash);
+			input.manifest.report.licenceImpactAuthorised!.reproduction!.baselineResultsSha256 = 'b'.repeat(64);
+			await writeFile(join(dir, 'headline-bad.zip'), (await buildPackBundle(input, hash)).bytes);
+			const { code, out } = await run(['headline-bad.zip']);
+			expect(code).toBe(1);
+			expect(out).toMatch(/FAIL\s+reproduce:headline\s+.*the full-allocation baseline's results digest is [0-9a-f]{64}, not b{64}/);
+			expect(out).toContain('NOT reproduced: 1 check failed.');
+		});
+
+		it('an older pack’s bundle (bundle-1) passes as it did, with the note “headline not included (older pack)”', async () => {
+			const built = await buildPackBundle(await headlinePackFixture(hash, { legacy: true }), hash);
+			const archive = await ZipArchive.open(built.bytes);
+			const entries = [];
+			for (const name of archive.names) {
+				const data = new Uint8Array(await archive.read(name));
+				if (name !== 'bundle.json') entries.push({ name, data });
+				else {
+					const { headline: _h, ...index } = JSON.parse(new TextDecoder().decode(data));
+					entries.push({ name, data: new TextEncoder().encode(canonicalJson({ ...index, version: 'bundle-1' })) });
+				}
+			}
+			await writeFile(join(dir, 'older.zip'), await zip(entries));
+			const { code, out } = await run(['older.zip']);
+			expect(code, out).toBe(0);
+			expect(out).toMatch(/ok\s+headline\s+headline not included \(older pack\)/);
+			expect(out).toContain('Note: headline not included (older pack)');
+			expect(out).toContain('Reproduced: every file matches, and each run re-runs to the same results.');
+		});
 	});
 
 	it('checks without re-running with --no-run, and prints JSON with --json', async () => {

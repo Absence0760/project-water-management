@@ -232,7 +232,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-18');
+		expect(r.version).toBe('evidence-19');
 		expect(r.allocations.notAssessed).toBeNull();
 		// Baseline evidence has no applicant: Upper isn't the applicant's, and one unit is too few for a total, so § 5 names no unit.
 		expect(r.allocations.units).toEqual([]);
@@ -443,7 +443,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-18');
+		expect(r.version).toBe('evidence-19');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([

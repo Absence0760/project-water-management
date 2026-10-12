@@ -324,6 +324,11 @@ describe('reproductionNote', () => {
 		const one = reproductionNote(state({ status: 'reproduced', engineVersion: '9.1.0', checks: [ok('reproduce:baseline')] }))!;
 		expect(one.text).toContain('its run gave the same results');
 		expect(one.text).not.toContain(' on 2');
+		// The headline board's pair at full allocation (bundle-2, #523 G2) is named apart, never counted as a third run.
+		const headline = reproductionNote(
+			state({ status: 'reproduced', engineVersion: '9.1.0', checks: [ok('reproduce:baseline'), ok('reproduce:application'), ok('headline'), ok('reproduce:headline')] })
+		)!;
+		expect(headline.text).toContain('both its runs and the headline board’s pair at full allocation gave the same results, and every one of its 4 checks passed');
 	});
 
 	it('lists the failed checks when it didn’t reproduce', () => {

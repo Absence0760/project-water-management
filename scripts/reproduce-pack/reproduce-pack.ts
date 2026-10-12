@@ -10,8 +10,12 @@
 // hash (and, with --expect, against the hash the public verify lookup
 // returned), the inputs and stored results against the manifest, and then
 // re-runs each run from its stored inputs and compares the results digest
-// (engine evidence/bundle.ts checkPackBundle). --no-run stops before the
-// re-run. Exits 0 when everything matches, 1 on any mismatch, 2 on a usage
+// (engine evidence/bundle.ts checkPackBundle). For a bundle-2 bundle it also
+// re-derives the full-allocation pair behind page 1's headline board (the
+// baseline input at fullAllocation, scenario.json's ops on it), re-runs it and
+// checks both results digests, the board and the authorised volume's mix as
+// at the baseline (issue #523 G2); an older pack's bundle says the headline
+// isn't included and verifies as it did. --no-run stops before the re-run. Exits 0 when everything matches, 1 on any mismatch, 2 on a usage
 // error or an unreadable file. --json prints the checks as JSON instead.
 //
 // Run through the backend's tsx (root package.json `reproduce:pack`); a
@@ -58,12 +62,15 @@ export function formatResult(r: BundleCheckResult, file: string): string {
 	for (const c of r.checks) lines.push(`  ${c.ok ? 'ok  ' : 'FAIL'}  ${c.id.padEnd(width)}  ${c.detail}`);
 	const other = [...new Set(r.engine.runs)].filter((v) => v !== r.engine.here);
 	if (other.length) lines.push(`Note: the runs were made with engine ${other.join(', ')}; this checkout is engine ${r.engine.here}. Check out that engine (README.md) to re-run them.`);
+	if (r.headline === 'older') lines.push('Note: headline not included (older pack): the board against full authorised use on page 1 is not re-run; the runs above are.');
 	const failed = r.checks.filter((c) => !c.ok).length;
 	const reran = r.checks.some((c) => c.id.startsWith('reproduce:'));
 	lines.push(
 		r.ok
 			? reran
-				? 'Reproduced: every file matches, and each run re-runs to the same results.'
+				? r.headline === 'checked'
+					? 'Reproduced: every file matches, each run re-runs to the same results, and so does the headline pair at full allocation.'
+					: 'Reproduced: every file matches, and each run re-runs to the same results.'
 				: 'Checked: every file matches its hash and the manifest (not re-run: --no-run).'
 			: `NOT reproduced: ${failed} check${failed === 1 ? '' : 's'} failed.`
 	);

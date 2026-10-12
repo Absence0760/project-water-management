@@ -420,7 +420,11 @@ cl. 3). The licensing ones are rows in
   potential impacts"), and the authorised volume's mix, since only a
   licence or verified existing lawful use is an entitlement. *Built (165,
   report format `evidence-14`):* both boards on page 1; an editor runs the
-  full-allocation pair; a fixed row says when there is none. *For counsel
+  full-allocation pair; a fixed row says when there is none. Since
+  `evidence-19` (issue #523 G2, the assessor review's D15 defect) the board
+  records its pair's results digests and the mix as at the baseline, and
+  `pnpm reproduce:pack` re-derives and re-runs the pair from a pack's
+  bundle. *For counsel
   and the client's hydrologist:* which basis an authority expects first,
   and how to treat registered but unverified volumes.
 - [ ] **D16, signers (item 9).** *Provisional position (pre-counsel

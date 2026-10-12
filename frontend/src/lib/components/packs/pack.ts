@@ -267,8 +267,10 @@ export async function lookUpCode(
 export function reproductionNote(r: PackReproductionState): { tone: 'good' | 'bad' | 'warn' | 'quiet'; text: string; failed: PackBundleCheck[]; rerun: string | null } | null {
 	const failed = r.checks.filter((c) => !c.ok);
 	const when = r.checkedAt ? ` on ${fmtDate(r.checkedAt)}` : '';
-	const reruns = r.checks.filter((c) => c.id.startsWith('reproduce:')).length;
-	const runs = reruns === 1 ? 'its run' : 'both its runs';
+	// The pack's own runs; the headline board's pair at full allocation is re-run apart (bundle-2, #523 G2).
+	const reruns = r.checks.filter((c) => c.id === 'reproduce:baseline' || c.id === 'reproduce:application').length;
+	const pair = r.checks.some((c) => c.id === 'reproduce:headline');
+	const runs = `${reruns === 1 ? 'its run' : 'both its runs'}${pair ? ' and the headline board’s pair at full allocation' : ''}`;
 	// An outcome of an older engine than the server's: the server may record its own beside it.
 	const older = r.canRerun && r.engineVersion !== null && r.engineVersion !== r.serverEngine;
 	const newer = older ? ` The server now runs engine ${r.serverEngine}: re-run it to record that engine’s outcome beside this one.` : '';

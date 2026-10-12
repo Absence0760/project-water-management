@@ -1446,7 +1446,12 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `created_at`. RLS: read by a viewer and up who reads the application run
   (`model_run`'s RLS in the policy's subquery); an editor inserts, and
   deletes the run's older ones (the route keeps one per run); no `UPDATE`
-  (catalogue `NO_UPDATE`). The pair's runs themselves aren't stored.
+  (catalogue `NO_UPDATE`). The pair's runs aren't stored as runs: since
+  `evidence-19` (issue #523 G2) `result.reproduction` records how to
+  re-derive them and what they give (both results digests, the outcome
+  settings, each registered volume's authorisation as at the baseline run,
+  from `run_allocation_holder.authorisation`, 230), which a pack's
+  reproduction bundle re-runs ([evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)).
 
 **The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
 
@@ -1647,7 +1652,12 @@ water-use volumes per farm or water user.
   `run_allocation_holder` (owner-only, 219) keeps each run's rows' keys as
   they were when it was stored (trigger `model_run_allocation_holders` on
   `model_run` insert; `gone` for a row no living holder had; existing runs
-  filled by 219 from the rows then living), and
+  filled by 219 from the rows then living), with each row's `authorisation`
+  then since 230 (NULL for a row with no living row; existing runs filled by
+  230 from the rows then living; not reset on erasure, it isn't personal
+  information), read through `app_run_allocation_kinds(project, run, ids)`
+  (`SECURITY DEFINER`, viewer and up, the same run rule; no volume, no
+  holder) for the headline board's mix as at the baseline (#523 G2), and
   `app_run_allocation_holders(project, run, ids)` (`SECURITY DEFINER`,
   viewer and up) returns the keys of the given rows of one run, no volume:
   the evidence report's § 5 gate and the authorised mix count holders by

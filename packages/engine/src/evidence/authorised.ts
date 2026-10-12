@@ -18,6 +18,7 @@
 // it (or says why there is none: a fixed row, never omitted).
 import { FARMER_K } from '../views/farmView';
 import type { EvidenceLicenceImpact } from './types';
+import type { AuthorisedPairRecord } from './authorisedPair';
 
 /** How a registered volume is held (the allocation's `authorisation`, backend 136). */
 export type AuthorisationKind = 'licence' | 'existing_lawful_use' | 'registration' | 'existing_lawful_use_claimed' | 'general_authorisation' | 'schedule_1';
@@ -225,6 +226,13 @@ export interface EvidenceAuthorisedImpact {
 	/** When the pair was run, and on which engine; null unless ok or stale. */
 	builtAt: string | null;
 	engineVersion: string | null;
+	/**
+	 * How to re-derive the pair and what it must give (evidence-19, issue #523 G2, authorisedPair.ts): both
+	 * runs' results digests and how each registered volume was held as at the baseline. Absent from a board
+	 * built before (the report treats such a board as stale); left out for a viewer kept from each registered
+	 * volume (backend allocations/viewerUnits.ts authorisedVerdicts).
+	 */
+	reproduction?: AuthorisedPairRecord | null;
 }
 
 /** A section that says why there is no board. */

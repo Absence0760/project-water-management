@@ -14,16 +14,29 @@
 // scenario run is), and the board the engine builds is kept in
 // authorised_impact; the evidence report reads the newest for its
 // application run (loadAuthorisedImpact), or says why there is none. The
-// pair's runs aren't stored: nothing in the run list, no run cap.
+// pair's runs aren't stored as runs (nothing in the run list, no run cap), so
+// the board records how to re-derive them and what they give (`reproduction`,
+// engine evidence/authorisedPair.ts, issue #523 G2): both results digests, the
+// outcome settings, and how each registered volume was held as at the
+// baseline run (230), which a pack's reproduction bundle re-runs and checks.
 //
 //  POST /projects/:id/runs/:runId/authorised-impact   editor
 import {
 	authorisedMix,
+	AUTHORISED_PAIR_VERSION,
+	authorisedPairBoard,
+	authorisedPairInputs,
+	authorisedTakes,
+	atFullAllocation,
 	foldedMix,
 	authorisedUnavailable,
 	ENGINE_VERSION,
-	licenceImpactBoard,
+	freshResultsDigest,
+	pairKinds,
 	runModelChecked,
+	RUN_RESULTS_VERSION,
+	sameModelInput,
+	type AuthorisedPairRecord,
 	type EvidenceAuthorisedImpact,
 	type ModelInput,
 	type ModelOutput,
@@ -38,17 +51,12 @@ import { ApiError, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import { checkScenario, loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
-import { allocationHolderKeys } from '../allocations/holders.js';
+import { allocationHolderKeys, allocationKindsAsAtRun } from '../allocations/holders.js';
+import { bundleHash } from './bundle.js';
 import { z } from 'zod';
 
-/** A run's catchment series as stored values (JSON has no NaN): null for a gap. */
-const catchmentSeries = (out: ModelOutput, key: string): (number | null)[] | null => {
-	const s = out.series.find((x) => x.nodeId === null && x.key === key);
-	return s ? s.values.map((v) => (Number.isFinite(v) ? v : null)) : null;
-};
-
 /** The registered volumes a full-allocation run of `input` holds holders to: those that take (not s21b storage only). */
-const takes = (input: ModelInput) => (input.model.allocations ?? []).filter((a) => a.waterUse !== '21b' && a.volumeM3PerYear > 0);
+const takes = authorisedTakes;
 
 /** The engine's own words, or a plain line: never DB text. */
 function engineRun(input: ModelInput, which: string): ModelOutput {
@@ -66,7 +74,7 @@ function engineRun(input: ModelInput, which: string): ModelOutput {
  */
 export async function buildAuthorisedImpact(db: Db, projectId: string, runId: string): Promise<EvidenceAuthorisedImpact> {
 	if (!UUID.test(runId)) throw notFound();
-	const { rows } = await db.query<{ scenario: { id: string; baseRunId: string; ops: ScenarioOp[]; ownedNodeIds?: string[] } | null }>(
+	const { rows } = await db.query<{ scenario: { id: string; baseRunId: string; ops: ScenarioOp[]; opsSha256?: string; ownedNodeIds?: string[] } | null }>(
 		`SELECT inputs->'scenario' AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -89,36 +97,39 @@ export async function buildAuthorisedImpact(db: Db, projectId: string, runId: st
 
 	const { rows: sc } = await db.query<{ origin: ScenarioOrigin }>('SELECT origin FROM scenario WHERE project_id = $1 AND id = $2', [projectId, recorded.id]);
 	const origin: ScenarioOrigin = sc[0]?.origin ?? 'team';
-	const full: ModelInput = { ...base, settings: { ...base.settings, allocationMode: 'fullAllocation' } as ModelInput['settings'] };
+	const full: ModelInput = atFullAllocation(base);
 	const check = checkScenario(full, { ops: recorded.ops, ownedNodeIds: recorded.ownedNodeIds ?? [], origin });
 	if (check.problems.length)
 		throw new ApiError(409, 'the application’s changes don’t all apply to the baseline at full allocation', { problems: check.assessorProblems });
-	const background = engineRun(full, 'baseline');
-	const application = engineRun(check.input, 'application');
+	// The pair must be the one an assessor re-derives from the pack's bundle (engine authorisedPairInputs: the ops applied
+	// with nothing masked). An applicant's ops are checked in their namespace (checkScenario's mask), which gives another
+	// input only when an op meets hidden data (a new item under a hidden one's id or name): such a board couldn't be
+	// reproduced, so it isn't built (#523 G2).
+	const pair = authorisedPairInputs(base, recorded.ops);
+	if (pair.problems.length || !sameModelInput(pair.application, check.input))
+		throw new ApiError(
+			409,
+			'the application’s changes meet data its applicant can’t see, so the pair at full allocation couldn’t be re-derived from the pack’s bundle: change the application so its new items don’t reuse a hidden one’s name or id'
+		);
+	const background = engineRun(pair.baseline, 'baseline');
+	const application = engineRun(pair.application, 'application');
 
 	const { rows: settings } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
 	const outcomes = resolveOutcomes(settings[0]?.settings);
-	const board = licenceImpactBoard(
-		{ startDate: background.startDate, summary: background.summary, natural: catchmentSeries(background, 'natural_flow'), ewrShortfall: catchmentSeries(background, 'ewr_shortfall') },
-		{ startDate: application.startDate, summary: application.summary, ewrShortfall: catchmentSeries(application, 'ewr_shortfall') },
-		{ yearClassMethod: outcomes.yearClassMethod, siteNodeId: outcomes.siteNodeId, nameOf: (id) => full.model.nodes.find((n) => n.id === id)?.name ?? null }
-	);
-	// How the volumes it held holders to are held (licence, verified ELU, registration, …), from the allocation rows as they are now.
+	const board = authorisedPairBoard(full, background, application, { yearClassMethod: outcomes.yearClassMethod, siteNodeId: outcomes.siteNodeId });
+	// How the volumes it held holders to are held (licence, verified ELU, registration, …), as at the baseline run: the
+	// authorisation frozen with it (230, #523 G2), not the allocation rows as they are now.
 	const allocations = takes(full);
 	// Who held each when the baseline ran (219's keys frozen with the run, counted as app_allocation_volumes counts
 	// holders: the name, normalised; else another row's on the same unit; else the unit; else the row; a row no living
 	// holder had, one shared key). The folded mix gives no line of fewer
 	// than 5 holders' volume, and only as shares (evidence-18, #523 G1/H/J).
-	const { rows: kinds } = await db.query<{ id: string; authorisation: string }>(
-		'SELECT id::text, authorisation FROM allocation WHERE project_id = $1 AND id::text = ANY($2::text[])',
-		[projectId, allocations.map((a) => a.id)]
-	);
-	const kindOf = new Map(kinds.map((k) => [k.id, k.authorisation]));
+	const kindOf = await allocationKindsAsAtRun(db, projectId, recorded.baseRunId, allocations);
 	const holders = await allocationHolderKeys(db, projectId, recorded.baseRunId, allocations);
 	const entries = allocations.map((a) => ({
 		volumeM3PerYear: a.volumeM3PerYear,
 		waterUse: a.waterUse ?? null,
-		authorisation: kindOf.get(a.id) ?? null,
+		authorisation: kindOf[a.id] ?? null,
 		holder: holders[a.id]!,
 		waterSource: a.waterSource
 	}));
@@ -127,7 +138,19 @@ export async function buildAuthorisedImpact(db: Db, projectId: string, runId: st
 	const mix = authorisedMix(entries);
 	const mixFolded = foldedMix(entries);
 	const builtAt = new Date().toISOString();
-	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, mixFolded, builtAt, engineVersion: ENGINE_VERSION };
+	// What re-deriving the pair needs and must give (evidence-19): a pack's bundle re-runs it and checks these.
+	const reproduction: AuthorisedPairRecord = {
+		version: AUTHORISED_PAIR_VERSION,
+		resultsVersion: RUN_RESULTS_VERSION,
+		allocationMode: 'fullAllocation',
+		opsSha256: recorded.opsSha256 ?? null,
+		baselineResultsSha256: await freshResultsDigest(background, bundleHash),
+		applicationResultsSha256: await freshResultsDigest(application, bundleHash),
+		yearClassMethod: outcomes.yearClassMethod,
+		siteNodeId: outcomes.siteNodeId,
+		kinds: pairKinds(full, (id) => kindOf[id])
+	};
+	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, mixFolded, builtAt, engineVersion: ENGINE_VERSION, reproduction };
 
 	// Newest wins: the run's older boards go (on any engine or settings), so one row per run is kept.
 	await db.query('DELETE FROM authorised_impact WHERE project_id = $1 AND application_run_id = $2', [projectId, runId]);
@@ -164,6 +187,9 @@ export async function loadAuthorisedImpact(
 		return authorisedUnavailable('stale', `it was run on engine ${hit.engineVersion}, but the baseline ran on engine ${o.baselineEngine}: run it again`, built);
 	if (hit.yearClassMethod !== o.yearClassMethod || (hit.siteNodeId ?? null) !== o.siteNodeId)
 		return authorisedUnavailable('stale', 'it was run with other outcome settings (how years are classed, or the Reserve site) than the project has now: run it again', built);
+	// A board built before evidence-19 records neither its pair's digests nor the mix as at the baseline, so a pack's bundle couldn't re-run it (#523 G2).
+	if (hit.result.status === 'ok' && !hit.result.reproduction)
+		return authorisedUnavailable('stale', 'it was run before its pair of runs was recorded for reproduction, and its mix read the allocations as they were then: run it again', built);
 	return hit.result;
 }
 

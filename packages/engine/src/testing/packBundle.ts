@@ -5,7 +5,24 @@
 // the bundle's tests (evidence/bundle.test.ts) and scripts/reproduce-pack's.
 // The SHA-256 is the caller's, so this stays free of Node APIs.
 import { diffInputs, type RunInputsSnapshot } from '../compare';
-import { buildPackManifest, localitySection, type PackBundleInput, type PackBundleRun } from '../evidence';
+import {
+	AUTHORISED_PAIR_VERSION,
+	authorisedMix,
+	authorisedPairBoard,
+	authorisedPairInputs,
+	buildPackManifest,
+	freshResultsDigest,
+	localitySection,
+	pairKinds,
+	RUN_RESULTS_VERSION,
+	runAuthorisedPair,
+	type AuthorisedPairRecord,
+	type EvidenceAuthorisedImpact,
+	type PackBundleInput,
+	type PackBundleRun
+} from '../evidence';
+import { applyScenario } from '../scenario/overrides';
+import type { ScenarioOp } from '../scenario/ops';
 import { localityMapSvg } from '../geo/localityMap';
 import type { EvidenceReport } from '../evidence/types';
 import { canonicalJson, seriesDigest } from '../manifest';
@@ -155,5 +172,87 @@ export function packBundleFixture(hash: SyncHash, opts: { application?: boolean;
 	} as unknown as EvidenceReport;
 	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
 	// As the backend reads it back from jsonb.
+	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
+}
+
+/** The headline fixture's registered volumes (synthetic): two takes on Farm one, one storage-only row (s21b, not a take). */
+export const HEADLINE_ALLOCATIONS = [
+	{ id: '00000000-0000-4000-8000-0000000000e1', nodeId: 'F1', waterSource: 'surface' as const, volumeM3PerYear: 40_000 },
+	{ id: '00000000-0000-4000-8000-0000000000e2', nodeId: 'F1', waterSource: 'surface' as const, volumeM3PerYear: 25_000 },
+	{ id: '00000000-0000-4000-8000-0000000000e3', nodeId: 'F1', waterSource: 'surface' as const, volumeM3PerYear: 0, storageM3: 9_000, waterUse: '21b' as const }
+];
+/** How each take was held as at the baseline (synthetic). */
+export const HEADLINE_KINDS: Record<string, string> = { '00000000-0000-4000-8000-0000000000e1': 'licence', '00000000-0000-4000-8000-0000000000e2': 'registration' };
+const HEADLINE_OPS: ScenarioOp[] = [{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2: 600_000 }];
+
+/**
+ * An application pack whose page-1 headline board against full authorised use
+ * is built and records its pair (evidence-19, issue #523 G2), as the backend
+ * builds it: registered volumes on Farm one, a real op (its maize doubled),
+ * the pair re-derived from the baseline at full allocation and run, its board,
+ * the full mix from the kinds as at the baseline, and the record. With
+ * `legacy`, the board is built but carries no record (a board built before).
+ */
+export async function headlinePackFixture(hash: SyncHash, opts: { legacy?: boolean } = {}): Promise<PackBundleInput> {
+	const base: ModelInput = { ...packFixtureInput(), model: { ...packFixtureInput().model, allocations: structuredClone(HEADLINE_ALLOCATIONS) } };
+	const baseline = storedRun(hash, '00000000-0000-4000-8000-0000000000a1', base, runModelChecked(structuredClone(base)));
+	const appInput = applyScenario(base, HEADLINE_OPS).input;
+	const opsSha256 = hash(canonicalJson(HEADLINE_OPS));
+	const scenarioId = '00000000-0000-4000-8000-0000000000c1';
+	const application = storedRun(hash, '00000000-0000-4000-8000-0000000000a2', appInput, runModelChecked(structuredClone(appInput)), {
+		id: scenarioId,
+		baseRunId: baseline.runId,
+		ops: HEADLINE_OPS,
+		opsSha256
+	});
+	const pair = authorisedPairInputs(base, HEADLINE_OPS);
+	const ran = runAuthorisedPair(pair);
+	const outcomes = { yearClassMethod: 'auto' as const, siteNodeId: null };
+	const board = authorisedPairBoard(pair.baseline, ran.background, ran.application, outcomes);
+	const kinds = pairKinds(base, (id) => HEADLINE_KINDS[id]);
+	const reproduction: AuthorisedPairRecord = {
+		version: AUTHORISED_PAIR_VERSION,
+		resultsVersion: RUN_RESULTS_VERSION,
+		allocationMode: 'fullAllocation',
+		opsSha256,
+		baselineResultsSha256: await freshResultsDigest(ran.background, hash),
+		applicationResultsSha256: await freshResultsDigest(ran.application, hash),
+		...outcomes,
+		kinds
+	};
+	const mix = authorisedMix(kinds.map((k) => ({ volumeM3PerYear: base.model.allocations!.find((a) => a.id === k.allocationId)!.volumeM3PerYear, authorisation: k.authorisation })));
+	const authorised: EvidenceAuthorisedImpact = {
+		status: 'ok',
+		detail: null,
+		board,
+		mix,
+		builtAt: '2026-10-12T00:00:00.000Z',
+		engineVersion: ENGINE_VERSION,
+		...(opts.legacy ? {} : { reproduction })
+	};
+	const listed = (run: PackBundleRun, name: 'baseline' | 'application') =>
+		Object.entries(run.inputs.series).map(([kind, s]) => ({ run: name, kind, startDate: s!.startDate, days: s!.length, sha256: s!.valuesSha256 ?? null }));
+	const project = { id: '00000000-0000-4000-8000-0000000000f1', name: 'Catchment' };
+	const report = {
+		version: 'evidence-19',
+		mode: 'application',
+		builtBy: ENGINE_VERSION,
+		identity: {
+			title: 'Catchment',
+			project,
+			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion },
+			application: { runId: application.runId, engineVersion: application.engineVersion, scenarioId, opsSha256 }
+		},
+		issuable: true,
+		refused: false,
+		appendix: {
+			baselineInputs: baseline.inputs,
+			changes: diffInputs(baseline.inputs, application.inputs, { a: baseline.values, b: application.values }),
+			series: [...listed(baseline, 'baseline'), ...listed(application, 'application')]
+		},
+		summaries: { baseline: baseline.summary, application: application.summary },
+		licenceImpactAuthorised: authorised
+	} as unknown as EvidenceReport;
+	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
 	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
 }

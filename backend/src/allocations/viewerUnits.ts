@@ -37,7 +37,7 @@ import {
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
-import { boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
+import { authorisedVerdicts, boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 
 /** A viewer on a project whose owners haven't let viewers read each registered volume. */
 export async function allocationUnitsHidden(db: Db, projectId: string, role: Role): Promise<boolean> {
@@ -433,8 +433,8 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 	const out = {
 		...report,
 		...(report.ops ? { ops: withoutPositions(report.ops, drop) } : {}),
-		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one; its verdicts without the waterfall (#523 I).
-		...(lia ? { licenceImpactAuthorised: boardVerdicts((({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia)) } : {}),
+		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one; its verdicts without the waterfall (#523 I), and without the pair's reproduction record (#523 G2).
+		...(lia ? { licenceImpactAuthorised: authorisedVerdicts((({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia)) } : {}),
 		...('licenceImpact' in report ? { licenceImpact: boardVerdicts((report as { licenceImpact?: unknown }).licenceImpact) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },

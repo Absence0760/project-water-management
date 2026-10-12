@@ -440,16 +440,49 @@ the application twice, both labelled:
 The pair is two model runs, which a report request (a viewer's GET, a pack
 draft) must not carry, so an editor runs it from the evidence report
 (**Run at full authorised use**, `POST …/runs/:runId/authorised-impact`):
-the board the engine builds over it, the mix (from the allocations' rows as
-they are then) and when and on which engine are kept for that application
-run (`authorised_impact`, the newest only); the pair's runs aren't stored.
-The report reads it only when it was run on the baseline's engine with the
-project's outcome settings as they are now; otherwise, or without one, or
-when the baseline ran with no registered volumes, a fixed row says which
-(*Not assessed: …*, never left out). A pack freezes whichever page 1 had
-when it was drafted; one drafted before `evidence-14` has no such board and
-says so. Tests: `backend/src/evidence/authorised-impact.db.test.ts`,
-`packages/engine/src/evidence/authorised.test.ts`,
+the board the engine builds over it, the mix and when and on which engine
+are kept for that application run (`authorised_impact`, the newest only).
+The pair's runs aren't stored as runs (nothing in the run list, no run
+cap), so since `evidence-19` (issue #523 G2) the board records how to
+re-derive them and what they give (`reproduction`, engine
+`evidence/authorisedPair.ts`), and a pack's reproduction bundle re-runs
+them ([§ Reproduction](#reproduction)):
+
+- **The derivation**: the baseline run's stored input with
+  `allocationMode: 'fullAllocation'`, and the application's recorded ops
+  (their hash, `opsSha256`) applied to it (`authorisedPairInputs`). An
+  applicant's ops are checked in their own namespace (the mask that hides
+  other farms); when that would give another input than applying them plain
+  (an op that adds an item under a hidden one's name or id), the pair
+  couldn't be re-derived from the bundle, so it isn't built (`409`).
+- **Both results digests** (`baselineResultsSha256`,
+  `applicationResultsSha256`, `runResultsText` `results-1`), the same
+  digest the bundle uses for the stored runs.
+- **The outcome settings** it was built with (how years are classed, the
+  Reserve site).
+- **The mix as at the baseline**: how each registered volume the pair held
+  a holder to was held, by allocation id (`kinds`), from the authorisation
+  frozen with the baseline run when it was stored (migration
+  `230_run_allocation_authorisation`, beside 219's holder keys), not the
+  allocation rows as they are when the board is built: re-recording a
+  licence as a registration after the baseline ran doesn't move the mix;
+  a new baseline does. Runs stored before 230 took the authorisation of
+  the rows living when it was applied (as 219 did for the holder keys).
+
+The report reads the board only when it was run on the baseline's engine
+with the project's outcome settings as they are now and records its pair;
+otherwise, or without one, or when the baseline ran with no registered
+volumes, a fixed row says which (*Not assessed: …*, never left out): a board
+built before `evidence-19` is `stale` (*run it again*). A viewer kept from
+each registered volume reads the board without its `reproduction` (the
+digests would be an oracle for guessed volumes, and the kinds are by
+allocation id; they are refused the bundle that uses them too). A pack
+freezes whichever page 1 had when it was drafted; one drafted before
+`evidence-14` has no such board and says so. Tests:
+`backend/src/evidence/authorised-impact.db.test.ts` (the record, the mix as
+at the baseline with its control, the stale board, and a bundle of the
+report re-run offline), `packages/engine/src/evidence/authorised.test.ts`,
+`packages/engine/src/evidence/authorisedPair.test.ts`,
 `e2e/tests/evidence-allocations.spec.ts`.
 
 ### Sending it to the authority
@@ -848,11 +881,12 @@ non-member `404`, as for every pack route; share links, the verify page and
 the applicant's view never offer the bundle, the manifest or the PDF.
 
 **What it holds** (engine `packages/engine/src/evidence/bundle.ts`,
-`buildPackBundle`, layout `bundle-1`):
+`buildPackBundle`, layout `bundle-2` since issue #523 G2; `checkPackBundle`
+reads `bundle-1` and `bundle-2`):
 
 | Entry | What |
 | --- | --- |
-| `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, and the SHA-256 of every other entry |
+| `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, the headline pair's two results digests (`headline`, `bundle-2`; null without a recorded pair), and the SHA-256 of every other entry |
 | `manifest.json` | the manifest as its RFC 8785 text: its SHA-256 *is* the manifest hash |
 | `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash), `<run>` `baseline` and, for an application, `application` |
 | `runs/<run>/results.json` | the run's stored summary and the SHA-256 of each daily output (results `results-1`) |
@@ -922,16 +956,22 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | `changes`, `scenario` | the application's inputs differ from the baseline's by exactly the changes the manifest lists, and the scenario's ops hash to the hash it names (application packs) |
 | `results:<run>` | the stored summary is the manifest's, and `results.json` gives the digest `bundle.json` names |
 | `reproduce:<run>` | re-running the run's input with this checkout's engine gives the same results digest (skipped with `--no-run`) |
+| `headline` | application packs: the manifest's headline board records its pair (`evidence-19`) with the digests `bundle.json` names, the application's ops hash and the baseline's engine, and the full mix built again from the baseline input's registered volumes and the recorded kinds (as at the baseline) is the manifest's. Passes with *headline not included (older pack)* for a `bundle-1` bundle or a board built before the pair was recorded, and with *no headline board to re-run* when page 1 has none |
+| `reproduce:headline` | the pair re-derived from the bundle (the baseline input at `fullAllocation`, `scenario.json`'s ops on it) and re-run with this checkout's engine gives both recorded results digests, and the board built again over it is the manifest's (skipped with `--no-run`) |
 
-It exits 0 when every check passes, 1 when any fails (naming what differs:
+The folded mix a restricted viewer reads isn't checked: it counts holders by
+219's salted keys, which never leave the server. It exits 0 when every check passes, 1 when any fails (naming what differs:
 the summary's paths, the daily outputs), and 2 on a usage error. A run made
 with another engine version is expected to differ: the output says which
 engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
 (round trip, determinism, and each tampering beside a positive control),
 `packages/engine/src/zip/zip.test.ts`,
-`scripts/reproduce-pack/reproduce-pack.test.ts` and, against the database and
-MinIO, `backend/src/evidence/packs.db.test.ts` (issue, download, reproduce
-both a baseline and an application pack; the setter's refusals).
+`scripts/reproduce-pack/reproduce-pack.test.ts` (with the headline pair: a
+tampered digest fails, an older bundle passes with the note) and, against
+the database and MinIO, `backend/src/evidence/packs.db.test.ts` (issue,
+download, reproduce both a baseline and an application pack; the setter's
+refusals) and `backend/src/evidence/authorised-impact.db.test.ts` (a bundle
+of a report with a recorded pair re-runs it offline).
 
 **Re-run on the server** (154_pack_reproduce, 2026-10-01). Issue checks the
 bundle as `--no-run` would; the re-run takes as long as the runs, so the
