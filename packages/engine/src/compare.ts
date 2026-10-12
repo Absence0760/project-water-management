@@ -1307,6 +1307,9 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): the share of the flow and its daily cap.
 	['reachLossFrac', 'bed losses in the reach below', (v) => (typeof v === 'number' && v > 0 ? `${pct(v)} of the flow` : 'none')],
 	['reachLossMaxM3Day', 'bed losses cap', (v) => (v === null || v === undefined ? 'no cap' : `${fmtValue(v)} m³/day`)],
+	// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b).
+	['baseflowLossM3Day', 'base-flow loss', (v) => (typeof v === 'number' && v > 0 ? `${fmtValue(v)} m³/day` : 'none')],
+	['baseflowGainM3Day', 'base-flow gain', (v) => (typeof v === 'number' && v > 0 ? `${fmtValue(v)} m³/day` : 'none')],
 	// Hands-off flow (engine ≥ 1.32.0); its monthly amounts and River to dam by month are diffed below.
 	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.

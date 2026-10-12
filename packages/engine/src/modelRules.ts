@@ -123,6 +123,8 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		}
 		// Bed losses (engine ≥ 1.75.0, docs/model.md §2.6b) are in the reach below a node: the outlet has none in the model.
 		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0) add(`reachLossOutlet:${n.id}`, `"${n.name}" is the outlet: there is no reach below it in the model to lose water in`);
+		// A base-flow loss or gain (engine 1.86.0, docs/model.md §2.6b) acts on a unit's own runoff: only a unit has one.
+		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0)) add(`baseflowKind:${n.id}`, `"${n.name}": only a hydrological unit has a base-flow loss or gain`);
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
 		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';

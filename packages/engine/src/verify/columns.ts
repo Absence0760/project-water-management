@@ -209,7 +209,9 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		optional: true
 	},
 	{ key: 'reach_loss', letter: null, formula: 'bed losses in the reach below (engine ≥ 1.75.0): MIN(cap, f × U), lost from the catchment; the element below receives U − this; only with bed losses', optional: true },
-	{ key: 'senior_reach_loss', letter: null, formula: 'Σ over the priority claims crossing the reach below of what their gross-up added for its bed losses, MIN(x ÷ (1 − f), x + cap) − x (engine ≥ 1.75.0); the element below receives Zs − MIN(Zs, this); only with priority claims across a losing reach', optional: true }
+	{ key: 'senior_reach_loss', letter: null, formula: 'Σ over the priority claims crossing the reach below of what their gross-up added for its bed losses, MIN(x ÷ (1 − f), x + cap) − x (engine ≥ 1.75.0); the element below receives Zs − MIN(Zs, this); only with priority claims across a losing reach', optional: true },
+	{ key: 'baseflow_loss', letter: null, formula: 'base-flow loss (engine 1.86.0): MIN(the unit’s loss, I), lost from the catchment before the runoff split, so M + N = I − this + the gain; only with a base-flow loss', optional: true },
+	{ key: 'baseflow_gain', letter: null, formula: 'base-flow gain (engine 1.86.0): the unit’s gain every day, from outside the catchment, joining I before the runoff split; only with a base-flow gain', optional: true }
 ];
 
 /** Other water users (engine ≥ 0.22.0, WP-1.33, docs/model.md §2.7c). No letters: the workbook has no such element. */

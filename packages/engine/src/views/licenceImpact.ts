@@ -26,8 +26,8 @@
 // - **Other** closes the waterfall: natural − existing − proposed − left.
 //   It is the rest of the application run's water account (dam evaporation
 //   and seepage lost, storage change, land cover, groundwater, transfers,
-//   bed losses in the reaches, the natural flow's difference between the
-//   runs), broken down in
+//   bed losses in the reaches, the units' base-flow losses less their gains,
+//   the natural flow's difference between the runs), broken down in
 //   `otherParts`, so a reader sees what it is.
 // - **Not enough years**: fewer than OUTCOME_MIN_YEARS years in a class →
 //   no waterfall, no counts, verdict `notEnoughYears`.
@@ -74,6 +74,8 @@ export interface LicenceImpactOtherParts {
 	residualM3: number;
 	/** Lost into the river bed in the reaches between nodes (engine ≥ 1.75.0, docs/model.md §2.6b); absent when the application run has none. */
 	reachLossM3?: number;
+	/** The units' base-flow losses − their gains (engine 1.86.0, docs/model.md §2.6b); absent when the application run has neither. */
+	baseflowM3?: number;
 }
 
 /** A class's annual waterfall, mean m³ a year over its years. natural − existing − proposed − other = left. */
@@ -197,7 +199,10 @@ export function licenceImpactByYearClass(input: LicenceImpactInput): LicenceImpa
 			transfersM3: mean((wy) => -app(wy).transfersM3),
 			naturalDifferenceM3: mean((wy) => bg(wy).naturalFlowM3 - app(wy).naturalFlowM3),
 			residualM3: mean((wy) => app(wy).residualM3),
-			...(waterYears.some((wy) => app(wy).reachLossM3 !== undefined) ? { reachLossM3: mean((wy) => app(wy).reachLossM3 ?? 0) } : {})
+			...(waterYears.some((wy) => app(wy).reachLossM3 !== undefined) ? { reachLossM3: mean((wy) => app(wy).reachLossM3 ?? 0) } : {}),
+			...(waterYears.some((wy) => app(wy).baseflowLossM3 !== undefined || app(wy).baseflowGainM3 !== undefined)
+				? { baseflowM3: mean((wy) => (app(wy).baseflowLossM3 ?? 0) - (app(wy).baseflowGainM3 ?? 0)) }
+				: {})
 		};
 		const waterfall: LicenceImpactWaterfall = {
 			naturalM3,

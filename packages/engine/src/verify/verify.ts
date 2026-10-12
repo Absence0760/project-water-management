@@ -9,6 +9,7 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import { capacityScaleOf } from '../network/development';
 import { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolEvaporationKey } from '../network/riverSource';
 import { REACH_LOSS_SERIES } from '../network/reachLoss';
+import { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES } from '../network/baseflow';
 import {
 	type ModelInput,
 	type ModelOutput,
@@ -172,6 +173,9 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			for (let t = 0; t < out.days; t++) reachOut[t]! += v[t] ?? 0;
 		}
 	}
+	// A unit's base-flow gain (in) and loss (out of the catchment), engine 1.86.0, docs/model.md §2.6b; null without.
+	const fBfGain = farms.some((n) => series.has(`${n.id}|${BASEFLOW_GAIN_SERIES.key}`)) ? totals(BASEFLOW_GAIN_SERIES.key) : null;
+	const fBfLoss = farms.some((n) => series.has(`${n.id}|${BASEFLOW_LOSS_SERIES.key}`)) ? totals(BASEFLOW_LOSS_SERIES.key) : null;
 	// A dam whose capacity changes (engine ≥ 1.30.0) starts at its share of the first day's capacity.
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3 * (capacityScaleOf(n, toEpochDay(out.startDate), out.days, [])?.[0] ?? 1), 0);
 	// The river abstractions' pools (engine ≥ 1.65.0, docs/model.md §2.7j): their storage joins the dams', their
@@ -197,7 +201,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { set: 0, natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, poolEvap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0, conveyance: 0, reach: 0 };
+		const r = { set: 0, natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, poolEvap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0, conveyance: 0, reach: 0, bfGain: 0, bfLoss: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -223,6 +227,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			if (fSet) r.set += fSet[t]!;
 			if (fOtOut) r.conveyance += fOtRet ? fOtOut[t]! - fOtIn![t]! - fOtRet[t]! : fOtOut[t]! - fOtIn![t]!;
 			if (reachOut) r.reach += reachOut[t]!;
+			if (fBfGain) r.bfGain += fBfGain[t]!;
+			if (fBfLoss) r.bfLoss += fBfLoss[t]!;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;
@@ -232,6 +238,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		const opening = farmStorage(from - 1);
 		const closing = farmStorage(to);
 		const consumptive = r.supplied - r.ret;
+		const residual =
+			(fSet ? opening + r.runoff + r.transfer + r.rainOnDams + r.gw + r.set : opening + r.runoff + r.transfer + r.rainOnDams + r.gw) - consumptive - r.evap - r.poolEvap - r.otherUse - r.dep - r.seepLost - r.conveyance - r.reach - r.outflow - closing;
 		const hasRain = !!rain && rainDays > 0;
 		const naturalFlowMm = area ? r.natural / (area * 1000) : null;
 		let runoff: WaterBalanceRow['runoff'] = null;
@@ -264,10 +272,12 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			...(releaseNodes.length ? { damReleaseM3: r.release } : {}),
 			...(hasOfftakes ? { conveyanceLossM3: r.conveyance } : {}),
 			...(reachOut ? { reachLossM3: r.reach } : {}),
+			...(fBfGain ? { baseflowGainM3: r.bfGain } : {}),
+			...(fBfLoss ? { baseflowLossM3: r.bfLoss } : {}),
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,
-			residualM3: (fSet ? opening + r.runoff + r.transfer + r.rainOnDams + r.gw + r.set : opening + r.runoff + r.transfer + r.rainOnDams + r.gw) - consumptive - r.evap - r.poolEvap - r.otherUse - r.dep - r.seepLost - r.conveyance - r.reach - r.outflow - closing
+			residualM3: fBfGain || fBfLoss ? residual + r.bfGain - r.bfLoss : residual
 		};
 	};
 

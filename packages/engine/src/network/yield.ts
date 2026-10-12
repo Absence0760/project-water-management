@@ -311,6 +311,8 @@ export function firmYield(source: ModelInput | YieldProblem, nodeId: string, opt
 	let inflow = 0;
 	// River off-take water delivered to it (engine ≥ 1.14.0) comes in too.
 	for (let t = 0; t < days; t++) inflow += zero.inflowUpstream[t]! + zero.runoff[t]! + Math.max(zero.transfer[t]!, 0) + (zero.offtakeIn?.[t] ?? 0);
+	// A unit's base-flow gain and loss (engine 1.86.0) change what its runoff brings: the gain can fill the dam too.
+	if (zero.baseflowGain || zero.baseflowLoss) for (let t = 0; t < days; t++) inflow += (zero.baseflowGain?.[t] ?? 0) - (zero.baseflowLoss?.[t] ?? 0);
 	let rainOnFull = 0;
 	// The full surface: the survey curve's top row when the dam has one (WP-3.5), else the power law's.
 	const fullArea = plan.nodes[at]!.damCurve ? Math.max(...plan.nodes[at]!.damCurve!.area) : plan.nodes[at]!.damAreaFullM2;

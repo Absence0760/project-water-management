@@ -29,6 +29,13 @@ export interface GenOptions {
 	 * stream, and so the rest of each seed, is unchanged.
 	 */
 	allocationModes?: boolean;
+	/**
+	 * true: give the units base-flow losses and gains (engine 1.86.0,
+	 * addBaseflow), from their own stream, so the rest of each seed is
+	 * unchanged. Off by default, so every seed pinned before them keeps its
+	 * network; run.invariants.test.ts soaks seeds with it on.
+	 */
+	baseflow?: boolean;
 }
 
 const monthly = (f: (m: number) => number): Monthly => Array.from({ length: 12 }, (_, m) => f(m)) as unknown as Monthly;
@@ -418,6 +425,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addCropSupply(new Rng(seed ^ 0x5bd1e995), nodes);
 	// Bed losses in the reaches (engine ≥ 1.75.0, issue #444), from their own stream, last of all.
 	addReachLosses(new Rng(seed ^ 0x6c8e9cf5), nodes);
+	// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), from their own stream, only when asked for.
+	if (opts.baseflow) addBaseflow(new Rng(seed ^ 0x3a8f05c5), nodes);
 	return {
 		settings,
 		model: {
@@ -799,6 +808,24 @@ function addReachLosses(g: Rng, nodes: NetworkNode[]): void {
 		if (!g.bool(0.4)) continue;
 		n.reachLossFrac = g.bool(0.05) ? g.pick([-0.1, 1.2]) : g.pick([g.float(0, 0.05), g.float(0, 0.5), 0.5, g.float(0.5, 1), 1]);
 		n.reachLossMaxM3Day = g.pick([null, null, 0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
+	}
+}
+
+/**
+ * A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1,
+ * docs/model.md §2.6b) on each unit 60 % of the time: a loss, a gain or
+ * both, from a trickle to more than any day's runoff (so the loss takes all
+ * of it some days, part on others), now and then not a size ≥ 0 (which the
+ * run treats as none, with a warning). Gauges and users get one now and then
+ * too, which the run ignores with a warning.
+ */
+function addBaseflow(g: Rng, nodes: NetworkNode[]): void {
+	const size = () => (g.bool(0.05) ? -1 : g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e5), g.logFloat(1, 1e7)]));
+	for (const n of nodes) {
+		if (!g.bool(n.kind === 'farm' ? 0.6 : 0.05)) continue;
+		const which = g.int(0, 2);
+		if (which !== 1) n.baseflowLossM3Day = size();
+		if (which !== 0) n.baseflowGainM3Day = size();
 	}
 }
 
