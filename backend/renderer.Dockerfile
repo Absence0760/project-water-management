@@ -32,7 +32,7 @@
 # (infra/scripts/smoke-renderer-image.sh) whenever the new version brings a
 # new Chromium build, which the image then lacks. CI runs both on every PR.
 
-FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 AS deps
+FROM mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f AS deps
 # aws-lambda-ric compiles a native addon at install (its preinstall and
 # install scripts: the ones renderer-deps/package.json's allowScripts lets
 # run, since npm 11.16+ skips every other package's); its preinstall unpacks
@@ -98,7 +98,7 @@ WORKDIR /deps
 COPY renderer-deps/package.json renderer-deps/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+FROM mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f
 WORKDIR /var/task
 COPY --from=deps /deps/node_modules ./node_modules
 COPY dist/renderer/lambda-renderer.mjs ./lambda-renderer.mjs
