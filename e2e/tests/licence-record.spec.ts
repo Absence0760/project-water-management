@@ -7,6 +7,7 @@
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 test('an owner records the licence outcome, and the panel says how long the record is kept', async ({ page, owner, signIn }) => {
 	void owner;
@@ -34,6 +35,15 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	await expect(panel.getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
 	await expect(panel).toContainText('Recorded because: Invented decision letter 1');
 	await expectNoViolations(page);
+
+	// On a phone the outcome picker keeps to the form, also on its longest words (233's outcomes pushed a 320 px page sideways).
+	await form.getByLabel('Outcome').selectOption('application_rejected');
+	await expect(form.getByLabel('Outcome')).toHaveValue('application_rejected');
+	for (const width of [320, 390]) {
+		await resizeTo(page, { width, height: 740 });
+		await expectNoSidewaysScroll(page);
+	}
+	await resizeTo(page, { width: 1280, height: 800 });
 
 	// An editor reads it, without the form; a viewer doesn't see the panel.
 	const editor = await signIn('Licence record editor');

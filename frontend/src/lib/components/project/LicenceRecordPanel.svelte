@@ -136,8 +136,12 @@
 	.intro {
 		margin-top: 0;
 	}
+	/* One column no wider than the form: an auto track grows to its widest field's min-content, and the
+	   outcome select's is its longest option ("Application rejected (formal requirements)"), which pushed a
+	   320 px page sideways. With the track at minmax(0, 1fr) the select's own max-width: 100% (app.css) holds. */
 	.outcome {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.75rem;
 	}
 </style>
