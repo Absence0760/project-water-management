@@ -6706,10 +6706,11 @@ two.
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows; the total flow is the
   catchment's hydrologist's choice, 2026-10-10). Under the low-flow choice a
-  warning badge, **Filter settings unconfirmed** (`data-testid
-  "baseflow-filter-unconfirmed"`), says the base-flow filter's passes and α
-  aren't yet checked against the Desktop Reserve Model's method (issue #507
-  item 6, model.md §2.9d). Each has a help tip; scenarios can change both
+  line (`data-testid "baseflow-filter-method"`) names the filter: one pass,
+  α 0.995, as Hughes, Hannart & Watkins (2003) separate daily flows for the
+  Desktop Reserve Model's study. It replaced the **Filter settings
+  unconfirmed** badge once the paper was checked (issue #523 D3, engine
+  1.87.0, model.md §2.9d). Each has a help tip; scenarios can change both
   with `settings.set`.
 - **Drought restrictions** (`#set-restrict`, engine ≥ 1.54.0, WP-3.8): the
   model's restriction rule, off by default; see

@@ -376,10 +376,12 @@ runs and accumulations are real) can't be decided without the client.
       1981) where that narrows it. Trigger:
       the client's first per-unit run, or the hydrologist's review of the
       unit MAPs.
-- [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
+- [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
-      EWR). Awaiting the hydrologist: which scale factor (natural MAR or area
+      EWR). **Confirmed by the client's hydrologist 2026-10-10 (#90 A8, via
+      B1a and B2):** the daily lookup is their own process; both scalings
+      stay, the area ratio the default. It asked: which scale factor (natural MAR or area
       ratio) a project should use; the model's MAR from the natural flow at
       the outlet over the historical days, before land cover and net of
       natural bed losses; a rising natural percentile row read as its
@@ -423,7 +425,9 @@ runs and accumulations are real) can't be decided without the client.
       no pipe losses. Trigger: the hydrologist's answer on #90; a change is a
       new engine version.
 
-- [ ] **River abstractions beside a dam (engine 1.65.0, issue #344):**
+- [x] **River abstractions beside a dam (engine 1.65.0, issue #344):**
+      **confirmed as built by the client's hydrologist 2026-10-11 (#90 R2);
+      engine-audit R2 and model.md §2.7j say so.**
       confirm the decisions of [model.md §2.7j](./model.md) (open question R2
       in engine-audit.md): the abstractions take after the dam side from the
       flow passing the dam (its spill too), keep the unit's hands-off flow,
@@ -771,8 +775,9 @@ runs and accumulations are real) can't be decided without the client.
       flat-lines by the record's resolution (1.12.0, migration 089).
       Waiting on the real hydrologist, because they change defaults or rest on
       judgement no published standard settles: `ewrChargeSource` →
-      `ruleTable` and `lowFlowMeasure` → `baseflow`; the base-flow filter's
-      three passes (the Desktop Reserve method used one, Hughes et al. 2003);
+      `ruleTable` and `lowFlowMeasure` → `baseflow` (decided 2026-10-10: total
+      flow); the base-flow filter's three passes (settled 2026-10-12: one
+      pass, as Hughes et al. 2003, engine 1.87.0, issue #523 D3);
       τ 0.2; outcome cut-offs 0.95 / 0.85 and the 5 % / 20 % days; the 0.9
       annual assurance threshold; priority users exempt only for basic human
       needs, with an optional restriction % (provisionally 2026-10-01: the
@@ -1383,7 +1388,8 @@ the reports):
             1.3.0 (issue #64, [model.md §2.9d](./model.md)):
             `settings.lowFlowMeasure: 'baseflow'` judges a low-flow
             requirement on the month's base flow from a three-pass
-            Lyne–Hollick filter (α 0.995, Smakhtin & Watkins 1997); the
+            Lyne–Hollick filter (α 0.995, Smakhtin & Watkins 1997; one pass
+            from engine 1.87.0, after Hughes, Hannart & Watkins 2003); the
             default stays the month's total volume. Engine ≥ 1.6.0 filters
             each month over its own days and the 730 before it only, so a
             completed month's base flow never moves with later days and a

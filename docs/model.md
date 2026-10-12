@@ -5834,8 +5834,9 @@ the pump-limited figures follow. Stored runs keep their evaporation figures
 `WaterAccountRow.poolEvaporationM3`), and a stored project's pool capacity
 means the same thing: there was never a stored pool area.
 
-**Decisions** (pending the client’s hydrologist, issue #90 Q18 for the pool, listed
-in [followups.md § Hydrologist](./followups.md#hydrologist)):
+**Decisions** (**confirmed as built by the client's hydrologist 2026-10-11**,
+issue #90 R2, the day order; the pool settled the same day, *Storage only*
+above. The EWR is kept at the abstractions only in a scenario, per #90 R4):
 
 - *The dam side goes first, the river abstractions take what passes the
   dam.* An abstraction beside the dam sits on the river below it, so it
@@ -5961,7 +5962,8 @@ some networks; every daily series agrees.
 **Not in the workbook.** b023 has no river abstraction beside a dam; with
 no water source set the engine is the workbook's, so it is no deviation and
 the client catchment regression suite is unchanged. The decisions above are
-open question R2 in [engine-audit.md](./engine-audit.md#open-questions-for-the-hydrologist).
+R2 in [engine-audit.md](./engine-audit.md#findings), confirmed by the
+client's hydrologist on 2026-10-11 (issue #90 R2).
 
 ### 2.7k Crop supply table: the crops' demand in shares of three sources (engine ≥ 1.73.0, issue #408)
 
@@ -6268,7 +6270,10 @@ no comparison and no warning, so a table stored before behaves as it did.
 The 15 % is a **judgement**, not a published standard: the tolerance the
 hydrologist and licensing-authority persona drafts proposed, about the
 WR2012-versus-quinary MAR gap CR-7 names as the largest uncertainty.
-**Draft pending the client's hydrologist.** The same drafts prefer `table`
+**Confirmed by the client's hydrologist 2026-10-10 (issue #90 B3):** keep
+±15 %; it is a warning only and changes no numbers, wide enough not to fire
+on normal differences between models and tight enough to catch a real
+mismatch (a wrong area, a wrong PE level). The same drafts prefer `table`
 wherever the determination publishes a natural curve; the default stays
 `run`.
 
@@ -6569,14 +6574,38 @@ recursive digital filter of Lyne & Hollick (1979),
 f_t = α f_t−1 + (1 + α)/2 · (Q_t − Q_t−1),   0 ≤ f_t ≤ Q_t,   b_t = Q_t − f_t
 ```
 
-passed three times, forward, backward, forward, each pass filtering the last
-one's base flow (Nathan & McMahon 1990), over the series reflected by 30 days
-at each end so the ends don't carry the filter's start-up (Ladson et al.
-2013). **α = 0.995**: Smakhtin & Watkins (1997, WRC Report 494/1/97) found
-0.995–0.997 right for daily flows in most South African catchments, and
-Hughes, Hannart & Watkins (2003, *Water SA* 29(1):43) build their daily and
-monthly separation for the DRM on it; the international default of 0.925
-(Nathan & McMahon) calls more of the flow quick flow. A digital filter was
+run **once, forward** (engine ≥ 1.87.0, issue #523 D3), over the series
+reflected by 30 days at each end so the start doesn't carry the filter's
+start-up (Ladson et al. 2013). **α = 0.995**: Smakhtin & Watkins (1997, WRC
+Report 494/1/97) found 0.995–0.997 right for daily flows in most South
+African catchments, and the international default of 0.925 (Nathan &
+McMahon) calls more of the flow quick flow.
+
+*Checked against Hughes, Hannart & Watkins (2003, *Water SA* 29(1):43–48),
+read 2026-10-12.* Their separation is one component of the study that
+recalibrated the Desktop Reserve Model's base-flow parameters. Their
+equation 1 is this filter with a second parameter β,
+q_i = α·q_i−1 + β(1 + α)(Q_i − Q_i−1), QB_i = Q_i − q_i, constrained to
+0 ≤ QB ≤ Q, and for daily data they keep β = 0.5 (Lyne & Hollick's own
+filter: "there does not appear to be any reason to change the β parameter
+from the fixed value of 0.5"). **Passes:** they apply equation 1 once. Nathan
+& McMahon's repeated passes "introduce a further parameter", and they
+considered varying the number of passes and rejected it. **α:** 0.995 after
+Smakhtin & Watkins, with "slightly higher α values (up to 0.997)" more
+appropriate in many of their catchments, though "the differences are quite
+small" (their Table 1's daily α is 0.995 or 0.997). So the engine matches
+them: one pass, β 0.5, α 0.995. Engines 1.3.0–1.86.0 passed three times,
+forward, backward, forward, each pass filtering the last one's base flow
+(Nathan & McMahon 1990). That gives less base flow at the same α, so a
+month judged on base flow could fail its low flows where the paper's
+separation passes them. The option is off by default and the client
+catchment judges low flows on total flow (below), so no run of the client's
+moves. The DRM's own regional parameters are for **monthly** flows, where
+Hughes et al. set β below 0.5 (0.43–0.47 in their examples) and α per
+region; this check is on daily flows, so it uses their daily form, not the
+monthly regional parameters. α stays one value: the paper gives no rule for
+when 0.997 applies, and a per-site α would be a setting nobody has asked
+for. A digital filter was
 chosen over the mean of the month's lowest daily flows because it is the
 separation South African Reserve work uses (the DRM's base-flow index comes
 from it), it needs no window length to pick, and a month's base flow then
@@ -6601,11 +6630,13 @@ flow could still move after it ended.
 
 So each month is filtered **on its own window**: the month's days and at
 most the **730 days** before its first day (`BASEFLOW_HISTORY_DAYS`, fewer
-at the start of the record), with the same three passes, α and 30-day
+at the start of the record), with the same filter, α and 30-day
 reflection at both window ends (`monthBaseflowSum`), and B is the sum of
-the window's last days. The month's end is the window's end, so the end
-reflection stands in for the days after it exactly as it did for the last
-month of a run before; nothing after the month's last day reaches B. This
+the window's last days. Nothing after the month's last day reaches B. Under
+the three passes of engines 1.6.0–1.86.0 the window's end stood in for the
+days after it (the end reflection fed the backward pass); one forward pass
+(engine ≥ 1.87.0) depends on nothing after a day in any case, and the
+window stays because a model-state snapshot carries just those days (below). This
 is what a hydrologist with the record up to that month's end would compute,
 which is the question a Reserve compliance check asks each month; the whole
 record's answer, which a later flood revises, is a hindcast. Two years is
@@ -6616,13 +6647,12 @@ filter to the bit (365 days moved them by 0.09 % on average, up to 2.5 %).
 Each month costs one filter over at most ~820 days, so a run's cost grows
 linearly with its months.
 
-Alternatives set aside. *One forward pass* (causal by construction, one
-number of state) is the original Lyne & Hollick recursion without the
-Nathan & McMahon passes, but it is a different separation: on the same
-record its base-flow index was 0.73 against 0.54 for three passes, so at
-the same α it would pass low-flow months the method the hydrologist is
-being asked to confirm (question 17) fails; changing the method is theirs
-to decide, not a side effect of making it causal.
+Alternatives set aside. *One forward pass* was set aside at engine 1.6.0
+because it is a different separation from three passes (on the same record
+its base-flow index was 0.73 against 0.54 for three), and changing the
+method was not to be a side effect of making it causal. Engine 1.87.0
+adopted it on the evidence above (Hughes, Hannart & Watkins 2003), not for
+causality.
 Eckhardt's (2005) two-parameter filter is causal too but needs a maximum
 base-flow index per aquifer type that nobody has set for these catchments.
 *Carrying the whole record* in the snapshot would reproduce "the record up
@@ -6648,10 +6678,11 @@ Institution of Engineers Australia, 89–93 (the filter) · Eckhardt 2005,
 *Hydrological Processes* 19:507 (the two-parameter causal filter, set
 aside here; engine ≥ 1.55.0 uses it, and the Hughes form, for the
 validation signatures' BFI, §2.10d) · Nathan & McMahon
-1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
+1990, *WRR* 26:1465 (three passes, engines 1.3.0–1.86.0; α 0.925) · Smakhtin & Watkins 1997, WRC
 494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
 Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
-and monthly flows for the DRM) · Ladson, Brown, Neal & Nathan 2013,
+and monthly flows for the DRM; the filter's form, one pass, β 0.5 and α
+0.995 for daily flows, engine ≥ 1.87.0) · Ladson, Brown, Neal & Nathan 2013,
 *Australasian J. Water Resources* 17(1):25 (reflecting the ends).
 
 **High flows** (`EwrRuleTable.highFlows`, optional, at most 12). Each
@@ -6793,9 +6824,11 @@ this is signed off; each is a row of the engine audit (A5–A7,
 [engine-audit.md § Findings](./engine-audit.md#findings)), so the known
 limitations list it.
 
-**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `lowFlowMeasure: 'total'` (base flow at α 0.995, three passes, judged on the record to date, as the option), freshets capped by natural events and counted per water year, the half-peak-for-half-duration event rule, and no DRM high-flow volume check. Hughes, Hannart & Watkins (2003) use the same filter family (β 0.5 at a daily step, α 0.925–0.997); their pass count is still unread (an earlier persona reading says one forward pass), so check it before switching base flow on.
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `lowFlowMeasure: 'total'` (base flow at α 0.995, three passes, judged on the record to date, as the option), freshets capped by natural events and counted per water year, the half-peak-for-half-duration event rule, and no DRM high-flow volume check. Hughes, Hannart & Watkins (2003) use the same filter family (β 0.5 at a daily step, α 0.925–0.997); their pass count is still unread (an earlier persona reading says one forward pass), so check it before switching base flow on. *(Superseded: read 2026-10-12, one pass; engine 1.87.0, below.)*
 
-**Decided 2026-10-10 (the client's hydrologist, issue #507 item 6):** the Reserve's low-flow requirement is judged on the model's **simulated total flow** (`lowFlowMeasure: 'total'`, the default), so nothing changes for the client catchment. Base flow stays an off-by-default option, and until its filter is confirmed against the Desktop Reserve Model's published method (Hughes, Hannart & Watkins 2003: the number of passes, one or three, and α) Settings shows **"Filter settings unconfirmed"** beside *Low flows judged on* (`EwrRulesSection.svelte`, [ui.md](./ui.md)). Once the paper is read, a pass count that differs from three is an engine change and bumps `ENGINE_VERSION` (engine-audit.md A5).
+**Decided 2026-10-10 (the client's hydrologist, issue #507 item 6):** the Reserve's low-flow requirement is judged on the model's **simulated total flow** (`lowFlowMeasure: 'total'`, the default), so nothing changes for the client catchment. Base flow stays an off-by-default option. Until its filter was checked against the Desktop Reserve Model's published method (Hughes, Hannart & Watkins 2003: the number of passes, one or three, and α), Settings showed **"Filter settings unconfirmed"** beside *Low flows judged on*.
+
+**Checked 2026-10-12 (issue #523 D3, engine 1.87.0):** the paper applies its equation 1 once, with β 0.5 and α 0.995 for daily flows (*The filter* above). The engine now runs one forward pass (three before), α unchanged, and Settings names the filter in place of the badge (`EwrRulesSection.svelte`, [ui.md](./ui.md)); engine-audit.md A5.
 
 ### 2.9e No-flow days, and users served in full while an EWR site fails (engine ≥ 1.33.0, issue #71)
 
@@ -8319,8 +8352,8 @@ reflected by 30 days at each end, as there):
 | Eckhardt (2005) | b_t = ((1 − BFImax)·a·b_t−1 + (1 − a)·BFImax·Q_t) ÷ (1 − a·BFImax), b_t ≤ Q_t, b_0 = BFImax·Q_0 | a **0.98**, BFImax **0.25** | Eckhardt 2005's BFImax 0.25 for perennial streams on hard-rock aquifers (0.80 perennial on porous aquifers, 0.50 ephemeral on porous); most South African rivers drain fractured hard-rock aquifers. a 0.98 is the usual daily recession constant; Eckhardt (2008) derives it from the record's own recessions instead |
 
 β = 0.5 is Lyne & Hollick's own filter, so the Hughes form is §2.9d's filter
-with one pass instead of three (`lyneHollickBaseflow` is now the β = 0.5 case
-of `filterBaseflow`, bit for bit; tested). b_0 = BFImax·Q_0 is Eckhardt's
+(one pass instead of three before engine 1.87.0; the same filter since, tested;
+`lyneHollickBaseflow` is the β = 0.5 case of `filterBaseflow`, bit for bit). b_0 = BFImax·Q_0 is Eckhardt's
 steady state for a constant flow, so a flat record needs no start-up.
 Eckhardt's index can't exceed BFImax much, so its absolute value says more
 about the parameter than the river; read it as a comparison between record
@@ -8923,8 +8956,17 @@ outside them is flagged whatever its length; with no months listed the
 
 The defaults (censor above the rating; leave out below-rating, suspect and
 infilled days) are a *provisional decision 2026-10-01, to be confirmed by
-the client's hydrologist* ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)); the
-gauged ranges themselves need the client's gauging lists (QF-4).
+the client's hydrologist* ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
+
+**The gauged ranges: confirmed by the client's hydrologist 2026-10-11
+(issue #90 B5, replacing QF-4).** The hydrologist has no access to the field
+gaugings behind the rating table, neither the highest nor the lowest
+measured flow. The rule: the rating table's extrapolated flows above the
+highest measured flow are used **as they are**; no day is flagged or
+discounted as outside the rating, and each record's gauged range in
+Settings → Calibration record stays blank. That is the behaviour with no
+range entered, so nothing changes. The data-quality panel's note that no day
+can be flagged as extrapolated stays, so the limitation is visible.
 
 **Provenance.** The fit record stores `qualityFlags` (the settings at the
 time), `dayQuality` and `fitAllDays`. `fitRecordStatus.qualityFlagsChanged`
