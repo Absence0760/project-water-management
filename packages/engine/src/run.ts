@@ -2382,6 +2382,8 @@ function runAllocations(
 	if (!raw?.length) return null;
 	const units = nodes.flatMap((n, i) => (n.kind === 'farm' || n.kind === 'user' ? [i] : []));
 	const tolerance = settings.allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
+	// Each unit's dam rules out of the catchment (engine-audit.md X1), the ones stored as series, in plan order.
+	const externalOf = (i: number) => plan.transfers.flatMap((tr, k) => (tr.to === EXTERNAL_TO && tr.from === i && tr.seriesKey ? [sim.transfers[k]!] : []));
 	const cmp = compareAllocations({
 		startDate,
 		tolerance,
@@ -2400,6 +2402,8 @@ function runAllocations(
 				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])],
 				intakeTake: intake.take.get(i) ?? null,
 				receivedAtIntake: intake.received.get(i) ?? null,
+				// What its dam rules sent out of the catchment: surface use (X1).
+				...(externalOf(i).length ? { externalTransfers: externalOf(i) } : {}),
 				// A unit's dam losses, shown beside a dam on the river's use (engine ≥ 1.83.0, §2.12); only when it has a dam.
 				...(nodes[i]!.kind === 'farm' && nodes[i]!.damCapacityM3 > 0 ? { damEvaporation: sim.workings?.[i]?.damEvaporation ?? null, damSeepageLost: plan.nodes[i]!.seepageReturn !== undefined ? (sim.workings?.[i]?.damSeepageLost ?? null) : null } : {})
 			};
@@ -2427,7 +2431,7 @@ function runAllocations(
 				const cap = plan.nodes[i]!.allocationCap!;
 				const limit = side.waterSource === 'surface' ? cap.surfaceLimit : cap.groundwaterLimit;
 				const outside = outsideMonths(ap.byNode.get(i) ?? [], side.waterSource, toEpochDay(startDate), budget.length);
-				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3, (ap.byNode.get(i) ?? []).filter((a) => a.waterSource === side.waterSource)));
+				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3, (ap.byNode.get(i) ?? []).filter((a) => a.waterSource === side.waterSource), externalOf(i)));
 			}
 			sources.push(src);
 		}
@@ -2457,7 +2461,9 @@ function capYears(
 	startDate: string,
 	before?: readonly [number, number],
 	/** The unit's allocations of `source`: a resumed run's first year counts as capped when one was in force before the snapshot. */
-	own: readonly AllocationEntry[] = []
+	own: readonly AllocationEntry[] = [],
+	/** What its dam rules sent out of the catchment each day: surface use, as the cap counted it (engine-audit.md X1). */
+	external: readonly Float64Array[] = []
 ): { capReached: { waterYear: number; budgetM3: number; usedM3: number }[]; limitBound: AllocationLimitBound[] } {
 	const capReached: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
 	const limitBound: AllocationLimitBound[] = [];
@@ -2487,7 +2493,8 @@ function capYears(
 		}
 		if (!(budget[t]! < Infinity)) continue;
 		b = budget[t]!;
-		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		let use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		if (source === 'surface') for (const x of external) use += x[t]!;
 		const kind = limitBoundKind(Math.max(0, b - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, b);
 		if (kind) {
 			bound!.days++;

@@ -3077,9 +3077,30 @@ catchment by one transfer rule"). The EWR charge (§2.7b) never counts it
 as internal to a site's catchment, so it is an export charged to its
 source, like a rule into a unit outside the site's catchment; the licence
 impact board (§2.14a) counts it as use, as a demand object piped out is.
-§2.12's modelled use M and the allocation cap (§2.12a) don't count it yet:
-a capped scenario doesn't limit it (provisional, pending the hydrologist,
-[engine-audit.md X1](./engine-audit.md)).
+**It is its source unit's surface use under its licence** (engine ≥
+1.88.0, decided by the operator 2026-10-12,
+[engine-audit.md X1](./engine-audit.md)): §2.12's modelled use M counts it
+as a dam draw (on a dam beside the river, measured at its intake, it was
+counted when diverted and isn't counted again), and under an allocation
+cap (§2.12a) it is limited by the source's surface room. In the rounds
+above, each source's rules out of the catchment share one receiver, the
+**outside of that source**, whose room at each priority is the source's
+surface room at the start of the day (what is left of the water year's
+volume, within the licence's months and rate) less the remote share its
+crops asked for (§2.7k, its first surface use, already bounded by that
+room) and less what its lower priorities sent out today; endless without a
+surface cap, or on a day none of its surface allocations is in force. So
+the rules out of one source share its room pro rata to what their source
+gave them, as rules into one dam share its room, and the source water they
+can't take is offered again to its other rules (a rule into another unit's
+dam isn't use). What they sent is counted against the year's volume with
+the unit's own use that day, which its own sources (off-take water, the
+dam, the river pump, its river abstractions) then share what is left of.
+The `allocation_room_surface` column stays the room at the start of the
+day, before the rules out. A run without a rule out of the catchment is
+bit-identical to the engine before; one whose sources have no surface cap
+keeps every series, and only its allocation comparison (§2.12) counts the
+water sent out.
 Off unless set: every stored rule names a unit, so no existing result
 changes. Only a dam rule can leave: a river off-take delivers to a unit
 (§2.6a), and the save refuses one with no destination
@@ -9654,10 +9675,27 @@ the days *D(y)* of *y* inside the run:
   for *s* = surface
 
   ```
-  M(n,surface,y) = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam + Σ received_at_intake, Σ dam draw)
-  dam draw       = MAX(supplied − groundwater_used − river side, 0)   (per day)
+  M(n,surface,y) = Σ (supplied − groundwater_used + sent out) − MIN(Σ groundwater_to_dam + Σ received_at_intake, Σ dam draw)
+  dam draw       = MAX(supplied − groundwater_used − river side, 0) + sent out   (per day)
   river side     = river_abstraction + offtake_used + Σ river_take@<key>
+  sent out       = Σ transfer_rule@<id> over the unit's dam rules out of the catchment   (engine ≥ 1.88.0, §2.6)
   ```
+
+  **Water a dam rule pumps out of the catchment** (engine ≥ 1.88.0,
+  decided by the operator 2026-10-12, [engine-audit.md X1](./engine-audit.md))
+  is its source unit's surface use under its licence, as a **dam draw**: on
+  a unit read by the draws it is added to M and joins the dam draw that
+  groundwater pumped into the dam (and water counted at another dam's
+  intake) is netted against. On a dam **beside the river** it was counted at
+  the intake when it was diverted, so it isn't counted again: M stays
+  Σ `intake_take`, and the water sent out is in the reported `damDrawM3`
+  only. The licence impact board (§2.14a) counts the same volume as use
+  (`externalTransferM3`), so the two agree. The allocation cap counts it too
+  (§2.12a). The comparison reads each rule's `transfer_rule@<id>` series
+  (`externalTransfers` on `AllocationUseNode`; the backend picks the rules
+  with no destination from the run's own stored inputs,
+  `externalRuleKeys`), so a stored run from engine 1.86.0 or 1.87.0 is
+  compared the same way.
 
   and, for a farm whose dam is **beside the river** (engine ≥ 1.82.0, below),
 
@@ -9886,7 +9924,8 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   ```
   budget(n,s,y) = Σ over n's allocations a of source s: V(a) × |L(y) ∩ [validFrom(a), validTo(a)]| ÷ |L(y)|
   capped(n,s,t) = some allocation a of n's of source s has validFrom(a) ≤ t ≤ validTo(a)      (engine ≥ 1.70.0)
-  surface use   = G − GW          (the dam, the river pump and off-take water used; §2.7d–§2.7e, §2.6a)
+  surface use   = G − GW + Xout   (the dam, the river pump and off-take water used; §2.7d–§2.7e, §2.6a;
+                                   Xout what its dam rules sent out of the catchment, engine ≥ 1.88.0, §2.6)
   groundwater   = GW + GWd        (to the crop and into the dam)
   room(t)       = MAX(0, budget(y) − use so far in y on capped days),  at the start of a capped day t
                   ∞ (not capped; the day's use not counted) on a day that isn't capped     (engine ≥ 1.70.0)
@@ -9897,12 +9936,18 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   its volume early in the year and then go without (that is what a volume per
   year allows).
 
-  **A dam rule's transfer out of the catchment** (engine 1.86.0, §2.6) is
-  not surface use here, nor in §2.12's M: the cap doesn't limit it, though
-  the licence impact board (§2.14a) counts it as use. Provisional, pending
-  the hydrologist ([engine-audit.md X1](./engine-audit.md): counting it, as
-  a dam draw on the river and not again at a dam beside the river, is the
-  recommended fix).
+  **A dam rule's transfer out of the catchment** (§2.6) is surface use
+  here (engine ≥ 1.88.0, decided by the operator 2026-10-12,
+  [engine-audit.md X1](./engine-audit.md)): surface use = G − GW + what the
+  unit's rules sent out of the catchment that day, so the cap limits them,
+  as the licence impact board (§2.14a) counts them as use. They settle
+  before any unit runs (§2.6: the outside of each source is a receiver whose
+  room is the source's surface room, shared pro rata by its rules out), and
+  the unit's own sources share what they left. The cap counts them on a dam
+  beside the river too: the cap reads draws, not the intake take (the
+  intake take is the comparison's only, §2.12). Whether water pumped out
+  rides on the unit's licence or on a transfer authorisation of its own was
+  the open question; counting it on the licence never under-counts use.
 
   **A day with no licence in force** (engine ≥ 1.70.0, issue #393, #90 Q24;
   a provisional answer, pending the hydrologist): on a day none of the

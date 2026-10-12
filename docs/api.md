@@ -1581,7 +1581,12 @@ out of the catchment (engine ≥ 1.86.0, migration 224, [model.md
 destination; a run with such a rule stores its `transfer_rule@<id>` on the
 source, and `summary.waterBalance` and the water account gain
 `externalTransferM3` (their `transfersM3` is then the transfers between
-units only). A scenario's `transfer.add` and `transfer.set` take `toNodeId`
+units only). From engine 1.88.0 the water such a rule sends is its source
+unit's surface use ([engine-audit.md X1](./engine-audit.md)): the
+allocation comparison (`GET …/runs/:runId/allocations`, the evidence
+report's § 5) reads it from the rules with `toNodeId` `null` in the run's
+stored inputs, and under `allocationMode` `cap` it is limited by the
+source's surface room. A scenario's `transfer.add` and `transfer.set` take `toNodeId`
 `null` the same way;
 nodes carry `irrigationEfficiency`, `returnFlowFraction` (engine ≥ 1.71.0: the share of the water supplied returning, at most 1 − the unit's blended efficiency, accepted above it and capped by the run, which warns; a document with 0.16.0–1.70.0's `lossReturnFraction` β, a share of the losses, is read as β(1 − e)), `damAreaFullM2`
 (nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node

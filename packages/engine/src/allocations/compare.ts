@@ -105,6 +105,18 @@ export interface AllocationUseNode {
 	 * year's dam draw. Absent on a unit no such dam can give water to.
 	 */
 	receivedAtIntake?: ArrayLike<number | null> | null;
+	/**
+	 * What the unit's dam rules sent out of the catchment (m³/day each, engine
+	 * ≥ 1.88.0, docs/engine-audit.md X1): the run's `transfer_rule@<id>` series
+	 * of each of its rules with no destination unit
+	 * (../network/transferSeries.ts externalRuleKeys). Water pumped out of the
+	 * catchment is the unit's surface use under its licence, as a dam draw: on
+	 * a unit read by the draws it is added to the use (and netted against
+	 * groundwater pumped into the dam like any draw); on a unit measured at the
+	 * intake it was counted when diverted, so it is reported in the dam draw
+	 * only, never counted twice. Absent on a unit with no such rule.
+	 */
+	externalTransfers?: readonly (ArrayLike<number | null> | null | undefined)[] | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
 	/**
@@ -149,7 +161,8 @@ export interface AllocationYear {
 	modelledM3: number;
 	/**
 	 * Surface water drawn from dams over the days covered (m³, supplied less
-	 * groundwater and the river water in it), when the surface use is measured
+	 * groundwater and the river water in it, plus what its dam rules sent out
+	 * of the catchment, engine ≥ 1.88.0), when the surface use is measured
 	 * at the intake (`measuredAt: 'intake'`): reported beside the take, never
 	 * added to it. Absent otherwise.
 	 */
@@ -249,8 +262,12 @@ const waterYearStart = (wy: number) => toEpochDay(`${wy}-10-01`);
  *   groundwater(y) = Σ groundwater_used + Σ groundwater_to_dam
  *   surface(y)     = Σ intake_take                                       (a dam beside the river, engine ≥ 1.82.0)
  *                  = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam + Σ received_at_intake, Σ dam draw)
- *   dam draw       = MAX(supplied − groundwater_used − river side, 0), per day
+ *   dam draw       = MAX(supplied − groundwater_used − river side, 0) + sent out of the catchment, per day
  *
+ * On a unit read by the draws, the water its dam rules sent out of the
+ * catchment (engine ≥ 1.88.0, docs/engine-audit.md X1) is added to the
+ * surface sum as a dam draw; measured at the intake it was counted when
+ * diverted, so it is in the reported dam draw only.
  * Groundwater pumped into the dam is counted once, as groundwater, when it is
  * pumped; the dam draw attributes to it first, up to what was pumped in that
  * water year, so re-drawing it is not a second, surface take. Water from a
@@ -308,6 +325,12 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 		const gd = n.groundwaterToDam ?? null;
 		const ra = n.riverAbstraction ?? null;
 		const rivers = (n.riverTakes ?? []).filter((x): x is ArrayLike<number | null> => !!x);
+		const exts = (n.externalTransfers ?? []).filter((x): x is ArrayLike<number | null> => !!x);
+		const extAt = (t: number) => {
+			let v = 0;
+			for (const x of exts) v += finite(x[t]);
+			return v;
+		};
 		const take = n.intakeTake ?? null;
 		const rcv = n.receivedAtIntake ?? null;
 		const evap = n.damEvaporation ?? null;
@@ -337,13 +360,17 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 					else if (atIntake) {
 						// Measured at the intake (engine ≥ 1.82.0): the take is the use; the dam draw is reported only.
 						modelled += finite(take![t]);
+						// Water sent out of the catchment left the dam too: a draw, already counted at the intake (X1).
 						damDraw += Math.max(finite(n.supplied[t]) - g - riverAt(t), 0);
+						if (exts.length) damDraw += extAt(t);
 					} else {
 						const surface = finite(n.supplied[t]) - g;
-						modelled += surface;
+						// Water its dam rules sent out of the catchment is surface use, as a dam draw (X1).
+						const out = exts.length ? extAt(t) : 0;
+						modelled += exts.length ? surface + out : surface;
 						if (gd || rcv) {
 							toDam += pumped + (rcv ? finite(rcv[t]) : 0);
-							damDraw += Math.max(surface - riverAt(t), 0);
+							damDraw += exts.length ? Math.max(surface - riverAt(t), 0) + out : Math.max(surface - riverAt(t), 0);
 						}
 					}
 				}

@@ -1025,19 +1025,26 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const otAct = new Int32Array(offtakes.length);
 	const otCapInto = new Float64Array(nodes.length);
 	const trOut = transfers.map(() => new Float64Array(days));
-	// A rule out of the catchment (EXTERNAL_TO, engine ≥ 1.86.0) settles into one extra receiver slot after the
-	// nodes, whose room is endless: it never fills, so only its source dam and its own limit hold it back.
+	// A rule out of the catchment (EXTERNAL_TO, engine ≥ 1.86.0) settles into an extra receiver slot after the
+	// nodes, one per source unit (XS + its index). Water pumped out of the catchment is its source unit's surface
+	// use (engine-audit.md X1, decided 2026-10-12): the slot's room is the source's surface allocation room today
+	// (endless without a cap, so then only its source dam and its own limit hold it back), so the rules out of one
+	// source share that room pro rata, as the rules into one dam share its room.
 	const XS = nodes.length;
-	const toSlot = Int32Array.from(transfers, (tr) => (tr.to === EXTERNAL_TO ? XS : tr.to));
-	const jToday = new Float64Array(nodes.length + 1);
+	const toSlot = Int32Array.from(transfers, (tr) => (tr.to === EXTERNAL_TO ? XS + tr.from : tr.to));
+	const anyExternal = transfers.some((tr) => tr.to === EXTERNAL_TO);
+	const jToday = new Float64Array(2 * nodes.length);
 	// Volume already committed today by earlier transfers from each source dam,
 	// and already scheduled into each destination.
 	const drawnToday = new Float64Array(nodes.length);
-	const intoToday = new Float64Array(nodes.length + 1);
+	const intoToday = new Float64Array(2 * nodes.length);
+	// What each unit's rules out of the catchment have sent today (engine-audit.md X1): its surface use, counted
+	// against its allocation cap with the rest of its use today.
+	const extToday = new Float64Array(nodes.length);
 	// Transfer rules by priority, lowest first (audit Q18).
 	const levels = [...new Set(transfers.map((tr) => tr.priority))].sort((a, b) => a - b).map((p) => transfers.flatMap((tr, k) => (tr.priority === p ? [k] : [])));
 	const want = new Float64Array(transfers.length);
-	const sumBy = new Float64Array(nodes.length + 1);
+	const sumBy = new Float64Array(2 * nodes.length);
 	// Each level's rules grouped by source, highest reserve first (ties in rule order), for step 3 below.
 	// A dam's rules share one capacity factor, so the reserves keep this order every day.
 	const levelSources = levels.map((level) =>
@@ -1052,12 +1059,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	// The rounds of proportional rationing (engine ≥ 1.70.0): what each rule still asks, each receiver's room
 	// left and whether it is full, and what each source has given this priority so far.
 	const rem = new Float64Array(transfers.length);
-	const roomLeft = new Float64Array(nodes.length + 1);
-	const roomFull = new Uint8Array(nodes.length + 1);
-	roomLeft[XS] = Infinity;
+	const roomLeft = new Float64Array(2 * nodes.length);
+	const roomFull = new Uint8Array(2 * nodes.length);
 	const srcTaken = new Float64Array(nodes.length);
-	// The receiving nodes of each priority; the outside slot (XS) has no room to work out and never fills.
-	const levelDests = levels.map((level) => Int32Array.from(new Set(level.flatMap((k) => (toSlot[k] === XS ? [] : [toSlot[k]!])))));
+	// The receiving nodes of each priority (the outside slots apart).
+	const levelDests = levels.map((level) => Int32Array.from(new Set(level.flatMap((k) => (toSlot[k]! >= XS ? [] : [toSlot[k]!])))));
+	// The units each priority sends out of the catchment from: each one's outside slot gets its room per priority.
+	const levelExt = levels.map((level) => Int32Array.from(new Set(level.flatMap((k) => (toSlot[k]! >= XS ? [transfers[k]!.from] : [])))));
 
 	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
 	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, Math.min(days, plan.historyDays ?? days)));
@@ -1168,6 +1176,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		jToday.fill(0);
 		drawnToday.fill(0);
 		intoToday.fill(0);
+		if (anyExternal) extToday.fill(0);
 		const prevQ = (n: number) => startStorage(n, t);
 		for (let li = 0; li < levels.length; li++) {
 			const level = levels[li]!;
@@ -1194,6 +1203,22 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const rel = dst.damCapacityM3 * kd > 0 ? fixedReleaseRoom(dst.release, month[t]!) : 0;
 				roomLeft[d] = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[d]!);
 				roomFull[d] = roomLeft[d]! > 0 ? 0 : 1;
+			}
+			// The outside slot of each unit sending out of the catchment at this priority (engine-audit.md X1): the
+			// unit's surface allocation room today, less a remote share it asked for (its first surface use, already
+			// bounded by that room) and what its lower priorities sent out today; endless without a surface cap.
+			const ext = levelExt[li]!;
+			for (let a = 0; a < ext.length; a++) {
+				const s = ext[a]!;
+				const c = nodes[s]!.allocationCap;
+				let room = Infinity;
+				if (c?.surface) {
+					room = capRoom(c.surface, c.surfaceLimit, allocUsed[s]![0]!, t);
+					if (nodes[s]!.remote) room -= rmAsk[s]!;
+					room = Math.max(0, room - extToday[s]!);
+				}
+				roomLeft[XS + s] = room;
+				roomFull[XS + s] = room > 0 ? 0 : 1;
 			}
 			for (const sx of levelSources[li]!) srcTaken[sx.from] = 0;
 			// What each active rule still asks: its daily limit (engine ≥ 1.70.0, issue #90 Q25: never first cut to
@@ -1285,6 +1310,16 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						filled = true;
 					} else roomLeft[d] = roomLeft[d]! - sumBy[d]!;
 				}
+				// An outside slot fills like a receiver when its source's surface room is shared out (endless: never).
+				for (let a = 0; a < ext.length; a++) {
+					const d = XS + ext[a]!;
+					if (roomFull[d]) continue;
+					if (sumBy[d]! > roomLeft[d]!) {
+						roomLeft[d] = 0;
+						roomFull[d] = 1;
+						filled = true;
+					} else roomLeft[d] = roomLeft[d]! - sumBy[d]!;
+				}
 				// 3. Only a receiver filling this round can have left water at a source unused: offer it again.
 				if (!filled) break;
 			}
@@ -1294,10 +1329,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const v = want[k]!;
 				trOut[k]![t] = v;
 				drawnToday[tr.from]! += v;
-				// Out of the catchment (engine ≥ 1.86.0): it leaves the source's dam like any rule, into the outside slot.
+				// Out of the catchment (engine ≥ 1.86.0): it leaves the source's dam like any rule, into the outside slot,
+				// and is the source unit's surface use today (engine-audit.md X1).
 				intoToday[toSlot[k]!]! += v;
 				jToday[toSlot[k]!]! += v;
 				jToday[tr.from]! -= v;
+				if (toSlot[k]! >= XS) extToday[tr.from]! += v;
 			}
 		}
 
@@ -1325,7 +1362,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// 1.70.0 the rule sized to the full demand, the extra flowed on below the unit, and its losses left the
 				// catchment. The top-up room below isn't capped: water into a dam is not use (§2.12a).
 				const dc = dst.allocationCap;
-				if (dc?.surface) need = Math.min(need, capRoom(dc.surface, dc.surfaceLimit, allocUsed[o.to]![0]!, t));
+				if (dc?.surface) need = Math.min(need, extToday[o.to]! > 0 ? Math.max(0, capRoom(dc.surface, dc.surfaceLimit, allocUsed[o.to]![0]!, t) - extToday[o.to]!) : capRoom(dc.surface, dc.surfaceLimit, allocUsed[o.to]![0]!, t));
 				const dstCap = dst.damCapacityM3 * capacityK(dst, t);
 				if (o.topUpDam && dstCap > 0) {
 					// The dam's room after today's step (§2.7a): its losses clamped as the step clamps them (it can't
@@ -1595,7 +1632,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Another unit's dam has already given this unit's crops their remote share (engine ≥ 1.73.0): its first
 			// surface use, so the unit's own sources share what is left of the room.
 			const Gin = node.remote ? rmGot[i]! : 0;
-			const sRoom = Gin > 0 ? Math.max(0, sRoom0 - Gin) : sRoom0;
+			// What its rules sent out of the catchment today is surface use too (engine-audit.md X1), settled first.
+			const Gext = extToday[i]!;
+			const sRoom1 = Gext > 0 ? Math.max(0, sRoom0 - Gext) : sRoom0;
+			const sRoom = Gin > 0 ? Math.max(0, sRoom1 - Gin) : sRoom1;
 			// In the rules' id order (§6), each source being simulated before this unit.
 			let Xin = 0;
 			let XinDam = 0;
@@ -1672,7 +1712,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Gs + (D − Gs) can round one ulp above D, and so can Xused + (D − Xused) (fuzz seed 15467).
 			const G = Xused > 0 ? Math.min(Xused + Math.min(Gs + Ggw + Gr, Dl), Dr) : Math.min(Gs + Ggw + Gr, Dr);
 			const au = allocUsed[i];
-			if (au) countUse(node.allocationCap!, au, t, Gin > 0 ? G - Ggw + Gin : G - Ggw, Ggw + Gd);
+			if (au) countUse(node.allocationCap!, au, t, Gext > 0 ? (Gin > 0 ? G - Ggw + Gin : G - Ggw) + Gext : Gin > 0 ? G - Ggw + Gin : G - Ggw, Ggw + Gd);
 			// Other units' crops take their remote share from this dam (engine ≥ 1.73.0, docs/model.md §2.7k): after its
 			// own dam side and release, from the storage above dead storage, before the spill (so what they take comes
 			// out of what would have spilled first), pro rata to their asks when it is short.
