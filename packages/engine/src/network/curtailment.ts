@@ -258,6 +258,13 @@ export interface CurtailmentUserInput {
 	 * Absent = a senior user isn't curtailed (ignored on a junior one).
 	 */
 	restrictionPct?: number;
+	/**
+	 * Its demand after the drought restriction's fixed % (`restricted_demand`,
+	 * engine 1.86.0), when the rule restricted it: the curtailment cut takes
+	 * only what of c × H the rule hasn't already taken, so the two together
+	 * stay within the stated %. Absent = the rule didn't restrict it.
+	 */
+	restrictedDemand?: ArrayLike<number>;
 }
 
 /**
@@ -266,9 +273,11 @@ export interface CurtailmentUserInput {
  * (k = 1 − return share: cutting ΔG removes k·ΔG of use), what the cut can't
  * remove left standing; a senior user is not curtailed, so all of its charge
  * stands, unless it has a fixed restriction % c (engine 1.86.0, issue #523
- * B3): then −ΔG = MAX(charge ÷ k, −supplied, −c × demand), with no
- * basic-needs floor, and the rest of its charge stands (never moved onto the
- * farms).
+ * B3): then −ΔG = MAX(charge ÷ k, −supplied, −MAX(0, c × demand −
+ * mean(demand − restricted_demand))), with no basic-needs floor: what the
+ * drought restriction rule already took of its demand counts against the %,
+ * so the two never cut more than c × demand together. The rest of its charge
+ * stands (never moved onto the farms).
  */
 export function otherUserCurtailment(users: CurtailmentUserInput[], window: ReportWindow): CurtailmentUser[] {
 	const { from, to } = window;
@@ -280,7 +289,10 @@ export function otherUserCurtailment(users: CurtailmentUserInput[], window: Repo
 		// A senior user's fixed restriction % (engine 1.86.0): curtailed, by at most that share of its demand.
 		const c = u.senior && u.restrictionPct !== undefined && u.restrictionPct > 0 ? Math.min(u.restrictionPct, 1) : 0;
 		const curtailed = !u.senior || c > 0;
-		const cut = !curtailed || !(k > 0) ? 0 : nz(u.senior ? Math.max(R / k, -I, -c * H) : Math.max(R / k, -I));
+		// What the drought restriction rule already took of its demand counts against its % (engine 1.86.0).
+		const restricted = c > 0 && u.restrictedDemand ? Math.max(0, nz(H - windowMean(u.restrictedDemand, from, to))) : 0;
+		const room = Math.max(0, c * H - restricted);
+		const cut = !curtailed || !(k > 0) ? 0 : nz(u.senior ? Math.max(R / k, -I, -room) : Math.max(R / k, -I));
 		return {
 			nodeId: u.nodeId,
 			name: u.name,

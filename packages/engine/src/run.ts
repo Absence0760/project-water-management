@@ -941,7 +941,7 @@ function runNetwork(
 		curtailment.otherUsers = otherUserCurtailment(
 			nodes.flatMap((node, i) =>
 				node.kind === 'user'
-					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!), ...(userRestrictionShare(node) > 0 ? { restrictionPct: userRestrictionShare(node) } : {}) }]
+					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!), ...(userRestrictionShare(node) > 0 ? { restrictionPct: userRestrictionShare(node), ...(sim.nodes[i]!.restrictedDemand ? { restrictedDemand: sim.nodes[i]!.restrictedDemand } : {}) } : {}) }]
 					: []
 			),
 			window

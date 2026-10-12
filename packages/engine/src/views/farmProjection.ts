@@ -287,6 +287,11 @@ export interface SeasonAnalysis {
 	bindingApproximate: boolean;
 }
 
+/** A Priority user's demand after the drought restriction (engine 1.86.0), when the run restricted it. */
+function restrictedOf(run: ProjectionRun, nodeId: string, days: number): { restrictedDemand?: Float64Array } {
+	return run.series(nodeId, 'restricted_demand') ? { restrictedDemand: need(run, nodeId, 'restricted_demand', days) } : {};
+}
+
 function need(run: ProjectionRun, nodeId: string | null, key: string, days: number): Float64Array {
 	const v = run.series(nodeId, key);
 	if (!v) throw new ProjectionInputError(`the run has no ${key} series${nodeId ? ` for hydrological unit ${nodeId}` : ''}: run the model again to publish it`);
@@ -619,6 +624,8 @@ export function curtailmentSeriesKeys(
 		} else if (n.kind === 'user') {
 			if (!stored || options.otherUsers !== false) add(n.id, 'supplied');
 			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');
+			// A Priority user's demand after the drought restriction (engine 1.86.0): read when the run stored one.
+			if (options.otherUsers !== false && userRestrictionShare(n) > 0 && (!has || has(n.id, 'restricted_demand'))) add(n.id, 'restricted_demand');
 		} else if (n.kind === 'gauge' && i !== topo.outflow && sites.has(i)) {
 			add(n.id, siteShortfallKey(n.id), 'ewr_charged', 'ewr_natural');
 		}
@@ -689,7 +696,7 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 				ewrCharge: need(run, n.id, 'ewr_charge', days),
 				consumptivePerSupplied: consumptiveShare(n, run),
 				// A Priority user's fixed restriction % (engine 1.86.0), as runModel reads it.
-				...(userRestrictionShare(n) > 0 ? { restrictionPct: userRestrictionShare(n) } : {})
+				...(userRestrictionShare(n) > 0 ? { restrictionPct: userRestrictionShare(n), ...restrictedOf(run, n.id, days) } : {})
 			});
 		}
 	}

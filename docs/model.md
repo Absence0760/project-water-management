@@ -4391,8 +4391,13 @@ their own rows (`CurtailmentSummary.otherUsers`):
   which would charge irrigators for the town's use;
 - a **priority** user with a **fixed restriction %** c (engine 1.86.0, below)
   is curtailed, by at most that share of its demand H:
-  −ΔG = MAX(R ÷ (1 − r), −supplied, −c × H), with no basic-needs floor; the
-  rest of its charge stands, still never moved onto the farms. Its row
+  −ΔG = MAX(R ÷ (1 − r), −supplied, −MAX(0, c × H − mean(D − D′))), with
+  no basic-needs floor, where D′ is its `restricted_demand` (D′ = D on a
+  day the drought restriction rule doesn't restrict it, or without the
+  rule): what the rule already took of its demand counts against the %, so
+  the two together never take more than c × H. With H = 100, c = 0.2, the
+  whole window restricted (D′ = 80) and a charge of −30, the cut is 0 and the
+  user is supplied 80, not 60; the rest of its charge stands, still never moved onto the farms. Its row
   carries `restrictionPct` and the table and the share-the-pain board mark
   it "fixed %, no basic-needs floor" (`USER_RESTRICTION_NOTE`).
 
@@ -4406,7 +4411,8 @@ and under the drought restriction rule. **Off by default**: null, absent and
 choices:
 
 - *The % of its demand, not of its charge.* It caps the curtailment cut at
-  c × H (the window's mean demand) and, under the rule, asks the river and
+  c × H (the window's mean demand), less what the rule already took over the
+  window, and under the rule, asks the river and
   the boreholes for D′ = D × (1 − c) on each day it is restricted: a fixed
   share, whatever the level, the way a municipal restriction stage is
   stated. A level of the rule that cuts no part of a unit's demand still

@@ -172,6 +172,29 @@ describe('a fixed restriction % for Priority users (engine 1.86.0)', () => {
 		expect(junior!.restrictionPct).toBeUndefined();
 	});
 
+	it('what the drought restriction rule took counts against the %: the two never cut more than c × H together', () => {
+		const ones = (v: number) => [v, v];
+		const base = { name: 'Town', senior: true, demand: ones(100), returned: ones(0), ewrCharge: ones(-30), consumptivePerSupplied: 1, restrictionPct: 0.2 };
+		const window = { from: 0, to: 1, reportStart: '2021-01-01', reportEnd: '2021-01-02' };
+		const [whole, half, control] = otherUserCurtailment(
+			[
+				// Restricted the whole window (D′ = 80): the rule took the whole 20 %, so the cut is 0 and it keeps 80, not 60.
+				{ ...base, nodeId: 'a', supplied: ones(80), restrictedDemand: ones(80) },
+				// Restricted one day of two: the rule took 10 of the 20, the cut takes the other 10.
+				{ ...base, nodeId: 'b', supplied: [80, 100], restrictedDemand: [80, 100] },
+				// Control, no rule: the cut is the full 20 %.
+				{ ...base, nodeId: 'c', supplied: ones(100) }
+			],
+			window
+		);
+		expect(whole).toMatchObject({ curtailed: true, supplyCutM3Day: 0, uncurtailedChargeM3Day: -30, restrictionPct: 0.2 });
+		expect(whole!.suppliedM3Day + whole!.supplyCutM3Day).toBe(80);
+		expect(half).toMatchObject({ supplyCutM3Day: -10, uncurtailedChargeM3Day: -20 });
+		expect(half!.suppliedM3Day + half!.supplyCutM3Day).toBe(80);
+		expect(control).toMatchObject({ supplyCutM3Day: -20, uncurtailedChargeM3Day: -10 });
+		expect(control!.suppliedM3Day + control!.supplyCutM3Day).toBe(80);
+	});
+
 	it('the curtailment table in a run carries the % and passes the self-check', () => {
 		// An EWR of 1 500 m³/day at the outlet the 1 000 m³/day can't meet: the user is charged.
 		const out = run(input({ userRestrictionPct: 0.25 }, null, 1500));
@@ -180,6 +203,16 @@ describe('a fixed restriction % for Priority users (engine 1.86.0)', () => {
 		expect(row.curtailed).toBe(true);
 		expect(row.restrictionPct).toBe(0.25);
 		expect(row.supplyCutM3Day).toBeCloseTo(-50, 9);
+	});
+
+	it('in a run with the rule, the curtailment cut takes only what of the % the rule left, and the self-check redoes it', () => {
+		// Restricted all four days (D′ = 0.7 × 200 = 140): the rule took the whole 30 %, so the charged user isn't cut again.
+		const out = run(input({ userRestrictionPct: 0.3 }, always, 1500));
+		passed(out);
+		const row = out.summary.curtailment!.otherUsers!.find((u) => u.nodeId === 'U')!;
+		expect(row.ewrChargeM3Day).toBeLessThan(0);
+		expect(row).toMatchObject({ curtailed: true, restrictionPct: 0.3, supplyCutM3Day: 0 });
+		expect(row.uncurtailedChargeM3Day).toBe(row.ewrChargeM3Day);
 	});
 
 	describe('random networks', () => {

@@ -1290,6 +1290,8 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
  * 0 ≤ supplied ≤ demand; a priority user is never cut and keeps its whole
  * charge; a non-priority user's cut −ΔG = MAX(charge ÷ k, −supplied) ≤ 0 with
  * k = 1 − return share, and the charge left standing = MIN(0, charge − k·cut).
+ * A priority user with a fixed restriction % c (engine 1.86.0) is cut by
+ * −ΔG = MAX(charge ÷ k, −supplied, −MAX(0, c·H − mean(D − restricted_demand))).
  */
 function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, from: number, to: number): string | null {
 	const users = input.model.nodes.filter((n) => n.kind === 'user');
@@ -1331,7 +1333,11 @@ function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, f
 		const rv = u.userRestrictionPct;
 		const c = senior && typeof rv === 'number' && Number.isFinite(rv) && rv > 0 && rv <= 1 ? rv : 0;
 		const curtailed = !senior || c > 0;
-		const cut = !curtailed || !(k > 0) ? 0 : senior ? Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day, -c * row.demandM3Day) : Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day);
+		// What the drought restriction rule already took of its demand counts against the % (engine 1.86.0): the two cut at most c × H together.
+		const DR = c > 0 ? get.get(`${u.id}|${RESTRICTION_SERIES.restricted.key}`) : undefined;
+		const taken = DR ? Math.max(0, row.demandM3Day - sum(DR as number[], from, to) / n) : 0;
+		const room = Math.max(0, c * row.demandM3Day - taken);
+		const cut = !curtailed || !(k > 0) ? 0 : senior ? Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day, -room) : Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day);
 		if ((row.restrictionPct ?? 0) !== c) return `${w}: restriction % ${row.restrictionPct} ≠ the user's fixed ${c}`;
 		if (row.curtailed !== curtailed || !close(row.supplyCutM3Day, cut) || row.supplyCutM3Day > 0) return `${w}: supply cut ${row.supplyCutM3Day} ≠ ${cut} (${senior ? (c > 0 ? `senior, fixed ${c}` : 'senior: not curtailed') : 'junior'})`;
 		if (!close(row.uncurtailedChargeM3Day, Math.min(0, row.ewrChargeM3Day - cut * k))) return `${w}: charge left standing ${row.uncurtailedChargeM3Day}`;
