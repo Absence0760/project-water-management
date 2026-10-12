@@ -2747,7 +2747,7 @@ below work on it too, for an editor.
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`, a draft or withdrawn one; its runs that nothing keeps go with it | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` | as above; for a contributor `run` is metadata only (`id, label, engineVersion, startDate, endDate, createdAt, scenarioId`: the summary names every farm) and the application keeps its newest 5 runs | its owner or a shared member, or an editor; not a viewer |
 | POST | `/projects/:id/scenarios/:sid/rebase` | as above | as above; a contributor's new base must be published | owner of the application |
-| POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply; `409` unless a draft | its owner (a team scenario: an editor) |
+| POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply (and `details.maskedRules`; when a rule hidden from the applicant broke a line, the message adds that this is the app's check that the model can run the changes, not a refusal under s42 of the National Water Act, and that they can still apply to DWS through e-WULAAS, issue #523 G7); `409` unless a draft | its owner (a team scenario: an editor) |
 | POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/decide` | **Record the authority's decision** (163_licensing_authority; provisional position, pre-counsel research, 2026-10-01): `{ outcome: 'licence_issued' \| 'licence_refused' \| 'application_rejected' \| 'not_considered', authority?: ≤ 200, decisionDate: 'YYYY-MM-DD', reference?: ≤ 200, reasonsReceived: boolean, note?: ≤ 4000, granted?: { ops?: ScenarioOp[], conditions?: ≤ 4000 } }` (`authority` omitted: the project's `settings.responsibleAuthority.name`, `400` when it names none; `decisionDate` a real date, not after tomorrow; `granted` only with `licence_issued`, else `400`: the licence's granted terms (227_licence_terms, issue #523 G3), `ops` the "as licensed" changes, checked as the scenario's own (`422 { details: { problems } }` in the assessors' words when one doesn't apply to the base run; an application's under its applicant's mask), left out for granted as applied for, which is written out as the granted ops) | `submitted → decided`, with `decidedAt` (the app's stamp), `decidedBy` and the record above; final. `403` unless the caller acts for the responsible authority (a confirmed delegate holding editor or above, 229, [Acts for the authority](#acts-for-the-authority)), and for the application's own owner; `409` unless submitted; `409` `run_unverified` while any of its runs doesn't verify (security.md § Run stamps). Every single-scenario answer (`GET`, `PATCH`, the status moves) carries `unverifiedRunIds`: an application's runs that don't verify, to an editor or owner (`null` for a team scenario or a lower role) | editor acting for the authority |
@@ -2759,7 +2759,7 @@ below work on it too, for an editor.
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
 | POST | `/projects/:id/scenarios/:sid/questions` | `{ problem: int, line: string }` (strict) | `201 { question }`, the parties' view below: "Ask the assessors why" (164) about problem line `problem` of the application's check, quoting it as the caller read it. `409` when the check's line is no longer `line` (read it again), or for a team scenario; `422` when no hidden rule broke that line; `409` past 50 questions on one application; `403` for a reader who isn't one of its parties (its owner or someone it is shared with); `404` for an application the caller can't read | a party of the application |
 | GET | `/projects/:id/scenarios/:sid/questions` | – | `{ questions }`, newest first. A party: `{ id, askedAt, problem, opIndexes, rules, answer, answeredAt }` (`app_application_questions`: never the real words or the ops). An editor: also `scenarioId, scenarioName, ops, assessorText`. `404` for anyone else | a party, or an editor |
-| GET | `/projects/:id/application-questions` | – | `{ questions }` (the editors' shape above), unanswered first, then newest, at most 200: every application's questions, drafts' included (the draft itself stays its applicant's) | editor |
+| GET | `/projects/:id/application-questions` | – | `{ questions }` (the editors' shape above), unanswered first, then newest, at most 200: every application's questions, drafts' included (the draft itself stays its applicant's), and those of a deleted draft with `scenarioId: null` (234) | editor |
 | POST | `/projects/:id/application-questions/:qid/answer` | `{ answer: 1–4000 }` (strict) | `200 { question }`; once (`409` when answered). `404` for no such question | editor |
 
 - **"Ask the assessors why"** (164, [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
@@ -2770,7 +2770,12 @@ below work on it too, for an editor.
   name and the line in its real words (written by the server; only editors
   read it). The audit trail records `application.question_asked` and
   `application.question_answered` (ids, op indexes and the rules' kinds;
-  never the words).
+  never the words). The question and its answer are the application's
+  record for the authority's s42 written reasons (issue #523 G7): a
+  cumulative assessment carries those on its applications
+  ([§ Assessments](#assessments)), and deleting a draft keeps its questions
+  for the editors, `scenarioId` then `null` (234_question_kept); its parties
+  read them no more.
 - **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
   other node by kind and place under an anonymous name ("Farm 3") with its
   values blanked, and only their own farms' crops, crop areas, transfers and
@@ -4126,7 +4131,7 @@ submitted applications, which neither contributors nor viewers read.
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/assessments` | `{ name, scenarioIds, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
 | GET | `/projects/:id/assessments` | – | `{ assessments: Assessment[] }`, newest first, **without** `report` | editor |
-| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report`; `404` for one that isn't this project's | editor |
+| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report` and `questions`: the "Ask the assessors why" questions on its applications in the editors' shape ([§ Scenarios](#scenarios)), oldest first, answered or not (issue #523 G7: exported with the matrix for the authority's s42 written reasons; the list leaves them out); `404` for one that isn't this project's | editor |
 
 - Body (strict): `name` 1–200 characters (trimmed); `scenarioIds` **2–8**
   distinct UUIDs (`ASSESSMENT_SCENARIOS_MIN`/`MAX`).

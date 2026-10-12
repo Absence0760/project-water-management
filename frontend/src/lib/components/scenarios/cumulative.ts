@@ -3,7 +3,7 @@
 // can be picked together, the report's rows as the matrix shows them, and its
 // CSV. Pure, so it is unit-tested without a component.
 import { CUMULATIVE_METRIC_LABEL, type CumulativeReport, type CumulativeRow } from '@water-management/engine';
-import type { Assessment, Scenario } from '$lib/api/types';
+import type { Assessment, AssessorQuestion, Scenario } from '$lib/api/types';
 import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 
 /** Applications an assessor can assess together: submitted or decided (a draft is the applicant's, a withdrawn one is off the table). */
@@ -71,8 +71,14 @@ function cell(v: string | number | null): string {
 	return /[",\n\r]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
 }
 
-/** The report as CSV: one line per row, the raw numbers (the matrix rounds), each application alone and all together. */
-export function assessmentCsv(report: CumulativeReport): string {
+/**
+ * The report as CSV: one line per row, the raw numbers (the matrix rounds),
+ * each application alone and all together. With questions, a blank line and
+ * then the applicants' "Ask the assessors why" questions on these
+ * applications, one line each with the answer (issue #523 G7: the
+ * applications' record for the authority's s42 written reasons).
+ */
+export function assessmentCsv(report: CumulativeReport, questions: readonly AssessorQuestion[] = []): string {
 	const names = report.scenarios.map((s) => s.name);
 	const head = [
 		'Measure',
@@ -90,7 +96,12 @@ export function assessmentCsv(report: CumulativeReport): string {
 		const { measure, site } = rowLabel(r);
 		return [measure, site, r.unit, r.baseline, ...r.singles, r.combined, ...r.singleChanges, r.sumOfSingles, r.combinedChange, r.interaction];
 	});
-	return [head, ...lines].map((l) => l.map(cell).join(',')).join('\r\n') + '\r\n';
+	const table = [head, ...lines];
+	if (questions.length) {
+		table.push([], ['Application', 'Asked', 'The applicant read', 'In its own words', 'Answer', 'Answered']);
+		for (const q of questions) table.push([q.scenarioName, q.askedAt, q.problem, q.assessorText, q.answer, q.answeredAt]);
+	}
+	return table.map((l) => l.map(cell).join(',')).join('\r\n') + '\r\n';
 }
 
 export type AssessmentState = { kind: 'complete' } | { kind: 'pending'; text: string; progress: number | null } | { kind: 'stopped'; text: string; lines: string[] };

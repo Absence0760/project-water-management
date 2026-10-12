@@ -407,6 +407,7 @@ const SCENARIO_ID_NULL_TESTS = new Map<string, string>([
 	['function app_run_digest', 'access: who reads the run (as the model_run_select policy)'],
 	['function app_run_digest_body', 'the stamp: a set scenario_id matches the inputs.scenario it ran (077); unchanged, so stamps hold'],
 	['function app_signoff_registration_check', 'evidence_pack.scenario_id'],
+	['function application_question_guard', 'application_question.scenario_id: its draft deleted (234)'],
 	['function model_run_scenario_same_project', 'link: a set scenario is of the run’s project'],
 	['function yield_result_guard', 'yield_result.scenario_id'],
 	['policy evidence_pack.evidence_pack_select', 'evidence_pack.scenario_id'],

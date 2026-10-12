@@ -360,8 +360,14 @@ cl. 3). The licensing ones are rows in
   the catchment's aggregate past five hidden holders, the generic words
   below; the assessors read the rule's real words; the applicant's **Ask
   the assessors why** sends the line, the changes it names and the rule's
-  kind (nothing hidden), and an editor answers once. *For counsel:* how
-  much third-party detail the authority's reasons may carry (PAJA s5(4)).
+  kind (nothing hidden), and an editor answers once. *Built (issue #523
+  G7, the licensing assessor's review):* the refusal says it is the app's
+  check, not a refusal under s42, and that the applicant can still apply
+  through DWS (e-WULAAS); the question and its answer stay with the
+  application (and after a draft is deleted, 234) and a cumulative
+  assessment exports them, for the authority's s42 written reasons.
+  *For counsel:* how much third-party detail the authority's reasons may
+  carry (PAJA s5(4)).
 - [ ] **The applicant's printable copy, and the full pack to the
   authority.** *Provisional position (pre-counsel research, 2026-10-01):*
   the applicant files the technical report (R267 reg 11(1)) and what they

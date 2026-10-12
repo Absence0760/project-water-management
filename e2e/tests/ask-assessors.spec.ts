@@ -2,7 +2,8 @@
 // § Applications, docs/scenarios.md § Applications): an applicant's change
 // breaks a rule that depends on a farm they can't see (the catchment's flow
 // shares, set by hand, pass 100 % only with the other farm's share), which
-// they read only as "doesn't apply to the catchment as modelled". They ask
+// they read only as "doesn't apply to the catchment as modelled", with a note
+// that this is the app's check, not a refusal under s42 (issue #523 G7). They ask
 // the assessors why; the assessor (the project's owner) reads the rule in
 // its own words on the Applications tab and answers; the applicant reads the
 // answer. Axe on both panels, light and dark. Synthetic data only.
@@ -42,6 +43,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
 		const ask = a.getByRole('region', { name: 'Rules you can’t see' });
 		await expect(ask).toContainText("doesn't apply to the catchment as modelled");
 		await expect(ask).toContainText('change 1: flow shares');
+		// Issue #523 G7: an app check, not a refusal under s42; DWS is still open to them.
+		await expect(ask.getByTestId('ask-in-app-check')).toContainText('It is not a refusal of a water use licence under section 42 of the National Water Act');
+		await expect(ask.getByTestId('ask-in-app-check')).toContainText('(e-WULAAS)');
 		await expect(a.getByText('Lower farm')).toHaveCount(0);
 		await ask.getByRole('button', { name: 'Ask the assessors why' }).click();
 		await expect(ask.getByTestId('asked')).toContainText('waiting for the assessors’ answer');

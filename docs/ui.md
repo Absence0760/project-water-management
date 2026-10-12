@@ -9636,7 +9636,12 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   **Ask the assessors why**, which sends the line, those changes and the
   rule's kind (never anything hidden) to the assessors. The panel says what
   the assessors see (the question, the changes it names and the
-  application's name, not the rest of the draft). Once asked: "Asked
+  application's name, not the rest of the draft), and (issue #523 G7) that
+  this is the app's check that the model can run the changes, not a refusal
+  of a water use licence under section 42 of the National Water Act, that
+  they can still apply to DWS through its own channels (e-WULAAS), and that
+  the assessors keep the question and answer with the application for any
+  written reasons (`ask-in-app-check`). Once asked: "Asked
   <date>; waiting for the assessors' answer", then the answer and **Ask
   again**. Questions about lines the check no longer shows sit under
   **Earlier questions**.
@@ -9710,7 +9715,8 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   **Send the answer** (once; an answer goes to the application's parties,
   so the note above the list says to write only what they may know of
   other water users). A question may be about a draft, which stays the
-  applicant's.
+  applicant's; a deleted draft's questions stay, marked "(draft deleted)"
+  (234, issue #523 G7).
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
@@ -9745,7 +9751,13 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   separate changes; its plain-words reading is the cell's title and is read
   out), with a one-paragraph explanation of the interaction above it and
   **Download CSV** (the raw numbers, names guarded against CSV injection)
-  below.
+  below. Between them, when there are any, **Applicants' questions on these
+  applications (n)** (closed `<details>`, `assess-questions`; issue #523
+  G7): each "Ask the assessors why" question on them, the application's
+  name, when asked, the rule in its own words and the answer or *Not
+  answered yet*, kept for the authority's written reasons. The CSV carries
+  them too, after a blank line: *Application, Asked, The applicant read,
+  In its own words, Answer, Answered*.
 - Workspace English, like the rest of the assessors' tab.
 
 e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
