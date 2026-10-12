@@ -67,7 +67,8 @@ describe('hand-rolled owner and admin checks', () => {
 
 // The actions that reach people outside the team need a second factor
 // whatever the project's or team's setting (operator decision, 2026-10-08):
-// publishing to farmers, deciding an application, endorsing a baseline,
+// publishing to farmers, deciding an application and recording an appeal
+// event, endorsing a baseline,
 // recording a registration check, and signing, issuing and withdrawing an
 // evidence pack. Each route calls the unconditional check, never the
 // project-scoped one; stepUp.db.test.ts proves each refusal with the setting
@@ -80,8 +81,8 @@ describe('the always-required actions keep the unconditional check', () => {
 		['publish/routes.ts', 'requireStepUp', 3],
 		// Publishing and withdrawing an outlook.
 		['outlooks/routes.ts', 'requireStepUp', 2],
-		// Deciding an application.
-		['scenarios/routes.ts', 'requireStepUp', 1],
+		// Deciding an application, and recording what followed the decision (228_decision_events, issue #523 G4).
+		['scenarios/routes.ts', 'requireStepUp', 2],
 		['signoffs/registrationCheck.ts', 'requireStepUp', 1],
 		// Signing a pack (as the applicant's specialist, or as an editor), issuing it and withdrawing it.
 		['evidence/packs.ts', 'requireFreshCode', 4]
