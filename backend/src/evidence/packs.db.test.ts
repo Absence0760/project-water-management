@@ -1588,8 +1588,27 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		expect(report.summaries.baseline.allocations.used).toBe(1);
 		const text = JSON.stringify(res.body);
 		for (const s of [String(VOLUME), HOLDER, 'REG-G1-1']) expect(text).not.toContain(s);
-		// Its PDF isn't refused: since evidence-15, § 5 prints only the applicant's own units (a draft has none: 409).
-		expect((await viewer.call('GET', `${packPath(current)}/pdf`)).status).toBe(409);
+		// Since evidence-15, § 5 prints only the applicant's own units, but page 1's "Registered vs modelled use" row still
+		// counts the left-out unit's years over its volume: the PDF is refused (#523 G1c). The manifest's row is recounted.
+		expect(report.allocations.othersLeftOut).toBe(1);
+		expect(report.rows.find((r: { id: string }) => r.id === 'registeredUse').notAssessed).toMatch(/^Not shown/);
+		withheld(await viewer.call('GET', `${packPath(current)}/pdf`));
+	});
+
+	it('#523 G1c: serves a viewer the PDF of a pack whose page-1 row counts only the listed units (a draft: 409), and refuses it when the row counts another unit’s years; an editor passes both (positive control)', async () => {
+		/** Page 1's row and unitYears as an engine counting no left-out unit would freeze them. */
+		const ownOnly = (r: PackManifest['report']) =>
+			({
+				...r,
+				allocations: { ...r.allocations, unitYears: { overA: 0, judgedA: 0, overB: null, judgedB: null } }
+			}) as PackManifest['report'];
+		const plain = await plant('evidence-18', { edit: ownOnly });
+		expect((await viewer.call('GET', `${packPath(plain)}/pdf`)).status).toBe(409);
+		const counted = await plant('evidence-18');
+		const frozen = (await editor.call('GET', packPath(counted))).body.manifest.report;
+		expect(frozen.allocations.unitYears.judgedA).toBeGreaterThan(0);
+		withheld(await viewer.call('GET', `${packPath(counted)}/pdf`));
+		for (const id of [plain, counted]) expect((await editor.call('GET', `${packPath(id)}/pdf`)).status).toBe(409);
 	});
 
 	it('redacts the live evidence report for that viewer alike; the owner and an allowed viewer read it whole', async () => {
