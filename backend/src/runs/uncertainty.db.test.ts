@@ -250,6 +250,49 @@ describe('storing the result', () => {
 			expect(done.body.ensemble.summary.ownSupply).toBeUndefined();
 		});
 
+		// #523 G1c: a paired band is the difference of the two runs' members, so either side's cap or full allocation gives
+		// its figures back. A viewer kept from the volumes reads it as verdicts when EITHER run is one. Synthetic: a run is
+		// made a cap or full-allocation run by marking its summary as the engine records one (as verdictsOnly.db.test.ts).
+		it('are verdicts and counts only for a viewer kept from the volumes when either run caps or fully allocates', async () => {
+			/** Set a run's recorded allocation mode (`null`: the summary as it was, with none recorded). */
+			const setAllocations = (runId: string, allocations: unknown) =>
+				asOwner(`UPDATE model_run SET summary = CASE WHEN $2::jsonb IS NULL THEN summary - 'allocations' ELSE jsonb_set(summary, '{allocations}', $2::jsonb) END WHERE id = $1`, [
+					runId,
+					allocations === null ? null : JSON.stringify(allocations)
+				]);
+			const markMode = (runId: string, mode: string) => setAllocations(runId, { mode, tolerance: 0.1, used: 1, notMatched: 0, nodes: [] });
+			const before = await asOwner(`SELECT id, summary->'allocations' AS a FROM model_run WHERE id = ANY($1)`, [[runA, runB]]);
+			/** The paired band of runB on runA's ensemble, as listed and as read alone. */
+			const paired = async (u: User) => {
+				const list = (await u.call('GET', `${base(runB)}/uncertainty`)).body.ensembles as { id: string; baselineId: string | null; status: string; summary: Record<string, unknown> }[];
+				const row = list.find((e) => e.baselineId === uid && e.status === 'complete')!;
+				const one = (await u.call('GET', `${base(runB)}/uncertainty/${row.id}`)).body.ensemble;
+				return { summaries: [row.summary, one.summary as Record<string, unknown>], members: one.result.members as { metrics: Record<string, unknown> }[] };
+			};
+			const whole = (p: Awaited<ReturnType<typeof paired>>) =>
+				p.summaries.every((s) => typeof (s.marOutflowMm3 as { max?: unknown } | undefined)?.max === 'number') && p.members.every((m) => typeof m.metrics.marOutflowMm3 === 'number');
+			const verdicts = (p: Awaited<ReturnType<typeof paired>>) =>
+				p.summaries.every((s) => s.marOutflowMm3 === undefined && s.supply === undefined && s.ewrDaysNotMet !== undefined) &&
+				p.members.length > 0 &&
+				p.members.every((m) => m.metrics.marOutflowMm3 === undefined && m.metrics.unitSuppliedM3Day === undefined && typeof m.metrics.ewrDaysNotMet === 'number');
+			try {
+				// Positive control: neither run caps, so the viewer reads the band whole.
+				expect(whole(await paired(viewer))).toBe(true);
+				// The baseline ensemble's run caps or fully allocates, the band's own run doesn't: verdicts for the viewer,
+				// the editor reads it whole (positive control).
+				for (const mode of ['cap', 'fullAllocation']) {
+					await markMode(runA, mode);
+					expect([mode, verdicts(await paired(viewer)), whole(await paired(editor))]).toEqual([mode, true, true]);
+				}
+				// The band's own run caps, the baseline's doesn't: verdicts too.
+				await markMode(runA, 'none');
+				await markMode(runB, 'cap');
+				expect([verdicts(await paired(viewer)), whole(await paired(editor))]).toEqual([true, true]);
+			} finally {
+				for (const r of before) await setAllocations(r.id as string, r.a);
+			}
+		});
+
 		it('refuse a baseline of the same run, one not complete, and one from another project', async () => {
 			const same = await start(owner, runA, { baselineId: uid });
 			expect(same.status).toBe(400);

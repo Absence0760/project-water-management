@@ -40,9 +40,8 @@ import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
-import { ensembleVerdicts } from '../allocations/verdictsOnly.js';
-import { seriesWithholding } from './withheldSeries.js';
-import { requireRole, UUID } from '../projects/access.js';
+import { ensembleVerdicts, verdictsOnly } from '../allocations/verdictsOnly.js';
+import { requireRole, type Role, UUID } from '../projects/access.js';
 import { loadModelInput, loadRunInput, RunInputError, seriesHash } from './execute.js';
 
 /** Random members the server re-runs besides member 0 (docs/security.md § Authorization). */
@@ -235,6 +234,27 @@ function engine<T>(f: () => T): T {
 /** The runoff model the run used (absent = legacy, as model_run's other readers). */
 const runModelOf = (input: ModelInput) => (input.settings.runoffModel as string | undefined) ?? 'legacy';
 
+/**
+ * Ensembles listed under `runId` as `role` reads them: for a viewer kept from
+ * each registered volume (162, D3), an ensemble is its verdicts and counts
+ * only (ensembleVerdicts, #523 I) when its own run caps or fully allocates,
+ * and a paired band also when the run its baseline ensemble is of does
+ * (#523 G1c): the band is the difference between the two runs' members, so
+ * either side's figures give the other's back. A baseline run that can't be
+ * read is treated as one that does.
+ */
+export async function ensemblesAsSeen<T extends { baselineRunId: string | null }>(db: Db, projectId: string, role: Role, runId: string, rows: T[]): Promise<T[]> {
+	if (!rows.length || !(await allocationUnitsHidden(db, projectId, role))) return rows;
+	const ids = [...new Set([runId, ...rows.flatMap((r) => (r.baselineRunId ? [r.baselineRunId] : []))])];
+	const { rows: runs } = await db.query<{ id: string; allocations: { mode?: unknown } | null }>(
+		`SELECT id, summary->'allocations' AS allocations FROM model_run WHERE project_id = $1 AND id = ANY($2::uuid[])`,
+		[projectId, ids]
+	);
+	const modes = new Map(runs.map((r) => [r.id, r.allocations]));
+	const bound = (id: string) => !modes.has(id) || verdictsOnly(modes.get(id));
+	return rows.map((r) => (bound(runId) || (r.baselineRunId !== null && bound(r.baselineRunId)) ? ensembleVerdicts(r) : r));
+}
+
 export const uncertaintyRoutes = new Hono<AuthEnv>()
 	// The run's own input, for running an ensemble in the browser (viewer: a
 	// viewer may reproduce a stored ensemble; only an editor can store one).
@@ -262,9 +282,9 @@ export const uncertaintyRoutes = new Hono<AuthEnv>()
 			const { rows: run } = await db.query('SELECT 1 FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
 			if (!run.length) throw new ApiError(404, 'not found');
 			const { rows } = await db.query<Row>(`SELECT ${COLUMNS} ${FROM} WHERE u.project_id = $1 AND u.run_id = $2 ORDER BY u.created_at DESC`, [id, runId]);
-			// A cap or full-allocation run's ensembles: their verdicts and counts only, for a viewer kept from the volumes (#523 I).
-			const verdicts = !!(await seriesWithholding(db, id, role, runId))?.verdictsOnly;
-			return c.json({ ensembles: verdicts ? ensembleVerdicts(rows) : rows });
+			// A cap or full-allocation run's ensembles, and a paired band whose baseline ensemble is of one: their verdicts
+			// and counts only, for a viewer kept from the volumes (#523 I, G1c).
+			return c.json({ ensembles: await ensemblesAsSeen(db, id, role, runId, rows) });
 		});
 	})
 	.get('/:id/runs/:runId/uncertainty/:uid', async (c) => {
@@ -272,9 +292,10 @@ export const uncertaintyRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
 			const ensemble = await loadRow(db, id, runId, uid, true);
-			// A cap or full-allocation run: each member's EWR counts and rates only, for a viewer kept from the volumes (#523 I).
-			const verdicts = !!(await seriesWithholding(db, id, role, runId))?.verdictsOnly;
-			return c.json({ ensemble: verdicts ? ensembleVerdicts(ensemble) : ensemble });
+			// A cap or full-allocation run, on either side of a paired band: each member's EWR counts and rates only, for a
+			// viewer kept from the volumes (#523 I, G1c).
+			const [seen] = await ensemblesAsSeen(db, id, role, runId, [ensemble]);
+			return c.json({ ensemble: seen });
 		});
 	})
 	.post('/:id/runs/:runId/uncertainty', async (c) => {
