@@ -19,7 +19,7 @@ export const AUTHORITY = { name: 'Synthetic catchment management agency', kind: 
 
 /**
  * The project names its responsible authority, and the caller (`request`, an owner) acts for it, so they record its
- * decisions: they propose themself, and the operator confirms it (233_authority_delegates: only the authority, or the
+ * decisions: they propose themself, and the operator confirms it (229_authority_delegates: only the authority, or the
  * operator for the first delegate, confirms one).
  */
 export async function actForAuthority(request: APIRequestContext, projectId: string): Promise<void> {

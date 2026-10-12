@@ -10,7 +10,7 @@
 //  - both runs' results digests (bundle.ts runResultsDigest), so a re-run that
 //    gives the same digests is the same pair, day for day;
 //  - how each registered volume was held as at the baseline run (the
-//    authorisation frozen with it, backend 230), so the mix is the one the
+//    authorisation frozen with it, backend 226), so the mix is the one the
 //    baseline's rows gave, not today's rows.
 //
 // The record is in the report (and so in the pack's manifest, whose hash the

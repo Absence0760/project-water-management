@@ -1,4 +1,4 @@
-// The responsible authority (163_licensing_authority, 233_authority_delegates; provisional position,
+// The responsible authority (163_licensing_authority, 229_authority_delegates; provisional position,
 // pre-counsel research, 2026-10-01; docs/scenarios.md § Applications "Who
 // decides", docs/api.md § Members and § Publication): who acts for it, what
 // only they may do (record its decision, endorse a published baseline), and
@@ -58,7 +58,7 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('who acts for the responsible authority', () => {
-	it('is the authority’s to confirm: the owner proposes, the operator confirms the first, and the member list shows it (233)', async () => {
+	it('is the authority’s to confirm: the owner proposes, the operator confirms the first, and the member list shows it (229)', async () => {
 		// The 163 flag is no longer settable: not through the route, nor past it.
 		expect((await owner.call('PATCH', `${P()}/members/${marked.id}`, { actsForAuthority: true })).status).toBe(400);
 		await expect(

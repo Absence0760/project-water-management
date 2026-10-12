@@ -8,7 +8,7 @@
 	run that can't be published (legacy, scenario) offers none, only why
 	(issue #521). Whether the responsible authority endorsed
 	this run as a baseline, and, for a member the authority confirmed as
-	acting for it, the action to endorse it, once (163, 233).
+	acting for it, the action to endorse it, once (163, 229).
 -->
 <script lang="ts">
 	import DayInput from '$lib/components/common/DayInput.svelte';

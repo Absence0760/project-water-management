@@ -1,8 +1,8 @@
 <script lang="ts">
-	// A licence's granted terms, read only (231_licence_terms, issue #523 G3;
+	// A licence's granted terms, read only (227_licence_terms, issue #523 G3;
 	// docs/ui.md § Applications): "As applied for", or the changes as licensed
 	// in words, and the conditions as the licence gives them. Also a
-	// variation's terms (232_decision_events).
+	// variation's terms (228_decision_events).
 	import type { ModelInput } from '@water-management/engine';
 	import type { LicenceTerms } from '$lib/api';
 	import OpList from './OpList.svelte';

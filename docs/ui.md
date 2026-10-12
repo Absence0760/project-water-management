@@ -1969,7 +1969,7 @@ it scrolls, and isn't fitted to the window.
   member who acts for the responsible authority shows **Acts for the
   responsible authority** under their role, and one proposed but not yet
   confirmed *Proposed to act for the responsible authority (not confirmed)*
-  (233; managed in **Acts for the authority** below, which the list follows
+  (229; managed in **Acts for the authority** below, which the list follows
   after each change). A change that would make an editor also part of an applying
   party is refused with the server's `role_conflict` words. A member with a
   party has a **Specialist for this party** tick box for owners (167_signers;
@@ -1981,7 +1981,7 @@ it scrolls, and isn't fitted to the window.
   the authority card's *responsible authority*) and their glossary entries;
   an 8-line paragraph under **Add** repeated them until issue #521 § 13.
 - **Acts for the authority** (`project/AuthorityDelegatesPanel.svelte`,
-  233_authority_delegates, issue #523 G5; under **Responsible authority**,
+  229_authority_delegates, issue #523 G5; under **Responsible authority**,
   every project reader): who acts for the responsible authority, which the
   authority decides, not the host. **Confirmed** delegates first (name, a
   *Confirmed* badge, who confirmed it and when: a member, *on the
@@ -9575,7 +9575,7 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   applicant never does. An assessor also reads, in an info box, each rule
   the applicant reads without the other units' figures in its own words
   (`check.assessorProblems`, 164).
-- **Granted terms** (231_licence_terms, issue #523 G3): choosing **Licence
+- **Granted terms** (227_licence_terms, issue #523 G3): choosing **Licence
   issued** in **Record the authority's decision** opens **Granted terms**
   (`LicenceTermsEditor.svelte`): **As applied for**, or **With changes**,
   which starts from the changes applied for as a list (remove what wasn't
@@ -9591,7 +9591,7 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   an appeal open, "nothing changes until it is decided"; `licence.ts`
   `licenceLine`), and for an assessor while a licence is in force **Run the
   licensed terms** (the run the evidence report's other applications read).
-- **Appeals** (232_decision_events, #523 G4), under the decision: the
+- **Appeals** (228_decision_events, #523 G4), under the decision: the
   events in order ("Appeal lodged: Water Tribunal, 2 Oct 2026", its
   reference, who recorded it and when, its note, a variation's terms), or
   "None recorded.". A member acting for the authority gets **Record an
@@ -9756,7 +9756,7 @@ dark).
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it. An editor who isn't its owner and whom the
-responsible authority confirmed as acting for it (233) gets **Record the
+responsible authority confirmed as acting for it (229) gets **Record the
 authority's decision** (163_licensing_authority; provisional position,
 pre-counsel research, 2026-10-01): the outcome in the Act's words with its
 basis beside each (*Licence issued (see its conditions)*, *Licence refused*,
@@ -10554,7 +10554,7 @@ their own application's in [their own view](#the-applicants-pack-view).
   the authority and not through the applicant, the members acting for the
   responsible authority as ticked checkboxes, an optional note and
   **Send**, then "Sent to …"; with none, it says the authority confirms
-  them in Acts for the authority (233; a proposal alone isn't enough); [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
+  them in Acts for the authority (229; a proposal alone isn't enough); [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
   and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash. When an erratum found
   since the manifest was frozen applies to either run's engine or its fit's

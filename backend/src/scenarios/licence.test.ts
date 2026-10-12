@@ -1,5 +1,5 @@
 // Which ops a scenario counts with among the other applications on its
-// baseline (licence.ts; 231_licence_terms, 232_decision_events): the database
+// baseline (licence.ts; 227_licence_terms, 228_decision_events): the database
 // says whether its licence is in force and from what; this picks those terms.
 import type { ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';

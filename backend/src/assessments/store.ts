@@ -105,7 +105,7 @@ export function checkCombination(base: ModelInput, scenarios: readonly Pick<Scen
  * can't: another project's, or an application still a draft), each a team
  * scenario or a submitted or decided application, all on one base run;
  * and that base run's input (loadBaseInput: 404 / 409 as for a scenario).
- * Each with the ops it counts with: a licence in force's terms (231/232).
+ * Each with the ops it counts with: a licence in force's terms (227/228).
  */
 async function loadRequest(db: Db, projectId: string, ids: readonly string[]): Promise<{ scenarios: ScenarioRow[]; baseRunId: string; base: ModelInput }> {
 	const scenarios: ScenarioRow[] = [];
@@ -117,7 +117,7 @@ async function loadRequest(db: Db, projectId: string, ids: readonly string[]): P
 	const bases = new Set(scenarios.map((s) => s.baseRunId));
 	if (bases.size > 1) throw new ApiError(422, 'these scenarios are based on different runs; rebase them onto one run to assess them together');
 	const baseRunId = scenarios[0]!.baseRunId;
-	// A licence in force counts on its terms (231/232), as assessment_member_guard copies them.
+	// A licence in force counts on its terms (227/228), as assessment_member_guard copies them.
 	return { scenarios: scenarios.map((s) => ({ ...s, ...countedOps(s) })), baseRunId, base: await loadBaseInput(db, projectId, baseRunId) };
 }
 

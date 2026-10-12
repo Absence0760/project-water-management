@@ -4,7 +4,7 @@
 	// docs/ui.md § Evidence pack). The pack's PDF and bundle name every water
 	// user, so they go to the authority that decides (NWA s41(2)), never
 	// through the applicant: an editor picks among the members the authority
-	// confirmed as acting for it (233_authority_delegates, a team editor
+	// confirmed as acting for it (229_authority_delegates, a team editor
 	// included), adds a note, and each gets
 	// an email linking the pack's page (sign-in needed to download) and the
 	// verify page. Never a file, never a link that works on its own.

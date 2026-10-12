@@ -341,7 +341,7 @@ existing lawful use beside the application's numbers.
   out is said only at 5 or more, else only that some were (holders counted
   as `app_allocation_volumes` counts them, by the keys frozen with the
   baseline run, `app_run_allocation_holders`, 219). Since `evidence-19` (issue #523 G2) both mixes count each
-  volume by how it was held **as at the baseline run** (its authorisation frozen with the run, 230), not the
+  volume by how it was held **as at the baseline run** (its authorisation frozen with the run, 226), not the
   allocation row as it is when the board is built. Since `evidence-18` (issue #523 H/J) the folded mix is frozen, and
   served, as each line's whole-percent share of the lines' sum (largest
   remainder, adding up to 100), with no m³ and no total: the mix sums every

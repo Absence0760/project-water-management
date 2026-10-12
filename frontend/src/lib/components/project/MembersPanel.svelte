@@ -26,7 +26,7 @@
 		isOwner: boolean;
 		currentUserId: string;
 		onLeftProject: () => void;
-		/** Bumped after a change in Acts for the authority (233): the list reloads, quietly, so its authority lines follow. */
+		/** Bumped after a change in Acts for the authority (229): the list reloads, quietly, so its authority lines follow. */
 		authorityVersion?: number;
 	} = $props();
 
@@ -249,7 +249,7 @@
 								{:else if m.specialist}
 									<span class="badge small">Specialist for {m.party}</span>
 								{/if}
-								<!-- Who acts for the responsible authority is the authority's own call (233_authority_delegates): shown
+								<!-- Who acts for the responsible authority is the authority's own call (229_authority_delegates): shown
 								     here, managed in Acts for the authority below. A proposal grants nothing until it is confirmed. -->
 								{#if m.authority === 'confirmed' && m.actsForAuthority}
 									<span class="badge small authority" data-testid="member-authority">Acts for the responsible authority</span>

@@ -82,7 +82,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'api_key.created_by': { excluded: 'the project’s key; api_key.created is in auditEvents; never key material' },
 	'api_key.revoked_by': { excluded: 'the project’s key; api_key.revoked is in auditEvents' },
 	'audit_event.actor_user_id': { section: 'auditEvents' },
-	// Who acts for a project's responsible authority (233_authority_delegates): the person's own proposals and confirmations.
+	// Who acts for a project's responsible authority (229_authority_delegates): the person's own proposals and confirmations.
 	'authority_delegate.user_id': { section: 'authorityDelegations' },
 	'authority_delegate.proposed_by': { excluded: 'someone else the person proposed to act for the authority; authority.proposed is in auditEvents' },
 	'authority_delegate.confirmed_by': { excluded: 'someone else the person confirmed as acting for the authority; authority.confirmed is in auditEvents' },
@@ -123,7 +123,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'run_publication.updated_by': { excluded: 'the project’s publication; its last editor only' },
 	'run_uncertainty.created_by': { excluded: 'the project’s ensemble; its maker only' },
 	'scenario.decided_by': { excluded: 'the project’s application decision; its assessor only' },
-	// What followed a decision (232_decision_events): the project's record; scenario.appeal_recorded is in auditEvents.
+	// What followed a decision (228_decision_events): the project's record; scenario.appeal_recorded is in auditEvents.
 	'decision_event.recorded_by': { excluded: 'the project’s record of an appeal on a decision; who recorded it only, and scenario.appeal_recorded is in auditEvents' },
 	'scenario.owner_user_id': { excluded: 'the project’s scenario; scenario.created is in auditEvents' },
 	'scenario_member.added_by': { excluded: 'people the person added to a scenario; its maker only' },
@@ -252,7 +252,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 WHERE m.user_id = $1 ORDER BY m.added_at, m.project_id`,
 			[userId]
 		);
-		// 233: where the person is proposed or confirmed to act for the authority (a team editor's too, with no membership row).
+		// 229: where the person is proposed or confirmed to act for the authority (a team editor's too, with no membership row).
 		const { rows: authorityDelegations } = await db.query(
 			`SELECT d.project_id AS "projectId", p.name AS "projectName", CASE WHEN d.confirmed_at IS NULL THEN 'proposed' ELSE 'confirmed' END AS status,
 				d.proposed_at AS "proposedAt", d.confirmed_at AS "confirmedAt", d.confirmed_via AS "confirmedVia"

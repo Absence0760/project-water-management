@@ -395,7 +395,7 @@ for and whether that authority accepted the baseline:
 - **§ 4's decided applications** carry the authority's outcome words; only
   a licence in force counts among the other applications on the baseline (a
   pack drafted before keeps its frozen `approved` /
-  `approved_with_conditions`, which it still words). Since 231/232 (issue
+  `approved_with_conditions`, which it still words). Since 227/228 (issue
   #523 G3, G4) it counts on its **granted terms**, never the changes applied
   for: § 4 reads its newest run of those terms (an assessor's **Run the
   licensed terms**; the run of the applied changes no longer stands for it,
@@ -416,7 +416,7 @@ A pack drafted before `evidence-13` has neither field; its identity block
 says nothing about the authority and it has no such flag.
 
 **Who acts for the authority is the authority's own call**
-(233_authority_delegates, issue #523 G5; the assessor's review of D1). An
+(229_authority_delegates, issue #523 G5; the assessor's review of D1). An
 endorsement, a decision, a registration check and the pack's *Send to the
 authority* count only a **confirmed** delegate holding editor or above in
 the project (directly or through its team): an owner (the host) may
@@ -427,7 +427,7 @@ proposal but not remove a confirmed delegate; the authority removes anyone.
 So *Not endorsed by the responsible authority* stays printed until someone
 the authority confirmed endorses the baseline, whatever the host does.
 Every change is in the project's History ([security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls), [data-model.md](./data-model.md) `authority_delegate`).
-The flags owners set before 233 were carried over as confirmed, each with
+The flags owners set before 229 were carried over as confirmed, each with
 an `authority.grandfathered` event naming who set it.
 
 ### Both impact bases
@@ -490,10 +490,10 @@ them ([§ Reproduction](#reproduction)):
 - **The mix as at the baseline**: how each registered volume the pair held
   a holder to was held, by allocation id (`kinds`), from the authorisation
   frozen with the baseline run when it was stored (migration
-  `230_run_allocation_authorisation`, beside 219's holder keys), not the
+  `226_run_allocation_authorisation`, beside 219's holder keys), not the
   allocation rows as they are when the board is built: re-recording a
   licence as a registration after the baseline ran doesn't move the mix;
-  a new baseline does. Runs stored before 230 took the authorisation of
+  a new baseline does. Runs stored before 226 took the authorisation of
   the rows living when it was applied (as 219 did for the holder keys).
 
 The report reads the board only when it was run on the baseline's engine
@@ -522,7 +522,7 @@ others' figures, [§ Applicants](#applicants)). On an issued pack's page an
 editor picks **Send to the authority…** (`POST …/packs/:packId/send`): the
 members the authority confirmed as acting for it (confirmed delegates
 holding editor or above, directly or through the team,
-`app_authority_members`, 233; a proposal gets nothing), all of them or those
+`app_authority_members`, 229; a proposal gets nothing), all of them or those
 picked, never the sender, each get an email (`pack_sent`) naming the pack,
 its version, code and the authority, with the editor's note. The email
 holds **no file and no download link**: it links the pack's page, where
@@ -680,7 +680,7 @@ make the authority's side its author.
 - **The registration check.** Someone at the host looks the signer up on
   the public SACNASP or ECSA register, and an owner, or an editor the
   authority confirmed as acting for it (`app_acts_for_authority`, 163,
-  233), records what they found on the
+  229), records what they found on the
   Project page's Registration checks panel
   (`POST /projects/:id/members/:userId/registration-checks`,
   `app_record_registration_check`; insert-only). A check is current for a
@@ -1199,8 +1199,8 @@ or revokes it. The link shows the public projection above
 ([§ Sharing and comments](#sharing-and-comments)), which names no unit, the
 applicant's own included.
 
-**The decision, its terms and what followed** (231_licence_terms,
-232_decision_events, issue #523 G3, G4). On the Application panel the
+**The decision, its terms and what followed** (227_licence_terms,
+228_decision_events, issue #523 G3, G4). On the Application panel the
 applicant reads the authority's decision, the licence's granted terms (as
 applied for, or the changes as licensed, naming only their own units; a
 neighbour's is an anonymous farm to them, as in their base) with its

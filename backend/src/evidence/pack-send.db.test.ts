@@ -4,7 +4,7 @@
 // authority). Every "cannot" has its positive control:
 //
 //   - who sends: an editor or owner (control), never a viewer or an applicant;
-//   - to whom: only members the authority confirmed as acting for it (233),
+//   - to whom: only members the authority confirmed as acting for it (229),
 //     editors and up, never the sender; an id that isn't one is one refusal;
 //   - what: only an issued pack, of this project;
 //   - the mail: the pack's page and the verify page, never a file or a

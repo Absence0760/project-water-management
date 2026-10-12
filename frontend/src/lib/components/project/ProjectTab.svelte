@@ -97,7 +97,7 @@
 	// fill in as their data arrives, after the browser's own jump, so wait for the heading, then
 	// scroll there and hold it while the page settles (as River & reserve does), focusing it.
 	let body: HTMLDivElement | undefined = $state();
-	// Bumped by Acts for the authority after each change, so the members list's authority lines follow it (233).
+	// Bumped by Acts for the authority after each change, so the members list's authority lines follow it (229).
 	let authorityVersion = $state(0);
 	let releaseAnchor = () => {};
 	let stopWaiting = () => {};
@@ -192,7 +192,7 @@
 			<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} {authorityVersion} />
 			<!-- The host's checks of signers' registrations (167_signers): editors read them, owners record them. -->
 			{#if canEdit}<RegistrationChecksPanel projectId={project.id} {isOwner} actsForAuthority={project.actsForAuthority ?? false} />{/if}
-			<!-- Who decides the project's licence applications (163_licensing_authority), and who acts for it: the authority's own call (233). -->
+			<!-- Who decides the project's licence applications (163_licensing_authority), and who acts for it: the authority's own call (229). -->
 			<AuthorityPanel {project} {canEdit} {onProjectChange} />
 			<AuthorityDelegatesPanel projectId={project.id} {currentUserId} {onProjectChange} {project} onChange={() => authorityVersion++} />
 			<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />

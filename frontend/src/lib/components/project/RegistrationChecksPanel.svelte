@@ -10,7 +10,7 @@
 	// project requires it (the owner's switch, on by default), issuing a pack
 	// waits until each specialist signer has a current check (a year, and the
 	// latest check says registered). Editors read the list; owners, and the
-	// editors the authority confirmed as acting for it (163, 233), record.
+	// editors the authority confirmed as acting for it (163, 229), record.
 	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { onMount, tick } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -50,7 +50,7 @@
 	const register = $derived(bodyInfo(form.registrationBody));
 	const name = (userId: string | null) => members.find((m) => m.userId === userId)?.displayName ?? 'A former member';
 	const signers = $derived(members.filter((m) => m.role !== 'farmer'));
-	/** An owner, or a confirmed delegate of the responsible authority (project.actsForAuthority, 233: a team editor too), records a check. */
+	/** An owner, or a confirmed delegate of the responsible authority (project.actsForAuthority, 229: a team editor too), records a check. */
 	const canRecord = $derived(isOwner || actsForAuthority);
 
 	async function load() {

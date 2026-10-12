@@ -148,11 +148,11 @@ interface DecisionRecord {
 	decisionDate: string;
 	reference: string;
 	reasonsReceived: boolean;
-	/** With licence_issued (231): the granted terms' ops (null: as applied for, which the guard writes out) and conditions. */
+	/** With licence_issued (227): the granted terms' ops (null: as applied for, which the guard writes out) and conditions. */
 	granted: { terms: CheckedTerms | null; conditions: string } | null;
 }
 
-/** Granted terms (231) or a variation's (232) as stored: the ops, their hash and their names. */
+/** Granted terms (227) or a variation's (228) as stored: the ops, their hash and their names. */
 interface CheckedTerms {
 	ops: ScenarioOp[];
 	opsSha256: string;
@@ -160,8 +160,8 @@ interface CheckedTerms {
 }
 
 /**
- * A licence's granted terms, checked as the scenario's own ops are (231,
- * 232): every op applies to its base run, an application's under its
+ * A licence's granted terms, checked as the scenario's own ops are (227,
+ * 228): every op applies to its base run, an application's under its
  * applicant's mask (so terms can't name a farm the applicant can't see, and
  * the applicant reads them in their own namespace), else 422 with the
  * assessors' words; the names stored as op_names are (namesToStore).
@@ -434,7 +434,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	.post('/:id/scenarios/:sid/runs', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = ScenarioRunBody.parse(await readJson(c, { optional: true }));
-		// `terms: 'licensed'`: the terms of its licence in force (231/232), 409 without one (runOps).
+		// `terms: 'licensed'`: the terms of its licence in force (227/228), 409 without one (runOps).
 		// A team scenario: an editor runs it. An application: whoever reads it
 		// as its owner or a shared member, and the assessors; never a viewer.
 		// Checked when the run is read and again when it is stored (runScenario).
@@ -537,7 +537,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		});
 	})
 	// Record the responsible authority's decision (163_licensing_authority): an
-	// editor the authority confirmed as acting for it (233), who didn't make the
+	// editor the authority confirmed as acting for it (229), who didn't make the
 	// application. The app records the decision; it never makes one.
 	.post('/:id/scenarios/:sid/decide', async (c) => {
 		const { id, sid } = c.req.param();
@@ -559,7 +559,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				throw runUnverified(
 					`this scenario can't be decided: ${unverified.length} of its runs (unverifiedRunIds) weren't stored by the model run itself (a server stamp missing or no longer matching its results); delete them and run it again`
 				);
-			// A licence issued records its granted terms (231): changed ops checked as the scenario's own; none, as applied for.
+			// A licence issued records its granted terms (227): changed ops checked as the scenario's own; none, as applied for.
 			const issued = body.outcome === 'licence_issued';
 			const terms = issued && body.granted?.ops ? await checkTerms(db, id, s, role, body.granted.ops) : null;
 			await move(db, id, s, 'decided', {
@@ -590,7 +590,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			return c.json(await withCheck(db, id, decided, role));
 		});
 	})
-	// Record what followed the decision (232_decision_events): an appeal lodged
+	// Record what followed the decision (228_decision_events): an appeal lodged
 	// with the Water Tribunal or a court, then upheld, set aside or varied (new
 	// granted terms, checked as the decision's are). Append-only: the decision
 	// never changes. The members who record the decision record these.

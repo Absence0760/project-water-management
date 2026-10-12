@@ -256,7 +256,7 @@ async function loadPublications(db: Db, projectId: string, baseline: RunRow): Pr
 /**
  * Which other scenarios count on the baseline, and with which ops' hash: a
  * submitted one with its own ops, a decided one only while its licence is in
- * force (app_scenario_licence: issued and not set aside, 231/232), with the
+ * force (app_scenario_licence: issued and not set aside, 227/228), with the
  * licence's terms (the granted ones, or the newest variation's), never the
  * ops applied for. `lic` is the scenario's app_scenario_licence row.
  */
@@ -415,7 +415,7 @@ async function loadCombined(
 	if (stale) return { ...none, others: listed, unavailable: stale };
 
 	// No assessment of exactly these: check that they combine at all, so a conflict is named now.
-	// Each with the ops it counts with: a licence in force's terms (231/232), else its own.
+	// Each with the ops it counts with: a licence in force's terms (227/228), else its own.
 	const { rows: full } = await db.query<{ id: string; name: string; origin: ScenarioOrigin; ops: ScenarioOp[]; ownedNodeIds: string[] }>(
 		`SELECT s.id, s.name, s.origin, CASE WHEN s.status = 'decided' THEN lic.l->'terms'->'ops' ELSE s.ops END AS ops, s.owned_node_ids::text[] AS "ownedNodeIds"
 		 FROM scenario s ${LICENCE_JOIN_SQL} WHERE s.project_id = $1 AND s.id = ANY($2::uuid[])`,

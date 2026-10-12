@@ -3,7 +3,7 @@
 // position, pre-counsel research, 2026-10-01). A signer types their SACNASP
 // or ECSA registration in; the project's host checks it against the public
 // register and an owner, or an editor the authority confirmed as acting for
-// it (163_licensing_authority, 233_authority_delegates), records that check in the app
+// it (163_licensing_authority, 229_authority_delegates), records that check in the app
 // (POST /projects/:id/members/:userId/registration-checks,
 // app_record_registration_check), never the operator. Issuing a pack binds
 // each sign-off to its signer's current check in the project
@@ -127,7 +127,7 @@ export const registrationCheckRoutes = new Hono<AuthEnv>()
 		const checkedAt = new Date(body.checkedAt);
 		if (Number.isNaN(checkedAt.getTime()) || checkedAt.getTime() > Date.now() + 60_000) throw new ApiError(400, 'checkedAt must be a date that has passed');
 		return withUser(c.get('userId'), async (db) => {
-			// An owner, or an editor the authority confirmed as acting for it (163, 233); either needs two-step
+			// An owner, or an editor the authority confirmed as acting for it (163, 229); either needs two-step
 			// sign-in. requireRole steps up only when the route's minimum is owner, and this one's is editor, so the
 			// owner's step-up is asked for here too (before, an owner recorded a check on a password alone).
 			const role = await requireRole(db, id, 'editor');

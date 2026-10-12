@@ -1,4 +1,4 @@
-// The authority controls its own delegates (233_authority_delegates, issue
+// The authority controls its own delegates (229_authority_delegates, issue
 // #523 G5; docs/security.md § Authorization, docs/api.md § Acts for the
 // authority). A team project, so a team editor can be one: the owner (the
 // host) proposes; a proposal grants nothing; only a member already acting for
@@ -211,7 +211,7 @@ const MIGRATIONS = new URL('../../migrations/', import.meta.url);
 const MIGRATION = readFileSync(new URL(readdirSync(MIGRATIONS).find((f) => f.endsWith('_authority_delegates.sql'))!, MIGRATIONS), 'utf8');
 const CARRY_OVER = MIGRATION.slice(MIGRATION.indexOf('-- 5. Carry the 163 flags over'));
 
-describe('grandfathering the flags an owner set before 233', () => {
+describe('grandfathering the flags an owner set before 229', () => {
 	it('carries an editor’s flag over as confirmed, with a History event whose actor is the owner who ticked it; a viewer’s granted nothing and stays behind', async () => {
 		const [owner, editor, viewerU] = (await Promise.all(['GfOwner', 'GfEditor', 'GfViewer'].map((n) => signUp(n)))) as [User, User, User];
 		const id = (await owner.call('POST', '/projects', { name: 'Grandfathered' })).body.project.id as string;
@@ -222,7 +222,7 @@ describe('grandfathering the flags an owner set before 233', () => {
 		await db.connect();
 		try {
 			await db.query('BEGIN');
-			// As the owner ticked it before 233 (163's project_member_authority still asks for an owner).
+			// As the owner ticked it before 229 (163's project_member_authority still asks for an owner).
 			await db.query(`SELECT set_config('app.current_user_id', $1, true)`, [owner.id]);
 			await db.query('UPDATE project_member SET acts_for_authority = true WHERE project_id = $1 AND user_id = ANY($2)', [id, [editor.id, viewerU.id]]);
 			await db.query(
@@ -235,7 +235,7 @@ describe('grandfathering the flags an owner set before 233', () => {
 			expect(rows[0]).toMatchObject({ user_id: editor.id, proposed_by: owner.id, confirmed_via: 'grandfathered' });
 			expect(rows[0].confirmed_at).not.toBeNull();
 			const { rows: events } = await db.query(`SELECT actor_user_id, actor_label, subject FROM audit_event WHERE project_id = $1 AND kind = 'authority.grandfathered'`, [id]);
-			expect(events).toEqual([{ actor_user_id: owner.id, actor_label: 'GfOwner', subject: { userId: editor.id, displayName: 'GfEditor', via: 'grandfathered', reference: 'Marked by an owner before 233' } }]);
+			expect(events).toEqual([{ actor_user_id: owner.id, actor_label: 'GfOwner', subject: { userId: editor.id, displayName: 'GfEditor', via: 'grandfathered', reference: 'Marked by an owner before 229' } }]);
 			// And it counts: the editor acts for the authority.
 			await db.query(`SELECT set_config('app.current_user_id', $1, true)`, [editor.id]);
 			expect((await db.query('SELECT app_acts_for_authority($1) AS ok', [id])).rows[0].ok).toBe(true);

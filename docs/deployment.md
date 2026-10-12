@@ -2196,7 +2196,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
     `team.records_disposal_confirmed_on` (operator agreement 3A.2). Record
     the confirmation, the date and what was deleted in the operator log.
 17. **The responsible authority confirms who acts for it** (operator;
-    233_authority_delegates, issue #523 G5; [security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Who acts for a project's responsible
+    229_authority_delegates, issue #523 G5; [security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Who acts for a project's responsible
     authority is the authority's call, not the host's: in the app an owner
     only proposes someone, and only a member already acting for the
     authority confirms them. A project with nobody confirmed yet (a new

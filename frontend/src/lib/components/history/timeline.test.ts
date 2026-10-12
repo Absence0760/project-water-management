@@ -71,7 +71,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Weir', outcome: 'not_considered' }))).toBe(
 			'Recorded the responsible authority’s decision on the application “Weir”: not considered (use already authorised)'
 		);
-		// 232_decision_events: what followed a decision, in the forum's words.
+		// 228_decision_events: what followed a decision, in the forum's words.
 		expect(eventLine(ev('scenario.appeal_recorded', { scenarioId: 's', name: 'Weir', kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-02' }))).toBe(
 			'Recorded an appeal lodged with the Water Tribunal against the decision on “Weir”'
 		);
@@ -122,7 +122,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('registration.requirement', { required: false }))).toBe('Issuing an evidence pack no longer waits for a registration check');
 		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: true }))).toBe('Marked Ben as acting for the responsible authority');
 		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: false }))).toBe('Ben no longer acts for the responsible authority');
-		// 233 (issue #523 G5): the authority confirms its own delegates; the database writes each event.
+		// 229 (issue #523 G5): the authority confirms its own delegates; the database writes each event.
 		expect(eventLine(ev('authority.proposed', { userId: 'u', displayName: 'Ben' }))).toBe(
 			'Proposed Ben to act for the responsible authority (it grants nothing until the authority confirms it)'
 		);

@@ -18,7 +18,7 @@
 // the board records how to re-derive them and what they give (`reproduction`,
 // engine evidence/authorisedPair.ts, issue #523 G2): both results digests, the
 // outcome settings, and how each registered volume was held as at the
-// baseline run (230), which a pack's reproduction bundle re-runs and checks.
+// baseline run (226), which a pack's reproduction bundle re-runs and checks.
 //
 //  POST /projects/:id/runs/:runId/authorised-impact   editor
 import {
@@ -118,7 +118,7 @@ export async function buildAuthorisedImpact(db: Db, projectId: string, runId: st
 	const outcomes = resolveOutcomes(settings[0]?.settings);
 	const board = authorisedPairBoard(full, background, application, { yearClassMethod: outcomes.yearClassMethod, siteNodeId: outcomes.siteNodeId });
 	// How the volumes it held holders to are held (licence, verified ELU, registration, …), as at the baseline run: the
-	// authorisation frozen with it (230, #523 G2), not the allocation rows as they are now.
+	// authorisation frozen with it (226, #523 G2), not the allocation rows as they are now.
 	const allocations = takes(full);
 	// Who held each when the baseline ran (219's keys frozen with the run, counted as app_allocation_volumes counts
 	// holders: the name, normalised; else another row's on the same unit; else the unit; else the row; a row no living

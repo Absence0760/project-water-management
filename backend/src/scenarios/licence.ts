@@ -1,5 +1,5 @@
-// A licence's terms and what followed its decision (231_licence_terms,
-// 232_decision_events, issue #523 G3/G4; docs/scenarios.md § Applications):
+// A licence's terms and what followed its decision (227_licence_terms,
+// 228_decision_events, issue #523 G3/G4; docs/scenarios.md § Applications):
 // the shapes the API returns and which ops a scenario counts with among the
 // other applications on its baseline. Whether a licence is in force is the
 // database's rule (app_scenario_licence), read into ScenarioRow.licence;
@@ -8,7 +8,7 @@ import type { ScenarioOp } from '@water-management/engine';
 import type { ScenarioRow } from './execute.js';
 import type { OpName } from './names.js';
 
-/** A licence's granted terms (231): the "as licensed" ops, their hash and names, and the conditions in words. */
+/** A licence's granted terms (227): the "as licensed" ops, their hash and names, and the conditions in words. */
 export interface LicenceTerms {
 	ops: ScenarioOp[];
 	opsSha256: string;
@@ -23,7 +23,7 @@ export interface LicenceTerms {
 export type DecisionEventKind = 'lodged' | 'upheld' | 'set_aside' | 'varied';
 export type DecisionEventForum = 'water_tribunal' | 'court';
 
-/** One event after a decision (232): an appeal lodged, or its outcome. `terms` only on `varied`. */
+/** One event after a decision (228): an appeal lodged, or its outcome. `terms` only on `varied`. */
 export interface DecisionEvent {
 	id: string;
 	position: number;

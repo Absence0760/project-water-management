@@ -1,4 +1,4 @@
--- 231_licence_terms — a licence issued records its granted terms (issue #523
+-- 227_licence_terms — a licence issued records its granted terms (issue #523
 -- G3; the licensing assessor's review, § Outcome words (D14); docs/roadmap/
 -- step-3-licensing.md § 11 D14; docs/data-model.md § Applications).
 --
@@ -19,13 +19,13 @@
 --     change, the guard writes the applied ops out as the granted ones, so
 --     "granted as applied for" is a recorded fact (granted_ops_sha256 =
 --     ops_sha256), never a missing value.
---  2. Existing licence_issued decisions (before 231) are given their applied
+--  2. Existing licence_issued decisions (before 227) are given their applied
 --     ops as granted terms, which is what they counted as until now, with the
---     conditions "Not recorded (before 231): counted as applied for.", as 163
+--     conditions "Not recorded (before 227): counted as applied for.", as 163
 --     marked its decisions' authority.
 --  3. Where an issued licence counts. app_scenario_licence(scenario) says, as
 --     its caller reads it, whether a decided scenario's licence is in force and
---     on which terms; 232 adds the appeal events that change that. An
+--     on which terms; 228 adds the appeal events that change that. An
 --     assessment's member (assessment_member_guard) copies those terms in
 --     place of the applied ops; the evidence report's other applications and
 --     its combined row (backend evidence/report.ts) read the same function.
@@ -47,7 +47,7 @@ ALTER TABLE scenario
 -- The guard refuses any change to a decided scenario's decision: off while the old licences get their terms.
 ALTER TABLE scenario DISABLE TRIGGER scenario_guard;
 UPDATE scenario SET granted_ops = ops, granted_ops_sha256 = ops_sha256, granted_op_names = op_names,
-	granted_conditions = 'Not recorded (before 231): counted as applied for.'
+	granted_conditions = 'Not recorded (before 227): counted as applied for.'
 	WHERE status = 'decided' AND outcome = 'licence_issued';
 ALTER TABLE scenario ENABLE TRIGGER scenario_guard;
 
@@ -60,10 +60,10 @@ ALTER TABLE scenario
 	);
 
 COMMENT ON COLUMN scenario.granted_ops IS
-	'The licence''s granted terms as ops (231): the "as licensed" revision of the application''s ops, set exactly when the outcome is licence_issued, once, with the decision; the applied ops written out when it was issued as applied for. Where the licence counts in cumulative impact, these count, not ops (app_scenario_licence; an appeal event varied replaces them, 232).';
-COMMENT ON COLUMN scenario.granted_ops_sha256 IS 'SHA-256 of granted_ops as RFC 8785 canonical JSON (231), as ops_sha256; equal to ops_sha256 when issued as applied for. A run of the licensed terms records it as its opsSha256.';
-COMMENT ON COLUMN scenario.granted_op_names IS 'Display names for granted_ops (231), as op_names: an application keeps only its own nodes'' names.';
-COMMENT ON COLUMN scenario.granted_conditions IS 'The licence''s conditions in words, as the authority''s licence gives them (231); '''' = none recorded. "Not recorded (before 231): …" on a licence issued before 231.';
+	'The licence''s granted terms as ops (227): the "as licensed" revision of the application''s ops, set exactly when the outcome is licence_issued, once, with the decision; the applied ops written out when it was issued as applied for. Where the licence counts in cumulative impact, these count, not ops (app_scenario_licence; an appeal event varied replaces them, 228).';
+COMMENT ON COLUMN scenario.granted_ops_sha256 IS 'SHA-256 of granted_ops as RFC 8785 canonical JSON (227), as ops_sha256; equal to ops_sha256 when issued as applied for. A run of the licensed terms records it as its opsSha256.';
+COMMENT ON COLUMN scenario.granted_op_names IS 'Display names for granted_ops (227), as op_names: an application keeps only its own nodes'' names.';
+COMMENT ON COLUMN scenario.granted_conditions IS 'The licence''s conditions in words, as the authority''s licence gives them (227); '''' = none recorded. "Not recorded (before 227): …" on a licence issued before 227.';
 
 -- scenario_guard, from 188 (163 + from_scenario): the granted terms (above).
 CREATE OR REPLACE FUNCTION scenario_guard() RETURNS trigger
@@ -147,7 +147,7 @@ CREATE OR REPLACE FUNCTION scenario_guard() RETURNS trigger
 					RAISE EXCEPTION 'a decision needs the authority, the date of its decision and whether written reasons were received' USING ERRCODE = 'check_violation';
 				END IF;
 			END IF;
-			-- 231: a licence issued records its granted terms; none given, it is granted as applied for, written out.
+			-- 227: a licence issued records its granted terms; none given, it is granted as applied for, written out.
 			IF deciding THEN
 				IF NEW.outcome IS NOT DISTINCT FROM 'licence_issued' THEN
 					IF NEW.granted_ops IS NULL THEN
@@ -220,7 +220,7 @@ CREATE OR REPLACE FUNCTION scenario_guard() RETURNS trigger
 -- else { inForce, from: 'decision', eventId: null, appealPending: false,
 -- terms: { ops, opsSha256, opNames, conditions, asApplied } | null }. A
 -- licence issued is in force on its granted terms; any other outcome isn't.
--- 232 adds the appeal events (from: 'event'). The one rule every caller reads.
+-- 228 adds the appeal events (from: 'event'). The one rule every caller reads.
 CREATE FUNCTION app_scenario_licence(p_scenario uuid) RETURNS jsonb
 	LANGUAGE sql STABLE SET search_path = public
 	AS $$
@@ -239,7 +239,7 @@ REVOKE ALL ON FUNCTION app_scenario_licence(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_scenario_licence(uuid) TO water_app;
 
 -- assessment_member_guard, from 145: a member whose licence is in force is
--- assessed on the licence's terms (231), not on the ops applied for.
+-- assessed on the licence's terms (227), not on the ops applied for.
 CREATE OR REPLACE FUNCTION assessment_member_guard() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
 	AS $$

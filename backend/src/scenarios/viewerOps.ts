@@ -62,7 +62,7 @@ export function checkWithout<C extends { applied: { index: number }[]; problems:
  */
 export function viewerScenario<S extends ScenarioRow>(s: S): { scenario: S & { withheldOps?: number }; drop: Set<number> } {
 	const own = s.origin === 'applicant' ? s.ownedNodeIds : [];
-	// A licence's terms (231) and a variation's (232) carry volumes too: the same ops left out of each.
+	// A licence's terms (227) and a variation's (228) carry volumes too: the same ops left out of each.
 	const terms = (t: LicenceTerms | null): LicenceTerms | null => {
 		if (!t) return t;
 		const gone = withheldAllocationOps(t.ops, own);

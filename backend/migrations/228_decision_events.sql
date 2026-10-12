@@ -1,17 +1,17 @@
--- 232_decision_events — what follows a recorded decision: an appeal lodged,
+-- 228_decision_events — what follows a recorded decision: an appeal lodged,
 -- then upheld, set aside or varied (issue #523 G4; the licensing assessor's
 -- review, § Outcome words (D14); docs/roadmap/step-3-licensing.md § 11 D14;
 -- docs/data-model.md § Applications).
 --
 -- The Water Tribunal (NWA s148, s149) or a court can set an authority's
 -- decision aside or vary it. A decision stays immutable (scenario_guard, 163,
--- 231); what happens after it is recorded beside it, one append-only row per
+-- 227); what happens after it is recorded beside it, one append-only row per
 -- event:
 --
 --  1. decision_event: the scenario, its place in the sequence (position, from
 --     1), the kind (lodged, upheld, set_aside, varied), the forum
 --     (water_tribunal or court), the date on the lodging or the order, a
---     reference and a note; for `varied`, the new granted terms in 231's shape
+--     reference and a note; for `varied`, the new granted terms in 227's shape
 --     (ops, ops_sha256, op_names, conditions); who recorded it and when. Never
 --     changed or deleted by water_app (no UPDATE or DELETE grant or policy);
 --     goes with its scenario (which a decision keeps) or its project.
@@ -23,7 +23,7 @@
 --     the responsible authority (app_acts_for_authority, the helper 163 made
 --     and the authority's delegates decide), never by an application's owner,
 --     and only on a decided scenario with an outcome.
---  3. What counts (app_scenario_licence, from 231): the newest set aside or
+--  3. What counts (app_scenario_licence, from 227): the newest set aside or
 --     varied decides. Varied: the licence is in force on the event's terms
 --     (also after a refusal: the forum substituted a licence). Set aside: it
 --     isn't in force (a court that reinstates a licence records varied, with
@@ -49,7 +49,7 @@ CREATE TABLE decision_event (
 	event_date   date NOT NULL,
 	reference    text NOT NULL DEFAULT '' CHECK (char_length(reference) <= 200),
 	note         text NOT NULL DEFAULT '' CHECK (char_length(note) <= 4000),
-	-- A variation's granted terms, in 231's shape (scenario.granted_*).
+	-- A variation's granted terms, in 227's shape (scenario.granted_*).
 	ops          jsonb CHECK (ops IS NULL OR (jsonb_typeof(ops) = 'array' AND jsonb_array_length(ops) <= 500 AND octet_length(ops::text) <= 1048576)),
 	ops_sha256   text CHECK (ops_sha256 IS NULL OR ops_sha256 ~ '^[0-9a-f]{64}$'),
 	op_names     jsonb CHECK (op_names IS NULL OR (jsonb_typeof(op_names) = 'array' AND jsonb_array_length(op_names) <= 2000 AND octet_length(op_names::text) <= 1048576)),
@@ -71,9 +71,9 @@ CREATE TRIGGER decision_event_same_project BEFORE INSERT OR UPDATE ON decision_e
 	FOR EACH ROW EXECUTE FUNCTION assert_same_project('scenario_id');
 
 COMMENT ON TABLE decision_event IS
-	'What followed a recorded decision (232, issue #523 G4): an appeal lodged (Water Tribunal, NWA s148, or a court), then upheld, set aside or varied. Append-only, in order (position); the decision itself never changes. app_scenario_licence reads them: the newest set aside or varied decides whether the licence counts in cumulative impact, and on which terms.';
+	'What followed a recorded decision (228, issue #523 G4): an appeal lodged (Water Tribunal, NWA s148, or a court), then upheld, set aside or varied. Append-only, in order (position); the decision itself never changes. app_scenario_licence reads them: the newest set aside or varied decides whether the licence counts in cumulative impact, and on which terms.';
 COMMENT ON COLUMN decision_event.ops IS
-	'A variation''s granted terms as ops (232), in 231''s shape (scenario.granted_ops): set exactly when kind = varied. They count in cumulative impact from then on, in place of the decision''s.';
+	'A variation''s granted terms as ops (228), in 227''s shape (scenario.granted_ops): set exactly when kind = varied. They count in cumulative impact from then on, in place of the decision''s.';
 COMMENT ON COLUMN decision_event.recorded_by IS 'The member acting for the responsible authority who recorded it (NULL once that account is gone).';
 
 -- The sequence and who records it: stamped here, so no caller chooses its place, author or time.
@@ -138,7 +138,7 @@ CREATE POLICY decision_event_insert ON decision_event FOR INSERT
 -- Append-only: no UPDATE or DELETE grant or policy.
 GRANT SELECT, INSERT ON decision_event TO water_app;
 
--- app_scenario_licence, from 231: the newest set aside or varied decides; an
+-- app_scenario_licence, from 227: the newest set aside or varied decides; an
 -- open appeal (the newest event lodged) changes nothing but appealPending.
 CREATE OR REPLACE FUNCTION app_scenario_licence(p_scenario uuid) RETURNS jsonb
 	LANGUAGE sql STABLE SET search_path = public

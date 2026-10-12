@@ -251,7 +251,7 @@ export interface Project extends ProjectSummary {
 	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
-	/** The caller acts for the responsible authority (163, 233): a confirmed delegate holding editor or above, so they record its decisions and endorse a baseline. */
+	/** The caller acts for the responsible authority (163, 229): a confirmed delegate holding editor or above, so they record its decisions and endorse a baseline. */
 	actsForAuthority?: boolean;
 	/** The project's own two-step sign-in setting (204_mfa_opt_in): its owners' actions need a code. Absent from an older API. */
 	requireMfa?: boolean;
@@ -339,16 +339,16 @@ export interface Member {
 	party: string | null;
 	/** The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party. */
 	specialist: boolean;
-	/** They act for the responsible authority: a confirmed delegate holding editor or above (233). Absent from an older API. */
+	/** They act for the responsible authority: a confirmed delegate holding editor or above (229). Absent from an older API. */
 	actsForAuthority?: boolean;
-	/** Their delegation, if any (233_authority_delegates): proposed (grants nothing yet) or confirmed. Absent from an older API. */
+	/** Their delegation, if any (229_authority_delegates): proposed (grants nothing yet) or confirmed. Absent from an older API. */
 	authority?: AuthorityDelegateStatus | null;
 }
 
-/** A delegation's state (233_authority_delegates): a proposal grants nothing until the authority confirms it. */
+/** A delegation's state (229_authority_delegates): a proposal grants nothing until the authority confirms it. */
 export type AuthorityDelegateStatus = 'proposed' | 'confirmed';
 
-/** Someone proposed or confirmed to act for the responsible authority (GET /projects/:id/authority-delegates, 233). */
+/** Someone proposed or confirmed to act for the responsible authority (GET /projects/:id/authority-delegates, 229). */
 export interface AuthorityDelegate {
 	userId: string;
 	displayName: string;
@@ -359,7 +359,7 @@ export interface AuthorityDelegate {
 	proposedAt: string;
 	confirmedBy: { userId: string; displayName: string } | null;
 	confirmedAt: string | null;
-	/** member: by someone acting for the authority; operator: on the authority's letter; grandfathered: an owner's flag from before 233. */
+	/** member: by someone acting for the authority; operator: on the authority's letter; grandfathered: an owner's flag from before 229. */
 	confirmedVia: 'member' | 'operator' | 'grandfathered' | null;
 	/** The operator's reference (the authority's letter); '' otherwise. */
 	reference: string;
@@ -1143,11 +1143,11 @@ export interface Scenario {
 	decisionReference?: string;
 	reasonsReceived?: boolean | null;
 	/**
-	 * The licence's granted terms (231, issue #523 G3): set exactly when the
+	 * The licence's granted terms (227, issue #523 G3): set exactly when the
 	 * outcome is licence_issued. `asApplied`: the changes applied for, written out.
 	 */
 	grantedTerms?: LicenceTerms | null;
-	/** What followed the decision (232, #523 G4): appeals lodged and their outcomes, in order. */
+	/** What followed the decision (228, #523 G4): appeals lodged and their outcomes, in order. */
 	decisionEvents?: DecisionEvent[];
 	/** Whether its licence counts now, and from what (the decision, or the newest set aside or varied event); null until decided with an outcome. */
 	licence?: LicenceStanding | null;
@@ -1175,7 +1175,7 @@ export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
 	application_rejected: 'Application rejected (formal requirements)',
 	not_considered: 'Not considered: use already authorised'
 };
-/** A licence's granted terms (231): the changes as licensed, their hash and names, and its conditions in words. */
+/** A licence's granted terms (227): the changes as licensed, their hash and names, and its conditions in words. */
 export interface LicenceTerms {
 	ops: ScenarioOp[];
 	opsSha256: string;
@@ -1198,7 +1198,7 @@ export const DECISION_EVENT_LABEL: Record<DecisionEventKind, string> = {
 };
 export const DECISION_EVENT_FORUM_LABEL: Record<DecisionEventForum, string> = { water_tribunal: 'Water Tribunal', court: 'Court' };
 
-/** One event after a decision (232): an appeal lodged, or its outcome; `terms` only on `varied`. */
+/** One event after a decision (228): an appeal lodged, or its outcome; `terms` only on `varied`. */
 export interface DecisionEvent {
 	id: string;
 	position: number;
@@ -1212,7 +1212,7 @@ export interface DecisionEvent {
 	recordedAt: string;
 }
 
-/** Whether a decided scenario's licence counts in cumulative impact now (app_scenario_licence, 232). */
+/** Whether a decided scenario's licence counts in cumulative impact now (app_scenario_licence, 228). */
 export interface LicenceStanding {
 	inForce: boolean;
 	from: 'decision' | 'event';
@@ -1221,7 +1221,7 @@ export interface LicenceStanding {
 	appealPending: boolean;
 }
 
-/** POST …/appeals: "Record what followed the decision" (232). `terms` with `varied` only. */
+/** POST …/appeals: "Record what followed the decision" (228). `terms` with `varied` only. */
 export interface AppealRequest {
 	kind: DecisionEventKind;
 	forum: DecisionEventForum;
@@ -1242,7 +1242,7 @@ export interface DecideRequest {
 	reference?: string;
 	reasonsReceived: boolean;
 	note?: string;
-	/** With licence_issued only (231): the granted terms; `ops` left out, granted as applied for. */
+	/** With licence_issued only (227): the granted terms; `ops` left out, granted as applied for. */
 	granted?: { ops?: ScenarioOp[]; conditions?: string };
 }
 

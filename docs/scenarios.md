@@ -976,7 +976,7 @@ effect on the resource and the Reserve). Build plan:
 [roadmap WP-3.11](./roadmap/step-3-licensing.md#wp-311-cumulative-impact-assessment),
 issue #287.
 
-**An issued licence counts on its granted terms** (231/232, issue #523 G3,
+**An issued licence counts on its granted terms** (227/228, issue #523 G3,
 G4). A decided application whose licence is in force (`app_scenario_licence`)
 joins an assessment with the licence's terms, the granted ones or the newest
 variation's, in place of the changes applied for: `assessment_member_guard`
@@ -1481,7 +1481,7 @@ scenario is `'team'`, and behaves exactly as above).
   app **records the responsible authority's decision; it never makes one**
   (163_licensing_authority; provisional position, pre-counsel research,
   2026-10-01, D14 in [step-3-licensing.md § 11](./roadmap/step-3-licensing.md)):
-  only an assessor the authority confirmed as acting for it (233, below)
+  only an assessor the authority confirmed as acting for it (229, below)
   records it, with **Record the authority's decision** (`…/decide
   { outcome, authority?, decisionDate, reference?, reasonsReceived, note }`).
   The outcome is in the National Water Act's and GN R267's words:
@@ -1500,7 +1500,7 @@ scenario is `'team'`, and behaves exactly as above).
   date. A team scenario an editor only marks decided (no outcome) is the
   team's own what-if and records none of this. The panel says any appeal runs from the authority's decision letter
   (s148, s41(6)) and works out no deadline.
-  **Granted terms** (231_licence_terms, issue #523 G3): a licence issued
+  **Granted terms** (227_licence_terms, issue #523 G3): a licence issued
   records the terms it was granted on, `…/decide { …, granted?: { ops?,
   conditions? } }`: the "as licensed" revision of the changes (a smaller
   volume, an added release rule; checked against the base run as the
@@ -1511,7 +1511,7 @@ scenario is `'team'`, and behaves exactly as above).
   (§ Cumulative impact: an assessment's members; the evidence report's § 4
   and page 1's combined row), the granted terms count, never the changes
   applied for. A run of them is `…/runs { terms: 'licensed' }`.
-  **What followed the decision** (232_decision_events, #523 G4): a member
+  **What followed the decision** (228_decision_events, #523 G4): a member
   acting for the authority records, append-only, an appeal lodged (the Water
   Tribunal, s148, or a court) and then its outcome in that forum, upheld,
   set aside or varied (`…/appeals`); the decision itself never changes.
@@ -1526,7 +1526,7 @@ scenario is `'team'`, and behaves exactly as above).
 - **Who decides: the responsible authority** (163, D1 in step-3 § 11). The
   project names it in `settings.responsibleAuthority { name, kind: 'dws' |
   'cma', office }` (the Project page's *Responsible authority* card; no model
-  input). Who acts for it is the authority's call (233_authority_delegates,
+  input). Who acts for it is the authority's call (229_authority_delegates,
   issue #523 G5): an owner proposes an editor or owner on the Project page's
   *Acts for the authority* card, and a member already acting for it confirms
   (the operator confirms a project's first, on the authority's letter); a

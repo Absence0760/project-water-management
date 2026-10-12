@@ -55,7 +55,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 		}
 	}),
 	'PUT /projects/:id/registration-check-required': () => ({ body: { required: true } }),
-	// Who acts for the authority (233): the ladder's editor, proposed by an owner (the editor's own call is refused by the route's rules).
+	// Who acts for the authority (229): the ladder's editor, proposed by an owner (the editor's own call is refused by the route's rules).
 	'POST /projects/:id/authority-delegates': (c) => ({ body: { userId: c.editor.id } }),
 	'POST /projects/:id/authority-delegates/:userId/confirm': (c) => ({ params: { userId: c.editor.id } }),
 	'DELETE /projects/:id/authority-delegates/:userId': (c) => ({ params: { userId: c.editor.id } }),

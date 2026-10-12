@@ -271,7 +271,7 @@ export async function plantCompleteOutlook(
 }
 
 /**
- * Make a member act for the project's responsible authority (233_authority_delegates): the owner proposes them
+ * Make a member act for the project's responsible authority (229_authority_delegates): the owner proposes them
  * (POST …/authority-delegates, as the Project page sends it), then the operator confirms the proposal on the
  * authority's letter (authority_confirm_by_operator, as the schema owner), the bootstrap when nobody acts for it yet.
  * Only a confirmed editor or owner records a decision (POST …/decide) or endorses a baseline. `owner` is any member
@@ -283,7 +283,7 @@ export async function actForAuthority(owner: { call: Call }, projectId: string, 
 	if (res.body.delegate.status !== 'confirmed') await confirmAsOperator(projectId, userId);
 }
 
-/** The operator's confirmation of a delegate (authority_confirm_by_operator, 233), as the schema owner. */
+/** The operator's confirmation of a delegate (authority_confirm_by_operator, 229), as the schema owner. */
 export async function confirmAsOperator(projectId: string, userId: string, reference = 'Test authority letter 1'): Promise<void> {
 	await asOwner('SELECT authority_confirm_by_operator($1, $2, $3)', [projectId, userId, reference]);
 }

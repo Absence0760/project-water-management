@@ -77,13 +77,13 @@ export function applicantOpNames<T extends { opNames: OpName[]; ownedNodeIds: st
 	const terms = <X extends { opNames: OpName[] } | null>(t: X): X => (t ? { ...t, opNames: t.opNames.filter((x) => own.has(x.id)) } : t);
 	return {
 		...ownNames(s),
-		// The licence's terms (231) and a variation's (232) name nodes the same way: only the application's own.
+		// The licence's terms (227) and a variation's (228) name nodes the same way: only the application's own.
 		...(s.grantedTerms !== undefined ? { grantedTerms: terms(s.grantedTerms) } : {}),
 		...(s.decisionEvents ? { decisionEvents: s.decisionEvents.map((e) => ({ ...e, terms: terms(e.terms) })) } : {})
 	};
 }
 
-/** What applicantOpNames filters besides op_names: a licence's terms and its variations' (231, 232). */
+/** What applicantOpNames filters besides op_names: a licence's terms and its variations' (227, 228). */
 interface WithTerms {
 	grantedTerms: { opNames: OpName[] } | null;
 	decisionEvents: { terms: { opNames: OpName[] } | null }[];

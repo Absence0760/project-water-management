@@ -1,10 +1,10 @@
 <script lang="ts">
 	// The terms a licence is granted on, as the authority's licence gives them
-	// (231_licence_terms, issue #523 G3; docs/ui.md § Applications): as applied
+	// (227_licence_terms, issue #523 G3; docs/ui.md § Applications): as applied
 	// for, or with changes (the application's changes revised: a smaller
 	// volume, an added release rule), and its conditions in words. Used by
 	// "Record the authority's decision" and by a variation on appeal
-	// (232_decision_events). The server checks the changes against the base
+	// (228_decision_events). The server checks the changes against the base
 	// run, as an application's own.
 	import type { ModelInput, ScenarioOp } from '@water-management/engine';
 	import OpForm from './OpForm.svelte';

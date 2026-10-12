@@ -156,7 +156,7 @@ beforeAll(async () => {
 	// member.authority names them in the log (pseudonymised on deletion, 048). An owner can't be in an
 	// applying party any more (163's conflict guard), which member.party used to stand in for here.
 	await actForAuthority(owner, projectId, subject.id);
-	// Acting for it, they add the owner, confirmed at once: authority_delegate.proposed_by and confirmed_by (233), cleared on deletion.
+	// Acting for it, they add the owner, confirmed at once: authority_delegate.proposed_by and confirmed_by (229), cleared on deletion.
 	await call(subject, 'POST', `/projects/${projectId}/authority-delegates`, { userId: owner.id });
 	await call(subject, 'POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farm.id] });
 	runId = (await call(owner, 'POST', `/projects/${projectId}/runs`, { label: 'r' })).run.id;
@@ -269,7 +269,7 @@ beforeAll(async () => {
 	const comment = await call(subject, 'POST', `/projects/${projectId}/notes`, { body: `application comment ${tag}`, scenarioId: sid });
 	await call(subject, 'PATCH', `/projects/${projectId}/notes/${comment.note.id}`, { body: `application comment ${tag}, edited` });
 	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_refused', note: 'Too little left in dry years.' });
-	// An appeal on that decision they recorded (232): recorded_by is SET NULL when they go; the event stays.
+	// An appeal on that decision they recorded (228): recorded_by is SET NULL when they go; the event stays.
 	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/appeals`, { kind: 'lodged', forum: 'water_tribunal', eventDate: DECISION.decisionDate });
 	// A sweep, an outlook and a yield result they asked for; the workers aren't under test.
 	// The rows as the subject makes them (their stamp triggers set created_by), without the jobs.

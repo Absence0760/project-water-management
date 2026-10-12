@@ -7,7 +7,7 @@
 // go where NWA s41(2) says the evidence goes: to the authority that decides,
 // never through the applicant (whose copy withholds the others' figures,
 // 165_applicant_copy). An editor emails the members the authority confirmed
-// as acting for it (app_authority_members, 233_authority_delegates; a
+// as acting for it (app_authority_members, 229_authority_delegates; a
 // proposed delegate gets nothing) and settings.responsibleAuthority (163). The mail
 // carries no file and no download link: it links the pack's page, where a
 // signed-in editor gets a one-minute signed download, and the verify page.
@@ -60,7 +60,7 @@ export const packSendRoutes = new Hono<AuthEnv>().post('/:id/packs/:packId/send'
 		const pack = packs[0];
 		if (!pack) throw notFound();
 		if (pack.status !== 'issued') throw new ApiError(409, `only an issued pack is sent to the authority; this one is ${pack.status}`);
-		// The members acting for the authority: confirmed delegates holding editor or above, directly or through the team (233). Never the sender.
+		// The members acting for the authority: confirmed delegates holding editor or above, directly or through the team (229). Never the sender.
 		const { rows: acting } = await db.query<Recipient>(
 			`SELECT a.user_id AS "userId", u.email, u.display_name AS "displayName"
 			 FROM app_authority_members($1) a JOIN app_user u ON u.id = a.user_id

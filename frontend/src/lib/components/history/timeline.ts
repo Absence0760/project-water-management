@@ -180,9 +180,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				? `Appointed ${who} specialist for the applying party ${str(s.party)}`
 				: `${who} is no longer the specialist for ${s.party ? `the applying party ${str(s.party)}` : 'their applying party'}`;
 		case 'member.authority':
-			// 163_licensing_authority: the owner marked who acts for the responsible authority (before 233).
+			// 163_licensing_authority: the owner marked who acts for the responsible authority (before 229).
 			return s.actsForAuthority ? `Marked ${who} as acting for the responsible authority` : `${who} no longer acts for the responsible authority`;
-		// 233_authority_delegates (issue #523 G5): the authority confirms its own delegates.
+		// 229_authority_delegates (issue #523 G5): the authority confirms its own delegates.
 		case 'authority.proposed':
 			return `Proposed ${who} to act for the responsible authority (it grants nothing until the authority confirms it)`;
 		case 'authority.confirmed':
@@ -473,7 +473,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return outcome ? `Recorded ${str(s.authority) || 'the responsible authority'}’s decision on ${what}: ${outcome}` : `Decided ${what}: ${str(s.outcome).replaceAll('_', ' ')}`;
 		}
 		case 'scenario.appeal_recorded': {
-			// 232_decision_events: what followed a decision; the event's kind, forum and date, never its note.
+			// 228_decision_events: what followed a decision; the event's kind, forum and date, never its note.
 			const forum = s.forum === 'court' ? 'court' : 'Water Tribunal';
 			const on = `the decision on “${str(s.name)}”`;
 			switch (s.kind) {

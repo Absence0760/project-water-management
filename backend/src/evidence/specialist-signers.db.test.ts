@@ -242,8 +242,8 @@ describe('the registration check', () => {
 		expect(audit).toHaveLength(1);
 	});
 
-	it('is recorded by an editor once the authority confirms them as acting for it (163, 233; control: unconfirmed, 403 above)', async () => {
-		// Proposed by the owner only: grants nothing (233).
+	it('is recorded by an editor once the authority confirms them as acting for it (163, 229; control: unconfirmed, 403 above)', async () => {
+		// Proposed by the owner only: grants nothing (229).
 		expect((await owner.call('POST', `${P()}/authority-delegates`, { userId: assessor.id })).status).toBe(201);
 		expect((await record(assessor, specialistB)).status).toBe(403);
 		await confirmAsOperator(projectId, assessor.id);

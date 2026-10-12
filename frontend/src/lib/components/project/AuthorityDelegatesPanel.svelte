@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Who acts for the responsible authority (233_authority_delegates, issue
+	// Who acts for the responsible authority (229_authority_delegates, issue
 	// #523 G5; docs/ui.md § Project → Acts for the authority). The authority,
 	// not the project's host, decides it: an owner proposes an editor or owner
 	// (directly or through the team), and a proposal grants nothing until a

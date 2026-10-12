@@ -77,7 +77,7 @@
 		isOwner: boolean;
 		/**
 		 * An editor who isn't its owner and whom the responsible authority
-		 * confirmed as acting for it (163, 233): they record its decision
+		 * confirmed as acting for it (163, 229): they record its decision
 		 * once submitted.
 		 */
 		canDecide: boolean;
@@ -157,7 +157,7 @@
 	let decisionDate = $state('');
 	let reference = $state('');
 	let reasonsReceived = $state<'' | 'yes' | 'no'>('');
-	// A licence issued records its granted terms (231): as applied for, or the changes revised, and its conditions.
+	// A licence issued records its granted terms (227): as applied for, or the changes revised, and its conditions.
 	let grantedMode = $state<'as_applied' | 'changed'>('as_applied');
 	let grantedOps = $state.raw<ScenarioOp[]>([]);
 	let grantedConditions = $state('');
@@ -178,7 +178,7 @@
 		act('Decision recorded.', () => api.scenarios.decide(projectId, s.id, body));
 	}
 
-	// --- what followed the decision (232): appeals and their outcomes -------------------
+	// --- what followed the decision (228): appeals and their outcomes -------------------
 	const events = $derived(s.decisionEvents ?? []);
 	const standing = $derived(licenceLine(s));
 	const inForce = $derived(licensedTerms(s));

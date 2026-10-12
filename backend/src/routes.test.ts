@@ -295,7 +295,7 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/scenarios/:sid/withdraw',
 			'POST /projects/:id/scenarios/:sid/reopen',
 			'POST /projects/:id/scenarios/:sid/decide',
-			// What followed a decision: an appeal lodged and its outcome (232_decision_events).
+			// What followed a decision: an appeal lodged and its outcome (228_decision_events).
 			'POST /projects/:id/scenarios/:sid/appeals',
 			'POST /projects/:id/scenarios/:sid/members',
 			'DELETE /projects/:id/scenarios/:sid/members/:userId',

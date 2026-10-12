@@ -57,7 +57,7 @@ type ProjectRow = {
 	published_at: Date | null;
 	/** When the project's pending re-run is due, or null (042_auto_rerun). */
 	rerun_queued_for: Date | null;
-	/** The caller acts for the responsible authority (163, app_acts_for_authority): a confirmed delegate holding editor or above (233). */
+	/** The caller acts for the responsible authority (163, app_acts_for_authority): a confirmed delegate holding editor or above (229). */
 	acts_for_authority: boolean;
 	/** The project's own two-step sign-in setting (204_mfa_opt_in). */
 	require_mfa: boolean;
@@ -154,7 +154,7 @@ const PatchBody = z.object({
 });
 // 'contributor': a licence applicant (044/045, WP-3.3). Farmers are added through /farmers.
 /**
- * A member row's authority columns (233_authority_delegates), for `m` a project_member: actsForAuthority, only for a
+ * A member row's authority columns (229_authority_delegates), for `m` a project_member: actsForAuthority, only for a
  * confirmed delegate holding editor or above (app_authority_members), and authority, 'proposed' | 'confirmed' | null.
  */
 const MEMBER_AUTHORITY_SQL = `m.user_id IN (SELECT a.user_id FROM app_authority_members(m.project_id) a) AS "actsForAuthority",
@@ -578,7 +578,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 	// who edits the project may be in a party (163's conflict guard: 409
 	// role_conflict). Who acts for the responsible authority is no longer
 	// set here: the authority confirms its own delegates
-	// (233_authority_delegates, projects/authorityDelegates.ts).
+	// (229_authority_delegates, projects/authorityDelegates.ts).
 	.patch('/:id/members/:userId', async (c) => {
 		const body = z
 			.object({
@@ -624,7 +624,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (body.party !== undefined && (was[0]?.party ?? null) !== rows[0].party) {
 				await recordAudit(db, id, 'member.party', { userId, displayName: rows[0].displayName, from: was[0]?.party ?? null, to: rows[0].party });
 			}
-			// A demotion below editor ends any delegation (233's lapse trigger): read the authority after the update.
+			// A demotion below editor ends any delegation (229's lapse trigger): read the authority after the update.
 			const { rows: authority } = await db.query<{ actsForAuthority: boolean; authority: 'proposed' | 'confirmed' | null }>(
 				`SELECT ${MEMBER_AUTHORITY_SQL} FROM project_member m WHERE m.project_id = $1 AND m.user_id = $2`,
 				[id, userId]

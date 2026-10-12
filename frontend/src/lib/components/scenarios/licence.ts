@@ -1,5 +1,5 @@
-// A decided application's licence in words (231_licence_terms,
-// 232_decision_events, issue #523 G3/G4; docs/ui.md § Applications): whether
+// A decided application's licence in words (227_licence_terms,
+// 228_decision_events, issue #523 G3/G4; docs/ui.md § Applications): whether
 // it counts in cumulative assessments now and on which terms, what an open
 // appeal changes (nothing, until it is decided), and which event can be
 // recorded next. The server holds every rule (app_scenario_licence and the

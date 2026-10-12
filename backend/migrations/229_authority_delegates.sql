@@ -1,4 +1,4 @@
--- 233_authority_delegates — the responsible authority controls who acts for
+-- 229_authority_delegates — the responsible authority controls who acts for
 -- it (issue #523 G5; the licensing assessor's review, D1: "the host controls
 -- who acts for us"; docs/security.md § Authorization, docs/data-model.md
 -- § Who acts for the responsible authority, docs/evidence-pack.md § The
@@ -37,7 +37,7 @@
 --     authority.confirmed, authority.withdrawn, authority.declined (the
 --     authority refused a proposal), authority.removed, authority.lapsed and
 --     authority.grandfathered.
---  5. Grandfathering. Every flag an owner set before 233, on a member who
+--  5. Grandfathering. Every flag an owner set before 229, on a member who
 --     still holds editor or above, is carried over as confirmed
 --     (confirmed_via 'grandfathered'), so no decision or endorsement in
 --     progress stops; each gets an authority.grandfathered event on the
@@ -74,9 +74,9 @@ CREATE INDEX authority_delegate_user_idx ON authority_delegate (user_id);
 CREATE INDEX authority_delegate_proposed_by_idx ON authority_delegate (proposed_by);
 CREATE INDEX authority_delegate_confirmed_by_idx ON authority_delegate (confirmed_by);
 COMMENT ON TABLE authority_delegate IS
-	'Who acts for the project''s responsible authority (233, issue #523 G5): proposed by an owner or an authority member, confirmed only by a member already acting for it or by the operator (authority_confirm_by_operator). Only a confirmed row held by an editor or above counts (app_acts_for_authority, app_authority_members).';
+	'Who acts for the project''s responsible authority (229, issue #523 G5): proposed by an owner or an authority member, confirmed only by a member already acting for it or by the operator (authority_confirm_by_operator). Only a confirmed row held by an editor or above counts (app_acts_for_authority, app_authority_members).';
 COMMENT ON COLUMN project_member.acts_for_authority IS
-	'Superseded by authority_delegate (233): read by nothing, set by nobody; its pre-233 values were carried over as confirmed delegates (grandfathered). Dropped by a later migration.';
+	'Superseded by authority_delegate (229): read by nothing, set by nobody; its pre-229 values were carried over as confirmed delegates (grandfathered). Dropped by a later migration.';
 
 ALTER TABLE authority_delegate ENABLE ROW LEVEL SECURITY;
 
@@ -305,7 +305,7 @@ CREATE FUNCTION authority_delegate_audit() RETURNS trigger
 			v_kind := CASE WHEN NEW.confirmed_via = 'grandfathered' THEN 'authority.grandfathered'
 				WHEN NEW.confirmed_at IS NOT NULL THEN 'authority.confirmed' ELSE 'authority.proposed' END;
 			IF NEW.confirmed_via = 'grandfathered' THEN
-				-- Its actor: the owner who ticked the flag before 233.
+				-- Its actor: the owner who ticked the flag before 229.
 				v_actor := NEW.proposed_by;
 			END IF;
 		ELSIF TG_OP = 'UPDATE' THEN
@@ -335,7 +335,7 @@ CREATE FUNCTION authority_delegate_audit() RETURNS trigger
 		INSERT INTO audit_event (project_id, actor_user_id, actor_label, kind, subject)
 			VALUES (r.project_id, v_actor,
 				coalesce(v_label, CASE WHEN v_actor IS NOT NULL THEN '' WHEN r.confirmed_via = 'operator' THEN 'Operator'
-					WHEN r.confirmed_via = 'grandfathered' THEN 'An owner, before 233' ELSE '' END),
+					WHEN r.confirmed_via = 'grandfathered' THEN 'An owner, before 229' ELSE '' END),
 				v_kind, v_subject);
 		RETURN NULL;
 	END
@@ -430,7 +430,7 @@ REVOKE ALL ON FUNCTION authority_confirm_by_operator(uuid, uuid, text) FROM PUBL
 -- ---------------------------------------------------------------------------
 INSERT INTO authority_delegate (project_id, user_id, proposed_by, proposed_at, confirmed_at, confirmed_by, confirmed_via, confirmation_note)
 SELECT m.project_id, m.user_id, marked.actor_user_id, coalesce(marked.created_at, m.added_at), now(), NULL, 'grandfathered',
-	'Marked by an owner before 233'
+	'Marked by an owner before 229'
 FROM project_member m
 LEFT JOIN LATERAL (
 	SELECT e.actor_user_id, e.created_at FROM audit_event e

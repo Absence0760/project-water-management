@@ -6294,8 +6294,8 @@ handling: Delineation, Map data files, Geometry cost). Left open:
 ## Licence terms and appeals (issue #523 G3, G4, 2026-10-12)
 
 Built: a licence issued records its granted terms, which count in cumulative
-impact in place of the changes applied for (231_licence_terms); appeal
-events after a decision, append-only (232_decision_events). Left open:
+impact in place of the changes applied for (227_licence_terms); appeal
+events after a decision, append-only (228_decision_events). Left open:
 
 - [ ] **"Lapsed / deemed withdrawn"** (the licensing assessor's review, §
       Outcome words (D14)): an application that misses GN R267's time limits

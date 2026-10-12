@@ -1,5 +1,5 @@
 // The operator's confirmation that someone acts for a project's responsible
-// authority (233_authority_delegates, issue #523 G5), locally:
+// authority (229_authority_delegates, issue #523 G5), locally:
 //
 //   pnpm dev:authority:confirm <project-id> <email> --reference "<the authority's letter>"
 //

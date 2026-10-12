@@ -67,12 +67,12 @@ export interface ScenarioRow {
 	decisionReference: string;
 	reasonsReceived: boolean | null;
 	/**
-	 * The licence's granted terms (231_licence_terms, issue #523 G3): set
+	 * The licence's granted terms (227_licence_terms, issue #523 G3): set
 	 * exactly when the outcome is licence_issued; `asApplied` when they are the
 	 * applied ops written out. null otherwise.
 	 */
 	grantedTerms: LicenceTerms | null;
-	/** What followed the decision (232_decision_events, #523 G4): appeals lodged and their outcomes, in order. */
+	/** What followed the decision (228_decision_events, #523 G4): appeals lodged and their outcomes, in order. */
 	decisionEvents: DecisionEvent[];
 	/**
 	 * Whether its licence is in force now, and from what (app_scenario_licence):
@@ -104,7 +104,7 @@ export const APPLICATION_RUNS_KEPT = 5;
 // links (app_application_own_nodes, 071): what the base projection, the check
 // and a new run show them in full. Everyone else reads the stored list, the
 // record the assessors judge.
-/** A licence's terms (231's columns, or a variation's in 232) as LicenceTerms; NULL without ops. */
+/** A licence's terms (227's columns, or a variation's in 228) as LicenceTerms; NULL without ops. */
 const termsJson = (ops: string, sha: string, names: string, conditions: string) =>
 	`CASE WHEN ${ops} IS NULL THEN NULL ELSE jsonb_build_object('ops', ${ops}, 'opsSha256', ${sha}, 'opNames', ${names}, 'conditions', ${conditions}, 'asApplied', ${sha} = s.ops_sha256) END`;
 
@@ -249,7 +249,7 @@ interface ScenarioRunPlan {
 
 /**
  * Which ops a scenario run applies: the scenario's own (`applied`), or the
- * terms of its licence in force (`licensed`, 231/232: the granted terms, or
+ * terms of its licence in force (`licensed`, 227/228: the granted terms, or
  * the newest variation's), which the evidence report's other applications
  * read. 409 when no licence is in force.
  */

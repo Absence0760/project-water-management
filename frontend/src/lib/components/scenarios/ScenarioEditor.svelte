@@ -303,7 +303,7 @@
 		}
 	}
 
-	/** Run the licence's terms in force (231/232): the run the evidence report's other applications read. Throws for the panel to show. */
+	/** Run the licence's terms in force (227/228): the run the evidence report's other applications read. Throws for the panel to show. */
 	async function runLicensed() {
 		running = true;
 		try {

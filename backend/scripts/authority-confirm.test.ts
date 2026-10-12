@@ -1,4 +1,4 @@
-// The operator's confirmation script (pnpm dev:authority:confirm, 233_authority_delegates): what it takes and refuses.
+// The operator's confirmation script (pnpm dev:authority:confirm, 229_authority_delegates): what it takes and refuses.
 // The confirmation itself is authority_confirm_by_operator, tested in projects/authority-delegates.db.test.ts.
 import { describe, expect, it } from 'vitest';
 import { parseArgs } from './authority-confirm.js';

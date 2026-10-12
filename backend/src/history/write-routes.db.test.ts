@@ -160,7 +160,7 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['registration.requirement'],
 		call: (c) => c.owner.call('PUT', `${at(c)}/registration-check-required`, { required: false })
 	},
-	// Who acts for the authority (233, written by the database's authority_delegate_audit): the owner proposes the
+	// Who acts for the authority (229, written by the database's authority_delegate_audit): the owner proposes the
 	// editor, the owner (confirmed by the operator, the bootstrap) confirms them, then removes them, before they leave below.
 	{
 		route: `POST ${P}/authority-delegates`,
@@ -280,7 +280,7 @@ const WRITE_ROUTES: Entry[] = [
 		route: `POST ${P}/publication/:pubId/endorse`,
 		records: ['publication.endorsed'],
 		call: async (c) => {
-			// The owner acts for the authority: confirmed by the operator above (authority-delegates entries, 233).
+			// The owner acts for the authority: confirmed by the operator above (authority-delegates entries, 229).
 			await confirmAsOperator(c.projectId, c.owner.id);
 			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
 		}

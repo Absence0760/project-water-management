@@ -795,12 +795,12 @@ the result change?", and put back any earlier version.
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
   it is decided; since 163 `scenario.decided` also carries the `authority`
-  and `decisionDate`, and since 231 with a licence issued `granted`,
+  and `decisionDate`, and since 227 with a licence issued `granted`,
   `as_applied` or `changed`, and `grantedOpsSha256`), `scenario.appeal_recorded`
-  (232: what followed a decision: `eventId`, `kind`, `forum`, `eventDate`, a
+  (228: what followed a decision: `eventId`, `kind`, `forum`, `eventDate`, a
   variation's `opsSha256`; never its note), `member.authority` (163: an owner marked or unmarked
   a member as acting for the responsible authority, `actsForAuthority`;
-  none since 233), the `authority.*` events (233, written by the database's
+  none since 229), the `authority.*` events (229, written by the database's
   `authority_delegate_audit`, never by `recordAudit`, `{ userId,
   displayName, via?, reference?, wasConfirmed? }`): `authority.proposed`,
   `authority.confirmed` (`via`: `member`, or `operator` with the
@@ -1462,7 +1462,7 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `evidence-19` (issue #523 G2) `result.reproduction` records how to
   re-derive them and what they give (both results digests, the outcome
   settings, each registered volume's authorisation as at the baseline run,
-  from `run_allocation_holder.authorisation`, 230), which a pack's
+  from `run_allocation_holder.authorisation`, 226), which a pack's
   reproduction bundle re-runs ([evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)).
 
 **The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
@@ -1665,8 +1665,8 @@ water-use volumes per farm or water user.
   they were when it was stored (trigger `model_run_allocation_holders` on
   `model_run` insert; `gone` for a row no living holder had; existing runs
   filled by 219 from the rows then living), with each row's `authorisation`
-  then since 230 (NULL for a row with no living row; existing runs filled by
-  230 from the rows then living; not reset on erasure, it isn't personal
+  then since 226 (NULL for a row with no living row; existing runs filled by
+  226 from the rows then living; not reset on erasure, it isn't personal
   information), read through `app_run_allocation_kinds(project, run, ids)`
   (`SECURITY DEFINER`, viewer and up, the same run rule; no volume, no
   holder) for the headline board's mix as at the baseline (#523 G2), and
@@ -2219,7 +2219,7 @@ projection's read and narrows their series further:
   published run of the project (on insert and rebase); only its owner moves
   it (submit, withdraw, back to draft) or edits it; only an editor who isn't
   its owner **and acts for the responsible authority** (163,
-  `app_acts_for_authority`: a confirmed delegate since 233; also for an outcome on a team scenario, though
+  `app_acts_for_authority`: a confirmed delegate since 229; also for an outcome on a team scenario, though
   an editor may still mark a team scenario decided without one) decides it, with an
   outcome, the authority, the date and the reasons flag, and nothing else
   changed; the decision and its record are set once. The one change it lets through is the assessor's
@@ -2230,7 +2230,7 @@ projection's read and narrows their series further:
   change to a decision. `scenario_drop_application_runs` deletes a deleted
   application's runs that nothing keeps (else `SET NULL` would show them to
   every viewer).
-- **Granted terms** (231_licence_terms, issue #523 G3): `scenario.granted_ops`
+- **Granted terms** (227_licence_terms, issue #523 G3): `scenario.granted_ops`
   (the "as licensed" revision of the ops, ≤ 500, the API checks them as the
   scenario's own against the base run, an application's under its
   applicant's mask), `granted_ops_sha256` (RFC 8785, as `ops_sha256`),
@@ -2239,16 +2239,16 @@ projection's read and narrows their series further:
   words). Set exactly when the outcome is `licence_issued`
   (`scenario_granted_terms`), with the decision, once; issued as applied for,
   the guard writes the applied ops out as the granted ones (`granted_ops_sha256
-  = ops_sha256`). A licence issued before 231 was given its applied ops, the
-  conditions "Not recorded (before 231): counted as applied for.".
+  = ops_sha256`). A licence issued before 227 was given its applied ops, the
+  conditions "Not recorded (before 227): counted as applied for.".
   `scenario_guard` (from 188) refuses terms with any other outcome and keeps
   them with the decision's record.
 - **`decision_event (id, project_id, scenario_id, position, kind, forum,
   event_date, reference, note, ops, ops_sha256, op_names, conditions,
-  recorded_by, recorded_at)`** (232_decision_events, issue #523 G4): what
+  recorded_by, recorded_at)`** (228_decision_events, issue #523 G4): what
   followed a decision, one append-only row per event: `lodged` (an appeal,
   `forum` `water_tribunal` (NWA s148) or `court`), then `upheld`,
-  `set_aside` or `varied` (a variation's new granted terms in 231's shape:
+  `set_aside` or `varied` (a variation's new granted terms in 227's shape:
   `ops` set exactly then). `decision_event_guard` (SECURITY DEFINER, under
   a per-scenario advisory lock) stamps `position` (from 1), `recorded_by`
   and `recorded_at`; admits only a member acting for the authority
@@ -2262,7 +2262,7 @@ projection's read and narrows their series further:
   its scenario (which a decision keeps) or project; `recorded_by` is SET
   NULL when the account goes. Covering indexes: `(scenario_id, position)`
   unique, `(project_id, recorded_at)`, `(recorded_by)`.
-- **`app_scenario_licence(scenario)`** (231, events since 232): the one rule
+- **`app_scenario_licence(scenario)`** (227, events since 228): the one rule
   for whether a decided scenario's licence counts, as its caller reads it:
   `{ inForce, from: 'decision' | 'event', eventId, appealPending, terms }`,
   NULL until decided with an outcome. The newest `set_aside` or `varied`
@@ -2321,13 +2321,13 @@ projection's read and narrows their series further:
   change clears it unless the same update sets it. water_app's column
   `UPDATE` grant now includes it.
 - **`project_member.acts_for_authority`** (163_licensing_authority, boolean,
-  default false): superseded by `authority_delegate` (233). Read by nothing;
+  default false): superseded by `authority_delegate` (229). Read by nothing;
   water_app's column `UPDATE` grant on it is revoked (its grant is now
-  `role`, `party`, `specialist`); its pre-233 values were carried over as
+  `role`, `party`, `specialist`); its pre-229 values were carried over as
   confirmed delegates. `project_member_authority` (163) stays with it until a
   later migration drops both (expand/contract).
 - **Who acts for the responsible authority** (`authority_delegate`,
-  233_authority_delegates, issue #523 G5): `(project_id → project CASCADE,
+  229_authority_delegates, issue #523 G5): `(project_id → project CASCADE,
   user_id → app_user CASCADE)` primary key, `proposed_by → app_user SET
   NULL`, `proposed_at`, `confirmed_at` (NULL = proposed), `confirmed_by →
   app_user SET NULL`, `confirmed_via` (`member` | `operator` |

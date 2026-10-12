@@ -563,7 +563,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
 		/**
-		 * Who acts for the responsible authority (233_authority_delegates): an owner proposes, only a member already
+		 * Who acts for the responsible authority (229_authority_delegates): an owner proposes, only a member already
 		 * acting for the authority confirms (or the operator, on its letter), the owner withdraws a proposal, and the
 		 * authority removes anyone.
 		 */
@@ -1017,7 +1017,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			) => request<ScenarioWithCheck>('PATCH', `${p(id)}/scenarios/${enc(sid)}`, body),
 			remove: (id: string, sid: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}`),
 			/** Run it on its base run's stored input; counts toward the project's run cap like any run. */
-			/** `terms: 'licensed'`: the terms of its licence in force (231/232) instead of its own changes. */
+			/** `terms: 'licensed'`: the terms of its licence in force (227/228) instead of its own changes. */
 			run: (id: string, sid: string, label?: string, terms?: 'licensed') =>
 				request<{ run: Run; removedRunIds?: string[]; applied: ScenarioCheck['applied']; classified: ScenarioCheck['classified'] }>(
 					'POST',
@@ -1041,10 +1041,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			reopen: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/reopen`),
 			/**
 			 * Record the responsible authority's decision (163): an editor the authority confirmed as acting
-			 * for it (233), who didn't make the application. `authority` defaults to settings.responsibleAuthority.
+			 * for it (229), who didn't make the application. `authority` defaults to settings.responsibleAuthority.
 			 */
 			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
-			/** Record what followed the decision (232): an appeal lodged, upheld, set aside or varied. */
+			/** Record what followed the decision (228): an appeal lodged, upheld, set aside or varied. */
 			appeal: (id: string, sid: string, body: AppealRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/appeals`, body),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>

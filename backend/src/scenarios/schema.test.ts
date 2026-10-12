@@ -172,7 +172,7 @@ describe('opsSha256', () => {
 	});
 });
 
-describe('a licence’s granted terms and what followed the decision (231, 232)', () => {
+describe('a licence’s granted terms and what followed the decision (227, 228)', () => {
 	const decision = { outcome: 'licence_issued', authority: 'CMA', decisionDate: '2026-09-30', reasonsReceived: true } as const;
 	const smaller = [{ op: 'node.set', nodeId: a, field: 'damCapacityM3', value: 150_000 }];
 

@@ -219,7 +219,7 @@ export const RebaseBody = z.object({ baseRunId: z.string().uuid(), dryRun: z.boo
 
 /**
  * POST …/runs: `terms: 'licensed'` runs the terms of the scenario's licence in
- * force (231/232) instead of its own ops: the run the evidence report's other
+ * force (227/228) instead of its own ops: the run the evidence report's other
  * applications read for an issued licence.
  */
 export const ScenarioRunBody = z.object({ label: z.string().trim().max(200).optional(), terms: z.enum(['applied', 'licensed']).default('applied') }).strict();
@@ -240,7 +240,7 @@ const isoDay = z
 	.regex(/^\d{4}-\d{2}-\d{2}$/, 'a date as YYYY-MM-DD')
 	.refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d, 'not a real date');
 
-/** A licence's conditions in words, as its licence gives them (231): ≤ 4000, trimmed. */
+/** A licence's conditions in words, as its licence gives them (227): ≤ 4000, trimmed. */
 const conditions = z
 	.string()
 	.trim()
@@ -248,7 +248,7 @@ const conditions = z
 	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
 
 /**
- * A licence's granted terms (231_licence_terms, issue #523 G3): the "as
+ * A licence's granted terms (227_licence_terms, issue #523 G3): the "as
  * licensed" revision of the ops (`ops`, checked as any scenario's ops are,
  * then by the route against the base run) and its conditions in words. `ops`
  * left out: granted as applied for, which the database writes out.
@@ -271,19 +271,19 @@ export const DecideBody = z
 		reference: z.string().trim().max(200).default(''),
 		reasonsReceived: z.boolean(),
 		note: description.default(''),
-		/** With licence_issued only (231): the granted terms; left out, granted as applied for. */
+		/** With licence_issued only (227): the granted terms; left out, granted as applied for. */
 		granted: GrantedTermsBody.optional()
 	})
 	.strict()
 	.refine((b) => b.outcome === 'licence_issued' || b.granted === undefined, { message: 'granted terms go with a licence issued', path: ['granted'] });
 
-/** What can follow a decision (232_decision_events, issue #523 G4): an appeal lodged, then its outcome. */
+/** What can follow a decision (228_decision_events, issue #523 G4): an appeal lodged, then its outcome. */
 export const DECISION_EVENT_KINDS = ['lodged', 'upheld', 'set_aside', 'varied'] as const;
 /** Where: the Water Tribunal (NWA s148, s149) or a court (s149(4), review). */
 export const DECISION_EVENT_FORUMS = ['water_tribunal', 'court'] as const;
 
 /**
- * POST …/appeals ("Record what followed the decision", 232): the kind, the
+ * POST …/appeals ("Record what followed the decision", 228): the kind, the
  * forum, the date on the lodging or the order, its reference and a note;
  * `terms` (the new granted terms, G3's shape) with `varied` and only then.
  */

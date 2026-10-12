@@ -1,5 +1,5 @@
-// A licence's granted terms and what followed its decision (231_licence_terms,
-// 232_decision_events; issue #523 G3/G4; docs/scenarios.md § Applications).
+// A licence's granted terms and what followed its decision (227_licence_terms,
+// 228_decision_events; issue #523 G3/G4; docs/scenarios.md § Applications).
 // An issued licence counts in cumulative impact on its granted terms, never
 // the ops applied for; an appeal lodged changes nothing until it is decided;
 // set aside, it stops counting; varied, its new terms count. Only a member
@@ -103,7 +103,7 @@ afterAll(async () => {
 	await retirePendingJobs(projectId);
 });
 
-describe('granted terms (231)', () => {
+describe('granted terms (227)', () => {
 	it('writes the applied ops out as the granted terms when a licence is issued as applied for, with its conditions', async () => {
 		const sid = await apply('As applied', [dam(upper.id, 120_000)]);
 		const res = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued', granted: { conditions: 'Release 5 % of inflow in dry months.' } });
@@ -192,7 +192,7 @@ describe('granted terms (231)', () => {
 	});
 });
 
-describe('appeal events (232)', () => {
+describe('appeal events (228)', () => {
 	let sid: string;
 	let grantedSha: string;
 	const appeal = (u: User, body: Record<string, unknown>) => u.call('POST', `${P()}/scenarios/${sid}/appeals`, body);

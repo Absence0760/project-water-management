@@ -8,8 +8,8 @@
 // project's owner, confirmed as acting for the responsible authority) finds it
 // in the Applications tab and records the authority's decision, with the
 // licence's granted terms (a smaller dam than applied for, and its conditions;
-// 231_licence_terms), then an appeal lodged with the Water Tribunal and the
-// decision set aside (232_decision_events), which the applicant reads; an
+// 227_licence_terms), then an appeal lodged with the Water Tribunal and the
+// decision set aside (228_decision_events), which the applicant reads; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
 // warning and can't be decided. Axe on
@@ -111,7 +111,7 @@ test('an applicant submits an application on the published baseline, and the ass
 	await decide.getByLabel('Licence or file reference').fill('WU-SYN-001');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('Yes').check();
 	await decide.getByLabel('Note: the authority’s reasons').fill('Enough is left for the Reserve at a smaller dam.');
-	// The granted terms (231): less than applied for. They start from the changes applied for; the assessor replaces the dam size.
+	// The granted terms (227): less than applied for. They start from the changes applied for; the assessor replaces the dam size.
 	const terms = decide.getByTestId('decide-terms');
 	await terms.getByLabel('With changes').check();
 	const granted = terms.getByRole('list', { name: 'Granted changes' });
@@ -136,7 +136,7 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(grantedTerms).toContainText('Conditions: Release 5 % of inflow in dry months.');
 	await expect(decision.getByTestId('application-licence')).toHaveText('The licence counts in cumulative assessments on its granted terms, not the changes applied for.');
 
-	// An appeal lodged (232): recorded beside the decision, and it changes nothing until it is decided.
+	// An appeal lodged (228): recorded beside the decision, and it changes nothing until it is decided.
 	const appeals = page.getByTestId('application-appeals');
 	await expect(appeals).toContainText('None recorded.');
 	await appeals.getByRole('button', { name: 'Record an appeal…' }).click();
@@ -296,7 +296,7 @@ test('the authority confirms who acts for it: a host owner proposes, an authorit
 	const applicant = await signIn('Authority applicant');
 	const editor = await signIn('Authority editor');
 	const host = await signIn('Authority host');
-	// `page`'s owner acts for the authority (confirmed by the operator, the bootstrap, 233); `host` is a second owner who doesn't.
+	// `page`'s owner acts for the authority (confirmed by the operator, the bootstrap, 229); `host` is a second owner who doesn't.
 	const { project, runId, upper } = await seedApplicantProject(page, 'Applications authority', applicant.user);
 	await addMember(page.request, project.id, editor.user.email, 'editor');
 	await addMember(page.request, project.id, host.user.email, 'owner');

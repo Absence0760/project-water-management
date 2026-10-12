@@ -232,7 +232,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await page.reload();
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 
-	// Sent to the responsible authority (licensing build item 13): to the member it confirmed as acting for it (233).
+	// Sent to the responsible authority (licensing build item 13): to the member it confirmed as acting for it (229).
 	await page.getByTestId('pack-send-open').click();
 	const sendDialog = page.getByRole('dialog', { name: 'Send evidence pack v1 to the responsible authority' });
 	await expect(sendDialog.getByTestId('pack-send-none')).toContainText('No other member acts for the responsible authority');

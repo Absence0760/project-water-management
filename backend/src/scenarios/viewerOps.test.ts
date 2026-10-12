@@ -20,7 +20,7 @@ describe('viewerScenario', () => {
 		expect(viewerScenario(plain).scenario).toBe(plain);
 	});
 
-	it('leaves the same ops out of a licence’s granted terms and a variation’s (231, 232)', () => {
+	it('leaves the same ops out of a licence’s granted terms and a variation’s (227, 228)', () => {
 		const terms = (ops: unknown[]) => ({ ops, opsSha256: '0'.repeat(64), opNames: [], conditions: '', asApplied: false });
 		const s = {
 			ops: [node('n1')],

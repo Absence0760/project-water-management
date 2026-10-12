@@ -26,7 +26,7 @@ export async function allocationHolderKeys(db: Db, projectId: string, runId: str
 
 /**
  * How each of `rows` (a run's allocations, by id) was held when run `runId`
- * was stored (230, issue #523 G2): its authorisation then, or null for a row
+ * was stored (226, issue #523 G2): its authorisation then, or null for a row
  * with no living row then. The headline board's mix as at the baseline.
  */
 export async function allocationKindsAsAtRun(db: Db, projectId: string, runId: string, rows: readonly { id: string }[]): Promise<Record<string, string | null>> {

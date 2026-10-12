@@ -5,7 +5,7 @@
 // regional office), or a catchment management agency the power is assigned
 // or delegated to (s1, s40(1), s41, s42). A licensing project names it in
 // settings.responsibleAuthority. Who acts for it is the authority's own call
-// (233_authority_delegates, issue #523 G5; projects/authorityDelegates.ts):
+// (229_authority_delegates, issue #523 G5; projects/authorityDelegates.ts):
 // an owner may propose someone, but only a member already acting for the
 // authority (or the operator, on its letter) confirms them, and only a
 // confirmed delegate holding editor or above records its decision on an
@@ -57,7 +57,7 @@ export async function projectAuthority(db: Db, projectId: string): Promise<Respo
 
 /**
  * Whether the current user acts for the project's authority: a confirmed delegate holding editor or above, directly
- * or through the team (app_acts_for_authority, 163, redefined by 233). The one test for every authority action
+ * or through the team (app_acts_for_authority, 163, redefined by 229). The one test for every authority action
  * (decisions, endorsement, registration checks, confirming delegates); a proposed delegate gets false.
  */
 export async function actsForAuthority(db: Db, projectId: string): Promise<boolean> {

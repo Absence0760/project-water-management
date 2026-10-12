@@ -1,4 +1,4 @@
-// Who acts for the project's responsible authority (233_authority_delegates,
+// Who acts for the project's responsible authority (229_authority_delegates,
 // issue #523 G5; the licensing assessor's review, D1; docs/security.md
 // § Authorization, docs/api.md § Acts for the authority).
 //
@@ -41,7 +41,7 @@ export interface AuthorityDelegate {
 	proposedAt: string;
 	confirmedBy: { userId: string; displayName: string } | null;
 	confirmedAt: string | null;
-	/** member: by a member acting for the authority; operator: on the authority's letter; grandfathered: an owner's flag from before 233. */
+	/** member: by a member acting for the authority; operator: on the authority's letter; grandfathered: an owner's flag from before 229. */
 	confirmedVia: 'member' | 'operator' | 'grandfathered' | null;
 	/** The operator's reference (the authority's letter); '' otherwise. */
 	reference: string;
