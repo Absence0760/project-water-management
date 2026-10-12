@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "PR #524 (#523 rounds: viewer volume leaks closed in the allocations tab, the report and pack pages, the EWR rules made scenario-only with the base-run notice in the scenario editor and settings, the zero-flow and rain fill rules): measured 1973 KB on main @ f81e741cc and 1979 KB with this branch merged onto it (+6 KB). Headroom ~1 KB."
+}
