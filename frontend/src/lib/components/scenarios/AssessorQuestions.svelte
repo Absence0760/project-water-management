@@ -6,7 +6,8 @@
 	// words. An editor answers once; what the answer discloses of other water
 	// users' figures is the authority's call (provisional position, pre-counsel
 	// research, 2026-10-01). The question may be about a draft, which stays
-	// the applicant's: the question carries what the assessors need.
+	// the applicant's: the question carries what the assessors need, and
+	// stays when the draft is deleted (234, issue #523 G7: "(draft deleted)").
 	import { untrack } from 'svelte';
 	import { api, type AssessorQuestion } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
@@ -65,7 +66,9 @@
 		<ul class="items">
 			{#each questions ?? [] as q (q.id)}
 				<li data-answered={q.answer ? 'true' : 'false'}>
-					<p class="small muted">“{q.scenarioName}”, asked {fmtDate(q.askedAt, true)} about {opsText(q.opIndexes)}: {rulesText(q.rules)}</p>
+					<p class="small muted">
+						“{q.scenarioName}”{q.scenarioId === null ? ' (draft deleted)' : ''}, asked {fmtDate(q.askedAt, true)} about {opsText(q.opIndexes)}: {rulesText(q.rules)}
+					</p>
 					<p class="line"><span class="who">The applicant read:</span> {q.problem}</p>
 					<p class="line"><span class="who">In its own words:</span> {q.assessorText}</p>
 					{#if q.answer}

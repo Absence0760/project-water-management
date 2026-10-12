@@ -238,3 +238,44 @@ describe('who reads an assessment', () => {
 		expect((await assessor.call('GET', `${P()}/assessments/${res.body.assessment.id}`)).body.assessment.status).toBe('complete');
 	});
 });
+
+describe("the applicants' questions, exported with the assessment (issue #523 G7)", () => {
+	it("carries its applications' questions and answers, oldest first, and no other application's", async () => {
+		// Planted as the schema owner: asking one through the API needs a rule that turns on hidden farms (questions.db.test.ts).
+		const ask = async (sid: string, name: string) =>
+			(
+				(await asOwner(
+					`INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text)
+					 VALUES ($1, $2, $3, 'op 1 (node.set): doesn''t apply to the catchment as modelled', '{0}', '[]', '{shares}', 'op 1 (node.set): flow shares add up to 125 %')
+					 RETURNING id`,
+					[projectId, sid, name]
+				)) as [{ id: string }]
+			)[0].id;
+		const qA = await ask(appA, 'Raise Rooikloof');
+		const qB = await ask(appB, 'More lucerne on Kalkoenkrans');
+		expect((await assessor.call('POST', `${P()}/application-questions/${qA}/answer`, { answer: 'The catchment is fully allocated.' })).status).toBe(200);
+		// Another application, not in the assessment.
+		const third = await application(applicantA, 'Rooikloof pump', [{ op: 'node.set', nodeId: rooikloof.id, field: 'divertCapacityM3Day', value: 500 }]);
+		const qOther = await ask(third, 'Rooikloof pump');
+
+		const res = await assessor.call('POST', `${P()}/assessments`, { name: 'With questions', scenarioIds: [appA, appB] });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const got = (await assessor.call('GET', `${P()}/assessments/${res.body.assessment.id}`)).body.assessment;
+		expect(got.questions.map((q: { id: string }) => q.id)).toEqual([qA, qB]);
+		expect(got.questions[0]).toMatchObject({
+			scenarioId: appA,
+			scenarioName: 'Raise Rooikloof',
+			assessorText: 'op 1 (node.set): flow shares add up to 125 %',
+			answer: 'The catchment is fully allocated.',
+			answeredAt: expect.any(String)
+		});
+		expect(got.questions[1]).toMatchObject({ scenarioId: appB, answer: null, answeredAt: null });
+		expect(JSON.stringify(got.questions)).not.toContain(qOther);
+		// The list stays lean: no questions, no report.
+		const list = (await assessor.call('GET', `${P()}/assessments`)).body.assessments;
+		expect(list.find((a: { id: string }) => a.id === res.body.assessment.id)).not.toHaveProperty('questions');
+		// Only the assessors read them (control: the assessor above).
+		expect((await applicantA.call('GET', `${P()}/assessments/${res.body.assessment.id}`)).status).toBe(403);
+		await tick();
+	});
+});

@@ -2294,8 +2294,11 @@ projection's read and narrows their series further:
   removes anyone and anyone listed may leave; no update.
 - **`application_question`** (164_applicant_visibility): "Ask the
   assessors why": an application's party asks about a problem line of its
-  check that a rule hidden from them broke. `scenario_id` (cascade: it goes
-  with the application; `assert_same_project`), `asked_at`, `scenario_name`
+  check that a rule hidden from them broke. `scenario_id` (164 cascaded:
+  it went with the application; since 234_question_kept `ON DELETE SET
+  NULL`, nullable: a deleted draft's questions and answers stay with the
+  editors, the application's record for the authority's s42 written
+  reasons, issue #523 G7; `assert_same_project`), `asked_at`, `scenario_name`
   (the application's name when asked: the assessors can't read a draft's
   row), `problem` (the line as the applicant read it), `op_indexes` and
   `ops` (the ops it names, as they stood), `rules` (the rules' kinds, never
@@ -2309,7 +2312,8 @@ projection's read and narrows their series further:
   `app_answer_assessors_question(project, question, answer)` lets an editor
   answer once (`'answered'`, `'already'`, `'none'`);
   `application_question_guard` refuses a question born answered, a second
-  answer or any other change; `app_application_questions(scenario)` gives
+  answer or any other change (234: but `scenario_id` going to null with
+  nothing else changed, its draft deleted); `app_application_questions(scenario)` gives
   the parties their questions without `assessor_text` or `ops`.
   `app_application_hidden_holders(scenario)` (server only, capped at 5)
   counts the farm holders of an application's hidden farms, its owner left

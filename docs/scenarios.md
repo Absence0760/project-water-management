@@ -1454,6 +1454,18 @@ scenario is `'team'`, and behaves exactly as above).
     (`application_question`). The editors answer once, on the Applications
     tab; the authority decides what an answer discloses of other users'
     figures. The draft stays the applicant's.
+  - **What the refusal is** (issue #523 G7, the licensing assessor's
+    review). The panel and the submit's `422` say it is the app's check
+    that the model can run the changes, not a refusal of a water use
+    licence under s42 of the National Water Act (no authority has
+    considered the application), and that the applicant can still apply to
+    DWS through its own channels (e-WULAAS). A masked line ("flow shares
+    over 100 %", "no catchment area left") is evidence that the catchment
+    is fully allocated, so the question and the answer are the
+    application's record for the authority's s42 written reasons: a
+    cumulative assessment shows and exports those on its applications, and
+    they outlive a deleted draft (234_question_kept), for the editors
+    only.
 
   Afterwards each hidden node and crop gets its real name back, suffixed
   where an op took it (`Kalkoenkrans` → `Kalkoenkrans (2)` in that application's

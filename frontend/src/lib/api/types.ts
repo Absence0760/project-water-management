@@ -1409,7 +1409,8 @@ export interface ApplicationQuestion {
 
 /** The same question as the assessors read it: the application, the ops it named and the line in its real words. */
 export interface AssessorQuestion extends ApplicationQuestion {
-	scenarioId: string;
+	/** Null once its draft was deleted: the question and its answer stay the assessors' (234). */
+	scenarioId: string | null;
 	scenarioName: string;
 	ops: ScenarioOp[];
 	assessorText: string;
@@ -2583,6 +2584,12 @@ export interface Assessment {
 	createdAt: string;
 	completedAt: string | null;
 	members: AssessmentMember[];
+	/**
+	 * Only on GET …/assessments/:aid: the applicants' "Ask the assessors why"
+	 * questions on its applications with the answers, oldest first, exported
+	 * with the matrix for the authority's s42 written reasons (issue #523 G7).
+	 */
+	questions?: AssessorQuestion[];
 }
 
 /** POST /projects/:id/assessments. */
