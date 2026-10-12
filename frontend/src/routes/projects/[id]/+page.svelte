@@ -68,6 +68,7 @@
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { fetchProjectPage, takeProjectPage } from '$lib/workspace/firstLoad';
 	import { compareTabHref } from '$lib/components/compare/picker';
+	import { firstOutletSeries } from '$lib/series/pick';
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
 	import { FieldHistoryStore, setFieldHistory } from '$lib/components/history/fieldHistory.svelte';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -980,8 +981,8 @@
 								gaugeRecords={series?.flatMap((x) => (x.siteNodeId ? [{ kind: x.kind, siteNodeId: x.siteNodeId }] : [])) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
 								observedOrigins={observedOriginsOf(series)}
-								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}
-								flowRecordId={series?.find((x) => x.kind === 'flow_observed_m3s' || x.kind === 'flow_logger_m3s')?.id ?? null}
+								apanSeries={series ? (firstOutletSeries(series, 'evap_apan_mm') ?? null) : undefined}
+								flowRecordId={series ? ((firstOutletSeries(series, 'flow_observed_m3s') ?? firstOutletSeries(series, 'flow_logger_m3s'))?.id ?? null) : null}
 								readonly={!canEdit}
 								{onProjectChange}
 								onModelChanged={reloadInputs}

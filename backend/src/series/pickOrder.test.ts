@@ -12,10 +12,11 @@ const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8');
 describe('series picks order by the name’s bytes', () => {
 	it.each([
 		// A run's input: the first of each kind per site.
-		['runs/execute.ts', /ORDER BY site_node_id NULLS FIRST, kind, name COLLATE "C"/],
+		['runs/execute.ts', /SELECT DISTINCT ON \(site_node_id, kind\)[^`]*FROM time_series t WHERE project_id = \$1 ORDER BY site_node_id NULLS FIRST, kind, name COLLATE "C"`/],
 		// A unit's own CHIRPS series for the unit feed proposal.
-		['feeds/fromUnits.ts', /ORDER BY site_node_id, name COLLATE "C"/]
-	] as const)('%s', (rel, order) => {
-		expect(read(rel)).toMatch(order);
+		['feeds/fromUnits.ts', /SELECT DISTINCT ON \(site_node_id\)[^`]*FROM time_series WHERE[^`]*ORDER BY site_node_id, name COLLATE "C"`/]
+	] as const)('%s', (rel, query) => {
+		// The query itself, from its SELECT to its closing backtick, not a comment that quotes it.
+		expect(read(rel)).toMatch(query);
 	});
 });
