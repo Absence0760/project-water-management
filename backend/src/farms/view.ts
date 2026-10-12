@@ -13,6 +13,7 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
+import { jrcTraced } from '../geo/credits.js';
 import { centerOf, type Geometry, type Position } from '../geo/geojson.js';
 import { isUnnamedReach } from '../geo/reachName.js';
 import { csvDownload } from '../export/download.js';
@@ -199,13 +200,19 @@ export interface FarmMapFeature {
 	/** A point at its middle (lon, lat). */
 	center: Position;
 	/**
-	 * The licence credit the map must show while it draws this feature: only
-	 * 'hydrorivers', on a river added from a HydroRIVERS reach (its `ref`,
-	 * geo/rivers.ts riverRef; docs/maps.md § Sources). Absent otherwise. Its
-	 * properties themselves never leave (no author, no node).
+	 * The licence credit the map must show while it draws this feature:
+	 * 'hydrorivers' on a river added from a HydroRIVERS reach (its `ref`,
+	 * geo/rivers.ts riverRef), 'jrc-water' on an outline (a dam, as saved)
+	 * traced from JRC Global Surface Water (its description names the source,
+	 * geo/credits.ts jrcTraced; docs/maps.md § Sources). Absent otherwise.
+	 * Only the flag leaves: its properties themselves (the ref, the
+	 * description) never do, nor an author or a node.
 	 */
-	credit?: 'hydrorivers';
+	credit?: FarmMapCredit;
 }
+
+/** The licensed sources a farm map credits (FarmMapFeature.credit). */
+export type FarmMapCredit = 'hydrorivers' | 'jrc-water';
 
 /** A river feature added from a HydroRIVERS reach: its ref names the dataset (`river-network:HydroRIVERS-v10:<id>`). */
 export const hydroRiversRef = (ref: string | null | undefined): boolean => !!ref && /^river-network:hydro\s*(rivers|sheds)/i.test(ref);
@@ -229,8 +236,8 @@ const FARM_MAP_ORDER: Record<FarmMapKind, number> = { farm_parcel: 0, dam: 1, ga
  * when the farm has no parcel or dam on the map, and the page then shows no map.
  */
 export async function farmMap(db: Db, projectId: string, nodeId: string): Promise<FarmMap> {
-	const { rows } = await db.query<{ id: string; kind: FarmMapKind; name: string; geometry: Geometry; area_m2: number | null; ref: string | null }>(
-		`SELECT id, kind, name, geometry, area_m2, properties ->> 'ref' AS ref FROM map_feature
+	const { rows } = await db.query<{ id: string; kind: FarmMapKind; name: string; geometry: Geometry; area_m2: number | null; ref: string | null; description: string | null }>(
+		`SELECT id, kind, name, geometry, area_m2, properties ->> 'ref' AS ref, properties ->> 'description' AS description FROM map_feature
 		 WHERE project_id = $1
 			AND (kind IN ('catchment_boundary', 'river', 'gauge') OR (kind IN ('farm_parcel', 'dam') AND node_id = $2))`,
 		[projectId, nodeId]
@@ -245,10 +252,18 @@ export async function farmMap(db: Db, projectId: string, nodeId: string): Promis
 			geometry: r.geometry,
 			areaM2: r.area_m2,
 			center: centerOf(r.geometry),
-			...(r.kind === 'river' && hydroRiversRef(r.ref) ? { credit: 'hydrorivers' as const } : {})
+			...creditOf(r)
 		}))
 		.sort((a, b) => FARM_MAP_ORDER[a.kind] - FARM_MAP_ORDER[b.kind] || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 	return { features };
+}
+
+/** A farm map feature's licence credit (FarmMapFeature.credit), as a spread: the flag alone, never the ref or description it is read from. */
+function creditOf(r: { kind: FarmMapKind; ref: string | null; description: string | null }): { credit?: FarmMapCredit } {
+	if (r.kind === 'river' && hydroRiversRef(r.ref)) return { credit: 'hydrorivers' };
+	// Whatever its kind now: a traced outline is saved as a dam, and a kind changed later is still JRC's data.
+	if (jrcTraced(r.description)) return { credit: 'jrc-water' };
+	return {};
 }
 
 export const farmViewRoutes = new Hono<AuthEnv>()
