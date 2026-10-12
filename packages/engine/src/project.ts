@@ -1459,6 +1459,17 @@ export interface NetworkNode {
 	/** kind 'user' only: priority against the farms. Default 'senior'. */
 	userPriority?: UserPriority;
 	/**
+	 * kind 'user', Priority only (engine 1.86.0, issue #523 B3, docs/model.md
+	 * §2.7c): a fixed restriction, the share (0–1) of its demand it gives up
+	 * when restricted, with no basic-needs floor (a user has no population).
+	 * It caps the user's supply cut for its EWR charge in the curtailment
+	 * table, and the drought restriction rule (§2.7i) cuts the user's demand
+	 * by it on every day the rule's level is in force for it. null / absent /
+	 * 0 = uncurtailed (the default, every run before 1.86.0). Ignored, with a
+	 * warning, on a Non-priority user (curtailed for its whole charge).
+	 */
+	userRestrictionPct?: number | null;
+	/**
 	 * Demand factor (engine ≥ 0.41.0, issue #53 R1): a multiplier on the
 	 * node's demand per water-year month (Oct–Sep), for a farm its crop water
 	 * requirement F (so the abstraction D = F ÷ e scales with it, and the
@@ -1700,7 +1711,7 @@ export const BOREHOLE_DEFAULTS = {
 } as const;
 
 /** What a user node without the fields runs as (WP-1.33). */
-export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' } as const;
+export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior', userRestrictionPct: null } as const;
 
 /** One row of a dam's survey curve (WP-3.5): water level (m), surface area (m²) and volume stored (m³) at that level. */
 export interface DamCurvePoint {
@@ -2013,6 +2024,8 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.userDemandM3Day === undefined) n.userDemandM3Day = USER_DEFAULTS.userDemandM3Day;
 				n.userReturnPct ??= USER_DEFAULTS.userReturnPct;
 				n.userPriority ??= USER_DEFAULTS.userPriority;
+				// A Priority user's fixed restriction % (engine 1.86.0): none unless set.
+				if (n.userRestrictionPct === undefined) n.userRestrictionPct = USER_DEFAULTS.userRestrictionPct;
 				// Boreholes (WP-1.34): none unless set.
 				if (n.boreholeCapacityM3Day === undefined) n.boreholeCapacityM3Day = BOREHOLE_DEFAULTS.boreholeCapacityM3Day;
 				n.boreholeRule ??= BOREHOLE_DEFAULTS.boreholeRule;
@@ -2991,14 +3004,28 @@ export interface CurtailmentUser {
 	returnedM3Day: number;
 	/** Mean EWR charge, ≤ 0. */
 	ewrChargeM3Day: number;
-	/** Junior users only. */
+	/** Junior users, and (engine 1.86.0) a senior user with a fixed restriction %. */
 	curtailed: boolean;
-	/** −ΔG ≤ 0: the cut in what it takes that removes the charge (0 for a senior user). */
+	/** −ΔG ≤ 0: the cut in what it takes that removes the charge (0 for a senior user without a fixed restriction %). */
 	supplyCutM3Day: number;
 	supplyCutLs: number;
-	/** The charge the cut does not remove, ≤ 0: all of it for a senior user, the part beyond what it took for a junior one. */
+	/** The charge the cut does not remove, ≤ 0: all of it for a senior user without a fixed %, the part beyond what it took (or beyond its fixed % of its demand) otherwise. */
 	uncurtailedChargeM3Day: number;
+	/**
+	 * A senior user's fixed restriction % (engine 1.86.0, issue #523 B3,
+	 * NetworkNode.userRestrictionPct), a share 0–1: its cut is at most this
+	 * share of its demand, with no basic-needs floor (USER_RESTRICTION_NOTE).
+	 * Absent for a junior user and for a senior one without it.
+	 */
+	restrictionPct?: number;
 }
+
+/**
+ * How the curtailment table and the share-the-pain board mark a Priority
+ * user curtailed by its fixed restriction % (engine 1.86.0, issue #523 B3):
+ * the cut has no basic-needs floor, since a user has no population yet.
+ */
+export const USER_RESTRICTION_NOTE = 'fixed %, no basic-needs floor';
 
 /**
  * What land cover took from the river over the run (engine ≥ 0.24.0, WP-1.35).
@@ -3751,6 +3778,25 @@ export interface DroughtRestrictionSummary {
 		/** The mean cut (demand − restricted demand) over the days a level was in force only, m³/day; null when none was. */
 		avgCutOnRestrictedDaysM3Day: number | null;
 		/** The unit's days at each level over the run (index 0 = none; engine ≥ 1.54.0): the catchment's under a shared basis, its own under 'own'. */
+		daysByLevel: number[];
+	}[];
+	/**
+	 * Per Priority user with a fixed restriction % (engine 1.86.0, issue #523
+	 * B3, in id order; absent when none has one): the % (a share 0–1), its
+	 * mean demand, the mean after the cut (what it asked the river and its
+	 * boreholes for) and the mean taken, m³/day over the run, its mean cut on
+	 * the days it was restricted, and its days at each level: the
+	 * catchment's under a shared basis, the EWR trigger's alone under 'own'
+	 * (a user has no dam of its own).
+	 */
+	users?: {
+		nodeId: string;
+		name: string;
+		restrictionPct: number;
+		avgDemandM3Day: number;
+		avgRestrictedDemandM3Day: number;
+		avgSuppliedM3Day: number;
+		avgCutOnRestrictedDaysM3Day: number | null;
 		daysByLevel: number[];
 	}[];
 }

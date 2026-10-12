@@ -566,6 +566,12 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 			'Unit,Mean demand (m³/day),Mean demand after the restriction (m³/day),Mean cut (m³/day),Mean cut on restricted days (m³/day),Mean supplied (m³/day),Days restricted',
 			'Farm A,100,80,20,43.2,75,105'
 		]);
+		// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3), when there are any.
+		const withUsers = [...droughtRestrictionLines({ ...r, users: [{ nodeId: 't', name: 'Town', restrictionPct: 0.3, avgDemandM3Day: 200, avgRestrictedDemandM3Day: 170, avgSuppliedM3Day: 160, avgCutOnRestrictedDaysM3Day: 60, daysByLevel: [360, 85, 20] }] })];
+		expect(withUsers.slice(-2)).toEqual([
+			'"Priority user (fixed restriction, no basic-needs floor)",Fixed restriction (%),Mean demand (m³/day),Mean demand after the restriction (m³/day),Mean cut (m³/day),Mean cut on restricted days (m³/day),Mean taken (m³/day),Days restricted',
+			'Town,30,200,170,30,60,160,105'
+		]);
 		// In the summary sheet of a run with the rule only.
 		expect([...summaryCsvLines(meta, { ...summary, droughtRestriction: r })]).toContain('Whole run,465,360,85,20');
 		expect([...summaryCsvLines(meta, summary)].some((l) => l.startsWith('Drought restrictions'))).toBe(false);
@@ -652,6 +658,10 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines).toContain('Town,Priority,100,90,10,90,45,5,3');
 		expect(lines).toContain('Town,Priority,100,90,45,5,no (priority),0,0,5');
 		expect(lines.at(-1)).toMatch(/priority user is not curtailed/);
+		// A Priority user with a fixed restriction % (engine 1.86.0, issue #523 B3): curtailed, by at most that share.
+		const fixed = [{ ...otherUsers[0]!, curtailed: true, restrictionPct: 0.3, supplyCutM3Day: -5, supplyCutLs: -5 / 86.4, uncurtailedChargeM3Day: 0 }];
+		const fixedLines = [...otherUserLines({ users, curtailment: { ...c, otherUsers: fixed } } as unknown as RunSummary)];
+		expect(fixedLines.some((l) => l.startsWith('Town,Priority,100,90,45,5,"yes (30 % fixed %, no basic-needs floor)",-5,'))).toBe(true);
 		// No user has a pump capacity: no pump columns.
 		expect(lines[1]).not.toMatch(/pump/);
 	});

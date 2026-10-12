@@ -4211,6 +4211,7 @@ is our pick pending the client's hydrologist's confirmation (#507 item 4).
 | `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
 | `userPriority` | `senior`, shown as Priority (default: a municipal allocation is usually a priority user; confirmed as the default by the client's hydrologist 2026-10-10, issue #507) or `junior`, shown as Non-priority |
 | `pumpCapacityM3Day` P | its river pump's capacity, m³/day (engine ≥ 1.58.0; the farm's field, §2.7e, in the form pumps × m³/h × 24); null = no limit (the default, every user before 1.58.0, no warning); 0 = no river pump |
+| `userRestrictionPct` c | a Priority user's fixed restriction, the share (0–1) of its demand it gives up when restricted (engine 1.86.0, issue #523 B3; below); null / 0 = uncurtailed (the default, every user before 1.86.0). Priority users only: the API refuses it on a Non-priority user and the run ignores it there with a warning |
 
 It has no area, flow share, dam, crops, transfers, EWR share or supply
 rule; the API refuses crop areas and transfers on it
@@ -4276,7 +4277,8 @@ part). The EWR sites table's "farms upstream" and "charged" include the users.
 
 **Curtailment** (provisional decision 2026-10-01, to be confirmed by the
 client's hydrologist, issue #90: kept as built; the NWA reading below is the
-target once the client gives each priority user's population). Of the
+target once the client gives each priority user's population; from engine
+1.86.0 a Priority user may carry a fixed restriction %, below). Of the
 two readings put to the hydrologist, the one the National Water Act
 supports is **"exempt only the basic-human-needs share"**: the Reserve
 (basic human needs and the ecological Reserve, s16–18) is the only use with
@@ -4300,7 +4302,49 @@ their own rows (`CurtailmentSummary.otherUsers`):
   use), and whatever the cut can't remove stands;
 - a **priority** user is **not** curtailed: its charge is reported and left
   standing (`uncurtailedChargeM3Day`). It is **not** moved onto the farms,
-  which would charge irrigators for the town's use.
+  which would charge irrigators for the town's use;
+- a **priority** user with a **fixed restriction %** c (engine 1.86.0, below)
+  is curtailed, by at most that share of its demand H:
+  −ΔG = MAX(R ÷ (1 − r), −supplied, −c × H), with no basic-needs floor; the
+  rest of its charge stands, still never moved onto the farms. Its row
+  carries `restrictionPct` and the table and the share-the-pain board mark
+  it "fixed %, no basic-needs floor" (`USER_RESTRICTION_NOTE`).
+
+**The fixed restriction % (engine 1.86.0, issue #523 B3; the 2026-10-11
+answer to followups.md § *Drought restrictions on the other water users*,
+option d, per user).** Until the client gives each Priority user's
+population (option b, the basic-needs floor), a Priority user can carry one
+fixed % of its demand it gives up when restricted, the same in a curtailment
+and under the drought restriction rule. **Off by default**: null, absent and
+0 run to the bit as before (a test on random networks with the rule on). The
+choices:
+
+- *The % of its demand, not of its charge.* It caps the curtailment cut at
+  c × H (the window's mean demand) and, under the rule, asks the river and
+  the boreholes for D′ = D × (1 − c) on each day it is restricted: a fixed
+  share, whatever the level, the way a municipal restriction stage is
+  stated. A level of the rule that cuts no part of a unit's demand still
+  restricts it: the level is in force.
+- *No basic-needs floor.* A user has no population, so 25 l a person a day
+  can't be worked out; the cut is marked "fixed %, no basic-needs floor"
+  wherever it shows, and a large % can take a town below basic needs. The
+  durable fix stays option b.
+- *Priority users only.* A Non-priority user is already curtailed for its
+  whole charge, and the rule doesn't cut it (it has no %).
+- *What the farms upstream pass.* On a day the rule restricts it, the
+  requirement the farms upstream pass for it is its claim at the restricted
+  demand, MIN(D′, P), and the requirement below it drops by that: water it
+  gives up stays in the dams upstream or flows on below it. The claims are
+  computed twice before the run (`otherUsers`: as they are, and at D′ for
+  every user with a %, with the bed-loss gross-ups each), and each day takes
+  one set: every user with a % is at the same level that day (below, §2.7i).
+- *The demand stays the demand.* `demand` and `deficit` stay the
+  unrestricted demand's, so the cut shows as a shortfall and in the
+  assurance of supply, as a unit's does; `restricted_demand` is published
+  on the user (only with the rule on).
+- *No new flow.* Water not taken stays in the river, so the water balance
+  needs no new term; the mass-balance invariants hold on random networks
+  with users carrying a % and a random rule (`userRestriction.test.ts`).
 
 **The pump capacity (engine ≥ 1.58.0, roadmap WP-3.8, issue #54 item 2b;
 decided, pending the hydrologist).** Mirrors a farm's river pump (§2.7e)
@@ -4327,15 +4371,16 @@ so it needs only the capacity P. The choices:
   demand and no capacity, and a user an application adds can't keep a
   hands-off flow, so it stops that application's pack too (`evidence-10`,
   [evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river)).
-- *Not cut by the drought restriction* (§2.7i): the rule cuts units only;
-  whether to cut other water users is open for the hydrologist
-  ([followups.md § Hydrologist](./followups.md#hydrologist)). The pump is a
-  physical limit, not a restriction: it applies every day.
+- *Not cut by the drought restriction* (§2.7i) unless a Priority user has a
+  fixed restriction % (engine 1.86.0, above). The pump is a physical limit,
+  not a restriction: it applies every day.
 
 **Outputs.** Per user: `demand`, `supplied` (taken), `deficit`,
 `inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
 `ewr_shortfall`, `ewr_charge` (and `senior_requirement` when any priority user's
-demand is passed down, at every node, with the farms' `passed_for_senior`).
+demand is passed down, at every node, with the farms' `passed_for_senior`;
+`restricted_demand` on a Priority user with a fixed restriction % when the
+drought restriction rule is on, engine 1.86.0).
 With a pump capacity (engine ≥ 1.58.0) also `pump_limited` =
 MAX(0, MIN(what its priority leaves, its allocation room, D − GW) − Gr), with
 Gr = supplied − groundwater its river take (no `river_abstraction` series: that
@@ -4347,16 +4392,21 @@ the farms upstream passed only its capped claim and it took it all), with
 `otherUseM3` = Σ (taken − returned) and closes with it (§6).
 
 **Checks** (`verify/checks.ts`): the user's day (G as above, T = r·G,
-U = H − G + T, deficit, shortfall; with a pump, G − GW ≤ P, the
+U = H − G + T, deficit, shortfall; G against `restricted_demand` when it has
+one, the deficit against the demand, engine 1.86.0; with a pump, G − GW ≤ P, the
 `pump_limited` replay and the requirement below a priority user dropping by at
 most MIN(D, P), and the summary's pump means), the farm keeps MIN(Zs, H + I) below its
 dam and holds nothing back without a requirement, Zs never grows past a user,
 the attribution check counts users as contributors, and the summaries and
-curtailment rows are the means of the series. The fuzz generator adds up to
+curtailment rows are the means of the series (a Priority user's cut redone
+with its fixed %, engine 1.86.0). The fuzz generator adds up to
 three users (priority or non-priority, any return share, demand from none to far more
-than the river) to 30 % of networks, and a pump capacity (0, a trickle, or up
-to more than any flow) to half the users of 30 % of seeds. Hand examples:
-`network/users.test.ts` and `network/userPump.test.ts`.
+than the river) to 30 % of networks, a pump capacity (0, a trickle, or up
+to more than any flow) to half the users of 30 % of seeds, and a fixed
+restriction % (a little, any share, all of it, or 0) to half the Priority users
+of 30 % of seeds (engine 1.86.0). Hand examples:
+`network/users.test.ts`, `network/userPump.test.ts` and
+`network/userRestriction.test.ts`.
 
 ### 2.7d Groundwater abstraction and stream depletion (engine ≥ 0.23.0, roadmap WP-1.34, audit N5)
 
@@ -5465,11 +5515,22 @@ each **pending the hydrologist**, listed in
   `e2e/demand.firstFilling.e2e.test.ts` (each case above by hand,
   monotonicity, resumed runs), `run.droughtRestriction.test.ts` (the helpers,
   the self-check, random networks with dams coming into service).
-- *Every farm's demand; not the other water users.* A user node's demand
-  has no category and no population, so a cut on it could take a town's
-  water below basic needs with no floor to stop it. Users keep taking their
-  demand; whether to cut them, and how, is a policy question for the
-  hydrologist ([followups.md § Hydrologist](./followups.md#hydrologist)).
+- *Every farm's demand; a Priority user's by its fixed % only* (engine
+  1.86.0, issue #523 B3, §2.7c). A user node's demand has no category and
+  no population, so the levels' cuts by part don't reach it, and no floor
+  stops a cut taking a town below basic needs. A Priority user with a fixed
+  restriction % c asks for D × (1 − c) on every day its level is above 0,
+  whatever the level's cuts, marked "fixed %, no basic-needs floor"; every
+  other user keeps taking its demand. Its level is the shared one under
+  `total` and `dams` (the rule's `nodeIds` lists units and doesn't limit
+  it), and under `own` the EWR trigger's alone, as a unit without a dam:
+  a user has no dam to read. Decided on the review days, held and lifted
+  with the units', and carried in a snapshot (`restrictionLevels`), so every
+  user with a % is at the same level each day. A user with a % alone
+  doesn't make a rule apply (one that cuts no unit isn't applied). This
+  answers followups.md § *Drought restrictions on the other water users*
+  with option d per user; option b (a population and the 25 l floor)
+  stays the durable fix.
 - *The floor.* A domestic or municipal object never goes below MIN(its
   basic-needs floor, its demand before the restriction) (#250, §2.7f): the
   rule reuses the object's floor and `dayFloor`. A cut of 100 % leaves the
@@ -5505,14 +5566,19 @@ each **pending the hydrologist**, listed in
 day, 0 = none; under `own` the deepest any unit is at) and, under a shared
 basis, `restriction_cut@<part>` (that day's cut, 0–1, for each part some
 level cuts); on every unit the rule cuts, `restricted_demand` (m³/day) and,
-under `own`, its own `restriction_level`. The summary's
+under `own`, its own `restriction_level`; on a Priority user with a fixed
+restriction % (engine 1.86.0), `restricted_demand`, with no level column of
+its own. The summary's
 `droughtRestriction`: the rule, the days at each level per water year and
 over the run, the reviews in the run (with a trigger, `ewrReviews`: those
 after a day its site failed), and per unit its mean demand, mean restricted
 demand and mean supply over the run, its mean cut over the restricted days
 alone and its days at each level; on a resumed run, `start`; with a new dam
-filling (engine ≥ 1.70.0), `filling`. Also a block
-of the summary CSV. A model-state snapshot carries each unit's level held
+filling (engine ≥ 1.70.0), `filling`; with a Priority user's fixed
+restriction % (engine 1.86.0), `users`: per such user its %, mean demand,
+mean restricted demand, mean taken, mean cut on its restricted days and days
+at each level. Also a block
+of the summary CSV. A model-state snapshot carries each unit's (and such a user's) level held
 (`restrictionLevels`), the trigger's state (`restrictionEwrFailed`) and the
 dams still filling (`restrictionFilling`, engine ≥ 1.70.0).
 
@@ -9275,15 +9341,17 @@ labelled table, not a silent redefinition of M.
 two stages per group, each ÷ the group's demand: supplied (K) and volume
 left (V), with the equitable share (P = K_tot, the same for every farm and
 summing to the supplied total) stated once in the board's intro, and the other water users
-as their own rows (supplied, then supplied + supply cut for a non-priority user,
-all of it for a priority one). It is a view: every figure comes from this
+as their own rows (supplied, then supplied + supply cut for a non-priority user
+or a priority one with a fixed restriction %, engine 1.86.0, marked "fixed %, no
+basic-needs floor"; all of it for any other priority one). It is a view: every figure comes from this
 table, bounded as *Demand left %* is, and `ENGINE_VERSION` is unchanged
 ([ui.md § Share the pain](./ui.md#share-the-pain)).
 
 **Other water users (engine ≥ 0.22.0, WP-1.33).** Users are not rows of this
 table and not in its totals or equitable fraction. `CurtailmentSummary.otherUsers`
 lists each over the same window: demand, taken, returned, the mean EWR charge,
-whether it is curtailed (non-priority) and its supply cut and the charge left
+whether it is curtailed (non-priority, or from engine 1.86.0 priority with a
+fixed restriction %, `restrictionPct`) and its supply cut and the charge left
 standing (§2.7c).
 
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,

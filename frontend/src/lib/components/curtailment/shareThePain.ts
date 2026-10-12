@@ -6,7 +6,8 @@
 //   1. Today: what it was supplied (I / H).
 //   2. EWR met: what is left once the EWR charge is met as well (U / H for a
 //      farm, bounded to 0–100 %, never below its basic-needs floor, engine ≥ 1.44.0; for another user, what it takes after its
-//      supply cut, or all of it for a priority user, which is not curtailed).
+//      supply cut, or all of it for a priority user, which is not curtailed
+//      unless it has a fixed restriction %, engine 1.86.0, issue #523 B3).
 //
 // The equitable share (M / H = K_tot) is not a stage: it is the same fraction
 // for every farm and its total is always today's, so the board says it once,
@@ -17,7 +18,10 @@
 // EWR to a group with no demand and printed a negative final demand; the
 // engine bounds the volume left and shows that charge as store less / pass
 // inflow, plan.md Q13). Pure, so it is unit-tested without Svelte.
-import { DEMAND_NORMS, DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser } from '@water-management/engine';
+import { DEMAND_NORMS, DEMAND_PCT_FLOOR_M3_DAY, USER_RESTRICTION_NOTE, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser } from '@water-management/engine';
+
+/** A share as a whole percent: 0.3 → "30 %". */
+const fmtPctShare = (x: number) => `${Math.round(x * 100)} %`;
 import { fmtDemandLeft, fmtVol } from './curtailment';
 
 /** One stage for one row: volume (m³/day) and the share of demand it is. */
@@ -42,6 +46,12 @@ export interface BoardRow {
 	kind: 'farm' | 'user';
 	/** Other water users only. */
 	priority: Priority | null;
+	/**
+	 * Other water users only: the badge's words, "priority, not curtailed",
+	 * "priority, fixed 30 %" (a fixed restriction %, engine 1.86.0) or
+	 * "non-priority, curtailed".
+	 */
+	priorityLabel: string | null;
 	demandM3Day: number;
 	demand: string;
 	today: StageCell;
@@ -106,6 +116,7 @@ function farmRow(f: CurtailmentFarm, names: Record<string, string>): BoardRow {
 		name: names[f.nodeId] ?? f.name,
 		kind: 'farm',
 		priority: null,
+		priorityLabel: null,
 		demandM3Day: f.demandM3Day,
 		demand: fmtVol(f.demandM3Day),
 		today: stageCell(f.suppliedM3Day, f.demandM3Day),
@@ -114,7 +125,7 @@ function farmRow(f: CurtailmentFarm, names: Record<string, string>): BoardRow {
 	};
 }
 
-/** What an other water user takes once the EWR is met: after its supply cut (non-priority), or all of it (priority). */
+/** What an other water user takes once the EWR is met: after its supply cut (non-priority, or priority with a fixed restriction %), or all of it (priority). */
 export function userLeftM3Day(u: CurtailmentUser): number {
 	return u.curtailed ? Math.max(u.suppliedM3Day + u.supplyCutM3Day, 0) : u.suppliedM3Day;
 }
@@ -122,18 +133,24 @@ export function userLeftM3Day(u: CurtailmentUser): number {
 function userRow(u: CurtailmentUser, names: Record<string, string>): BoardRow {
 	const notes: string[] = [];
 	const standing = -u.uncurtailedChargeM3Day;
+	// A Priority user with a fixed restriction % (engine 1.86.0): cut by at most that share, no basic-needs floor.
+	const fixed = u.priority === 'senior' && u.restrictionPct !== undefined && u.restrictionPct > 0;
+	if (fixed) notes.push(`${fmtPctShare(u.restrictionPct!)} fixed restriction, ${USER_RESTRICTION_NOTE.replace('fixed %, ', '')}`);
 	if (standing >= NOTE_FLOOR_M3_DAY) {
 		notes.push(
-			u.curtailed
-				? `${fmtVol(standing)} m³/day of its EWR charge is more than it takes and stands`
-				: `not curtailed: its EWR charge of ${fmtVol(standing)} m³/day stands`
+			fixed
+				? `${fmtVol(standing)} m³/day of its EWR charge is beyond its fixed % and stands`
+				: u.curtailed
+					? `${fmtVol(standing)} m³/day of its EWR charge is more than it takes and stands`
+					: `not curtailed: its EWR charge of ${fmtVol(standing)} m³/day stands`
 		);
 	}
 	return {
 		nodeId: u.nodeId,
 		name: names[u.nodeId] ?? u.name,
 		kind: 'user',
-		priority: u.curtailed ? 'junior' : 'senior',
+		priority: u.priority,
+		priorityLabel: u.priority === 'junior' ? 'non-priority, curtailed' : fixed ? `priority, fixed ${fmtPctShare(u.restrictionPct!)}` : 'priority, not curtailed',
 		demandM3Day: u.demandM3Day,
 		demand: fmtVol(u.demandM3Day),
 		today: stageCell(u.suppliedM3Day, u.demandM3Day),

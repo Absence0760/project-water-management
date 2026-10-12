@@ -117,6 +117,8 @@ describe('model store', () => {
 		// The town carries the GN 538 property area and Table 2 rate (engine 1.12.0, 089_ga538_property)
 		// and a river pump capacity (engine 1.58.0; 060's column, a user's too).
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15', pumpCapacityM3Day: 864.25 });
+		// A Priority user with a fixed restriction % (engine 1.86.0, 223_user_restriction_pct), an awkward number.
+		const mill = node('Mill', outlet.id, { sortOrder: 7, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(250), userPriority: 'senior', userRestrictionPct: 1 / 3 });
 		// A canal head, the river off-take's destination (engine 1.14.0, 091).
 		// It also carries a crop supply table (engine 1.73.0, 202_crop_supply_table): a share from Upper's dam, awkward numbers.
 		const canal = node('Canal', outlet.id, { sortOrder: 6, areaKm2: 0, damCapacityM3: 0, cropShareDam: 0.25, cropShareRiver: 0.5, cropShareRemote: 0.25, cropRemoteNodeId: farm.id, cropRemoteCapM3Day: 0.1 + 0.2 });
@@ -135,7 +137,7 @@ describe('model store', () => {
 		});
 		const model = {
 			// Out of order on purpose: the store orders by sortOrder, then name.
-			nodes: [outlet, weir, town, farm, canal],
+			nodes: [outlet, weir, town, farm, canal, mill],
 			crops: [beans, maize],
 			cropAreas: [
 				{ nodeId: farm.id, cropId: beans.id, areaM2: 1234.5 },
@@ -203,6 +205,7 @@ describe('model store', () => {
 			userDemandM3Day: null,
 			userReturnPct: 0,
 			userPriority: 'senior',
+			userRestrictionPct: null,
 			boreholeCapacityM3Day: null,
 			boreholeRule: 'supplemental',
 			boreholeTriggerPct: 0.3,
@@ -242,7 +245,9 @@ describe('model store', () => {
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.
-		expect(got.nodes).toEqual([full(town), full(farm), full(weir), full(outlet), full(canal)]);
+		expect(got.nodes).toEqual([full(town), full(farm), full(weir), full(outlet), full(canal), full(mill)]);
+		// Migration 223's CHECK keeps the fixed restriction % a share, below the API's own check (engine 1.86.0).
+		await expect(asOwner('UPDATE node SET user_restriction_pct = 1.5 WHERE id = $1', [mill.id])).rejects.toMatchObject({ code: '23514' });
 		expect(got.crops).toEqual([maize, beans]);
 		expect([...got.cropAreas].sort((a, b) => a.areaM2 - b.areaM2)).toEqual([model.cropAreas[1], model.cropAreas[0]]);
 		expect(got.transfers).toEqual([model.transfers[1], model.transfers[0]]);

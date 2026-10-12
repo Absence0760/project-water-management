@@ -418,6 +418,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addCropSupply(new Rng(seed ^ 0x5bd1e995), nodes);
 	// Bed losses in the reaches (engine ≥ 1.75.0, issue #444), from their own stream, last of all.
 	addReachLosses(new Rng(seed ^ 0x6c8e9cf5), nodes);
+	// A fixed restriction % on Priority users (engine 1.86.0, issue #523 B3), from its own stream, last of all.
+	addUserRestrictions(new Rng(seed ^ 0x0d1c2b3a), nodes);
 	return {
 		settings,
 		model: {
@@ -814,6 +816,24 @@ function addUserPumps(g: Rng, nodes: NetworkNode[]): void {
 	for (const n of nodes) {
 		if (n.kind !== 'user' || !g.bool(0.5)) continue;
 		n.pumpCapacityM3Day = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
+	}
+}
+
+/**
+ * A fixed restriction % on other water users (engine 1.86.0, issue #523 B3,
+ * docs/model.md §2.7c) in 30 % of seeds, on each user half the time: a small
+ * share, anything up to all of it, or 100 %, on Priority users only (a
+ * Non-priority user's breaks a model rule; the engine ignores it with a
+ * warning, userRestriction.test.ts). It applies with a drought restriction
+ * rule and in the curtailment table. The rule
+ * itself comes from addDroughtRestriction (25 % of seeds), so some seeds
+ * have both, with every basis and the EWR trigger.
+ */
+function addUserRestrictions(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'user' || !g.bool(0.5) || n.userPriority === 'junior') continue;
+		n.userRestrictionPct = g.pick([g.float(0.01, 0.1), g.frac(), 1, 0]);
 	}
 }
 

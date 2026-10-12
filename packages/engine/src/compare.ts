@@ -1275,6 +1275,8 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
 	['userReturnPct', 'share returned', pct],
 	['userPriority', 'user class', (v) => userPriorityWord(v as UserPriority)],
+	// A Priority user's fixed restriction % (engine 1.86.0, issue #523 B3); null (and absent, upgraded) = none.
+	['userRestrictionPct', 'fixed restriction', (v) => (typeof v === 'number' ? pct(v) : 'none')],
 	// Boreholes (WP-1.34).
 	['boreholeCapacityM3Day', 'borehole capacity', withUnit('m³/day', 0)],
 	['boreholeRule', 'borehole rule', plain],

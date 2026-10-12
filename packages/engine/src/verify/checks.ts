@@ -28,7 +28,7 @@ import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, obj
 import { scheduleFactors } from '../network/demandSchedule';
 import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
 import { hasPumpLimit, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
-import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
+import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES, userRestrictionShare } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
 import { DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
@@ -633,6 +633,9 @@ const arrivingSenior = (zs: number, claimsLost: ArrayLike<number> | undefined, t
  * it returns T = r × G; U = H − G + T; deficit = D − G; its EWR shortfall is
  * MIN(U − Z, 0) with Z the upstream requirement (it has no share of its own);
  * a priority user takes its demand out of the priority requirement below it.
+ * A Priority user with a fixed restriction % (engine 1.86.0, issue #523 B3)
+ * asks for its restricted_demand instead of D (checkDroughtRestriction checks
+ * the cut itself); its deficit stays D − G.
  */
 function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<ModelInput['model']['boreholes']>, day0: number, get: SeriesMap, ups: readonly NetworkNode[], days: number): string | null {
 	const g = (k: string) => get.get(`${n.id}|${k}`);
@@ -656,12 +659,16 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 	const PL = g('pump_limited');
 	if ((pump !== null) !== !!PL) return `${n.id}: user pump_limited ${pump !== null ? 'missing for a pump capacity' : 'without a pump capacity'}`;
 	if (g('river_abstraction')) return `${n.id}: a user has no river_abstraction series (its river take is supplied − groundwater_used)`;
+	// Its demand after the drought restriction's fixed % (engine 1.86.0): what it asked the river and its boreholes for.
+	const DR = g(RESTRICTION_SERIES.restricted.key);
 	for (let t = 0; t < days; t++) {
 		const where = `${n.id} day ${t}`;
 		let zIn = 0;
 		for (let k = 0; k < upZs.length; k++) zIn += arrivingSenior(upZs[k]?.[t] ?? 0, upLost[k], t);
 		const h = H[t]!;
-		const d = D[t]!;
+		const d0 = D[t]!;
+		const d = DR ? DR[t]! : d0;
+		if (DR && (d < 0 || d > d0 + tol(d0))) return `${where}: user restricted demand ${d} outside [0, demand ${d0}]`;
 		const gw = GW?.[t] ?? 0;
 		const dep = DEP?.[t] ?? 0;
 		const avail = senior ? h : Math.max(0, h - zIn);
@@ -672,7 +679,7 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		const want = rp.surface + wantGw;
 		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − priority requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
 		if (Math.abs(gw - wantGw) > tol(d)) return `${where}: user pumped ${gw} ≠ ${wantGw} (borehole rule)`;
-		if (Math.abs(W[t]! - (d - G[t]!)) > tol(d)) return `${where}: user deficit ≠ demand − taken`;
+		if (Math.abs(W[t]! - (d0 - G[t]!)) > tol(d0)) return `${where}: user deficit ≠ demand − taken`;
 		if (Math.abs(T[t]! - r * G[t]!) > tol(G[t]!)) return `${where}: user return ${T[t]} ≠ ${r} × taken ${G[t]}`;
 		if (Math.abs(U[t]! - (h - (G[t]! - gw) + T[t]! - dep)) > tol(Math.max(h, gw))) return `${where}: user balance: outflow ${U[t]} ≠ inflow ${h} − taken from the river ${G[t]! - gw} + returned ${T[t]} − depletion ${dep}`;
 		const noise = 1e-12 * Math.max(Math.abs(U[t]!), Math.abs(Z[t]!));
@@ -1294,8 +1301,13 @@ function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, f
 		if (row.suppliedM3Day > row.demandM3Day || row.ewrChargeM3Day > 0) return `${w}: supplied ${row.suppliedM3Day} > demand or charge ${row.ewrChargeM3Day} > 0`;
 		const k = 1 - Math.min(Math.max(u.userReturnPct ?? 0, 0), 1);
 		const senior = (u.userPriority ?? 'senior') !== 'junior';
-		const cut = senior || !(k > 0) ? 0 : Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day);
-		if (row.curtailed === senior || !close(row.supplyCutM3Day, cut) || row.supplyCutM3Day > 0) return `${w}: supply cut ${row.supplyCutM3Day} ≠ ${cut} (${senior ? 'senior: not curtailed' : 'junior'})`;
+		// A senior user's fixed restriction % (engine 1.86.0, issue #523 B3): curtailed, by at most that share of its demand.
+		const rv = u.userRestrictionPct;
+		const c = senior && typeof rv === 'number' && Number.isFinite(rv) && rv > 0 && rv <= 1 ? rv : 0;
+		const curtailed = !senior || c > 0;
+		const cut = !curtailed || !(k > 0) ? 0 : senior ? Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day, -c * row.demandM3Day) : Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day);
+		if ((row.restrictionPct ?? 0) !== c) return `${w}: restriction % ${row.restrictionPct} ≠ the user's fixed ${c}`;
+		if (row.curtailed !== curtailed || !close(row.supplyCutM3Day, cut) || row.supplyCutM3Day > 0) return `${w}: supply cut ${row.supplyCutM3Day} ≠ ${cut} (${senior ? (c > 0 ? `senior, fixed ${c}` : 'senior: not curtailed') : 'junior'})`;
 		if (!close(row.uncurtailedChargeM3Day, Math.min(0, row.ewrChargeM3Day - cut * k))) return `${w}: charge left standing ${row.uncurtailedChargeM3Day}`;
 		if (!close(row.supplyCutLs, row.supplyCutM3Day / 86.4)) return `${w}: l/s ≠ m³/day ÷ 86.4`;
 	}
@@ -2652,6 +2664,13 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	if (basis === 'own') for (const d of own.values()) if (d && (!d.Q || d.before0 === undefined)) return `${d.n.id}: dam_storage column or starting storage missing`;
 	const held = new Map(units.map((u) => [u.id, resumed?.levelsBefore?.[u.id] ?? 0]));
 	const unitLevels = new Map(units.map((u) => [u.id, new Array<number>(out.days).fill(0)]));
+	// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3): at the shared level, or under 'own'
+	// (no dam of their own) at the EWR trigger's alone; held and lifted with the units.
+	const cutUsers = nodes.filter((n) => userRestrictionShare(n) > 0);
+	for (const u of cutUsers) {
+		held.set(u.id, resumed?.levelsBefore?.[u.id] ?? 0);
+		unitLevels.set(u.id, new Array<number>(out.days).fill(0));
+	}
 	let ewrReviews = 0;
 	let reviewCount = 0;
 	for (let t = 0; t < out.days; t++) {
@@ -2674,8 +2693,9 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 				const d = own.get(u.id);
 				held.set(u.id, basis === 'own' ? Math.max(d ? levelOf([d], t) : 0, ewr) : Math.max(sharedLevel, ewr));
 			}
-		} else if (e === 2) for (const u of units) held.set(u.id, 0);
-		for (const u of units) unitLevels.get(u.id)![t] = held.get(u.id)!;
+			for (const u of cutUsers) held.set(u.id, basis === 'own' ? ewr : Math.max(sharedLevel, ewr));
+		} else if (e === 2) for (const u of [...units, ...cutUsers]) held.set(u.id, 0);
+		for (const u of [...units, ...cutUsers]) unitLevels.get(u.id)![t] = held.get(u.id)!;
 	}
 	// The summary's dams that were filling, and the day each joined the reviews.
 	const wantFill = [...joinedOn].sort((a, b) => cmpStr(a[0], b[0])).map(([nodeId, on]) => ({ nodeId, inServiceFrom: nodes.find((n) => n.id === nodeId)!.damInServiceFrom!, joinedOn: on }));
@@ -2705,8 +2725,24 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	}
 	// Each unit's demand after the cut.
 	const inScope = new Set(units.map((u) => u.id));
+	const userIds = new Set(cutUsers.map((u) => u.id));
 	for (const n of nodes) {
 		const DR = get.get(`${n.id}|${RESTRICTION_SERIES.restricted.key}`);
+		if (userIds.has(n.id)) {
+			// A Priority user with a fixed restriction %: D × (1 − c) on the days its level is above 0, no floor.
+			if (!DR) return `${n.id}: no restricted_demand column for a Priority user with a fixed restriction %`;
+			const c = userRestrictionShare(n);
+			const D = get.get(`${n.id}|demand`);
+			const G = get.get(`${n.id}|supplied`);
+			if (!D || !G) return `${n.id}: demand and supplied are needed to check the drought restriction`;
+			const lvs = unitLevels.get(n.id)!;
+			for (let t = 0; t < out.days; t++) {
+				const want = lvs[t]! > 0 ? D[t]! * (1 - c) : D[t]!;
+				if (Math.abs(DR[t]! - want) > tol(D[t]!)) return `${n.id} day ${t}: user restricted demand ${DR[t]} ≠ ${want} (level ${lvs[t]}, fixed ${c})`;
+				if (G[t]! > DR[t]! + tol(Math.max(DR[t]!, G[t]!))) return `${n.id} day ${t}: user supplied ${G[t]}, more than its restricted demand ${DR[t]}`;
+			}
+			continue;
+		}
 		if (!inScope.has(n.id)) {
 			if (DR) return `${n.id}: restricted_demand on a ${n.kind === 'farm' ? 'unit the rule doesn’t cut' : n.kind}`;
 			continue;
@@ -2790,6 +2826,38 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		if (want === null ? u.avgCutOnRestrictedDaysM3Day !== null : u.avgCutOnRestrictedDaysM3Day === null || Math.abs(u.avgCutOnRestrictedDaysM3Day - want) > tol(want))
 			return `${u.nodeId}: the drought restriction summary's cut on restricted days ${u.avgCutOnRestrictedDaysM3Day} ≠ ${want}`;
 		if (u.daysByLevel.length !== nl || u.daysByLevel.some((v, i) => v !== byLevel[i])) return `${u.nodeId}: the drought restriction summary's days by level don't match its levels`;
+	}
+	// The Priority users with a fixed restriction % (engine 1.86.0): their summary rows.
+	const su = sum.users ?? [];
+	if (su.length !== cutUsers.length) return `the drought restriction summary lists ${su.length} users with a fixed restriction %, the model has ${cutUsers.length}`;
+	for (const u of su) {
+		const lvs = unitLevels.get(u.nodeId);
+		const node = cutUsers.find((n) => n.id === u.nodeId);
+		if (!lvs || !node) return `${u.nodeId}: in the drought restriction summary's users but not a Priority user with a fixed restriction %`;
+		if (u.restrictionPct !== userRestrictionShare(node)) return `${u.nodeId}: the summary's restriction % ${u.restrictionPct} ≠ the user's`;
+		const D = get.get(`${u.nodeId}|demand`) ?? [];
+		const R = get.get(`${u.nodeId}|${RESTRICTION_SERIES.restricted.key}`) ?? [];
+		const G = get.get(`${u.nodeId}|supplied`) ?? [];
+		const m = (a: ArrayLike<number>) => {
+			let x = 0;
+			for (let t = 0; t < a.length; t++) x += a[t]!;
+			return a.length ? x / a.length : 0;
+		};
+		if (Math.abs(u.avgDemandM3Day - m(D)) > tol(m(D)) || Math.abs(u.avgRestrictedDemandM3Day - m(R)) > tol(m(R)) || Math.abs(u.avgSuppliedM3Day - m(G)) > tol(m(G)))
+			return `${u.nodeId}: the drought restriction summary's user means don't match its columns`;
+		let cut = 0;
+		let days = 0;
+		const byLevel = new Array<number>(nl).fill(0);
+		for (let t = 0; t < out.days; t++) {
+			byLevel[lvs[t]!]!++;
+			if (lvs[t] === 0) continue;
+			cut += D[t]! - R[t]!;
+			days++;
+		}
+		const want = days ? cut / days : null;
+		if (want === null ? u.avgCutOnRestrictedDaysM3Day !== null : u.avgCutOnRestrictedDaysM3Day === null || Math.abs(u.avgCutOnRestrictedDaysM3Day - want) > tol(want))
+			return `${u.nodeId}: the drought restriction summary's user cut on restricted days ${u.avgCutOnRestrictedDaysM3Day} ≠ ${want}`;
+		if (u.daysByLevel.length !== nl || u.daysByLevel.some((v, i) => v !== byLevel[i])) return `${u.nodeId}: the drought restriction summary's user days by level don't match its levels`;
 	}
 	return null;
 }

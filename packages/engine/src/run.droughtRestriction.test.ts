@@ -215,6 +215,9 @@ describe('the drought restriction rule (engine 1.54.0)', () => {
 				const base = randomInput(seed);
 				base.settings.droughtRestriction = undefined;
 				delete base.settings.droughtRestriction;
+				// A Priority user's fixed restriction % (engine 1.86.0) applies whenever a level is in force, a level
+				// that cuts no part of a unit's demand included: userRestriction.test.ts covers it, so not here.
+				for (const n of base.model.nodes) delete n.userRestrictionPct;
 				let off: ModelOutput;
 				try {
 					off = runModel(base);

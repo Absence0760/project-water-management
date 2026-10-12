@@ -239,6 +239,15 @@ describe('validateModel', () => {
 		]);
 	});
 
+	it('checks a fixed restriction % as the API does (engine 1.86.0, issue #523 B3)', () => {
+		const town: NetworkNode = { ...node('u', 'Town', 'g'), kind: 'user', userDemandM3Day: new Array(12).fill(10), userReturnPct: 0, userPriority: 'senior', userRestrictionPct: 0.3 };
+		const with_ = (u: Partial<NetworkNode>) => messages(model([node('g', 'Gauge', null), { ...town, ...u }, node('a', 'A', 'u')]));
+		expect(with_({})).toEqual([]);
+		expect(with_({ userRestrictionPct: 1.2 })).toEqual(['"Town": the fixed restriction must be between 0% and 100%.']);
+		expect(with_({ userPriority: 'junior' })).toEqual(['"Town": a fixed restriction is for Priority users; clear it or make the user Priority.']);
+		expect(with_({ userPriority: 'junior', userRestrictionPct: null })).toEqual([]);
+	});
+
 	it('checks boreholes as the API does (WP-1.34)', () => {
 		const g = node('g', 'Gauge', null);
 		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 100, streamDepletionFrac: 0.5 }]))).toEqual([]);

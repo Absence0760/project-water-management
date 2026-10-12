@@ -36,7 +36,9 @@ export const RESTRICTION_SERIES = {
 	cutPrefix: 'restriction_cut@',
 	cutLabel: (part: DemandPart) => `Drought restriction cut on ${DEMAND_PART_WORDS[part]} (share of demand, 0–1)`,
 	cutUnit: '',
-	restricted: { key: 'restricted_demand', label: 'Demand after the drought restriction (abstraction; what the unit asks its sources for)', unit: 'm³/day' }
+	restricted: { key: 'restricted_demand', label: 'Demand after the drought restriction (abstraction; what the unit asks its sources for)', unit: 'm³/day' },
+	/** The restricted_demand column's label on a Priority user with a fixed restriction % (engine 1.86.0). */
+	restrictedUserLabel: 'Demand after the drought restriction (its fixed restriction %, no basic-needs floor; what the user asks the river and its boreholes for)'
 } as const;
 
 export const restrictionCutKey = (part: DemandPart): string => `${RESTRICTION_SERIES.cutPrefix}${part}`;
@@ -269,6 +271,27 @@ export function restrictedObjectDemand(d: number, cut: number, floor: number | n
 	return floor === null ? r : Math.max(r, dayFloor(floor, d));
 }
 
+/**
+ * A Priority user's fixed restriction (engine 1.86.0, issue #523 B3,
+ * docs/model.md §2.7c and §2.7i): NetworkNode.userRestrictionPct as a share
+ * in (0, 1], or 0 for none. 0 for a node that isn't a user, for a
+ * Non-priority user (curtailed for its whole EWR charge already; warned),
+ * and for a value that isn't a share (warned; the API refuses both).
+ */
+export function userRestrictionShare(n: { kind: string; name?: string; userPriority?: string | null; userRestrictionPct?: number | null }, warnings?: string[]): number {
+	const v = n.userRestrictionPct;
+	if (n.kind !== 'user' || v === null || v === undefined || v === 0) return 0;
+	if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1) {
+		warnings?.push(`user "${n.name ?? ''}": restriction ${String(v)} is not a share from 0 to 1; not restricted`);
+		return 0;
+	}
+	if (n.userPriority === 'junior') {
+		warnings?.push(`user "${n.name ?? ''}": a fixed restriction % applies to Priority users only; a Non-priority user is curtailed for its whole EWR charge, so it is ignored`);
+		return 0;
+	}
+	return v;
+}
+
 /** The simulation's form of a rule (NetworkPlan.restriction). */
 export interface PlanRestriction {
 	/** Per run day: 0 = no event, 1 = a review (the level is decided), 2 = a lift (the level is 0). */
@@ -287,6 +310,16 @@ export interface PlanRestriction {
 	ownDam: Int32Array;
 	/** 1 for each unit the rule cuts (farms only). */
 	inScope: Uint8Array;
+	/**
+	 * Each Priority user's fixed restriction share (engine 1.86.0, issue #523
+	 * B3, userRestrictionShare), 0 for every other node; absent when no user
+	 * has one. The rule cuts such a user's demand by it on every day its
+	 * level is above 0: the shared level under 'total' and 'dams', the EWR
+	 * trigger's alone under 'own' (a user has no dam to read), held and
+	 * lifted with the units'. Not in `inScope`: a user isn't a unit, and it
+	 * alone doesn't make a rule apply.
+	 */
+	userCut?: Float64Array;
 	/**
 	 * The EWR trigger's site (a node index) and its level; -1 = none. At the
 	 * outlet (`ewrAtOutlet`) the trigger reads the catchment's EWR, the
@@ -367,7 +400,7 @@ export function restrictionEvents(rule: Pick<DroughtRestrictionRule, 'reviewDate
  */
 export function planRestriction(
 	rule: DroughtRestrictionRule,
-	nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string; ewrSite?: boolean }[],
+	nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string; ewrSite?: boolean; userCut?: number }[],
 	start: number,
 	days: number,
 	warnings: string[] = [],
@@ -409,6 +442,7 @@ export function planRestriction(
 		dams: Int32Array.from(dams),
 		ownDam,
 		inScope,
+		...(nodes.some((n) => (n.userCut ?? 0) > 0) ? { userCut: Float64Array.from(nodes, (n) => (n.kind === 'user' && (n.userCut ?? 0) > 0 ? n.userCut! : 0)) } : {}),
 		ewrSite,
 		ewrAtOutlet: ewrSite >= 0 && ewrSite === outlet,
 		ewrLevel: ewrSite >= 0 ? rule.ewrTrigger!.level : 0,

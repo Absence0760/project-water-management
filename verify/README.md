@@ -305,7 +305,8 @@ docs/followups.md § Verification ("`verify/` phase 2b").
   abstraction from a date), §2.7g;
 - demand factors by part (`partDemandFactor`, the `demand.scale` scenario op
   with a part), dated demand factors (`demandFactorWindows`, the op with
-  `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges;
+  `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges
+  (with a Priority user's fixed restriction %, engine 1.86.0, §2.7i);
 - rain-source periods (§2.4e), the areal rainfall correction (§2.4g), the
   daily A-pan series (§2.3a), CHIRPS fit ranges (§2.4b), the CHIRPS quantile
   map (CR-23), keep-dry periods and the keep-dry guard, listed and kept
@@ -482,7 +483,10 @@ and written into docs/model.md:
 Coverage probes (rules the docs settle, which the random networks rarely
 reach in a way a mutant would show): `trigger-hysteresis` (the trigger rule
 keeps pumping until the stop level, §2.7e), `junior-user` (a non-priority user
-leaves the priority users’ requirement, §2.7c) and `offtake-keep-bands` (off-takes
+leaves the priority users’ requirement, §2.7c), `priority-user-fixed-restriction`
+(a Priority user's fixed restriction %, engine 1.86.0, issue #523 B3, changes no
+daily series without a drought restriction rule: it acts only in the curtailment
+table and under the rule, both outside this cross-check, §2.7c) and `offtake-keep-bands` (off-takes
 of one priority share the flow in bands at their keeps, so a sibling without
 a hands-off flow doesn't let the others take below theirs, §2.6a, engine
 1.69.0), `offtake-release-keep-and-floor` (an off-take leaves its source's

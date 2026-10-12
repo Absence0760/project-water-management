@@ -216,7 +216,8 @@ const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Da
 /** Development over the run (engine ≥ 1.30.0, docs/model.md §2.7g): a dam's sediment and in-service date, a unit's abstraction start. */
 const DEVELOPMENT = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
-const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
+/** An other water user (WP-1.33); a Priority user's fixed restriction % from engine 1.86.0 (issue #523 B3, docs/model.md §2.7c). */
+const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority', 'userRestrictionPct'] as const;
 /** An other water user's river pump (engine ≥ 1.58.0, WP-3.8, docs/model.md §2.7c): the farm's field, without a supply rule. */
 const USER_PUMP = ['pumpCapacityM3Day'] as const;
 /**
@@ -316,6 +317,7 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	userDemandM3Day: nullable(monthlyOf(nonNeg)),
 	userReturnPct: frac,
 	userPriority: oneOf(USER_PRIORITIES),
+	userRestrictionPct: nullable(frac),
 	supplyRule: oneOf(SUPPLY_RULES),
 	pumpCapacityM3Day: nullable(nonNeg),
 	supplyTriggerPct: frac,

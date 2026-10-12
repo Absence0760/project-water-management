@@ -123,6 +123,12 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		}
 		// Bed losses (engine ≥ 1.75.0, docs/model.md §2.6b) are in the reach below a node: the outlet has none in the model.
 		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0) add(`reachLossOutlet:${n.id}`, `"${n.name}" is the outlet: there is no reach below it in the model to lose water in`);
+		// A fixed restriction % (engine 1.86.0, issue #523 B3, docs/model.md §2.7c): a Priority user's only; a
+		// Non-priority user is curtailed for its whole EWR charge already.
+		if ((n.userRestrictionPct ?? 0) > 0) {
+			if (n.kind !== 'user') add(`userRestrictionKind:${n.id}`, `"${n.name}": only an other water user has a fixed restriction %`);
+			else if (n.userPriority === 'junior') add(`userRestrictionJunior:${n.id}`, `"${n.name}": a fixed restriction % is for Priority users; a Non-priority user is curtailed for its whole EWR charge`);
+		}
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
 		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';

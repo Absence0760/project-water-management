@@ -4,13 +4,15 @@
 	// WP-3.8) and its demand per water-year month. Used by the one-node form
 	// and the "Other water users" panel. As on a hydrological unit's supply
 	// fields, only the m³/day is stored; the pumps × m³/h is a calculator.
+	// A Priority user also has a fixed restriction % (engine 1.86.0, issue
+	// #523 B3); switching to Non-priority clears it.
 	import { USER_PRIORITIES, type NetworkNode, type UserPriority } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MonthFields from './MonthFields.svelte';
 	import PumpCapacityField from './PumpCapacityField.svelte';
-	import { userDemandOf, userPriorityNote, userPumpNote } from './users';
+	import { userDemandOf, userPriorityNote, userPumpNote, userRestrictionNote } from './users';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
@@ -22,6 +24,13 @@
 	};
 	const demand = $derived(userDemandOf(node));
 	const pump = $derived(node.pumpCapacityM3Day ?? null);
+	const senior = $derived((node.userPriority ?? 'senior') !== 'junior');
+
+	function setPriority(p: UserPriority) {
+		node.userPriority = p;
+		// A fixed restriction % is a Priority user's only (the API refuses it on a Non-priority one).
+		if (p === 'junior') node.userRestrictionPct = null;
+	}
 
 </script>
 
@@ -29,7 +38,7 @@
 	<div class="row">
 		<div class="field">
 			<span class="lbl"><label for={id('priority')}>Priority</label><HelpTip key="node.userPriority" /></span>
-			<select id={id('priority')} aria-describedby={id('priority-note')} disabled={readonly} value={node.userPriority ?? 'senior'} onchange={(e) => (node.userPriority = e.currentTarget.value as UserPriority)}>
+			<select id={id('priority')} aria-describedby={id('priority-note')} disabled={readonly} value={node.userPriority ?? 'senior'} onchange={(e) => setPriority(e.currentTarget.value as UserPriority)}>
 				{#each USER_PRIORITIES as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
 			</select>
 			<span class="hint explain" id={id('priority-note')} data-testid="user-priority-note">{userPriorityNote(node.userPriority)}</span>
@@ -46,6 +55,24 @@
 				onchange={(v) => (node.userReturnPct = v ?? 0)}
 			/>
 		</div>
+		{#if senior}
+			<div class="field" data-testid="user-restriction-{node.id}">
+				<span class="lbl"><label for={id('restriction')}>Fixed restriction <span class="u">(%)</span></label><HelpTip key="node.userRestrictionPct" /></span>
+				<NumberInput
+					id={id('restriction')}
+					nullable
+					placeholder="none"
+					min={0}
+					max={100}
+					scale={100}
+					disabled={readonly}
+					aria-describedby={id('restriction-note')}
+					value={node.userRestrictionPct ?? null}
+					onchange={(v) => (node.userRestrictionPct = v === null || v === 0 ? null : v)}
+				/>
+				<span class="hint explain" id={id('restriction-note')} data-testid="user-restriction-note">{userRestrictionNote(node.userRestrictionPct)}</span>
+			</div>
+		{/if}
 	</div>
 	<div class="row pump" data-testid="user-pump-{node.id}">
 		<PumpCapacityField

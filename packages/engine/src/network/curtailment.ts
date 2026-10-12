@@ -252,6 +252,12 @@ export interface CurtailmentUserInput {
 	ewrCharge: ArrayLike<number>;
 	/** k = 1 − return share. */
 	consumptivePerSupplied: number;
+	/**
+	 * A senior user's fixed restriction % (engine 1.86.0, issue #523 B3), a
+	 * share in (0, 1]: it is curtailed, by at most this share of its demand.
+	 * Absent = a senior user isn't curtailed (ignored on a junior one).
+	 */
+	restrictionPct?: number;
 }
 
 /**
@@ -259,7 +265,10 @@ export interface CurtailmentUserInput {
  * window means; a junior user's supply cut −ΔG = MAX(charge ÷ k, −supplied)
  * (k = 1 − return share: cutting ΔG removes k·ΔG of use), what the cut can't
  * remove left standing; a senior user is not curtailed, so all of its charge
- * stands.
+ * stands, unless it has a fixed restriction % c (engine 1.86.0, issue #523
+ * B3): then −ΔG = MAX(charge ÷ k, −supplied, −c × demand), with no
+ * basic-needs floor, and the rest of its charge stands (never moved onto the
+ * farms).
  */
 export function otherUserCurtailment(users: CurtailmentUserInput[], window: ReportWindow): CurtailmentUser[] {
 	const { from, to } = window;
@@ -268,7 +277,10 @@ export function otherUserCurtailment(users: CurtailmentUserInput[], window: Repo
 		const I = nz(windowMean(u.supplied, from, to));
 		const R = nz(windowMean(u.ewrCharge, from, to));
 		const k = u.consumptivePerSupplied;
-		const cut = u.senior || !(k > 0) ? 0 : nz(Math.max(R / k, -I));
+		// A senior user's fixed restriction % (engine 1.86.0): curtailed, by at most that share of its demand.
+		const c = u.senior && u.restrictionPct !== undefined && u.restrictionPct > 0 ? Math.min(u.restrictionPct, 1) : 0;
+		const curtailed = !u.senior || c > 0;
+		const cut = !curtailed || !(k > 0) ? 0 : nz(u.senior ? Math.max(R / k, -I, -c * H) : Math.max(R / k, -I));
 		return {
 			nodeId: u.nodeId,
 			name: u.name,
@@ -279,10 +291,11 @@ export function otherUserCurtailment(users: CurtailmentUserInput[], window: Repo
 			fractionSupplied: H === 0 ? null : I / H,
 			returnedM3Day: nz(windowMean(u.returned, from, to)),
 			ewrChargeM3Day: R,
-			curtailed: !u.senior,
+			curtailed,
 			supplyCutM3Day: cut,
 			supplyCutLs: nz(cut / M3_PER_DAY_PER_LS),
-			uncurtailedChargeM3Day: nz(Math.min(0, R - cut * k))
+			uncurtailedChargeM3Day: nz(Math.min(0, R - cut * k)),
+			...(c > 0 ? { restrictionPct: c } : {})
 		};
 	});
 }

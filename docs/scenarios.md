@@ -222,7 +222,10 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   reads them (level, area, volume, one row per line) and checks them the
   same way; empty is none.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
-  `userPriority`, `pumpCapacityM3Day` (engine ≥ 1.58.0: its river pump, `null`
+  `userPriority`, `userRestrictionPct` (engine 1.86.0, issue #523 B3: a
+  Priority user's fixed restriction, a share 0–1 or `null` = none; a model
+  rule refuses it on a Non-priority user, [model.md §2.7c](./model.md)),
+  `pumpCapacityM3Day` (engine ≥ 1.58.0: its river pump, `null`
   = no limit, [model.md §2.7c](./model.md); the supply rule and trigger levels
   stay a farm's), `abstractionFrom` (engine ≥ 1.30.0), and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the

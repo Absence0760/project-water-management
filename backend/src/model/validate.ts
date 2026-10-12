@@ -58,6 +58,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				userDemandM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				userReturnPct: frac.default(0),
 				userPriority: z.enum(USER_PRIORITIES).default('senior'),
+				// A Priority user's fixed restriction % (engine 1.86.0, issue #523 B3): a share; null = none. Only on a
+				// Priority user (modelRuleProblems refuses it elsewhere).
+				userRestrictionPct: frac.nullable().default(null),
 				// Boreholes (WP-1.34): capacity null = none; depletion share and lag of the river's loss.
 				boreholeCapacityM3Day: nonNeg.nullable().default(null),
 				boreholeRule: z.enum(BOREHOLE_RULES).default('supplemental'),

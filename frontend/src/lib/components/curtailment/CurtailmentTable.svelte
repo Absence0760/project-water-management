@@ -9,7 +9,7 @@
 <script lang="ts">
 	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol } from './curtailment';
+	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol, userPriorityText } from './curtailment';
 	import ShareThePainBoard from './ShareThePainBoard.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { basicNeedsNote } from './shareThePain';
@@ -200,7 +200,9 @@
 			<p class="muted small">
 				Towns, industry and unlisted users are outside the irrigation equitable share. They are charged for the EWR by
 				their net impact (taken − returned) like hydrological units. A <strong>non-priority</strong> user is curtailed for its charge; a
-				<strong>priority</strong> one is not, and its charge stands (it is not moved onto the hydrological units). Daily averages over {range}.
+				<strong>priority</strong> one is not, and its charge stands (it is not moved onto the hydrological units), unless it has a fixed
+				restriction %: then it is cut by at most that share of its demand, with no basic-needs floor, and the rest of its charge stands.
+				Daily averages over {range}.
 			</p>
 			<div class="table-wrap">
 				<table class="data" aria-labelledby="other-users-heading">
@@ -222,7 +224,7 @@
 							{@const short = u.fractionSupplied !== null && u.fractionSupplied < SUPPLY_TARGET}
 							<tr>
 								<th scope="row">{farmNames[u.nodeId] ?? u.name}{#if short}<span class="badge badge-warn">below {fmtPct(SUPPLY_TARGET, 0)}</span>{/if}</th>
-								<td>{u.curtailed ? 'Non-priority (curtailed)' : 'Priority (not curtailed)'}</td>
+								<td>{userPriorityText(u)}</td>
 								<td class="num">{fmtVol(u.demandM3Day)}</td>
 								<td class="num">{fmtVol(u.suppliedM3Day)}</td>
 								<td class="num" class:neg={short}>{u.fractionSupplied === null ? '–' : fmtPct(u.fractionSupplied)}</td>

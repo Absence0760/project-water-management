@@ -472,6 +472,18 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists a Priority user’s fixed restriction %; a snapshot from before it diffs clean (engine 1.86.0)', () => {
+		const a = snapshot();
+		a.model.nodes.push({ ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200) });
+		const b = structuredClone(a);
+		b.model.nodes.find((n) => n.name === 'Town')!.userRestrictionPct = 0.3;
+		expect(texts(a, b)).toEqual(['Town: fixed restriction none → 30%']);
+		// Absent (a run before 1.86.0) against null on every node, as a model saved now stores it.
+		const c = structuredClone(a);
+		for (const n of c.model.nodes) n.userRestrictionPct = null;
+		expect(texts(a, c)).toEqual([]);
+	});
+
 	it('lists an other water user’s pump capacity, added with it or changed (engine 1.58.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

@@ -175,6 +175,25 @@ describe('modelRuleIssues', () => {
 		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['supplyKind:gp', 'supplyKind:u', 'supplyRor:r', 'supplyStop:s', 'supplyTrigger:t']);
 	});
 
+	it('a fixed restriction % (engine 1.86.0, issue #523 B3): a Priority user’s only', () => {
+		const n = (id: string, kind: string, over: object = {}) => ({ id, name: id, kind, damCapacityM3: 0, downstreamNodeId: id === 'g' ? null : 'g', ...over }) as ProjectModel['nodes'][number];
+		const m = {
+			nodes: [
+				n('g', 'gauge'),
+				n('ok1', 'user', { userRestrictionPct: 0.3 }),
+				n('ok2', 'user', { userPriority: 'senior', userRestrictionPct: 1 }),
+				n('ok3', 'user', { userPriority: 'junior', userRestrictionPct: 0 }),
+				n('ok4', 'farm', { userRestrictionPct: null }),
+				n('j', 'user', { userPriority: 'junior', userRestrictionPct: 0.3 }),
+				n('f', 'farm', { userRestrictionPct: 0.3 })
+			],
+			crops: [],
+			cropAreas: [],
+			transfers: []
+		} as unknown as ProjectModel;
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['userRestrictionJunior:j', 'userRestrictionKind:f']);
+	});
+
 	it('hands-off flow and River to dam by month (engine 1.32.0): a farm\'s, 12 values each', () => {
 		const n = (id: string, kind: string, over: object = {}) => ({ id, name: id, kind, damCapacityM3: 0, downstreamNodeId: id === 'g' ? null : 'g', ...over }) as ProjectModel['nodes'][number];
 		const twelve = new Array(12).fill(100);
