@@ -123,13 +123,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Decided (from the literature, engine 0.33.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
-		"id": "U1",
-		"source": "finding",
-		"severity": "Medium (projects with runoff from each unit's own rain, settings.unitRain perUnit)",
-		"title": "Each unit's rain level rests on provisional calls the hydrologist hasn't confirmed",
-		"status": "Needs hydrologist (engine 1.78.0, issue #482)"
-	},
-	{
 		"id": "L1",
 		"source": "finding",
 		"severity": "Medium (licence applications that insert a priority other water user on a reach)",
