@@ -51,25 +51,50 @@ describe('the licence record', () => {
 		expect((await editor.call('GET', at())).body.licenceRecord.reviewDueOn).toBe(plusYears(today(), 5));
 	});
 
-	it('lets an owner, not an editor, record the outcome; a grant closes 3 years after it expires', async () => {
-		const grant = { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'DWS letter 16/2/7/A' };
+	it('lets an owner, not an editor, record the outcome; an issued licence closes 3 years after it expires', async () => {
+		const grant = { outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'DWS letter 16/2/7/A' };
 		expect((await editor.call('PUT', at(), grant)).status).toBe(403);
 		const res = await owner.call('PUT', at(), grant);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.licenceRecord).toEqual({ ...grant, closesOn: '2049-02-28', reviewDueOn: null });
 		const events = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'licence.outcome'`, [projectId]);
-		expect(events.at(-1)?.subject).toMatchObject({ outcome: 'granted', closesOn: '2049-02-28', previous: null, reason: grant.reason });
+		expect(events.at(-1)?.subject).toMatchObject({ outcome: 'licence_issued', closesOn: '2049-02-28', previous: null, reason: grant.reason });
 	});
 
-	it('closes a refused or withdrawn application 3 years after the decision', async () => {
-		const res = await owner.call('PUT', at(), { outcome: 'refused', outcomeOn: '2026-03-01', reason: 'refused on appeal' });
-		expect(res.body.licenceRecord).toMatchObject({ outcome: 'refused', expiresOn: null, closesOn: '2029-03-01' });
+	// 233 (issue #523 G9 (b)): the authority's words (D14), and the applicant's withdrawal.
+	it('closes every other outcome 3 years after its date, with no expiry', async () => {
+		for (const outcome of ['licence_refused', 'application_rejected', 'not_considered', 'application_withdrawn']) {
+			const res = await owner.call('PUT', at(), { outcome, outcomeOn: '2026-03-01', reason: 'the authority’s letter' });
+			expect(res.status, outcome).toBe(200);
+			expect(res.body.licenceRecord, outcome).toMatchObject({ outcome, expiresOn: null, closesOn: '2029-03-01' });
+		}
+		// An expiry only with an issued licence.
+		expect((await owner.call('PUT', at(), { outcome: 'licence_refused', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'x' })).status).toBe(400);
+		expect((await owner.call('PUT', at(), { outcome: 'approved', outcomeOn: '2026-03-01', reason: 'x' })).status).toBe(400);
 	});
 
-	it('refuses a grant without an expiry, or expiring before it was granted', async () => {
-		expect((await owner.call('PUT', at(), { outcome: 'granted', outcomeOn: '2026-03-01', reason: 'x' })).status).toBe(400);
-		expect((await owner.call('PUT', at(), { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2026-02-01', reason: 'x' })).status).toBe(400);
-		expect((await owner.call('PUT', at(), { outcome: 'refused', outcomeOn: '2026-03-01', reason: '' })).status).toBe(400);
+	it('still takes 161’s words from an older web release, storing the authority’s (expand/contract)', async () => {
+		const grant = await owner.call('PUT', at(), { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'x' });
+		expect(grant.body.licenceRecord).toMatchObject({ outcome: 'licence_issued', closesOn: '2049-02-28' });
+		for (const [old, now] of [
+			['refused', 'licence_refused'],
+			['withdrawn', 'application_withdrawn']
+		])
+			expect((await owner.call('PUT', at(), { outcome: old, outcomeOn: '2026-03-01', reason: 'x' })).body.licenceRecord).toMatchObject({ outcome: now, closesOn: '2029-03-01' });
+		// And so does the database function an older backend calls.
+		await withUser(owner.id, (db) => db.query(`SELECT app_set_licence_outcome($1, 'granted', '2026-03-01', '2046-02-28', 'x')`, [projectId]));
+		expect((await owner.call('GET', at())).body.licenceRecord).toMatchObject({ outcome: 'licence_issued', expiresOn: '2046-02-28', closesOn: '2049-02-28' });
+	});
+
+	it('refuses the old words written into the column, and an issued licence without an expiry (the CHECKs)', async () => {
+		await expect(asOwner(`UPDATE project SET licence_outcome = 'granted' WHERE id = $1`, [projectId])).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner(`UPDATE project SET licence_expires_on = NULL WHERE id = $1`, [projectId])).rejects.toMatchObject({ code: '23514' });
+	});
+
+	it('refuses an issued licence without an expiry, or expiring before it was issued', async () => {
+		expect((await owner.call('PUT', at(), { outcome: 'licence_issued', outcomeOn: '2026-03-01', reason: 'x' })).status).toBe(400);
+		expect((await owner.call('PUT', at(), { outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2026-02-01', reason: 'x' })).status).toBe(400);
+		expect((await owner.call('PUT', at(), { outcome: 'licence_refused', outcomeOn: '2026-03-01', reason: '' })).status).toBe(400);
 	});
 
 	it('refuses the app writing the dates itself, even as an owner (licence_record_guard)', async () => {
@@ -155,7 +180,7 @@ describe('the tick’s notices', () => {
 	});
 
 	it('tells them once that the record can now be deleted when its closing date passes', async () => {
-		const res = await o.call('PUT', `/projects/${p}/licence-record`, { outcome: 'withdrawn', outcomeOn: plusYears(today(), -4), reason: 'withdrawn by the applicant' });
+		const res = await o.call('PUT', `/projects/${p}/licence-record`, { outcome: 'application_withdrawn', outcomeOn: plusYears(today(), -4), reason: 'withdrawn by the applicant' });
 		expect(res.body.licenceRecord.closesOn < today()).toBe(true);
 		await sendLicenceRecordNotices({ operatorEmail });
 		await sendLicenceRecordNotices({ operatorEmail });

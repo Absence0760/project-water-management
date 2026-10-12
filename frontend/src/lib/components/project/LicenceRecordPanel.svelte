@@ -80,7 +80,8 @@
 	</div>
 	<p class="muted small intro">
 		An issued evidence pack and a signed-off run keep the names of the people who made and signed them, also after their accounts are
-		deleted. They are kept until three years after the licence expires, or three years after the application is refused or withdrawn.
+		deleted. They are kept until three years after the licence expires, or three years after any other outcome (refused, rejected, not
+		considered or withdrawn).
 		Until the outcome is recorded here, an owner confirms every five years that the record is still needed. Nothing is deleted
 		automatically.
 	</p>
@@ -107,11 +108,11 @@
 					</div>
 					{#if form.outcome !== ''}
 						<div class="field">
-							<label for="lr-on">Decided on</label>
+							<label for="lr-on">{form.outcome === 'application_withdrawn' ? 'Withdrawn on' : 'Decided on'}</label>
 							<DayInput id="lr-on" bind:value={form.outcomeOn} />
 						</div>
 					{/if}
-					{#if form.outcome === 'granted'}
+					{#if form.outcome === 'licence_issued'}
 						<div class="field">
 							<label for="lr-expires">Licence expires on</label>
 							<DayInput id="lr-expires" bind:value={form.expiresOn} />

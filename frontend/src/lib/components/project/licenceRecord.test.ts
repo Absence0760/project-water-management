@@ -16,34 +16,47 @@ describe('recordStatus', () => {
 		expect(due.text).toContain('record the licence outcome, or confirm');
 	});
 
-	it('gives a grant’s expiry and the closing date, and says when it has passed', () => {
-		const granted: LicenceRecord = { ...empty, outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28', reason: 'x' };
-		expect(recordStatus(granted, '2026-10-01')).toEqual({ text: 'Granted on 2026-03-01; the licence expires on 2046-02-28. The record is kept until 2049-02-28.', due: false });
-		const refused: LicenceRecord = { ...empty, outcome: 'refused', outcomeOn: '2020-03-01', closesOn: '2023-03-01', reason: 'x' };
+	it('gives an issued licence’s expiry and the closing date, and says when it has passed', () => {
+		const issued: LicenceRecord = { ...empty, outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28', reason: 'x' };
+		expect(recordStatus(issued, '2026-10-01')).toEqual({ text: 'Licence issued on 2026-03-01; it expires on 2046-02-28. The record is kept until 2049-02-28.', due: false });
+		const refused: LicenceRecord = { ...empty, outcome: 'licence_refused', outcomeOn: '2020-03-01', closesOn: '2023-03-01', reason: 'x' };
 		const s = recordStatus(refused, '2026-10-01');
 		expect(s.due).toBe(true);
-		expect(s.text).toBe('Refused on 2020-03-01. The record could be deleted from 2023-03-01: ask the operator, in writing, when the organisation no longer needs it.');
+		expect(s.text).toBe('Licence refused on 2020-03-01. The record could be deleted from 2023-03-01: ask the operator, in writing, when the organisation no longer needs it.');
+	});
+
+	// 233 (issue #523 G9 (b)): the authority's words (D14) and the applicant's withdrawal.
+	it('names every other outcome in the authority’s words', () => {
+		const at = (outcome: LicenceRecord['outcome']) => recordStatus({ ...empty, outcome, outcomeOn: '2026-03-01', closesOn: '2029-03-01', reason: 'x' }, '2026-10-01').text;
+		expect(at('application_rejected')).toBe('Application rejected (formal requirements) on 2026-03-01. The record is kept until 2029-03-01.');
+		expect(at('not_considered')).toBe('Not considered: use already authorised on 2026-03-01. The record is kept until 2029-03-01.');
+		expect(at('application_withdrawn')).toBe('Application withdrawn on 2026-03-01. The record is kept until 2029-03-01.');
 	});
 });
 
 describe('the owner’s form', () => {
-	it('needs a reason, a decision date and, for a grant, an expiry after it', () => {
-		expect(formProblem({ outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: '' })).toContain('Say why');
-		expect(formProblem({ outcome: 'refused', outcomeOn: '', expiresOn: '', reason: 'letter' })).toContain('date of the decision');
-		expect(formProblem({ outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '', reason: 'letter' })).toContain('expires');
-		expect(formProblem({ outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2026-01-01', reason: 'letter' })).toContain('before it was granted');
+	it('needs a reason, a decision date and, for an issued licence, an expiry after it', () => {
+		expect(formProblem({ outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: '' })).toContain('Say why');
+		expect(formProblem({ outcome: 'licence_refused', outcomeOn: '', expiresOn: '', reason: 'letter' })).toContain('date of the decision');
+		expect(formProblem({ outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '', reason: 'letter' })).toContain('expires');
+		expect(formProblem({ outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2026-01-01', reason: 'letter' })).toContain('before it was issued');
+		expect(formProblem({ outcome: 'not_considered', outcomeOn: '2026-03-01', expiresOn: '', reason: 'letter' })).toBeNull();
 		expect(formProblem({ outcome: '', outcomeOn: '', expiresOn: '', reason: 'wrong project' })).toBeNull();
 	});
 
 	it('sends only the fields the outcome takes', () => {
-		expect(outcomeBody({ outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: ' letter ' })).toEqual({
-			outcome: 'granted',
+		expect(outcomeBody({ outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: ' letter ' })).toEqual({
+			outcome: 'licence_issued',
 			outcomeOn: '2026-03-01',
 			expiresOn: '2046-02-28',
 			reason: 'letter'
 		});
-		expect(outcomeBody({ outcome: 'withdrawn', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'x' })).toEqual({ outcome: 'withdrawn', outcomeOn: '2026-03-01', reason: 'x' });
+		expect(outcomeBody({ outcome: 'application_withdrawn', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'x' })).toEqual({
+			outcome: 'application_withdrawn',
+			outcomeOn: '2026-03-01',
+			reason: 'x'
+		});
 		expect(outcomeBody({ outcome: '', outcomeOn: '2026-03-01', expiresOn: '', reason: 'x' })).toEqual({ outcome: null, reason: 'x' });
-		expect(formOf({ ...empty, outcome: 'refused', outcomeOn: '2026-03-01', reason: 'kept' })).toEqual({ outcome: 'refused', outcomeOn: '2026-03-01', expiresOn: '', reason: '' });
+		expect(formOf({ ...empty, outcome: 'licence_refused', outcomeOn: '2026-03-01', reason: 'kept' })).toEqual({ outcome: 'licence_refused', outcomeOn: '2026-03-01', expiresOn: '', reason: '' });
 	});
 });

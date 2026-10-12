@@ -259,9 +259,9 @@ unfinished calculation and a draft application of theirs are deleted; a
 sign-off's typed name and registration, and the names printed in an issued
 evidence pack, are kept until the closing date of the licence record they
 support (three years after the licence expires, or three years after the
-application is refused or withdrawn, reviewed every five years while no
-outcome is recorded), and then deleted on the Client's written confirmation.
-The Operator tells the Client of each deletion that touches the Client's
+application is refused, rejected, not considered or withdrawn, reviewed
+every five years while no outcome is recorded), and then deleted on the
+Client's written confirmation. The Operator tells the Client of each deletion that touches the Client's
 projects within [5] business days. The Client may vary this instruction in
 writing for its own projects (for example under clause 3 where it must keep
 a name by law).

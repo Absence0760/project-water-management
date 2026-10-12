@@ -306,6 +306,16 @@ describe('what an item says', () => {
 		expect(eventLine(ev('licence.outcome', { outcome: 'refused', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
 			'Recorded the licence outcome: refused on 2026-03-01; the record may be deleted from 2029-03-01'
 		);
+		// 233: the authority's words; the events above are 161's, still read as written.
+		expect(eventLine(ev('licence.outcome', { outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28' }))).toBe(
+			'Recorded the licence outcome: licence issued on 2026-03-01, expiring 2046-02-28; the record may be deleted from 2049-02-28'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: 'application_withdrawn', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
+			'Recorded the licence outcome: application withdrawn on 2026-03-01; the record may be deleted from 2029-03-01'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: 'not_considered', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
+			'Recorded the licence outcome: not considered (use already authorised) on 2026-03-01; the record may be deleted from 2029-03-01'
+		);
 		expect(eventLine(ev('licence.outcome', { outcome: null, reason: 'entered on the wrong project' }))).toBe('Cleared the licence outcome: entered on the wrong project');
 		expect(eventLine(ev('licence.confirmed', { reviewDueOn: '2031-10-01' }))).toBe('Confirmed the licence record is still needed; next review 2031-10-01');
 		expect(eventLine(ev('allocation.viewer_units', { on: true }))).toBe('Let viewers see each farm’s registered volumes');
