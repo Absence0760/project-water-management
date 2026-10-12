@@ -1681,15 +1681,16 @@ A demand object's `waterSource` (engine ≥ 1.65.0, migration 170, issue #344,
 [model.md §2.7j](./model.md)) is where its water comes from: null or `'dam'`,
 the unit's dam side under its supply rule (every object saved before it);
 `'river'`, a river abstraction of its own beside the dam, with the pump
-`riverPumpM3Day` and the pool `riverPoolM3` (capacity only: it starts full,
-its area is estimated). A pump or pool on a dam-sourced object is kept but
+`riverPumpM3Day` and the pool `riverPoolM3` (capacity only: it starts full
+and is storage only from engine 1.86.0, with no rain or evaporation). A pump or pool on a dam-sourced object is kept but
 unused. `PUT` refuses an unknown source and a negative or infinite pump or
 pool. Runs of a unit with a river abstraction store, per abstraction (key the
 object's id or `crops`), `river_take@<key>` (m³/day, part of `supplied`) and,
-with a pool, `river_pool@<key>` (m³, end of the day) and
-`river_pool_evaporation@<key>` (m³/day); its `FarmSummary.riverTakes` lists
-each one's mean take, pump and pool, and the water balance gains
-`poolEvaporationM3`.
+with a pool, `river_pool@<key>` (m³, end of the day); its
+`FarmSummary.riverTakes` lists each one's mean take, pump and pool. A pool is
+storage only from engine 1.86.0 (issue #523 B2); runs of engines
+1.65.0–1.85.x also store `river_pool_evaporation@<key>` (m³/day) and the
+water balance's `poolEvaporationM3`.
 
 A demand object's `population` (engine ≥ 1.44.0, migration 127, issue #123,
 [model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
@@ -1736,7 +1737,7 @@ The crops' water source (engine ≥ 1.65.0, migration 170, issue #344,
 a pool on a node that isn't a farm, an unknown source and a negative pump or
 pool. Under `"river"` the unit's crops take from a river abstraction of their
 own beside the dam (series `river_take@crops`, and with a pool
-`river_pool@crops` and `river_pool_evaporation@crops`); the supply rule then
+`river_pool@crops`, and before engine 1.86.0 `river_pool_evaporation@crops`); the supply rule then
 serves the unit's dam-sourced demand objects only.
 
 Bed losses (engine ≥ 1.75.0, migration 203, issue #444,

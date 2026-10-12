@@ -1374,7 +1374,8 @@ def run(doc: dict) -> dict:
 
     # ---- river abstractions beside a unit's dam (§2.7j) -------------------
     # Each demand with water source 'river' (the crops, or an enabled object) has its own pump (None = no
-    # limit) and a pool (capacity > 0; it starts full, its full area 7.2 × capacity^0.77, b = 0.7). Its supply
+    # limit) and a pool (capacity > 0; it starts full; storage only from engine 1.86.0, no rain and no
+    # evaporation, issue #523 B2). Its supply
     # level is its place in the unit's supply order (supply_key; the crops with 'shared'). The dam side serves
     # the other demands only.
     # ---- the crop supply table (§2.7k) ------------------------------------
@@ -1655,8 +1656,8 @@ def run(doc: dict) -> dict:
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
     obj_sup = {ob["id"]: [0.0] * n for lst in objs.values() for ob in lst}
-    # Each river abstraction's take, pool storage and pool evaporation (§2.7j).
-    river_cols = {fid: {t["key"]: {"take": [0.0] * n, "pool": [0.0] * n, "evap": [0.0] * n} for t in ts} for fid, ts in riv.items()}
+    # Each river abstraction's take and pool storage (§2.7j).
+    river_cols = {fid: {t["key"]: {"take": [0.0] * n, "pool": [0.0] * n} for t in ts} for fid, ts in riv.items()}
     storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] for f in farms}
     on_river = {f["id"]: False for f in farms}
     sd_store = {x["id"]: 0.0 for x in nodes}
@@ -2249,16 +2250,8 @@ def run(doc: dict) -> dict:
                 free = max(0.0, past - keep)
                 rroom = (sroom[0] if sroom else math.inf) - gin - (G - GW)
                 q = pool_q[xid]
-                held = []
-                evs = []
-                for a, t in enumerate(ts):
-                    ev = 0.0
-                    if t["pool"]:
-                        prev = q[a]
-                        ar = 7.2 * t["pool"] ** 0.77 * min(prev / t["pool"], 1.0) ** 0.7 if prev > 0 else 0.0
-                        ev = min(k_lake[m] * apan[m] / mdays[m] / 1000 * ar, prev)
-                    evs.append(ev)
-                    held.append(q[a] - ev)
+                # A pool is storage only (engine ≥ 1.86.0): it starts the day holding what it ended the last with.
+                held = list(q)
                 want_t = [crop_share(xid, "river") * d["Dc"][i] if t["ob"] is None else obj_dem[t["ob"]["id"]][i] for t in ts]
                 got = [0.0] * len(ts)
                 left_p = [t["pump"] for t in ts]
@@ -2310,10 +2303,9 @@ def run(doc: dict) -> dict:
                     cc_t = river_cols[xid][t["key"]]
                     cc_t["take"][i] = got[a]
                     if t["pool"]:
-                        pool_chg += held[a] - q[a] + evs[a]
+                        pool_chg += held[a] - q[a]
                         q[a] = held[a]
                         cc_t["pool"][i] = held[a]
-                        cc_t["evap"][i] = evs[a]
                 T += back_r
                 flow = max(0.0, past - from_flow - refill) + T
                 diag["river_take_days"] += 1 if g_riv > 0 else 0
@@ -2636,7 +2628,6 @@ def run(doc: dict) -> dict:
                 put(xid, f"river_take@{t['key']}", c_["take"])
                 if t["pool"]:
                     put(xid, f"river_pool@{t['key']}", c_["pool"])
-                    put(xid, f"river_pool_evaporation@{t['key']}", c_["evap"])
             for k in extra:
                 put(xid, k, cc[k])
             put(xid, "ewr_charge", charge[xid])

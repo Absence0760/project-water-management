@@ -426,9 +426,11 @@ runs and accumulations are real) can't be decided without the client.
       in engine-audit.md): the abstractions take after the dam side from the
       flow passing the dam (its spill too), keep the unit's hands-off flow,
       share the river by the demand objects' supply order, and a pool (issue
-      #90 Q18) starts full, refills only from the flow above what must pass
-      and gains no rain. Trigger: the hydrologist's answer on #90; a change
-      is a new engine version.
+      #90 Q18) starts full and refills only from the flow above what must
+      pass. Trigger: the hydrologist's answer on #90; a change is a new
+      engine version. The pools are settled (2026-10-11, #90
+      River-abstraction pools; engine 1.86.0, issue #523 B2): storage only,
+      no rain, no evaporation, no area.
 
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
@@ -4471,7 +4473,8 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       ([model.md §2.7j](./model.md)). The node form's **Water for …**
       fields, a scenario `node.set` / `demandObject.set`, the run comparison,
       the series `river_take@`, `river_pool@`, `river_pool_evaporation@`,
-      `FarmSummary.riverTakes` and the water balance's pool evaporation.
+      `FarmSummary.riverTakes` and the water balance's pool evaporation
+      (both dropped in engine 1.86.0, issue #523 B2: a pool is storage only).
       Supersedes draft PR #341's pool on a dam-less run-of-river unit. No
       importer sets it (b023 has no such abstraction). The decisions are
       open question R2 in engine-audit.md, listed under § Hydrologist.

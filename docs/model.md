@@ -3642,10 +3642,11 @@ start of the day = store[t−1] + Pd − E − Sp       (G, P and Q follow from 
 **No A-pan, no open-water evaporation (engine ≥ 1.67.0 warns).** With the
 monthly A-pan 0 in every month and no daily A-pan series covering a day
 (a new project's default; an ET₀ row from the map feeds GR4J's PE only,
-[maps.md § Evaporation from the map](./maps.md)), E is 0 for every dam and
-river pool (§2.7j). The run then warns "A-pan evaporation is 0 on every day,
-so the dams and river pools lose nothing to evaporation …" whenever it has a
-dam or a pool on a river-sourced demand; before 1.67.0 only the crops'
+[maps.md § Evaporation from the map](./maps.md)), E is 0 for every dam. The
+run then warns "A-pan evaporation is 0 on every day, so the dams lose
+nothing to evaporation …" whenever it has a dam (engines 1.67.0–1.85.x also
+named the river pools and warned for a pool on a river-sourced demand,
+which is storage only from 1.86.0, §2.7j); before 1.67.0 only the crops'
 "irrigation demand is 0" said so, and a unit with a dam and no crops ran
 with no word (persona-hydrologist, round 4).
 
@@ -5573,9 +5574,13 @@ A demand with source `river` is a **river abstraction**: its own pump on the
 river at the unit, and an optional pool at the pump (a natural pool or a
 weir pool in the channel). One pump per demand, as the client describes it
 ("each abstraction has its own demand"); two demands sharing one pump aren't
-modelled. The pool takes only its capacity: it starts the run full and its
-surface area is estimated from the capacity as a dam's is (7.2 ×
-capacity^0.77, §2.7a), with the dams' area–storage exponent b = 0.7.
+modelled. The pool takes only its capacity: it starts the run full and is
+**storage only** (engine ≥ 1.86.0, issue #523 B2, the hydrologist's answer
+on #90 River-abstraction pools): it holds up to its capacity with no rain
+and no evaporation, so it has no surface area. Engines 1.65.0–1.85.x
+estimated its surface from the capacity as a dam's (7.2 × capacity^0.77,
+§2.7a, b = 0.7) and took open-water evaporation off it each day; see
+*Storage only* below for which results move.
 
 **Each day,** after the unit's dam side (§2.7, §2.7e, the off-take water,
 the boreholes) has supplied its dam-sourced demand and the dam has spilled:
@@ -5587,7 +5592,7 @@ dam side      D_dam = Σ the demands with source dam (F′/e for the crops when 
 flow past     Fr = (S − Gr) + R + released + returned seepage + off-take water passing the unit
 keep          = MAX(Zs, the pass-inflow release's target, the hands-off keep §2.7h)   (the unit pump's keep)
 free          = MAX(0, Fr − keep)
-pool          A = A_full × (V[t−1] ÷ cap)^0.7;   E_pool = MIN(lake evaporation × A, V[t−1]);   held = V[t−1] − E_pool
+pool          held = V[t−1]                                                  (storage only, engine ≥ 1.86.0)
 by supply level (the unit's supply order, §2.7f: 'first' by rank, then the crops with 'shared', then 'last' by rank):
               want_a   = MIN(demand_a, pump_a)
               flow_a   = want_a × MIN(1, free ÷ Σ want, room ÷ Σ want)       pro rata within a level
@@ -5602,11 +5607,30 @@ U             = Fr − Σ flow_a − Σ refill_a + T + T_river − Dep, then the
 `room` is the surface allocation room the dam side left (§2.12a; Infinity
 without a cap). `T_river` is each river demand's own return: β(1 − e) of
 the crops' take, the object's return share of its take. The farm's balance
-gains the pools' change and evaporation:
+gains the pools' change:
 
 ```
-H + I + J + rain + GW + off-takes in − off-takes out = (G − T) + E + ΔQ + U + Dep + seepage lost + Σ (ΔV_a + E_pool,a)
+H + I + J + rain + GW + off-takes in − off-takes out = (G − T) + E + ΔQ + U + Dep + seepage lost + Σ ΔV_a
 ```
+
+**Storage only (engine 1.86.0, issue #523 B2).** The hydrologist settled the
+pools on #90 (River-abstraction pools): a pool is in-channel storage that
+holds up to its volume, with no rain on it and no evaporation off it, so
+its area isn't needed. Engines 1.65.0–1.85.x took `E_pool = MIN(lake
+evaporation × A, V[t−1])` off it each day, from a surface estimated from its
+capacity. That term is gone, and with it the `river_pool_evaporation@<key>`
+series and the water balance's and water account's `poolEvaporationM3`.
+Runs without a pool don't change. A run with a pool (and a nonzero A-pan)
+moves: each pool holds more, by its old evaporation and what that drew on,
+so `river_pool@<key>` rises; on days a pool was drawn to empty, its
+abstraction's `river_take@<key>` (and `supplied`, `object_supplied@<key>`
+for an object, the return flow from it) rises and its shortfall falls; a
+pool needs less refill, so the flow left past the unit (`outflow` and every
+node below) rises on refill days; `RiverTakeSummary.avgPoolStorageM3` and
+the pump-limited figures follow. Stored runs keep their evaporation figures
+(the fields stay readable: `WaterBalanceRow.poolEvaporationM3`,
+`WaterAccountRow.poolEvaporationM3`), and a stored project's pool capacity
+means the same thing: there was never a stored pool area.
 
 **Decisions** (pending the client’s hydrologist, issue #90 Q18 for the pool, listed
 in [followups.md § Hydrologist](./followups.md#hydrologist)):
@@ -5638,10 +5662,10 @@ in [followups.md § Hydrologist](./followups.md#hydrologist)):
   left, and their return flows.
 - *The pool* refills only from the flow above what must pass, after every
   abstraction of the day has taken, and it isn't limited by the pump (it
-  fills in the channel). It loses open-water evaporation from its
-  start-of-day surface and gains no rain (a pool is small; leaving out its
-  rain understates what it holds); no seepage. It starts the run full; a
-  run resumed from a snapshot starts from the pool the snapshot held.
+  fills in the channel). It is storage only (engine ≥ 1.86.0, settled by
+  the hydrologist on #90): no rain, no evaporation, no seepage. It starts
+  the run full; a run resumed from a snapshot starts from the pool the
+  snapshot held.
 - *The supply rule governs only the dam-sourced demand.* `riverFirst` and
   `trigger` stay: they answer a different question (conjunctive use of the
   dam-sourced demand, one pump serving several demands with the dam
@@ -5664,11 +5688,12 @@ in [followups.md § Hydrologist](./followups.md#hydrologist)):
 **Outputs** (only on a unit with a river-sourced demand): per abstraction,
 keyed by the demand object's id or `crops`, `river_take@<key>` (pumped,
 m³/day, part of `supplied`; for an object also its `object_supplied@`),
-and with a pool `river_pool@<key>` (storage at the end of the day, m³) and
-`river_pool_evaporation@<key>` (m³/day); `FarmSummary.riverTakes` (each
-one's mean take and, with a pool, its mean storage). The water balance
-counts the pools' evaporation with the dams' and their storage in the
-opening and closing storage.
+and with a pool `river_pool@<key>` (storage at the end of the day, m³);
+`FarmSummary.riverTakes` (each one's mean take and, with a pool, its mean
+storage). The water balance counts the pools' storage in the opening and
+closing storage. Engines 1.65.0–1.85.x also wrote
+`river_pool_evaporation@<key>` (m³/day) and counted it with the dams'
+evaporation (`poolEvaporationM3`); from 1.86.0 there is none.
 
 **Pump-limited demand (engine ≥ 1.66.0).** With a pump capacity (a number,
 0 included) an abstraction also publishes `river_pump_limited@<key>`
@@ -5695,7 +5720,7 @@ CSV's River abstractions block show each abstraction's pump, mean take,
 these two and its pool.
 
 **Checks.** `checkBalance` closes every unit's balance with the pools'
-change and evaporation, and keeps each pool within 0 … capacity;
+change, and keeps each pool within 0 … capacity;
 `checkWorkings` keeps each take within its pump's capacity and its
 demand, and the flow the abstractions took (Σ take − pool drawn + refill)
 within the flow past the dam above what must pass, and each pump-limited
@@ -5705,7 +5730,8 @@ its own pool after its draw (an overstated figure is the costlier mistake:
 it argues for a bigger pump), and, with no cap, at least the flow left over
 at the end of the day up to the shortfall; `checkReportTotals` keeps the summary's pump-limited
 mean and days to the column. `checkWorkings` replays
-each pool's evaporation from its start-of-day surface, the dam side's
+each pool's draw (it loses only what its abstraction took from it, engine
+≥ 1.86.0; a leftover `river_pool_evaporation@` column is stray), the dam side's
 supply against its dam-sourced demand only, and the outflow with the
 abstractions' flow taken out; while flow above what must pass is left over
 (and no allocation cap), every abstraction got MIN(its demand, its pump)
@@ -5716,7 +5742,8 @@ objects on it, spill feeding the pump, the hands-off flow kept, priority by
 level and a pump below its share, a pool drawn down and refilled, the
 pump-limited demand (a higher level's spent pump, a pool, a pump of 0) and
 the self-checks catching a tampered one,
-evaporation off the pool and the water balance closing with it, a resumed
+a pool that is storage only under a high A-pan and daily rain (engine
+1.86.0) with the water balance and water account closing, a resumed
 run to the bit, a tampered take caught by the self-checks, and bit identity
 with the fields absent, null or "dam" (pump and pool inert) on random
 networks. The fuzz generator gives a quarter of networks river sources on

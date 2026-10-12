@@ -1526,7 +1526,7 @@ export interface NetworkNode {
 	cropWaterSource?: WaterSource;
 	/** The crops' river pump capacity, m³/day, under `cropWaterSource` 'river'; null / absent = no limit (the run warns); 0 = no pump. */
 	cropRiverPumpM3Day?: number | null;
-	/** A pool at the crops' river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	/** A pool at the crops' river pump, m³ (starts full; storage only from engine 1.86.0: no rain, no evaporation); null / absent / 0 = none. Read only under 'river'. */
 	cropRiverPoolM3?: number | null;
 	/**
 	 * Farms only (engine ≥ 1.73.0, issue #408, docs/model.md §2.7k): the crop
@@ -2525,7 +2525,7 @@ export interface DemandObject {
 	waterSource?: WaterSource | null;
 	/** Its river pump capacity, m³/day, under 'river'; null / absent = no limit (the run warns); 0 = no pump. */
 	riverPumpM3Day?: number | null;
-	/** A pool at its river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	/** A pool at its river pump, m³ (starts full; storage only from engine 1.86.0: no rain, no evaporation); null / absent / 0 = none. Read only under 'river'. */
 	riverPoolM3?: number | null;
 	/** The detail of where the number comes from (which meter, which strategy and year, which norm), for the report. */
 	note: string;
@@ -4024,7 +4024,7 @@ export interface WaterBalanceRow {
 	rainOnDamsM3?: number;
 	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
 	damEvaporationM3?: number;
-	/** Evaporation from the river abstractions' pools (engine ≥ 1.65.0, docs/model.md §2.7j); their storage is in the opening and closing storage. Absent without a pool. */
+	/** Evaporation from the river abstractions' pools (engines 1.65.0–1.85.x, docs/model.md §2.7j); their storage is in the opening and closing storage. Absent without a pool, and on every run from engine 1.86.0, where a pool is storage only (issue #523 B2); kept so a stored run reads. */
 	poolEvaporationM3?: number;
 	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
 	otherUseM3?: number;
@@ -4047,7 +4047,7 @@ export interface WaterBalanceRow {
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − bed losses − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation (engines 1.65.0–1.85.x) − other use − stream depletion − seepage lost − conveyance losses − bed losses − outflow − closing. */
 	residualM3: number;
 }
 

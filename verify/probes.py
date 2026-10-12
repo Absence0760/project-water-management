@@ -1076,6 +1076,23 @@ def unit_rain_reference_unit_gauge_checked() -> dict:
     return doc
 
 
+def pool_storage_only() -> dict:
+    """A pool at the crops' river pump (§2.7j) under a high A-pan with a lake
+    factor of 1, on a unit with no dam: it holds up to its capacity with no
+    rain and no evaporation (engine 1.86.0, issue #523 B2), so it loses only
+    what the pump draws on dry days and refills from the flow left on wet
+    ones. Engines 1.65.0–1.85.x took ~200 m³/day of evaporation off it."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=1, cropWaterSource="river", cropRiverPumpM3Day=2000, cropRiverPoolM3=30000),
+    ]
+    crops, areas = _crop("f", 80000)
+    s = _settings(apanMm=[300] * 12, lakeEvapFactor=1, effectiveRainFraction=0)
+    rain = [25.0 if t % 15 == 0 else 0.0 for t in range(90)]
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []},
+            "series": {"rain_catchment_mm": {"startDate": "2020-01-01", "values": rain}}}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -1115,4 +1132,5 @@ PROBES = {
     "unit-rain-gauge-catchment-settings": unit_rain_gauge_catchment_settings(),
     "unit-rain-reference-checked": unit_rain_reference_checked(),
     "unit-rain-reference-unit-gauge-checked": unit_rain_reference_unit_gauge_checked(),
+    "pool-storage-only": pool_storage_only(),
 }

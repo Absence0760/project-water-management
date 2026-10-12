@@ -39,7 +39,7 @@ import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
 import { cropSharesOf, planRemoteSupply, REMOTE_SERIES } from './network/cropSupply';
-import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
+import { RIVER_TAKE_SERIES, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
@@ -755,15 +755,12 @@ function runNetwork(
 			const floor = basicNeeds[i];
 			if (floor) push(node.id, BASIC_NEEDS_SERIES.key, BASIC_NEEDS_SERIES.label, BASIC_NEEDS_SERIES.unit, floor);
 		}
-		// River abstractions (engine ≥ 1.65.0, docs/model.md §2.7j): each one's take and, with a pool, its storage and evaporation.
+		// River abstractions (engine ≥ 1.65.0, docs/model.md §2.7j): each one's take and, with a pool, its storage (storage only from engine 1.86.0: no evaporation series).
 		const riv = plan.nodes[i]!.river;
 		if (riv && r.riverTakes) {
 			riv.takes.forEach((x, a) => {
 				push(node.id, riverTakeKey(x.key), RIVER_TAKE_SERIES.take.label(x.name), RIVER_TAKE_SERIES.take.unit, r.riverTakes!.got[a]!);
-				if (x.pool) {
-					push(node.id, riverPoolKey(x.key), RIVER_TAKE_SERIES.pool.label(x.name), RIVER_TAKE_SERIES.pool.unit, r.riverTakes!.pool[a]!);
-					push(node.id, riverPoolEvaporationKey(x.key), RIVER_TAKE_SERIES.poolEvaporation.label(x.name), RIVER_TAKE_SERIES.poolEvaporation.unit, r.riverTakes!.poolEvaporation[a]!);
-				}
+				if (x.pool) push(node.id, riverPoolKey(x.key), RIVER_TAKE_SERIES.pool.label(x.name), RIVER_TAKE_SERIES.pool.unit, r.riverTakes!.pool[a]!);
 				// Its pump's limit (engine ≥ 1.66.0): only with a pump capacity.
 				const pl = r.riverTakes!.pumpLimited[a];
 				if (pl) push(node.id, riverPumpLimitedKey(x.key), RIVER_TAKE_SERIES.pumpLimited.label(x.name), RIVER_TAKE_SERIES.pumpLimited.unit, pl);
@@ -1582,12 +1579,11 @@ export function buildNetworkPlan(
 		if ((a === a ? a : settings.apanMm[m]!) > 0) anyApan = true;
 	}
 	// No A-pan on any day (a new project's default row; an ET0 grid fills GR4J's PE only, docs/maps.md): open water
-	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4).
+	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4). Only
+	// the dams: a river abstraction's pool is storage only from engine 1.86.0 (issue #523 B2), with no evaporation.
 	if (!anyApan && days > 0) {
-		const pooled = (model.demandObjects ?? []).some((o) => o.enabled !== false && o.waterSource === 'river' && typeof o.riverPoolM3 === 'number' && o.riverPoolM3 > 0);
-		const open = nodes.filter((n) => n.kind === 'farm' && (n.damCapacityM3 > 0 || (n.cropWaterSource === 'river' && typeof n.cropRiverPoolM3 === 'number' && n.cropRiverPoolM3 > 0)));
-		if (open.length || pooled)
-			warnings.push('A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
+		if (nodes.some((n) => n.kind === 'farm' && n.damCapacityM3 > 0))
+			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
 	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
@@ -2881,26 +2877,22 @@ export function resolveReportWindow(
 
 /**
  * A unit's river abstractions' pools for the water account (engine ≥ 1.65.0):
- * their storage and evaporation summed per day, in `river.takes` order, and
- * their start (full, or a resumed run's). {} without a pool.
+ * their storage summed per day, in `river.takes` order, and their start
+ * (full, or a resumed run's). {} without a pool. A pool is storage only
+ * (engine ≥ 1.86.0, issue #523 B2), so it has no evaporation to account.
  */
-function poolAccount(p: PlanNode, r: NodeResult, days: number): { pool?: { storage: Float64Array; evaporation: Float64Array; initialM3: number } } {
+function poolAccount(p: PlanNode, r: NodeResult, days: number): { pool?: { storage: Float64Array; initialM3: number } } {
 	const tk = p.river?.takes;
 	if (!tk || !r.riverTakes || !tk.some((x) => x.pool)) return {};
 	const storage = new Float64Array(days);
-	const evaporation = new Float64Array(days);
 	let initialM3 = 0;
 	tk.forEach((x, a) => {
 		if (!x.pool) return;
 		initialM3 += p.initialPoolM3 ? p.initialPoolM3[a]! : x.pool.capM3;
 		const q = r.riverTakes!.pool[a]!;
-		const e = r.riverTakes!.poolEvaporation[a]!;
-		for (let t = 0; t < days; t++) {
-			storage[t]! += q[t]!;
-			evaporation[t]! += e[t]!;
-		}
+		for (let t = 0; t < days; t++) storage[t]! += q[t]!;
 	});
-	return { pool: { storage, evaporation, initialM3 } };
+	return { pool: { storage, initialM3 } };
 }
 
 /**

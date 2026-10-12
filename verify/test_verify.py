@@ -205,6 +205,7 @@ MUTANTS = [
     # River abstractions beside a unit's dam (§2.7j).
     ("a river abstraction takes what must pass the unit", "free = max(0.0, past - keep)", "free = max(0.0, past)"),
     ("a river abstraction's pool never refills", "if rsum > 0 and free > 0:", "if False:"),
+    ("a river abstraction's pool evaporates (engines before 1.86.0)", "held = list(q)", "held = [v * 0.99 for v in q]"),
     # River off-takes and canal seepage (§2.6a).
     ("the canal loses nothing on the way", "append((t, v * (1 - lp)))", "append((t, v))"),
     (
