@@ -2349,7 +2349,10 @@ projection's read and narrows their series further:
   when they no longer do (`authority_delegate_prune` from `AFTER` triggers
   on `project_member` delete or role change, `team_member` delete or role
   change and `project.team_id`). `app_authority_member(project, user)`: a
-  confirmed delegate holding editor or above; `app_acts_for_authority(project)`
+  confirmed delegate holding editor or above (internal since 230: invoker's
+  rights, closed to PUBLIC and water_app, called only from
+  `app_acts_for_authority`, so no account can ask it about a project it
+  can't read); `app_acts_for_authority(project)`
   (from 163): that, for the current user; `app_authority_members(project)`:
   the list, for a viewer or above (the members list, the pack's send
   dialog, `holdsRequiredRole`); `app_authority_candidate(s)`: who may be

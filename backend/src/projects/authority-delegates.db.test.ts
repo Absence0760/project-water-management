@@ -144,6 +144,22 @@ describe('the authority confirms, declines and removes; the owner proposes and w
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.scenario).toMatchObject({ status: 'decided', decidedBy: 'AdTeamEd' });
 	});
+
+	it('never answers water_app whether a person is a delegate (230): not an outsider, not even a member; the decision above still went through it', async () => {
+		// 229 left app_authority_member SECURITY DEFINER and EXECUTE-able, with no caller check.
+		for (const u of [outsider, viewer, lead]) {
+			await expect(withUser(u.id, (db) => db.query('SELECT app_authority_member($1, $2) AS yes', [projectId, lead.id])), u.email).rejects.toMatchObject({ code: '42501' });
+		}
+		// Positive controls: the one caller (app_acts_for_authority, SECURITY DEFINER) still reaches it,
+		// so a confirmed delegate acts for the authority, and a viewer still reads the list.
+		expect((await lead.call('GET', P())).body.project.actsForAuthority).toBe(true);
+		expect((await teamEditor.call('GET', P())).body.project.actsForAuthority).toBe(true);
+		const listed = await withUser(viewer.id, async (db) => (await db.query<{ user_id: string }>('SELECT user_id FROM app_authority_members($1)', [projectId])).rows);
+		expect(listed.map((r) => r.user_id)).toEqual(expect.arrayContaining([lead.id, teamEditor.id]));
+		const fn = await asOwner(`SELECT prosecdef, has_function_privilege('water_app', oid, 'EXECUTE') AS app, has_function_privilege('public', oid, 'EXECUTE') AS pub
+			FROM pg_proc WHERE oid = 'app_authority_member(uuid,uuid)'::regprocedure`);
+		expect(fn[0]).toEqual({ prosecdef: false, app: false, pub: false });
+	});
 });
 
 describe('lapse', () => {
