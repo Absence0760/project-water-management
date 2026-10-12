@@ -1241,8 +1241,18 @@ result without signing in, until it expires or its owner revokes it.
   rule until a DWS feed writes it (fail closed). A scenario run is never
   marked; an applicant reads the published base run's record, in
   `run_series_select_contributor` and in the results' `gaugeRecords`; a
-  share link's `observed_flow` likewise. Private loggers, the outflow and
-  the EWR shortfall keep k and dominance. Runs stored before 232 carry no
+  share link's `observed_flow` likewise. Private loggers, the simulated
+  outflow and the EWR shortfall keep k and dominance, but that doesn't keep
+  the use itself: **accepted residual (for the CISO and counsel's D3
+  review, #92).** Where the DWS gauge is at the outlet, its record is in
+  effect the measured outflow, and natural flow is shown at any holder
+  count (164), so natural flow less the shown DWS record gives the use
+  upstream of the gauge at any holder count, k and dominance
+  notwithstanding. DWS publishes the record anyway, and a share link's
+  natural flow beside DWS's own published record already allowed the same
+  sum since 164, so 232 adds no inference anyone couldn't make from public
+  data; the withheld outflow still keeps the *modelled* use from such a
+  reader. Runs stored before 232 carry no
   mark. **The database checks the mark** (235, defence in depth behind
   storeRun): `run_series_published_mark`, a BEFORE INSERT and UPDATE OF
   meta trigger, strips `publishedBy` and `station` unless the row is the

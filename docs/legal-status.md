@@ -355,7 +355,10 @@ cl. 3). The licensing ones are rows in
   published DWS gauge record (a record a DWS feed wrote whole) shown at any
   holder count, since DWS publishes it (the licensing assessors' review).
   *For counsel:* whether 5 is defensible, and whether the dominance limits
-  are (with the CISO, #92).
+  are (with the CISO, #92); and the accepted residual of a DWS gauge at the
+  outlet: natural flow less its shown record is the upstream use at any
+  holder count, as it was from DWS's own publication since 164
+  ([security.md § Share links](./security.md#share-links)).
 - [ ] **Rules broken by hidden farms.** *Provisional position (pre-counsel
   research, 2026-10-01):* a validation refusal the applicant can't fix
   blind is a fairness problem; an aggregate over five or more holders
