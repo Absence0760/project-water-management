@@ -1,5 +1,6 @@
 import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type UnitRainSummary, type UnitRainUnit, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
+import { splitCsv } from '../allocations/parse.js';
 import {
 	allocationCapLines,
 	chirpsFactorLines,
@@ -1176,6 +1177,43 @@ describe('water balance block', () => {
 			'Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + pool evaporation + off-take losses + bed losses + outflow + end storage + residual; the residual should be 0'
 		);
 		expect(lines.find((l) => l.startsWith('Water year,'))).toContain('River off-takes: lost on the way (m³),Bed losses in the reaches (m³)');
+	});
+
+	it('adds base flow as an in and an out term only when a run has it, and its columns close to the residual (engine 1.86.0)', () => {
+		const header = (w: WaterBalance) => [...waterBalanceLines(w)].find((l) => l.startsWith('Water year,'))!;
+		expect(header(wb)).not.toContain('Base-flow');
+		// 10 + 1e6 + 0 + 50 + 300 − 180 − 30 − 6 − 70 − 500 − 120 − 999 449 − 0 = 5, the stored residual.
+		const terms = { rainOnDamsM3: 50, damEvaporationM3: 30, baseflowGainM3: 300, conveyanceLossM3: 6, reachLossM3: 70, externalTransferM3: 500, baseflowLossM3: 120, outflowM3: 999_449, residualM3: 5 };
+		const full: WaterBalance = { ...wb, years: [row(1999, terms)], total: row(null, terms) };
+		const lines = [...waterBalanceLines(full)];
+		expect(lines[1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams + base-flow gain = consumptive use + dam evaporation + off-take losses + bed losses + transferred out of the catchment + base-flow loss + outflow + end storage + residual; the residual should be 0'
+		);
+		// Some headers hold a comma ("Transfers, net"), so parse the rows as CSV.
+		const cells = (l: string) => splitCsv(l, ',')[0]!.cells;
+		const cols = cells(header(full));
+		expect(cols).toContain('Base-flow gain from outside the catchment (m³)');
+		expect(cols).toContain('Base-flow loss from the units’ runoff (m³)');
+		for (const l of lines.slice(lines.indexOf(header(full)) + 1)) {
+			const v = cells(l);
+			const c = (h: string) => {
+				expect(cols).toContain(h);
+				return Number(v[cols.indexOf(h)]);
+			};
+			const ins = ['Dam storage at start (m³)', 'Farm runoff (m³)', 'Transfers, net (m³)', 'Rain on dams (m³)', 'Base-flow gain from outside the catchment (m³)'];
+			const outs = [
+				'Consumptive use (m³)',
+				'Dam evaporation (m³)',
+				'River off-takes: lost on the way (m³)',
+				'Bed losses in the reaches (m³)',
+				'Transferred out of the catchment (m³)',
+				'Base-flow loss from the units’ runoff (m³)',
+				'Outflow (m³)',
+				'Dam storage at end (m³)'
+			];
+			const sum = (hs: string[]) => hs.reduce((a, h) => a + c(h), 0);
+			expect(sum(ins) - sum(outs)).toBe(c('Residual (m³)'));
+		}
 	});
 
 	it('says an old run has none', () => {
