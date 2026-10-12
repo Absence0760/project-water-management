@@ -36,6 +36,19 @@ here that holds each item's detail. Tick an item in both places.
 
 The checklist for these is issue #62; the history scrub is #63.
 
+- [ ] **Runs on the rejected reference-gauge formula (issue #500,
+      engine 1.80.0–1.84.0).** Those engines levelled a unit's CHIRPS with a
+      reference gauge set by × unit MAP ÷ the reference unit's MAP, which the
+      operator's 2026-10-09 decisions replaced with k_unit (engine 1.85.0;
+      engine-audit.md U1 says why it is not an erratum). Per-unit rain is off
+      by default, but that doesn't prove no production run used it. Run, on
+      production (operator; read-only):
+      `SELECT project_id, id, engine_version, created_at FROM model_run WHERE engine_version IN ('1.80.0','1.81.0','1.82.0','1.83.0','1.84.0') AND inputs->'settings'->'unitRain'->>'mode' = 'perUnit' AND jsonb_typeof(inputs->'settings'->'unitRain'->'reference') = 'object';`
+      If it returns no rows, tick this. If it returns any, add an errata
+      row to docs/engine-errata.md (keyed `run`, 1.80.0 to 1.84.0, fixed
+      1.85.0, condition: `settings.unitRain.reference` set) and follow
+      docs/legal/known-defect-procedure.md. Trigger: before the release that
+      ships engine 1.85.0.
 - [ ] **GitHub variables for the background Lambdas (2026-09-25).** The
       backend release preflight (`deploy-backend.yml`, `REQUIRED_CONFIG`)
       refuses every `backend@` release until these repository variables
@@ -332,6 +345,22 @@ runs and accumulations are real) can't be decided without the client.
       factors move. Trigger: a client project turning a reference gauge on
       whose gauge sits in another cell than its unit's centre, or the rain
       gauge map point being built for another reason.
+- [ ] **Leave §2.4e rain-source days out of the reference fit? (issue
+      #500, engine-review finding 4).** The reference gauge's factors are
+      fitted on the checked catchment rain over its whole record
+      (`prepare.ts` `checkedCatchmentRainRecord`), which includes the days a
+      rain-source period (§2.4e) sets from an alternate series × its factor
+      or from the reanalysis fallback. On those days the fit compares that
+      series, not the gauge, with the CHIRPS cell, so it may pull a month's
+      factor towards whatever the alternate series' own bias is. Two-line
+      fix if the answer is "leave them out": in `checkedCatchmentRainRecord`
+      with `fitExcludeAccumulations`, blank every day whose
+      `r.rainSource.code[t]` (applyRainSource's per-day code) is not -1, as
+      `blankFitExcluded` blanks the accumulation windows; bump the engine
+      version, since factors move on projects with periods. Keeping them is
+      defensible too: the factors are meant for the rain the model runs on.
+      Trigger: the hydrologist's answer (model.md §2.4h *Still
+      provisional*).
 - [ ] **The unit MAPs' own period against the 1991–2020 MAP period (issue
       #500).** k_unit compares a unit's MAP with its CHIRPS over the MAP
       period, so any difference between the MAP source's years and
