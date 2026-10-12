@@ -1458,7 +1458,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'low-flow-measure',
 		term: 'Low flows judged on',
-		short: 'The month’s total flow (default, the hydrologist’s choice), or its base flow (filter settings unconfirmed), so a flood can’t hide low flows.',
+		short: 'The month’s total flow (default, the hydrologist’s choice), or its base flow (a one-pass digital filter), so a flood can’t hide low flows.',
 		units: 'Mm³ per month or m³/s',
 		category: 'ewr',
 		fields: ['settings.lowFlowMeasure']
