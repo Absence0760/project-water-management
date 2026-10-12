@@ -169,7 +169,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'allocation_room_surface',
 		letter: null,
 		formula:
-			'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered surface volume − its surface use so far that year (G − GW each day), never < 0, the licence limit today: 0 outside the months of use, else the maximum rates × 86 400, engine ≥ 1.37.0), at the start of the day; off-take water used, the river pump and the dam together give at most this, and a demand-sized off-take into the unit asks for at most MIN(D, this) (engine ≥ 1.70.0); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
+			'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered surface volume − its surface use so far that year (G − GW each day, plus what its dam rules sent out of the catchment, engine ≥ 1.88.0), never < 0, the licence limit today: 0 outside the months of use, else the maximum rates × 86 400, engine ≥ 1.37.0), at the start of the day; its rules out of the catchment first (sharing it pro rata, less a remote share it asked for), then off-take water used, the river pump and the dam together give at most what they left, and a demand-sized off-take into the unit asks for at most MIN(D, that) (engine ≥ 1.70.0); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
 		optional: true
 	},
 	{
@@ -181,7 +181,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{
 		key: 'allocation_left_surface',
 		letter: null,
-		formula: 'allocation cap with licence conditions (engine ≥ 1.40.0): the water year’s registered surface volume − its surface use so far that year (G − GW each day), never < 0, at the start of the day, before the licence limit; allocation_room_surface = MIN(this, the limit); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
+		formula: 'allocation cap with licence conditions (engine ≥ 1.40.0): the water year’s registered surface volume − its surface use so far that year (G − GW each day, plus what its dam rules sent out of the catchment, engine ≥ 1.88.0), never < 0, at the start of the day, before the licence limit; allocation_room_surface = MIN(this, the limit); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
 		optional: true
 	},
 	{

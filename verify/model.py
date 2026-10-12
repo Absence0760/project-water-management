@@ -1784,7 +1784,26 @@ def run(doc: dict) -> dict:
                 v = min(v, s_[0])
             return v
 
+        # The remote shares' asks (§2.7k), known before any unit runs: the share of the crop demand, up to the pipe
+        # and, under a cap, the receiver's surface room at the start of the day. What each got is set at its source.
+        rm_ask: dict[str, float] = {}
+        rm_got: dict[str, float] = {}
+        for fid, r_ in remote.items():
+            a_ = min(r_["share"] * fd[fid]["Dc"][i], r_["cap"])
+            sr_ = room.get((fid, "surface"))
+            if sr_:
+                a_ = min(a_, sr_[0])
+            rm_ask[fid] = max(a_, 0.0)
+            rm_got[fid] = 0.0
+
         # Dam transfers (§2.6): by priority; each rule above its own reserve.
+        # What each unit's rules sent out of the catchment today: its surface use (engine-audit.md X1).
+        ext_out = {f["id"]: 0.0 for f in farms}
+
+        def recv(t):
+            # A rule out of the catchment settles into its source's own outside receiver (X1).
+            return t["toNodeId"] if t["toNodeId"] is not None else ("out", t["fromNodeId"])
+
         J = {f["id"]: 0.0 for f in farms}
         drawn = {f["id"]: 0.0 for f in farms}
         sched = {f["id"]: 0.0 for f in farms}
@@ -1817,9 +1836,16 @@ def run(doc: dict) -> dict:
                     floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))
                 rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
                 room_left[dst] = max(0.0, rm)
+            # Outside the catchment (engine-audit.md X1): each source's own receiver, whose room is its surface
+            # allocation room today less a remote share it asked for and what it sent out at lower priorities;
+            # endless without a cap.
+            for src in sorted({t["fromNodeId"] for t, _ in group if t["toNodeId"] is None}):
+                sr_ = room.get((src, "surface"))
+                if sr_ is not None and math.isfinite(sr_[0]):
+                    room_left[("out", src)] = max(0.0, sr_[0] - rm_ask.get(src, 0.0) - ext_out[src])
+                else:
+                    room_left[("out", src)] = math.inf
             full = {d for d, v in room_left.items() if not v > 0}
-            if any(t["toNodeId"] is None for t, _ in group):
-                room_left[None] = math.inf
             vol = {t["id"]: 0.0 for t, _ in group}
             taken = {}
             while True:
@@ -1827,7 +1853,7 @@ def run(doc: dict) -> dict:
                 # to what each rule into a receiver that isn't full still asks.
                 given = {t["id"]: 0.0 for t, _ in group}
                 for src in sorted({t["fromNodeId"] for t, _ in group}):
-                    from_src = [t for t, _ in group if t["fromNodeId"] == src and rem[t["id"]] > 0 and t["toNodeId"] not in full]
+                    from_src = [t for t, _ in group if t["fromNodeId"] == src and rem[t["id"]] > 0 and recv(t) not in full]
                     cur = storage[src] - drawn[src] - taken.get(src, 0.0)
                     left = {t["id"]: rem[t["id"]] for t in from_src}
                     levels = sorted({reserve[t["id"]] for t in from_src}, reverse=True)
@@ -1847,10 +1873,10 @@ def run(doc: dict) -> dict:
                 # (2) Each receiver's room, pro rata to what the sources gave; a receiver given more is full.
                 basis = given
                 filled = False
-                for dst in sorted(room_left, key=lambda d: (d is None, d or "")):
+                for dst in sorted(room_left, key=lambda d: (isinstance(d, tuple), d[1] if isinstance(d, tuple) else d)):
                     if dst in full:
                         continue
-                    into = [t for t, _ in group if t["toNodeId"] == dst and rem[t["id"]] > 0]
+                    into = [t for t, _ in group if recv(t) == dst and rem[t["id"]] > 0]
                     tot = sum(basis[t["id"]] for t in into)
                     rm_left = room_left[dst]
                     for t in into:
@@ -1876,10 +1902,12 @@ def run(doc: dict) -> dict:
                 rule_vol[t["id"]][i] = v
                 J[t["fromNodeId"]] -= v
                 drawn[t["fromNodeId"]] += v
-                # Out of the catchment: it leaves the source's dam and the model.
+                # Out of the catchment: it leaves the source's dam and the model, the source's surface use (X1).
                 if t["toNodeId"] is not None:
                     J[t["toNodeId"]] += v
                     sched[t["toNodeId"]] += v
+                else:
+                    ext_out[t["fromNodeId"]] += v
 
         # River off-takes (§2.6a): each rule's share of its destination's
         # need, fixed before the day runs.
@@ -1907,21 +1935,11 @@ def run(doc: dict) -> dict:
                 # Under an allocation cap, the demand the cap still allows (§2.6a, §2.12a, engine >= 1.70.0):
                 # at most the destination's surface room at the start of the day; the top-up isn't capped.
                 sr_ = room.get((dst, "surface"))
-                need = min(dam_dem(dst, i), sr_[0] if sr_ else math.inf) + (rm_dst if t.get("topUpDam") else 0.0)
+                # Less what it sent out of the catchment today (X1).
+                need = min(dam_dem(dst, i), max(0.0, sr_[0] - ext_out[dst]) if sr_ else math.inf) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
         arrived: dict[str, list[float]] = {}
         back_to: dict[str, list[tuple[str, float]]] = {}
-        # The remote shares' asks (§2.7k), known before any unit runs: the share of the crop demand, up to the pipe
-        # and, under a cap, the receiver's surface room at the start of the day. What each got is set at its source.
-        rm_ask: dict[str, float] = {}
-        rm_got: dict[str, float] = {}
-        for fid, r_ in remote.items():
-            a_ = min(r_["share"] * fd[fid]["Dc"][i], r_["cap"])
-            sr_ = room.get((fid, "surface"))
-            if sr_:
-                a_ = min(a_, sr_[0])
-            rm_ask[fid] = max(a_, 0.0)
-            rm_got[fid] = 0.0
 
         # Nodes in network order (§2.7, §2.7c, §2.6a).
         U: dict[str, float] = {}
@@ -2031,6 +2049,10 @@ def run(doc: dict) -> dict:
             if xid in Dd:
                 dem = Dd[xid][i]
             d = fd[xid]
+            # What its rules sent out of the catchment today is surface use, settled first (X1).
+            gx = ext_out.get(xid, 0.0)
+            if gx > 0:
+                s_left = max(0.0, s_left - gx)
             # The remote share (§2.7k) has arrived (its source ran first): the unit's first surface use.
             gin = rm_got.get(xid, 0.0)
             if gin > 0:
@@ -2349,7 +2371,7 @@ def run(doc: dict) -> dict:
             for k_ in range(len(ulist)):
                 used_u[k_] += pumped[k_]
             if sroom:
-                spend(xid, "surface", G - GW + g_riv + gin)
+                spend(xid, "surface", G - GW + g_riv + gin + gx)
             if groom:
                 spend(xid, "groundwater", GW + GWd)
             # The unit's whole use, demand and shortfall: its river abstractions' too (§2.7j).
@@ -2357,7 +2379,7 @@ def run(doc: dict) -> dict:
             g_all = G + g_riv + gin
             if xid in tab:
                 g_all = min(g_all, dem_all)
-            note_limit(lb_days, xid, wy, room, "surface", G - GW + g_riv + gin, sroom, dem_all, dem_all - g_all, o, ald)
+            note_limit(lb_days, xid, wy, room, "surface", G - GW + g_riv + gin + gx, sroom, dem_all, dem_all - g_all, o, ald)
             note_limit(lb_days, xid, wy, room, "groundwater", GW + GWd, groom, dem_all, dem_all - g_all, o, ald)
             # Off-takes from this unit (§2.6a), by priority.
             taken = 0.0

@@ -18,7 +18,7 @@ import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../ne
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
-import { canMove, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
+import { canMove, externalRuleKeys, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { reachLossDay, reachLossOf, REACH_LOSS_SERIES, SENIOR_REACH_LOSS_SERIES } from '../network/reachLoss';
@@ -76,6 +76,27 @@ const capRoomOn = (c: ArrayLike<number> | undefined, t: number): number => {
 	const v = c?.[t];
 	return v === undefined || Number.isNaN(v) ? Infinity : v;
 };
+/**
+ * What a unit's dam rules sent out of the catchment each day (engine ≥
+ * 1.86.0), from their own `transfer_rule@` series: its surface use under an
+ * allocation cap and in the comparison (engine ≥ 1.88.0,
+ * docs/engine-audit.md X1). Null without such a rule (or its series).
+ */
+function externalSent(input: ModelInput, nodeId: string, get: SeriesMap, days: number): Float64Array | null {
+	const list = externalRuleKeys(input.model.transfers, nodeId).flatMap((k) => {
+		const v = get.get(`${nodeId}|${k}`);
+		return v ? [v] : [];
+	});
+	if (!list.length) return null;
+	const out = new Float64Array(days);
+	for (const v of list) for (let t = 0; t < days; t++) out[t] = out[t]! + (v[t] ?? 0);
+	return out;
+}
+/** A surface room column less what was sent out of the catchment first, never below 0; a blank day stays blank. */
+function roomAfterExternal(room: ArrayLike<number> | undefined, ext: Float64Array | null): ArrayLike<number> | undefined {
+	if (!room || !ext) return room;
+	return Float64Array.from({ length: room.length }, (_, t) => (Number.isNaN(room[t]!) ? NaN : ext[t]! > 0 ? Math.max(0, room[t]! - ext[t]!) : room[t]!));
+}
 const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site', ...ALLOCATION_CAP_COLUMNS]);
 
 /**
@@ -880,11 +901,15 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			const where = `${f.id} day ${t}`;
 			if (Math.abs(sent - got) > tol(sent)) return `${where}: sent ${sent} but its destinations got ${got}`;
 			const prev = storage(f.id, t);
-			// What the destinations could take: per destination MIN(Σ limits into it, its room).
+			// What the destinations could take: per destination MIN(Σ limits into it, its room). Out of the catchment
+			// the room is the source's surface allocation room today (engine ≥ 1.88.0, docs/engine-audit.md X1),
+			// less a remote share it asked for, which the run doesn't store: with one, no floor is read for it.
+			const RSsrc = get.get(`${f.id}|${ALLOCATION_SERIES.surfaceRoom.key}`);
+			const outsideRoom = !RSsrc ? Infinity : get.has(`${f.id}|remote_dam_in`) ? 0 : capRoomOn(RSsrc, t);
 			let limit = 0;
 			for (const d of dests) {
 				const into = outs.filter((r) => r.to === d).reduce((s, r) => s + r.maxDaily, 0);
-				limit += d === OUTSIDE ? into : Math.min(into, Math.max(0, roomOf(farmIndex.get(d)!, t)));
+				limit += d === OUTSIDE ? Math.min(into, outsideRoom) : Math.min(into, Math.max(0, roomOf(farmIndex.get(d)!, t)));
 			}
 			const floor = Math.min(limit, Math.max(prev - capOn(f.id, t) * Math.max(...outs.map((r) => r.reserve)), 0));
 			if (sent < floor - tol(Math.max(floor, prev))) return `${where}: sent only ${sent}; the rules and the destinations' room allowed ${floor} (storage ${prev})`;
@@ -1537,7 +1562,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const returnPerSupplied = runReturnFlow(n.returnFlowFraction, e);
 		// Registered volumes (engine ≥ 1.18.0): a full allocation's factor on the demand, a cap's room per source.
 		const KF = g(ALLOCATION_SERIES.demandFactor.key);
-		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
+		// The surface room left to the unit's own sources: the day's room less what its dam rules sent out of the
+		// catchment first (engine ≥ 1.88.0, docs/engine-audit.md X1); blank stays blank.
+		const RS = roomAfterExternal(g(ALLOCATION_SERIES.surfaceRoom.key), externalSent(input, n.id, get, out.days));
 		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 		// The demand factor on F each day (the demand.scale scenario op from settings.demandFactorFrom, × a full allocation's).
 		// On F, the crops' own factor too (engine ≥ 1.45.0, demand.scale with part 'crops').
@@ -3066,7 +3093,9 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 				const GW = g('groundwater_used');
 				const GD = g('groundwater_to_dam');
 				if (!G) return `${n.id}: supplied series missing`;
-				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
+				// Surface use counts what its dam rules sent out of the catchment (engine ≥ 1.88.0, docs/engine-audit.md X1).
+				const EXT = source === 'surface' ? externalSent(input, n.id, get, out.days) : null;
+				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) + (EXT ? EXT[t]! : 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
 				// The licence conditions (engine ≥ 1.37.0): the room is at most the day's limit, which the
 				// input gives (0 outside the months of use, else the maximum rates × 86 400).
 				const limit = dailyLimits(allocs, source, day0, out.days);
@@ -3233,6 +3262,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					riverTakes: [...get.entries()].filter(([k]) => k === `${n.id}|offtake_used` || k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v),
 					intakeTake: get.get(`${n.id}|${INTAKE_SERIES.take.key}`) ?? null,
 					receivedAtIntake: get.get(`${n.id}|${INTAKE_SERIES.received.key}`) ?? null,
+					// What its dam rules sent out of the catchment (engine ≥ 1.88.0, X1), from their own series.
+					externalTransfers: externalRuleKeys(input.model.transfers, n.id).map((k) => get.get(`${n.id}|${k}`) ?? null),
 					// A unit's dam losses (engine ≥ 1.83.0): its own dam_evaporation and dam_seepage_lost columns, when it has a dam.
 					...(n.kind === 'farm' && n.damCapacityM3 > 0 ? { damEvaporation: get.get(`${n.id}|dam_evaporation`) ?? null, damSeepageLost: get.get(`${n.id}|dam_seepage_lost`) ?? null } : {})
 				}

@@ -66,7 +66,17 @@ MUTANTS = [
         "if n >= ACC_MAX_BLANK_DAYS:",
     ),
     ("transfers ignore the receiver's room (N4)", "room_left[dst] = max(0.0, rm)", "room_left[dst] = math.inf"),
-    ("a transfer out of the catchment moves nothing, as if outside had no room (engine 1.86.0, issue #523 B5)", "room_left[None] = math.inf", "room_left[None] = 0.0"),
+    ("a transfer out of the catchment moves nothing, as if outside had no room (engine 1.86.0, issue #523 B5)", 'room_left[("out", src)] = math.inf', 'room_left[("out", src)] = 0.0'),
+    (
+        "an allocation cap doesn't hold back a transfer out of the catchment (engine-audit.md X1)",
+        'room_left[("out", src)] = max(0.0, sr_[0] - rm_ask.get(src, 0.0) - ext_out[src])',
+        'room_left[("out", src)] = math.inf',
+    ),
+    (
+        "a transfer out of the catchment isn't counted against its source's cap (engine-audit.md X1)",
+        'spend(xid, "surface", G - GW + g_riv + gin + gx)',
+        'spend(xid, "surface", G - GW + g_riv + gin)',
+    ),
     (
         "a source's rules share one pool down to the lowest reserve (N6, before engine 1.36.0)",
         'elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]',

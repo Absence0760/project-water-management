@@ -11,6 +11,7 @@ import { checkInvariants, checkTransferLimits } from './verify/checks';
 import { modelRuleProblems } from './modelRules';
 import { randomInput } from './testing/fuzz';
 import { checkAll } from './testing/invariants';
+import { compareAllocations } from './allocations/compare';
 
 const flat = (v: number) => new Array(12).fill(v);
 
@@ -222,5 +223,141 @@ describe('a transfer out of the catchment (engine 1.86.0)', () => {
 		}
 		expect(tried).toBe(12);
 		expect(moved).toBeGreaterThan(3);
+	});
+});
+
+// Engine-audit.md X1 (decided by the operator 2026-10-12): water pumped out of the catchment is its source unit's
+// surface use under its licence, in the allocation comparison's modelled use M (as a dam draw for a dam on the
+// river; a dam beside the river was counted at its intake) and under an allocation cap (the rules out of one
+// source share its surface room pro rata), as the licence impact board already counts it.
+describe('a transfer out of the catchment is its source unit’s surface use (engine-audit.md X1)', () => {
+	// One whole water year, 1 October 2020 to 30 September 2021.
+	const YEAR = 365;
+	function yearModel(transfers: Transfer[], volume: number | null, mode: 'none' | 'cap', s: Partial<NetworkNode> = {}): ModelInput {
+		const input = model(transfers, YEAR);
+		input.series.rain_catchment_mm!.startDate = '2020-10-01';
+		Object.assign(input.model.nodes[1]!, s);
+		if (volume !== null) input.model.allocations = [{ id: 'a', nodeId: 'S', waterSource: 'surface', volumeM3PerYear: volume }];
+		input.settings.allocationMode = mode;
+		return input;
+	}
+	const surfaceOf = (out: ReturnType<typeof run>) => out.summary.allocations!.nodes.find((n) => n.nodeId === 'S')!.sources.find((x) => x.waterSource === 'surface')!;
+	const total = (v: number[]) => v.reduce((a, b) => a + b, 0);
+
+	it('a dam on the river: modelled use M counts it, as the water account and the licence impact board do', () => {
+		// S's dam takes the river through it (pctUpstreamToDam 1): its draws are its use. No demand, so all of M is
+		// the 500 m³ the rule sent out (1000 m³ full, 50 % kept).
+		const input = yearModel([rule()], 1000, 'none', { pctUpstreamToDam: 1 });
+		const out = run(input);
+		const sent = total(get(out, 'S', 'transfer_rule@x1'));
+		expect(sent).toBeCloseTo(500, 9);
+		const side = surfaceOf(out);
+		expect(side.wholeYears).toBe(1);
+		expect(side.meanModelledM3PerYear).toBeCloseTo(500, 9);
+		// The same volume the water account (what the licence impact board reads as use) has as leaving the catchment.
+		const yr = out.summary.supplyAssurance!.waterAccount.years.find((y) => y.waterYear === 2020)!;
+		const supplied = total(get(out, 'S', 'supplied'));
+		expect(side.meanModelledM3PerYear! - supplied).toBeCloseTo(yr.externalTransferM3!, 9);
+		passes(input, out);
+	});
+
+	it('a dam beside the river: measured at its intake, so the water is in the dam draw and not counted twice', () => {
+		// pctUpstreamToDam 0 with River to dam: the dam fills from a diversion, and the take at the intake is the use.
+		const input = yearModel([rule()], 1000, 'none', { pctUpstreamToDam: 0, pctRunoffToDam: 0, divertCapacityM3Day: 50 });
+		const out = run(input, new Array(YEAR).fill(20));
+		const side = surfaceOf(out);
+		expect(side.measuredAt).toBe('intake');
+		const take = total(get(out, 'S', 'intake_take'));
+		expect(take).toBeGreaterThan(0);
+		// Still only the intake: the water sent out isn't added again.
+		expect(side.meanModelledM3PerYear).toBeCloseTo(take, 9);
+		const sent = total(get(out, 'S', 'transfer_rule@x1'));
+		expect(sent).toBeGreaterThan(0);
+		const cmp = compareAllocations({
+			startDate: out.startDate,
+			allocations: [],
+			nodes: [{ nodeId: 'S', name: 'S', kind: 'farm', supplied: get(out, 'S', 'supplied'), intakeTake: get(out, 'S', 'intake_take'), externalTransfers: [get(out, 'S', 'transfer_rule@x1')] }]
+		}).nodes[0]!.surface.years[0]!;
+		expect(cmp.modelledM3).toBeCloseTo(take, 9);
+		expect(cmp.damDrawM3).toBeCloseTo(total(get(out, 'S', 'supplied')) + sent, 9);
+		passes(input, out);
+	});
+
+	it('the comparison nets groundwater pumped into the dam against the water sent out, as against any draw', () => {
+		// 300 m³ of groundwater went into the dam this year and 500 m³ left it out of the catchment: 200 m³ is surface use.
+		const n = YEAR;
+		const days = (v: number) => new Array(n).fill(v / n);
+		const y = compareAllocations({
+			startDate: '2020-10-01',
+			allocations: [],
+			nodes: [{ nodeId: 'S', name: 'S', kind: 'farm', supplied: days(0), groundwaterToDam: days(300), externalTransfers: [days(500)] }]
+		}).nodes[0]!.surface.years[0]!;
+		expect(y.modelledM3).toBeCloseTo(200, 9);
+	});
+
+	it('under a cap: the rule is held to the source’s surface room, and the room it used is gone', () => {
+		// 250 m³ a year: 100, 100, then the 50 left, then nothing, though the dam still holds 250 m³ above its reserve.
+		const input = yearModel([rule()], 250, 'cap', { pctUpstreamToDam: 1 });
+		const out = run(input);
+		const v = get(out, 'S', 'transfer_rule@x1');
+		expect(v.slice(0, 5)).toEqual([100, 100, 50, 0, 0]);
+		expect(total(v)).toBeCloseTo(250, 9);
+		// The room at the start of each day: the year's volume less what was sent so far.
+		expect(get(out, 'S', 'allocation_room_surface').slice(0, 4)).toEqual([250, 150, 50, 0]);
+		const side = surfaceOf(out);
+		expect(side.capReached?.[0]?.usedM3).toBeCloseTo(250, 9);
+		expect(side.meanModelledM3PerYear).toBeCloseTo(250, 9);
+		passes(input, out);
+	});
+
+	it('under a cap: the rules out of one source share its room pro rata, and the dam water left goes to its other rules', () => {
+		// 200 m³ of room, 500 m³ free above the reserve. Out: x1 asks 100, x2 300; into C: x3 300. The source shares its
+		// 500 among 700 asked; the outside's 200 of room goes 1 : 3 (50 and 150), and x3 then gets its full 300.
+		for (const order of [0, 1]) {
+			const rules = [rule(), rule({ id: 'x2' }, 300), rule({ id: 'x3', toNodeId: 'C' }, 300)];
+			const input = yearModel(order ? rules.reverse() : rules, 200, 'cap', { pctUpstreamToDam: 1 });
+			const out = run(input);
+			expect(get(out, 'S', 'transfer_rule@x1')[0]).toBeCloseTo(50, 9);
+			expect(get(out, 'S', 'transfer_rule@x2')[0]).toBeCloseTo(150, 9);
+			expect(get(out, 'S', 'transfer_rule@x3')[0]).toBeCloseTo(300, 9);
+			// The room is spent: neither rule out moves again this year; water into C isn't use.
+			expect(total(get(out, 'S', 'transfer_rule@x1').slice(1))).toBe(0);
+			expect(total(get(out, 'S', 'transfer_rule@x2').slice(1))).toBe(0);
+			passes(input, out);
+		}
+	});
+
+	it('under a cap: a later priority gets the room the earlier one left', () => {
+		const input = yearModel([rule({ priority: 0 }), rule({ id: 'x2', priority: 1 }, 300)], 150, 'cap', { pctUpstreamToDam: 1 });
+		const out = run(input);
+		expect(get(out, 'S', 'transfer_rule@x1')[0]).toBeCloseTo(100, 9);
+		expect(get(out, 'S', 'transfer_rule@x2')[0]).toBeCloseTo(50, 9);
+		passes(input, out);
+	});
+
+	it('a cap on another unit, or no cap, leaves the rule as it was', () => {
+		const free = run(yearModel([rule()], null, 'cap'));
+		const other = yearModel([rule()], null, 'cap');
+		other.model.allocations = [{ id: 'a', nodeId: 'C', waterSource: 'surface', volumeM3PerYear: 10 }];
+		const capped = run(other);
+		expect(get(capped, 'S', 'transfer_rule@x1')).toEqual(get(free, 'S', 'transfer_rule@x1'));
+	});
+
+	it('runs with no rule out of the catchment are unchanged: capped random networks give the same output with or without a switched-off one', () => {
+		let capped = 0;
+		for (let seed = 1; seed < 120 && capped < 6; seed++) {
+			const x = randomInput(seed, { maxDays: 200 });
+			if (x.settings.allocationMode !== 'cap' || !x.model.allocations?.length) continue;
+			const farm = x.model.nodes.find((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
+			if (!farm) continue;
+			capped++;
+			const off = structuredClone(x);
+			off.model.transfers.push(rule({ id: 'zz-off', fromNodeId: farm.id, enabled: false }));
+			const a = runModel(x);
+			const b = runModel(off);
+			expect(b.series, `seed ${seed}`).toEqual(a.series);
+			expect(b.summary.allocations, `seed ${seed}`).toEqual(a.summary.allocations);
+		}
+		expect(capped).toBe(6);
 	});
 });

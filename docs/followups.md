@@ -574,7 +574,7 @@ runs and accumulations are real) can't be decided without the client.
       cuts the users (`usersCut`), with the drought restriction self-check
       and the Python cross-check, and an `ENGINE_VERSION` bump.
       Trigger: the hydrologist's answer.
-- [ ] **Count a transfer out of the catchment as its source unit's use in
+- [x] **Count a transfer out of the catchment as its source unit's use in
       the allocations comparison and under the cap** (engine 1.86.0, issue
       #523 B5, [engine-audit.md X1](./engine-audit.md), [model.md §2.6 and
       §2.12a](./model.md); provisional, needs the hydrologist). Today §2.12's
@@ -592,6 +592,14 @@ runs and accumulations are real) can't be decided without the client.
       whether water pumped out rides on the unit's licence or on a transfer
       authorisation of its own is the hydrologist's call. Trigger: the
       hydrologist's answer, or a catchment with a transfer out and a licence.
+      — *Done 2026-10-12 (engine 1.88.0, issue #523): decided by the
+      operator and built as recommended. M counts it as a dam draw (not again
+      on a dam beside the river, measured at its intake); under a cap each
+      source's rules out share its surface room pro rata in the transfer
+      rounds; the self-checks, the backend's reading and the Python
+      cross-check (probe `transfer-out-of-catchment-cap`) follow. It rides
+      on the unit's licence, which never under-counts use
+      ([engine-audit.md X1](./engine-audit.md)).*
 - [ ] **A pump capacity on other water users (WP-3.8) to confirm** (engine
       1.58.0, [model.md §2.7c](./model.md); to put to the hydrologist through
       #90 / #46). Built off by default (null = no limit) on these choices;

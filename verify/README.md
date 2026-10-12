@@ -93,7 +93,12 @@ The core daily chain, with every setting of it the generator varies:
   the receiver's room (its dam's own gains and losses, its demand) shared pro
   rata, and the source's water in bands at each rule's reserve; a dam rule
   out of the catchment (toNodeId null, engine 1.86.0) runs as any rule with
-  no receiver (probe `transfer-out-of-catchment`, and a fifth of the random networks).
+  no receiver (probe `transfer-out-of-catchment`, and a fifth of the random networks);
+  from engine 1.88.0 its source's surface use, so under a cap the rules out
+  of one source share its surface room pro rata as an outside receiver of
+  their own and the volume counts against the year's volume
+  ([engine-audit.md X1](../docs/engine-audit.md), probe
+  `transfer-out-of-catchment-cap`).
 - **EWR** (§2.7, §2.7b): Y, Z, AA and AB; the outlet and gauge EWR sites
   (`ewrSite` on or off); the attribution with J_int, Σ A + N = D, the charge
   as the largest share, its irrigation part and the binding site.

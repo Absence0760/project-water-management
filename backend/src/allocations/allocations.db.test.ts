@@ -455,6 +455,40 @@ describe('the run comparison', () => {
 		expect(old.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!), 3);
 	});
 
+	it('counts water a dam rule pumps out of the catchment as its source unit’s surface use (engine-audit.md X1), read from the run’s own stored rules', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: transfer out of the catchment' })).body.project.id;
+		const out = node('Weir', null);
+		// A dam on the river (all the upstream inflow into it), full, with crops: its draws are its use.
+		const f = node('Exporting farm', out.id, { damCapacityM3: 20_000, damInitialPct: 1, pctUpstreamToDam: 1, pctRunoffToDam: 0.3 });
+		const g = node('Neighbour', out.id, { damCapacityM3: 20_000, damInitialPct: 1, pctUpstreamToDam: 1, pctRunoffToDam: 0.3 });
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		const rule = {
+			id: crypto.randomUUID(), fromNodeId: f.id, toNodeId: null, months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxRateM3s: 30 / 86_400, dailyCapM3: null,
+			minStoragePct: 0.2, enabled: true, priority: 0, monthlyRateM3s: null, source: 'dam', handsOffM3Day: null, handsOffEwr: false, lossPct: 0, sizing: 'demand',
+			topUpDam: false, lossReturnPct: 0, lossReturnNodeId: null
+		};
+		const m = { nodes: [out, f, g], crops: [crop], cropAreas: [{ nodeId: f.id, cropId: crop.id, areaM2: 20_000 }, { nodeId: g.id, cropId: crop.id, areaM2: 20_000 }], transfers: [rule] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, m)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(0) } })).status).toBe(200);
+		const rain = Array.from({ length: 365 }, (_, i) => (i % 9 === 0 ? 25 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'export' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/allocations`);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const at = (id: string) => res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === id);
+		const sum = (a: number[]) => a.reduce((t, v) => t + v, 0);
+		const series = async (id: string, key: string) => (await asOwner(`SELECT "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = $3`, [run.body.run.id, id, key]))[0]!.values as number[];
+		const sent = sum(await series(f.id, `transfer_rule@${rule.id}`));
+		expect(sent).toBeGreaterThan(0);
+		const supplied = sum(await series(f.id, 'supplied'));
+		expect(supplied).toBeGreaterThan(0);
+		// The exporting unit's surface use is what it supplied plus what it sent out.
+		expect(at(f.id).surface.years[0].modelledM3).toBeCloseTo(supplied + sent, 3);
+		// Positive control: the neighbour, with no rule out, is its supply alone.
+		expect(at(g.id).surface.years[0].modelledM3).toBeCloseTo(sum(await series(g.id, 'supplied')), 3);
+	});
+
 	it("leaves a forecast run's forecast days out (issue #51); an ordinary run of the same record is the control", async () => {
 		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: forecast' })).body.project.id;
 		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };

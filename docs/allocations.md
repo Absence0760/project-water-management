@@ -208,6 +208,19 @@ For a run, per farm or water user, per water source and per **water year**
   dam lost counted on top of the draws) is ignored. Run the model again for
   the take at the intake
   ([model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)).
+- **Water pumped out of the catchment** (engine ≥ 1.88.0, decided by the
+  operator 2026-10-12, [engine-audit.md X1](./engine-audit.md)): what a
+  unit's dam rules send out of the catchment (a transfer rule with no
+  destination unit, its `transfer_rule@<id>` series) is that unit's surface
+  use under its licence, as the licence impact board counts it. On a dam on
+  the river it is a dam draw: added to the surface use, and netted with the
+  other draws against groundwater pumped into the dam. On a dam beside the
+  river it was counted at the intake when diverted, so it isn't added again
+  (it is in the dam draw shown beside the take). A cap scenario limits it to
+  the unit's surface room, shared pro rata between the unit's rules out
+  ([model.md §2.12a](./model.md)). The backend picks those rules from each
+  run's stored inputs, so a run from engine 1.86.0 or 1.87.0 reads the same
+  way.
 - **Dam losses on the river** (engine ≥ 1.83.0, issue #507 item 7): for a
   farm whose dam is on the river, each water year's surface row also shows
   the dam's evaporation plus the seepage that doesn't return ("dam losses

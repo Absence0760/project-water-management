@@ -59,7 +59,7 @@ export { verifyRun } from './verify/verify';
 export * from './verify/audit';
 export { buildTopology, ewrSiteNodes, isEwrSite, type Topology } from './network/topology';
 export { EWR_BINDING_SERIES } from './network/bindingSeries';
-export { parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
+export { externalRuleKeys, parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 export { hasMonthlyRates, monthlyRatesMismatch, transferRatesM3s, validMonthlyRates, WATER_YEAR_MONTHS, withMonthlyRates } from './network/transferRates';
 export { isRiverOfftake, OFFTAKE_SERIES, offtakeReturnAt } from './network/offtake';
 export { REACH_LOSS_FRAC_MAX, REACH_LOSS_SERIES, reachLossDay } from './network/reachLoss';

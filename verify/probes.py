@@ -561,6 +561,41 @@ def transfer_out_of_catchment() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": rules}, "series": _dry(4)}
 
 
+def transfer_out_of_catchment_cap() -> dict:
+    """Engine-audit.md X1 (decided 2026-10-12): water pumped out of the
+    catchment is its source unit's surface use, so under an allocation cap it
+    is held to the source's surface room. s (1 000 m³, full, keeping 50 %) has
+    250 m³ a year. Priority 0: the source shares its 500 m³ above the reserve
+    among xo1 out (100 m³/day), xo2 out (300) and xi into x's empty dam (300);
+    the two rules out share the 250 of room 1 : 3 (62.5 and 187.5), and xi
+    (water into a dam is not use) gets the 250 m³ of dam water they leave.
+    Priority 1: xo3 out 50 m³/day finds no room left, and from day 1 nothing
+    moves out of s (the room is spent). t (2 000 m³, full, keeping 20 %) has
+    1 000 m³ a year: its rule out (100 m³/day) runs ten days, until the volume
+    is spent, with 600 m³ still above its reserve."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=1, pctUpstreamToDam=1),
+        _node("x", "farm", "o", areaKm2=1, damCapacityM3=100000, damInitialPct=0),
+        _node("t", "farm", "o", areaKm2=1, damCapacityM3=2000, damInitialPct=1, pctUpstreamToDam=1),
+    ]
+    rules = [
+        _rule("xo1", "s", None, 100, 0.5),
+        _rule("xo2", "s", None, 300, 0.5),
+        _rule("xi", "s", "x", 300, 0.5),
+        _rule("xo3", "s", None, 50, 0.5, priority=1),
+        _rule("to", "t", None, 100, 0.2),
+    ]
+    alloc = [
+        {"id": "as", "nodeId": "s", "waterSource": "surface", "volumeM3PerYear": 250, "storageM3": None,
+         "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None},
+        {"id": "at", "nodeId": "t", "waterSource": "surface", "volumeM3PerYear": 1000, "storageM3": None,
+         "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None},
+    ]
+    return {"settings": _settings(allocationMode="cap"), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": rules, "allocations": alloc},
+            "series": _dry(14, "2020-10-01")}
+
+
 # Runoff from each unit's own rain (§2.4h, engine >= 1.78.0).
 
 
@@ -1179,6 +1214,7 @@ PROBES = {
     "offtake-release-keep-and-floor": offtake_release_keep_and_floor(),
     "dam-rules-rationing-and-release": dam_rules_rationing_and_release(),
     "transfer-out-of-catchment": transfer_out_of_catchment(),
+    "transfer-out-of-catchment-cap": transfer_out_of_catchment_cap(),
     "unit-rain-rules": unit_rain_rules(),
     "unit-rain-forecast-warmup": unit_rain_forecast_warmup(),
     "unit-rain-map-period": unit_rain_map_period(),

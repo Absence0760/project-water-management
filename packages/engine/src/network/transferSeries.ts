@@ -32,6 +32,17 @@ export const TRANSFER_RULE_SERIES = {
 /** The run series key of one transfer rule's daily volume. */
 export const transferRuleKey = (ruleId: string): string => `${TRANSFER_RULE_SERIES.prefix}${ruleId}`;
 
+/**
+ * The run series keys of a unit's dam rules out of the catchment (engine ≥
+ * 1.86.0, toNodeId null), in the rules' order: what the allocation comparison
+ * counts as the unit's surface use (engine ≥ 1.88.0, docs/engine-audit.md X1;
+ * ../allocations/compare.ts externalTransfers). A rule that can't move water
+ * has no series; a reader skips a key it doesn't find.
+ */
+export function externalRuleKeys(transfers: readonly Pick<Transfer, 'id' | 'fromNodeId' | 'toNodeId'>[] | null | undefined, nodeId: string): string[] {
+	return (transfers ?? []).filter((tr) => tr.toNodeId === null && tr.fromNodeId === nodeId).map((tr) => transferRuleKey(tr.id));
+}
+
 /** The rule id of a transfer_rule@ key; null for any other key. */
 export function parseTransferRuleKey(key: string): string | null {
 	return key.startsWith(TRANSFER_RULE_SERIES.prefix) && key.length > TRANSFER_RULE_SERIES.prefix.length ? key.slice(TRANSFER_RULE_SERIES.prefix.length) : null;

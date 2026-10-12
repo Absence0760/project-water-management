@@ -33,6 +33,7 @@ import type { ModelInput, ModelOutput } from '../project';
 import { Rng } from '../random';
 import { runModel, runModelCapturing, runModelFrom } from '../run';
 import { cloneInput, randomInput } from '../testing/fuzz';
+import { externalRuleKeys } from '../network/transferSeries';
 
 const wyStart = (wy: number) => toEpochDay(`${wy}-10-01`);
 const yearDays = (wy: number) => wyStart(wy + 1) - wyStart(wy);
@@ -304,6 +305,8 @@ function useNodesLikeBackend(input: ModelInput, out: ModelOutput): AllocationUse
 			riverTakes: picked.filter((s) => s.nodeId === n.id && (s.key === 'offtake_used' || s.key.startsWith('river_take@'))).map((s) => s.values),
 			intakeTake: get(n.id, 'intake_take'),
 			receivedAtIntake: get(n.id, 'received_at_intake'),
+			// Its rules out of the catchment, the keys the backend reads by `key = ANY(…)` (X1).
+			externalTransfers: externalRuleKeys(input.model.transfers, n.id).map((k) => out.series.find((s) => s.nodeId === n.id && s.key === k)?.values ?? null),
 			// Only a unit with a dam (runUseNodes: damCapacityM3 > 0).
 			...(n.kind === 'farm' && n.damCapacityM3 > 0 ? { damEvaporation: get(n.id, 'dam_evaporation'), damSeepageLost: get(n.id, 'dam_seepage_lost') } : {})
 		}));
@@ -366,6 +369,59 @@ describe('deep: RunSummary.allocations is compareAllocations on the run’s own 
 			expect(withLosses).toBeGreaterThan(5);
 		});
 	}
+});
+
+describe('deep: water sent out of the catchment is its source unit’s surface use (engine-audit.md X1)', () => {
+	it('the summary and the backend’s reading agree, a resumed capped run agrees to the bit, and the use counts it', () => {
+		const bad: string[] = [];
+		let counted = 0;
+		let resumed = 0;
+		for (const seed of SEEDS.slice(0, 40)) {
+			for (const mode of ['none', 'cap'] as const) {
+				const input = withAllocations(randomInput(seed, { ...GEN, externalTransfers: true }), seed, mode);
+				const sources = new Set(input.model.transfers.filter((t) => t.toNodeId === null && t.enabled).map((t) => t.fromNodeId));
+				if (!sources.size || !input.model.allocations?.length) continue;
+				const out = runModel(input);
+				const sum = out.summary.allocations;
+				if (!sum) continue;
+				const cmp = compareAllocations({ startDate: out.startDate, nodes: useNodesLikeBackend(input, out), allocations: usableAllocations(input.model.allocations, []), tolerance: input.settings.allocationTolerance ?? 0.1 });
+				for (const n of sum.nodes) {
+					const side = cmp.nodes.find((c) => c.nodeId === n.nodeId)!.surface;
+					const src = n.sources.find((x) => x.waterSource === 'surface');
+					if (!src) continue;
+					const close = (a: number | null, b: number | null) => (a === null || b === null ? a === b : Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b)));
+					if (!close(src.meanModelledM3PerYear, side.meanModelledM3PerYear)) bad.push(`seed ${seed} ${mode} ${n.nodeId}: summary ${src.meanModelledM3PerYear} vs tab ${side.meanModelledM3PerYear}`);
+					if (sources.has(n.nodeId) && !side.measuredAt) {
+						// On a unit read by the draws, every whole year's use is at least what it sent out that year.
+						const sent = externalRuleKeys(input.model.transfers, n.nodeId).map((k) => out.series.find((x) => x.nodeId === n.nodeId && x.key === k)?.values ?? []);
+						const d0 = toEpochDay(out.startDate);
+						for (const y of side.years) {
+							let v = 0;
+							for (const a of sent) for (let t = 0; t < a.length; t++) if (waterYearOf(d0 + t) === y.waterYear) v += a[t]!;
+							if (v > 0) counted++;
+							if (y.modelledM3 < v - 1e-6 * Math.max(1, v)) bad.push(`seed ${seed} ${mode} ${n.nodeId} ${y.waterYear}: use ${y.modelledM3} < ${v} sent out`);
+						}
+					}
+				}
+				if (mode === 'cap' && out.days >= 60) {
+					const k = Math.floor(out.days / 2);
+					const { snapshot } = runModelCapturing(input, fromEpochDay(toEpochDay(out.startDate) + k));
+					const tail = runModelFrom(snapshot, input);
+					resumed++;
+					const m = new Map(out.series.map((x) => [`${x.nodeId}/${x.key}`, x.values]));
+					for (const x of tail.series) {
+						const w = m.get(`${x.nodeId}/${x.key}`);
+						if (!w) continue;
+						for (let i = 0; i < x.values.length; i++) if (!Object.is(x.values[i], w[k + i])) { bad.push(`seed ${seed} resumed ${x.nodeId}/${x.key} day ${i}: ${x.values[i]} vs ${w[k + i]}`); break; }
+					}
+				}
+				if (bad.length > 8) break;
+			}
+		}
+		expect(bad).toEqual([]);
+		expect(counted).toBeGreaterThan(5);
+		expect(resumed).toBeGreaterThan(5);
+	});
 });
 
 describe('deep: a capped run resumed inside a water year (§2.12a, §2.16)', () => {
