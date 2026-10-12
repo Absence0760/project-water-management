@@ -5249,7 +5249,12 @@ Applicant view and the Applications tab. Left:
       against `totalShown`, and end to end with a positive control:
       `share/small-catchments.db.test.ts`. With it, a published DWS gauge
       record shows at any holder count ([security.md § Share
-      links](./security.md#share-links)).
+      links](./security.md#share-links)). **235 (round 6 security
+      review):** the other water users' supply (`summary.users`) is among
+      the parts, so a dominant mine, town or abstractor beside even farms
+      withholds the use, as does one user when every farm takes nothing; k
+      still counts farm holders only (decided: a user is no farmer's
+      neighbour in the count).
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +

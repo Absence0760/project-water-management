@@ -1194,10 +1194,18 @@ result without signing in, until it expires or its owner revokes it.
   abstraction: natural flow less the outflow is then mostly that holder's
   use. `app_run_use_shown(run)` is the one place that decides whether a
   run's use may be shown to someone kept from each farm: k as above, and,
-  over the run's modelled supply per holder (`summary.farms`
-  `avgSuppliedM3Day`, a holder's farms summed; an application's new farms
-  its owner's), either no supply at all or 5 or more holders with some,
-  none above 80 % of the total and no two above 90 %. The limits are the
+  over the run's modelled supply per holder (`avgSuppliedM3Day` of
+  `summary.farms` **and** `summary.users`, the other water users: a mine, a
+  town, an industrial or private abstractor, since 235; a holder's nodes
+  summed; an application's new farms and users its owner's), either no
+  supply at all (nobody takes water, so natural flow less the outflow is
+  no holder's use) or 5 or more holders with some, none above 80 % of the
+  total and no two above 90 %. Before 235 only the farms were parts, so a
+  dominant other water user beside 5 even farms passed, and so did any user
+  when every farm took nothing. k still counts farm holders only: it is the
+  number of farmers each is hidden among, and a mine or a town makes no
+  catchment of four farms safe to show; the users count in the dominance
+  rule, where their take is part of the use. The limits are the
   registered volumes' (engine `allocations/holders.ts` `totalShown`,
   `DOMINANCE_TOP1` / `DOMINANCE_TOP2`; the second limb keeps a reader who
   knows one holder's use, such as an applicant's own, from reading the
@@ -1209,7 +1217,12 @@ result without signing in, until it expires or its owner revokes it.
   (`app_share_run_projection`) and a pack's volume rows over both its runs
   (`app_share_pack`, `app_applicant_pack`). The arithmetic is
   `app_use_parts_shown`, pinned to `totalShown` on fixed and random sums by
-  `share/small-catchments.db.test.ts`; both helpers are invoker's rights,
+  `share/small-catchments.db.test.ts`, which also works out
+  `app_run_use_shown` from a run's summary (farms and users) on each run of
+  its dominant-user cases (a mine above 80 % beside six even farms
+  withheld, a small user shown as the control; every farm at zero supply
+  with one user withheld, five even users shown; five users and one farm
+  holder withheld); both helpers are invoker's rights,
   closed to `water_app`, called only from SECURITY DEFINER functions. A
   farmer's own even share (`app_other_farm_holders`, 020) is a different
   aggregate and keeps k alone.

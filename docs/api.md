@@ -2804,7 +2804,8 @@ below work on it too, for an editor.
   outlet flow (`meanSimulatedOutflowM3Day`), the `outflow` series and every
   `deficitM3` only at five or more farm holders and past the dominance
   rule over the run and its base (no holder above 80 % of the run's
-  supply, no two above 90 %; `app_run_use_shown`, 232, provisional, #92),
+  supply, farms and other water users alike, no two above 90 %;
+  `app_run_use_shown`, 232, 235, provisional, #92),
   else null (with `withheld: 'few_farm_holders'` when every op was a
   proposal). `units[]`: their own units
   (their farm links as they read them now) and the ones the ops add
@@ -3342,8 +3343,8 @@ never a farm's row, name or id.
   [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)):
   in a smaller catchment natural flow minus outflow would reveal the farms'
   use (164), and when no one holder takes more than 80 % of the run's
-  supply, nor two more than 90 % (the dominance rule, 232, provisional,
-  #92). `observed_flow` also answers at any holder count when it is a
+  supply (farms and other water users alike, 235), nor two more than 90 %
+  (the dominance rule, 232, provisional, #92). `observed_flow` also answers at any holder count when it is a
   published DWS gauge record (a record a DWS river-gauge feed wrote whole,
   232, #523 G8; [security.md § Share links](./security.md#share-links)).
 - Every dead link answers the same `404 { error: "not found" }`: unknown,

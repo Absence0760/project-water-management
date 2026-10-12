@@ -7,7 +7,8 @@
 //    the outflow and the EWR shortfall keep the k rule;
 //  - the dominance rule beside k: the use's series and volumes are withheld
 //    when one holder takes more than 80 % of the run's supply, or two more
-//    than 90 % (engine totalShown, the registered volumes' provisional limits).
+//    than 90 % (engine totalShown, the registered volumes' provisional limits),
+//    the farms and the other water users alike (235); k counts farm holders.
 //
 // Every "cannot" has its positive control (CLAUDE.md rule 5).
 import { DOMINANCE_TOP1, DOMINANCE_TOP2, FARMER_K, totalShown } from '@water-management/engine';
@@ -30,10 +31,15 @@ const START = '2021-10-01';
 const STATION = 'X0H000';
 const P = () => `/projects/${projectId}`;
 
-/** Save the model with these crop areas (m², one per farm). */
-async function areas(m2: number[]) {
+/**
+ * Save the model with these crop areas (m², one per farm), and these other water users: in a chain above the outlet,
+ * the farms draining into the last, so each user has the river to take from.
+ */
+async function areas(m2: number[], users: ReturnType<typeof node>[] = []) {
+	const chain = users.map((u, i) => ({ ...u, downstreamNodeId: i === 0 ? outlet.id : users[i - 1]!.id }));
+	const into = chain.at(-1)?.id ?? outlet.id;
 	const model = {
-		nodes: [outlet, ...farms],
+		nodes: [outlet, ...farms.map((f) => ({ ...f, downstreamNodeId: into })), ...chain],
 		crops: [crop],
 		cropAreas: farms.map((f, i) => ({ nodeId: f.id, cropId: crop.id, areaM2: m2[i]! })),
 		transfers: []
@@ -74,6 +80,33 @@ async function supplied(runId: string): Promise<number[]> {
 	return rows[0]!.summary.farms.map((f) => f.avgSuppliedM3Day);
 }
 const useShown = async (runId: string) => ((await asOwner('SELECT app_run_use_shown($1) AS ok', [runId])) as { ok: boolean }[])[0]!.ok;
+/** An other water user (a mine, a town) taking this much a day from the river. */
+const waterUser = (name: string, m3Day: number) => node(name, outlet.id, { kind: 'user', userDemandM3Day: monthly(m3Day) });
+/**
+ * app_run_use_shown worked out here (235): k over the farm holders, and the engine's totalShown over each holder's
+ * supply, the farms and the other water users alike (summary.farms + summary.users; a node's holder its lowest linked
+ * user, else the node). Also the parts, for the test to assert on.
+ */
+async function expectedUseShown(runId: string): Promise<{ shown: boolean; farms: number[]; users: number[] }> {
+	type Take = { nodeId: string; avgSuppliedM3Day: number };
+	const [{ summary }] = (await asOwner('SELECT summary FROM model_run WHERE id = $1', [runId])) as [{ summary: { farms: Take[]; users?: Take[] } }];
+	const links = (await asOwner(
+		`SELECT n.id::text AS node, n.kind, (SELECT min(fl.user_id::text) FROM farm_link fl WHERE fl.node_id = n.id) AS holder FROM node n WHERE n.project_id = $1`,
+		[projectId]
+	)) as { node: string; kind: string; holder: string | null }[];
+	const keyOf = new Map(links.map((l) => [l.node, l.holder ?? `node:${l.node}`]));
+	const parts = new Map<string, number>();
+	for (const t of [...summary.farms, ...(summary.users ?? [])]) {
+		const key = keyOf.get(t.nodeId) ?? `node:${t.nodeId}`;
+		parts.set(key, (parts.get(key) ?? 0) + Math.max(t.avgSuppliedM3Day, 0));
+	}
+	const farmHolders = new Set(links.filter((l) => l.kind === 'farm').map((l) => keyOf.get(l.node))).size;
+	return {
+		shown: farmHolders >= FARMER_K && totalShown(parts.values()),
+		farms: summary.farms.map((f) => f.avgSuppliedM3Day),
+		users: (summary.users ?? []).map((u) => u.avgSuppliedM3Day)
+	};
+}
 
 beforeAll(async () => {
 	[owner, applicant, farmer] = (await Promise.all(['SCowner', 'SCapplicant', 'SCfarmer'].map((n) => signUp(n)))) as [User, User, User];
@@ -159,6 +192,67 @@ describe('the dominance rule (232, provisional, #92)', () => {
 		expect(r.catchment.figures.base.meanSimulatedOutflowM3Day).toBeNull();
 		expect(r.catchment.figures.base.meanNaturalFlowM3Day).toBeGreaterThan(0);
 		expect(r.catchment.series.outflow).toBeNull();
+		await areas([100_000, 120_000, 140_000, 160_000, 180_000, 200_000]);
+	});
+});
+
+describe('the dominance rule counts the other water users (235)', () => {
+	it('withholds the use when a mine takes most of the water beside even farms (control: a small user, shown)', async () => {
+		// Control: six even farms and a small user. k holds, nobody dominates: the use shows.
+		await areas([100_000, 120_000, 140_000, 160_000, 180_000, 200_000], [waterUser('Small works', 5)]);
+		const small = await publish();
+		const control = await expectedUseShown(small);
+		expect(control.users).toHaveLength(1);
+		expect(control.users[0]).toBeGreaterThan(0);
+		expect(control.shown).toBe(true);
+		expect(await useShown(small)).toBe(true);
+		expect(await shareStatus('simulated_outflow')).toBe(200);
+		expect(await applicantKeys(small)).toContain('simulated_outflow');
+
+		// The same farms and a mine taking far more than all of them: still six farm holders, but the use is the mine's.
+		await areas([100_000, 120_000, 140_000, 160_000, 180_000, 200_000], [waterUser('Mine', 200_000)]);
+		const mine = await publish();
+		const dominated = await expectedUseShown(mine);
+		const total = [...dominated.farms, ...dominated.users].reduce((a, b) => a + b, 0);
+		expect(dominated.farms.filter((v) => v > 0)).toHaveLength(6);
+		expect(dominated.users[0]!).toBeGreaterThan(DOMINANCE_TOP1 * total);
+		expect(dominated.shown).toBe(false);
+		expect(await useShown(mine)).toBe(false);
+		expect([await shareStatus('simulated_outflow'), await shareStatus('ewr_shortfall'), await shareStatus('observed_flow')]).toEqual([404, 404, 404]);
+		expect([await shareStatus('natural_flow'), await shareStatus('ewr')]).toEqual([200, 200]);
+		const keys = await applicantKeys(mine);
+		expect(keys).not.toContain('simulated_outflow');
+		expect(keys).toEqual(expect.arrayContaining(['ewr', 'natural_flow']));
+		expect((await applicantResults()).catchment.withheld).toBe('few_farm_holders');
+		await areas([100_000, 120_000, 140_000, 160_000, 180_000, 200_000]);
+	});
+
+	it('weighs the users when every farm takes nothing, and counts only farm holders toward k', async () => {
+		// No crops: the farms take nothing, so the parts are the users'. One user alone is one holder's use.
+		await areas([0, 0, 0, 0, 0, 0], [waterUser('Mine', 2_000)]);
+		const one = await publish();
+		const parts = await expectedUseShown(one);
+		expect(parts.farms.every((v) => v === 0)).toBe(true);
+		expect(parts.users[0]).toBeGreaterThan(0);
+		expect(parts.shown).toBe(false);
+		expect(await useShown(one)).toBe(false);
+		expect(await shareStatus('simulated_outflow')).toBe(404);
+
+		// Five even users and no farm crops: 5 or more holders take water, six farm holders: shown (positive control).
+		const five = ['U1', 'U2', 'U3', 'U4', 'U5'].map((n) => waterUser(n, 50));
+		await areas([0, 0, 0, 0, 0, 0], five);
+		const even = await publish();
+		expect((await expectedUseShown(even)).shown).toBe(true);
+		expect(await useShown(even)).toBe(true);
+		expect(await shareStatus('simulated_outflow')).toBe(200);
+
+		// Users never make up k: every farm held by the farmer (one farm holder) beside five even users stays withheld.
+		expect((await linkAll(true)).status).toBe(200);
+		await areas([100_000, 120_000, 140_000, 160_000, 180_000, 200_000], five);
+		const fewFarms = await publish();
+		expect((await expectedUseShown(fewFarms)).shown).toBe(false);
+		expect(await useShown(fewFarms)).toBe(false);
+		expect((await linkAll(false)).status).toBe(200);
 		await areas([100_000, 120_000, 140_000, 160_000, 180_000, 200_000]);
 	});
 });

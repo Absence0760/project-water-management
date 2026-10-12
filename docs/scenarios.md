@@ -1628,8 +1628,9 @@ scenario is `'team'`, and behaves exactly as above).
     more farm holders (the k rule of the share links and the contributor's
     series, split in 164; provisional position, pre-counsel research,
     2026-10-01) and when no one holder takes more than 80 % of the run's
-    supply, nor two more than 90 % (the dominance rule, over the run and
-    its base, 232, provisional, #92); read under the caller's own RLS;
+    supply (farms and other water users alike, 235), nor two more than
+    90 % (the dominance rule, over the run and its base, 232, provisional,
+    #92); read under the caller's own RLS;
   - the outlet's **published DWS gauge record** (`gaugeRecords`, #523 G8),
     the published base run's, at any holder count and whatever the ops: DWS
     publishes it, and no op changes it (a record is one only when a DWS
