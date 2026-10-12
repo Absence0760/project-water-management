@@ -9,9 +9,11 @@
 //
 // Each check runs inside a READ ONLY transaction (any write, sequence or
 // function that writes fails, SQLSTATE 25006) with a statement timeout, and
-// answers with ids, engine versions, modes and dates only: never a name, an
-// email, a volume, a note or any other figure, so its answer is safe to paste
-// into an issue. A check lists at most CHECK_ROWS_MAX rows and says whether
+// answers with ids, engine versions, modes and dates only: never a person's
+// name, an email, a volume, a note or any other figure, so its answer is safe
+// to paste into an issue. The one exception is series-pick-moves, whose
+// answer is the series names themselves (project data, not personal data:
+// the gauge or feed a series came from). A check lists at most CHECK_ROWS_MAX rows and says whether
 // it held back more (`truncated`, `count` is the total).
 //
 // Adding a check: one entry below, its SQL selecting only `columns`, a DB
@@ -24,7 +26,7 @@ export interface ReadOnlyCheck {
 	readonly about: string;
 	/** The query: SELECT only, no parameters, its columns exactly `columns`. */
 	readonly sql: string;
-	/** The columns returned, in order; ids, versions, modes, dates and flags only. */
+	/** The columns returned, in order; ids, versions, modes, dates and flags only (series-pick-moves: series names too). */
 	readonly columns: readonly string[];
 	/** The ORDER BY of the outer query (the subquery's own order isn't kept). */
 	readonly orderBy: string;
@@ -84,6 +86,38 @@ export const CHECKS = {
 			JOIN capped c ON c.id = o.base_run_id`,
 		columns: ['kind', 'id', 'project_id', 'run_id', 'mode', 'engine_version', 'run_created_at', 'at', 'current'],
 		orderBy: 'current DESC, project_id, at, id'
+	},
+	// Issue #523: a run reads the first series of a kind (at a site) by name,
+	// and production sorted names linguistically until the backend that sorts
+	// them by byte (COLLATE "C"; data-model.md § Which series a run reads). One
+	// row per project, kind and site whose first series differs between the
+	// two orders: `was` and `will` are its series names in each order, so the
+	// operator can tell the owner which series its runs will read. The answer
+	// depends only on series names, so it can run straight after that deploy.
+	'series-pick-moves': {
+		about: 'projects whose series pick moves when names sort by byte (issue #523)',
+		sql: `SELECT project_id, kind, site_node_id,
+				array_agg(name ORDER BY name) AS was,
+				array_agg(name ORDER BY name COLLATE "C") AS will
+			FROM time_series
+			GROUP BY project_id, kind, site_node_id
+			HAVING count(*) > 1
+			   AND (array_agg(name ORDER BY name))[1] <> (array_agg(name ORDER BY name COLLATE "C"))[1]`,
+		columns: ['project_id', 'kind', 'site_node_id', 'was', 'will'],
+		orderBy: 'project_id, kind, site_node_id NULLS FIRST'
+	},
+	// Issue #523 G5: 229 carried every "acts for the authority" flag an owner
+	// had set over as a confirmed delegate, each with an
+	// authority.grandfathered event. Each authority reviews its list
+	// (deployment.md runbook step 18). The person is answered by id only: the
+	// operator finds their name in the project's members list in the app.
+	'authority-grandfathered': {
+		about: 'delegates 229 grandfathered, per project (issue #523 G5)',
+		sql: `SELECT e.project_id, e.subject->>'userId' AS user_id, e.created_at
+			FROM audit_event e
+			WHERE e.kind = 'authority.grandfathered'`,
+		columns: ['project_id', 'user_id', 'created_at'],
+		orderBy: 'project_id, created_at, user_id'
 	}
 } as const satisfies Record<string, ReadOnlyCheck>;
 
@@ -127,12 +161,16 @@ export interface CheckResult {
 	/** Every row the query found (also when `rows` holds fewer). */
 	count: number;
 	truncated: boolean;
-	rows: Record<string, string | boolean | null>[];
+	rows: Record<string, CheckCell>[];
 }
 
-/** A column's value as the answer carries it: a date as ISO 8601, a flag as itself, anything else as text. */
-function cell(v: unknown): string | boolean | null {
+/** One value of a check's answer. A list (series-pick-moves' names) stays a list of text. */
+export type CheckCell = string | boolean | string[] | null;
+
+/** A column's value as the answer carries it: a date as ISO 8601, a flag as itself, a list as a list of text, anything else as text. */
+function cell(v: unknown): CheckCell {
 	if (v === null || v === undefined) return null;
+	if (Array.isArray(v)) return v.map((x) => String(x));
 	if (v instanceof Date) return v.toISOString();
 	if (typeof v === 'boolean' || typeof v === 'string') return v;
 	return String(v);

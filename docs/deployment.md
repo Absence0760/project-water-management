@@ -1853,8 +1853,10 @@ SSO session invokes the function, and the function reads only the secret
 it already reads.
 
 The answer is `{ check, count, truncated, rows }`: ids, engine versions,
-allocation modes, dates and flags only, never a name, an email, a volume or
-a note, so it can be pasted into an issue. At most 500 rows come back;
+allocation modes, dates and flags only, never a person's name, an email, a
+volume or a note, so it can be pasted into an issue (`series-pick-moves`
+also answers with series names, which are project data, not personal
+data). At most 500 rows come back;
 `count` is the total and `truncated` says whether more were held back. A
 failure is a `CheckFailed` error whose message is `{ code, reason,
 logStream, requestId }`; the detail is in the function's CloudWatch log
@@ -1911,6 +1913,32 @@ water-management`; the answer is written to the named file, then printed:
   the volumes already get none of their figures (farm previews refused,
   farm history drops them). An outlook publication whose outlook was
   trimmed has lost its link to the run and can't be found by this check.
+
+- **`series-pick-moves`** (issue #523, runbook step 19,
+  [data-model.md § Which series a run reads](./data-model.md#which-series-a-run-reads)):
+  projects whose series of one kind (at one site) pick a different first
+  series when names sort by byte (`COLLATE "C"`) instead of
+  linguistically. Each row is `project_id`, `kind`, `site_node_id`, `was`
+  (the names in the old order) and `will` (in the new); the first of each
+  is the series a run read and will read.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"series-pick-moves"}' --cli-read-timeout 300 --region af-south-1 --profile water-management series-pick-moves.json && jq . series-pick-moves.json
+  ```
+
+  `count: 0`: no project's pick moves. Any rows: step 19.
+
+- **`authority-grandfathered`** (issue #523 G5, runbook step 18): the
+  delegates 229 carried over from an owner's "acts for the authority"
+  flag (`authority.grandfathered` events). Each row is `project_id`,
+  `user_id` and `created_at`; the person is an id, never a name or an
+  email: find them in the project's members list in the app.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"authority-grandfathered"}' --cli-read-timeout 300 --region af-south-1 --profile water-management authority-grandfathered.json && jq . authority-grandfathered.json
+  ```
+
+  `count: 0`: nobody was grandfathered. Any rows: step 18.
 
 Adding a check is a code change: an entry in the registry (a `SELECT`
 with no parameters, its columns from the allowlist its unit test holds), a
@@ -2305,10 +2333,14 @@ Every step is an ordinary app action by an owner unless it says "operator".
     "acts for the authority" flag an owner had set (on someone still an
     editor or above) over as a **confirmed** delegate, so no decision in
     progress stopped, but the host chose those people, not the authority.
-    List them per project, as the schema owner:
-    `SELECT p.name, u.email, e.created_at, e.subject FROM audit_event e JOIN project p ON p.id = e.project_id JOIN app_user u ON u.id = (e.subject->>'userId')::uuid WHERE e.kind = 'authority.grandfathered' ORDER BY p.name;`
-    (each project's History shows the same `authority.grandfathered`
-    events, naming the owner who ticked the flag). Send each project's
+    List them per project with the read-only check
+    `authority-grandfathered` ([§ Read-only production
+    checks](#read-only-production-checks)):
+    `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"authority-grandfathered"}' --cli-read-timeout 300 --region af-south-1 --profile water-management authority-grandfathered.json && jq . authority-grandfathered.json`
+    It answers with project and user ids only; find each person in that
+    project's members list in the app (each project's History shows the
+    same `authority.grandfathered` events, naming the owner who ticked the
+    flag). Send each project's
     responsible authority its list in writing and ask it to confirm each
     person or remove them: a delegate removes anyone in the app
     (Responsible authority › Acts for the authority), or, at its written
@@ -2317,16 +2349,20 @@ Every step is an ordinary app action by an owner unless it says "operator".
     the authority doesn't recognise; until it answers, the grandfathered
     delegates keep acting. Record what was sent, the answers and the
     removals in the operator log.
-19. **List the projects whose series pick moves** (operator, before the
-    backend release that orders series picks by byte, issue #523;
-    data-model.md § Which series a run reads). Production sorted names
-    linguistically until then, so a project whose series of one kind (at
-    one site) differ in case or punctuation order will run on another
-    series once it deploys. Read only, as the schema owner:
-    `SELECT project_id, kind, site_node_id, array_agg(name ORDER BY name) AS was, array_agg(name ORDER BY name COLLATE "C") AS will FROM time_series GROUP BY 1, 2, 3 HAVING count(*) > 1 AND (array_agg(name ORDER BY name))[1] <> (array_agg(name ORDER BY name COLLATE "C"))[1];`
-    For each row, tell the project's owner which series its runs will
-    read; rename a series (so the one they mean sorts first) if they
-    want the old pick. Record the list in the operator log.
+19. **List the projects whose series pick moves** (operator, straight
+    after the backend release that orders series picks by byte, issue
+    #523; data-model.md § Which series a run reads). Production sorted
+    names linguistically until then, so a project whose series of one kind
+    (at one site) differ in case or punctuation order runs on another
+    series once it deploys. The answer depends only on series names, so
+    the read-only check `series-pick-moves` ([§ Read-only production
+    checks](#read-only-production-checks)), which ships in that release,
+    can run straight after the deploy:
+    `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"series-pick-moves"}' --cli-read-timeout 300 --region af-south-1 --profile water-management series-pick-moves.json && jq . series-pick-moves.json`
+    Then, for each row, tell the project's owner which series its runs now
+    read (the first of `will`; before, the first of `was`); rename a
+    series (so the one they mean sorts first) if they want the old pick.
+    Record the list in the operator log.
 
 ## Rollback
 

@@ -126,6 +126,70 @@ describe('pre-213-cap-runs (issue #523 finding I)', () => {
 	});
 });
 
+describe('series-pick-moves (issue #523)', () => {
+	/** A series of this project (as owner: only its kind, name and site matter here). */
+	const plantSeries = (kind: string, name: string, site: string | null = null) =>
+		asOwner(`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", site_node_id) VALUES ($1, $2, $3, 'mm', '2024-01-01', '{1}', $4)`, [
+			projectId,
+			kind,
+			name,
+			site
+		]);
+
+	beforeAll(async () => {
+		// Moves: linguistic order puts 'a gauge' first, byte order 'B gauge' (B is 0x42, a 0x61).
+		await plantSeries('rain_mm', 'a gauge');
+		await plantSeries('rain_mm', 'B gauge');
+		// Near misses: the same first name in both orders; a kind with one series.
+		await plantSeries('evap_mm', 'a pan');
+		await plantSeries('evap_mm', 'b pan');
+		await plantSeries('temp_c', 'B only');
+	});
+
+	const hit = { project_id: '', kind: 'rain_mm', site_node_id: null, was: ['a gauge', 'B gauge'], will: ['B gauge', 'a gauge'] };
+
+	it('finds the kind whose first series differs between linguistic and byte order, with its names in each, and none of the near misses', async () => {
+		// "was" is the database's default order, which is linguistic on production (glibc's en_US.UTF-8) but
+		// bytewise on the alpine (musl) test database. The same SQL with ICU's linguistic order spelled out
+		// stands in for production's default here.
+		const sql = CHECKS['series-pick-moves'].sql;
+		const linguistic = sql.replaceAll('ORDER BY name)', 'ORDER BY name COLLATE "und-x-icu")');
+		expect(linguistic.split('und-x-icu').length - 1).toBe(2);
+		const asProduction = { 'series-pick-moves': { ...CHECKS['series-pick-moves'], sql: linguistic } } satisfies Record<string, ReadOnlyCheck>;
+		const r = await runCheck(client, 'series-pick-moves', asProduction);
+		expect(mine(r)).toEqual([{ ...hit, project_id: projectId }]);
+		expect(r.truncated).toBe(false);
+	});
+
+	it('as registered, it compares the database’s own order: here a pick moves only if this database sorts linguistically', async () => {
+		const [{ lingual }] = (await client.query(`SELECT 'a gauge' < 'B gauge' AS lingual`)).rows;
+		const rows = mine(await runCheck(client, 'series-pick-moves'));
+		expect(rows).toEqual(lingual ? [{ ...hit, project_id: projectId }] : []);
+	});
+});
+
+describe('authority-grandfathered (issue #523 G5)', () => {
+	let delegate: Awaited<ReturnType<typeof signUp>>;
+	let other: Awaited<ReturnType<typeof signUp>>;
+
+	beforeAll(async () => {
+		delegate = await signUp('Grandfathered');
+		other = await signUp('Confirmed');
+		const ins = `INSERT INTO audit_event (project_id, actor_user_id, actor_label, kind, subject) VALUES ($1, $2, 'Owner', $3, $4)`;
+		await asOwner(ins, [projectId, owner.id, 'authority.grandfathered', JSON.stringify({ userId: delegate.id, displayName: 'Grandfathered', via: 'grandfathered' })]);
+		// Near miss: a delegate the authority confirmed itself.
+		await asOwner(ins, [projectId, owner.id, 'authority.confirmed', JSON.stringify({ userId: other.id, displayName: 'Confirmed', via: 'delegate' })]);
+	});
+
+	it('finds the grandfathered delegate by id, not the confirmed one, and answers with no name or email', async () => {
+		const rows = mine(await runCheck(client, 'authority-grandfathered'));
+		expect(rows.map((row) => row.user_id)).toEqual([delegate.id]);
+		expect(Object.keys(rows[0]!)).toEqual(['project_id', 'user_id', 'created_at']);
+		expect(rows[0]!.created_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+		expect(JSON.stringify(rows)).not.toMatch(/Grandfathered|@/);
+	});
+});
+
 describe('runCheck runs read only', () => {
 	// A table and a function that writes to it, in a schema of their own (dropped after), to try a write through runCheck.
 	beforeAll(() =>
