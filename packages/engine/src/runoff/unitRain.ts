@@ -65,6 +65,7 @@ import type { Gr4jParams } from './params';
 import { simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
 import { isLandUnit, MM_KM2_TO_M3 } from './area';
 import { recipeLevel } from './unitRainFingerprint';
+import { checkedReferenceGauge, checkedUnitGauge, unitGaugeCheckWarnings } from './unitGaugeChecks';
 
 export { isLandUnit, perUnitAreaKm2 } from './area';
 export * from './unitRainFingerprint';
@@ -118,7 +119,8 @@ export interface UnitForcing {
 
 /** What the per-unit forcing reads from a prepared run. */
 export interface UnitRainContext {
-	settings: Pick<ProjectSettings, 'unitRain' | 'arealRain'>;
+	/** The run's merged settings: the unit gauge and reference gauge checks read the catchment's rain-check settings (issue #500 decisions 1c, 6). */
+	settings: ProjectSettings;
 	series: ModelInput['series'];
 	nodes: readonly NetworkNode[];
 	startDate: string;
@@ -191,12 +193,22 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
  * them; null when the setting has no reference, or its unit is not a land
  * unit of the model (that warns, and the units' CHIRPS is levelled as without
  * it). Each calendar month's factor is Σ gauge ÷ Σ CHIRPS over the days both
- * the gauge (settings.unitRain.reference.gauge, as stored) and the cell
+ * the gauge (settings.unitRain.reference.gauge) and the cell
  * (`rain_chirps_cell_mm@<unit>`) have a reading, over their whole stored
  * records; it needs §2.4b's 90 shared days and 50 mm of CHIRPS, else it is 1
  * (with a warning), and is clamped to 0.25–4. Pinned factors replace the fit's.
+ * `checkedGauge` is the gauge's checked record (./unitGaugeChecks.ts
+ * checkedReferenceGauge, issue #500 decision 1c): days the checks set aside
+ * and accumulation windows (as §2.4b leaves them out) are left out. Without it (undefined)
+ * the gauge is read as stored, and the fit says so (gaugeChecked false).
  */
-export function referenceFit(u: UnitRainSettings | null | undefined, series: ModelInput['series'], nodes: readonly NetworkNode[], warnings: string[]): UnitRainReferenceFit | null {
+export function referenceFit(
+	u: UnitRainSettings | null | undefined,
+	series: ModelInput['series'],
+	nodes: readonly NetworkNode[],
+	warnings: string[],
+	checkedGauge?: DailySeries | null
+): UnitRainReferenceFit | null {
 	const ref = u?.reference;
 	if (u?.mode !== 'perUnit' || !ref) return null;
 	const node = nodes.find((n) => n.id === ref.unitId);
@@ -208,7 +220,7 @@ export function referenceFit(u: UnitRainSettings | null | undefined, series: Mod
 	}
 	const all = series as Record<string, DailySeries | undefined>;
 	const cellKey = referenceCellSeriesKey(ref.unitId);
-	const gauge = all[ref.gauge];
+	const gauge = checkedGauge !== undefined ? (checkedGauge ?? undefined) : all[ref.gauge];
 	const cell = all[cellKey];
 	const n = new Array<number>(12).fill(0);
 	const g = new Array<number>(12).fill(0);
@@ -251,7 +263,7 @@ export function referenceFit(u: UnitRainSettings | null | undefined, series: Mod
 			if (w) warnings.push(w);
 		}
 	}
-	return { gauge: ref.gauge, unitId: ref.unitId, unitName, mapMm: usableMap(node.mapMm), cellKey, cellReason: 'referenceUnitCentre', gaugeChecked: false, pinned: !!pinned, months };
+	return { gauge: ref.gauge, unitId: ref.unitId, unitName, mapMm: usableMap(node.mapMm), cellKey, cellReason: 'referenceUnitCentre', gaugeChecked: checkedGauge !== undefined, pinned: !!pinned, months };
 }
 
 /** The catchment's §2.4b monthly factors exist: mode 'monthly' and some month has one. */
@@ -281,7 +293,7 @@ export function unitRainRecipes(
 	const gaugeRain = hasReading(series.rain_catchment_mm);
 	const period = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	const bias = biasExists(ctx.chirpsCorrection);
-	const reference = referenceFit(u, series, ctx.nodes, warnings);
+	const reference = referenceFit(u, series, ctx.nodes, warnings, u.reference ? checkedReferenceGauge(ctx.settings, series, u.reference.gauge) : undefined);
 	if (fit) fit.reference = reference;
 	const refFactors = reference ? reference.months.map((x) => x.factor) : null;
 	return units.map((n) => {
@@ -413,7 +425,10 @@ export function unitRainForcing(
 			}
 			return { ...base, rainMm, source, ...(before ? { rainBeforeArealMm: before } : {}) };
 		}
-		const gauge = r.hasGauge ? align(ctx.series[unitRainSeriesKey('rain_catchment_mm', n.id)]) : null;
+		// Rule 1's gauge after the catchment's §2.4c and §2.4d checks (issue #500 decision 6): a day they set aside is blank, so it falls to the next link.
+		const checked = r.hasGauge ? checkedUnitGauge(ctx.settings, ctx.series, n.id, d0, days) : null;
+		if (checked) warnings.push(...unitGaugeCheckWarnings(n.name, checked));
+		const gauge = checked ? checked.values : null;
 		// The unit's own forecast (a seasonal outlook member's season, unitForecastSeriesKey): read before the catchment's rain.
 		const ownForecast = ctx.series[unitForecastSeriesKey(n.id)] ? align(ctx.series[unitForecastSeriesKey(n.id)]) : null;
 		// An unusable CHIRPS (all-zero years) is never read: its days fall to the next link.

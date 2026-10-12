@@ -993,8 +993,9 @@ export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' 
 export interface UnitRainReference {
 	/**
 	 * The reference gauge's series: `rain_catchment_mm` (the catchment rain
-	 * gauge) or `rain_catchment_mm@<unit id>` (a unit's own gauge), read as
-	 * stored.
+	 * gauge) or `rain_catchment_mm@<unit id>` (a unit's own gauge), read
+	 * after the rain checks (§2.4c, §2.4d, and §2.4e for the catchment gauge;
+	 * issue #500 decision 1c).
 	 */
 	gauge: string;
 	/** The reference unit: a land unit whose centre picks the CHIRPS cell (REFERENCE_CELL_KIND@unitId), and whose MAP the other units' MAPs are divided by. */
@@ -3477,6 +3478,8 @@ export interface UnitRainReferenceFit {
 	gaugeChecked: boolean;
 	/** Whether the factors were pinned (the uncertainty ensemble's CHIRPS-only member), not fitted. */
 	pinned: boolean;
+	/** Whether the fit read the gauge's checked rain (after §2.4c zero runs, §2.4d accumulations and, for the catchment gauge, §2.4e rain-source periods; issue #500 decision 1c), not the series as stored. */
+	gaugeChecked: boolean;
 	months: UnitRainReferenceMonth[];
 }
 
