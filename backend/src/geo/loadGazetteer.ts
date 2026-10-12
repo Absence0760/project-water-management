@@ -8,7 +8,7 @@
 //   geonameid, name, asciiname, alternatenames, latitude, longitude,
 //   feature class, feature code, country code, cc2, admin1 code, admin2,
 //   admin3, admin4, population, elevation, dem, timezone, modification date.
-// Only the first, second, fifth to eighth and eleventh are read. A blank line
+// Only the first, second, fifth to ninth and eleventh are read. A blank line
 // or one starting with # is skipped (the committed fixture's comments).
 //
 // Which places are kept: the feature classes a catchment is found by, A
@@ -16,7 +16,10 @@
 // (towns, settlements) and T (peaks, hills, passes), and of S (spots,
 // buildings) only the farms (FRM, FRMS, FRMT). Roads, railways, undersea and
 // vegetation features (R, U, V) and every other S feature are left out, as is
-// a line whose position isn't WGS84 degrees. A load replaces every row of its
+// a line whose position isn't WGS84 degrees. So is a place whose country code
+// (the ninth column) isn't ZA, counted apart: the search is South Africa's, and
+// a file holding other countries (allCountries.txt, a neighbour's dump) is the
+// wrong file, so the loaders say how many they dropped. A load replaces every row of its
 // dataset, in one transaction.
 import type pg from 'pg';
 import { searchKey } from './gazetteer.js';
@@ -33,6 +36,8 @@ export interface PlaceRecord {
 	source: string;
 }
 
+/** The country a place must be in (GeoNames' ISO 3166 country code). */
+export const GAZETTEER_COUNTRY = 'ZA';
 /** The feature classes kept whole, and the S (spot) codes kept: farms. */
 const KEEP_CLASSES = new Set(['A', 'H', 'L', 'P', 'T']);
 const KEEP_SPOTS = new Set(['FRM', 'FRMS', 'FRMT']);
@@ -48,20 +53,26 @@ export function keepsFeature(cls: string, code: string): boolean {
 /**
  * The places a GeoNames dump holds, with a problem per line it couldn't read
  * (a place of a class the search doesn't keep is left out quietly, counted in
- * `leftOut`). The source is stored on every place. A geonameid seen twice is
+ * `leftOut`; a place outside South Africa, country code not ZA, is left out
+ * and counted in `otherCountry`). The source is stored on every place. A geonameid seen twice is
  * kept the first time.
  */
-export function placeRecords(text: string, file: string, source: string): { records: PlaceRecord[]; problems: string[]; leftOut: number } {
+export function placeRecords(text: string, file: string, source: string): { records: PlaceRecord[]; problems: string[]; leftOut: number; otherCountry: number } {
 	const records: PlaceRecord[] = [];
 	const problems: string[] = [];
 	const seen = new Set<string>();
 	let leftOut = 0;
+	let otherCountry = 0;
 	const lines = text.replace(/^﻿/, '').split(/\r?\n/);
 	lines.forEach((line, i) => {
 		if (!line.trim() || line.startsWith('#')) return;
 		const where = `${file} line ${i + 1}`;
 		const c = line.split('\t');
 		if (c.length < 11) return problems.push(`${where}: ${c.length} columns, not GeoNames' 19`);
+		if ((c[8] ?? '').trim() !== GAZETTEER_COUNTRY) {
+			otherCountry++;
+			return;
+		}
 		const placeId = c[0]!.trim();
 		if (!/^[0-9A-Za-z_-]{1,30}$/.test(placeId)) return problems.push(`${where}: "${placeId.slice(0, 40)}" is not a place id`);
 		const cls = c[6]!.trim();
@@ -84,7 +95,7 @@ export function placeRecords(text: string, file: string, source: string): { reco
 		const admin1 = (c[10] ?? '').trim();
 		records.push({ placeId, name, searchName: key, feature: `${cls}.${code}`, admin1: /^[0-9A-Za-z]{1,20}$/.test(admin1) ? admin1 : '', lon, lat, source });
 	});
-	return { records, problems, leftOut };
+	return { records, problems, leftOut, otherCountry };
 }
 
 /** Replace every row of `dataset` with `records`, in one transaction, as the schema owner; `origin` is the bucket file a production load read. Returns how many rows it wrote. */

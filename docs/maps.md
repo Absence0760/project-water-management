@@ -1506,8 +1506,11 @@ The search's places come from `gazetteer_reference` (225), which the
   feature classes A (administrative areas), H (rivers, dams, pans), L (areas),
   P (towns, settlements) and T (peaks, hills), and of S (spots, buildings)
   only farms (`FRM`, `FRMS`, `FRMT`); roads, railways, schools and the rest
-  are left out and counted. A line without a place id, a feature class or a
-  WGS84 position is skipped and listed. The name is stored as published and
+  are left out and counted. A place whose country code isn't `ZA` is left
+  out and counted apart, with a warning (a file holding other countries,
+  `allCountries.txt` or a neighbour's dump, is the wrong file). A line
+  without a place id, a feature class or a WGS84 position is skipped and
+  listed. The name is stored as published and
   folded for the search (`search_name`: lower case, accents and punctuation
   dropped), with an index for a match on the whole name's start; a match on a
   later word reads the table (about 150 000 rows for South Africa). A load

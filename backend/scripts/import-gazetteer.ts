@@ -52,16 +52,16 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
 	return { file: cliPath(positional[0]!, env), dataset, source: source.trim() };
 }
 
-/** Load `args` into the database at `url`; returns the rows written, the lines skipped and the places of classes the search leaves out. */
-export async function importGazetteer(url: string, args: Args): Promise<{ written: number; problems: string[]; leftOut: number }> {
+/** Load `args` into the database at `url`; returns the rows written, the lines skipped, the places of classes the search leaves out and the places outside South Africa. */
+export async function importGazetteer(url: string, args: Args): Promise<{ written: number; problems: string[]; leftOut: number; otherCountry: number }> {
 	const bytes = readFileSync(args.file);
 	const text = (args.file.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8');
-	const { records, problems, leftOut } = placeRecords(text, basename(args.file), args.source);
+	const { records, problems, leftOut, otherCountry } = placeRecords(text, basename(args.file), args.source);
 	const client = new pg.Client({ connectionString: url });
 	await client.connect();
 	try {
 		const written = records.length ? await replacePlaces(client, args.dataset, records) : 0;
-		return { written, problems, leftOut };
+		return { written, problems, leftOut, otherCountry };
 	} finally {
 		await client.end();
 	}
@@ -80,9 +80,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		process.exit(2);
 	}
 	importGazetteer(url, args)
-		.then(({ written, problems, leftOut }) => {
+		.then(({ written, problems, leftOut, otherCountry }) => {
 			for (const p of problems.slice(0, 50)) console.warn(`skipped: ${p}`);
 			if (problems.length > 50) console.warn(`… and ${problems.length - 50} more skipped`);
+			if (otherCountry) console.warn(`left out ${otherCountry} place${otherCountry === 1 ? '' : 's'} outside South Africa (country code not ZA): is this GeoNames' ZA dump?`);
 			console.log(`${written} place${written === 1 ? '' : 's'} loaded as "${args.dataset}" (${leftOut} of the kinds the search leaves out)`);
 			process.exit(written ? 0 : 1);
 		})

@@ -88,6 +88,15 @@ describe('the GeoNames dump parser', () => {
 		]);
 	});
 
+	it('leaves out a place outside South Africa, counted apart, not as a problem', () => {
+		const text = [line({ 0: '30', 1: 'Binne' }), line({ 0: '31', 1: 'Gaborone', 8: 'BW' }), line({ 0: '32', 1: 'Maseru', 8: 'LS' }), line({ 0: '33', 1: 'Nowhere', 8: '' }), line({ 0: '34', 1: 'Lower', 8: 'za' })].join('\n');
+		const { records, problems, leftOut, otherCountry } = placeRecords(text, 'all.txt', 'src');
+		expect(records.map((r) => r.placeId)).toEqual(['30']);
+		expect(otherCountry).toBe(4);
+		expect(leftOut).toBe(0);
+		expect(problems).toEqual([]);
+	});
+
 	it('strips control characters from a name (the table refuses them)', () => {
 		const { records } = placeRecords(line({ 0: '20', 1: 'Twee\u0007Riviere' }), 'za.txt', 'src');
 		expect(records[0]!.name).toBe('Twee Riviere');
@@ -95,11 +104,12 @@ describe('the GeoNames dump parser', () => {
 });
 
 describe('the committed synthetic gazetteer', () => {
-	const { records, problems, leftOut } = placeRecords(readFileSync(SYNTHETIC_GAZETTEER_FILE, 'utf8'), 'fixture', SYNTHETIC_GAZETTEER_SOURCE);
+	const { records, problems, leftOut, otherCountry } = placeRecords(readFileSync(SYNTHETIC_GAZETTEER_FILE, 'utf8'), 'fixture', SYNTHETIC_GAZETTEER_SOURCE);
 
 	it('parses whole, every place invented and marked so; the school and the railway left out', () => {
 		expect(problems).toEqual([]);
 		expect(leftOut).toBe(2);
+		expect(otherCountry).toBe(0);
 		expect(records.length).toBe(9);
 		for (const r of records) expect(r.placeId).toMatch(/^9\d{6}$/);
 		expect(SYNTHETIC_GAZETTEER_SOURCE).toMatch(/^SYNTHETIC/);

@@ -291,6 +291,7 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
 		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
 		log(`left out ${got.leftOut} place(s) of the kinds the search doesn't keep`);
+		if (got.otherCountry) log(`left out ${got.otherCountry} place(s) outside South Africa (country code not ZA): is this GeoNames' ZA dump?`);
 		if (!got.records.length) throw new LoadError(`${req.key}: no place to load`, 'empty', 'the file has no place the load can take (a GeoNames dump: 19 tab-separated columns)');
 		try {
 			const written = await replacePlaces(client, req.dataset, got.records, origin);
