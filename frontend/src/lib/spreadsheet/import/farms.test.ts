@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asRunOfRiver, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote, UPSTREAM_INTO_DAM_MARKER } from './farms';
+import { asRunOfRiver, farmOperatingRules, readFarmSpec, runOfRiverNote, smallPoolNote, UPSTREAM_INTO_DAM_MARKER } from './farms';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -196,23 +196,22 @@ describe('asRunOfRiver (as_run_of_river): the run-of-river option', () => {
 	});
 });
 
-// Same cases and text as test_run_of_river.py PlaceholderPoolNote (issue #90 Q18).
-describe('placeholder pool note', () => {
-	it('flags a near-empty dam that takes less than all the upstream inflow', () => {
-		expect(placeholderPoolNote('Pool', 0, 0.5, 0)).toBe(
-			"WARNING: farm Pool: probable placeholder pool, for the modeller to confirm: its dam holds 0.5 m³, less than a " +
-				"day's peak irrigation of one hectare, and takes 0 % of the upstream inflow, so it stores nothing from one day to " +
-				'the next. If it is a placeholder, set the dam capacity to 0; if the unit pumps from the river, set its supply ' +
-				'rule to run of river with a pump capacity (issue #90 Q18)'
-		);
-		expect(placeholderPoolNote('Tank', 0.5, 99.9, 0)).not.toBeNull();
-		expect(placeholderPoolNote('Pool', 0.25, 129.5, 12960)).not.toBeNull();
+// Same cases and text as test_run_of_river.py SmallPoolNote (issue #90 Q18).
+describe('small pool note', () => {
+	it('gives a small pool off the river a neutral note of its capacity', () => {
+		const note = smallPoolNote('Pool', 0, 0.5, 0);
+		expect(note).toBe("farm Pool: a small pool of 0.5 m³, imported as entered (a pool's capacity is user defined, issue #90 Q18)");
+		// A pool's capacity is user defined and it stays in the model (answered 2026-10-11): never a warning, never a placeholder.
+		expect(note).not.toMatch(/^WARNING/);
+		expect(note).not.toContain('placeholder');
+		expect(smallPoolNote('Tank', 0.5, 99.9, 0)).not.toBeNull();
+		expect(smallPoolNote('Pool', 0.25, 129.5, 12960)).not.toBeNull();
 	});
 
 	it('leaves a real dam, no dam and a run-of-river candidate alone', () => {
-		expect(placeholderPoolNote('Small dam', 0, 100, 0)).toBeNull();
-		expect(placeholderPoolNote('Small dam', 0.5, 4000, 12960)).toBeNull();
-		expect(placeholderPoolNote('No dam', 0, 0, 0)).toBeNull();
-		expect(placeholderPoolNote('Dummy dam', 1, 0.5, 0)).toBeNull();
+		expect(smallPoolNote('Small dam', 0, 100, 0)).toBeNull();
+		expect(smallPoolNote('Small dam', 0.5, 4000, 12960)).toBeNull();
+		expect(smallPoolNote('No dam', 0, 0, 0)).toBeNull();
+		expect(smallPoolNote('Dummy dam', 1, 0.5, 0)).toBeNull();
 	});
 });

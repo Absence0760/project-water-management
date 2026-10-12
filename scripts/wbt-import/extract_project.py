@@ -295,30 +295,23 @@ def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: f
     )
 
 
-# A probable placeholder pool (issue #90 Q18; provisional decision 2026-10-01,
-# to be confirmed by the client's hydrologist). A farm dam that takes less than
-# 100 % of the upstream inflow (so run_of_river_note never flags it) but holds
-# less than a day of one hectare's peak irrigation (about 6-8 mm, 60-80 m³; under
-# 100 m³), or under 1 % of a day of its diversion capacity, stores nothing across
-# the model's daily step: it is a pool, not a dam. b023 workbooks carry such
-# pools where a unit has no dam, and the app can't tell a placeholder from a
-# real (tiny) dam, so it imports the value and asks: a placeholder becomes a
-# dam-less unit (capacity 0), a unit pumping from the river becomes run of river.
-PLACEHOLDER_POOL_MAX_M3 = 100.0
+# A small pool (issue #90 Q18, answered 2026-10-11): a farm dam that takes less
+# than 100 % of the upstream inflow (so run_of_river_note never flags it) and
+# holds under 100 m³ (less than a day of one hectare's peak irrigation, about
+# 6-8 mm, 60-80 m³), or under 1 % of a day of its diversion capacity. A pool's
+# capacity is the modeller's to set, and even a small one stays in the model, so
+# this is a neutral note of the capacity, not a warning (until 2026-10-12 the
+# importers flagged it as a "probable placeholder pool").
+SMALL_POOL_MAX_M3 = 100.0
 
 
-def placeholder_pool_note(name: str, pct_upstream: float, capacity: float, divert: float) -> str | None:
-    """A WARNING for a near-empty dam that run_of_river_note leaves alone (it takes less than 100 % of the upstream inflow)."""
+def small_pool_note(name: str, pct_upstream: float, capacity: float, divert: float) -> str | None:
+    """A neutral note of a small pool's capacity, for a dam that run_of_river_note leaves alone (it takes less than 100 % of the upstream inflow)."""
     if capacity <= 0 or pct_upstream >= RUN_OF_RIVER_PCT_UPSTREAM:
         return None
-    if not (capacity < PLACEHOLDER_POOL_MAX_M3 or capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert):
+    if not (capacity < SMALL_POOL_MAX_M3 or capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert):
         return None
-    return (
-        f"WARNING: farm {name}: probable placeholder pool, for the modeller to confirm: its dam holds {capacity:g} m³, "
-        f"less than a day's peak irrigation of one hectare, and takes {pct_upstream * 100:g} % of the upstream inflow, "
-        "so it stores nothing from one day to the next. If it is a placeholder, set the dam capacity to 0; if the unit "
-        "pumps from the river, set its supply rule to run of river with a pump capacity (issue #90 Q18)"
-    )
+    return f"farm {name}: a small pool of {capacity:g} m³, imported as entered (a pool's capacity is user defined, issue #90 Q18)"
 
 
 def as_run_of_river(node: dict[str, Any], source_of_transfer: bool) -> str:
@@ -1305,7 +1298,7 @@ def extract(
                 if note:
                     wb.notes.append(note)
                     flagged.append(n)
-                pool = placeholder_pool_note(n["name"], n["pctUpstreamToDam"], n["damCapacityM3"], n["divertCapacityM3Day"])
+                pool = small_pool_note(n["name"], n["pctUpstreamToDam"], n["damCapacityM3"], n["divertCapacityM3Day"])
                 if pool:
                     wb.notes.append(pool)
         dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]

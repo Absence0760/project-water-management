@@ -4885,8 +4885,9 @@ NWA s18 requires a licence decision to give effect to the Reserve. A
 capacity isn't required to save a model, since a b023 import has none, but
 every run without one warns. The real capacities, and which units really
 pump straight from the river, are client data: the importers flag the
-probable run-of-river units (and, from 2026-10-01, near-empty placeholder
-pools that take less than all the upstream inflow, issue #90 Q18), and a
+probable run-of-river units (a small pool that takes less than all the
+upstream inflow gets only a neutral note of its capacity: its capacity is
+user defined, issue #90 Q18), and a
 run warns on a dam-less unit whose upstream or runoff share still routes
 water to an absent dam (Q19). The decisions:
 

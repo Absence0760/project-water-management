@@ -398,9 +398,11 @@ runs and accumulations are real) can't be decided without the client.
       m² (Maaren & Moolman 1985, via Sawunyama 2013) instead of capacity ÷
       3 m, whose source was never found; a save takes a dam area exponent
       0 < b ≤ 1; the sediment warning asks for a dam's in-service date; and
-      both importers flag a near-empty placeholder pool (Q18). Everything
+      both importers flagged a near-empty placeholder pool (Q18; since
+      2026-10-12 only a neutral note of a small pool's capacity, issue #523
+      C3). Everything
       else was kept. **Still the client's data**, each surfaced in the app:
-      which dams keep a reserve (form hint), Q18 pools (import warning), Q19
+      which dams keep a reserve (form hint), Q19
       upstream-to-dam % per farm (run warning on a dam-less farm), which
       units are run of river and their pump capacities (import flag, run
       warning, evidence-pack gate), each priority user's population (for the
