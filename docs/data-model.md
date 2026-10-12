@@ -83,7 +83,7 @@ erDiagram
 | `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
 | `seasonal_outlook` | A seasonal outlook (063, issue #53 R5): a base run × a season (`decision_date`, `season_end`) × demand `levels`, over the record's analogue years, run as one `outlook` job; `planning_share`, `analogue_years`, `status`, `result` (the engine's summary), `engine_version`; see [Seasonal outlooks](#seasonal-outlooks-063_seasonal_outlooksql) | none (the sketch S3 was worked by hand) |
 | `seasonal_outlook_member` | One level in one analogue year of an outlook (063): `level_position`, `water_year`, `status` (`done`, `failed`), `member` (the engine's `OutlookMember`) or `problems`; written once, complete | none |
-| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
+| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow. `meta` is `{ label, unit }`, plus `publishedBy: 'DWS'` and `station` on the outlet's `observed_flow` / `observed_flow_other` when it holds a record a DWS river-gauge feed wrote whole (232, #523 G8: shown to share links and applicants at any holder count; runs/publishedRecords.ts) |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
 Model names are one line (migration 189, issue #385): `node.name`,
@@ -1598,15 +1598,21 @@ were swept and who was mailed.
 `project` and `team`; provisional position (pre-counsel research,
 2026-10-01).
 
-- **`project.licence_outcome`** (`granted`, `refused`, `withdrawn`, NULL),
-  `licence_outcome_on`, `licence_expires_on` (exactly when granted, not
-  before the decision), `licence_outcome_reason`; **`record_closes_on`**
-  (generated: expiry or decision + 3 years); **`record_review_due_on`** (set
+- **`project.licence_outcome`** (NULL, or since 233 the authority's words,
+  D14: `licence_issued`, `licence_refused`, `application_rejected`,
+  `not_considered`, plus `application_withdrawn`, which the authority
+  doesn't decide; 161 said `granted`, `refused`, `withdrawn`, and 233 mapped
+  them), `licence_outcome_on`, `licence_expires_on` (exactly when
+  `licence_issued`, not before the decision), `licence_outcome_reason`;
+  **`record_closes_on`** (generated: expiry or the outcome's date + 3
+  years); **`record_review_due_on`** (set
   by `licence_record_start` when the project first issues a pack or
   nominates a run, + 5 years; backfilled for existing projects); the tick's
   bookkeeping `record_reminders_sent` (0–3), `record_reminded_at`,
   `record_close_notified_at`. Two partial indexes serve the tick.
-- Written only through **`app_set_licence_outcome`** and
+- Written only through **`app_set_licence_outcome`** (since 233 it still
+  takes 161's three words and stores the new ones, for a backend released
+  before 233; dropping them is in [followups.md](./followups.md)) and
   **`app_confirm_licence_record`** (SECURITY DEFINER, owners) and the
   tick's **`app_licence_record_due(limit)`** (marks and returns the due
   notices with the owners to tell); `licence_record_guard` and
@@ -1619,7 +1625,8 @@ were swept and who was mailed.
   `team_public_records_guard` refuse deleting its projects or the team, and
   moving a project out of it, until the disposal is confirmed
   (`app_project_public_records`).
-- Guards: `licence/licence-record.db.test.ts`.
+- Guards: `licence/licence-record.db.test.ts`, `db/migration-233.db.test.ts`
+  (161's words mapped, dates kept).
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
@@ -1677,6 +1684,18 @@ water-use volumes per farm or water user.
   policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
   on their own farm; **viewers read no names**; writes editor. `water_app` has
   `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **One rule for who reads them (231, #523 G6).** `allocation_select` and
+  `allocation_holder_select` read `app_reads_allocation_units(project)` and
+  `app_reads_allocation_holders(project)` (`SECURITY DEFINER`, the current
+  user), which ask the internal `app_user_reads_allocation_units(project,
+  user)` and `app_user_reads_allocation_holders(project, user)` (invoker's
+  rights, closed to `water_app`, as `app_authority_member`, 230). Their first
+  line: a member acting for the responsible authority (`app_authority_member`)
+  always reads every row and name; then an editor or owner; then (rows only) a
+  viewer with the switch on. `app_audit_subject` (190), `report_enqueue`'s
+  `with_volumes` (218) and the API read the same functions;
+  `app_allocation_units_readers(project)` lists the members who read each
+  row, for a viewer or above (who a report with volumes is emailed to).
 - **Viewers' switch and totals (162).** `project.allocations_viewer_units`
   (default false) is set only through `app_set_allocations_viewer_units`
   (`SECURITY DEFINER`, owners; `allocation_viewer_units_guard` refuses
@@ -2312,8 +2331,11 @@ projection's read and narrows their series further:
   removes anyone and anyone listed may leave; no update.
 - **`application_question`** (164_applicant_visibility): "Ask the
   assessors why": an application's party asks about a problem line of its
-  check that a rule hidden from them broke. `scenario_id` (cascade: it goes
-  with the application; `assert_same_project`), `asked_at`, `scenario_name`
+  check that a rule hidden from them broke. `scenario_id` (164 cascaded:
+  it went with the application; since 234_question_kept `ON DELETE SET
+  NULL`, nullable: a deleted draft's questions and answers stay with the
+  editors, the application's record for the authority's s42 written
+  reasons, issue #523 G7; `assert_same_project`), `asked_at`, `scenario_name`
   (the application's name when asked: the assessors can't read a draft's
   row), `problem` (the line as the applicant read it), `op_indexes` and
   `ops` (the ops it names, as they stood), `rules` (the rules' kinds, never
@@ -2327,7 +2349,8 @@ projection's read and narrows their series further:
   `app_answer_assessors_question(project, question, answer)` lets an editor
   answer once (`'answered'`, `'already'`, `'none'`);
   `application_question_guard` refuses a question born answered, a second
-  answer or any other change; `app_application_questions(scenario)` gives
+  answer or any other change (234: but `scenario_id` going to null with
+  nothing else changed, its draft deleted); `app_application_questions(scenario)` gives
   the parties their questions without `assessor_text` or `ops`.
   `app_application_hidden_holders(scenario)` (server only, capped at 5)
   counts the farm holders of an application's hidden farms, its owner left

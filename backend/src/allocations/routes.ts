@@ -2,10 +2,13 @@
 // farm or water user, and how a run's modelled use compares with them
 // (roadmap WP-3.10 first slice; docs/allocations.md, docs/api.md
 // § Allocations). Holder names only for editors and owners (decision D3,
-// allocation_holder's RLS in 038_allocations.sql); editors write. Viewers read
+// allocation_holder's RLS); editors write. Viewers read
 // each volume only when an owner allows it (162, allocation_select), else
 // totals per water source at 5 or more holders (viewerUnits.ts). Farmers get 403 here like on every viewer route: RLS already scopes
 // them to their own farms for when the farm view shows their allocation.
+// Members acting for the responsible authority always read every row and name
+// (#523 G6): who reads what is decided once, in the database
+// (app_user_reads_allocation_units / _holders, 231_authority_reads_allocations.sql).
 //
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
@@ -21,7 +24,7 @@ import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
-import { rank, requireRole, UUID } from '../projects/access.js';
+import { requireRole, UUID } from '../projects/access.js';
 import { mergeSettings } from '../projects/settings.js';
 import {
 	AUTHORISATIONS,
@@ -43,7 +46,7 @@ import {
 	type ParsedRow
 } from './parse.js';
 import { runUseNodes } from './runUse.js';
-import { allocationUnitsHidden, comparisonTotals, loadVolumes, volumeTotals } from './viewerUnits.js';
+import { allocationUnitsHidden, comparisonTotals, loadVolumes, readsAllocationHolders, readsAllocationUnits, volumeTotals } from './viewerUnits.js';
 
 /** Most allocations per project (a catchment's WARMS extract is hundreds of rows, not thousands). */
 export const ALLOCATIONS_PER_PROJECT_MAX = 5000;
@@ -336,9 +339,11 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const { rows: flag } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [id]);
 			const viewerUnits = !!flag[0]?.on;
 			// A viewer the owners haven't let read each volume: RLS gave them no row; totals per water source instead (D3).
-			const unitsHidden = role === 'viewer' && !viewerUnits;
+			// Who reads each row and each name is the database's one rule (231), which allocation_select and
+			// allocation_holder_select read too: a member acting for the authority always (#523 G6).
+			const unitsHidden = !(await readsAllocationUnits(db, id));
 			const totals = unitsHidden ? volumeTotals(await loadVolumes(db, id), new Date().toISOString().slice(0, 10)) : null;
-			return c.json({ allocations, sources, nodes, canSeeHolders: rank[role] >= rank.editor, viewerUnits, unitsHidden, totals });
+			return c.json({ allocations, sources, nodes, canSeeHolders: await readsAllocationHolders(db, id), viewerUnits, unitsHidden, totals });
 		});
 	})
 	.post('/:id/allocations', async (c) => {
@@ -544,7 +549,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
 			if (await allocationUnitsHidden(db, id, role)) throw new ApiError(403, 'each registered volume is shown to this project’s editors and owners only');
-			const withNames = rank[role] >= rank.editor;
+			const withNames = await readsAllocationHolders(db, id);
 			// One client, one query at a time.
 			const { rows: proj } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 			const list = await loadAllocations(db, id);

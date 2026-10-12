@@ -4,7 +4,8 @@
 //   POST /projects/:id/assessments            editor   check the scenarios combine; write the assessment and queue its job (202 { assessment, jobId, job }),
 //                                                      or with dryRun only check (200 { check }); 422 { details: { conflicts, problems } } when they don't combine
 //   GET  /projects/:id/assessments            editor   the project's assessments, newest first, without their reports
-//   GET  /projects/:id/assessments/:aid       editor   one assessment with its cumulative report
+//   GET  /projects/:id/assessments/:aid       editor   one assessment with its cumulative report and its applications'
+//                                                      "Ask the assessors why" questions and answers (issue #523 G7)
 //
 // Editors only: an assessment names submitted applications, which neither
 // contributors nor viewers read (045). Status and progress of the job: the
@@ -16,6 +17,7 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { assessorQuestionsOf } from '../scenarios/questions.js';
 import { ASSESSMENT_JOBS_PER_USER, CreateAssessmentBody } from './schema.js';
 import { createAssessment, getAssessment, listAssessments, pendingAssessmentJobs } from './store.js';
 
@@ -48,6 +50,9 @@ export const assessmentRoutes = new Hono<AuthEnv>()
 			await requireRole(db, c.req.param('id'), 'editor');
 			const assessment = await getAssessment(db, c.req.param('id'), aid);
 			if (!assessment) throw new ApiError(404, 'not found');
-			return c.json({ assessment });
+			// The applicants' "Ask the assessors why" questions on its applications, with the answers: exported with
+			// the matrix as the applications' record for the authority's s42 written reasons (issue #523 G7).
+			const ids = assessment.members.map((m) => m.scenarioId).filter((s): s is string => s !== null);
+			return c.json({ assessment: { ...assessment, questions: await assessorQuestionsOf(db, c.req.param('id'), ids) } });
 		});
 	});

@@ -5,7 +5,9 @@
 	// names and the rule's kind to the assessors (never anything hidden: the
 	// app has nothing hidden to send back), and every question asked with its
 	// answer. The assessors read the rule in its real words and decide what
-	// their answer says; the draft itself stays the applicant's.
+	// their answer says; the draft itself stays the applicant's. The panel says
+	// this is the app's check, not a refusal under s42 of the National Water
+	// Act, and that they can still apply through DWS (issue #523 G7).
 	import { untrack } from 'svelte';
 	import { api, type ApplicationQuestion, type MaskedRuleRef } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
@@ -71,6 +73,12 @@
 			<p class="hint">
 				These changes break a rule that depends on other water users’ figures, which aren’t shown to you. The assessors can see them: ask them why, and
 				they decide what their answer can say. They see your question, the changes it names and this application’s name, not the rest of your draft.
+			</p>
+			<!-- Issue #523 G7 (the licensing assessor's review): an app check, not a decision on a licence. The API's submit refusal says the same. -->
+			<p class="hint" data-testid="ask-in-app-check">
+				This is the app’s check that the model can run these changes. It is not a refusal of a water use licence under section 42 of the National Water
+				Act: no authority has considered your application. You can still apply to the Department of Water and Sanitation through its own channels
+				(e-WULAAS). The assessors keep your question and their answer with this application, for any written reasons on it.
 			</p>
 			<ul class="items">
 				{#each items as it (it.problem)}

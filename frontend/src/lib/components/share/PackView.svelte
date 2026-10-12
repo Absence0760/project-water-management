@@ -109,7 +109,7 @@
 					</table>
 				</div>
 				{#if !fig.volumes}
-					<p class="fine">{t('Flow volumes aren’t shown for this catchment: with so few hydrological units, or with a change to the shared baseline, they could reveal a hydrological unit’s water use.')}</p>
+					<p class="fine">{t('Flow volumes aren’t shown for this catchment: with so few hydrological units, with one or two of them using most of the water, or with a change to the shared baseline, they could reveal a hydrological unit’s water use.')}</p>
 				{/if}
 			</section>
 

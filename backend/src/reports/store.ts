@@ -164,12 +164,13 @@ export async function recentReportCount(db: Db, projectId: string): Promise<numb
  */
 export async function membersAmong(db: Db, projectId: string, userIds: string[], o: { withVolumes?: boolean } = {}): Promise<{ id: string; email: string }[]> {
 	if (!userIds.length) return [];
-	// A report printed with each farm's volume (218, #523 G1) goes only to members who may read them: an editor or
-	// owner, or a viewer while the project lets viewers read each volume (162).
+	// A report printed with each farm's volume (218, #523 G1) goes only to members who may read them, by the
+	// database's one rule (app_allocation_units_readers, 231): a member acting for the responsible authority
+	// (#523 G6), an editor or owner (directly or through the team), or a viewer while the project lets viewers read each volume (162).
 	const { rows } = await db.query<{ id: string; email: string }>(
 		`SELECT u.id, u.email FROM project_member m JOIN app_user u ON u.id = m.user_id
 		 WHERE m.project_id = $1 AND m.user_id = ANY($2::uuid[]) AND m.role >= 'viewer'
-		   AND (NOT $3 OR m.role >= 'editor' OR app_allocations_viewer_units(m.project_id))
+		   AND (NOT $3 OR m.user_id IN (SELECT r.user_id FROM app_allocation_units_readers($1) r))
 		 ORDER BY u.email`,
 		[projectId, userIds, o.withVolumes ?? false]
 	);

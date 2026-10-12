@@ -2097,9 +2097,12 @@ it scrolls, and isn't fitted to the window.
   how long the issued packs, nominated runs and the names they keep are kept
   ([evidence-pack.md § Retention](./evidence-pack.md#retention)). One line
   says where it stands (nothing to keep yet; the next review; the review is
-  due; granted and expiring, kept until; past its closing date, ask the
-  operator), as a warning when due. Owners record the outcome (Not recorded,
-  Granted with its expiry, Refused, Withdrawn), the date and why, and, while
+  due; issued and expiring, kept until; past its closing date, ask the
+  operator), as a warning when due. Owners record the outcome in the
+  authority's words since 233 (Not recorded, Licence issued with its expiry,
+  Licence refused, Application rejected (formal requirements), Not
+  considered: use already authorised, Application withdrawn), the date
+  (**Withdrawn on** for a withdrawal) and why, and, while
   no outcome is recorded and a review is set, **The record is still
   needed** (the next review five years on).
 - On the **Network** tab, a farm with linked farmers says how many in its
@@ -9546,14 +9549,20 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   met, and a table of each EWR site's months met, rate and longest run not
   met, baseline beside theirs); **The catchment** (mean natural and outlet
   flow and a chart of the outlet's flow and EWR, baseline against theirs;
-  below five farm holders natural flow and the EWR only, and why the outlet
-  flow isn't shown); **Your hydrological units**
+  below five farm holders, or when one or two of them take most of the
+  water (the dominance rule, 232), natural flow and the EWR only, and why
+  the outlet flow isn't shown; for a run with a baseline assumption the
+  baseline's column only, theirs "Not shown", and a note why; and, whenever
+  the published baseline has one, the **DWS gauge record** at the outlet,
+  with its station code and a chart, at any holder count and even with a
+  baseline assumption, since DWS publishes it, #523 G8); **Your hydrological units**
   (demand, supply, share met, the dam on the last day, baseline → theirs,
   and what ran: crops with their areas and boreholes; a unit their changes
   add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:
-  supply −4 %", or "No other farm or water user lies downstream of your
-  units"). A run with a baseline assumption shows a note and the Reserve
-  only. Before a run: "Not run yet". Under it, **Yield under this
+  share of demand met −2 pp", whole percentage points as in their evidence
+  pack, or "No other farm or water user lies downstream of your units"). A
+  run with a baseline assumption shows a note, the Reserve and the
+  catchment's baseline column only. Before a run: "Not run yet". Under it, **Yield under this
   scenario** offers only their own units and the ones their changes add;
   the applicant (not the people they share it with) queues a yield and
   follows it on the job list, which shows them their own yield jobs only.
@@ -9637,7 +9646,12 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   **Ask the assessors why**, which sends the line, those changes and the
   rule's kind (never anything hidden) to the assessors. The panel says what
   the assessors see (the question, the changes it names and the
-  application's name, not the rest of the draft). Once asked: "Asked
+  application's name, not the rest of the draft), and (issue #523 G7) that
+  this is the app's check that the model can run the changes, not a refusal
+  of a water use licence under section 42 of the National Water Act, that
+  they can still apply to DWS through its own channels (e-WULAAS), and that
+  the assessors keep the question and answer with the application for any
+  written reasons (`ask-in-app-check`). Once asked: "Asked
   <date>; waiting for the assessors' answer", then the answer and **Ask
   again**. Questions about lines the check no longer shows sit under
   **Earlier questions**.
@@ -9711,7 +9725,8 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   **Send the answer** (once; an answer goes to the application's parties,
   so the note above the list says to write only what they may know of
   other water users). A question may be about a draft, which stays the
-  applicant's.
+  applicant's; a deleted draft's questions stay, marked "(draft deleted)"
+  (234, issue #523 G7).
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
@@ -9746,7 +9761,13 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   separate changes; its plain-words reading is the cell's title and is read
   out), with a one-paragraph explanation of the interaction above it and
   **Download CSV** (the raw numbers, names guarded against CSV injection)
-  below.
+  below. Between them, when there are any, **Applicants' questions on these
+  applications (n)** (closed `<details>`, `assess-questions`; issue #523
+  G7): each "Ask the assessors why" question on them, the application's
+  name, when asked, the rule in its own words and the answer or *Not
+  answered yet*, kept for the authority's written reasons. The CSV carries
+  them too, after a blank line: *Application, Asked, The applicant read,
+  In its own words, Answer, Answered*.
 - Workspace English, like the rest of the assessors' tab.
 
 e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
@@ -10613,7 +10634,7 @@ their own application's in [their own view](#the-applicants-pack-view).
   that the signer's name, registration and date are shown publicly on the
   verify page, even if the pack is withdrawn, for as long as the licence
   record it supports is kept (three years after the licence expires, or
-  after the application is refused or withdrawn; [evidence-pack.md §
+  after the application is refused, rejected, not considered or withdrawn; [evidence-pack.md §
   Retention](./evidence-pack.md#retention)). An editor chooses **You sign
   as**: "Specialist for the applicant" (the professional responsible for
   the evidence; what issue needs) or "Reviewed for the responsible

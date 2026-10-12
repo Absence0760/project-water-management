@@ -1296,19 +1296,30 @@ export interface ApplicantUnitFigures {
 	damLowM3: number | null;
 }
 
-/** Why the catchment figures or the per-unit figures are left out. */
+/** Why the catchment figures or the per-unit figures are left out. 'few_farm_holders': fewer than 5 farm holders, or one or two of them take most of the water (the dominance rule, 232). */
 export type ApplicantWithheld = 'baseline_assumptions' | 'few_farm_holders';
+
+/** A published DWS gauge record at the outlet, the published baseline's, shown at any holder count (#523 G8, 232). */
+export interface ApplicantGaugeRecord {
+	key: 'observed_flow' | 'observed_flow_other';
+	label: string;
+	/** The DWS station code, e.g. A2H012. */
+	station: string;
+	series: { startDate: string; values: (number | null)[] };
+}
 
 interface ApplicantSeriesPair {
 	base: { startDate: string; values: (number | null)[] };
-	application: { startDate: string; values: (number | null)[] };
+	/** Null when an op was a baseline assumption (the base is the published baseline, shown anyway). */
+	application: { startDate: string; values: (number | null)[] } | null;
 }
 
 /**
  * GET …/scenarios/:sid/results (WP-3.3, D2's default, pending the client): a
  * run of an application as its applicant sees it against its base. Every
  * other farm or water user only downstream of theirs, by the anonymous name
- * the base gives it ("Farm 3") and a whole percentage.
+ * the base gives it ("Farm 3") and its change in share of demand supplied in
+ * whole percentage points (the pack's measure).
  */
 export interface ApplicantResults {
 	allProposals: boolean;
@@ -1316,14 +1327,16 @@ export interface ApplicantResults {
 	catchment: {
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
-		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		/** The EWR requirement whenever the figures show; the outflow only past the k rule (164). */
+		/** The base's always (the published baseline); the application's null when an op was a baseline assumption. */
+		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures | null };
+		/** The EWR requirement at any holder count; the outflow only past the k rule (164). Null when not read. */
 		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
-		/** Why the use's figures (outflow, its series, the EWR deficit) are left out. */
+		/** Why the application's figures (`baseline_assumptions`) or the use's (outflow, its series, the EWR deficit: `few_farm_holders`) are left out. */
 		withheld: ApplicantWithheld | null;
 	};
 	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
-	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePct: number | null }[];
+	/** supplyChangePts: the change in share of demand supplied, whole percentage points (null without a share in either run). */
+	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePts: number | null }[];
 	unitsWithheld: ApplicantWithheld | null;
 	/** What ran on their units, by the ids they gave. */
 	model: {
@@ -1334,6 +1347,8 @@ export interface ApplicantResults {
 		/** Demand objects on their units (engine ≥ 1.45.0: a demandObject.add under a hidden object's id is shown by the id they gave). */
 		demandObjects?: { id: string; nodeId: string; name: string }[];
 	};
+	/** The published DWS gauge records at the outlet, always (#523 G8); [] when the baseline has none. */
+	gaugeRecords: ApplicantGaugeRecord[];
 }
 
 export interface ApplicantResultsRun {
@@ -1409,7 +1424,8 @@ export interface ApplicationQuestion {
 
 /** The same question as the assessors read it: the application, the ops it named and the line in its real words. */
 export interface AssessorQuestion extends ApplicationQuestion {
-	scenarioId: string;
+	/** Null once its draft was deleted: the question and its answer stay the assessors' (234). */
+	scenarioId: string | null;
 	scenarioName: string;
 	ops: ScenarioOp[];
 	assessorText: string;
@@ -2356,21 +2372,21 @@ export interface AllocationSource {
 	rows: number;
 }
 
-/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record, docs/api.md § Licence record). */
-export type LicenceOutcome = 'granted' | 'refused' | 'withdrawn';
+/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record; the authority's words since 233, docs/api.md § Licence record). */
+export type LicenceOutcome = 'licence_issued' | 'licence_refused' | 'application_rejected' | 'not_considered' | 'application_withdrawn';
 export interface LicenceRecord {
 	outcome: LicenceOutcome | null;
 	outcomeOn: string | null;
 	expiresOn: string | null;
 	reason: string;
-	/** When the record may be deleted: the expiry (granted) or the decision date, + 3 years; null without an outcome. */
+	/** When the record may be deleted: the expiry (licence_issued) or the outcome's date, + 3 years; null without an outcome. */
 	closesOn: string | null;
 	/** While no outcome is recorded: when the owners must next confirm the record is still needed; null before the first issued pack or nomination. */
 	reviewDueOn: string | null;
 }
 export type LicenceOutcomeInput =
-	| { outcome: 'granted'; outcomeOn: string; expiresOn: string; reason: string }
-	| { outcome: 'refused' | 'withdrawn'; outcomeOn: string; reason: string }
+	| { outcome: 'licence_issued'; outcomeOn: string; expiresOn: string; reason: string }
+	| { outcome: Exclude<LicenceOutcome, 'licence_issued'>; outcomeOn: string; reason: string }
 	| { outcome: null; reason: string };
 
 export interface AllocationList {
@@ -2583,6 +2599,12 @@ export interface Assessment {
 	createdAt: string;
 	completedAt: string | null;
 	members: AssessmentMember[];
+	/**
+	 * Only on GET …/assessments/:aid: the applicants' "Ask the assessors why"
+	 * questions on its applications with the answers, oldest first, exported
+	 * with the matrix for the authority's s42 written reasons (issue #523 G7).
+	 */
+	questions?: AssessorQuestion[];
 }
 
 /** POST /projects/:id/assessments. */

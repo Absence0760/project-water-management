@@ -1174,21 +1174,66 @@ result without signing in, until it expires or its owner revokes it.
   quaternary record); **the use** (`simulated_outflow`, `observed_flow`,
   `ewr_shortfall`) only when the catchment has at least `FARMER_K` = 5 farm
   holders (counted from nobody's point of view: one user's farms once, an
-  unlinked farm on its own). In a smaller catchment natural flow minus
+  unlinked farm on its own) **and** passes the dominance rule (below). In a
+  smaller catchment natural flow minus
   outflow is the farms' use, and with one farm it is that farm's
   (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)),
   so it stays linkable to a person "by a reasonably foreseeable method"
-  (POPIA s1, de-identify). The volume rows of the scenario and pack links
-  (`app_share_run_projection`, `app_share_pack_projection`) keep k as they
-  were. An applicant reads the same split (`run_series_select_contributor`,
-  `app_contributor_published_runs`; `scenarios/applicantResults.ts`
-  `naturalShown` / `impactedShown`). Five is a judgement in line with
-  statistical-disclosure practice, not a number in any statute; k alone
-  doesn't protect a catchment where one holder does almost all the
-  abstraction (a dominance rule is a follow-up,
-  [followups.md § Applicants](./followups.md#applicants-wp-33)).
+  (POPIA s1, de-identify). An applicant reads the same split
+  (`run_series_select_contributor`, `app_contributor_published_runs`,
+  `app_contributor_use_runs`; `scenarios/applicantResults.ts`
+  `impactedShown`), of the published base always and of an application run
+  only when every op was a proposal (`appShown`, 118): the results view and
+  RLS draw the same line (issue #523 G9 (d)). Five is a judgement in line with
+  statistical-disclosure practice, not a number in any statute.
   Farm keys are refused in the API and again in the function. The literal 5
   in the SQL is pinned to the engine's `FARMER_K` by `share.db.test.ts`.
+- **The dominance rule beside k** (232_small_catchments, issue #523 G8;
+  provisional, pending the CISO and counsel's D3 review, #92). k alone
+  doesn't protect a catchment where one holder does almost all the
+  abstraction: natural flow less the outflow is then mostly that holder's
+  use. `app_run_use_shown(run)` is the one place that decides whether a
+  run's use may be shown to someone kept from each farm: k as above, and,
+  over the run's modelled supply per holder (`summary.farms`
+  `avgSuppliedM3Day`, a holder's farms summed; an application's new farms
+  its owner's), either no supply at all or 5 or more holders with some,
+  none above 80 % of the total and no two above 90 %. The limits are the
+  registered volumes' (engine `allocations/holders.ts` `totalShown`,
+  `DOMINANCE_TOP1` / `DOMINANCE_TOP2`; the second limb keeps a reader who
+  knows one holder's use, such as an applicant's own, from reading the
+  largest of the rest as the total less theirs). It governs the use's
+  series of a share link (`app_share_series`) and an applicant
+  (`app_contributor_use_runs`, `app_contributor_catchment_runs`), the
+  applicant's results (`app_application_run_results` `farm_holders_ok`,
+  over the run and its base), a scenario link's volumes per run
+  (`app_share_run_projection`) and a pack's volume rows over both its runs
+  (`app_share_pack`, `app_applicant_pack`). The arithmetic is
+  `app_use_parts_shown`, pinned to `totalShown` on fixed and random sums by
+  `share/small-catchments.db.test.ts`; both helpers are invoker's rights,
+  closed to `water_app`, called only from SECURITY DEFINER functions. A
+  farmer's own even share (`app_other_farm_holders`, 020) is a different
+  aggregate and keeps k alone.
+- **A published DWS gauge record shows at any holder count** (232, #523 G8,
+  from the licensing assessors' review). Observed flow at a DWS gauging
+  station is published by DWS Hydrological Services, so hiding it below
+  five holders protects no one. A run marks the outlet's observed series
+  that holds one (`run_series.meta` `publishedBy: 'DWS'`, `station`;
+  `runs/publishedRecords.ts`, decided in the statement that reads the
+  values): an outlet flow record whose **every reading a DWS river-gauge
+  feed wrote** (`time_series.feed_id` + `feed_days`; a person's upload or
+  edit releases the days it covers), and not gap-filled (a filled day may
+  be a donor record's, a private logger's among them). Not the series'
+  free-text `source`: an editor's word would let a mislabelled private
+  logger through, so a DWS record imported from a workbook stays under the
+  rule until a DWS feed writes it (fail closed). A scenario run is never
+  marked; an applicant reads the published base run's record, in
+  `run_series_select_contributor` and in the results' `gaugeRecords`; a
+  share link's `observed_flow` likewise. Private loggers, the outflow and
+  the EWR shortfall keep k and dominance. Runs stored before 232 carry no
+  mark. Tests: `share/small-catchments.db.test.ts` (an uploaded record
+  hidden below k as the control; a DWS-fed one shown to the applicant, the
+  share link and the results; a day a person wrote, and a private logger,
+  never marked), `runs/publishedRecords.test.ts`.
 - **Rate limiting.** Nothing app-level: the WAF's per-IP rule on `/api/*`
   (`waf_rate_limit_per_ip`, `infra/waf.tf`) covers `/api/share/*`, and a
   256-bit token can't be enumerated. `last_used_at` moves at most once an
@@ -2296,8 +2341,10 @@ In short:
     leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
     EWR sites, the catchment under the split k rule (the river always, the
     use at 5 or more holders), their own units, other units
-    downstream only as "Farm 3" and a whole percentage, and nothing but the
-    EWR when an op was a baseline assumption). The DB test
+    downstream only as "Farm 3" and whole percentage points of share
+    supplied (the pack's measure), and of a run with a baseline assumption
+    nothing of the application's side but the EWR, beside the published
+    base's side as RLS serves it, issue #523 G9 (d)). The DB test
     (`scenarios/results.db.test.ts`) scans the answer for every other farm's
     name and the hidden crop.
   - **Drafts are private, even from the assessors.** Who reads an
@@ -2900,6 +2947,7 @@ database:
 
   | Reader | Names | Per-unit volumes |
   | --- | --- | --- |
+  | Members acting for the responsible authority (confirmed delegates, 229) | **always** | **always**, with how each is held (#523 G6: one rule, `app_user_reads_allocation_units` / `_holders`, 231, its first line the authority's) |
   | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
   | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise only today's total per water source, at ≥ 5 registered users in force and none (or two) dominating it (provisional, #92); a run's years and § 5's totals of other units as status and modelled use, no registered m³ (#523 G–O) |
@@ -3524,6 +3572,7 @@ PDF someone else asked for kept the person as a recipient
 | Registered users' names in issued evidence: none as a field. A run's input and the evidence report carry no holder name (§ 5 names units; Appendix A.1's model rows and A.2's diff have no holder field), so a frozen pack manifest has none either. A name can reach one only as text someone typed (a unit named after its owner, notes, the applicant statement) | `evidence_pack.manifest` (frozen, hashed) | With the pack: an issued pack is never edited (its hash is verified publicly); whether issued evidence is kept against an erasure request is a legal-hold question for counsel (#92) | Not linked to an account | Kept while the project is a licence record |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | What followed a decision (an appeal lodged, upheld, set aside or varied): the member who recorded it (228) | `decision_event.recorded_by` | Kept with its scenario (the record of the appeal) | Who cleared; the event stays | Deleted |
+| An applicant's "Ask the assessors why" question and the assessors' answer (164): the application's name, the line as they read it, the changes it names, the rule in its real words; no account (who asked and answered is the audit trail's) | `application_question` | With the project. Kept when its draft is deleted, `scenario_id` cleared (234, issue #523 G7): the application's record for the authority's s42 written reasons, read by the editors only | Unaffected (it names no account; a deleted draft's questions stay, detached, as above) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
 | Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |

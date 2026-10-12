@@ -46,6 +46,7 @@ import {
 } from './execute.js';
 import { loadApplicantResults, newestApplicationRun } from './results.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
+import { IN_APP_CHECK } from './questions.js';
 import { AppealBody, CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
 import type { ScenarioOp } from '@water-management/engine';
 
@@ -507,7 +508,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario can't be submitted`);
 			const base = await loadBaseInput(db, id, s.baseRunId, role);
 			const { problems, maskedRules } = checkScenario(base, s, await hiddenHolders(db, s));
-			if (problems.length) throw new ApiError(422, "a scenario whose changes don't all apply to its base can't be submitted", { problems, maskedRules });
+			if (problems.length)
+				throw new ApiError(
+					422,
+					// A rule hidden from the applicant broke a line: say what the refusal is (issue #523 G7).
+					`a scenario whose changes don't all apply to its base can't be submitted${maskedRules.length ? `. ${IN_APP_CHECK}` : ''}`,
+					{ problems, maskedRules }
+				);
 			await move(db, id, s, 'submitted');
 			await recordAudit(db, id, 'scenario.submitted', subject(s, { opsSha256: s.opsSha256 }));
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));

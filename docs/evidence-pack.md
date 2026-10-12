@@ -749,11 +749,14 @@ its makers under the hash the verify page checks (POPIA s14(1)(b), s14(6)(b);
 (161_licence_record, the Project page's **Licence record** panel, [api.md §
 Licence record](./api.md#licence-record)):
 
-- **Granted**: the licence's expiry date (NWA s28(1)(e), at most 40 years)
-  **+ 3 years**, for a professional-negligence claim on the assessment
-  (Prescription Act s11(d), s12(3)).
-- **Refused or withdrawn**: the decision date **+ 3 years** (PAJA's 180
-  days, Water Tribunal appeals and prescription).
+- **Licence issued**: the licence's expiry date (NWA s28(1)(e), at most 40
+  years) **+ 3 years**, for a professional-negligence claim on the
+  assessment (Prescription Act s11(d), s12(3)).
+- **Licence refused, application rejected, not considered, or application
+  withdrawn**: the outcome's date **+ 3 years** (PAJA's 180 days, Water
+  Tribunal appeals and prescription). The outcome words are the authority's
+  (D14, as an application's decision records them; 233, issue #523 G9 (b));
+  the withdrawal is the applicant's, which the authority doesn't decide.
 - **No outcome recorded**: a review every **5 years**, from the first pack
   issued or run nominated (mirroring the NWA s28(1)(f) review interval).
   The owners record the outcome, or confirm the record is still needed,

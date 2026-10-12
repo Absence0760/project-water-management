@@ -12,12 +12,14 @@
 // decision set aside (228_decision_events), which the applicant reads; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
-// warning and can't be decided. Axe on
+// warning and can't be decided; a run with a baseline assumption shows the
+// applicant the published baseline's river beside nothing of theirs but the
+// EWR (issue #523 G9 (d)). Axe on
 // both views, light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember } from '../support/api.ts';
+import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { AUTHORITY, seedApplicantProject, submitApplication } from '../support/applications.ts';
-import { tamperRunSummary } from '../support/db.ts';
+import { plantDwsGaugeRecord, tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
@@ -209,6 +211,47 @@ test('an application whose run was changed behind the API shows the assessor a w
 	await expect(decide.getByRole('button', { name: 'Record the authority’s decision' })).toBeDisabled();
 });
 
+test('a run with a baseline assumption shows the applicant the published baseline’s river beside nothing of theirs but the EWR', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Assuming applicant');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications assumption', applicant.user);
+	const P = `${API_URL}/projects/${project.id}`;
+	const req = applicant.context.request;
+	const lower = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Lower farm')!.id;
+	// Their own dam (a proposal) and the other farm's demand halved (a baseline assumption).
+	const made = await req.post(`${P}/scenarios`, {
+		data: {
+			name: 'Halve the other farm',
+			baseRunId: runId,
+			ops: [
+				{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 },
+				{ op: 'demand.scale', factor: 0.5, nodeIds: [lower] }
+			]
+		}
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	const sid = (await made.json()).scenario.id as string;
+	expect((await req.post(`${P}/scenarios/${sid}/runs`, { data: {} })).status()).toBe(201);
+
+	const a = applicant.page;
+	await a.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+	const results = a.getByTestId('applicant-results');
+	await expect(results.getByTestId('applicant-results-withheld')).toContainText('is a baseline assumption');
+	// The baseline's natural flow, as RLS serves it of the published run (issue #523 G9 (d)); theirs not shown.
+	const natural = results.getByTestId('applicant-catchment').getByRole('row', { name: /^Natural flow/ });
+	await expect(natural.getByRole('cell')).toHaveCount(2);
+	await expect(natural.getByRole('cell').first()).toHaveText(/^\d/);
+	await expect(natural.getByRole('cell').last()).toHaveText('Not shown');
+	await expect(results.getByTestId('applicant-catchment-assumption')).toHaveText(
+		"Your application's column is not shown for a run with a baseline assumption (above). The baseline's is the published run's."
+	);
+	// Two farm holders: the baseline's outlet flow stays out too.
+	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	await expect(results.getByTestId('applicant-units')).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	await expectNoViolations(a);
+});
+
 test('the Applications tab says so when nothing is submitted, and a draft stays with its applicant', async ({ page, owner, signIn }) => {
 	void owner;
 	const applicant = await signIn('Drafting applicant');
@@ -365,4 +408,30 @@ test('the authority confirms who acts for it: a host owner proposes, an authorit
 	const history = await page.request.get(`${API_URL}/projects/${project.id}/history?kind=authority&limit=50`);
 	const kinds = ((await history.json()) as { items: { kind?: string }[] }).items.map((ev) => ev.kind ?? '').filter((k) => k.startsWith('authority.'));
 	expect(kinds).toEqual(expect.arrayContaining(['authority.proposed', 'authority.confirmed', 'authority.removed']));
+});
+
+// Small catchments (#523 G8, 232_small_catchments): observed flow at a DWS gauging station is published by DWS, so an
+// applicant sees the baseline's record however few farms the catchment has, while the outflow stays withheld.
+test('an applicant sees the published DWS gauge record in a catchment with two farms', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Gauge applicant');
+	const project = await seedRunnableProject(page.request, 'DWS gauge record');
+	await plantDwsGaugeRecord(project.id, 'X0H000');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	await addMember(page.request, project.id, applicant.user.email, 'contributor');
+	const a = applicant.page;
+	const created = await a.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: 'Gauge check', baseRunId: runId, ops: [] } });
+	expect(created.status(), await created.text()).toBe(201);
+	const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+	expect((await a.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/runs`, { data: {} })).status()).toBe(201);
+
+	await a.goto(`/projects/${project.id}?scenario=${sid}`);
+	const results = a.getByTestId('applicant-results');
+	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	await expect(results.getByTestId('applicant-catchment').getByRole('rowheader', { name: 'Flow at the outlet' })).toHaveCount(0);
+	const gauge = results.getByTestId('applicant-gauge-records');
+	await expect(gauge).toContainText('Observed flow at DWS gauging station X0H000, in the published baseline');
+	await expect(gauge.getByText('Observed flow at the outlet · DWS gauge record')).toBeVisible();
+	await expectNoViolations(a);
 });

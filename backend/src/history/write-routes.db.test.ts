@@ -323,7 +323,7 @@ const WRITE_ROUTES: Entry[] = [
 	{
 		route: `PUT ${P}/licence-record`,
 		records: ['licence.outcome'],
-		call: (c) => c.owner.call('PUT', `${at(c)}/licence-record`, { outcome: 'refused', outcomeOn: '2026-03-01', reason: 'guard' })
+		call: (c) => c.owner.call('PUT', `${at(c)}/licence-record`, { outcome: 'licence_refused', outcomeOn: '2026-03-01', reason: 'guard' })
 	},
 	// Alert rules (WP-2.13). Saved switched off here, so no alert check is left queued for other files' ticks.
 	{

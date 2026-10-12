@@ -8,7 +8,10 @@
 // names, the rules' kinds and the line in its real words, which the server
 // computed (the check's assessorProblems) and the applicant never reads back.
 // The editors read and answer it, once; the authority decides what its answer
-// discloses (provisional position, pre-counsel research, 2026-10-01).
+// discloses (provisional position, pre-counsel research, 2026-10-01). The
+// question and its answer are the application's record for the authority's
+// s42 written reasons (issue #523 G7): a cumulative assessment exports them
+// with its matrix, and they outlive a deleted draft (234_question_kept).
 //
 //  POST /projects/:id/scenarios/:sid/questions            a party asks about one problem line
 //  GET  /projects/:id/scenarios/:sid/questions            the parties' view (never the real words)
@@ -24,6 +27,15 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { checkScenario, hiddenHolders, loadBaseInput, loadScenario } from './execute.js';
+
+/**
+ * What a masked refusal is, and isn't (issue #523 G7, the licensing assessor's
+ * review): the app's check that the model can run the changes, not a refusal
+ * under s42 of the National Water Act, and the applicant may still apply
+ * through DWS. The frontend's AskAssessors panel says the same.
+ */
+export const IN_APP_CHECK =
+	"This is the app's check that the model can run these changes, not a refusal of a water use licence under section 42 of the National Water Act: no authority has considered the application. You can still apply to the Department of Water and Sanitation through its own channels (e-WULAAS).";
 
 /** Most questions one application may hold: a cap on what an applicant can write, not a quota anyone should meet. */
 export const QUESTIONS_PER_APPLICATION_MAX = 50;
@@ -58,7 +70,8 @@ export interface PartyQuestion {
 
 /** A question as the assessors read it. */
 export interface AssessorQuestion extends PartyQuestion {
-	scenarioId: string;
+	/** Null once its draft was deleted: the question and its answer stay the assessors' (234). */
+	scenarioId: string | null;
 	scenarioName: string;
 	ops: ScenarioOp[];
 	assessorText: string;
@@ -78,6 +91,21 @@ async function partyQuestions(db: Db, scenarioId: string): Promise<PartyQuestion
 const ASSESSOR_SELECT = `SELECT id, scenario_id AS "scenarioId", scenario_name AS "scenarioName", asked_at AS "askedAt", problem,
 	op_indexes AS "opIndexes", ops, rules, assessor_text AS "assessorText", answer, answered_at AS "answeredAt"
 	FROM application_question`;
+
+/**
+ * The questions asked about these applications, with their answers, as the
+ * assessors read them (oldest first): what a cumulative assessment exports
+ * beside its matrix for the authority's s42 written reasons (issue #523 G7).
+ * The caller is an editor (application_question's policy).
+ */
+export async function assessorQuestionsOf(db: Db, projectId: string, scenarioIds: readonly string[]): Promise<AssessorQuestion[]> {
+	if (!scenarioIds.length) return [];
+	const { rows } = await db.query<AssessorQuestion>(`${ASSESSOR_SELECT} WHERE project_id = $1 AND scenario_id = ANY($2::uuid[]) ORDER BY asked_at, id`, [
+		projectId,
+		scenarioIds
+	]);
+	return rows;
+}
 
 async function isParty(db: Db, scenarioId: string): Promise<boolean> {
 	const { rows } = await db.query<{ party: boolean }>('SELECT app_scenario_party($1) AS party', [scenarioId]);

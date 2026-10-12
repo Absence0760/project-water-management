@@ -2747,7 +2747,7 @@ below work on it too, for an editor.
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`, a draft or withdrawn one; its runs that nothing keeps go with it | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` | as above; for a contributor `run` is metadata only (`id, label, engineVersion, startDate, endDate, createdAt, scenarioId`: the summary names every farm) and the application keeps its newest 5 runs | its owner or a shared member, or an editor; not a viewer |
 | POST | `/projects/:id/scenarios/:sid/rebase` | as above | as above; a contributor's new base must be published | owner of the application |
-| POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply; `409` unless a draft | its owner (a team scenario: an editor) |
+| POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply (and `details.maskedRules`; when a rule hidden from the applicant broke a line, the message adds that this is the app's check that the model can run the changes, not a refusal under s42 of the National Water Act, and that they can still apply to DWS through e-WULAAS, issue #523 G7); `409` unless a draft | its owner (a team scenario: an editor) |
 | POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/decide` | **Record the authority's decision** (163_licensing_authority; provisional position, pre-counsel research, 2026-10-01): `{ outcome: 'licence_issued' \| 'licence_refused' \| 'application_rejected' \| 'not_considered', authority?: ≤ 200, decisionDate: 'YYYY-MM-DD', reference?: ≤ 200, reasonsReceived: boolean, note?: ≤ 4000, granted?: { ops?: ScenarioOp[], conditions?: ≤ 4000 } }` (`authority` omitted: the project's `settings.responsibleAuthority.name`, `400` when it names none; `decisionDate` a real date, not after tomorrow; `granted` only with `licence_issued`, else `400`: the licence's granted terms (227_licence_terms, issue #523 G3), `ops` the "as licensed" changes, checked as the scenario's own (`422 { details: { problems } }` in the assessors' words when one doesn't apply to the base run; an application's under its applicant's mask), left out for granted as applied for, which is written out as the granted ops) | `submitted → decided`, with `decidedAt` (the app's stamp), `decidedBy` and the record above; final. `403` unless the caller acts for the responsible authority (a confirmed delegate holding editor or above, 229, [Acts for the authority](#acts-for-the-authority)), and for the application's own owner; `409` unless submitted; `409` `run_unverified` while any of its runs doesn't verify (security.md § Run stamps). Every single-scenario answer (`GET`, `PATCH`, the status moves) carries `unverifiedRunIds`: an application's runs that don't verify, to an editor or owner (`null` for a team scenario or a lower role) | editor acting for the authority |
@@ -2759,7 +2759,7 @@ below work on it too, for an editor.
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
 | POST | `/projects/:id/scenarios/:sid/questions` | `{ problem: int, line: string }` (strict) | `201 { question }`, the parties' view below: "Ask the assessors why" (164) about problem line `problem` of the application's check, quoting it as the caller read it. `409` when the check's line is no longer `line` (read it again), or for a team scenario; `422` when no hidden rule broke that line; `409` past 50 questions on one application; `403` for a reader who isn't one of its parties (its owner or someone it is shared with); `404` for an application the caller can't read | a party of the application |
 | GET | `/projects/:id/scenarios/:sid/questions` | – | `{ questions }`, newest first. A party: `{ id, askedAt, problem, opIndexes, rules, answer, answeredAt }` (`app_application_questions`: never the real words or the ops). An editor: also `scenarioId, scenarioName, ops, assessorText`. `404` for anyone else | a party, or an editor |
-| GET | `/projects/:id/application-questions` | – | `{ questions }` (the editors' shape above), unanswered first, then newest, at most 200: every application's questions, drafts' included (the draft itself stays its applicant's) | editor |
+| GET | `/projects/:id/application-questions` | – | `{ questions }` (the editors' shape above), unanswered first, then newest, at most 200: every application's questions, drafts' included (the draft itself stays its applicant's), and those of a deleted draft with `scenarioId: null` (234) | editor |
 | POST | `/projects/:id/application-questions/:qid/answer` | `{ answer: 1–4000 }` (strict) | `200 { question }`; once (`409` when answered). `404` for no such question | editor |
 
 - **"Ask the assessors why"** (164, [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
@@ -2770,7 +2770,12 @@ below work on it too, for an editor.
   name and the line in its real words (written by the server; only editors
   read it). The audit trail records `application.question_asked` and
   `application.question_answered` (ids, op indexes and the rules' kinds;
-  never the words).
+  never the words). The question and its answer are the application's
+  record for the authority's s42 written reasons (issue #523 G7): a
+  cumulative assessment carries those on its applications
+  ([§ Assessments](#assessments)), and deleting a draft keeps its questions
+  for the editors, `scenarioId` then `null` (234_question_kept); its parties
+  read them no more.
 - **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
   other node by kind and place under an anonymous name ("Farm 3") with its
   values blanked, and only their own farms' crops, crop areas, transfers and
@@ -2788,25 +2793,40 @@ below work on it too, for an editor.
   outlet, a gauge's name, else the anonymous one) with `base` and
   `application` `{ months, met, rate, longestNotMetRun, deficitM3 }`.
   `catchment`: `ewrDaysNotMet` and `ewrFractionDaysNotMet` `{ base,
-  application }` always; `figures` (mean natural flow and outlet flow, base
-  and application) and `series` (`{ outflow, ewr }`, the outlet's daily
-  series, base and application) only when every op was a proposal, else
-  null with `withheld: 'baseline_assumptions'`. Within them the k rule is
+  application }` always; `figures` (`{ base, application }`, mean natural
+  flow and outlet flow) and `series` (`{ outflow, ewr }`, each a `{ base,
+  application }` pair of the outlet's daily series, or null). The base's
+  side always (the published baseline, which a contributor's RLS serves
+  anyway); the application's side only when every op was a proposal, else
+  `figures.application` and each pair's `application` null with `withheld:
+  'baseline_assumptions'` (issue #523 G9 (d)). Within them the k rule is
   split (164): natural flow and the `ewr` series at any holder count; the
   outlet flow (`meanSimulatedOutflowM3Day`), the `outflow` series and every
-  `deficitM3` only at five or more farm holders, else null with
-  `withheld: 'few_farm_holders'`. `units[]`: their own units
+  `deficitM3` only at five or more farm holders and past the dominance
+  rule over the run and its base (no holder above 80 % of the run's
+  supply, no two above 90 %; `app_run_use_shown`, 232, provisional, #92),
+  else null (with `withheld: 'few_farm_holders'` when every op was a
+  proposal). `units[]`: their own units
   (their farm links as they read them now) and the ones the ops add
   (`added`), `{ nodeId, name, kind, base, application }` with demand,
   supply, share met, EWR charge and dam figures. `downstream[]`: every other
   farm or water user below those units, `{ nodeId, name, kind,
-  supplyChangePct }`: the anonymous name `…/base` gives it and the change in
-  its mean supply as a whole percentage (null when it had none in the
-  base). `units` and `downstream` are `[]` with `unitsWithheld:
+  supplyChangePts }`: the anonymous name `…/base` gives it and the change in
+  its share of demand supplied, application − base, in whole percentage
+  points (rounded half away from zero), the measure its evidence pack
+  prints (`changePts`); null when either run gives it no share (no demand).
+  Until issue #523 G9 (a) this was `supplyChangePct`, a relative change in
+  mean supply. `units` and `downstream` are `[]` with `unitsWithheld:
   'baseline_assumptions'` when an op was a baseline assumption. `model`:
   what ran on their units (nodes, crops, crop areas, transfers, land cover,
   boreholes, demand objects), an item an op added under a hidden item's id
   shown by that id (the run holds it under a fresh one, `check.reIds`).
+  `gaugeRecords[]` (#523 G8, 232): the published base run's DWS gauge
+  records at the outlet, `{ key: 'observed_flow' | 'observed_flow_other',
+  label, station, series: { startDate, values } }` (m³/day), always, whatever
+  the holders or the ops; `[]` when the baseline has none (a record is one
+  only when a DWS river-gauge feed wrote every reading of it,
+  [security.md § Share links](./security.md#share-links)).
 - A contributor linked to a farm also reads its farm view
   (`GET /projects/:id/farm…`) as a farmer would.
 
@@ -3062,12 +3082,13 @@ research, 2026-10-01).
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/licence-record` | – | `{ licenceRecord: LicenceRecord }` | editor |
-| PUT | `/projects/:id/licence-record` | `{ outcome: 'granted', outcomeOn, expiresOn, reason }`, `{ outcome: 'refused' \| 'withdrawn', outcomeOn, reason }` or `{ outcome: null, reason }` (strict; dates `YYYY-MM-DD`, `reason` 1–2 000) | `200 { licenceRecord }`; records `licence.outcome`. `400` for a grant without an expiry or one expiring before it was granted | owner |
+| PUT | `/projects/:id/licence-record` | `{ outcome: 'licence_issued', outcomeOn, expiresOn, reason }`, `{ outcome: 'licence_refused' \| 'application_rejected' \| 'not_considered' \| 'application_withdrawn', outcomeOn, reason }` or `{ outcome: null, reason }` (strict; dates `YYYY-MM-DD`, `reason` 1–2 000). The authority's words since 233 (D14, as a decision records them, plus the applicant's withdrawal); 161's `granted`, `refused` and `withdrawn` are still taken from an older web release and stored as `licence_issued`, `licence_refused` and `application_withdrawn` (to be dropped, [followups.md](./followups.md)) | `200 { licenceRecord }`; records `licence.outcome`. `400` for an issued licence without an expiry or one expiring before it was issued, or an expiry with any other outcome | owner |
 | POST | `/projects/:id/licence-record/confirm` | none, or `{}` (strict) | `200 { licenceRecord }`, the next review five years from today; records `licence.confirmed`. `409` once an outcome is recorded | owner |
 
-- `LicenceRecord = { outcome: 'granted' | 'refused' | 'withdrawn' | null,
+- `LicenceRecord = { outcome: 'licence_issued' | 'licence_refused' |
+  'application_rejected' | 'not_considered' | 'application_withdrawn' | null,
   outcomeOn, expiresOn, reason, closesOn, reviewDueOn }`: `closesOn` is the
-  expiry (granted) or the decision date, + 3 years; `reviewDueOn` the next
+  expiry (`licence_issued`) or the outcome's date, + 3 years; `reviewDueOn` the next
   5-yearly review while no outcome is recorded (null before the first issued
   pack or nomination).
 - `DELETE /projects/:id` and `DELETE /teams/:id` answer `409`
@@ -3088,7 +3109,7 @@ what](./allocations.md#who-sees-what)).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders, viewerUnits, unitsHidden, totals }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners; `viewerUnits` whether the owners let viewers read each volume (162); `unitsHidden` true for a viewer while it is off, and then `allocations` is `[]` (RLS) and `totals` is `[{ waterSource, holders, registeredM3PerYear, storageM3, storageWithheld? }]`, the volumes (21(a) takes) and storage in force today summed per water source, only for a source held by 5 or more registered users (counted by name, else a name on another row of the same unit, else the unit, else the row; `app_allocation_volumes`), and each sum only when the rows in force today in it are 5 or more registered users' and none holds more than 80 % of it, nor two more than 90 % (the dominance rule, provisional, #92; #523 G/O, 219's salted per-row holder key): the only registered m³ such a viewer reads. Otherwise `registeredM3PerYear` is `null`, and `storageM3` `null` with `storageWithheld: true` (`0` / `null` when none is in force); `totals` is `null` otherwise | viewer |
+| GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders, viewerUnits, unitsHidden, totals }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners and, always, for a member acting for the responsible authority (`app_reads_allocation_holders`, 231, #523 G6, who also always reads every row); `viewerUnits` whether the owners let viewers read each volume (162); `unitsHidden` true for a viewer while it is off, and then `allocations` is `[]` (RLS) and `totals` is `[{ waterSource, holders, registeredM3PerYear, storageM3, storageWithheld? }]`, the volumes (21(a) takes) and storage in force today summed per water source, only for a source held by 5 or more registered users (counted by name, else a name on another row of the same unit, else the unit, else the row; `app_allocation_volumes`), and each sum only when the rows in force today in it are 5 or more registered users' and none holds more than 80 % of it, nor two more than 90 % (the dominance rule, provisional, #92; #523 G/O, 219's salted per-row holder key): the only registered m³ such a viewer reads. Otherwise `registeredM3PerYear` is `null`, and `storageM3` `null` with `storageWithheld: true` (`0` / `null` when none is in force); `totals` is `null` otherwise | viewer |
 | PUT | `/projects/:id/allocations/viewer-units` | `{ on: boolean }` | `200 { viewerUnits }`: whether viewers read each registered volume (162, D3; on only if every viewer works for, or was appointed by, the organisation). History `allocation.viewer_units` `{ on }` when it changes | owner |
 | POST | `/projects/:id/allocations` | `AllocationInput` | `201 { allocation }`. `400` for a node that isn't a farm or water user of this project, dates out of order, a volume < 0; `409` past 5 000 allocations per project (counted under a per-project lock, so concurrent adds and imports can't pass it together; `costCaps.security.db.test.ts`) | editor |
 | PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; only the fields sent change (issue #72: before, every field not sent went back to its default, the name and registration number included); `holder: ''` removes the name | editor |
@@ -3320,12 +3341,16 @@ never a farm's row, name or id.
   user count once, an unlinked farm on its own; design
   [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)):
   in a smaller catchment natural flow minus outflow would reveal the farms'
-  use (164).
+  use (164), and when no one holder takes more than 80 % of the run's
+  supply, nor two more than 90 % (the dominance rule, 232, provisional,
+  #92). `observed_flow` also answers at any holder count when it is a
+  published DWS gauge record (a record a DWS river-gauge feed wrote whole,
+  232, #523 G8; [security.md § Share links](./security.md#share-links)).
 - Every dead link answers the same `404 { error: "not found" }`: unknown,
   malformed, revoked or expired token, or nothing published. `/share/series`
   answers the same `404` for a key off the allowlist (every farm key), a key
   the run doesn't have (`observed_flow` without observed data), and a use
-  key below `k` holders. A body without `token` (or `key`) is `400`.
+  key below `k` holders or under the dominance rule. A body without `token` (or `key`) is `400`.
   When the published run is a forecast run, the series stops the day before
   its first forecast day (190): the monthly means and the last 365 days are
   the record's, never forecast rain read as the river's flow.
@@ -4127,7 +4152,7 @@ submitted applications, which neither contributors nor viewers read.
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/assessments` | `{ name, scenarioIds, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
 | GET | `/projects/:id/assessments` | – | `{ assessments: Assessment[] }`, newest first, **without** `report` | editor |
-| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report`; `404` for one that isn't this project's | editor |
+| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report` and `questions`: the "Ask the assessors why" questions on its applications in the editors' shape ([§ Scenarios](#scenarios)), oldest first, answered or not (issue #523 G7: exported with the matrix for the authority's s42 written reasons; the list leaves them out); `404` for one that isn't this project's | editor |
 
 - Body (strict): `name` 1–200 characters (trimmed); `scenarioIds` **2–8**
   distinct UUIDs (`ASSESSMENT_SCENARIOS_MIN`/`MAX`).

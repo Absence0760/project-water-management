@@ -3863,9 +3863,13 @@ from the WP:
 - [ ] **Confirm the dominance rule's limits** (#523 O, provisional: no
       holder above 80 % of a total a restricted reader sees, no two above
       90 %; `DOMINANCE_TOP1` / `DOMINANCE_TOP2`, engine
-      `allocations/holders.ts`). Pending the CISO and counsel's D3 review
-      (#92). Trigger: that review, or a client's catchment where the rule
-      withholds a total they need.
+      `allocations/holders.ts`). Since 232 (#523 G8) the same limits also
+      withhold the use's catchment series and volume rows from share links
+      and applicants (`app_run_use_shown` over the run's supply per holder;
+      its SQL literals pinned to the engine's by
+      `share/small-catchments.db.test.ts`, so a change moves both). Pending
+      the CISO and counsel's D3 review (#92). Trigger: that review, or a
+      client's catchment where the rule withholds a total they need.
 - [x] **A full-allocation run's per-unit figures give the volume** (issue
       #523 G1 security review, finding 7; real by the model's definition,
       model.md §2.12a: demand is scaled per water year to the registered
@@ -5082,8 +5086,23 @@ Applicant view and the Applications tab. Left:
       165_applicant_copy); D3 (names to editors, owners and the linked
       farmer; volumes outside the organisation as totals, 162; [allocations.md § Who sees what](./allocations.md#who-sees-what));
       and the outcome words (D14: `licence_issued`, `licence_refused`,
-      `application_rejected`, `not_considered`, 163), whose labels may follow
-      the pilot authority's house style. Trigger: the client's answers.
+      `application_rejected`, `not_considered`, 163; the project's licence
+      record uses them too since 233, plus `application_withdrawn`), whose
+      labels may follow the pilot authority's house style. Trigger: the
+      client's answers.
+- [ ] **Drop 161's licence-record words (the contract step of 233).**
+      233_licence_record_outcome_words (issue #523 G9 (b)) moved
+      `project.licence_outcome` to the authority's words, but
+      `app_set_licence_outcome` and `PUT /projects/:id/licence-record` still
+      take `granted`, `refused` and `withdrawn` (`LEGACY_OUTCOMES`,
+      `backend/src/licence/routes.ts`) and store the new ones, so a backend or
+      web release from before 233 keeps working while the other catches up.
+      Fix: a migration that replaces `app_set_licence_outcome` without the
+      mapping, and the route's enums without the legacy words (the
+      licence-record DB test's "161's words" case turns into a `400`).
+      Older `licence.outcome` audit events keep their words; the timeline
+      reads them. Trigger: the first `backend@` and `web@` releases that both
+      contain 233 are in production.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
@@ -5205,7 +5224,7 @@ Applicant view and the Applications tab. Left:
       from the members list keeps the farms. Tests:
       `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
       `farmer-invites.spec.ts`.
-- [ ] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
+- [x] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
       split, 164; provisional position, pre-counsel research, 2026-10-01).
       The use's catchment series (outflow, observed flow, EWR shortfall) and
       the volume rows show at 5 or more farm holders, but k alone doesn't
@@ -5218,6 +5237,19 @@ Applicant view and the Applications tab. Left:
       at 69 and 71 %). Trigger: counsel's answer on question 5 of the
       licensing positions (k and "reasonably foreseeable method"), or the
       first pilot catchment with one dominant user.
+      **Built (232_small_catchments, issue #523 G8, before a small-catchment
+      pilot):** `app_run_use_shown(run)`, k and the dominance rule over the
+      run's modelled supply per holder, at the registered volumes' limits
+      (80 % / 90 %, `totalShown`, so one rule, not a second ~70 % one; the
+      limits stay provisional under "Confirm the dominance rule's limits"
+      above). Used by `app_share_series`, `run_series_select_contributor`
+      (through `app_contributor_use_runs`), `app_application_run_results`,
+      `app_share_run_projection`, `app_share_pack` and `app_applicant_pack`.
+      Tests at the limits (80 / 80.5 %, 90 / 91 %) and on random sums
+      against `totalShown`, and end to end with a positive control:
+      `share/small-catchments.db.test.ts`. With it, a published DWS gauge
+      record shows at any holder count ([security.md § Share
+      links](./security.md#share-links)).
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +

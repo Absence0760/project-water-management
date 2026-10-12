@@ -349,9 +349,13 @@ cl. 3). The licensing ones are rows in
   practice, not a statutory number). *Built (164):* share links and
   applicants see natural flow and the EWR always; outflow, observed flow
   below the farms, the EWR shortfall and the volume rows stay at five
-  holders. A dominance rule (one holder taking most of the use) is a
-  tracked follow-up. *For counsel:* whether 5 is defensible, and whether a
-  dominance rule is needed before go-live.
+  holders. *Built (232, #523 G8):* the dominance rule beside k (the use
+  withheld when one holder takes more than 80 % of the run's supply, or two
+  more than 90 %; the registered volumes' provisional limits), and a
+  published DWS gauge record (a record a DWS feed wrote whole) shown at any
+  holder count, since DWS publishes it (the licensing assessors' review).
+  *For counsel:* whether 5 is defensible, and whether the dominance limits
+  are (with the CISO, #92).
 - [ ] **Rules broken by hidden farms.** *Provisional position (pre-counsel
   research, 2026-10-01):* a validation refusal the applicant can't fix
   blind is a fairness problem; an aggregate over five or more holders
@@ -360,8 +364,14 @@ cl. 3). The licensing ones are rows in
   the catchment's aggregate past five hidden holders, the generic words
   below; the assessors read the rule's real words; the applicant's **Ask
   the assessors why** sends the line, the changes it names and the rule's
-  kind (nothing hidden), and an editor answers once. *For counsel:* how
-  much third-party detail the authority's reasons may carry (PAJA s5(4)).
+  kind (nothing hidden), and an editor answers once. *Built (issue #523
+  G7, the licensing assessor's review):* the refusal says it is the app's
+  check, not a refusal under s42, and that the applicant can still apply
+  through DWS (e-WULAAS); the question and its answer stay with the
+  application (and after a draft is deleted, 234) and a cumulative
+  assessment exports them, for the authority's s42 written reasons.
+  *For counsel:* how much third-party detail the authority's reasons may
+  carry (PAJA s5(4)).
 - [ ] **The applicant's printable copy, and the full pack to the
   authority.** *Provisional position (pre-counsel research, 2026-10-01):*
   the applicant files the technical report (R267 reg 11(1)) and what they
@@ -411,7 +421,11 @@ cl. 3). The licensing ones are rows in
   is **Record the authority's decision**, with the authority's name, the
   decision letter's date, its reference and whether written reasons were
   received; the app says appeals run from the decision letter and computes
-  no deadline. Older decisions were mapped. *For counsel and the pilot
+  no deadline. Older decisions were mapped. *Built (233, issue #523 G9
+  (b)):* the project's licence record (161) records its outcome in the same
+  words, plus *Application withdrawn*, which the authority doesn't decide;
+  every outcome but an issued licence closes the record three years after
+  its date, as refused and withdrawn did. *For counsel and the pilot
   authority:* the exact labels (its house style), and whether the R267
   "rejection" stages need their own record.
 - [ ] **D15, the impact basis.** *Provisional position (pre-counsel
