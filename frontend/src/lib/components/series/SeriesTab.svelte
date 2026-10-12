@@ -60,6 +60,7 @@
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote } from '$lib/series/provenance';
+	import { firstOutletSeries } from '$lib/series/pick';
 	import { asksSite, productField, rowSiteMark, siteText, uploadUnitText } from './details';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
 	import { agoText } from '$lib/format/age';
@@ -272,9 +273,9 @@
 	);
 	const bins = $derived(Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageBins(values[s.id]!) : []])));
 
-	// The series a run reads for a kind: the first of that kind by name, among the outlet's (a gauge's record,
+	// The series a run reads for a kind: the first of that kind by name (byte order, lib/series/pick.ts), among the outlet's (a gauge's record,
 	// 084_gauge_records, is read only at its gauge: seriesInUse and the backend's loadLiveInput skip it too).
-	const first = (k: string) => [...list].filter((s) => s.kind === k && !s.siteNodeId).sort((a, b) => a.name.localeCompare(b.name))[0];
+	const first = (k: string) => firstOutletSeries(list, k);
 
 	// Days a run treats as missing (CR-20) or spreads a multi-day accumulation over (B4), shaded on the
 	// catchment rain a run reads: the first by name. Accumulations are judged against the CHIRPS a run reads.
@@ -891,7 +892,7 @@
 	</details>
 	<p class="muted small">
 		A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
-		With several series of one kind, the first by name is used.
+		With several series of one kind, the first by name is used, in character order: digits and capitals before lower case.
 	</p>
 </section>
 </SectionNav>

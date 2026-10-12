@@ -136,12 +136,12 @@ function unitFeeds(feeds: readonly FeedMeta[]): Map<string, FeedMeta> {
 	return out;
 }
 
-/** Each unit's own CHIRPS series (sited at it), the first by name, and how many days it holds. */
+/** Each unit's own CHIRPS series (sited at it), the first by name as a run picks it (COLLATE "C"), and how many days it holds. */
 async function unitSeries(db: Db, projectId: string, nodeIds: string[]): Promise<Map<string, UnitSeries>> {
 	const { rows } = await db.query<UnitSeries & { nodeId: string }>(
 		`SELECT DISTINCT ON (site_node_id) site_node_id AS "nodeId", id, name, cardinality(array_remove("values", NULL)) AS days
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND site_node_id = ANY($3::uuid[])
-		 ORDER BY site_node_id, name`,
+		 ORDER BY site_node_id, name COLLATE "C"`,
 		[projectId, UNIT_TARGET_KIND, nodeIds]
 	);
 	return new Map(rows.map(({ nodeId, ...s }) => [nodeId, s]));

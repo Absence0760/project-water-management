@@ -7,6 +7,7 @@ export * from './forecast';
 export * from './format';
 export * from './project';
 export * from './names';
+export * from './seriesNames';
 export * from './manifest';
 export * from './run';
 export * from './warmstart/snapshot';

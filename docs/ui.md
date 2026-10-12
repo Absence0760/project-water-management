@@ -1413,7 +1413,8 @@ same way on every screen:
   view, and goes when the file, kind, name, mode or unit changes.
   A name that matches no series creates one; when the kind already has some,
   the form says what a run will make of it (runs read the first of a kind by
-  name): *Creates a second … series. Runs read the first by name, so this one
+  name, in byte order: capitals before lower case, `lib/series/pick.ts`,
+  [data-model.md § Which series a run reads](./data-model.md#which-series-a-run-reads)): *Creates a second … series. Runs read the first by name, so this one
   **will replace “Station 0021” in runs*** or *… so they keep reading “Station
   0021”* (`roles.ts` `newSeriesEffect`), and a name that differs from an
   existing one only in case or spacing gets *Did you mean “Station 0021”?*
@@ -5327,7 +5328,7 @@ with the table the data needs).
 Each series shows its role in the model, its last date and age, its period,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
-their kind by name) are marked. The role badge carries its reason in its own
+their kind by name, in byte order as runs pick: `lib/series/pick.ts`) are marked. The role badge carries its reason in its own
 words, and the kind's role is an ⓘ `HelpTip` beside it (`series.<kind>`); a
 gauge record adds a line saying where it is checked and scored
 (`roles.ts` `roleBadge`). None of it is a hover title any more, which

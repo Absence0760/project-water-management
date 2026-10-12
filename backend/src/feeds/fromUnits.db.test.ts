@@ -209,6 +209,23 @@ describe('rain for each unit (from-units)', () => {
 		expect(await unitSeries(s.pid, s.a.id)).toEqual([expect.objectContaining({ id: own, name: 'A own' })]);
 	});
 
+	it('names the unit’s series a run reads when it has two: the first by byte order of the name (issue #523)', async () => {
+		const s = await setup();
+		await parcel(s.owner, s.pid, s.a.id);
+		const put = async (name: string, values: number[]) => {
+			const id = (await s.owner.call('PUT', `/projects/${s.pid}/series`, { kind: 'rain_chirps_mm', name, unit: 'mm', startDate: '2024-01-01', values })).body.id as string;
+			expect((await s.owner.call('PATCH', `/projects/${s.pid}/series/${id}`, { siteNodeId: s.a.id })).status).toBe(200);
+		};
+		// "R" (0x52) sorts before "a" (0x61) by byte; a linguistic collation (glibc's en_US.utf8) puts "average" first.
+		await put('average own', [1, 2]);
+		await put('RAIN own', [3, 4]);
+		const [icu] = await asOwner(`SELECT 'average own' < 'RAIN own' COLLATE "und-x-icu" AS linguistic, 'average own' < 'RAIN own' COLLATE "C" AS bytewise`);
+		expect(icu).toEqual({ linguistic: true, bytewise: false });
+		expect((await s.owner.call('GET', at(s.pid))).body.refused).toEqual([{ nodeId: s.a.id, name: 'Unit A', reason: expect.stringMatching(/\(“RAIN own”\)/) }]);
+		const input = await withUser(s.owner.id, (db) => loadModelInput(db, s.pid));
+		expect(input.series[unitRainSeriesKey('rain_chirps_mm', s.a.id)]!.values).toEqual([3, 4]);
+	});
+
 	it('never reaches another project’s unit, and the plain feed routes can’t claim a unit mark', async () => {
 		const s = await setup();
 		const t = await setup();

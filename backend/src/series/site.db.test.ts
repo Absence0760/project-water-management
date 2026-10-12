@@ -54,6 +54,27 @@ describe('a flow record’s site (084_gauge_records)', () => {
 		expect((await seriesList(owner, p.id)).every((s) => s.siteNodeId === null)).toBe(true);
 	});
 
+	it('of two series of a kind, a run reads the first by the name’s bytes, whatever the database’s collation (issue #523)', async () => {
+		const u = await signUp('SiteBytes');
+		const q = await gaugedProject(u, 'Bytes');
+		const put = (body: Record<string, unknown>) => u.call('PUT', `/projects/${q.id}/series`, { unit: 'm3/s', startDate: '2020-01-01', ...body });
+		// "R" (0x52) sorts before "a" (0x61) by byte; a linguistic collation (glibc's en_US.utf8, RDS) puts "average" first.
+		const [order] = await asOwner(`SELECT 'average gauge' < 'RAIN-B logger' COLLATE "und-x-icu" AS linguistic, 'average gauge' < 'RAIN-B logger' COLLATE "C" AS bytewise`);
+		expect(order).toEqual({ linguistic: true, bytewise: false });
+		const rain = (v: number) => Array.from({ length: DAYS }, () => v);
+		expect((await put({ kind: 'rain_catchment_mm', unit: 'mm', name: 'average gauge', values: rain(1) })).status).toBe(200);
+		expect((await put({ kind: 'rain_catchment_mm', unit: 'mm', name: 'RAIN-B logger', values: rain(7) })).status).toBe(200);
+		// The project's first rain series is unnamed (''), which sorts before both: delete it, so the two compete.
+		expect((await u.call('DELETE', `/projects/${q.id}/series/${q.rainId}`)).status).toBe(204);
+		// At a gauge too: two records attached to the weir.
+		const a = (await put({ kind: 'flow_logger_m3s', name: 'weir logger', values: flow(5) })).body.id as string;
+		const b = (await put({ kind: 'flow_logger_m3s', name: 'Weir logger', values: flow(6) })).body.id as string;
+		for (const id of [a, b]) expect((await site(u, q.id, id, q.upper.id)).status).toBe(200);
+		const i = await input(u, q.id);
+		expect(i.series.rain_catchment_mm!.values).toEqual(rain(7));
+		expect(i.series[gaugeSeriesKey('flow_logger_m3s', q.upper.id)]!.values).toEqual(flow(6));
+	});
+
 	it('attaching a record to a gauge makes it that gauge’s own, and records who moved it', async () => {
 		const res = await site(owner, p.id, p.gaugeRecord, p.upper.id);
 		expect(res.status).toBe(200);

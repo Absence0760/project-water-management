@@ -34,11 +34,12 @@ import {
 	type ModelInput,
 	type ModelOutput
 } from '@water-management/engine';
+import { inputSeriesOf, type DocumentSeries } from './fit-project.js';
 
 interface ImportedProject {
 	settings: ModelInput['settings'];
 	model: ModelInput['model'];
-	series: { kind: string; startDate: string; values: (number | null)[] }[];
+	series: DocumentSeries[];
 }
 
 export interface SensitivityCase {
@@ -81,7 +82,7 @@ export async function loadModelInput(file: string): Promise<ModelInput> {
 	return {
 		settings: project.settings,
 		model: project.model,
-		series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }])) as ModelInput['series']
+		series: inputSeriesOf(project.series)
 	};
 }
 

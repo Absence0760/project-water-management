@@ -3792,6 +3792,7 @@ CORS (gateways aren't browsers), JSON bodies only.
   `mergeInto`): the series is created if it doesn't exist (only when the
   project has no outlet series of that kind: otherwise `409`, and a person
   adds the series first, since a run reads the first of each kind by name
+  (byte order, [data-model.md § Which series a run reads](./data-model.md#which-series-a-run-reads))
   and a key must not be able to replace it; issue #51), only the days sent
   are touched (a `null` clears a day here, where the UI's merge keeps the
   stored value), units are converted to the kind's
