@@ -6,8 +6,10 @@
 // 166_public_participation), come back to the same application, read that a
 // comment is not a written objection, and comment for public participation,
 // giving their name and email for the applicant's register; the assessor sees the
-// comment in the application's comments. axe on the Share dialog, the shared
-// view (signed out and signed in) and the comments drawer. Invented names only.
+// comment in the application's comments, and the in-app warning beside the
+// box when they choose to write for public participation. axe on the Share
+// dialog, the shared view (signed out and signed in) and the comments drawer
+// (with the warning shown). Invented names only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, PASSWORD, seedRunnableProject, updateSettings } from '../support/api.ts';
@@ -118,7 +120,15 @@ test('an NGO opens an application’s link, reads the EWR per site, signs in and
 	await expect(note).toContainText('River Trust officer');
 	await expect(note.getByTestId('note-audience-badge')).toHaveText('Public');
 	await expect(drawer.getByTestId('note-audience')).toHaveValue('assessors');
+	// The in-app warning (issue #523 G9 (c)): beside the box only while it writes for public participation.
+	await expect(drawer.getByTestId('note-objection-warning')).toHaveCount(0);
+	await drawer.getByTestId('note-audience').selectOption('public_participation');
+	await expect(drawer.getByTestId('note-objection-warning')).toContainText('A comment here is not a written objection.');
+	await expect(drawer.getByTestId('note-objection-warning')).toContainText('The applicant, the responsible authority that decides the application');
+	await expect(drawer.getByTestId('note-register-consent')).toBeVisible();
 	await expectNoViolations(page);
+	await drawer.getByTestId('note-audience').selectOption('assessors');
+	await expect(drawer.getByTestId('note-objection-warning')).toHaveCount(0);
 
 	// The applicant's public participation record (GN R267 reg 19): the comment, and the email the commenter agreed to give.
 	await applicant.page.goto(`/projects/${projectId}/scenarios/${sid}/participation`);

@@ -9,14 +9,17 @@
 //     it with (control), never another applicant, an editor who isn't a party
 //     (they read the pack themselves), a viewer or a farmer;
 //   - which packs: issued, superseded and withdrawn after issue (with their
-//     standing), never a draft or a pack withdrawn before issue, never another
-//     application's or the baseline's;
+//     standing and the reason, read but never linked), never a draft or a
+//     pack withdrawn before issue, never another application's or the
+//     baseline's;
 //   - the projection: their own units by name; the other units only when
 //     the application run's base is still a published run (here it isn't:
 //     the runs are planted, so `others` is null; the downstream set and the
 //     results view's names are applicant-pack-units.db.test.ts'); no other unit's name, id or
 //     figures, no holder, statement or other application; no units at all
-//     when a baseline assumption changed; volumes past the k rule;
+//     when a baseline assumption changed; volumes past the k rule, and with
+//     fewer than 5 farm holders and no assumption changed, the volumes held
+//     back while the units stay (issue #523 G9 (c));
 //   - the database: still no pack row for a contributor, the anonymiser not
 //     callable by water_app;
 //   - share links: the owner links their own issued pack (not superseded, not
@@ -50,6 +53,8 @@ let v2: string; // A's, issued
 let v3: string; // A's, a draft of the next version
 let neverIssued: string; // A's second application, withdrawn before issue
 let assumption: string; // A's second application, issued, a baseline assumption changed
+let appA3: string;
+let pulled: string; // A's third application, issued and then withdrawn
 let packB: string; // B's, issued
 let baselinePack: string; // the project's baseline evidence, issued
 
@@ -253,6 +258,8 @@ beforeAll(async () => {
 		neverIssued = await plantPack(q, { run: base, status: 'withdrawn', issued: false, rep: report('application', false, 'A second dam'), scenario: appA2, scenarioRun: runA2 });
 		assumption = await plantPack(q, { run: base, status: 'issued', rep: report('application', true, 'A second dam'), scenario: appA2, scenarioRun: runA2, version: 2, supersedes: neverIssued });
 		packB = await plantPack(q, { run: base, status: 'issued', rep: report('application', false, 'B plan'), scenario: appB, scenarioRun: runB });
+		appA3 = await plantScenario(q, 'A third dam', applicantA.id, base, [kalk.id]);
+		pulled = await plantPack(q, { run: base, status: 'withdrawn', rep: report('application', false, 'A third dam'), scenario: appA3, scenarioRun: await plantRun(q, appA3) });
 		baselinePack = await plantPack(q, { run: base, status: 'issued', rep: report('baseline', false, 'Applicant packs') });
 	});
 }, 120_000);
@@ -354,6 +361,53 @@ describe('reading a pack as its applicant', () => {
 		expect(r.body.pack).toMatchObject({ status: 'superseded', supersededById: v2, isOwner: true, canShare: false });
 		expect(r.body.verify.status).toBe('superseded');
 		expect(r.body.figures.rows.length).toBeGreaterThan(0);
+	});
+
+	// Issue #523 G9 (c): withdrawn after issue, it is still theirs to read, with its standing and why; never to link.
+	it('reads a pack withdrawn after issue with its standing, the reason and its figures; it lists, but is never linked', async () => {
+		const listed = (await list(applicantA, appA3)).body.packs;
+		expect(listed.map((p: { id: string; status: string }) => [p.id, p.status])).toEqual([[pulled, 'withdrawn']]);
+		expect(listed[0]).toMatchObject({ withdrawnReason: 'An error in the rule table', isOwner: true, canShare: false });
+		const r = await read(applicantA, appA3, pulled);
+		expect(r.status, JSON.stringify(r.body)).toBe(200);
+		expect(r.body.pack).toMatchObject({ id: pulled, status: 'withdrawn', withdrawnReason: 'An error in the rule table', isOwner: true, canShare: false });
+		expect(r.body.verify.status).toBe('withdrawn');
+		expect(r.body.verify).toEqual((await anon('GET', `/verify/${r.body.pack.shortCode}`)).body.pack);
+		expect(r.body.figures.rows.length).toBeGreaterThan(0);
+		expect(r.body.units.own.map((u: { name: string }) => u.name)).toEqual(['Kalkoenkrans', 'My new dam']);
+		const text = JSON.stringify(r.body);
+		for (const leak of LEAKS) expect(text, leak).not.toContain(leak);
+		// Never linked (as a superseded pack; control: their issued one is, in the share links below).
+		expect((await link(applicantA, pulled)).status).toBe(409);
+		// Another applicant, still nothing.
+		expect((await read(applicantB, appA3, pulled)).status).toBe(404);
+	});
+
+	// Issue #523 G9 (c): the k rule on its own. With no baseline assumption changed the units stay, and with fewer than 5 farm
+	// holders the volumes go (the shortfall and the outflow, which could read one farm's use).
+	it('holds back the volumes, not the units, when the catchment has fewer than 5 farm holders and no assumption changed', async () => {
+		const rows = (b: { figures: { rows: { id: string }[] } }) => b.figures.rows.map((x) => x.id);
+		// Positive control: 5 holders (Kalkoenkrans is A's, Doornhoek the farmer's, the other three nobody's).
+		const before = (await read(applicantA, appA, v2)).body;
+		expect(before.figures.volumes).toBe(true);
+		expect(rows(before)).toEqual(expect.arrayContaining(['shortfall', 'outflowMar']));
+		// A holds three more of the farms: 2 holders.
+		expect((await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [kalk.id, berg.id, water.id, klip.id] })).status).toBe(200);
+		try {
+			const r = await read(applicantA, appA, v2);
+			expect(r.status, JSON.stringify(r.body)).toBe(200);
+			expect(r.body.figures.volumes).toBe(false);
+			expect(rows(r.body)).not.toContain('shortfall');
+			expect(rows(r.body)).not.toContain('outflowMar');
+			expect(rows(r.body)).toEqual(expect.arrayContaining(['reserve', 'ewrDays', 'noFlowDays']));
+			// The units stay, frozen at issue: their own by name, as with 5 holders.
+			expect(r.body.units.own.map((u: { name: string }) => u.name)).toEqual(['Kalkoenkrans', 'My new dam']);
+			const text = JSON.stringify(r.body);
+			for (const leak of LEAKS) expect(text, leak).not.toContain(leak);
+		} finally {
+			expect((await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [kalk.id] })).status).toBe(200);
+		}
+		expect((await read(applicantA, appA, v2)).body.figures.volumes).toBe(true);
 	});
 
 	it('withholds every unit when the report changed a baseline assumption, and the volumes with it', async () => {
