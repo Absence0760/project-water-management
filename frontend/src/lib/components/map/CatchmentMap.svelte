@@ -32,6 +32,13 @@
 	shaded from the DEM (docs/maps.md § Relief); turning it off or on changes
 	the live map, and a DEM that can't be read drops the relief (`onreliefError`)
 	and leaves everything else drawn.
+	Licensed data drawn is credited on the attribution control while it is
+	drawn (mapLayers.ts mapCredits: HydroRIVERS reaches or rivers, a dam
+	traced from JRC Global Surface Water), each linking to its section of the
+	data sources page. With `attribution="outside"` the map draws no
+	attribution control: the parent shows the credits next to the map instead
+	(the farm map's line under it, farm/FarmMapCanvas.svelte), so they never
+	cover a small map.
 	A start or divide proposal (`proposal` with `pieces`, #326 C3's follow-up)
 	is drawn piece by piece, each with its number as a badge (hidden from
 	assistive technology: the sheet's cards carry the numbers and are the
@@ -60,9 +67,8 @@
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import type { MapFeature } from '$lib/api/types';
-	import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
-	import { creditedFeature } from './mapLayers';
+	import { MAP_CREDIT_TEXT, mapCredits, type MapCredit } from './mapLayers';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import {
 		basemapLayerIds,
@@ -83,10 +89,10 @@
 		riverNetworkData,
 		channelData,
 		type ChannelLineData,
-		RIVERS_CREDIT_LAYER,
-		RIVERS_CREDIT_SOURCE,
-		riversCredit as riversCreditLink,
-		riversCreditSource,
+		creditLayer,
+		creditLink,
+		creditSource,
+		creditSourceId,
 		TERRAIN_SOURCE,
 		terrainSource,
 		type NetworkReach,
@@ -135,6 +141,7 @@
 		channels = null,
 		channelsDim = false,
 		riversCredit = false,
+		attribution = 'map',
 		pickedReach = null,
 		onreach,
 		terrainUrl = null,
@@ -184,6 +191,11 @@
 		channelsDim?: boolean;
 		/** Credit the river network on the map (its licence asks it: HydroRIVERS), while its reaches are drawn. */
 		riversCredit?: boolean;
+		/**
+		 * Where the credits go: on the map's attribution control (always expanded), or `outside`, no control at all,
+		 * the parent showing the basemap's and mapCredits()' credits next to the map (the farm map, FarmMapCanvas.svelte).
+		 */
+		attribution?: 'map' | 'outside';
 		/** The reach picked in the tab's list, drawn heavier. */
 		pickedReach?: string | null;
 		/** A click on a reach where no feature is: its key. */
@@ -406,21 +418,26 @@
 		syncBadges();
 	}
 
-	// The credit shows while the layer draws HydroRIVERS reaches (`riversCredit`) or a river added from one is drawn.
-	const featuresCredited = $derived(features.some(creditedFeature));
-	const riversCreditHtml = () => (riversCredit || featuresCredited ? riversCreditLink(`${base}/data-sources`, HYDRORIVERS_MAP_ATTRIBUTION) : null);
+	// Each licensed source's credit shows while its data is drawn: HydroRIVERS while the layer draws its reaches
+	// (`riversCredit`) or a river added from one is drawn, JRC Global Surface Water while a traced dam is.
+	const credited = $derived(mapCredits(features, riversCredit));
+	const ALL_CREDITS = Object.keys(MAP_CREDIT_TEXT) as MapCredit[];
+	const creditEntries = (ids: readonly MapCredit[]) => ids.map((id) => ({ id, html: creditLink(`${base}/data-sources`, id, MAP_CREDIT_TEXT[id]) }));
 
-	/** Add or drop the river network's credit on the live map, to match the reaches drawn (a style load carries it already). */
-	function syncRiversCredit() {
+	/** Add or drop each credit on the live map, to match what is drawn (a style load carries them already). */
+	function syncCredits() {
 		if (!map || status !== 'ready') return;
-		const html = riversCreditHtml();
-		const has = !!map.getLayer(RIVERS_CREDIT_LAYER.id);
-		if (html && !has) {
-			if (!map.getSource(RIVERS_CREDIT_SOURCE)) map.addSource(RIVERS_CREDIT_SOURCE, riversCreditSource(html) as never);
-			map.addLayer(RIVERS_CREDIT_LAYER as never);
-		} else if (!html && has) {
-			map.removeLayer(RIVERS_CREDIT_LAYER.id);
-			map.removeSource(RIVERS_CREDIT_SOURCE);
+		const want = new Set(credited);
+		for (const { id, html } of creditEntries(ALL_CREDITS)) {
+			const layer = creditLayer(id);
+			const has = !!map.getLayer(layer.id);
+			if (want.has(id) && !has) {
+				if (!map.getSource(creditSourceId(id))) map.addSource(creditSourceId(id), creditSource(html) as never);
+				map.addLayer(layer as never);
+			} else if (!want.has(id) && has) {
+				map.removeLayer(layer.id);
+				map.removeSource(creditSourceId(id));
+			}
 		}
 	}
 
@@ -453,7 +470,7 @@
 						rivers: riverNetworkData(rivers, pickedReach),
 						channels: channelData(channels, channelsDim),
 						terrain: reliefUrl(),
-						riversCredit: riversCreditHtml(),
+						credits: creditEntries(credited),
 						dataSourcesHref: `${base}/data-sources`,
 						proposal: proposalData(proposal),
 						units: unitsData(units, features),
@@ -478,8 +495,8 @@
 				});
 				map = m;
 				m.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
-				// Always expanded: the basemap's licence must stay visible.
-				m.addControl(new lib.AttributionControl({ compact: false }), 'bottom-right');
+				// Always expanded: the basemap's licence must stay visible. Outside, the parent shows it next to the map.
+				if (attribution === 'map') m.addControl(new lib.AttributionControl({ compact: false }), 'bottom-right');
 				m.on('error', (ev) => {
 					const e = ev as unknown as { sourceId?: string; error?: { message?: string } };
 					if (e.sourceId === 'basemap' && !tilesNote) {
@@ -664,12 +681,11 @@
 		untrack(syncRelief);
 	});
 
-	// HydroRIVERS reaches drawn or gone: their credit with them.
+	// Licensed data drawn or gone: its credit with it.
 	$effect(() => {
-		void riversCredit;
-		void featuresCredited;
+		void credited.join();
 		void status;
-		untrack(syncRiversCredit);
+		untrack(syncCredits);
 	});
 
 	// Selecting in the list frames the feature (instantly under prefers-reduced-motion).

@@ -12,6 +12,7 @@ import type { FarmMapFeature, MapFeature, MapFeatureKind } from '$lib/api/types'
 import { msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
 import type { MapWords } from '$lib/components/map/CatchmentMap.svelte';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '$lib/components/legal/dataCredits';
 import { bandChip } from './cards';
 import { fmtNumber } from './numbers';
 
@@ -35,8 +36,8 @@ export function asMapFeatures(features: readonly FarmMapFeature[]): MapFeature[]
 		nodeId: null,
 		nodeName: null,
 		damPosition: null,
-		// The server says which river carries HydroRIVERS' credit (it sends no properties); the map's
-		// creditedFeature reads it here.
+		// The server says which feature carries a licence's credit (it sends no properties): the map's
+		// creditedFeature (HydroRIVERS) and jrcCreditedFeature (a traced dam) read it here.
 		properties: (f.credit ? { credit: f.credit } : {}) as Record<string, string>,
 		nonContributingM2: null,
 		sourceId: null,
@@ -81,6 +82,38 @@ export const mapWords = (): MapWords => ({
 	zoomIn: t('Zoom in'),
 	zoomOut: t('Zoom out')
 });
+
+/** One credit in the line under the farm map: its words, and the data sources page's section it links to (null: plain text). */
+export interface CreditItem {
+	text: string;
+	href: string | null;
+}
+
+/**
+ * The credits under the farm map, in one line (FarmMapCanvas.svelte;
+ * docs/legal/map-data-licences.md § 5.3): beside the map, not over it, so
+ * they never cover a phone's small map (OpenStreetMap's guidelines allow a
+ * credit adjacent to the map). The basemap's when it is drawn (`basemap`, its
+ * attribution as written), then each licensed source the map draws
+ * (`credits`, mapLayers.ts mapCredits): HydroRIVERS' credit as written, and a
+ * traced dam's source with the note that it was modified (Copernicus
+ * Delegated Regulation 1159/2013 Art. 8), in the reader's words around
+ * "Source: EC JRC/Google" as written; then the data sources page. The credit
+ * names stay as their licensors wrote them; only the words around them are
+ * translated.
+ */
+export function farmMapCredits(credits: readonly ('hydrorivers' | 'jrc-water')[], basemap: string | null, dataSourcesHref: string): CreditItem[] {
+	const out: CreditItem[] = [];
+	if (basemap) out.push({ text: basemap, href: null });
+	if (credits.includes('hydrorivers')) out.push({ text: HYDRORIVERS_MAP_ATTRIBUTION, href: `${dataSourcesHref}#hydrorivers` });
+	if (credits.includes('jrc-water'))
+		out.push({
+			text: t('Dam outline: traced from {dataset} ({source}), modified', { dataset: 'JRC Global Surface Water', source: JRC_WATER_STATEMENT }),
+			href: `${dataSourcesHref}#jrc-water`
+		});
+	out.push({ text: t('Data sources'), href: dataSourcesHref });
+	return out;
+}
 
 /** "33.684° S, 21.320° E": a place, for when there is no background map to show it. */
 export function placeText([lon, lat]: [number, number]): string {

@@ -1,6 +1,8 @@
 # Map data licences: the Terms clause and the farm map credits
 
 > **Not legal advice.** Pre-counsel research by the legal research agent (issue #90, 2026-10-11), for the operator and a South African attorney to review. Counsel's review is tracked in #92; the credit fix is #523 C6.
+>
+> **Status (2026-10-12): item (b) is built** (#523 C6, as § 5.3 recommends). The facts in § 2 and § 4.2 describe the code before it. A traced dam is now credited on the farm map and on the Map tab: "Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified", linking to `/data-sources#jrc-water`. The farm map's credits are one line under the map, not over it. Where each credit shows is listed in [maps.md § Credits on the map](../maps.md#credits-on-the-map). The Terms wording (§ 5.1) and the questions for counsel are still open.
 
 ## 1. Question and short answer
 
@@ -144,6 +146,8 @@ Email the HydroSHEDS team (contact on hydrosheds.org) with three questions:
 A written yes is the licensor's own "prior written consent" (§2.1.3). It makes the "at least as protective" reading academic. Keep the reply with the licence records (`docs/maps.md` § Sources).
 
 ### 5.3 Code: the credits (closes item (b))
+
+> Built in #523 C6 (2026-10-12), with these differences. The flag is read from the description, because a traced feature stores no structured `traced` property. It goes on any feature whose description names the source, not only a dam, since a traced outline whose kind is changed later is still JRC's data. A traced dam split in two keeps the credit on both parts. `CatchmentMap` takes `attribution="outside"`. The farm card builds the line itself from `mapCredits` (`farm/farmMap.ts` `farmMapCredits`). The farm line translates only "Dam outline: traced from …, modified" and "Data sources". The HydroRIVERS and basemap credits stay as written.
 
 1. **Backend, `backend/src/farms/view.ts`.**
    - Widen `FarmMapFeature.credit` to `'hydrorivers' | 'jrc-water'`.

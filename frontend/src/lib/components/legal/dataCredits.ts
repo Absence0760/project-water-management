@@ -63,6 +63,15 @@ export const WORLDCOVER_STATEMENT = '© ESA WorldCover project 2021 / Contains m
 /** The map's attribution control while real HydroRIVERS reaches are drawn: short, linking to the full statement. */
 export const HYDRORIVERS_MAP_ATTRIBUTION = 'Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license';
 
+/**
+ * The map's attribution control while a dam outline traced from JRC Global
+ * Surface Water is drawn: JRC's "Source: EC JRC/Google", and that the data was
+ * modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3);
+ * docs/legal/map-data-licences.md § 5.3). The farm map says the same in the
+ * reader's language (farm/farmMap.ts farmMapCredits), the statement as written.
+ */
+export const JRC_WATER_MAP_ATTRIBUTION = `Dam outline: traced from JRC Global Surface Water (${JRC_WATER_STATEMENT}), modified`;
+
 export const DATA_CREDITS: readonly DataCredit[] = [
 	{
 		id: 'basemap',

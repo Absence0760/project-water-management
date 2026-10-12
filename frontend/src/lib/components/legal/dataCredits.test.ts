@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT } from './dataCredits';
+import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT } from './dataCredits';
 import { TERRAIN_ATTRIBUTION } from '$lib/components/map/mapStyle';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '$lib/components/map/delineation';
 
@@ -50,11 +50,16 @@ describe('the data credits', () => {
 		// The water archive's attribution, which the dam trace writes into a traced feature's description.
 		const tiles = readFileSync(new URL('../../../../../bin/tiles-dev.sh', import.meta.url), 'utf8');
 		expect(tiles).toContain(`m.attribution="${JRC_WATER_STATEMENT}"`);
+		// The backend's copy, which flags a traced dam for the farm map's credit (geo/credits.ts).
+		expect(backend('geo/credits.ts')).toContain(`JRC_WATER_STATEMENT = '${JRC_WATER_STATEMENT}'`);
 	});
 
 	it('say what the map’s own notices say: the relief’s attribution and a delineated polygon’s notice', () => {
 		expect(TERRAIN_ATTRIBUTION).toContain(COPERNICUS_NOTICE);
 		expect(DELINEATION_NOTICE).toBe(`P${COPERNICUS_NOTICE.slice(1)}.`);
 		expect(HYDRORIVERS_MAP_ATTRIBUTION).toContain('© World Wildlife Fund, Inc. (2006-2022)');
+		// A traced dam's credit names JRC's source as its download page asks, and says the data was modified (1159/2013 Art. 8(3)).
+		expect(JRC_WATER_MAP_ATTRIBUTION).toContain(JRC_WATER_STATEMENT);
+		expect(JRC_WATER_MAP_ATTRIBUTION).toMatch(/modified$/);
 	});
 });

@@ -31,6 +31,7 @@ import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { geometryAreaM2, polygonAreaM2 } from './area.js';
 import { partsWithin } from './splitCheck.js';
+import { JRC_WATER_STATEMENT, jrcTraced } from './credits.js';
 import {
 	centerOf,
 	checkGeometry,
@@ -598,7 +599,9 @@ export const mapRoutes = new Hono<AuthEnv>()
 				throw new ApiError(400, 'The two parts are not this shape cut in two: together they must cover it exactly. Draw the line again.');
 			}
 			const label = before.name ? `“${before.name}”` : KIND_LABEL[before.kind];
-			const description = `Split from ${label} along a drawn line.`.slice(0, 500);
+			// A part of a dam traced from JRC Global Surface Water is still its data: the new part keeps the credit (geo/credits.ts; the kept part keeps its description).
+			const credit = jrcTraced(before.properties?.description) ? ` ${JRC_WATER_STATEMENT}.` : '';
+			const description = `Split from ${label} along a drawn line.${credit}`.slice(0, 500);
 			const ids: string[] = [];
 			let into: MapFeatureKind;
 			const insert = async (kind: MapFeatureKind, name: string, p: (typeof parts)[number]) => {

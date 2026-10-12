@@ -5,11 +5,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
 import { PIECE_TINT_COUNT } from './pieces';
-import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 import {
-	RIVERS_CREDIT_LAYER,
-	RIVERS_CREDIT_SOURCE,
-	riversCredit,
+	creditLayer,
+	creditLink,
+	creditSourceId,
 	escapeAttribution,
 	terrainSource,
 	BASEMAP_ATTRIBUTION,
@@ -337,17 +337,27 @@ describe('the river network (#345)', () => {
 		expect((mapStyle(null, false, overlayData([], null), { terrain: '/t.pmtiles' }).sources[TERRAIN_SOURCE] as { attribution: string }).attribution).toBe(TERRAIN_ATTRIBUTION);
 	});
 
-	it('credits HydroRIVERS on the attribution control only when asked: its own empty source and an invisible layer reading it', () => {
-		const html = riversCredit('/data-sources', HYDRORIVERS_MAP_ATTRIBUTION);
+	it('credits each licensed source on the attribution control only when asked: its own empty source and an invisible layer reading it', () => {
+		const html = creditLink('/data-sources', 'hydrorivers', HYDRORIVERS_MAP_ATTRIBUTION);
 		expect(html).toBe(`<a href="/data-sources#hydrorivers">${escapeAttribution(HYDRORIVERS_MAP_ATTRIBUTION)}</a>`);
-		const credited = mapStyle(null, false, overlayData([], null), { riversCredit: html });
-		expect(credited.sources[RIVERS_CREDIT_SOURCE]).toEqual({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution: html });
-		expect(credited.layers.find((l) => l.id === RIVERS_CREDIT_LAYER.id)).toEqual({ id: 'rivers-credit', type: 'line', source: RIVERS_CREDIT_SOURCE, paint: { 'line-opacity': 0 } });
-		const plain = mapStyle(null, false, overlayData([], null), { riversCredit: null });
-		expect(plain.sources[RIVERS_CREDIT_SOURCE]).toBeUndefined();
-		expect(plain.layers.some((l) => l.id === RIVERS_CREDIT_LAYER.id)).toBe(false);
-		// The river network's own source never carries it: it is in the style whether drawn or not.
+		const jrc = creditLink('/data-sources', 'jrc-water', JRC_WATER_MAP_ATTRIBUTION);
+		expect(jrc).toBe(`<a href="/data-sources#jrc-water">${escapeAttribution(JRC_WATER_MAP_ATTRIBUTION)}</a>`);
+		const credited = mapStyle(null, false, overlayData([], null), {
+			credits: [
+				{ id: 'hydrorivers', html },
+				{ id: 'jrc-water', html: jrc }
+			]
+		});
+		expect(credited.sources[creditSourceId('hydrorivers')]).toEqual({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution: html });
+		expect(credited.sources['credit-jrc-water']).toEqual({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution: jrc });
+		expect(credited.layers.find((l) => l.id === creditLayer('hydrorivers').id)).toEqual({ id: 'credit-hydrorivers', type: 'line', source: 'credit-hydrorivers', paint: { 'line-opacity': 0 } });
+		expect(credited.layers.find((l) => l.id === 'credit-jrc-water')).toEqual({ id: 'credit-jrc-water', type: 'line', source: 'credit-jrc-water', paint: { 'line-opacity': 0 } });
+		const plain = mapStyle(null, false, overlayData([], null), { credits: [] });
+		expect(Object.keys(plain.sources).filter((k) => k.startsWith('credit-'))).toEqual([]);
+		expect(plain.layers.some((l) => l.id.startsWith('credit-'))).toBe(false);
+		// The river network's and the features' own sources never carry one: they are in the style whether drawn or not.
 		expect((credited.sources.rivers as Record<string, unknown>).attribution).toBeUndefined();
+		expect((credited.sources.features as Record<string, unknown>).attribution).toBeUndefined();
 	});
 
 	it('feeds each reach with its key and order (1 when not given), marking the picked one', () => {
@@ -553,8 +563,8 @@ describe('the delineation proposal (#326 B-delineate)', () => {
 describe('attribution HTML (MapLibre sets it as innerHTML)', () => {
 	it('escapes every value put into it, so no text can become markup', () => {
 		expect(escapeAttribution(`<img src=x onerror="a()">&'`)).toBe('&#60;img src=x onerror=&#34;a()&#34;&#62;&#38;&#39;');
-		const html = riversCredit('" onmouseover="x', '<b>credit</b>');
-		expect(html).not.toMatch(/<b>|" onmouseover/);
+		const html = creditLink('" onmouseover="x', '"><script>', '<b>credit</b>');
+		expect(html).not.toMatch(/<b>|" onmouseover|<script>/);
 		expect(terrainSource('/t.pmtiles', '"><script>').attribution).not.toContain('<script>');
 	});
 });

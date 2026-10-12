@@ -505,7 +505,10 @@ attribution control while HydroRIVERS reaches are drawn (the River network
 layer's credit, "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund,
 Inc. (2006-2022), used under license", linking to its section, and on any
 map, the farm map included, that draws a river added from a HydroRIVERS
-reach), and from the relief's credit ("licence notice", to the Copernicus
+reach), from a traced dam's credit ("Dam outline: traced from JRC Global
+Surface Water (Source: EC JRC/Google), modified", to the JRC section,
+issue #523 C6; [maps.md § Credits on the map](./maps.md#credits-on-the-map)),
+and from the relief's credit ("licence notice", to the Copernicus
 section). Its line under the title is the latest day a licence was read
 (`LICENCES_READ`, the latest of the credits' `read` dates, each one a date
 the Sources table records). Also linked from the landing page's footer
@@ -10963,7 +10966,11 @@ published.
   MapLibre a chunk further), with its words, zoom buttons and keyboard hint in
   the reader's language, and a one-line key (the land in its band's colour,
   "Your land · Model: watch", the dam, river, gauge and boundary drawn as the
-  map draws them). The map draws without basemap tiles too (the farm's own
+  map draws them), then the map's credits as one small line under the key
+  instead of over the map (`farm-map-credits`: the basemap's, a HydroRIVERS
+  river's, a traced dam's "Dam outline: traced from JRC Global Surface Water
+  (Source: EC JRC/Google), modified", and **Data sources**; issue #523 C6,
+  [maps.md § Credits on the map](./maps.md#credits-on-the-map)). The map draws without basemap tiles too (the farm's own
   features on a plain background). The page's ready state doesn't wait for
   it: the card carries `data-ready="true"` once the map has drawn or said
   why it can't (no WebGL), or its chunk failed (`CatchmentMap`'s

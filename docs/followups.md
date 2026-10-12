@@ -2532,6 +2532,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       is nie veiliger as jou inkassie nie." The i18n-checker corrected the
       translator's "net so veilig soos", which softened the warning; confirm
       the corrected wording reads naturally. Do it with the catalogue review.
+- [ ] **A native speaker's look at row `876212bd`** (issue #523 C6, 2026-10-12):
+      the traced dam's credit under the farm map, "Damomtrek: nagetrek uit
+      {dataset} ({source}), gewysig". The i18n-checker kept it but asked
+      whether "nagetrek **van**" reads more naturally than "uit"; "gewysig"
+      must stay (the licence asks for the modified note). Do it with the
+      catalogue review.
 - [x] **Translation turnaround.** All 607 rows of
       `docs/i18n/af-translation-sheet.md` (505 site messages, some with a
       row per plural form; 70 email strings; 8 glossary entries of three

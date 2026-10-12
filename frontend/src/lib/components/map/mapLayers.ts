@@ -7,6 +7,7 @@
 // (mapLayers.test.ts).
 import type { MapFeature, MapPosition } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '$lib/components/legal/dataCredits';
 import { boundsOfAll } from './mapData';
 import { interiorPoint } from './pieces';
 
@@ -113,6 +114,45 @@ export const creditedFeature = (f: Pick<MapFeature, 'kind' | 'properties'>) => {
 	const ref = f.properties?.ref;
 	return typeof ref === 'string' && /^river-network:hydro\s*(rivers|sheds)/i.test(ref);
 };
+
+/**
+ * Whether a project feature's outline was traced from JRC Global Surface
+ * Water, whose terms (and Copernicus Delegated Regulation 1159/2013 Art. 8)
+ * ask the map to name the source and say the data was modified. On the Map
+ * tab its description says so (tracing writes the archive's "Source: EC
+ * JRC/Google" into it, geo/routes.ts tracedMethod); the farm map gets no
+ * properties, so the server flags it (`credit: 'jrc-water'`, farms/view.ts
+ * farmMap). A trace from the synthetic raster names no source: no credit.
+ */
+export const jrcCreditedFeature = (f: Pick<MapFeature, 'properties'>) => {
+	if (f.properties?.credit === 'jrc-water') return true;
+	const d = f.properties?.description;
+	return typeof d === 'string' && d.includes(JRC_WATER_STATEMENT);
+};
+
+/** A licensed source the map credits while its data is drawn; its id is also its section on the data sources page (`/data-sources#<id>`). */
+export type MapCredit = 'hydrorivers' | 'jrc-water';
+
+/** Each credit's line on the map's attribution control (English: the workspace's map; the farm map words its own, farmMap.ts). */
+export const MAP_CREDIT_TEXT: Readonly<Record<MapCredit, string>> = {
+	hydrorivers: HYDRORIVERS_MAP_ATTRIBUTION,
+	'jrc-water': JRC_WATER_MAP_ATTRIBUTION
+};
+
+/**
+ * The licence credits a map must show for what it draws, in a fixed order
+ * (docs/maps.md § Sources): HydroRIVERS while the River network layer draws
+ * its reaches (`riversDrawn`) or a river added from one is drawn, then JRC
+ * Global Surface Water while a traced outline is. Empty when nothing drawn
+ * is licensed data. The basemap's and the relief's credits are their own
+ * sources' and are not listed here.
+ */
+export function mapCredits(features: readonly Pick<MapFeature, 'kind' | 'properties'>[], riversDrawn = false): MapCredit[] {
+	const out: MapCredit[] = [];
+	if (riversDrawn || features.some(creditedFeature)) out.push('hydrorivers');
+	if (features.some(jrcCreditedFeature)) out.push('jrc-water');
+	return out;
+}
 
 /** A reach as the list names it: its own name, else its id. */
 export const reachLabel = (r: { name: string; reachId: number }) => r.name || `Reach ${r.reachId}`;

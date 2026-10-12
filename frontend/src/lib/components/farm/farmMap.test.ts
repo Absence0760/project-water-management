@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { FarmMapFeature } from '$lib/api/types';
 import { BAND_TOKEN } from '$lib/components/map/mapStatus';
 import { vaalbankFixture } from './fixture';
-import { creditedFeature } from '$lib/components/map/mapLayers';
-import { asMapFeatures, FARM_BAND_TOKEN, farmFills, farmMapCard, kindWord, mapWords, placeText, showsMap } from './farmMap';
+import { creditedFeature, jrcCreditedFeature, mapCredits } from '$lib/components/map/mapLayers';
+import { BASEMAP_ATTRIBUTION } from '$lib/components/map/mapStyle';
+import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
+import { asMapFeatures, FARM_BAND_TOKEN, farmFills, farmMapCard, farmMapCredits, kindWord, mapWords, placeText, showsMap } from './farmMap';
 
 const sp = (s: string) => s.replace(/[  ]/g, ' ');
 const box = (x: number, y: number, d: number) => ({
@@ -130,5 +132,31 @@ describe('asMapFeatures and the HydroRIVERS credit', () => {
 		expect(plain!.properties).toEqual({});
 		expect(creditedFeature(credited!)).toBe(true);
 		expect(creditedFeature(plain!)).toBe(false);
+	});
+});
+
+describe('farmMapCredits: the line under the farm map (issue #523 C6)', () => {
+	const dam = { id: 'd', kind: 'dam' as const, name: 'Dam', geometry: { type: 'Point' as const, coordinates: [21, -33] as [number, number] }, areaM2: null, center: [21, -33] as [number, number] };
+
+	it('keeps a traced dam’s flag where the map reads it, and so credits JRC under the map', () => {
+		const [traced, river] = asMapFeatures([{ ...dam, credit: 'jrc-water' }, { ...dam, id: 'r', kind: 'river', credit: 'hydrorivers' }]);
+		expect(traced!.properties).toEqual({ credit: 'jrc-water' });
+		expect(jrcCreditedFeature(traced!)).toBe(true);
+		expect(creditedFeature(traced!)).toBe(false);
+		expect(mapCredits([traced!, river!])).toEqual(['hydrorivers', 'jrc-water']);
+	});
+
+	it('lists the basemap, each licensed source drawn and the data sources page, each source linking to its section', () => {
+		expect(farmMapCredits(['hydrorivers', 'jrc-water'], BASEMAP_ATTRIBUTION, '/data-sources')).toEqual([
+			{ text: '© Protomaps © OpenStreetMap contributors', href: null },
+			{ text: HYDRORIVERS_MAP_ATTRIBUTION, href: '/data-sources#hydrorivers' },
+			{ text: 'Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified', href: '/data-sources#jrc-water' },
+			{ text: 'Data sources', href: '/data-sources' }
+		]);
+	});
+
+	it('leaves out the basemap without tiles and a source the map doesn’t draw', () => {
+		expect(farmMapCredits([], null, '/app/data-sources')).toEqual([{ text: 'Data sources', href: '/app/data-sources' }]);
+		expect(farmMapCredits(['jrc-water'], null, '/data-sources').map((c) => c.href)).toEqual(['/data-sources#jrc-water', '/data-sources']);
 	});
 });

@@ -5,6 +5,8 @@
 // farmer2@'s Kareebos is in Droëvlei, which has no map. The test reads the
 // card's words and key, never the map's pixels: the map is never the only way
 // to read what it shows, and a neighbour's parcel or dam is never named.
+// The map's credits are a line under it, never MapLibre's control over it
+// (issue #523 C6); a dam traced from JRC Global Surface Water adds JRC's.
 import type { BrowserContext, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -67,6 +69,8 @@ test('a farmer sees their own land and dam on a small map, said in words, and ne
 	if (band) await expect(card).toContainText(`Your land is coloured by the model’s look back: ${band}.`);
 	else await expect(card).not.toContainText('Your land is coloured by');
 	await expect(key.getByRole('listitem')).toHaveText([/^Your land/, 'Your dam', 'River', 'Gauge', 'Catchment boundary']);
+	// The credits, under the key: no basemap in this build and no licensed data drawn (the seed is synthetic), so only the data sources page.
+	await expect(page.getByTestId('farm-map-credits')).toHaveText('Data sources');
 
 	// No neighbour, on the map card or in the map's answer (positive control: Vaalbank is in both).
 	const answer = await (await page.context().request.get(`${API_URL}/projects/${projectId}/farm/${vaalbank.nodeId}/map`)).text();
@@ -107,4 +111,39 @@ test('a farm with nothing of its own on the map shows no map card', async ({ pag
 	expect(await (await answered).json()).toEqual({ features: [] });
 	await expect(page.getByRole('region', { name: 'Your hydrological unit on the map' })).toHaveCount(0);
 	await expect(page.getByTestId('farm-map-failed')).toHaveCount(0);
+});
+
+test('the map’s credits are a line under it, and a traced dam adds JRC’s source and that it was modified (#523 C6)', async ({ page, fetchRoute }) => {
+	await page.setViewportSize(PHONE);
+	await signIn(page, FARMER1);
+	const { projectId, farms } = await farmIn(page.context(), /Sandspruit/);
+	const vaalbank = farms.find((f) => f.name === 'Vaalbank')!;
+	// The seed is synthetic, so no dam in it was traced from JRC's data: flag Vaalbank's dam as the server flags a
+	// traced one (farms/view.ts, farm-map.db.test.ts covers the flag itself).
+	await fetchRoute(page, new RegExp(`/farm/${vaalbank.nodeId}/map$`), async (route) => {
+		const res = await route.fetch();
+		const body = (await res.json()) as { features: { kind: string; credit?: string }[] };
+		for (const f of body.features) if (f.kind === 'dam') f.credit = 'jrc-water';
+		await route.fulfill({ response: res, json: body });
+	});
+	await page.goto(`/farm/${projectId}`);
+	const card = page.getByRole('region', { name: 'Your hydrological unit on the map' });
+	await expect(card).toHaveAttribute('data-ready', 'true');
+
+	const credits = page.getByTestId('farm-map-credits');
+	await expect(credits).toHaveText('Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified · Data sources');
+	await expect(credits.getByRole('link', { name: 'Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified' })).toHaveAttribute('href', '/data-sources#jrc-water');
+	await expect(credits.getByRole('link', { name: 'Data sources' })).toHaveAttribute('href', '/data-sources');
+
+	// Under the map and its key, not over the map: the map draws no attribution control of its own.
+	const map = page.getByTestId('catchment-map');
+	const [mapBox, keyBox, creditsBox] = await Promise.all([map.boundingBox(), page.getByTestId('farm-map-legend').boundingBox(), credits.boundingBox()]);
+	expect(creditsBox!.y).toBeGreaterThanOrEqual(mapBox!.y + mapBox!.height);
+	expect(creditsBox!.y).toBeGreaterThanOrEqual(keyBox!.y + keyBox!.height);
+	await expect(card.locator('.maplibregl-ctrl-attrib')).toHaveCount(0);
+	// Positive control: drawn (some headless browsers have no WebGL), the map's other control, the zoom buttons, is there.
+	if ((await map.locator('xpath=..').getAttribute('data-status')) === 'ready') await expect(card.getByRole('button', { name: 'Zoom in' })).toBeVisible();
+	const [scroll, inner] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+	expect(scroll).toBeLessThanOrEqual(inner);
+	await expectNoViolations(page);
 });

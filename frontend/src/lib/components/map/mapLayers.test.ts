@@ -9,6 +9,9 @@ import {
 	snappedViewBbox,
 	chirpsCells,
 	creditedFeature,
+	jrcCreditedFeature,
+	MAP_CREDIT_TEXT,
+	mapCredits,
 	creditedReach,
 	layersOn,
 	layersStatus,
@@ -187,6 +190,40 @@ describe('creditedFeature', () => {
 		expect(creditedFeature({ kind: 'other', properties: { ref: 'river-network:HydroRIVERS-v10:1' } })).toBe(false);
 		// The farm map's flag from the server (farmMap.ts asMapFeatures).
 		expect(creditedFeature({ kind: 'river', properties: { credit: 'hydrorivers' } })).toBe(true);
+	});
+});
+
+describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
+	const traced = 'Traced from JRC GSW v1.5 (trace-dam-2): water in at least 25 % of the observations, clicked at 33.6900° S, 21.5100° E. Check it against the map. Source: EC JRC/Google.';
+	const reach = { kind: 'river' as const, properties: { ref: 'river-network:HydroRIVERS-v10:1050012345' } };
+	const dam = { kind: 'dam' as const, properties: { description: traced } };
+	const drawn = { kind: 'dam' as const, properties: {} };
+
+	it('is a feature traced from JRC Global Surface Water: its description names the source, or the farm map’s flag', () => {
+		expect(jrcCreditedFeature(dam)).toBe(true);
+		expect(jrcCreditedFeature({ properties: { credit: 'jrc-water' } })).toBe(true);
+		// The synthetic raster names no source; a drawn dam, a null properties, HydroRIVERS' flag: none.
+		expect(jrcCreditedFeature({ properties: { description: 'Traced from Synthetic water occurrence (trace-dam-2): water in at least 25 %.' } })).toBe(false);
+		expect(jrcCreditedFeature(drawn)).toBe(false);
+		expect(jrcCreditedFeature({ properties: null } as never)).toBe(false);
+		expect(jrcCreditedFeature({ properties: { credit: 'hydrorivers' } })).toBe(false);
+	});
+
+	it('lists each licensed source drawn once, HydroRIVERS then JRC, and nothing when nothing licensed is drawn', () => {
+		expect(mapCredits([])).toEqual([]);
+		expect(mapCredits([drawn, { kind: 'river', properties: {} }])).toEqual([]);
+		expect(mapCredits([reach, reach])).toEqual(['hydrorivers']);
+		expect(mapCredits([dam])).toEqual(['jrc-water']);
+		expect(mapCredits([dam, drawn, reach])).toEqual(['hydrorivers', 'jrc-water']);
+		// The River network layer drawing HydroRIVERS reaches credits it with no feature from it.
+		expect(mapCredits([dam], true)).toEqual(['hydrorivers', 'jrc-water']);
+		// The farm map's flags (farmMap.ts asMapFeatures).
+		expect(mapCredits([{ kind: 'dam', properties: { credit: 'jrc-water' } }, { kind: 'river', properties: { credit: 'hydrorivers' } }])).toEqual(['hydrorivers', 'jrc-water']);
+	});
+
+	it('words each credit for the attribution control: the JRC line names the source as JRC asks and says the outline was modified', () => {
+		expect(MAP_CREDIT_TEXT['jrc-water']).toBe('Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified');
+		expect(MAP_CREDIT_TEXT.hydrorivers).toMatch(/^Rivers: HydroRIVERS/);
 	});
 });
 

@@ -813,6 +813,10 @@ export const af: Catalogue = {
 	'a3583899': 'Zoem in',
 	// Zoom out
 	'8570fe3a': 'Zoem uit',
+	// Dam outline: traced from {dataset} ({source}), modified
+	'876212bd': 'Damomtrek: nagetrek uit {dataset} ({source}), gewysig',
+	// Data sources
+	'51f21a4b': 'Databronne',
 	// {deg}° S
 	'1044c926': '{deg}° S',
 	// {deg}° N
@@ -1123,8 +1127,6 @@ export const af: Catalogue = {
 	'575cffd2': 'Voetskrif',
 	// How the model is checked
 	'69391154': 'Hoe die model nagegaan word',
-	// Data sources
-	'51f21a4b': 'Databronne',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
