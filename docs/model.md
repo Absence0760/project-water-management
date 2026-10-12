@@ -3347,6 +3347,92 @@ transmission losses).
 on every kind of node, and baseline assumptions (`BASELINE_NODE_FIELDS`): the
 river's losses are not something an applicant proposes (docs/scenarios.md).
 
+#### A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1)
+
+**Why.** The bed losses above leave the catchment and none of them comes back
+as base flow (the hydrologist's answer to #90 R4, 2026-10-11). The same answer
+asked for two settings on a specific hydrological unit: a **base-flow loss**,
+where the unit's own runoff loses water to groundwater (a fault or dolomite
+that drains to another basin, a deep aquifer), and a **base-flow gain**, where
+groundwater from beyond the unit joins it (a spring, an aquifer draining into
+the river, or water a losing reach above returns lower down). GR4J's exchange
+X2 does something like either, but over the whole catchment and fitted, not
+at one unit from evidence. **Off by default**: a unit with neither runs
+exactly as before, to the bit (no series, summary field or warning).
+
+**The setting.** Units only (`NetworkNode`; a gauge or an other water user
+has no runoff of its own, so the API and the model rules refuse them there
+and the run ignores one with a warning):
+
+| Field | Meaning |
+| --- | --- |
+| `baseflowLossM3Day` L | m³/day of the unit's own runoff lost to groundwater, at most the day's runoff; default 0 (none) |
+| `baseflowGainM3Day` B | m³/day that joins the unit's runoff every day, from outside the modelled catchment; default 0 (none) |
+
+A value that isn't a size ≥ 0 runs as 0 with a warning; the API and the node
+form refuse it.
+
+**Each day** (network/baseflow.ts, in the unit's step in network/simulate.ts),
+with I the unit's runoff (§2.7 row I: natural × share, less land cover):
+
+```
+loss = MIN(L, I)          (0 when I ≤ 0)
+I'   = I − loss + B       what the unit's runoff brings to its dam and the river
+```
+
+I' takes I's place everywhere the unit's runoff goes: the split into the dam
+and below it (M = I' × `pctRunoffToDam`, N = I' − M), the priority users' pass
+and the hands-off flow (MIN(Zs, H + I'), MIN(H + I', keep)), and the balance
+check V. The runoff column I itself stays natural × share less land cover, so
+it still reads what the rain made; the run stores `baseflow_loss` (MIN(L, I)
+each day) and `baseflow_gain` (B) on the unit, each only when it is set. A
+fixed volume rather than a share: the loss is what the aquifer takes, which
+doesn't grow with a storm, and on a dry day it takes all the runoff (as
+WRSM's Bedloss does a reach's flow, §2.6b above). A loss of the flow passing
+*through* a unit, from the river rather than the unit's own runoff, is a bed
+loss in the reach above it.
+
+**Where the water goes.** The loss leaves the catchment, like a bed loss;
+none of it returns unless a gain is set somewhere (on this unit or one below).
+The gain comes from outside the modelled catchment. So both are terms of the
+balances: `summary.waterBalance` gains `baseflowGainM3` (in) and
+`baseflowLossM3` (out), and the water account (§2.11b) the same two, only on
+a run with them; each residual stays float noise.
+
+**Neither is a unit's use.** A unit's net impact for the EWR attribution
+(§2.7b) is e = H + I' + J − U, with the runoff after them, so a unit that
+only loses base flow is charged nothing: an undeveloped catchment's shortfall
+is all natural, as with the bed losses.
+
+**The natural flow is net of them.** Like the bed losses, they are the land's,
+not the development's: wherever a natural flow is routed for comparison (§2.6b
+above: a Reserve rule table's site, the daily EWR's percentile tables at the
+outlet, the WR2012 check and the calibration's MAR penalty), each unit's own
+natural runoff is taken through I − MIN(L, I) + B before it joins the river
+(`routeNatural`, `naturalReaches`). The catchment's `natural_flow` series and
+the runoff coefficient stay the runoff model's. The pragmatic EWR is a fixed
+flow at the outlet and doesn't change (the EWR stays unadjusted, #90 R4). The
+gauge plausibility checks (§2.10d) read the natural flow as natural × the
+shares above the gauge, without the bed losses or the base flow.
+
+**Calibration.** The fit scores the simulated flow, which carries them, so set
+them from evidence first (a gauge pair, a groundwater study, a spring's
+measured flow) and fit GR4J after: both they and X2 move water in or out, and
+fitting both against one record is poorly identified.
+
+**Scenarios.** `baseflowLossM3Day` and `baseflowGainM3Day` are `node.set`
+fields on a unit and baseline assumptions (`BASELINE_NODE_FIELDS`), the
+land's groundwater rather than a proposal; an applicant's view keeps them on
+the units it anonymises (docs/scenarios.md § Applications).
+
+**Checks.** `checkBalance` recomputes each day's loss from the setting,
+requires a series exactly when the setting has one and counts both in the
+unit's balance; `checkWorkings` reads the split on I'; the EWR attribution
+check reads I'. The audit workbook (docs/api.md § Audit workbook) refuses a
+unit with either, naming it. Hand examples and the invariants on random networks with them
+(`randomInput(seed, { baseflow: true })`): `network/baseflow.test.ts`; the
+Python cross-check models them (`verify/`, probe `baseflow-loss-and-gain`).
+
 ### 2.7 Farm balance (one sheet per element)
 
 Farms are processed in network order. Upstream elements come first, so a farm
@@ -3364,7 +3450,7 @@ storage to whole m³; the engine doesn't (R1).
 | J | Transfer in (+) / out (−) | from §2.6 |
 | K | Upstream inflow "above dam" (into the dam) | `H × pctUpstreamToDam` (engine ≥ 0.9.0; the workbook computed L this way, see quirk Q1) |
 | L | Upstream inflow "below dam" | `H − K` |
-| M | Farm runoff into dam | `I × pctRunoffToDam` |
+| M | Farm runoff into dam | `I × pctRunoffToDam`; with a base-flow loss or gain, I' = I − MIN(L, I) + B in place of I here, in N and in O's and the passes' H + I (engine 1.86.0, §2.6b) |
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam ("River to dam") | 0 for a dam on the river, `pctUpstreamToDam` = 100 % (engine ≥ 1.68.0; the stored capacity is kept but not used, and the run warns when one is entered); otherwise `MIN(divertCapacity, L + N)`, the capacity being the month's when River to dam is set by month (engine ≥ 1.32.0, §2.7h); then cut so S passes the priority users' requirement (§2.7c) and, with a hands-off flow, so `S ≥ MIN(L + N, hands-off keep)`, or on a farm without a dam today `S ≥ MIN(H + I, hands-off keep)`, cutting K and M too once O is 0 (§2.7h) |
 | A, Pd, E, Sp | Dam area, rain on the dam, evaporation, seepage | §2.7a (engine ≥ 0.16.0, N2); the workbook has none |
@@ -9141,8 +9227,10 @@ the run, volumes in m³, summed over every node per day in node-id order.
   users' take − return; dam evaporation; dam seepage **lost from the
   catchment** (engine ≥ 0.35.0, the share §2.7a's seepage destination sends
   out, `damSeepageLostM3`); stream depletion; bed losses in the reaches
-  (engine ≥ 1.75.0, §2.6b, `reachLossM3`, only on a run with them); outflow
-  at the outlet.
+  (engine ≥ 1.75.0, §2.6b, `reachLossM3`, only on a run with them); the
+  units' base-flow losses (engine 1.86.0, §2.6b, `baseflowLossM3`, only on a
+  run with one; their gains, `baseflowGainM3`, are an in term); outflow at
+  the outlet.
 - **Δ storage:** Σ farm dam storage at the end − at the start.
 - **Residual** = in − out − Δ storage: float noise. `scaleM3` is Σ of the
   terms' magnitudes; the invariant (`checkWaterAccount`) is |residual| ≤
