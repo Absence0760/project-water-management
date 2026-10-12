@@ -558,7 +558,8 @@ section it belongs to, with the example that taught it.
   corners read as clutter to the operator ("i just dont really like the
   bottom left box", 2026-10-03). Beside the map they are now tabs of the side
   column (Layers, Key after Details, Features, Checks), the map keeping only
-  its zoom buttons, the tool strip and small toggles that pick those tabs
+  its zoom buttons, the tool strip, small toggles that pick those tabs and
+  one search box along its top edge (below)
   (`aria-controls` the tab panel, `aria-expanded` while picked, pressed
   again or Escape gives the tab back). Where there is no column (a phone,
   an empty map, the Sub-catchments panel taking it over) they stay panels
@@ -569,6 +570,17 @@ section it belongs to, with the example that taught it.
   "one line": the Drawing bar's kind select, Snap and Follow, and its four
   buttons are ~840 px with no hint at all, so at 1440 (a 790 px bar) it is
   two lines and one line only from about 1100 px.
+- **A box over the map's top edge, never a row above it.** The Map's
+  search (issue #523 C5) first went in a row heading the card, which pushed
+  the map down the window (`map-layout.spec.ts` "thirty units" caught
+  it). It is one line over the map's top edge, right of the tools and clear
+  of the zoom buttons, the Google Maps place; what reads under it (its live
+  line, the credit) are chips that push the picked name and the tool strip
+  down through a CSS variable (`--map-inset-top`, set from the box's
+  measured height less the open list's), and the open list covers what's
+  under it. On a narrow map, check the right column too: Layers sits under
+  the zoom buttons, so it moves under the search's lines and the picked
+  name stops short of it (`MapTab.svelte`, a `map-body` container query).
 - **A popover's controls aren't in the DOM while it's closed.** The Map's
   Getting started pill kept its steps' buttons in a `hidden` box, and a check
   that the header's controls share one row (`locator('button, a.btn')`) read

@@ -3,7 +3,8 @@
 // map naming the tool that's on, the last action's toast over the page's foot
 // (it never pushes the map down), the setup steps in one Getting started pill,
 // Layers and Key as panels over the map's corners, and the side column one
-// panel at a time (Details · Features · Checks). Layout pins at 1440×960 and on
+// panel at a time (Details · Features · Checks), the search over the map's top
+// edge (issue #523 C5). Layout pins at 1440×960 and on
 // a phone, the old `checks=1` link, the keyboard, a viewer, axe with the panels
 // open, light and dark. No assertion reads the map's pixels.
 import type { Page } from '@playwright/test';
@@ -290,17 +291,37 @@ test('thirty units: the map keeps the window, the column’s one panel fits it; 
 	expect(m.mapTop).toBeLessThan(160);
 	expect(m.mapH).toBeGreaterThan(700);
 	expect(m.panelBottom).toBeLessThanOrEqual(m.sideBottom + 0.5);
+	// The search is over the map's top edge (issue #523 C5), not a row above it, and the picked name starts under it.
+	await expectSearchOverMap(page);
 
 	await resizeTo(page, { width: 390, height: 844 });
 	await expectNoSidewaysScroll(page);
 	const map = (await page.locator('.map-body').boundingBox())!;
-	for (const sel of ['[data-testid="map-tools"]', '[data-testid="map-layers-toggle"]', '[data-testid="map-key-toggle"]']) {
+	for (const sel of ['[data-testid="map-tools"]', '[data-testid="map-layers-toggle"]', '[data-testid="map-key-toggle"]', '[data-testid="map-search"]']) {
 		const r = (await page.locator(sel).boundingBox())!;
 		expect(r.x).toBeGreaterThanOrEqual(map.x);
 		expect(r.x + r.width).toBeLessThanOrEqual(map.x + map.width + 0.5);
 		expect(r.y + r.height).toBeLessThanOrEqual(map.y + map.height + 0.5);
 	}
+	await expectSearchOverMap(page);
 });
+
+/** The search box is inside the map, overlaps neither the tools, the zoom buttons nor Layers, and the picked name sits under it. */
+async function expectSearchOverMap(page: Page) {
+	const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+	const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+		a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 || a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5;
+	const map = await box('.map-body');
+	const search = await box('[data-testid="map-search"]');
+	expect(search.y).toBeGreaterThanOrEqual(map.y);
+	expect(search.y).toBeLessThan(map.y + 20);
+	for (const sel of ['[data-testid="map-tools"]', '[data-testid="map-layers-toggle"]', '.maplibregl-ctrl-zoom-in', '.maplibregl-ctrl-zoom-out']) {
+		expect(apart(search, await box(sel)), sel).toBe(true);
+	}
+	const picked = await box('[data-testid="map-picked-name"]');
+	expect(picked.y).toBeGreaterThanOrEqual(search.y + search.height);
+	expect(apart(picked, await box('[data-testid="map-layers-toggle"]'))).toBe(true);
+}
 
 for (const scheme of ['light', 'dark'] as const) {
 	for (const [label, size] of [

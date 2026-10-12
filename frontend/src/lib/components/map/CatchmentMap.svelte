@@ -912,12 +912,14 @@
 		outline-offset: 2px;
 		border-radius: 4px;
 	}
-	/* The picked feature's name (#326 E9), over the top-left corner (the zoom buttons are top right), right of any tools there. */
+	/* The picked feature's name (#326 E9), over the top-left corner (the zoom buttons are top right), right of any tools there and
+	   under a caller's box along the top edge (--map-inset-top: the Map tab's search; 0 elsewhere), clear of the zoom buttons or
+	   a caller's wider controls on the right (--map-inset-right: the Map tab's Layers on a phone). */
 	.picked-name {
 		position: absolute;
-		top: 0.6rem;
+		top: calc(0.6rem + var(--map-inset-top, 0px));
 		left: calc(0.6rem + var(--map-inset-left, 0px));
-		max-width: calc(100% - 5rem - var(--map-inset-left, 0px));
+		max-width: calc(100% - max(5rem, var(--map-inset-right, 0px)) - var(--map-inset-left, 0px));
 		margin: 0;
 		padding: 0.25rem 0.55rem;
 		display: flex;

@@ -1030,6 +1030,10 @@
 	/** The tool palette's size: the picked name and the Key panel keep clear of it. */
 	let toolsW = $state(0);
 	let toolsH = $state(0);
+	/** The search box's height over the map's top edge, and its open list's: the picked name and the tool strip start under the box
+	    and its lines; the list covers them while it's open, as a list under a box does. */
+	let searchH = $state(0);
+	let searchListH = $state(0);
 	const strip = $derived(
 		toolStrip({
 			measuring: measure.active,
@@ -1355,17 +1359,6 @@
 		{#if data}
 			<div class="map-layout" class:empty={!features.length} bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
-					{#if mapState === 'ready'}
-						<!-- Find the area before drawing or starting (issue #523 C5): our own reference tables only; the view moves, nothing is saved.
-						     Once the map is drawn (there is a view to move); without WebGL there is none, and the list carries on. -->
-						<MapSearch
-							{projectId}
-							onpick={(h) => {
-								const f = frameFor(h);
-								mapRef?.frameBox(f.bbox, f.maxZoom);
-							}}
-						/>
-					{/if}
 					{#if measure.active}
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
@@ -1375,7 +1368,7 @@
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
 						<!-- At least the tools' height and the key row under them, so the tool column stays inside the card while the map's chunk loads or when it fails (on a phone it ran over the Features list, issue #521). -->
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
@@ -1394,6 +1387,22 @@
 									onplace={startPlace}
 									ondelineate={() => (dividing ? doneDividing() : startDelineate())}
 									ontrace={startTrace}
+								/>
+							</div>
+						{/if}
+						{#if mapState === 'ready'}
+							<!-- Find the area before drawing or starting (issue #523 C5): over the map's top edge, between the tools and the zoom
+							     buttons, so it costs the map no height (until 2026-10-12 a row above the map). Our own reference tables only; the
+							     view moves, nothing is saved. Once the map is drawn (there is a view to move); without WebGL there is none. The
+							     picked name and the tool strip start under it (--map-inset-top). -->
+							<div class="search-at ov" bind:clientHeight={searchH}>
+								<MapSearch
+									{projectId}
+									bind:listHeight={searchListH}
+									onpick={(h) => {
+										const f = frameFor(h);
+										mapRef?.frameBox(f.bbox, f.maxZoom);
+									}}
 								/>
 							</div>
 						{/if}
@@ -1829,7 +1838,7 @@
 	.map-top {
 		position: absolute;
 		z-index: 3;
-		top: 0.5rem;
+		top: calc(0.5rem + var(--map-inset-top, 0px));
 		left: calc(var(--map-inset-left, 0px) + 0.6rem);
 		right: 3.4rem;
 		display: flex;
@@ -1852,6 +1861,19 @@
 		border-color: var(--accent);
 		color: var(--text);
 	}
+	/* The search box over the map's top edge: right of the tools, clear of MapLibre's zoom buttons (10 px in, 29 px wide), above
+	   the corners' boxes so its list of matches covers them while open. Clicks pass through beside its controls. */
+	.search-at {
+		position: absolute;
+		z-index: 5;
+		top: 0.6rem;
+		left: calc(var(--map-inset-left, 0px) + 0.6rem);
+		right: calc(10px + 29px + 0.6rem);
+		pointer-events: none;
+	}
+	.search-at > :global(*) {
+		pointer-events: auto;
+	}
 	.tools-at {
 		position: absolute;
 		z-index: 4;
@@ -1870,6 +1892,17 @@
 		gap: 6px;
 		max-height: calc(100% - 76px - 10px);
 		max-width: calc(100% - var(--map-inset-left, 0px) - 1.2rem);
+	}
+	/* A narrow map (a phone): the search's lines reach the Layers button's column, so Layers starts under them (its open list covers it). */
+	@container map-body (max-width: 46rem) {
+		.layers-at {
+			top: max(76px, calc(var(--map-inset-top, 0px) + 0.6rem));
+			max-height: calc(100% - max(76px, calc(var(--map-inset-top, 0px) + 0.6rem)) - 10px);
+		}
+		/* The picked name, under the search too, stops short of the Layers button beside it (CatchmentMap's --map-inset-right). */
+		.map-body > :global(:not(.ov)) {
+			--map-inset-right: 7.5rem;
+		}
 	}
 	/* The corners' boxes pass clicks through between their controls (a feature under the gap stays clickable). */
 	.layers-at,
@@ -2094,6 +2127,7 @@
 		color: var(--danger);
 	}
 	.map-body {
+		container: map-body / inline-size;
 		position: relative;
 		min-height: 0;
 	}

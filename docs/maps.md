@@ -1443,8 +1443,9 @@ these lines draw is one a click can go on, both at 1 km²).
 
 ## Search
 
-A search box heads the Map card, above the map, once the map is drawn
-(issue #523 C5, from the hydrologist's answer to #90 Q23, which reverses
+A search box sits over the map's top edge, between the tools and the zoom
+buttons, once the map is drawn, so it costs the map no height (a row above
+the map until 2026-10-12; docs/ui.md § Map has the layout) (issue #523 C5, from the hydrologist's answer to #90 Q23, which reverses
 #326 D-C3; `MapSearch.svelte`, `GET /projects/:id/map/search?q=`): for
 finding the area before drawing, delineating or **Start the model from the
 map**. **Find** (or Enter) asks our own backend, never a third-party
