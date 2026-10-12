@@ -293,7 +293,15 @@ beside the label, which a screen reader still hears ("River to dam (l/s)",
 the unit in a visually hidden span). Every field of that kind follows the
 pick, labels and words included ("Nov–Feb, up to 10 l/s"); the pump
 calculator's sum stays in what it computes, m³/day, with the picked unit in
-brackets ("2 × 9 m³/h × 24 h = 432 m³/day (5 l/s)."). It is
+brackets ("2 × 9 m³/h × 24 h = 432 m³/day (5 l/s)."). A scenario's
+**Add a change** form follows the same two picks for the same fields
+(River to dam and by month; each pump capacity, the borehole capacity and
+the pipe capacity), with the select beside the value's label
+(`scenarios/fields.ts` `flow`, issue #523 C2): the value is typed in the
+picked unit and the op stores m³/day, the change list and the **Now:** line
+read in the pick, and picking another unit with a value typed rewrites it
+in the new one (5 l/s becomes 432 m³/day, `rescaleText`), so a pick never
+changes what is added. It is
 display only: the model keeps each value in its stored unit (River to dam
 and pumps m³/day, a transfer m³/s), so a pick never changes a run, the
 History or another viewer's screen. The pick is kept in this browser
@@ -3059,9 +3067,15 @@ itself.
   dam, river when low / run of river, engine `SUPPLY_RULE_LABEL`) with a line
   on what the chosen rule does. Every rule but dam only shows the river pump:
   **Number of pumps** × **m³/h per pump**, which fills **River pump capacity**
-  (m³/day, pumps × m³/h × 24, with the sum shown under it), and the capacity
-  itself, which can be typed straight in (typing it clears the calculator).
-  Only the m³/day is stored, so a saved capacity reloads into the m³/day field
+  (pumps × m³/h × 24, with the sum shown under it), and the capacity
+  itself, which can be typed straight in (typing it clears the calculator),
+  in **m³/s**, **l/s** or **m³/day**, picked beside its label (the pumps'
+  pick, [§ Flow units](#flow-units); issue #523 C2, #90 *Run-of-river
+  units*): 5 l/s is stored as 432 m³/day. Every pump capacity takes the same
+  three units: the unit's river pump, the crops' own, an other water user's,
+  a demand object's river abstraction, and River to dam (its own pick,
+  m³/s until changed); the scenario form's **Add a change** offers them too.
+  Only the m³/day is stored, so a saved capacity reloads into the field
   with the calculator empty, whatever the pumps were; that way a capacity that
   isn't a whole pumps × rate product (an imported or licensed figure) shows as
   it is. Blank is no limit, and the note says the run warns. **Switch to river

@@ -15,7 +15,8 @@
 	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
 	import DemandScheduleFields from '$lib/components/network/DemandScheduleFields.svelte';
-	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
+	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, rescaleText, settingsValue, valueText, type ValueSpec } from './fields';
+	import FlowUnitSelect from '$lib/components/network/FlowUnitSelect.svelte';
 	import { fmtDay, tidyDay } from '$lib/format/number';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
 
@@ -237,7 +238,18 @@
 		</fieldset>
 	{:else}
 		<div class="field grow">
-			<label for="op-value">{label}{'unit' in s && s.unit ? ` (${s.unit})` : ''}</label>
+			{#if (s.t === 'number' || s.t === 'monthly') && s.flowUnit}
+				<!-- A flow rate (River to dam, a pump): its unit picked beside it, the Network form's pick (issue #523 C2); the typed text follows a new pick. -->
+				<span class="lbl"
+					><label for="op-value">{label}{' '}<span class="visually-hidden">({s.unit})</span></label><FlowUnitSelect
+						unit={s.flowUnit}
+						label="Unit of {label.toLowerCase()}"
+						onpick={(from) => (d.value = rescaleText(s, d.value, from))}
+					/></span
+				>
+			{:else}
+				<label for="op-value">{label}{'unit' in s && s.unit ? ` (${s.unit})` : ''}</label>
+			{/if}
 			{#if s.t === 'enum'}
 				<select id="op-value" bind:value={d.value}>
 					{#if s.nullable}<option value="">{s.nullLabel ?? 'none'}</option>{:else}<option value="" disabled>Pick one</option>{/if}
@@ -881,6 +893,12 @@
 	}
 	.field.grow {
 		flex: 1 1 16rem;
+	}
+	/* A flow rate's label with its unit select beside it. */
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 	.months {
 		display: flex;
