@@ -6,7 +6,8 @@
 	// background job. The result is one matrix: each measure at each EWR site
 	// and for the catchment, the baseline, each application alone, all
 	// together, and the interaction (together less the sum of the separate
-	// changes), with a CSV of the raw numbers. Editors only (the tab is the
+	// changes), with a CSV of the raw numbers and the applicants' "Ask the
+	// assessors why" questions with their answers (issue #523 G7). Editors only (the tab is the
 	// assessors'; the API refuses anyone else).
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
@@ -134,7 +135,7 @@
 	function downloadCsv() {
 		if (!current?.report) return;
 		const safe = current.name.replace(/[^\w -]+/g, '').trim() || 'assessment';
-		saveBlob(new Blob([assessmentCsv(current.report)], { type: 'text/csv;charset=utf-8' }), `${safe} - cumulative impact.csv`);
+		saveBlob(new Blob([assessmentCsv(current.report, current.questions)], { type: 'text/csv;charset=utf-8' }), `${safe} - cumulative impact.csv`);
 	}
 </script>
 
@@ -285,6 +286,24 @@
 							</tbody>
 						</table>
 					</div>
+					{#if current.questions?.length}
+						<!-- Issue #523 G7: the applicants' questions on these applications and the answers, the record for the s42 written reasons; in the CSV too. -->
+						<details class="questions" data-testid="assess-questions">
+							<summary>Applicants’ questions on these applications ({current.questions.length})</summary>
+							<p class="small muted">Kept with each application, and in the CSV, for the authority’s written reasons.</p>
+							<ul>
+								{#each current.questions as q (q.id)}
+									<li>
+										<p class="small muted">“{q.scenarioName}”, asked {fmtDate(q.askedAt, true)}</p>
+										<p><span class="who">In its own words:</span> {q.assessorText}</p>
+										<p>
+											{#if q.answer}<span class="who">Answered {fmtDate(q.answeredAt, true)}:</span> {q.answer}{:else}<span class="muted">Not answered yet.</span>{/if}
+										</p>
+									</li>
+								{/each}
+							</ul>
+						</details>
+					{/if}
 					<div class="actions"><button type="button" class="btn" onclick={downloadCsv}>Download CSV</button></div>
 				{/if}
 			</div>
@@ -352,6 +371,21 @@
 	}
 	.ok {
 		color: var(--success);
+	}
+	.questions ul {
+		list-style: none;
+		margin: 0.4rem 0 0;
+		padding: 0;
+		display: grid;
+		gap: 0.6rem;
+	}
+	.questions li {
+		border-top: 1px solid var(--border);
+		padding-top: 0.4rem;
+	}
+	.questions p {
+		margin: 0.15rem 0;
+		overflow-wrap: anywhere;
 	}
 	.bad,
 	.error {

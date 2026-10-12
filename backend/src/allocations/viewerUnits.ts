@@ -39,13 +39,32 @@ import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
 import { authorisedVerdicts, boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 
-/** A viewer on a project whose owners haven't let viewers read each registered volume. */
+/**
+ * Whether the caller is kept from each registered volume: a viewer on a
+ * project whose owners haven't let viewers read each one. Who reads them is
+ * decided in one place, the database's app_reads_allocation_units (231), the
+ * function allocation_select reads too: a member acting for the responsible
+ * authority always (#523 G6), an editor or owner, a viewer with the switch
+ * on. Farmers and applicants (contributors) aren't answered here: their own
+ * views decide what they read of their farms and applications.
+ */
 export async function allocationUnitsHidden(db: Db, projectId: string, role: Role): Promise<boolean> {
 	// A report render queued without registered volumes (218, #523 G1): every project, whatever the role.
 	if (requestAuth.getStore()?.redactAllocations) return true;
-	if (role !== 'viewer') return false;
-	const { rows } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [projectId]);
-	return !rows[0]?.on;
+	if (role === 'farmer' || role === 'contributor') return false;
+	return !(await readsAllocationUnits(db, projectId));
+}
+
+/** The current user reads each of the project's allocation rows (app_reads_allocation_units, 231; #523 G6). */
+export async function readsAllocationUnits(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ on: boolean }>('SELECT app_reads_allocation_units($1) AS "on"', [projectId]);
+	return rows[0]?.on === true;
+}
+
+/** The current user reads the names of the project's registered users (app_reads_allocation_holders, 231; #523 G6). */
+export async function readsAllocationHolders(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ on: boolean }>('SELECT app_reads_allocation_holders($1) AS "on"', [projectId]);
+	return rows[0]?.on === true;
 }
 
 /** One row behind a viewer's totals (app_allocation_volumes): no name, number or property. */

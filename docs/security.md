@@ -1182,7 +1182,9 @@ result without signing in, until it expires or its owner revokes it.
   (POPIA s1, de-identify). An applicant reads the same split
   (`run_series_select_contributor`, `app_contributor_published_runs`,
   `app_contributor_use_runs`; `scenarios/applicantResults.ts`
-  `naturalShown` / `impactedShown`). Five is a judgement in line with
+  `impactedShown`), of the published base always and of an application run
+  only when every op was a proposal (`appShown`, 118): the results view and
+  RLS draw the same line (issue #523 G9 (d)). Five is a judgement in line with
   statistical-disclosure practice, not a number in any statute.
   Farm keys are refused in the API and again in the function. The literal 5
   in the SQL is pinned to the engine's `FARMER_K` by `share.db.test.ts`.
@@ -2339,8 +2341,10 @@ In short:
     leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
     EWR sites, the catchment under the split k rule (the river always, the
     use at 5 or more holders), their own units, other units
-    downstream only as "Farm 3" and a whole percentage, and nothing but the
-    EWR when an op was a baseline assumption). The DB test
+    downstream only as "Farm 3" and whole percentage points of share
+    supplied (the pack's measure), and of a run with a baseline assumption
+    nothing of the application's side but the EWR, beside the published
+    base's side as RLS serves it, issue #523 G9 (d)). The DB test
     (`scenarios/results.db.test.ts`) scans the answer for every other farm's
     name and the hidden crop.
   - **Drafts are private, even from the assessors.** Who reads an
@@ -2943,6 +2947,7 @@ database:
 
   | Reader | Names | Per-unit volumes |
   | --- | --- | --- |
+  | Members acting for the responsible authority (confirmed delegates, 229) | **always** | **always**, with how each is held (#523 G6: one rule, `app_user_reads_allocation_units` / `_holders`, 231, its first line the authority's) |
   | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
   | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise only today's total per water source, at ≥ 5 registered users in force and none (or two) dominating it (provisional, #92); a run's years and § 5's totals of other units as status and modelled use, no registered m³ (#523 G–O) |
@@ -3567,6 +3572,7 @@ PDF someone else asked for kept the person as a recipient
 | Registered users' names in issued evidence: none as a field. A run's input and the evidence report carry no holder name (§ 5 names units; Appendix A.1's model rows and A.2's diff have no holder field), so a frozen pack manifest has none either. A name can reach one only as text someone typed (a unit named after its owner, notes, the applicant statement) | `evidence_pack.manifest` (frozen, hashed) | With the pack: an issued pack is never edited (its hash is verified publicly); whether issued evidence is kept against an erasure request is a legal-hold question for counsel (#92) | Not linked to an account | Kept while the project is a licence record |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | What followed a decision (an appeal lodged, upheld, set aside or varied): the member who recorded it (228) | `decision_event.recorded_by` | Kept with its scenario (the record of the appeal) | Who cleared; the event stays | Deleted |
+| An applicant's "Ask the assessors why" question and the assessors' answer (164): the application's name, the line as they read it, the changes it names, the rule in its real words; no account (who asked and answered is the audit trail's) | `application_question` | With the project. Kept when its draft is deleted, `scenario_id` cleared (234, issue #523 G7): the application's record for the authority's s42 written reasons, read by the editors only | Unaffected (it names no account; a deleted draft's questions stay, detached, as above) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
 | Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |

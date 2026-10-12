@@ -3,7 +3,8 @@
 // docs/api.md § Licence record, docs/evidence-pack.md § Retention). Provisional
 // position (pre-counsel research, 2026-10-01): a sign-off's name and an issued
 // pack's makers are kept until three years after the licence expires, or three
-// years after the application is refused or withdrawn; until the outcome is
+// years after any other outcome (refused, rejected, not considered,
+// withdrawn); until the outcome is
 // recorded, the owners confirm every five years that the record is still
 // needed. Nothing is deleted automatically (licence/record.ts tells the owners
 // and the operator).
@@ -21,8 +22,19 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
 
-export const LICENCE_OUTCOMES = ['granted', 'refused', 'withdrawn'] as const;
+/**
+ * The outcome in the authority's words (D14, as an application's decision
+ * records it, 163), plus the one it doesn't decide: the applicant withdrew
+ * the application (233_licence_record_outcome_words, issue #523 G9 (b)).
+ */
+export const LICENCE_OUTCOMES = ['licence_issued', 'licence_refused', 'application_rejected', 'not_considered', 'application_withdrawn'] as const;
 export type LicenceOutcome = (typeof LICENCE_OUTCOMES)[number];
+
+/**
+ * 161's words, still accepted from a web release older than 233 and stored as
+ * the new ones (expand/contract; dropping them is in docs/followups.md).
+ */
+export const LEGACY_OUTCOMES = { granted: 'licence_issued', refused: 'licence_refused', withdrawn: 'application_withdrawn' } as const;
 
 /** The licence record as the API answers it (dates as YYYY-MM-DD). */
 export interface LicenceRecord {
@@ -30,7 +42,7 @@ export interface LicenceRecord {
 	outcomeOn: string | null;
 	expiresOn: string | null;
 	reason: string;
-	/** When the record may be deleted: expiry (granted) or decision + 3 years; null without an outcome. */
+	/** When the record may be deleted: expiry (licence_issued) or the outcome's date + 3 years; null without an outcome. */
 	closesOn: string | null;
 	/** While no outcome is recorded: when the owners must next confirm the record is still needed; null before the first issued pack or nomination. */
 	reviewDueOn: string | null;
@@ -47,12 +59,17 @@ const reason = z
 	.max(2000)
 	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
 
+const issued = z.enum(['licence_issued', 'granted']).transform((): 'licence_issued' => 'licence_issued');
+const otherOutcome = z
+	.enum(['licence_refused', 'application_rejected', 'not_considered', 'application_withdrawn', 'refused', 'withdrawn'])
+	.transform((o) => (o === 'refused' || o === 'withdrawn' ? LEGACY_OUTCOMES[o] : o));
+
 export const OutcomeBody = z.union([
 	z
-		.object({ outcome: z.literal('granted'), outcomeOn: isoDate, expiresOn: isoDate, reason })
+		.object({ outcome: issued, outcomeOn: isoDate, expiresOn: isoDate, reason })
 		.strict()
-		.refine((b) => b.expiresOn >= b.outcomeOn, { message: 'the licence expires before it was granted', path: ['expiresOn'] }),
-	z.object({ outcome: z.enum(['refused', 'withdrawn']), outcomeOn: isoDate, reason }).strict(),
+		.refine((b) => b.expiresOn >= b.outcomeOn, { message: 'the licence expires before it was issued', path: ['expiresOn'] }),
+	z.object({ outcome: otherOutcome, outcomeOn: isoDate, reason }).strict(),
 	// Clear a mistaken record: the reviews start again.
 	z.object({ outcome: z.null(), reason }).strict()
 ]);
@@ -84,7 +101,7 @@ export const licenceRecordRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'owner');
 			const before = await loadLicenceRecord(db, id);
 			const on = body.outcome === null ? null : body.outcomeOn;
-			const expires = body.outcome === 'granted' ? body.expiresOn : null;
+			const expires = body.outcome === 'licence_issued' ? body.expiresOn : null;
 			await db.query('SELECT app_set_licence_outcome($1, $2, $3::date, $4::date, $5)', [id, body.outcome, on, expires, body.reason]);
 			const after = await loadLicenceRecord(db, id);
 			await recordAudit(db, id, 'licence.outcome', {

@@ -5086,8 +5086,23 @@ Applicant view and the Applications tab. Left:
       165_applicant_copy); D3 (names to editors, owners and the linked
       farmer; volumes outside the organisation as totals, 162; [allocations.md § Who sees what](./allocations.md#who-sees-what));
       and the outcome words (D14: `licence_issued`, `licence_refused`,
-      `application_rejected`, `not_considered`, 163), whose labels may follow
-      the pilot authority's house style. Trigger: the client's answers.
+      `application_rejected`, `not_considered`, 163; the project's licence
+      record uses them too since 233, plus `application_withdrawn`), whose
+      labels may follow the pilot authority's house style. Trigger: the
+      client's answers.
+- [ ] **Drop 161's licence-record words (the contract step of 233).**
+      233_licence_record_outcome_words (issue #523 G9 (b)) moved
+      `project.licence_outcome` to the authority's words, but
+      `app_set_licence_outcome` and `PUT /projects/:id/licence-record` still
+      take `granted`, `refused` and `withdrawn` (`LEGACY_OUTCOMES`,
+      `backend/src/licence/routes.ts`) and store the new ones, so a backend or
+      web release from before 233 keeps working while the other catches up.
+      Fix: a migration that replaces `app_set_licence_outcome` without the
+      mapping, and the route's enums without the legacy words (the
+      licence-record DB test's "161's words" case turns into a `400`).
+      Older `licence.outcome` audit events keep their words; the timeline
+      reads them. Trigger: the first `backend@` and `web@` releases that both
+      contain 233 are in production.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant

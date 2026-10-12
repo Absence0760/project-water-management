@@ -34,6 +34,15 @@ const DECISION_WORDS: Record<string, string> = {
 	not_considered: 'not considered (use already authorised)'
 };
 
+/** A licence record's outcome (161; the authority's words since 233, with the applicant's withdrawal; 161's own words in older events). */
+const LICENCE_OUTCOME_WORDS: Record<string, string> = {
+	...DECISION_WORDS,
+	application_withdrawn: 'application withdrawn',
+	granted: 'granted',
+	refused: 'refused',
+	withdrawn: 'withdrawn'
+};
+
 const SOURCE_TITLES: Record<HistoryRevision['source'], string> = {
 	baseline: 'Starting point',
 	model_put: 'Model changed',
@@ -445,12 +454,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const km2 = num(s.areaKm2);
 			return `Saved ${plural(num(s.pieces) ?? 0, 'sub-catchment')} from clicks on the rivers${km2 !== null ? `, ${km2} km² in all` : ''}${str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
 		}
-		// The licence record (161): the outcome, the date the record may be deleted, and why.
+		// The licence record (161): the outcome, the date the record may be deleted, and why. Events before 233 say granted, refused or withdrawn.
 		case 'licence.outcome': {
 			const o = str(s.outcome);
 			const closes = str(s.closesOn) ? `; the record may be deleted from ${str(s.closesOn)}` : '';
 			if (!o) return `Cleared the licence outcome${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
-			const what = o === 'granted' ? `granted on ${str(s.outcomeOn)}, expiring ${str(s.expiresOn)}` : `${o} on ${str(s.outcomeOn)}`;
+			const words = LICENCE_OUTCOME_WORDS[o] ?? o;
+			const what = o === 'licence_issued' || o === 'granted' ? `${words} on ${str(s.outcomeOn)}, expiring ${str(s.expiresOn)}` : `${words} on ${str(s.outcomeOn)}`;
 			return `Recorded the licence outcome: ${what}${closes}`;
 		}
 		case 'licence.confirmed':

@@ -2,12 +2,14 @@
 	// An applicant's results (WP-3.3, docs/ui.md § Applications): the newest
 	// run of their application against the published baseline, as the server
 	// projects it for them (GET …/scenarios/:sid/results, D2's default,
-	// pending the client). The EWR at every site; the catchment's flows and
-	// the outlet's flow chart at five or more farm holders; their own units in
-	// full; every other unit downstream of theirs only as "Farm 3" and a whole
-	// percentage; and what ran on their units. A run with a baseline
-	// assumption shows the EWR only (the server leaves the rest out). The
-	// workspace is English (the Applicant view has no t()).
+	// pending the client). The EWR at every site; the catchment's natural flow
+	// and EWR requirement, and its outlet flow at five or more farm holders;
+	// their own units in full; every other unit downstream of theirs only as
+	// "Farm 3" and its change in share of demand met in whole percentage
+	// points (the pack's measure); and what ran on their units. Of a run with
+	// a baseline assumption the application's side shows the EWR only, beside
+	// the published baseline (the server leaves the rest out). The workspace
+	// is English (the Applicant view has no t()).
 	import { untrack } from 'svelte';
 	import { api, type ApplicantResults, type ApplicantResultsRun, type ApplicantEwrFigures, type ApplicantUnitFigures } from '$lib/api';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -56,9 +58,10 @@
 	const rate = (f: ApplicantEwrFigures | null) => (f?.rate == null ? '–' : fmtPct(f.rate, 0));
 	const m3 = (v: number | null | undefined) => (v == null ? '–' : fmtNum(v));
 	const share = (f: ApplicantUnitFigures | null) => (f ? fmtPct(f.fractionSupplied, 0) : '–');
-	/** "−4 %", "+2 %", "0 %". */
-	const signedPct = (p: number) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p)} %`;
-	const showDeficit = $derived(!!results?.ewrSites.some((s) => s.base?.deficitM3 != null || s.application?.deficitM3 != null));
+	/** Whole percentage points: "−4 pp", "+2 pp", "0 pp". */
+	const signedPts = (p: number) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p)} pp`;
+	// The column shows the application's deficit only.
+	const showDeficit = $derived(!!results?.ewrSites.some((s) => s.application?.deficitM3 != null));
 
 	/** What ran on each of their units: its crops, boreholes and demand objects, by the names (and ids) they gave. */
 	function ranOn(nodeId: string): string {
@@ -82,17 +85,20 @@
 		const s = results?.catchment.series;
 		if (!s || (!s.outflow && !s.ewr)) return null;
 		// The EWR requirement is the river's (shown at any holder count); the outflow only past the k rule (164).
+		// The application's lines only when the server sends them (not for a run with a baseline assumption).
 		return [
 			...(s.outflow
 				? [
 						{ ...s.outflow.base, label: 'Outflow, baseline', color: '--series-1' },
-						{ ...s.outflow.application, label: 'Outflow, your application', color: '--series-2' }
+						...(s.outflow.application ? [{ ...s.outflow.application, label: 'Outflow, your application', color: '--series-2' }] : [])
 					]
 				: []),
 			...(s.ewr
 				? [
 						{ ...s.ewr.base, label: 'EWR, baseline', color: '--series-3', style: 'step' as const },
-						{ ...s.ewr.application, label: 'EWR, your application', color: '--series-4', style: 'dashed' as const, hidden: !!s.outflow }
+						...(s.ewr.application
+							? [{ ...s.ewr.application, label: 'EWR, your application', color: '--series-4', style: 'dashed' as const, hidden: !!s.outflow }]
+							: [])
 					]
 				: [])
 		];
@@ -120,7 +126,7 @@
 					<div class="alert alert-info" role="status" data-testid="applicant-results-withheld">
 						A change here is a baseline assumption (on a hydrological unit that isn't yours, or on the catchment). Its effect on your
 						units, the catchment and other units isn't shown to you, because it would show other units' own figures; the assessors
-						see it in full. The Ecological Reserve at each site is below.
+						see it in full. The Ecological Reserve at each site is below, and the catchment as the published baseline has it.
 					</div>
 				{/if}
 
@@ -167,6 +173,7 @@
 					<h3 id="ar-catchment-h">The catchment</h3>
 					{#if results.catchment.figures}
 						{@const f = results.catchment.figures}
+						{@const yours = (v: number | null | undefined) => (f.application ? fmtNum(v) : 'Not shown')}
 						<div class="table-wrap">
 							<table class="data">
 								<caption class="visually-hidden">The catchment's flows, baseline and your application</caption>
@@ -181,19 +188,24 @@
 									<tr>
 										<th scope="row">Natural flow</th>
 										<td class="num">{fmtNum(f.base.meanNaturalFlowM3Day)}</td>
-										<td class="num">{fmtNum(f.application.meanNaturalFlowM3Day)}</td>
+										<td class="num">{yours(f.application?.meanNaturalFlowM3Day)}</td>
 									</tr>
-									{#if f.base.meanSimulatedOutflowM3Day !== null && f.application.meanSimulatedOutflowM3Day !== null}
+									{#if f.base.meanSimulatedOutflowM3Day !== null}
 										<tr>
 											<th scope="row">Flow at the outlet</th>
 											<td class="num">{fmtNum(f.base.meanSimulatedOutflowM3Day)}</td>
-											<td class="num">{fmtNum(f.application.meanSimulatedOutflowM3Day)}</td>
+											<td class="num">{yours(f.application?.meanSimulatedOutflowM3Day)}</td>
 										</tr>
 									{/if}
 								</tbody>
 							</table>
 						</div>
-						{#if results.catchment.withheld === 'few_farm_holders'}
+						{#if !f.application}
+							<p class="muted small" data-testid="applicant-catchment-assumption">
+								Your application's column is not shown for a run with a baseline assumption (above). The baseline's is the published run's.
+							</p>
+						{/if}
+						{#if f.base.meanSimulatedOutflowM3Day === null}
 							<p class="muted small" data-testid="applicant-catchment-withheld">
 								The natural flow and the EWR are shown. The flow at the outlet is shown once the catchment has five or more farm holders
 								and no one or two of them take most of the water, since natural flow less the outflow is what the farms use, and that
@@ -204,7 +216,7 @@
 							<Lazy load={loadChart}>
 								{#snippet children(LineChart)}
 									<LineChart
-										title={results?.catchment.series?.outflow ? 'Flow at the outlet and the EWR · baseline vs your application' : 'The EWR · baseline vs your application'}
+										title={`${results?.catchment.series?.outflow ? 'Flow at the outlet and the EWR' : 'The EWR'} · ${f.application ? 'baseline vs your application' : 'baseline'}`}
 										unit="m³/day"
 										series={chartSeries}
 										logToggle
@@ -213,8 +225,6 @@
 								{/snippet}
 							</Lazy>
 						{/if}
-					{:else}
-						<p class="muted small" data-testid="applicant-catchment-withheld">Not shown for a run with a baseline assumption (above).</p>
 					{/if}
 					{#if gaugeSeries}
 						<!-- A published DWS gauge record (#523 G8): DWS publishes it, so it shows however few farms the catchment has. -->
@@ -275,11 +285,14 @@
 							<ul class="down" data-testid="applicant-downstream">
 								{#each results.downstream as d (d.nodeId)}
 									<li>
-										<strong>{d.name}</strong> downstream: {d.supplyChangePct === null ? 'no supply in the baseline' : `supply ${signedPct(d.supplyChangePct)}`}
+										<strong>{d.name}</strong> downstream: {d.supplyChangePts === null ? 'no demand to measure' : `share of demand met ${signedPts(d.supplyChangePts)}`}
 									</li>
 								{/each}
 							</ul>
-							<p class="muted small">Other units are shown only by an anonymous name, and their change in mean supply only as a whole percentage.</p>
+							<p class="muted small">
+								Other units are shown only by an anonymous name, and their change in the share of their demand met only in whole
+								percentage points (pp), as in your evidence pack.
+							</p>
 						{:else}
 							<p class="muted small" data-testid="applicant-downstream-empty">No other farm or water user lies downstream of your units.</p>
 						{/if}

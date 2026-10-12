@@ -10,6 +10,7 @@ import { FARMER_K, MASKED_RULE } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { IN_APP_CHECK } from './questions.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -88,6 +89,20 @@ describe('a rule broken by hidden farms', () => {
 		const submit = await applicant.call('POST', `${P()}/scenarios/${sid}/submit`);
 		expect(submit.status).toBe(422);
 		expect(submit.body.details).toEqual({ problems: res.body.check.problems, maskedRules: res.body.check.maskedRules });
+		// Issue #523 G7: the refusal says it is the app's check, not a refusal under s42, and that DWS is still open.
+		expect(submit.body.error).toContain(IN_APP_CHECK);
+		expect(IN_APP_CHECK).toMatch(/not a refusal of a water use licence under section 42 of the National Water Act/);
+		expect(IN_APP_CHECK).toMatch(/e-WULAAS/);
+	});
+
+	it('says nothing of s42 when no hidden rule broke a line (control: the masked refusal above does)', async () => {
+		const res = await applicant.call('POST', `${P()}/scenarios`, { name: 'Rooikloof plain', baseRunId: published, ops: [missing] });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(res.body.check.maskedRules).toEqual([]);
+		const submit = await applicant.call('POST', `${P()}/scenarios/${res.body.scenario.id}/submit`);
+		expect(submit.status).toBe(422);
+		expect(submit.body.error).toBe("a scenario whose changes don't all apply to its base can't be submitted");
+		expect((await applicant.call('DELETE', `${P()}/scenarios/${res.body.scenario.id}`)).status).toBe(204);
 	});
 
 	it(`keeps the generic words below ${FARMER_K} holders: the aggregate would be someone's own figure (control: ${FARMER_K} above)`, async () => {
@@ -223,9 +238,35 @@ describe('Ask the assessors why', () => {
 		expect(JSON.stringify(rows)).not.toMatch(/90(\.0)? %|Rooikloof asks|between them/);
 	});
 
-	it('goes with the application', async () => {
+	it('outlives its deleted draft, answer and all, for the assessors only (234, issue #523 G7)', async () => {
+		// The second question, from the guard test above, is unanswered: it is answered after the draft goes.
+		const before = await rowsAs<{ id: string; answer: string | null }>(assessor, 'SELECT id, answer FROM application_question WHERE scenario_id = $1 ORDER BY asked_at', [sid]);
+		expect(before).toHaveLength(2);
+		const open = before.find((q) => q.answer === null)!.id;
 		expect((await applicant.call('DELETE', `${P()}/scenarios/${sid}`)).status).toBe(204);
 		expect(await rowsAs(assessor, 'SELECT id FROM application_question WHERE scenario_id = $1', [sid])).toEqual([]);
+		// Kept, detached: the assessors still read the question, its real words and the answer.
+		const list = await assessor.call('GET', `${P()}/application-questions`);
+		const q = list.body.questions.find((x: { id: string }) => x.id === questionId);
+		expect(q).toMatchObject({
+			scenarioId: null,
+			scenarioName: 'Rooikloof asks',
+			problem: line,
+			ops: [tooMuch],
+			answer: 'The other units hold 90 % between them; reduce your share to 10 %.',
+			answeredAt: expect.any(String)
+		});
+		expect(q.assessorText).toMatch(/^op 1 \(node\.set\): /);
+		// An open one can still be answered, once, for the record.
+		expect((await assessor.call('POST', `${P()}/application-questions/${open}/answer`, { answer: 'Recorded after the draft went.' })).status).toBe(200);
+		expect((await assessor.call('POST', `${P()}/application-questions/${open}/answer`, { answer: 'again' })).status).toBe(409);
+		// Nothing else of a detached row changes.
+		await expect(asOwner(`UPDATE application_question SET scenario_name = 'x' WHERE id = $1`, [questionId])).rejects.toThrow(/answered once/);
+		// The party reads none of it any more (the application is gone); the table stays the editors'.
+		expect((await applicant.call('GET', `${P()}/scenarios/${sid}/questions`)).status).toBe(404);
+		expect(await rowsAs(applicant, 'SELECT * FROM application_question')).toEqual([]);
+		expect(await rowsAs(viewer, 'SELECT * FROM application_question')).toEqual([]);
+		expect((await viewer.call('GET', `${P()}/application-questions`)).status).toBe(403);
 	});
 });
 

@@ -1,13 +1,15 @@
 // The applicant's view of an application run's results (applicantResults.ts,
 // WP-3.3, D2's recommended default pending the client): EWR sites, the
 // catchment under the k rule, their own units, other units downstream only
-// as an anonymous name and a rounded percentage, what ran on their units by
-// the ids they gave; and nothing but EWR months when an op was a baseline
-// assumption. Each "hidden" has its positive control.
+// as an anonymous name and whole percentage points of share supplied (the
+// pack's measure), what ran on their units by the ids they gave; and of a
+// run with a baseline assumption, nothing of the application's side but EWR
+// months, with the published base's side kept. Each "hidden" has its
+// positive control.
 import { applyScenario, type ModelInput, type NetworkNode, type RunSummary, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { applicationMask } from './applicant.js';
-import { downstreamOf, projectResultsForApplicant, type ApplicantResultsInput } from './applicantResults.js';
+import { downstreamOf, projectResultsForApplicant, wholePoints, type ApplicantResultsInput } from './applicantResults.js';
 
 const monthly = (v: number) => new Array(12).fill(v);
 const node = (id: string, name: string, kind: NetworkNode['kind'], downstreamNodeId: string | null, sortOrder: number, extra: Partial<NetworkNode> = {}) =>
@@ -127,7 +129,7 @@ const damRaise: ScenarioOp = { op: 'node.set', nodeId: MINE, field: 'damCapacity
 const raised = summary({ mine: 95, below: 47.9, side: 70, town: 500, outflow: 5_800, met: 18 });
 
 describe('projectResultsForApplicant', () => {
-	it('shows their own unit, the EWR sites and the catchment, and the units below theirs only by anonymous name and a rounded %', () => {
+	it('shows their own unit, the EWR sites and the catchment, and the units below theirs only by anonymous name and whole percentage points', () => {
 		const out = projectResultsForApplicant(scenario([damRaise], raised));
 		expect(out.units).toEqual([
 			{
@@ -139,8 +141,9 @@ describe('projectResultsForApplicant', () => {
 				application: expect.objectContaining({ avgSuppliedM3Day: 95, fractionSupplied: 0.95 })
 			}
 		]);
-		// Waterval is below Rooikloof: −4.2 % → −4. Bergvliet (a side branch) and Town are not below it.
-		expect(out.downstream).toEqual([{ nodeId: BELOW, name: 'Farm 1', kind: 'farm', supplyChangePct: -4 }]);
+		// Waterval is below Rooikloof: share supplied 50 % → 47.9 %, −2.1 pp → −2 (a relative −4.2 % would read −4: issue #523 G9 (a)).
+		// Bergvliet (a side branch) and Town are not below it.
+		expect(out.downstream).toEqual([{ nodeId: BELOW, name: 'Farm 1', kind: 'farm', supplyChangePts: -2 }]);
 		expect(out.ewrSites).toEqual([
 			{ nodeId: null, name: null, isOutlet: true, base: { months: 24, met: 20, rate: 20 / 24, longestNotMetRun: 4, deficitM3: 1_234 }, application: expect.objectContaining({ met: 18, deficitM3: 1_234 }) },
 			{ nodeId: G, name: 'Gauge', isOutlet: false, base: expect.objectContaining({ met: 20, deficitM3: 567 }), application: expect.objectContaining({ met: 18 }) }
@@ -166,30 +169,57 @@ describe('projectResultsForApplicant', () => {
 			['Rooikloof', false, expect.anything(), 95],
 			['New weir', true, null, 30]
 		]);
-		// Bergvliet (Farm 2) is below the new one; Waterval (Farm 1) below theirs. 70 → 70: 0 %.
-		expect(out.downstream.map((d) => [d.name, d.supplyChangePct])).toEqual([
-			['Farm 1', -4],
+		// Bergvliet (Farm 2) is below the new one; Waterval (Farm 1) below theirs. 70 → 70: 0 pp.
+		expect(out.downstream.map((d) => [d.name, d.supplyChangePts])).toEqual([
+			['Farm 1', -2],
 			['Farm 2', 0]
 		]);
 		expect(out.model.nodes.map((n) => n.name)).toEqual(['Rooikloof', 'New weir']);
 	});
 
-	it('gives no percentage for a unit that had no supply in the base', () => {
-		const dry = { ...baseSummary, farms: baseSummary.farms.map((f) => (f.nodeId === BELOW ? { ...f, avgSuppliedM3Day: 0 } : f)) } as RunSummary;
+	it('measures a change from no supply in the base in points too, as the pack does (a relative % has none)', () => {
+		const dry = { ...baseSummary, farms: baseSummary.farms.map((f) => (f.nodeId === BELOW ? { ...f, avgSuppliedM3Day: 0, fractionSupplied: 0 } : f)) } as RunSummary;
 		const out = projectResultsForApplicant({ ...scenario([damRaise], raised), baseSummary: dry });
-		expect(out.downstream).toEqual([{ nodeId: BELOW, name: 'Farm 1', kind: 'farm', supplyChangePct: null }]);
+		expect(out.downstream).toEqual([{ nodeId: BELOW, name: 'Farm 1', kind: 'farm', supplyChangePts: 48 }]);
 	});
 
-	it('shows only the EWR months and days when an op was a baseline assumption (control: all proposals, above)', () => {
-		const out = projectResultsForApplicant(scenario([{ op: 'node.set', nodeId: BELOW, field: 'damCapacityM3', value: 0 }], raised, { allProposals: false }));
+	it('gives no points for a unit without a share in either run (no demand: the pack leaves it out too)', () => {
+		const none = { ...baseSummary, farms: baseSummary.farms.map((f) => (f.nodeId === BELOW ? { ...f, fractionSupplied: Number.NaN } : f)) } as RunSummary;
+		const out = projectResultsForApplicant({ ...scenario([damRaise], raised), baseSummary: none });
+		expect(out.downstream).toEqual([{ nodeId: BELOW, name: 'Farm 1', kind: 'farm', supplyChangePts: null }]);
+	});
+
+	it('rounds the points as the pack (Postgres round(numeric)): half away from zero, never −0', () => {
+		expect([2.5, -2.5, 2.49, -2.49, -0.4, 0.4, 0].map((x) => wholePoints(x))).toEqual([3, -3, 2, -2, -0, 0, 0]);
+		const half = { ...raised, farms: raised.farms.map((f) => (f.nodeId === BELOW ? { ...f, fractionSupplied: 0.5 - 0.025 } : f)) } as RunSummary;
+		expect(projectResultsForApplicant(scenario([damRaise], half)).downstream[0]!.supplyChangePts).toBe(-3);
+		const tiny = { ...raised, farms: raised.farms.map((f) => (f.nodeId === BELOW ? { ...f, fractionSupplied: 0.499 } : f)) } as RunSummary;
+		expect(Object.is(projectResultsForApplicant(scenario([damRaise], tiny)).downstream[0]!.supplyChangePts, 0)).toBe(true);
+	});
+
+	it('shows of the application only the EWR months and days when an op was a baseline assumption, and keeps the published base (issue #523 G9 (d); control: all proposals, above)', () => {
+		const series = { outflow: { base: { startDate: '2020-01-01', values: [1] }, application: { startDate: '2020-01-01', values: [2] } }, ewr: { base: { startDate: '2020-01-01', values: [3] }, application: { startDate: '2020-01-01', values: [4] } } };
+		const out = projectResultsForApplicant(scenario([{ op: 'node.set', nodeId: BELOW, field: 'damCapacityM3', value: 0 }], raised, { allProposals: false, series }));
 		expect(out.units).toEqual([]);
 		expect(out.downstream).toEqual([]);
 		expect(out.unitsWithheld).toBe('baseline_assumptions');
-		expect(out.catchment).toMatchObject({ figures: null, series: null, withheld: 'baseline_assumptions', ewrDaysNotMet: { base: 4, application: 6 } });
+		expect(out.catchment).toMatchObject({ withheld: 'baseline_assumptions', ewrDaysNotMet: { base: 4, application: 6 } });
+		// The base is the published baseline, which RLS serves a contributor (164): its river, and its use past k.
+		expect(out.catchment.figures).toEqual({
+			base: { meanNaturalFlowM3Day: 9_000, meanSimulatedOutflowM3Day: 6_000, ewrDaysNotMet: 4, ewrFractionDaysNotMet: 4 / 24 },
+			application: null
+		});
+		expect(out.catchment.series).toEqual({ ewr: { base: series.ewr.base, application: null }, outflow: { base: series.outflow.base, application: null } });
+		expect(JSON.stringify(out.catchment)).not.toContain('5800');
 		expect(out.ewrSites.map((s) => [s.base?.met, s.application?.met, s.base?.deficitM3, s.application?.deficitM3])).toEqual([
-			[20, 18, null, null],
-			[20, 18, null, null]
+			[20, 18, 1_234, null],
+			[20, 18, 567, null]
 		]);
+		// Below k as well, the base's use goes too; its river stays.
+		const few = projectResultsForApplicant(scenario([{ op: 'node.set', nodeId: BELOW, field: 'damCapacityM3', value: 0 }], raised, { allProposals: false, farmHoldersOk: false, series }));
+		expect(few.catchment.figures).toEqual({ base: expect.objectContaining({ meanNaturalFlowM3Day: 9_000, meanSimulatedOutflowM3Day: null }), application: null });
+		expect(few.catchment.series).toEqual({ ewr: { base: series.ewr.base, application: null }, outflow: null });
+		expect(few.ewrSites.every((s) => s.base?.deficitM3 === null && s.application?.deficitM3 === null)).toBe(true);
 	});
 
 	it('leaves the use (outflow, its series, EWR volumes) out below 5 farm holders, and keeps the river and their own units (164)', () => {
@@ -215,7 +245,8 @@ describe('projectResultsForApplicant', () => {
 		expect(few.catchment.withheld).toBe('few_farm_holders');
 		expect(few.gaugeRecords).toEqual(gaugeRecords);
 		const assumed = projectResultsForApplicant(scenario([{ op: 'node.set', nodeId: BELOW, field: 'damCapacityM3', value: 0 }], raised, { allProposals: false, gaugeRecords }));
-		expect(assumed.catchment.figures).toBeNull();
+		// G9 (d): the baseline's side only for a run with a baseline assumption; the gauge record whatever.
+		expect(assumed.catchment.figures?.application).toBeNull();
 		expect(assumed.gaugeRecords).toEqual(gaugeRecords);
 		expect(projectResultsForApplicant(scenario([damRaise], raised)).gaugeRecords).toEqual([]);
 	});
