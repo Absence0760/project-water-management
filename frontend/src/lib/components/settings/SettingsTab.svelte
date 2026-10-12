@@ -1329,7 +1329,7 @@
 		</div>
 		<p class="summary" data-testid="summary-ewr">{summaries['set-ewr']}</p>
 		<p class="hint muted explain">
-			The environmental water requirement: the flow that must stay in the river for the ecosystem (the Ecological Reserve). b023's <em>pragmatic</em> EWR is one fixed
+			The environmental water requirement: the flow that must stay in the river for the ecosystem (the Ecological Reserve). The workbook's <em>pragmatic</em> EWR is one fixed
 			flow per month, so farmers can plan for it; the model checks it at the EWR sites (the outlet and every gauge) and charges
 			each shortfall to the hydrological units upstream by their net impact that day.
 		</p>

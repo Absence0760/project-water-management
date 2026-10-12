@@ -77,7 +77,7 @@ function convertUpstreamPct(wb: B023Workbook, farms: Map<string, FarmSpec>, repo
 	for (const f of farms.values()) f.pctUpstreamToDam = 1 - f.pctUpstreamToDam;
 	report.note(
 		'upstream-pct-converted',
-		"[Farm spec] Upstream inflow above dam %: b023's formula sends that share past the dam, not into it, so the import " +
+		"[Farm spec] Upstream inflow above dam %: the workbook's formula sends that share past the dam, not into it, so the import " +
 			"stores 100 % − the workbook's value, which keeps what the workbook ran: 100 % there is an off-channel dam (0 % " +
 			'here), 0 % a dam on the river (100 % here). Check each dam (docs/model.md §3 Q1)',
 		{ sheet }
@@ -222,7 +222,7 @@ export function runOfRiverNote(name: string, pctUpstream: number, capacity: numb
 	}
 	return (
 		`WARNING: farm ${name}: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the upstream ` +
-		`inflow and ${why}. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; ` +
+		`inflow and ${why}. The workbook has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; ` +
 		'the app imports it as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)'
 	);
 }
@@ -270,7 +270,7 @@ export function asRunOfRiver(
 	const what = dropped > 0 ? `its ${Math.floor(dropped + 0.5)} m³ dummy dam is dropped` : 'it has no dam';
 	return (
 		`WARNING: farm ${name}: imported as run of river (--run-of-river): ${what}, and a river pump takes its demand ` +
-		'from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this ' +
+		'from the river below it. The workbook gives no pump capacity (it has none, and nothing there capped this ' +
 		"unit's take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply " +
 		'section (issue #54, 2c/2d)'
 	);

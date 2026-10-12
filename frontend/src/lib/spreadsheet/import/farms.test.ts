@@ -109,7 +109,7 @@ describe('readFarmSpec', () => {
 // Ported from scripts/wbt-import/test_run_of_river.py (issue #54, 2d): the same cases and text.
 describe('runOfRiverNote (run_of_river_note)', () => {
 	const TAIL =
-		'. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it ' +
+		'. The workbook has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it ' +
 		'as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)';
 
 	it('flags a pool with a large diversion', () => {
@@ -121,7 +121,7 @@ describe('runOfRiverNote (run_of_river_note)', () => {
 	});
 
 	it('flags a placeholder under 1 m³ without a diversion', () => {
-		expect(runOfRiverNote('Pump unit', 1, 0.5, 0, 0)).toContain('and is a pool of 0.5 m³. b023');
+		expect(runOfRiverNote('Pump unit', 1, 0.5, 0, 0)).toContain('and is a pool of 0.5 m³. The workbook');
 	});
 
 	it('flags a dam that holds a whole number of m³/s for one day', () => {
@@ -173,7 +173,7 @@ describe('asRunOfRiver (as_run_of_river): the run-of-river option', () => {
 		expect(Object.keys(node)).toEqual(['name', 'damCapacityM3', 'damInitialPct', 'damSeepagePerDay', 'supplyRule', 'pumpCapacityM3Day']);
 		expect(note).toBe(
 			'WARNING: farm River pool: imported as run of river (--run-of-river): its 259200 m³ dummy dam is dropped, and a river pump ' +
-				"takes its demand from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this unit's " +
+				"takes its demand from the river below it. The workbook gives no pump capacity (it has none, and nothing there capped this unit's " +
 				"take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply section (issue #54, 2c/2d)"
 		);
 	});

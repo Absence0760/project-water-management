@@ -5,9 +5,9 @@ import { WORKBOOK_MAX_MB } from './workbookFile';
 
 export const B023_WORKBOOK_FORMAT: FileFormat = {
 	id: 'b023-workbook',
-	title: 'A b023 workbook, as a new project',
-	where: 'Projects → Import b023 workbook',
-	accepts: `A b023 Water Balance Tool workbook (.xlsm or .xlsx), up to ${WORKBOOK_MAX_MB} MB, from a b02x build (b022, b023 …).`,
+	title: 'A Water Balance Tool workbook, as a new project',
+	where: 'Projects → Import workbook',
+	accepts: `A Water Balance Tool workbook (.xlsm or .xlsx), up to ${WORKBOOK_MAX_MB} MB. A build of the tool the importer doesn’t read is refused, and the message names it.`,
 	rules: [
 		'The whole tool: the importer finds its tables through the workbook’s named ranges, so a workbook without them is refused, and the message lists the ones missing.',
 		'It reads [Network], [Farm spec], [Crop demand], [Farm demand], [Transfers], [Flow Calibration Cfg] and [Flow data]; the per-farm result sheets are left out.',

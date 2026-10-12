@@ -1,5 +1,5 @@
 <script lang="ts">
-	// "Import project file" and "Import b023 workbook" on the project list
+	// "Import project file" and "Import workbook" on the project list
 	// (WP-1.8, WP-1.31; docs/ui.md § Project list). Steps: pick a file → read
 	// it → preview (ImportPreview) → POST /projects/import → done (link to the
 	// project) or failed (nothing created). The preview and submit steps take
@@ -282,8 +282,8 @@
 		queueMicrotask(() => el.closest('form')?.querySelector<HTMLInputElement>('#imp-name')?.focus());
 	};
 
-	const title = $derived(step === 'done' ? 'Project imported' : isWorkbook || report ? 'Import b023 workbook' : 'Import project file');
-	const inputLabel = $derived(isWorkbook ? 'b023 workbook (.xlsm or .xlsx)' : 'Project file (.json)');
+	const title = $derived(step === 'done' ? 'Project imported' : isWorkbook || report ? 'Import workbook' : 'Import project file');
+	const inputLabel = $derived(isWorkbook ? 'Workbook (.xlsm or .xlsx)' : 'Project file (.json)');
 	const accept = $derived(isWorkbook ? WORKBOOK_ACCEPT : IMPORT_ACCEPT);
 </script>
 
@@ -306,7 +306,7 @@
 			{/if}
 			{#if isWorkbook}
 				<p class="muted small">
-					A Water Balance Tool <strong>b023</strong> workbook (<span class="mono">.xlsm</span>, or
+					A Water Balance Tool workbook (<span class="mono">.xlsm</span>, or
 					<span class="mono">.xlsx</span>) becomes a new project: its network, hydrological units, crops, transfers, settings and
 					[Flow data] series. It's read here in your browser; only the project is sent. Formulas and macros are never run,
 					and the per-farm result sheets aren't imported. Up to {WORKBOOK_MAX_MB} MB. <HelpTip key="workbook-import" />

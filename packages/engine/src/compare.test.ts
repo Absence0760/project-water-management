@@ -1160,7 +1160,7 @@ describe('diffInputs', () => {
 		b.settings.gr4j = { x1: 420, x2: 0, x3: 90, x4: 2.1, warmupDays: 365 };
 		(b.settings as Record<string, unknown>).panCoefficient = [0.8, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7];
 		expect(texts(a, b)).toEqual([
-			'Runoff model: legacy (b023 recession) → GR4J',
+			'Runoff model: legacy (the original workbook’s recession) → GR4J',
 			'Pan coefficient: Oct 0.7 → 0.8',
 			'GR4J production store X1: 350 mm → 420 mm',
 			'GR4J unit hydrograph time base X4: 1.7 days → 2.1 days'
@@ -1171,7 +1171,7 @@ describe('diffInputs', () => {
 		delete (old.settings as Record<string, unknown>).gr4j;
 		delete (old.settings as Record<string, unknown>).runoffModel;
 		expect(diffInputs(old, a)).toEqual([]);
-		expect(texts(old, { ...a, settings: { ...a.settings, runoffModel: 'gr4j' } })).toEqual(['Runoff model: legacy (b023 recession) → GR4J']);
+		expect(texts(old, { ...a, settings: { ...a.settings, runoffModel: 'gr4j' } })).toEqual(['Runoff model: legacy (the original workbook’s recession) → GR4J']);
 		// Provenance only, but a changed note is still a difference between the two runs' records (engine ≥ 0.31.1).
 		expect(texts(a, { ...a, settings: { ...a.settings, panCoefficientSource: 'FAO-56 Table 5' } })).toEqual(['Pan coefficient source: none → "FAO-56 Table 5"']);
 		// Likewise the dam evaporation factors' note (engine ≥ 1.49.0); a run saved before it compares as none.

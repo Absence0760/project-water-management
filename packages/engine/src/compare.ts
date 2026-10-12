@@ -764,7 +764,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	// Engine ≥ 1.49.0; provenance only (a lake-factor preset's note). A snapshot without it had none.
 	lakeEvapFactorSource: { label: 'Dam evaporation factor source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
-	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
+	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (the original workbook’s recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
 		label: 'CHIRPS bias correction',
 		fmt: (v) => (v === 'monthly' ? 'monthly factors' : v === 'none' ? 'raw CHIRPS' : String(v))

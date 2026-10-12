@@ -86,8 +86,8 @@
 			Import {n === 1 ? 'it' : `these ${n}`} as run of river, pumping from the river
 		</label>
 		<p class="hint muted" id="wb-ror-hint">
-			The importer flags {n === 1 ? 'one unit' : `${n} units`} as probable run-of-river: {report.runOfRiverUnits.join(', ')}. b023 can't
-			pump from a river, so such a unit is entered as a tiny dummy dam or with no dam. This converts {n === 1 ? 'it' : 'them'} into
+			The importer flags {n === 1 ? 'one unit' : `${n} units`} as probable run-of-river: {report.runOfRiverUnits.join(', ')}. The workbook can't
+			model pumping from a river, so such a unit is entered as a tiny dummy dam or with no dam. This converts {n === 1 ? 'it' : 'them'} into
 			{n === 1 ? 'a unit' : 'units'} that pump{n === 1 ? 's' : ''} from the river, with no dam and no pump limit until you enter the pump
 			capacities (Network tab, Supply). A unit an enabled transfer draws on keeps its dam. Leave this off to import the workbook as it is.
 		</p>
@@ -103,11 +103,11 @@
 	<div class="field chirps">
 		<label for="wb-chirps">CHIRPS column <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
 		<select id="wb-chirps" bind:value={chirpsKey} {disabled} aria-describedby="wb-chirps-hint">
-			{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}{c.value === DEFAULT_CHIRPS_KEY ? ' (usual for b023)' : ''}</option>{/each}
+			{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}{c.value === DEFAULT_CHIRPS_KEY ? ' (usual for these workbooks)' : ''}</option>{/each}
 			<option value="">Not known</option>
 		</select>
 		<p class="hint muted" id="wb-chirps-hint">
-			Which CHIRPS the workbook holds. b023 workbooks were built on v2.0; the CHIRPS data feed writes v3.0, and the two differ by an amount
+			Which CHIRPS the workbook holds. Water Balance Tool workbooks were built on v2.0; the CHIRPS data feed writes v3.0, and the two differ by an amount
 			that changes over the years, so the feed won’t add to this series without asking.
 		</p>
 	</div>

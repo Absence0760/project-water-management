@@ -88,5 +88,15 @@ export function projectFileNotes(sentences: readonly string[]): ImportNote[] {
 
 /** Which importer made a report: the reader and the app build it ran in (`version` from $app/environment). */
 export function importerVersion(source: ImportReport['source'], build: string): string {
-	return `${source === 'b023-workbook' ? 'b023 browser importer' : 'project file'} (web build ${build})`;
+	return `${source === 'b023-workbook' ? 'workbook browser importer' : 'project file'} (web build ${build})`;
+}
+
+/**
+ * A stored importer version as the report panel shows it. Reports made
+ * before issue #523 name the workbook importer by the client build's code
+ * ("b023 browser importer (web build …)"); the app no longer shows that name,
+ * so it reads as the importer is called now. The stored text is unchanged.
+ */
+export function importerLabel(stored: string): string {
+	return stored.replace(/^b02\d (browser|web) importer\b/i, 'workbook $1 importer');
 }

@@ -1069,8 +1069,8 @@ export const af: Catalogue = {
 	'00ffc54f': 'Vir wie dit is',
 	// Consulting hydrologists
 	'e7a496c2': 'Raadgewende hidroloë',
-	// Build and calibrate a catchment model, or import your b023 workbook. Run decades of daily flows in seconds and compare what-ifs.
-	'79147a4a': 'Bou en kalibreer ’n opvanggebiedmodel, of voer jou b023-werkboek in. Bereken dekades se daaglikse vloei in sekondes en vergelyk wat-as-scenario’s.',
+	// Build and calibrate a catchment model, or import your Water Balance Tool workbook. Run decades of daily flows in seconds and compare what-ifs.
+	'289a7338': 'Bou en kalibreer ’n opvanggebiedmodel, of voer jou werkboek van die Water Balance Tool in. Bereken dekades se daaglikse vloei in sekondes en vergelyk wat-as-scenario’s.',
 	// Water user associations
 	'f78d4851': 'Watergebruikersverenigings',
 	// One shared model for the whole catchment: who is short this week, and what a restriction would do before you apply it.
@@ -1105,8 +1105,8 @@ export const af: Catalogue = {
 	'd03ba450': 'Hoe dit werk',
 	// Build the network
 	'9325094e': 'Bou die netwerk',
-	// Draw the hydrological units, dams, transfers and gauges on the river, or import your b023 workbook as it is.
-	'a5bd3aa3': 'Teken die hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, of voer jou b023-werkboek in soos dit is.',
+	// Draw the hydrological units, dams, transfers and gauges on the river, or import your Water Balance Tool workbook as it is.
+	'6594338d': 'Teken die hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, of voer jou werkboek van die Water Balance Tool in soos dit is.',
 	// Add the data
 	'ac61f1bd': 'Voeg die data by',
 	// Upload rainfall, flow and evaporation, or let the CHIRPS and DWS feeds keep them up to date every day.

@@ -227,7 +227,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A b023 workbook becomes one project; an administrator can import one with the workbook importer.'
+						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A Water Balance Tool workbook becomes one project; an administrator can import one with the workbook importer.'
 					}
 				]
 			},
@@ -396,7 +396,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The full tables are under **Tables** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library, a b023 workbook or a node-based workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model. With its parcels linked on the **Map**, that panel also shows **From land cover**: the area a land-cover map shows as cropland in them. Pick the area and the crop it is planted to (the land cover doesn’t say which), and **Use** saves it with its source.'
+						text: 'The full tables are under **Tables** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library, a Water Balance Tool workbook or a node-based workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model. With its parcels linked on the **Map**, that panel also shows **From land cover**: the area a land-cover map shows as cropland in them. Pick the area and the crop it is planted to (the land cover doesn’t say which), and **Use** saves it with its source.'
 					},
 					{
 						type: 'note',
@@ -1319,7 +1319,7 @@ export const GUIDES: Guide[] = [
 							'Flows and volumes are m³/day inside the model. Nothing is rounded mid-calculation; rounding is for display only.',
 							'Every hydrological unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Self-checks**).',
 							'A run is a snapshot: it records its inputs and engine version, so its results can always be explained and reproduced.',
-							'Where the engine departs from the b023 workbook, the engine audit records why.'
+							'Where the engine departs from the Water Balance Tool workbook, the engine audit records why.'
 						]
 					}
 				]

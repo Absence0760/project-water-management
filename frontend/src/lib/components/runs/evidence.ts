@@ -6,7 +6,7 @@ import { isScenarioRun, type ScenarioRunFields } from './scenarioRun';
 
 /** A runoff model id as people read it. */
 export function runoffModelName(id: string | undefined | null): string {
-	if (!id || id === 'legacy') return 'legacy (b023 workbook)';
+	if (!id || id === 'legacy') return 'legacy (original workbook)';
 	if (id === 'gr4j') return 'GR4J';
 	return id;
 }

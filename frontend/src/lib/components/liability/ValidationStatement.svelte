@@ -65,7 +65,7 @@
 	</dl>
 
 	{#if v.legacy}
-		<p class="alert alert-warning">Legacy runoff model (b023 workbook, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1). Not evidence.</p>
+		<p class="alert alert-warning">Legacy runoff model (the original workbook’s, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1). Not evidence.</p>
 	{/if}
 
 	<svelte:element this={h} id="{uid}-cal">Calibration</svelte:element>

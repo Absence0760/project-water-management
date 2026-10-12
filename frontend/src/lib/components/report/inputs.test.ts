@@ -65,7 +65,7 @@ describe('settingsRows', () => {
 		expect(gr4j['GR4J parameters']).toMatch(/^X1 350 mm/);
 		expect(gr4j['Calibration window']).toBe('whole record');
 		const legacy = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'legacy', calibrationStart: '2003-10-01' }), run));
-		expect(legacy['Runoff model']).toBe('Legacy (b023 workbook, removed in engine 1.0.0): workbook comparison only');
+		expect(legacy['Runoff model']).toBe('Legacy (the original workbook’s, removed in engine 1.0.0): workbook comparison only');
 		expect(legacy['GR4J parameters']).toBeUndefined();
 		expect(legacy['Calibration window']).toBe('from 2003-10-01');
 	});

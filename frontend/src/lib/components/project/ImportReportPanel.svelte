@@ -9,6 +9,7 @@
 	// ImportReportLists renders it as text only, never {@html}.
 	import { api, type StoredImportReport } from '$lib/api';
 	import ImportReportLists from '$lib/components/import/ImportReportLists.svelte';
+	import { importerLabel } from '$lib/components/import/importReport';
 	import { fmtDate } from '$lib/format/number';
 	import { FORMER_MEMBER } from '$lib/format/maker';
 
@@ -34,7 +35,7 @@
 	});
 
 	const when = $derived(report ? fmtDate(report.importedAt, true) : '');
-	const sourceLabel = $derived(report?.source === 'b023-workbook' ? 'b023 workbook' : 'project file');
+	const sourceLabel = $derived(report?.source === 'b023-workbook' ? 'Water Balance Tool workbook' : 'project file');
 </script>
 
 {#if report}
@@ -42,7 +43,7 @@
 		<div class="panel-head"><h2 id="import-record-h"><span id="import-record-h-t">Import record</span> <HelpTip key="import-record" /></h2></div>
 		<!-- One line of markup, so the sentence has no stray line break in its text. -->
 		<p class="summary">Imported from the {sourceLabel} <span class="mono">{report.fileName}</span> on {when} by {report.importedBy ?? FORMER_MEMBER}.</p>
-		<p class="muted small">Importer: {report.importerVersion}. What it flagged then is kept here as it was shown.</p>
+		<p class="muted small">Importer: {importerLabel(report.importerVersion)}. What it flagged then is kept here as it was shown.</p>
 		<ImportReportLists
 			notes={report.notes}
 			unmapped={report.unmapped}

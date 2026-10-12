@@ -16,7 +16,7 @@ from extract_project import as_run_of_river, extract, run_of_river_note, small_p
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "synthetic_b023.xlsx"
 
 TAIL = (
-    ". b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it "
+    ". The workbook has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it "
     "as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)"
 )
 
@@ -32,7 +32,7 @@ class RunOfRiverNote(unittest.TestCase):
     def test_a_placeholder_under_1_m3_is_flagged_without_a_diversion(self):
         note = run_of_river_note("Pump unit", 1.0, 0.5, 0, 0)
         self.assertIsNotNone(note)
-        self.assertIn("and is a pool of 0.5 m³. b023", note)
+        self.assertIn("and is a pool of 0.5 m³. The workbook", note)
 
     def test_a_dam_holding_a_whole_number_of_m3_s_for_one_day_is_flagged(self):
         self.assertEqual(

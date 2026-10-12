@@ -1,5 +1,5 @@
 // The b023 workbook source of the import dialog (WP-1.31; docs/ui.md §
-// Project list, "Import a b023 workbook"). The workbook is read in a worker
+// Project list, "Import a workbook"). The workbook is read in a worker
 // ($lib/spreadsheet/import/runner.ts, loaded on demand); this module is the
 // dialog's view logic around it: which files are workbooks, what each
 // failure says, the gauge and run-of-river options, and the review's notes and unmapped
@@ -127,8 +127,8 @@ export function describeFailure(f: WorkbookImportFailure): FailureView {
 		case 'not-b023': {
 			const missing = f.missing ?? [];
 			return {
-				title: "This isn't a b023 Water Balance Tool workbook.",
-				detail: `Every b023 workbook has these named ranges, and this one lacks ${missing.length === 1 ? 'it' : `${missing.length} of them`}:`,
+				title: "This isn't a Water Balance Tool workbook.",
+				detail: `Every Water Balance Tool workbook has these named ranges, and this one lacks ${missing.length === 1 ? 'it' : `${missing.length} of them`}:`,
 				list: missing.slice(0, SHOWN_NAMES),
 				more: Math.max(0, missing.length - SHOWN_NAMES)
 			};
@@ -143,7 +143,7 @@ export function describeFailure(f: WorkbookImportFailure): FailureView {
 						? `${f.message} If it is a real catchment workbook, ask your administrator to import it with the command-line importer.`
 						: f.what === 'sheets'
 							? f.message
-							: `${f.message} That's far beyond any real b023 workbook, so the file may be damaged.`
+							: `${f.message} That's far beyond any real Water Balance Tool workbook, so the file may be damaged.`
 			};
 		case 'unreadable':
 			return { title: "The file couldn't be opened as a workbook.", detail: f.message };

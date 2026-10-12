@@ -11,7 +11,7 @@ export const KNOWN_CAL_KEYS = new Set(['rainThresholdMm', 'catchmentAreaKm2']);
 /** The one runoff model, as the form names it. */
 export const RUNOFF_MODEL_LABEL = 'GR4J (Perrin et al. 2003)';
 export const RUNOFF_MODEL_HELP =
-	'A published daily model with four parameters that conserves water: rain leaves as evaporation or flow, or stays in a store. Needs potential evaporation. The legacy b023 workbook model was removed in engine 1.0.0; runs made with it still open, labelled, but cannot be re-run.';
+	'A published daily model with four parameters that conserves water: rain leaves as evaporation or flow, or stays in a store. Needs potential evaporation. The legacy runoff model (the original workbook’s) was removed in engine 1.0.0; runs made with it still open, labelled, but cannot be re-run.';
 
 export interface Gr4jField extends ParamSpec<Gr4jParams> {
 	help: string;

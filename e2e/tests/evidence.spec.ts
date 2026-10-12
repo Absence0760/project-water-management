@@ -59,7 +59,7 @@ test('an editor nominates a run as evidence, replaces it, and the history keeps 
 	await plantLegacyRun(legacy);
 	await page.goto(`/projects/${project.id}?tab=runs&run=${legacy}`);
 	await expect(page.getByTestId('evidence-drift')).toHaveText(
-		'1 run made after the nominated evidence run “GR4J B” uses a different runoff model (legacy (b023 workbook), not GR4J). ' +
+		'1 run made after the nominated evidence run “GR4J B” uses a different runoff model (legacy (original workbook), not GR4J). ' +
 			'The nomination still stands: results from those runs are not the evidence unless one is nominated, with a reason.'
 	);
 	await expect(page.getByRole('heading', { level: 2, name: 'Legacy' })).toBeVisible();

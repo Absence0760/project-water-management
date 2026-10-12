@@ -35,7 +35,7 @@ describe('describeFailure', () => {
 	it('lists the missing named ranges of a non-b023 workbook, eight at most', () => {
 		const missing = Array.from({ length: 11 }, (_, i) => `zName${i}`);
 		const v = describeFailure({ code: 'not-b023', message: '…', missing });
-		expect(v.title).toBe("This isn't a b023 Water Balance Tool workbook.");
+		expect(v.title).toBe("This isn't a Water Balance Tool workbook.");
 		expect(v.detail).toContain('lacks 11 of them');
 		expect(v.list).toEqual(missing.slice(0, 8));
 		expect(v.more).toBe(3);

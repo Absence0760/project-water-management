@@ -29,7 +29,7 @@ export function effectiveSettings(raw: RawSettings | undefined): RunSettings {
 	return s;
 }
 
-const RUNOFF_MODEL: Record<StoredRunoffModelId, string> = { gr4j: 'GR4J', legacy: 'Legacy (b023 workbook, removed in engine 1.0.0): workbook comparison only' };
+const RUNOFF_MODEL: Record<StoredRunoffModelId, string> = { gr4j: 'GR4J', legacy: 'Legacy (the original workbook’s, removed in engine 1.0.0): workbook comparison only' };
 
 /** The settings a reader needs to know the run by, as label → value. */
 export function settingsRows(s: RunSettings, run: { startDate: string; endDate: string }): [string, string][] {

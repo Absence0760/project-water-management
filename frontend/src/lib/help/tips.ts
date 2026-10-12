@@ -41,7 +41,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'project',
 		term: 'Project (catchment)',
-		short: 'One catchment model: its network, crops, settings, input series and runs. One b023 workbook becomes one project.',
+		short: 'One catchment model: its network, crops, settings, input series and runs. One Water Balance Tool workbook becomes one project.',
 		category: 'basics'
 	},
 	{
@@ -948,7 +948,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'effective-rainfall',
 		term: 'Effective rainfall fraction',
-		short: 'Share of rain on cropped land that counts towards the crop’s need and so reduces irrigation (b023 default 0.65).',
+		short: 'Share of rain on cropped land that counts towards the crop’s need and so reduces irrigation (the workbook’s default is 0.65).',
 		units: 'fraction 0–1',
 		category: 'crops',
 		fields: ['settings.effectiveRainFraction', 'settings.effectiveRainFractionMonthly']
@@ -1092,7 +1092,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'runoff-model',
 		term: 'Runoff model',
-		short: 'The model that turns rain into natural flow: GR4J, the only one since engine 1.0.0 removed the legacy b023 model.',
+		short: 'The model that turns rain into natural flow: GR4J, the only one since engine 1.0.0 removed the original workbook’s legacy model.',
 		category: 'flow',
 		fields: ['settings.runoffModel']
 	},
@@ -1290,7 +1290,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'rain-threshold',
 		term: 'Rain threshold',
-		short: 'Daily rain at or below this (mm) doesn’t reduce irrigation demand. GR4J uses all the rain. b023 default 2 mm.',
+		short: 'Daily rain at or below this (mm) doesn’t reduce irrigation demand. GR4J uses all the rain. The workbook’s default is 2 mm.',
 		units: 'mm',
 		category: 'flow',
 		fields: ['calibration.rainThresholdMm']
@@ -1306,7 +1306,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'legacy-runoff-model',
 		term: 'Legacy runoff model',
-		short: 'The b023 workbook’s rain → peak → recession routine, removed in engine 1.0.0. Runs made with it still open, labelled, but can’t be re-run.',
+		short: 'The workbook’s rain → peak → recession routine, removed in engine 1.0.0. Runs made with it still open, labelled, but can’t be re-run.',
 		category: 'flow',
 		fields: ['run.is_summer', 'run.rain_flow', 'run.response_flow']
 	},
@@ -1322,7 +1322,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'pragmatic-ewr',
 		term: 'Pragmatic EWR',
-		short: 'b023’s simplification: one fixed m³/day per month at the outlet, instead of a requirement that varies with wetness.',
+		short: 'The workbook’s simplification: one fixed m³/day per month at the outlet, instead of a requirement that varies with wetness.',
 		units: 'm³/day per month',
 		category: 'ewr',
 		fields: ['settings.ewrPragmaticM3PerDay', 'run.ewr']
@@ -1899,7 +1899,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'chirps-version',
 		term: 'CHIRPS product and version',
-		short: 'Which CHIRPS a series holds: v2.0 (usual in b023) or v3.0, sat or rnl. One series holds one; two are never spliced together.',
+		short: 'Which CHIRPS a series holds: v2.0 (usual in the workbooks) or v3.0, sat or rnl. One series holds one; two are never spliced together.',
 		category: 'data'
 	},
 	{
@@ -1935,8 +1935,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'workbook-import',
-		term: 'b023 workbook import',
-		short: 'Turns a b023 workbook into a new project, read in your browser: network, units, crops, transfers, settings and Flow data series.',
+		term: 'Workbook import',
+		short: 'Turns a Water Balance Tool workbook into a project, read in your browser: network, units, crops, transfers, settings and Flow data series.',
 		category: 'data'
 	},
 

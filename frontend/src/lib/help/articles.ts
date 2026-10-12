@@ -102,7 +102,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/ui.md § Project (Time zone); docs/api.md (058_project_time_zone)'
 	},
 	'import-record': {
-		long: 'Only a project made by an import has one. It names the file, when it was imported, who imported it and the importer’s version, then the importer’s notes and, for a b023 workbook, the unmapped report: the sheets and cells it found no place for. It is kept as it was shown at the import, so a reviewer or an assessor can check long afterwards what the importer interpreted. Every member reads it, viewers included.',
+		long: 'Only a project made by an import has one. It names the file, when it was imported, who imported it and the importer’s version, then the importer’s notes and, for a Water Balance Tool workbook, the unmapped report: the sheets and cells it found no place for. It is kept as it was shown at the import, so a reviewer or an assessor can check long afterwards what the importer interpreted. Every member reads it, viewers included.',
 		aliases: ['importer notes', 'unmapped report', 'imported from'],
 		related: ['project-file', 'project'],
 		source: 'docs/ui.md § Project (Import record); 017_project_import'
@@ -160,7 +160,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.1, §7'
 	},
 	'february-days': {
-		long: 'Monthly crop requirements are divided by the days in the month to get a daily demand. Use 28.25 to average over leap years (the b023 default) or 28 for a strict 365-day year.',
+		long: 'Monthly crop requirements are divided by the days in the month to get a daily demand. Use 28.25 to average over leap years (the workbook’s default) or 28 for a strict 365-day year.',
 		related: ['irrigation-demand'],
 		source: 'b023 Help (AppSettings, month and day labels)'
 	},
@@ -356,7 +356,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Farm spec'
 	},
 	'upstream-to-dam': {
-		long: 'The b023 column is labelled “upstream inflow above dam”: the share of the upstream inflow that enters the dam, above the dam wall. The rest passes below the dam.\n\n100 % is a dam on the river: it catches everything coming down, and River to dam isn’t available to it. 0 % is an off-channel dam beside the river: the river passes it by, and it fills from its share of the farm’s runoff and from River to dam. A value between is a dam that catches part of the river.\n\nThe workbook’s formula applied the fraction the other way round (to the water passing below), against its own label and its [Models] sheet. The client confirmed the label’s meaning, and the app follows it from engine 0.9.0. A workbook’s values were entered against its formula, so importing one stores 100 % − each value, which keeps what the workbook ran: a b023 100 % imports as an off-channel dam (0 %). This is also the South African convention: the Pitman/WRSM model describes farm dams by the share of the catchment that drains into them.',
+		long: 'The workbook’s column is labelled “upstream inflow above dam”: the share of the upstream inflow that enters the dam, above the dam wall. The rest passes below the dam.\n\n100 % is a dam on the river: it catches everything coming down, and River to dam isn’t available to it. 0 % is an off-channel dam beside the river: the river passes it by, and it fills from its share of the farm’s runoff and from River to dam. A value between is a dam that catches part of the river.\n\nThe workbook’s formula applied the fraction the other way round (to the water passing below), against its own label and its [Models] sheet. The client confirmed the label’s meaning, and the app follows it from engine 0.9.0. A workbook’s values were entered against its formula, so importing one stores 100 % − each value, which keeps what the workbook ran: a workbook’s 100 % imports as an off-channel dam (0 %). This is also the South African convention: the Pitman/WRSM model describes farm dams by the share of the catchment that drains into them.',
 		aliases: ['upstream inflow above dam', 'upstream to dam'],
 		related: ['runoff-to-dam', 'diversion'],
 		source: 'b023 Farm spec; docs/model.md §3 Q1 (resolved)'
@@ -368,7 +368,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Farm spec'
 	},
 	'dam-capacity': {
-		long: 'b023 treats a hydrological unit’s dams as one composite dam. Water above capacity spills downstream the same day. The dam also loses open-water evaporation and any seepage, and catches the rain on its surface (see dam evaporation).',
+		long: 'The Water Balance Tool workbook treats a hydrological unit’s dams as one composite dam. Water above capacity spills downstream the same day. The dam also loses open-water evaporation and any seepage, and catches the rain on its surface (see dam evaporation).',
 		aliases: ['composite dam', 'storage capacity', 'full supply'],
 		related: ['dam-initial', 'dam-min', 'spill', 'dam-storage', 'dam-evaporation', 'dam-seepage'],
 		source: 'b023 Farm spec'
@@ -379,7 +379,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Farm spec'
 	},
 	'dam-min': {
-		long: 'The level below which a farmer stops irrigating from the dam (a pump intake, a reserve for stock water or the dam wall). Each day irrigation can take only yesterday’s storage plus today’s inflows above capacity × this level. A transfer out of the dam keeps the higher of its own minimum storage and this level.\n\n0 % means irrigation may empty the dam, which is how the b023 workbook works; the network editor flags such dams as a hint. The workbook’s “min %” column was the minimum for transfers, which each transfer rule carries, so imported dams start at 0 %.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.16.0), pending confirmation by the project hydrologist.',
+		long: 'The level below which a farmer stops irrigating from the dam (a pump intake, a reserve for stock water or the dam wall). Each day irrigation can take only yesterday’s storage plus today’s inflows above capacity × this level. A transfer out of the dam keeps the higher of its own minimum storage and this level.\n\n0 % means irrigation may empty the dam, which is how the Water Balance Tool workbook works; the network editor flags such dams as a hint. The workbook’s “min %” column was the minimum for transfers, which each transfer rule carries, so imported dams start at 0 %.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.16.0), pending confirmation by the project hydrologist.',
 		aliases: ['min dam volume', 'dead storage', 'minimum storage'],
 		related: ['transfer', 'transfer-min-storage', 'irrigation-supplied'],
 		source: 'docs/engine-audit.md Q5; docs/model.md §2.7'
@@ -433,7 +433,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.7g; issue #67'
 	},
 	'diversion': {
-		long: 'Each day up to this rate is taken from the water passing below the dam (upstream inflow and runoff that bypass it) and put into storage. It is entered in m³/s, as in b023 (0.2 m³/s is 17 280 m³ a day), unless l/s or m³/day is picked beside the field (200 l/s is the same 17 280 m³ a day); whichever unit it is typed in, the app stores m³/day, which the API and the exports use.\n\nIt is for an off-channel dam. A dam on the river (Upstream inflow to dam 100 %) catches the river already, so River to dam isn’t available to it: the field is read-only and the run doesn’t use it (engine 1.68.0).\n\nBy default it takes up to this every day of the year. River to dam by month sets a capacity for each month instead, replacing the one value: 0 in the summer months fills the dam in winter only. It always leaves in the river what priority other water users downstream need: the farm diverts less first when they would be short. It leaves the EWR, or a set flow, only when the unit has a hands-off flow (under Supply). A run-of-river unit has no dam, so it diverts nothing. The dam’s spill takes what doesn’t fit.\n\nThe river pump under Supply is a separate limit, for irrigation. If one pump both fills the dam and irrigates, the run treats it as two pumps, so split its capacity between River to dam and the river pump capacity.',
+		long: 'Each day up to this rate is taken from the water passing below the dam (upstream inflow and runoff that bypass it) and put into storage. It is entered in m³/s, as in the workbook (0.2 m³/s is 17 280 m³ a day), unless l/s or m³/day is picked beside the field (200 l/s is the same 17 280 m³ a day); whichever unit it is typed in, the app stores m³/day, which the API and the exports use.\n\nIt is for an off-channel dam. A dam on the river (Upstream inflow to dam 100 %) catches the river already, so River to dam isn’t available to it: the field is read-only and the run doesn’t use it (engine 1.68.0).\n\nBy default it takes up to this every day of the year. River to dam by month sets a capacity for each month instead, replacing the one value: 0 in the summer months fills the dam in winter only. It always leaves in the river what priority other water users downstream need: the farm diverts less first when they would be short. It leaves the EWR, or a set flow, only when the unit has a hands-off flow (under Supply). A run-of-river unit has no dam, so it diverts nothing. The dam’s spill takes what doesn’t fit.\n\nThe river pump under Supply is a separate limit, for irrigation. If one pump both fills the dam and irrigates, the run treats it as two pumps, so split its capacity between River to dam and the river pump capacity.',
 		aliases: ['downstream diversion', 'divert capacity', 'diversion capacity', 'river to dam', 'river to dam by month', 'pump back'],
 		related: ['upstream-to-dam', 'runoff-to-dam'],
 		source: 'b023 Farm spec'
@@ -445,7 +445,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/engine-audit.md N1; Allen et al. 1998 (FAO-56); Keller & Bliesner 1990'
 	},
 	'irrigation-system': {
-		long: 'The way a crop is watered on a hydrological unit, and so its application efficiency. The project keeps a table of systems on Crops & demand (Tables, Irrigation systems): it starts with SABI’s Agricultural Design Norms (2021, Table 4), each at a value inside SABI’s range (drip 90 %, micro-sprinkler 82 %, centre pivot 85 %, permanent sprinkler 80 %, movable sprinkler 75 %, flood / furrow 70 %), and the hydrologist can change any efficiency or add a system of the scheme’s own. Changing a system’s efficiency changes every crop on it.\n\nA crop has a default system, set in its sheet. A hydrological unit that irrigates the crop differently puts it on another system in its planted areas; the rest keep the default. The unit’s efficiency is its crops’ systems combined, each weighted by its yearly water requirement ([[irrigation-efficiency]]).\n\nA project from before engine 1.72.0 kept each crop’s efficiency, and each unit’s: they became systems (a SABI one when the value matched, else a row named “Imported, NN %”), so its runs are as they were. A b023 workbook’s farms come in at 100 % − their return flow, each crop on its farm’s (a SABI system, else “Workbook, NN %”).',
+		long: 'The way a crop is watered on a hydrological unit, and so its application efficiency. The project keeps a table of systems on Crops & demand (Tables, Irrigation systems): it starts with SABI’s Agricultural Design Norms (2021, Table 4), each at a value inside SABI’s range (drip 90 %, micro-sprinkler 82 %, centre pivot 85 %, permanent sprinkler 80 %, movable sprinkler 75 %, flood / furrow 70 %), and the hydrologist can change any efficiency or add a system of the scheme’s own. Changing a system’s efficiency changes every crop on it.\n\nA crop has a default system, set in its sheet. A hydrological unit that irrigates the crop differently puts it on another system in its planted areas; the rest keep the default. The unit’s efficiency is its crops’ systems combined, each weighted by its yearly water requirement ([[irrigation-efficiency]]).\n\nA project from before engine 1.72.0 kept each crop’s efficiency, and each unit’s: they became systems (a SABI one when the value matched, else a row named “Imported, NN %”), so its runs are as they were. A Water Balance Tool workbook’s farms come in at 100 % − their return flow, each crop on its farm’s (a SABI system, else “Workbook, NN %”).',
 		aliases: ['irrigation method', 'drip', 'micro-sprinkler', 'centre pivot', 'sprinkler', 'flood', 'furrow', 'surface irrigation', 'SABI'],
 		related: ['irrigation-efficiency', 'return-flow', 'crop-requirement'],
 		source: 'SABI Agricultural Design Norms 2021, Table 4 (adapted from Reinders et al. 2010); docs/model.md §2.3'
@@ -481,7 +481,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Crop demand; docs/model.md §7'
 	},
 	'crop-factor': {
-		long: 'Gross requirement (mm) = A-pan × crop factor for that month. Factors vary with the growth stage; deciduous fruit, for example, needs little in winter.\n\nThe factor multiplies Class-A pan evaporation, not FAO reference evapotranspiration (ET₀). ET₀ is the pan coefficient Kp × A-pan, so a published FAO-56 Kc entered here overstates demand by 1/Kp − 1: a third at Kp 0.75, and about 18–67 % across Kp 0.60–0.85 (FAO-56 Table 5 goes as low as 0.35 in strong wind over dry ground). Multiply it by the pan coefficient first. A factor above 1.0 is possible but unusual against a pan, so the Crops tab points it out.\n\nLoad crop factors, above the crop table (Crops & demand › Tables › Crop factors), fills the factors from a reference library, a b023 workbook or a node-based workbook’s [Crop_Factors] sheet (FAO-56 Kc values, against ET₀). The library holds the A-pan design factors of the ARC/SABI Irrigation Design Manual (winter rainfall area, Tables 4.13–4.15; pecan from Table 4.10), each with its table and page; vegetables, staged by portion of the season, need a planting date and season length. The dialog takes you through it in steps: pick the source, set the pan coefficient (it starts at 1 for A-pan factors and 0.75, a mid FAO-56 Table 5 value, for an FAO-56 Kc set), then map each crop to a source crop (largest planted area first) and pick an irrigation system for its efficiency if it should change. Each crop’s card shows its change month by month, and beside the crops the effect on the catchment’s crop requirement and abstraction, per hydrological unit and by month, before you apply. Applying edits the table only: save it with a reason. Which set a catchment uses is the hydrologist’s call.',
+		long: 'Gross requirement (mm) = A-pan × crop factor for that month. Factors vary with the growth stage; deciduous fruit, for example, needs little in winter.\n\nThe factor multiplies Class-A pan evaporation, not FAO reference evapotranspiration (ET₀). ET₀ is the pan coefficient Kp × A-pan, so a published FAO-56 Kc entered here overstates demand by 1/Kp − 1: a third at Kp 0.75, and about 18–67 % across Kp 0.60–0.85 (FAO-56 Table 5 goes as low as 0.35 in strong wind over dry ground). Multiply it by the pan coefficient first. A factor above 1.0 is possible but unusual against a pan, so the Crops tab points it out.\n\nLoad crop factors, above the crop table (Crops & demand › Tables › Crop factors), fills the factors from a reference library, a Water Balance Tool workbook or a node-based workbook’s [Crop_Factors] sheet (FAO-56 Kc values, against ET₀). The library holds the A-pan design factors of the ARC/SABI Irrigation Design Manual (winter rainfall area, Tables 4.13–4.15; pecan from Table 4.10), each with its table and page; vegetables, staged by portion of the season, need a planting date and season length. The dialog takes you through it in steps: pick the source, set the pan coefficient (it starts at 1 for A-pan factors and 0.75, a mid FAO-56 Table 5 value, for an FAO-56 Kc set), then map each crop to a source crop (largest planted area first) and pick an irrigation system for its efficiency if it should change. Each crop’s card shows its change month by month, and beside the crops the effect on the catchment’s crop requirement and abstraction, per hydrological unit and by month, before you apply. Applying edits the table only: save it with a reason. Which set a catchment uses is the hydrologist’s call.',
 		aliases: ['Kc', 'crop coefficient', 'pan factor', 'crop library', 'load crop factors', 'ARC', 'SABI', 'design manual'],
 		related: ['apan', 'crop-area', 'irrigation-efficiency', 'pan-coefficient'],
 		source: 'b023 Crop demand; ARC/SABI Irrigation Design Manual ch. 4; docs/model.md §2.3'
@@ -499,7 +499,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Crop demand; docs/model.md §2.3'
 	},
 	'soil-water-store': {
-		long: 'Each hydrological unit has one store over its cropped area, a one-bucket form of the FAO-56 root-zone balance. Each day: effective rain is added; the day’s gross demand is met from the store plus that rain first; what is left stays, up to this depth, and the excess drains or runs off (the runoff model already counts it). The store starts empty.\n\nThe default 25 mm is the readily available water of 0.5 m of roots in a soil holding 100 mm/m, half of which the crop can take without stress (FAO-56 Tables 19 and 22). Deeper roots or a heavier soil hold more. 0 mm turns carry-over off: each day’s rain then only offsets that day, as the b023 workbook does.\n\nThis was decided on a simulated hydrologist’s recommendation and is pending the real hydrologist’s review. The daily hydrological unit CSV and “Trace a day” show the store at the end of each day.',
+		long: 'Each hydrological unit has one store over its cropped area, a one-bucket form of the FAO-56 root-zone balance. Each day: effective rain is added; the day’s gross demand is met from the store plus that rain first; what is left stays, up to this depth, and the excess drains or runs off (the runoff model already counts it). The store starts empty.\n\nThe default 25 mm is the readily available water of 0.5 m of roots in a soil holding 100 mm/m, half of which the crop can take without stress (FAO-56 Tables 19 and 22). Deeper roots or a heavier soil hold more. 0 mm turns carry-over off: each day’s rain then only offsets that day, as the Water Balance Tool workbook does.\n\nThis was decided on a simulated hydrologist’s recommendation and is pending the real hydrologist’s review. The daily hydrological unit CSV and “Trace a day” show the store at the end of each day.',
 		aliases: ['soil moisture', 'carry-over', 'root zone', 'readily available water', 'RAW'],
 		related: ['effective-rainfall', 'irrigation-demand', 'working-columns'],
 		source: 'Allen et al. 1998 (FAO-56) ch. 8; docs/engine-audit.md N3; docs/model.md §2.3'
@@ -511,7 +511,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Irrigation Demand; docs/model.md §2.3'
 	},
 	'irrigation-demand': {
-		long: 'Supply, deficit, the fraction supplied and the curtailment report are all measured against this abstraction demand, so 100 % supplied means the crop got its full requirement. With 100 % efficiency it equals the crop water requirement, as in the b023 workbook.',
+		long: 'Supply, deficit, the fraction supplied and the curtailment report are all measured against this abstraction demand, so 100 % supplied means the crop got its full requirement. With 100 % efficiency it equals the crop water requirement, as in the Water Balance Tool workbook.',
 		aliases: ['demand', 'abstraction'],
 		related: ['crop-requirement', 'irrigation-efficiency', 'irrigation-supplied', 'irrigation-deficit'],
 		source: 'docs/engine-audit.md N1; docs/model.md §2.7'
@@ -523,7 +523,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 farm element sheet; Shortfalls sheet'
 	},
 	'irrigation-deficit': {
-		long: 'A hydrological unit with a persistent deficit is over-allocated for the water it can capture. The b023 Shortfalls sheet reports it per hydrological unit over a reporting window.',
+		long: 'A hydrological unit with a persistent deficit is over-allocated for the water it can capture. The workbook’s Shortfalls sheet reports it per hydrological unit over a reporting window.',
 		aliases: ['shortfall', 'unmet demand'],
 		related: ['irrigation-demand'],
 		source: 'b023 Shortfalls sheet'
@@ -531,7 +531,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 
 	// ---- Transfers ------------------------------------------------------------
 	'transfer': {
-		long: 'Each day in an active month the transfer takes what the source dam held at the end of yesterday above its minimum level, up to the room at the destination (its free space plus that day’s irrigation demand) and the maximum rate (and daily cap, if set). Transfers move before any hydrological unit irrigates. The same volume leaves the source and enters the destination, so it always balances.\n\nb023 writes transfers as free-form formulas; the app uses these structured rules instead. Anything a workbook does that doesn’t fit them needs discussing with the hydrologist.',
+		long: 'Each day in an active month the transfer takes what the source dam held at the end of yesterday above its minimum level, up to the room at the destination (its free space plus that day’s irrigation demand) and the maximum rate (and daily cap, if set). Transfers move before any hydrological unit irrigates. The same volume leaves the source and enters the destination, so it always balances.\n\nThe Water Balance Tool workbook writes transfers as free-form formulas; the app uses these structured rules instead. Anything a workbook does that doesn’t fit them needs discussing with the hydrologist.',
 		aliases: ['pipeline', 'canal', 'from', 'to'],
 		related: ['transfer-months', 'transfer-rate', 'transfer-min-storage'],
 		source: 'b023 Help (Transfers sheet); docs/model.md §2.6'
@@ -543,7 +543,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.6'
 	},
 	'transfer-months': {
-		long: 'Often a winter-filling scheme: move water while the source dam spills, not in the irrigation season. Each month has its own maximum rate, so a pipe that runs at half capacity in spring and full in winter is one rule. A blank (0) month is off. A b023 workbook gives one rate and the months it runs in; that reads as the same rate in each of those months and runs exactly as before until you change a month (engine 1.14.0).',
+		long: 'Often a winter-filling scheme: move water while the source dam spills, not in the irrigation season. Each month has its own maximum rate, so a pipe that runs at half capacity in spring and full in winter is one rule. A blank (0) month is off. A Water Balance Tool workbook gives one rate and the months it runs in; that reads as the same rate in each of those months and runs exactly as before until you change a month (engine 1.14.0).',
 		related: ['transfer'],
 		source: 'b023 Transfers configuration'
 	},
@@ -665,7 +665,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 	},
 	'legacy-runoff-model': {
 		long: 'The workbook’s empirical model: rain above the threshold made a peak a · rain^b × catchment area × a summer or winter factor (a summer month, or a winter month before a big storm switched it to winter response), which then receded along a recession curve, next to a slowly receding base flow. The engine audit found that it does not conserve water: one small storm could return several times its own volume as flow, so it was never evidence and engine 1.0.0 removed it.\n\nRuns made with it before then still open read-only, badged “Workbook comparison”: they can be compared and exported, but not re-run, nominated as evidence, signed or published. Their daily table keeps the model’s own columns (summer flag, rain flow, response flow, base flow). A project still set to it runs GR4J, with a warning to check the GR4J parameters.',
-		aliases: ['legacy model', 'b023 recession', 'peak coefficient', 'summer factor', 'winter factor', 'summer months', 'recession curve', 'workbook comparison'],
+		aliases: ['legacy model', 'workbook recession', 'peak coefficient', 'summer factor', 'winter factor', 'summer months', 'recession curve', 'workbook comparison'],
 		related: ['runoff-model', 'gr4j', 'base-flow'],
 		source: 'docs/model.md §2.4 (retired); docs/engine-audit.md H1; issue #16'
 	}

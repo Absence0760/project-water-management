@@ -38,7 +38,7 @@ const text = (max: number) =>
 		.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
 
 /** Why a legacy run can't be signed. */
-export const LEGACY = 'a legacy (b023 workbook) run, from before engine 1.0.0 removed that model, is a workbook comparison only, not evidence (audit H1), so it cannot be signed off';
+export const LEGACY = 'a run of the legacy runoff model (the original workbook’s), from before engine 1.0.0 removed that model, is a workbook comparison only, not evidence (audit H1), so it cannot be signed off';
 
 const BODIES = REGISTRATION_BODIES.map((b) => b.code) as [RegistrationBodyCode, ...RegistrationBodyCode[]];
 /** A category or field code; which ones a body has is checked by the engine's registrationCheck. */

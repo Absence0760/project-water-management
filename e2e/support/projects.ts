@@ -20,7 +20,7 @@ export const importButton = (page: Page) => page.getByRole('button', { name: 'Im
  * Open one of the two imports at any width: its named button where there is room, or on a phone from
  * Import's list (the dialog then opens with the focus kept on Import).
  */
-export async function pickImport(page: Page, which: 'Import b023 workbook' | 'Import project file (.json)') {
+export async function pickImport(page: Page, which: 'Import workbook' | 'Import project file (.json)') {
 	await expect(page.locator('main.projects-page .head-actions')).toBeVisible();
 	const trigger = importButton(page);
 	// settled: the head is drawn, and which of the two shows is the viewport's media query alone, no app state.

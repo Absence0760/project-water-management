@@ -129,7 +129,7 @@ test('from a b023 workbook: matched by name, times a pan coefficient', async ({ 
 	await page.goto(`/projects/${project.id}?tab=crops`);
 	await openLoad(page);
 	const d = dialog(page);
-	await d.getByRole('radio', { name: 'A b023 workbook' }).check();
+	await d.getByRole('radio', { name: 'A Water Balance Tool workbook' }).check();
 	await d.getByLabel('Workbook (.xlsx, .xlsm)').setInputFiles(fileURLToPath(WORKBOOK));
 	await expect(d.getByRole('status').filter({ hasText: '6 crops from [Crop demand] in synthetic_b023.xlsx.' })).toBeVisible();
 	// The import report's crop-table warnings for the fixture's copied and suspect rows (issue #289), as text.
@@ -169,7 +169,7 @@ test('the pan coefficient starts at the source’s default, says why, and a type
 	// The modeller's own Kp is kept when the source changes; one click puts the default back.
 	await kp.fill('0.8');
 	await kp.press('Tab');
-	await d.getByRole('radio', { name: 'A b023 workbook' }).check();
+	await d.getByRole('radio', { name: 'A Water Balance Tool workbook' }).check();
 	await expect(kp).toHaveValue('0.8');
 	await d.getByRole('button', { name: 'Use the default, 1' }).click();
 	await expect(kp).toHaveValue('1');

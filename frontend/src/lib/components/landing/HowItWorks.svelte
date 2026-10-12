@@ -8,7 +8,7 @@
 	<ol>
 		<li>
 			<h3>{t('Build the network')}</h3>
-			<p>{t('Draw the hydrological units, dams, transfers and gauges on the river, or import your b023 workbook as it is.')}</p>
+			<p>{t('Draw the hydrological units, dams, transfers and gauges on the river, or import your Water Balance Tool workbook as it is.')}</p>
 		</li>
 		<li>
 			<h3>{t('Add the data')}</h3>

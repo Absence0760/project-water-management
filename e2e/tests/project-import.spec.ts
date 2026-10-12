@@ -126,7 +126,7 @@ test('the import dialogs open and close from the keyboard, focus returning to th
 	await page.goto('/');
 	await expect(page.getByText('You have no projects yet.')).toBeVisible();
 	for (const [button, title, picker] of [
-		['Import b023 workbook', 'Import b023 workbook', 'b023 workbook (.xlsm or .xlsx)'],
+		['Import workbook', 'Import workbook', 'Workbook (.xlsm or .xlsx)'],
 		['Import project file (.json)', 'Import project file', 'Project file (.json)']
 	] as const) {
 		const trigger = page.getByRole('button', { name: button, exact: true });

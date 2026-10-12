@@ -290,7 +290,7 @@ def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: f
         why = f"holds exactly {rate} m³/s for one day ({math.floor(capacity + 0.5)} m³) and takes none of the farm's own runoff"
     return (
         f"WARNING: farm {name}: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the upstream "
-        f"inflow and {why}. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; "
+        f"inflow and {why}. The workbook has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; "
         "the app imports it as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)"
     )
 
@@ -335,7 +335,7 @@ def as_run_of_river(node: dict[str, Any], source_of_transfer: bool) -> str:
     what = f"its {math.floor(dropped + 0.5)} m³ dummy dam is dropped" if dropped > 0 else "it has no dam"
     return (
         f"WARNING: farm {name}: imported as run of river (--run-of-river): {what}, and a river pump takes its demand "
-        "from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this "
+        "from the river below it. The workbook gives no pump capacity (it has none, and nothing there capped this "
         "unit's take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply "
         "section (issue #54, 2c/2d)"
     )
@@ -434,7 +434,7 @@ def convert_upstream_pct(wb: Workbook, farms: dict[str, dict[str, Any]]) -> None
     for f in farms.values():
         f["pctUpstreamToDam"] = 1 - f["pctUpstreamToDam"]
     wb.notes.append(
-        "[Farm spec] Upstream inflow above dam %: b023's formula sends that share past the dam, not into it, so the import "
+        "[Farm spec] Upstream inflow above dam %: the workbook's formula sends that share past the dam, not into it, so the import "
         "stores 100 % − the workbook's value, which keeps what the workbook ran: 100 % there is an off-channel dam (0 % "
         "here), 0 % a dam on the river (100 % here). Check each dam (docs/model.md §3 Q1)"
     )
@@ -647,7 +647,7 @@ def non_crop_demand_object(uid, farm: str, node_id: str, monthly: list[float], c
         "enabled": True,
         # The workbook's typed-over demand is neither a meter record, an AADD nor a norm by rule (engine 1.56.0).
         "source": "other",
-        "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)",
+        "note": "Workbook [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)",
     }
 
 

@@ -151,9 +151,9 @@ test('the alert email settings failing to download say so and offer a reload', a
 test('a workbook reader that fails to download says so and frees the file input', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/');
-	await page.getByRole('button', { name: 'Import b023 workbook' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Import b023 workbook' });
-	const input = dialog.getByLabel('b023 workbook (.xlsm or .xlsx)');
+	await page.getByRole('button', { name: 'Import workbook' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Import workbook' });
+	const input = dialog.getByLabel('Workbook (.xlsm or .xlsx)');
 	await expect(input).toBeVisible();
 
 	await page.route(BLOCKED, (r) => r.abort());
@@ -165,7 +165,7 @@ test('a workbook reader that fails to download says so and frees the file input'
 	await page.unroute(BLOCKED);
 	await dialog.getByRole('button', { name: 'Reload page' }).click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Import b023 workbook' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Import workbook' })).toBeVisible();
 });
 
 // The run's workbook download loads its writer on click. A failed download

@@ -58,7 +58,7 @@
 <section class="latest" aria-label="Latest run" aria-busy={loading}>
 	{#if meta.legacy}
 		<p class="alert alert-warning" role="note">
-			This run used the legacy runoff model of the b023 workbook, which does not conserve water at the event scale. Its
+			This run used the legacy runoff model of the original workbook, which does not conserve water at the event scale. Its
 			figures are for comparison with the workbook only, not evidence. Engine 1.0.0 removed that model, so the run can’t be
 			re-run: a new run uses GR4J.
 		</p>

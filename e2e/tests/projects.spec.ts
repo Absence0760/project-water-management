@@ -556,7 +556,7 @@ test.describe('fifty projects', () => {
 		await expect(page.getByLabel('Show')).toBeVisible();
 		// The head is one row, Import beside New project (issue #521: it was three full-width buttons, ~150 px,
 		// before any project), so the first project is in the first screen. The two named imports are its list.
-		await expect(page.getByRole('button', { name: 'Import b023 workbook', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Import workbook', exact: true })).toHaveCount(0);
 		const newProject = page.getByRole('button', { name: 'New project', exact: true });
 		const importBox = (await importButton(page).boundingBox())!;
 		const newBox = (await newProject.boundingBox())!;
@@ -573,7 +573,7 @@ test.describe('fifty projects', () => {
 		for (const width of [390, 320]) {
 			await resizeTo(page, { width, height: 844 });
 			await importButton(page).click();
-			for (const item of ['Import b023 workbook', 'Import project file (.json)']) {
+			for (const item of ['Import workbook', 'Import project file (.json)']) {
 				const box = (await page.locator('#pj-import-menu').getByRole('button', { name: item, exact: true }).boundingBox())!;
 				expect(box.x, `${item} at ${width}`).toBeGreaterThanOrEqual(0);
 				expect(box.x + box.width, `${item} at ${width}`).toBeLessThanOrEqual(width);

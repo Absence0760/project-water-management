@@ -383,7 +383,7 @@
 				aria-busy={importWaiting && importSource === 'workbook' ? 'true' : undefined}
 				onpointerenter={prefetchImport}
 				onfocus={prefetchImport}
-				onclick={() => openImport('workbook')}>Import b023 workbook</button
+				onclick={() => openImport('workbook')}>Import workbook</button
 			>
 			<button
 				type="button"
@@ -408,7 +408,7 @@
 				>
 				{#if importMenu}
 					<ul class="import-menu" id="pj-import-menu">
-						<li><button type="button" class="item" onclick={() => pickImport('workbook')}>Import b023 workbook</button></li>
+						<li><button type="button" class="item" onclick={() => pickImport('workbook')}>Import workbook</button></li>
 						<li><button type="button" class="item" onclick={() => pickImport('project')}>Import project file (.json)</button></li>
 					</ul>
 				{/if}

@@ -240,7 +240,7 @@ export interface CalibrationParams {
  * model, which engine 1.0.0 removed (issue #16): it ran GR4J instead.
  */
 export const LEGACY_UPGRADED_WARNING =
-	'LEGACY_UPGRADED: this project was set to the legacy runoff model (b023 workbook), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Settings → Flow calibration) or refit them.';
+	'LEGACY_UPGRADED: this project was set to the legacy runoff model (the original workbook’s), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Settings → Flow calibration) or refit them.';
 
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
 export const RETIRED_CALIBRATION_KEYS = [

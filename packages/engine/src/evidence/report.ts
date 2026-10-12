@@ -172,7 +172,7 @@ export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
 		id: 'notLegacy',
 		label: 'The baseline runs a current runoff model',
 		passed: !legacy,
-		detail: legacy ? 'The legacy (b023 workbook) runoff model does not conserve water at the event scale (audit H1): workbook comparison only.' : `Runoff model ${modelName(b.runoffModel)}.`,
+		detail: legacy ? 'The legacy runoff model (the original workbook’s) does not conserve water at the event scale (audit H1): workbook comparison only.' : `Runoff model ${modelName(b.runoffModel)}.`,
 		refuses: true,
 		blocksIssue: true,
 		fix: 'Run the model again: every run since engine 1.0.0 uses GR4J.'
@@ -2037,7 +2037,7 @@ const dedupe = (list: Erratum[]): Erratum[] => [...new Map(list.map((e) => [e.id
 const finite = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const day = (iso: string) => iso.slice(0, 10);
 const short = (id: string) => id.slice(0, 8);
-const modelName = (m: string) => (m === 'gr4j' ? 'GR4J' : m === 'legacy' ? 'legacy (b023 recession)' : m);
+const modelName = (m: string) => (m === 'gr4j' ? 'GR4J' : m === 'legacy' ? 'legacy (the original workbook’s recession)' : m);
 const fixed = (v: number, d: number) => v.toFixed(d);
 const signed = (s: string) => (s.startsWith('-') ? `−${s.slice(1)}` : `+${s}`);
 const pct0 = (f: number) => `${Math.round(f * 100)} %`;
