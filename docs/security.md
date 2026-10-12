@@ -1205,7 +1205,10 @@ result without signing in, until it expires or its owner revokes it.
   when every farm took nothing. k still counts farm holders only: it is the
   number of farmers each is hidden among, and a mine or a town makes no
   catchment of four farms safe to show; the users count in the dominance
-  rule, where their take is part of the use. The limits are the
+  rule, where their take is part of the use. One loosening follows: with
+  5 or more farm holders, fewer than 5 of them taking water plus enough
+  users can now pass (232 withheld it), since the use is then spread over
+  5 or more holders (pinned by the five-even-users case). The limits are the
   registered volumes' (engine `allocations/holders.ts` `totalShown`,
   `DOMINANCE_TOP1` / `DOMINANCE_TOP2`; the second limb keeps a reader who
   knows one holder's use, such as an applicant's own, from reading the
@@ -1264,7 +1267,11 @@ result without signing in, until it expires or its owner revokes it.
   run's inputs before its series so the trigger can see them). So a future
   insert path, or a bug in `publishedRecordMeta`, can't mark a private
   logger. The gap-filled exclusion stays the app's (the `_fill` sibling may
-  be stored after). Tests: `share/small-catchments.db.test.ts` (an uploaded record
+  be stored after). It checks the series link and the feed, not that the
+  run's stored input equals the live values, and an editor can already
+  create a `dws` feed and set `feed_id` / `feed_days`: it stops a future app
+  path or a bug, not a determined editor (who owns the catchment's data
+  anyway). Tests: `share/small-catchments.db.test.ts` (an uploaded record
   hidden below k as the control; a DWS-fed one shown to the applicant, the
   share link and the results; a day a person wrote, and a private logger,
   never marked; a forged mark stripped by the trigger on another key,
