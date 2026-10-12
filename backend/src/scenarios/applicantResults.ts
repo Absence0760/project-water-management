@@ -6,19 +6,25 @@
 // anything leaves, as applicant.ts does for the base.
 //
 //  - every EWR site: months met, rate and longest run not met, base beside
-//    application; the deficit volume only when the catchment figures show;
-//  - the catchment, base beside application, when every op was a proposal:
-//    its natural flow and daily EWR requirement (the river, made from
-//    natural flow) at any holder count; its outflow, the outflow series and
-//    the EWR deficit volume only at 5 or more farm holders, since natural
-//    minus outflow is the farms' use (the k rule of the share links and the
-//    contributor's series, 025/046, split in 164); its EWR days not met
-//    always (as the share link);
+//    application; the deficit volume only past the k rule (and on the
+//    application's side only when every op was a proposal);
+//  - the catchment, base beside application: its natural flow and daily EWR
+//    requirement (the river, made from natural flow) at any holder count;
+//    its outflow, the outflow series and the EWR deficit volume only at 5 or
+//    more farm holders, since natural minus outflow is the farms' use (the k
+//    rule of the share links and the contributor's series, 025/046, split in
+//    164); its EWR days not met always (as the share link). The
+//    application's side only when every op was a proposal (below); the
+//    base's side always, since it is the published baseline, whose river
+//    (and use, past k) a contributor reads anyway (app_contributor_published_runs,
+//    app_contributor_catchment_runs, 164);
 //  - their own units (their farm links as they read them now, and the nodes
 //    the application's ops add), in full, when every op was a proposal;
 //  - every other farm or water user downstream of those units, under the
-//    anonymous name the base projection gives it ("Farm 3"), with its supply
-//    change as a whole percentage only, when every op was a proposal;
+//    anonymous name the base projection gives it ("Farm 3"), with only the
+//    change in its share of demand supplied, in whole percentage points (the
+//    measure its evidence pack prints, evidence/applicantPacks.ts
+//    `changePts`), when every op was a proposal;
 //  - what ran on their units: their nodes, crops, crop areas, transfers, land
 //    cover, boreholes and demand objects, as in the base projection. An item
 //    an op added under a hidden item's id runs under a fresh one (the
@@ -28,8 +34,10 @@
 // a baseline assumption can change another unit's inputs (its demand set to
 // 0, a neighbour's dam removed), and every figure that moves with it (the
 // catchment's flow, the applicant's own supply, a neighbour's change) could
-// read that unit's values out. So such a run shows the EWR sites' months and
-// the catchment's EWR days only, which the share link shows to anyone.
+// read that unit's values out. So of such a run the application's side shows
+// the EWR sites' months and the catchment's EWR days only, which the share
+// link shows to anyone, and RLS hands over none of its series (118); the
+// base's side stays, as RLS serves it (issue #523 G9 (d)).
 import type { EwrAssuranceSite, FarmSummary, MaskedReId, ModelInput, NetworkNode, NodeKind, ProjectModel, RunSummary, UserSummary } from '@water-management/engine';
 import { projectBaseForApplicant } from './applicant.js';
 
@@ -40,7 +48,7 @@ export interface ApplicantEwrFigures {
 	/** met ÷ months; null without a complete month. */
 	rate: number | null;
 	longestNotMetRun: number;
-	/** Only when the impacted figures show (k and every op a proposal); else null. */
+	/** Only past the k rule, and on the application's side only when every op was a proposal; else null. */
 	deficitM3: number | null;
 }
 
@@ -66,6 +74,12 @@ export interface ApplicantCatchmentFigures {
 export interface ApplicantSeries {
 	startDate: string;
 	values: (number | null)[];
+}
+
+/** A catchment series of both runs: the application's null when an op was a baseline assumption. */
+export interface ApplicantSeriesPair {
+	base: ApplicantSeries;
+	application: ApplicantSeries | null;
 }
 
 export interface ApplicantUnitFigures {
@@ -96,8 +110,12 @@ export interface ApplicantDownstream {
 	/** Its anonymous name in the base projection ("Farm 3", "Water user 1"). */
 	name: string;
 	kind: 'farm' | 'user';
-	/** 100 × (application − base) ÷ base of its mean supply, rounded to a whole percent; null when it had no supply in the base. */
-	supplyChangePct: number | null;
+	/**
+	 * The change in its share of demand supplied, application − base, in whole
+	 * percentage points: the pack's measure (`changePts`, the engine's
+	 * `users[].change.run` rounded). Null when either run has no share (no demand).
+	 */
+	supplyChangePts: number | null;
 }
 
 /** Why the catchment figures or the per-unit figures are left out. */
@@ -111,11 +129,14 @@ export interface ApplicantResults {
 		/** EWR days not met at the outlet, always. */
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
-		/** The flows, or null when an op was a baseline assumption; the outflow in them is null below the k rule (`withheld`). */
-		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		/** The EWR requirement's series whenever the figures show; the outflow's only past the k rule. */
-		series: { outflow: { base: ApplicantSeries; application: ApplicantSeries } | null; ewr: { base: ApplicantSeries; application: ApplicantSeries } | null } | null;
-		/** Why the use's figures (the outflow, its series, the EWR deficit) are left out; null when they show. */
+		/**
+		 * The flows. The base's always (the published baseline: the outflow in it null below the k rule); the
+		 * application's null when an op was a baseline assumption, its outflow null below the k rule (`withheld`).
+		 */
+		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures | null };
+		/** The EWR requirement's series at any holder count, the outflow's only past the k rule; each pair's application side as `figures`'. Null when not read. */
+		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
+		/** Why the application's catchment figures (`baseline_assumptions`) or the use's (the outflow, its series, the EWR deficit: `few_farm_holders`) are left out; null when they show. */
 		withheld: ApplicantWithheld | null;
 	};
 	/** Their own units and those the ops add; [] with `unitsWithheld` when an op was a baseline assumption. */
@@ -142,11 +163,8 @@ export interface ApplicantResultsInput {
 	allProposals: boolean;
 	/** At least 5 farm holders (the k rule). */
 	farmHoldersOk: boolean;
-	/** The catchment series, read under the caller's RLS; null when not read. */
-	series: {
-		outflow: { base: ApplicantSeries; application: ApplicantSeries } | null;
-		ewr: { base: ApplicantSeries; application: ApplicantSeries } | null;
-	} | null;
+	/** The catchment series, read under the caller's RLS (the application's side only when every op was a proposal); null when not read. */
+	series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
 }
 
 const ewrFigures = (s: EwrAssuranceSite | undefined, volumes: boolean): ApplicantEwrFigures | null =>
@@ -193,10 +211,22 @@ function unitFigures(f: FarmSummary | undefined, u: UserSummary | undefined): Ap
 	return null;
 }
 
-/** Mean supply of a unit in a summary, or undefined when the summary doesn't have it. */
-function supplied(s: RunSummary, nodeId: string): number | undefined {
-	return (s.farms.find((f) => f.nodeId === nodeId) ?? s.users?.find((u) => u.nodeId === nodeId))?.avgSuppliedM3Day;
+/** A unit's share of demand supplied (0–1) in a summary: undefined when the summary doesn't have the unit, null when it has no finite share. */
+function shareSupplied(s: RunSummary, nodeId: string): number | null | undefined {
+	const u = s.farms.find((f) => f.nodeId === nodeId) ?? s.users?.find((x) => x.nodeId === nodeId);
+	if (!u) return undefined;
+	return Number.isFinite(u.fractionSupplied) ? u.fractionSupplied : null;
 }
+
+/**
+ * The pack's whole percentage points of a change in share supplied: the engine's evidence report's
+ * `(B − A) × 100` (users[].change.run), rounded as Postgres's round(numeric) rounds it in
+ * app_applicant_pack_units (half away from zero, where Math.round takes −2.5 to −2).
+ */
+export const wholePoints = (pp: number): number => Math.sign(pp) * Math.round(Math.abs(pp));
+
+/** A series pair with the application's side kept only when it may show. */
+const pairShown = (p: ApplicantSeriesPair | null, app: boolean): ApplicantSeriesPair | null => (p ? { base: p.base, application: app ? p.application : null } : null);
 
 /** The nodes below any of `from` in the network (following downstreamNodeId), `from` excluded. */
 export function downstreamOf(nodes: readonly Pick<NetworkNode, 'id' | 'downstreamNodeId'>[], from: Iterable<string>): Set<string> {
@@ -235,10 +265,11 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 	const anonName = new Map(baseView.model.nodes.filter((n) => anonymous.has(n.id)).map((n) => [n.id, n.name]));
 	const kindOf = new Map<string, NodeKind>([...i.base.model.nodes, ...i.runModel.nodes].map((n) => [n.id, n.kind]));
 
-	// The k rule, split (164): the river (natural flow, the EWR requirement) whenever the figures may show at all;
-	// the use (outflow, its series, the EWR deficit) only past k as well.
-	const naturalShown = i.allProposals;
-	const impactedShown = i.allProposals && i.farmHoldersOk;
+	// The k rule, split (164): the river (natural flow, the EWR requirement) at any holder count; the use (outflow,
+	// its series, the EWR deficit) only past k. The base is the published baseline, which a contributor reads anyway;
+	// the application's side only when every op was a proposal (module comment).
+	const appShown = i.allProposals;
+	const impactedShown = i.farmHoldersOk;
 	const catchmentWithheld: ApplicantWithheld | null = !i.allProposals ? 'baseline_assumptions' : !i.farmHoldersOk ? 'few_farm_holders' : null;
 
 	// --- EWR sites: the base's and the application's, paired by site ---
@@ -261,7 +292,7 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 			name: siteName(any),
 			isOutlet: key === 'outlet',
 			base: ewrFigures(b, impactedShown),
-			application: ewrFigures(a, impactedShown)
+			application: ewrFigures(a, impactedShown && appShown)
 		};
 	});
 
@@ -286,19 +317,19 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 					};
 				});
 
-	// --- the other units downstream, anonymous, as a rounded percentage ---
+	// --- the other units downstream, anonymous, as whole percentage points of share supplied (the pack's measure) ---
 	const below = downstreamOf(i.runModel.nodes, [...mine].filter((id) => runNodes.has(id)));
 	const downstream: ApplicantDownstream[] = !i.allProposals
 		? []
 		: baseView.model.nodes
 				.filter((n) => anonymous.has(n.id) && below.has(n.id) && (n.kind === 'farm' || n.kind === 'user'))
 				.flatMap((n) => {
-					const b = supplied(i.baseSummary, n.id);
-					const a = supplied(i.runSummary, n.id);
+					const b = shareSupplied(i.baseSummary, n.id);
+					const a = shareSupplied(i.runSummary, n.id);
 					if (b === undefined || a === undefined) return [];
-					const pct = b > 0 ? Math.round((100 * (a - b)) / b) : null;
-					// -0 reads as "−0 %".
-					return [{ nodeId: n.id, name: n.name, kind: n.kind as 'farm' | 'user', supplyChangePct: pct === 0 ? 0 : pct }];
+					const pts = b === null || a === null ? null : wholePoints((a - b) * 100);
+					// -0 reads as "−0 pp".
+					return [{ nodeId: n.id, name: n.name, kind: n.kind as 'farm' | 'user', supplyChangePts: pts === 0 ? 0 : pts }];
 				});
 
 	// --- what ran on their units, by the ids the applicant gave ---
@@ -323,8 +354,8 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 		catchment: {
 			ewrDaysNotMet: { base: i.baseSummary.catchment.ewrDaysNotMet, application: i.runSummary.catchment.ewrDaysNotMet },
 			ewrFractionDaysNotMet: { base: i.baseSummary.catchment.ewrFractionDaysNotMet, application: i.runSummary.catchment.ewrFractionDaysNotMet },
-			figures: naturalShown ? { base: catchmentFigures(i.baseSummary, impactedShown), application: catchmentFigures(i.runSummary, impactedShown) } : null,
-			series: naturalShown && i.series ? { ewr: i.series.ewr, outflow: impactedShown ? i.series.outflow : null } : null,
+			figures: { base: catchmentFigures(i.baseSummary, impactedShown), application: appShown ? catchmentFigures(i.runSummary, impactedShown) : null },
+			series: i.series ? { ewr: pairShown(i.series.ewr, appShown), outflow: impactedShown ? pairShown(i.series.outflow, appShown) : null } : null,
 			withheld: catchmentWithheld
 		},
 		units,

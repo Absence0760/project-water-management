@@ -1301,14 +1301,16 @@ export type ApplicantWithheld = 'baseline_assumptions' | 'few_farm_holders';
 
 interface ApplicantSeriesPair {
 	base: { startDate: string; values: (number | null)[] };
-	application: { startDate: string; values: (number | null)[] };
+	/** Null when an op was a baseline assumption (the base is the published baseline, shown anyway). */
+	application: { startDate: string; values: (number | null)[] } | null;
 }
 
 /**
  * GET …/scenarios/:sid/results (WP-3.3, D2's default, pending the client): a
  * run of an application as its applicant sees it against its base. Every
  * other farm or water user only downstream of theirs, by the anonymous name
- * the base gives it ("Farm 3") and a whole percentage.
+ * the base gives it ("Farm 3") and its change in share of demand supplied in
+ * whole percentage points (the pack's measure).
  */
 export interface ApplicantResults {
 	allProposals: boolean;
@@ -1316,14 +1318,16 @@ export interface ApplicantResults {
 	catchment: {
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
-		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		/** The EWR requirement whenever the figures show; the outflow only past the k rule (164). */
+		/** The base's always (the published baseline); the application's null when an op was a baseline assumption. */
+		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures | null };
+		/** The EWR requirement at any holder count; the outflow only past the k rule (164). Null when not read. */
 		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
-		/** Why the use's figures (outflow, its series, the EWR deficit) are left out. */
+		/** Why the application's figures (`baseline_assumptions`) or the use's (outflow, its series, the EWR deficit: `few_farm_holders`) are left out. */
 		withheld: ApplicantWithheld | null;
 	};
 	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
-	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePct: number | null }[];
+	/** supplyChangePts: the change in share of demand supplied, whole percentage points (null without a share in either run). */
+	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePts: number | null }[];
 	unitsWithheld: ApplicantWithheld | null;
 	/** What ran on their units, by the ids they gave. */
 	model: {

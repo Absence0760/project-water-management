@@ -12,7 +12,9 @@
 // decision set aside (228_decision_events), which the applicant reads; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
-// warning and can't be decided. Axe on
+// warning and can't be decided; a run with a baseline assumption shows the
+// applicant the published baseline's river beside nothing of theirs but the
+// EWR (issue #523 G9 (d)). Axe on
 // both views, light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember } from '../support/api.ts';
@@ -207,6 +209,47 @@ test('an application whose run was changed behind the API shows the assessor a w
 	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('No').check();
 	await expect(decide.getByRole('button', { name: 'Record the authority’s decision' })).toBeDisabled();
+});
+
+test('a run with a baseline assumption shows the applicant the published baseline’s river beside nothing of theirs but the EWR', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Assuming applicant');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications assumption', applicant.user);
+	const P = `${API_URL}/projects/${project.id}`;
+	const req = applicant.context.request;
+	const lower = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Lower farm')!.id;
+	// Their own dam (a proposal) and the other farm's demand halved (a baseline assumption).
+	const made = await req.post(`${P}/scenarios`, {
+		data: {
+			name: 'Halve the other farm',
+			baseRunId: runId,
+			ops: [
+				{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 },
+				{ op: 'demand.scale', factor: 0.5, nodeIds: [lower] }
+			]
+		}
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	const sid = (await made.json()).scenario.id as string;
+	expect((await req.post(`${P}/scenarios/${sid}/runs`, { data: {} })).status()).toBe(201);
+
+	const a = applicant.page;
+	await a.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+	const results = a.getByTestId('applicant-results');
+	await expect(results.getByTestId('applicant-results-withheld')).toContainText('is a baseline assumption');
+	// The baseline's natural flow, as RLS serves it of the published run (issue #523 G9 (d)); theirs not shown.
+	const natural = results.getByTestId('applicant-catchment').getByRole('row', { name: /^Natural flow/ });
+	await expect(natural.getByRole('cell')).toHaveCount(2);
+	await expect(natural.getByRole('cell').first()).toHaveText(/^\d/);
+	await expect(natural.getByRole('cell').last()).toHaveText('Not shown');
+	await expect(results.getByTestId('applicant-catchment-assumption')).toHaveText(
+		"Your application's column is not shown for a run with a baseline assumption (above). The baseline's is the published run's."
+	);
+	// Two farm holders: the baseline's outlet flow stays out too.
+	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	await expect(results.getByTestId('applicant-units')).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	await expectNoViolations(a);
 });
 
 test('the Applications tab says so when nothing is submitted, and a draft stays with its applicant', async ({ page, owner, signIn }) => {

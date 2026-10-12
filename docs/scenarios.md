@@ -1621,20 +1621,35 @@ scenario is `'team'`, and behaves exactly as above).
     charge, the dam;
   - every other farm or water user **downstream** of those units (along
     `downstreamNodeId` in the run's network) under the anonymous name the
-    base projection gives it, with only the change in its mean supply as a
-    whole percentage ("Farm 3 downstream: supply −4 %");
+    base projection gives it, with only the change in its share of demand
+    supplied, in whole percentage points ("Farm 3 downstream: share of
+    demand met −2 pp"). That is the measure the application's evidence pack
+    prints for the same unit (§ 4's `users[].change.run`, rounded by
+    `app_applicant_pack_units`), so the two never disagree (issue #523 G9
+    (a)); a relative change in mean supply, which this was before, reads
+    differently for the same run (50 % → 47.9 % met is −2 pp but −4 %) and
+    has no value for a unit with no supply in the base;
   - **what ran on their units**: their nodes, crops, crop areas, transfers,
     land cover, boreholes and demand objects as the base projection shows
     them, where an item an op added under a hidden item's id (the run holds
     it under a fresh one) shows under the id the applicant gave it.
 
-  **Only when every op was a proposal** (`app_run_all_proposals`, the share
-  link's rule). A baseline assumption can change another unit's inputs (its
-  demand halved, its dam emptied), and every figure that moves with it (the
-  catchment's flow, their own supply, a neighbour's change) could read that
-  unit's values out, so such a run shows the EWR sites' months and the EWR
-  days only, and RLS hands a contributor none of its series (118). The
-  percentage is rounded to a whole number and never comes with a volume. The
+  **The application's side only when every op was a proposal**
+  (`app_run_all_proposals`, the share link's rule). A baseline assumption
+  can change another unit's inputs (its demand halved, its dam emptied, its
+  land cover or area changed), and every figure that moves with it (the
+  catchment's flow, natural flow included, their own supply, a neighbour's
+  change) could read that unit's values out, so of such a run the
+  application's side shows the EWR sites' months and the EWR days only, and
+  RLS hands a contributor none of its series (118). **The base's side
+  always**: it is the published baseline, whose river (natural flow, the
+  EWR requirement) a contributor reads at any holder count and whose use
+  (outflow, EWR deficit) past k (`app_contributor_published_runs`,
+  `app_contributor_catchment_runs`, 164), so the view shows what RLS serves
+  and nothing it doesn't (issue #523 G9 (d): the view used to hide the
+  base's natural flow too, though RLS served it, and the opposite choice,
+  showing the application's natural flow, would hand out the oracle 118
+  closed). The points are whole and never come with a volume. The
   Applicant view shows it all under the changes (ui.md § Applications).
 - **The log.** `scenario.created / changed / submitted / withdrawn /
   reopened / decided / shared / unshared / deleted` and `run.created` carry
@@ -1725,8 +1740,12 @@ applied, classed baseline beside their own farm's proposal), e2e
 the results, their Yield panel, the assessor's
 decision, the owner's party and the applicant's share picker, axe in both
 themes). The results: `applicantResults.test.ts` (the projection: names as
-the base projection gives them, the rounded percentage, what's left out
-after a baseline assumption and below five farm holders, the `reIds` mapped
+the base projection gives them, the whole percentage points of share
+supplied as the pack rounds them, what's left out after a baseline
+assumption (the application's side, never the published base's) and below
+five farm holders, the `reIds` mapped
 back, each with its positive control) and `results.db.test.ts` (118 end to
 end: the string scan, who may ask, the definer function's readers, RLS on a
-baseline-assumption run's series).
+baseline-assumption run's series, beside the base's that it serves), e2e
+`applications.spec.ts` (a run with a baseline assumption shows the
+baseline's column only).
