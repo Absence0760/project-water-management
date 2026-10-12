@@ -40,8 +40,8 @@ client goes live. Not customer-facing.
   application go with the account. Two things keep the name: a sign-off's
   typed name and registration and the names printed in an evidence pack's
   hashed manifest, both for a **bounded** period, until the licence
-  record's closing date (the licence's expiry, or the refusal or withdrawal,
-  + 3 years; a 5-yearly review while no outcome is recorded; 161), defended under s14(1)(b) and s14(6)(b) (pre-counsel
+  record's closing date (the licence's expiry, or any other outcome (refused, rejected, not considered or withdrawn),
+  + 3 years; 233; a 5-yearly review while no outcome is recorded; 161), defended under s14(1)(b) and s14(6)(b) (pre-counsel
   research, fact-check of 2026-09-30 on #112). The only refusal left is the
   only owner of a project or admin of a team, until it is handed over.
   Self-service deletion (Account → Delete my account, 143, #112) is the
@@ -296,7 +296,7 @@ cl. 3). The licensing ones are rows in
 - [ ] **The life of the licence record** (Privacy §7, evidence-pack.md §
   Retention): *Provisional position (pre-counsel research, 2026-10-01):* a
   date the project holds (161_licence_record): the licence's expiry, or
-  the refusal or withdrawal, + 3 years (Prescription Act s11(d), s12(3);
+  any other outcome (refused, rejected, not considered or withdrawn), + 3 years (233; Prescription Act s11(d), s12(3);
   PAJA; NWA s28(1)(e)), with a 5-yearly review while no outcome is
   recorded (NWA s28(1)(f)'s interval). The tick emails the owners and the
   operator; it never deletes: the operator deletes on the client's written
@@ -554,7 +554,7 @@ cl. 3). The licensing ones are rows in
   entries are treated as personal information, and deletion now also
   blanks the masked address in invitation entries (160).
   **Licence record**: "the life of the licence record" is a date the
-  project holds (161): the licence's expiry, or the refusal or withdrawal,
+  project holds (161, 233): the licence's expiry, or any other outcome (refused, rejected, not considered or withdrawn),
   + 3 years, with a 5-yearly review while no outcome is recorded; the tick
   emails the owners and the operator, the operator deletes on the client's
   written confirmation (deployment.md runbook item 16); the pack signer is

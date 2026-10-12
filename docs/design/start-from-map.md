@@ -67,7 +67,7 @@ reload) lands on the same step.
    existing Part B proposals, each with its own accept, and where it is:
    rain from the boundary (the CHIRPS feed, on this sheet), the nearest
    gauging station (Settings → Data feeds), evaporation (Settings &
-   calibration → Demand, which links Evaporation from the map: the monthly A-pan the dams, river pools and crops lose,
+   calibration → Demand, which links Evaporation from the map: the monthly A-pan the dams and crops lose (river pools are storage only since engine 1.86.0),
    since an ET₀ row from the map feeds the runoff model only and with no
    A-pan the dams lose nothing; round 4), each dam's capacity from the
    register and full-supply area from its polygon (Dams), cultivated area
@@ -121,7 +121,8 @@ reference, never the composite's value. Built in #523 C1:
 - **Dams and abstraction points are parts of their unit.** A dam is **Part
   of its unit's composite dam**, an other point **Its unit's river pump**
   (or another water user); each goes to the first unit whose boundary holds
-  it (a polygon by its centre), else to the rest of the catchment, or is
+  it (a polygon by a point inside its outline, so a long or concave dam
+  can't land in the next unit), else to the rest of the catchment, or is
   dropped outside the catchment boundary. They are never placed on the
   elevation model, never units, and on apply only linked to their unit
   (`map_feature.node_id`, never a link a feature has). Nothing is filled:

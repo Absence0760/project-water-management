@@ -794,7 +794,7 @@ runs and accumulations are real) can't be decided without the client.
       natural-MAR tolerance. Still to build, not a judgement: a scenario op
       for a dam's surveyed curve (§ Yield) and GN 538's quaternary → rate
       schedule as data (Appendix B is a scan; the rate is an input today).
-      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** for the items in this pass (`ewrChargeSource`, `lowFlowMeasure`, the filter's passes, τ, the outcome cut-offs and the 5 % / 20 % days, the ±15 % natural-MAR tolerance) keep the built defaults; the pass count is the first thing to check if base flow is switched on ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** for the items in this pass (`ewrChargeSource`, `lowFlowMeasure`, the filter's passes, τ, the outcome cut-offs and the 5 % / 20 % days, the ±15 % natural-MAR tolerance) keep the built defaults; the pass count is the first thing to check if base flow is switched on ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)). (settled 2026-10-12: one pass, engine 1.87.0)
 - [x] **Client regression suite is thinner since N1** (fixed 2026-09-28,
       issue #68). The suite now compares the N1 columns against an **N1
       replay**: each farm with e < 1 runs with a demand factor of e, so it
@@ -1155,6 +1155,37 @@ runs and accumulations are real) can't be decided without the client.
       than half the water years (`EWR_HIGH_FLOW_NATURAL_MIN_SHARE`),
       §2.9d. Open: whether the engine should take the gazette's
       instantaneous peak and a per-site peak-to-daily ratio instead.
+
+**Round 7's modelling follow-ups (issue #523 F2, PR #527, 2026-10-12).**
+The refit was reported privately to the hydrologist (client data stays in
+the private source repo); these are what it left open:
+
+- [ ] **The PE level.** The hydrologist chooses, from the private refit
+      report, which pan the client catchment's PE stands on (A-pan with the
+      project's coefficient, or S-pan). Fix: record the choice in the
+      project's settings and in calibration-research.md. Trigger: the
+      hydrologist's answer.
+- [ ] **An S-pan PE preset, only if S-pan is chosen.** `fit-sweep` already
+      compares A-pan and S-pan with a per-month coefficient (F1 was not
+      needed), but the app has no preset for it. Fix: an S-pan entry in
+      `PAN_COEFFICIENT_PRESETS` that fills the monthly factors and records
+      their source, with an `ENGINE_VERSION` bump if it changes a run, and
+      model.md §2.4a. Trigger: the hydrologist picks S-pan.
+- [ ] **X1's upper bound.** Whether GR4J's X1 bound in the fit
+      (`CalibrationBounds`) is wide enough at the chosen PE level, or
+      constrains the fit there. Fix: widen or confirm the bound, documented
+      in model.md §2.10b. Trigger: with the PE-level choice.
+- [ ] **A refit with per-unit rain.** Fit again with each unit's own rain
+      (`settings.unitRain.mode = 'perUnit'`, #526) to see whether it
+      changes the parameters or the scores. Fix: a private refit report,
+      and the project's settings if the hydrologist adopts it. Trigger:
+      #526 is in the client project's release, after the PE-level choice.
+- [ ] **A second-seed check of the non-parametric fits.** Both
+      non-parametric fits (`kgeNp`) landed exactly on X4's bound, 2.00,
+      which may be the optimiser stopping at a bound rather than an optimum.
+      Fix: rerun them with another seed and more starts (`fit-sweep
+      --seed --starts`); if X4 stays pinned, review its bound with X1's.
+      Trigger: before anyone relies on those fits, and with the refit above.
 
 ## Issue #4 Phase 6: simulated review findings (2026-09-24)
 
@@ -5103,6 +5134,22 @@ Applicant view and the Applications tab. Left:
       Older `licence.outcome` audit events keep their words; the timeline
       reads them. Trigger: the first `backend@` and `web@` releases that both
       contain 233 are in production.
+- [ ] **Drop `project_member.acts_for_authority` and 163's
+      `project_member_authority` trigger (the contract step of 229).**
+      229_authority_delegates (issue #523 G5) moved who acts for the
+      responsible authority to `authority_delegate` and redefined
+      `app_acts_for_authority` to read only its confirmed rows, but left
+      the old flag in place (read by nothing new; `water_app` may no longer
+      set it), so a backend release from before 229 keeps working during a
+      deploy. Fix: a migration that drops the column and 163's
+      `project_member_authority()` trigger and function (from their latest
+      definitions), and the DB tests that still write the column
+      (`projects/authority.db.test.ts`, `authority-delegates.db.test.ts`)
+      turn into checks that it is gone; the catalogue guards stay green.
+      Trigger: the first `backend@`
+      and `web@` releases that both contain 229 are in production, and
+      deployment.md runbook step 18 (each authority reviews its
+      grandfathered delegates) is done.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
