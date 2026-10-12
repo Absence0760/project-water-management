@@ -2,18 +2,28 @@
 // § Project): what the record's dates say, in words, and the owner's form
 // turned into the API's body. Provisional position (pre-counsel research,
 // 2026-10-01): the names an issued pack or a sign-off keeps are kept until
-// three years after the licence expires, or three years after the
-// application is refused or withdrawn; until the outcome is recorded, an
-// owner confirms every five years that the record is still needed.
+// three years after the licence expires, or three years after any other
+// outcome; until the outcome is recorded, an owner confirms every five years
+// that the record is still needed. The outcomes are the authority's words
+// (D14, as an application's decision records them) and the applicant's
+// withdrawal (233_licence_record_outcome_words, issue #523 G9 (b)).
 import type { LicenceOutcome, LicenceOutcomeInput, LicenceRecord } from '$lib/api';
 
-export const OUTCOME_LABEL: Record<LicenceOutcome, string> = { granted: 'Granted', refused: 'Refused', withdrawn: 'Withdrawn' };
+export const OUTCOME_LABEL: Record<LicenceOutcome, string> = {
+	licence_issued: 'Licence issued',
+	licence_refused: 'Licence refused',
+	application_rejected: 'Application rejected (formal requirements)',
+	not_considered: 'Not considered: use already authorised',
+	application_withdrawn: 'Application withdrawn'
+};
 
 /** One sentence on where the record stands, as of `today` (YYYY-MM-DD). */
 export function recordStatus(r: LicenceRecord, today: string): { text: string; due: boolean } {
 	if (r.outcome) {
 		const what =
-			r.outcome === 'granted' ? `Granted on ${r.outcomeOn}; the licence expires on ${r.expiresOn}.` : `${OUTCOME_LABEL[r.outcome]} on ${r.outcomeOn}.`;
+			r.outcome === 'licence_issued'
+				? `Licence issued on ${r.outcomeOn}; it expires on ${r.expiresOn}.`
+				: `${OUTCOME_LABEL[r.outcome] ?? r.outcome} on ${r.outcomeOn}.`;
 		const closes = r.closesOn ?? '';
 		const due = closes !== '' && closes <= today;
 		return {
@@ -45,9 +55,9 @@ export function formProblem(f: OutcomeForm): string | null {
 	if (!f.reason.trim()) return 'Say why: the decision letter or its reference.';
 	if (f.outcome === '') return null;
 	if (!f.outcomeOn) return 'Give the date of the decision.';
-	if (f.outcome === 'granted') {
+	if (f.outcome === 'licence_issued') {
 		if (!f.expiresOn) return 'Give the date the licence expires.';
-		if (f.expiresOn < f.outcomeOn) return 'The licence expires before it was granted.';
+		if (f.expiresOn < f.outcomeOn) return 'The licence expires before it was issued.';
 	}
 	return null;
 }
@@ -55,6 +65,6 @@ export function formProblem(f: OutcomeForm): string | null {
 export function outcomeBody(f: OutcomeForm): LicenceOutcomeInput {
 	const reason = f.reason.trim();
 	if (f.outcome === '') return { outcome: null, reason };
-	if (f.outcome === 'granted') return { outcome: 'granted', outcomeOn: f.outcomeOn, expiresOn: f.expiresOn, reason };
+	if (f.outcome === 'licence_issued') return { outcome: 'licence_issued', outcomeOn: f.outcomeOn, expiresOn: f.expiresOn, reason };
 	return { outcome: f.outcome, outcomeOn: f.outcomeOn, reason };
 }

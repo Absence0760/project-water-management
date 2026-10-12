@@ -376,7 +376,7 @@
 					{/if}
 					{#if run.legacy}
 						<p class="alert alert-warning">
-							Legacy runoff model (b023 workbook, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1).
+							Legacy runoff model (the original workbook’s, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1).
 							Workbook comparison only, not evidence.
 						</p>
 					{/if}

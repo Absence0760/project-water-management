@@ -16,12 +16,11 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, confirmAsOperator, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
-import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { fileURLToPath } from 'node:url';
-import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
+import { fixtureLonLat, OUTLET_CELL, valleyUnitRing } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
@@ -161,6 +160,26 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['registration.requirement'],
 		call: (c) => c.owner.call('PUT', `${at(c)}/registration-check-required`, { required: false })
 	},
+	// Who acts for the authority (229, written by the database's authority_delegate_audit): the owner proposes the
+	// editor, the owner (confirmed by the operator, the bootstrap) confirms them, then removes them, before they leave below.
+	{
+		route: `POST ${P}/authority-delegates`,
+		records: ['authority.proposed'],
+		call: (c) => c.owner.call('POST', `${at(c)}/authority-delegates`, { userId: c.member.id })
+	},
+	{
+		route: `POST ${P}/authority-delegates/:userId/confirm`,
+		records: ['authority.confirmed'],
+		call: async (c) => {
+			await confirmAsOperator(c.projectId, c.owner.id);
+			return c.owner.call('POST', `${at(c)}/authority-delegates/${c.member.id}/confirm`, {});
+		}
+	},
+	{
+		route: `DELETE ${P}/authority-delegates/:userId`,
+		records: ['authority.removed'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/authority-delegates/${c.member.id}`)
+	},
 	{
 		route: `DELETE ${P}/members/:userId`,
 		records: ['member.removed'],
@@ -259,10 +278,10 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	{
 		route: `POST ${P}/publication/:pubId/endorse`,
-		records: ['publication.endorsed', 'member.authority'],
+		records: ['publication.endorsed'],
 		call: async (c) => {
-			// Marking the owner as acting for the authority is its own recorded change (member.authority, 163).
-			expect((await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true })).status).toBe(200);
+			// The owner acts for the authority: confirmed by the operator above (authority-delegates entries, 229).
+			await confirmAsOperator(c.projectId, c.owner.id);
 			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
 		}
 	},
@@ -304,7 +323,7 @@ const WRITE_ROUTES: Entry[] = [
 	{
 		route: `PUT ${P}/licence-record`,
 		records: ['licence.outcome'],
-		call: (c) => c.owner.call('PUT', `${at(c)}/licence-record`, { outcome: 'refused', outcomeOn: '2026-03-01', reason: 'guard' })
+		call: (c) => c.owner.call('PUT', `${at(c)}/licence-record`, { outcome: 'licence_refused', outcomeOn: '2026-03-01', reason: 'guard' })
 	},
 	// Alert rules (WP-2.13). Saved switched off here, so no alert check is left queued for other files' ticks.
 	{
@@ -449,15 +468,6 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
-		// A dam's capacity from the register of dams: a revision whose reason names the registered dam.
-		route: `POST ${P}/nodes/:nodeId/dam-capacity-from-register`,
-		records: ['revision'],
-		call: async (c) => {
-			await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
-			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-capacity-from-register`, { registerNo: 'Z100/07' });
-		}
-	},
-	{
 		// A planted area from land cover (issue #326 B-landcover): a revision whose reason names the dataset, version and method.
 		route: `POST ${P}/nodes/:nodeId/crop-area-from-land-cover`,
 		records: ['revision'],
@@ -560,7 +570,9 @@ const WRITE_ROUTES: Entry[] = [
 			const [dlon, dlat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y - 99.5);
 			const gauge = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'gauge', name: 'Guard weir', lon: olon, lat: olat })).body.feature.id;
 			const dam = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'dam', name: 'Guard dam', lon: dlon, lat: dlat })).body.feature.id;
-			const body = { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] };
+			// The unit is its own boundary (start-16); the dam inside it is part of its composite dam.
+			const unit = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'other', name: 'Guard unit', geometry: { type: 'Polygon', coordinates: [valleyUnitRing(0, OUTLET_CELL.y - 80)] } })).body.feature.id;
+			const body = { outletFeatureId: gauge, points: [{ featureId: unit, role: 'unit' }, { featureId: dam, role: 'dam' }] };
 			const r = await c.owner.call('POST', `${sat}/map/start`, body);
 			c.startBody = body;
 			c.startId = (await c.owner.call('POST', `${sat}/map/start`, body)).body.proposal?.id;
@@ -575,7 +587,7 @@ const WRITE_ROUTES: Entry[] = [
 			const r = await c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId}/discard`);
 			const again = await c.owner.call('POST', `/projects/${c.startProject}/map/start`, c.startBody);
 			c.startId2 = again.body.proposal?.id;
-			c.startUnits = again.body.proposal?.plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: true, drainsInto: true, runoffToDam: true }));
+			c.startUnits = again.body.proposal?.plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: true, drainsInto: true, runoffToDam: false }));
 			return r;
 		}
 	},
@@ -590,7 +602,7 @@ const WRITE_ROUTES: Entry[] = [
 				rest: { include: true, name: 'Rest of the catchment', area: true }
 			})
 	},
-	// --- divide that model from the map (182): the dam's point stands for its unit now; the rest a new unit (a change, so a revision) ----
+	// --- divide that model from the map (182): the unit's boundary stands for its unit now; the rest a new unit (a change, so a revision) ----
 	{
 		route: `POST ${P}/map/divide`,
 		records: ['map.divide_proposed'],
@@ -598,9 +610,9 @@ const WRITE_ROUTES: Entry[] = [
 		call: async (c) => {
 			const sat = `/projects/${c.startProject}`;
 			const features = (await c.owner.call('GET', `${sat}/map/features`)).body.features as { id: string; kind: string; nodeId: string | null }[];
-			const dam = features.find((f) => f.kind === 'dam')!;
+			const unit = features.find((f) => f.kind === 'other' && f.nodeId)!;
 			const outlet = features.find((f) => f.kind === 'gauge')!;
-			const r = await c.owner.call('POST', `${sat}/map/divide`, { outletFeatureId: outlet.id, points: [{ featureId: dam.id, nodeId: dam.nodeId }] });
+			const r = await c.owner.call('POST', `${sat}/map/divide`, { outletFeatureId: outlet.id, points: [{ featureId: unit.id, nodeId: unit.nodeId }] });
 			c.divideId = r.body.proposal?.id;
 			c.divideUnits = r.body.proposal?.plan.units.map((u: { key: string }) => ({ key: u.key, area: true, drainsInto: true, runoffToDam: false, add: false }));
 			return r;
@@ -633,9 +645,14 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.decided'],
 		call: async (c) => {
 			expect((await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)).status).toBe(200);
-			await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true });
+			await confirmAsOperator(c.projectId, c.owner.id);
 			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		}
+	},
+	{
+		route: `POST ${P}/scenarios/:sid/appeals`,
+		records: ['scenario.appeal_recorded'],
+		call: (c) => c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/appeals`, { kind: 'lodged', forum: 'water_tribunal', eventDate: DECISION.decisionDate })
 	},
 	{
 		route: `POST ${P}/scenarios/:sid/members`,
@@ -831,7 +848,7 @@ const WRITE_ROUTES: Entry[] = [
 		call: async (c) => {
 			const assessor = await signUp('Gauthority');
 			expect((await c.owner.call('POST', `/projects/${c.packProjectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
-			expect((await c.owner.call('PATCH', `/projects/${c.packProjectId}/members/${assessor.id}`, { actsForAuthority: true })).status).toBe(200);
+			await actForAuthority(c.owner, c.packProjectId as string, assessor.id);
 			return c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/send`, {});
 		},
 		projectOf: (c) => c.packProjectId as string,

@@ -43,6 +43,7 @@ import {
 import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
 import { runReturnFlow, type CropArea, type CurtailmentFarm, type CurtailmentSummary, type DemandObject, type IrrigationSystemDef, type NetworkNode, type Transfer } from '../project';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
+import { userRestrictionShare } from '../network/restriction';
 import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverTakeKey } from '../network/riverSource';
 import { modelFarmEfficiency, type CropEfficiencyInput, type CropSystemInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
@@ -286,6 +287,11 @@ export interface SeasonAnalysis {
 	bindingApproximate: boolean;
 }
 
+/** A Priority user's demand after the drought restriction (engine 1.86.0), when the run restricted it. */
+function restrictedOf(run: ProjectionRun, nodeId: string, days: number): { restrictedDemand?: Float64Array } {
+	return run.series(nodeId, 'restricted_demand') ? { restrictedDemand: need(run, nodeId, 'restricted_demand', days) } : {};
+}
+
 function need(run: ProjectionRun, nodeId: string | null, key: string, days: number): Float64Array {
 	const v = run.series(nodeId, key);
 	if (!v) throw new ProjectionInputError(`the run has no ${key} series${nodeId ? ` for hydrological unit ${nodeId}` : ''}: run the model again to publish it`);
@@ -321,12 +327,13 @@ function transferVolumes(
 	days: number
 ): { rules: { from: number; to: number; volume: Float64Array }[]; approximate: boolean } {
 	const perRule = storedRules(run, days);
-	if (perRule) return { rules: perRule.rules.map((r, k) => ({ from: index.get(r.fromNodeId)!, to: index.get(r.toNodeId)!, volume: perRule.volumes[k]! })), approximate: false };
+	if (perRule) return { rules: perRule.rules.map((r, k) => ({ from: index.get(r.fromNodeId)!, to: index.get(r.toNodeId!)!, volume: perRule.volumes[k]! })), approximate: false };
 	const pairs = new Map<string, [number, number]>();
 	for (const tr of run.transfers) {
 		if (!tr.enabled) continue;
 		const a = index.get(tr.fromNodeId);
-		const b = index.get(tr.toNodeId);
+		// A rule out of the catchment (engine ≥ 1.86.0) is never a leg: the engine charges it to its source as an export.
+		const b = tr.toNodeId === null ? undefined : index.get(tr.toNodeId);
 		if (a === undefined || b === undefined || a === b) continue;
 		if (run.nodes[a]!.kind !== 'farm' || run.nodes[b]!.kind !== 'farm') continue;
 		const [lo, hi] = a < b ? [a, b] : [b, a];
@@ -594,7 +601,7 @@ export function curtailmentSeriesKeys(
 	const inRule = new Set<string>();
 	for (const tr of transfers) {
 		const a = byId.get(tr.fromNodeId);
-		const b = byId.get(tr.toNodeId);
+		const b = tr.toNodeId === null ? undefined : byId.get(tr.toNodeId);
 		if (tr.enabled && a && b && a !== b && a.kind === 'farm' && b.kind === 'farm') inRule.add(a.id).add(b.id);
 	}
 	const rules = farmRules(transfers, nodes);
@@ -617,6 +624,8 @@ export function curtailmentSeriesKeys(
 		} else if (n.kind === 'user') {
 			if (!stored || options.otherUsers !== false) add(n.id, 'supplied');
 			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');
+			// A Priority user's demand after the drought restriction (engine 1.86.0): read when the run stored one.
+			if (options.otherUsers !== false && userRestrictionShare(n) > 0 && (!has || has(n.id, 'restricted_demand'))) add(n.id, 'restricted_demand');
 		} else if (n.kind === 'gauge' && i !== topo.outflow && sites.has(i)) {
 			add(n.id, siteShortfallKey(n.id), 'ewr_charged', 'ewr_natural');
 		}
@@ -685,7 +694,9 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 				supplied: need(run, n.id, 'supplied', days),
 				returned: need(run, n.id, 'return_flow', days),
 				ewrCharge: need(run, n.id, 'ewr_charge', days),
-				consumptivePerSupplied: consumptiveShare(n, run)
+				consumptivePerSupplied: consumptiveShare(n, run),
+				// A Priority user's fixed restriction % (engine 1.86.0), as runModel reads it.
+				...(userRestrictionShare(n) > 0 ? { restrictionPct: userRestrictionShare(n), ...restrictedOf(run, n.id, days) } : {})
 			});
 		}
 	}

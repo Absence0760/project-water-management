@@ -4,10 +4,25 @@
 	// only, so a viewer gets it too. At least 24 px tall (WCAG 2.5.8).
 	import { FLOW_UNITS, type FlowUnit, type FlowUnitId } from './flowUnit.svelte';
 
-	let { unit, label }: { unit: FlowUnit; label: string } = $props();
+	let {
+		unit,
+		label,
+		onpick
+	}: {
+		unit: FlowUnit;
+		label: string;
+		/** After a pick, with the scale it had before: a caller holding typed text rewrites it in the new unit (the scenario form). */
+		onpick?: (fromScale: number) => void;
+	} = $props();
+
+	function pick(id: FlowUnitId) {
+		const from = unit.scale;
+		unit.set(id);
+		onpick?.(from);
+	}
 </script>
 
-<select class="flow-unit" aria-label={label} value={unit.id} onchange={(e) => unit.set(e.currentTarget.value as FlowUnitId)}>
+<select class="flow-unit" aria-label={label} value={unit.id} onchange={(e) => pick(e.currentTarget.value as FlowUnitId)}>
 	{#each FLOW_UNITS as u (u.id)}<option value={u.id}>{u.label}</option>{/each}
 </select>
 

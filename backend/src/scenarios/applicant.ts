@@ -27,9 +27,10 @@ export interface ApplicantBase {
 
 const KIND_NAME: Record<NodeKind, string> = { farm: 'Farm', gauge: 'Gauge', user: 'Water user' };
 /**
- * Kept as they are on an anonymised node: where it sits in the network, what it is, and the bed losses of the reach
+ * Kept as they are on an anonymised node: where it sits in the network, what it is and the bed losses of the reach
  * below it (engine ≥ 1.75.0), a property of the river rather than of the farm's use, so the applicant's runs lose
- * water where the base's do.
+ * water where the base's do. Not a unit's base-flow loss and gain (engine 1.86.0): they go with its runoff, which
+ * the zeroed area takes to 0, so the loss (at most the runoff) would be 0 and a kept gain water from nowhere.
  */
 const KEEP = new Set(['id', 'kind', 'downstreamNodeId', 'sortOrder', 'reachLossFrac', 'reachLossMaxM3Day']);
 
@@ -117,7 +118,7 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 			nodes,
 			crops,
 			cropAreas,
-			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || own.has(t.toNodeId)),
+			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || (t.toNodeId !== null && own.has(t.toNodeId))),
 			landCover: (m.landCover ?? []).filter((p) => own.has(p.nodeId)),
 			// Their own farm's boreholes are theirs to see (as the table's RLS lets them, 045).
 			boreholes: (m.boreholes ?? []).filter((b) => own.has(b.nodeId)),

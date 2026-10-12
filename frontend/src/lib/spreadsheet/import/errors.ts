@@ -60,7 +60,7 @@ export class NotB023WorkbookError extends WorkbookImportError {
 	constructor(readonly missing: string[]) {
 		super(
 			'not-b023',
-			`This isn't a b023 Water Balance Tool workbook: it has no named range${missing.length === 1 ? '' : 's'} ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ` and ${missing.length - 5} more` : ''}.`
+			`This isn't a Water Balance Tool workbook: it has no named range${missing.length === 1 ? '' : 's'} ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ` and ${missing.length - 5} more` : ''}.`
 		);
 	}
 }
@@ -68,7 +68,7 @@ export class NotB023WorkbookError extends WorkbookImportError {
 /** A Water Balance Tool workbook of a code build the importer doesn't read (zAppVer isn't b02x). */
 export class UnsupportedVersionError extends WorkbookImportError {
 	constructor(readonly version: string) {
-		super('unsupported-version', `This workbook is Water Balance Tool build ${version}; the importer reads the b02x builds (b022, b023 …).`);
+		super('unsupported-version', `This workbook is Water Balance Tool build ${version}, which the importer doesn't read.`);
 	}
 }
 

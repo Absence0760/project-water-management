@@ -28,7 +28,9 @@ export type NodeNumberKey =
 	| 'streamDepletionLagDays'
 	| 'gaPropertyAreaHa'
 	| 'reachLossFrac'
-	| 'reachLossMaxM3Day';
+	| 'reachLossMaxM3Day'
+	| 'baseflowLossM3Day'
+	| 'baseflowGainM3Day';
 
 export interface NodeField {
 	key: NodeNumberKey;
@@ -37,7 +39,7 @@ export interface NodeField {
 	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | '% of supply' | 'm³/day' | 'm³/s' | 'l/s' | '×' | 'days' | 'ha';
 	/** Shown = stored × scale, for a field entered in another unit than it is stored in (m³/s stored as m³/day). Percentages scale by 100 on their own. */
 	scale?: number;
-	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater' | 'reach';
+	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater' | 'baseflow' | 'reach';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
 	help: string;
@@ -70,6 +72,7 @@ export const GROUPS: Record<NodeField['group'], string> = {
 	irrigation: 'Irrigation',
 	share: 'Flow share',
 	groundwater: 'Combined boreholes (one capacity)',
+	baseflow: 'Base-flow loss and gain',
 	reach: 'Bed losses in the reach below'
 };
 
@@ -188,7 +191,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'routing',
 		farmOnly: true,
 		aria: (n) => `Upstream inflow entering the dam at ${n}, %`,
-		help: 'Share of the water arriving from upstream hydrological units that enters the dam. 100 %: a dam on the river, which catches it all, and has no River to dam. 0 %: an off-channel dam, which the river passes by; it fills from its share of the runoff and from River to dam. (The b023 workbook\'s formula applied it the other way round; the import converts its values, see docs/model.md §3 Q1.)'
+		help: 'Share of the water arriving from upstream hydrological units that enters the dam. 100 %: a dam on the river, which catches it all, and has no River to dam. 0 %: an off-channel dam, which the river passes by; it fills from its share of the runoff and from River to dam. (The Water Balance Tool workbook\'s formula applied it the other way round; the import converts its values, see docs/model.md §3 Q1.)'
 	},
 	{
 		key: 'pctRunoffToDam',
@@ -324,6 +327,26 @@ export const NODE_FIELDS: NodeField[] = [
 		nullable: true,
 		aria: (n) => `Most lost into the river bed below ${n} in a day, m³/day`,
 		help: 'The reach loses at most this much a day, however high the flow (a bed that is already wet takes no more). Empty: no limit, the share alone.'
+	},
+	{
+		key: 'baseflowLossM3Day',
+		detailOnly: true,
+		farmOnly: true,
+		label: 'Base-flow loss',
+		unit: 'm³/day',
+		group: 'baseflow',
+		aria: (n) => `Base flow ${n} loses to groundwater, m³/day`,
+		help: 'Water this unit’s own runoff loses to groundwater every day, before it reaches the river or the dam, at most the day’s runoff. It leaves the catchment. 0 (the default): none. Set it from evidence, such as a gauge below that the model keeps over-simulating at low flows.'
+	},
+	{
+		key: 'baseflowGainM3Day',
+		detailOnly: true,
+		farmOnly: true,
+		label: 'Base-flow gain',
+		unit: 'm³/day',
+		group: 'baseflow',
+		aria: (n) => `Base flow ${n} gains from groundwater, m³/day`,
+		help: 'Water that joins this unit’s runoff from groundwater every day, from outside the catchment: a spring or an aquifer that drains into the river here. 0 (the default): none. Set it from evidence, such as a flow the river keeps in the dry season that the rain can’t explain.'
 	}
 ];
 

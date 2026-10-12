@@ -1,7 +1,7 @@
 import { band, type Band, type ResolvedEnsembleOptions } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { Ensemble } from '$lib/api';
-import { abandonedText, bandCells, coverageText, fdcChart, historyRows, isPaired, pct, pointsBelowEwr, rangeText, rejectedText, shownEnsemble, sig } from './bands';
+import { abandonedText, bandCells, coverageText, fdcChart, historyRows, isPaired, pct, pointsBelowEwr, rangeText, rejectedText, shownEnsemble, sig, withheldNote } from './bands';
 
 const gated: Band = { n: 5, p5: null, p50: null, p95: null, min: 1, max: 9 };
 const b = band(Array.from({ length: 40 }, (_, i) => i + 1));
@@ -52,6 +52,20 @@ describe('band text', () => {
 		expect(bandCells(b)).toEqual(['2.95', '20.5', '38.1']);
 		expect(rangeText(gated)).toBe('–');
 		expect(bandCells(gated)).toEqual(['–', '–', '–']);
+		// Withheld from a viewer kept from the volumes (#523 I, G1c): null in an ensemble's bands, absent from a paired band's.
+		expect([rangeText(null), rangeText(undefined)]).toEqual(['–', '–']);
+		expect([bandCells(null), bandCells(undefined)]).toEqual([['–', '–', '–'], ['–', '–', '–']]);
+	});
+	it('says when bands are withheld (a cap or full-allocation run, #523 I, G1c), so "–" isn\'t read as gated', () => {
+		// Served whole (no marker, or an empty one): no note.
+		expect([withheldNote([]), withheldNote([null, undefined]), withheldNote([{}]), withheldNote([{ verdictsOnlyRuns: [] }], { a: 'A', b: 'B' })]).toEqual([null, null, null, null]);
+		expect(withheldNote([{ verdictsOnlyRuns: ['A'] }])).toMatch(/^This run caps use at, or scales demand to, the registered water volumes, so its band shows EWR counts and rates only: .*editors and owners only\.$/);
+		const runs = { a: 'A', b: 'B' };
+		expect(withheldNote([{ verdictsOnlyRuns: ['A'] }, null, { verdictsOnlyRuns: ['A'] }], runs)).toMatch(/^Run A caps use at, or scales demand/);
+		expect(withheldNote([null, { verdictsOnlyRuns: ['B'] }], runs)).toMatch(/^Run B caps use at, or scales demand/);
+		expect(withheldNote([{ verdictsOnlyRuns: ['A'] }, { verdictsOnlyRuns: ['B'] }], runs)).toMatch(/^Both runs cap use at, or scale demand to, the registered water volumes, so the bands that rest on them/);
+		// A paired band's baseline from a third run (the API lists it): still said.
+		expect(withheldNote([{ verdictsOnlyRuns: ['C'] }], runs)).toMatch(/^A run behind these bands caps/);
 	});
 	it('rounds to about three significant figures', () => {
 		expect([sig(1234.5), sig(12.34), sig(1.234), sig(0.01234), sig(null)]).toEqual(['1\u202f235', '12.3', '1.23', '0.012', '–']);

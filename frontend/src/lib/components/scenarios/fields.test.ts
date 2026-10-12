@@ -12,8 +12,10 @@ import {
 	transferFieldError
 } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
+import { pumpUnit, riverToDamUnit, type FlowUnitId } from '$lib/components/network/flowUnit.svelte';
 import {
 	CROP_FIELD_SPECS,
+	DEMAND_OBJECT_FIELD_SPECS,
 	LAND_COVER_FIELD_SPECS,
 	NODE_FIELD_SPECS,
 	SETTINGS_SPECS,
@@ -23,6 +25,7 @@ import {
 	nodeFields,
 	parseValue,
 	peDraftOf,
+	rescaleText,
 	percentMessage,
 	settingsValue,
 	valueText,
@@ -133,7 +136,14 @@ describe('field specs cover the engine’s op catalogue', () => {
 		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
 		expect(formatValue(spec, null)).toBe('the source');
 		expect(transferFieldError('lossReturnNodeId', null)).toBeNull();
-		expect(parseValue(TRANSFER_FIELD_SPECS.toNodeId.spec, '')).toEqual({ ok: false, error: 'pick a hydrological unit' });
+		expect(parseValue(TRANSFER_FIELD_SPECS.fromNodeId.spec, '')).toEqual({ ok: false, error: 'pick a hydrological unit' });
+	});
+
+	it('reads an empty destination as out of the catchment (engine 1.86.0)', () => {
+		const spec = TRANSFER_FIELD_SPECS.toNodeId.spec;
+		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
+		expect(formatValue(spec, null)).toBe('outside the catchment');
+		expect(transferFieldError('toNodeId', null)).toBeNull();
 	});
 });
 
@@ -392,5 +402,76 @@ describe('an other water user’s priority (issue #507 item 4)', () => {
 		const spec = NODE_FIELD_SPECS.userPriority.spec;
 		expect(spec).toMatchObject({ t: 'enum', options: [{ value: 'senior', label: 'Priority' }, { value: 'junior', label: 'Non-priority' }] });
 		expect(formatValue(spec, 'junior')).toBe('Non-priority');
+	});
+});
+
+describe('pump capacities and River to dam in m³/s, l/s or m³/day (issue #523 C2)', () => {
+	const PUMPS = [
+		NODE_FIELD_SPECS.pumpCapacityM3Day,
+		NODE_FIELD_SPECS.cropRiverPumpM3Day,
+		NODE_FIELD_SPECS.boreholeCapacityM3Day,
+		NODE_FIELD_SPECS.cropRemoteCapM3Day,
+		DEMAND_OBJECT_FIELD_SPECS.riverPumpM3Day
+	].map((f) => f.spec);
+	const RIVER_TO_DAM = [NODE_FIELD_SPECS.divertCapacityM3Day.spec, NODE_FIELD_SPECS.divertMonthlyM3Day.spec];
+	/** Run `fn` with the pumps' and River to dam's unit picked, then put both back to their defaults. */
+	function picked(id: FlowUnitId, fn: () => void) {
+		pumpUnit.set(id);
+		riverToDamUnit.set(id);
+		try {
+			fn();
+		} finally {
+			pumpUnit.set('m3day');
+			riverToDamUnit.set('m3s');
+		}
+	}
+
+	it('follows the Network form’s pick: every pump field the pumps’ unit, River to dam its own', () => {
+		for (const s of PUMPS) expect(s).toMatchObject({ t: 'number', flowUnit: pumpUnit, unit: 'm³/day', scale: 1, nullable: true });
+		for (const s of RIVER_TO_DAM) expect(s).toMatchObject({ flowUnit: riverToDamUnit, unit: 'm³/s' });
+		picked('ls', () => {
+			for (const s of [...PUMPS, ...RIVER_TO_DAM]) expect(s).toMatchObject({ unit: 'l/s', scale: 1000 / 86_400 });
+		});
+	});
+
+	it('stores what is typed in m³/day, whichever unit it is typed in', () => {
+		const pump = NODE_FIELD_SPECS.pumpCapacityM3Day.spec;
+		expect(parseValue(pump, '432')).toEqual({ ok: true, value: 432 });
+		expect(parseValue(pump, '')).toEqual({ ok: true, value: null });
+		picked('ls', () => {
+			expect(parseValue(pump, '5')).toEqual({ ok: true, value: 432 });
+			expect(parseValue(pump, '12,5')).toEqual({ ok: true, value: 1080 });
+			expect(valueText(pump, 432)).toBe('5');
+			expect(formatValue(pump, 1080)).toBe('12.5 l/s');
+			expect(formatValue(pump, null)).toBe('no limit');
+			expect(parseValue(NODE_FIELD_SPECS.divertMonthlyM3Day.spec, '10')).toEqual({ ok: true, value: new Array(12).fill(864) });
+		});
+		picked('m3s', () => {
+			expect(parseValue(DEMAND_OBJECT_FIELD_SPECS.riverPumpM3Day.spec, '0.05')).toEqual({ ok: true, value: 4320 });
+			expect(parseValue(NODE_FIELD_SPECS.divertCapacityM3Day.spec, '0.2')).toEqual({ ok: true, value: 17_280 });
+		});
+	});
+
+	it('reads a stored value back unchanged when its text isn’t edited, in every unit', () => {
+		const pump = NODE_FIELD_SPECS.pumpCapacityM3Day.spec;
+		for (const id of ['m3s', 'ls', 'm3day'] as const)
+			picked(id, () => {
+				for (const v of [0, 1, 432, 999.999, 1234.5678, 17_280, 86_400, 123_456.789, 2_000_000 / 7]) {
+					const back = parseValue(pump, valueText(pump, v));
+					expect(back.ok && (back.value as number)).toBeCloseTo(v, 6);
+				}
+			});
+	});
+
+	it('rewrites the typed text in a new unit, leaving text it can’t read and other fields alone', () => {
+		const pump = NODE_FIELD_SPECS.pumpCapacityM3Day.spec;
+		picked('m3day', () => {
+			// Typed as 5 l/s, then m³/day picked: 432, not 5 m³/day.
+			expect(rescaleText(pump, '5', 1000 / 86_400)).toBe('432');
+			expect(rescaleText(pump, 'five', 1000 / 86_400)).toBe('five');
+			expect(rescaleText(pump, '', 1000 / 86_400)).toBe('');
+			expect(rescaleText(NODE_FIELD_SPECS.damCapacityM3.spec, '5', 1000 / 86_400)).toBe('5');
+		});
+		picked('ls', () => expect(rescaleText(NODE_FIELD_SPECS.divertMonthlyM3Day.spec, '0.01 0.02 0 0 0 0 0 0 0 0 0 0', 1 / 86_400)).toBe('10 20 0 0 0 0 0 0 0 0 0 0'));
 	});
 });

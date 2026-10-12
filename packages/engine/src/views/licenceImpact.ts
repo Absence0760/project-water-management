@@ -21,13 +21,14 @@
 //   fallback.
 // - **Use** is the water account's consumptive use (§2.11b): irrigation
 //   supplied less its return flow, plus other water users' take less what
-//   they return. It is what the river loses to the users; the gross
-//   abstraction is larger by the return flows.
+//   they return, plus what transfer rules send out of the catchment (engine
+//   ≥ 1.86.0, as a demand object piped out counts). It is what the river
+//   loses to the users; the gross abstraction is larger by the return flows.
 // - **Other** closes the waterfall: natural − existing − proposed − left.
 //   It is the rest of the application run's water account (dam evaporation
 //   and seepage lost, storage change, land cover, groundwater, transfers,
-//   bed losses in the reaches, the natural flow's difference between the
-//   runs), broken down in
+//   bed losses in the reaches, the units' base-flow losses less their gains,
+//   the natural flow's difference between the runs), broken down in
 //   `otherParts`, so a reader sees what it is.
 // - **Not enough years**: fewer than OUTCOME_MIN_YEARS years in a class →
 //   no waterfall, no counts, verdict `notEnoughYears`.
@@ -74,6 +75,8 @@ export interface LicenceImpactOtherParts {
 	residualM3: number;
 	/** Lost into the river bed in the reaches between nodes (engine ≥ 1.75.0, docs/model.md §2.6b); absent when the application run has none. */
 	reachLossM3?: number;
+	/** The units' base-flow losses − their gains (engine 1.86.0, docs/model.md §2.6b); absent when the application run has neither. */
+	baseflowM3?: number;
 }
 
 /** A class's annual waterfall, mean m³ a year over its years. natural − existing − proposed − other = left. */
@@ -143,7 +146,8 @@ function accountYears(run: LicenceImpactRun, which: string): Map<number, WaterAc
 	return out;
 }
 
-const use = (r: WaterAccountRow) => r.consumptiveIrrigationM3 + r.otherUseM3;
+// A transfer out of the catchment (engine ≥ 1.86.0) is use, as a demand object piped out is (its take is in the consumptive irrigation).
+const use = (r: WaterAccountRow) => r.consumptiveIrrigationM3 + r.otherUseM3 + (r.externalTransferM3 ?? 0);
 const hasSite = (run: LicenceImpactRun, siteNodeId: string | null) => !!run.summary.ewrAssurance?.some((s) => (siteNodeId === null ? s.isOutlet : s.nodeId === siteNodeId));
 
 /** Build the board: one entry per class of the background run's natural flow, driest first. */
@@ -197,7 +201,10 @@ export function licenceImpactByYearClass(input: LicenceImpactInput): LicenceImpa
 			transfersM3: mean((wy) => -app(wy).transfersM3),
 			naturalDifferenceM3: mean((wy) => bg(wy).naturalFlowM3 - app(wy).naturalFlowM3),
 			residualM3: mean((wy) => app(wy).residualM3),
-			...(waterYears.some((wy) => app(wy).reachLossM3 !== undefined) ? { reachLossM3: mean((wy) => app(wy).reachLossM3 ?? 0) } : {})
+			...(waterYears.some((wy) => app(wy).reachLossM3 !== undefined) ? { reachLossM3: mean((wy) => app(wy).reachLossM3 ?? 0) } : {}),
+			...(waterYears.some((wy) => app(wy).baseflowLossM3 !== undefined || app(wy).baseflowGainM3 !== undefined)
+				? { baseflowM3: mean((wy) => (app(wy).baseflowLossM3 ?? 0) - (app(wy).baseflowGainM3 ?? 0)) }
+				: {})
 		};
 		const waterfall: LicenceImpactWaterfall = {
 			naturalM3,

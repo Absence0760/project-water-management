@@ -17,7 +17,7 @@ function nodeFacts(m: ProjectModel | null | undefined): Map<string, string> {
 	for (const o of m?.demandObjects ?? []) add(o.nodeId, ['demandObject', o]);
 	for (const t of m?.transfers ?? []) {
 		add(t.fromNodeId, ['transfer', t]);
-		add(t.toNodeId, ['transfer', t]);
+		if (t.toNodeId !== null) add(t.toNodeId, ['transfer', t]);
 		// The unit an off-take's canal seepage rejoins below (engine ≥ 1.42.0) is touched by it too.
 		if (t.lossReturnNodeId && t.lossReturnNodeId !== t.fromNodeId && t.lossReturnNodeId !== t.toNodeId) add(t.lossReturnNodeId, ['transfer', t]);
 	}

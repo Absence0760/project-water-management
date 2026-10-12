@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Acts for the authority card (AuthorityDelegatesPanel) and its client calls, issue #523 G5: total 1989 -> 1991 KB gzipped measured with check:bundle"
+}

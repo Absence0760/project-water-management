@@ -24,7 +24,8 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { figuresAt, holdsFigure } from '../__tests__/figures.js';
+import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { reportRenderHandler } from '../jobs/handlers/report-render.js';
 import { computeSweep } from '../sweeps/store.js';
 import { buildPackManifest, ENGINE_VERSION, packManifestText } from '@water-management/engine';
@@ -454,6 +455,40 @@ describe('the run comparison', () => {
 		expect(old.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!), 3);
 	});
 
+	it('counts water a dam rule pumps out of the catchment as its source unit’s surface use (engine-audit.md X1), read from the run’s own stored rules', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: transfer out of the catchment' })).body.project.id;
+		const out = node('Weir', null);
+		// A dam on the river (all the upstream inflow into it), full, with crops: its draws are its use.
+		const f = node('Exporting farm', out.id, { damCapacityM3: 20_000, damInitialPct: 1, pctUpstreamToDam: 1, pctRunoffToDam: 0.3 });
+		const g = node('Neighbour', out.id, { damCapacityM3: 20_000, damInitialPct: 1, pctUpstreamToDam: 1, pctRunoffToDam: 0.3 });
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		const rule = {
+			id: crypto.randomUUID(), fromNodeId: f.id, toNodeId: null, months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxRateM3s: 30 / 86_400, dailyCapM3: null,
+			minStoragePct: 0.2, enabled: true, priority: 0, monthlyRateM3s: null, source: 'dam', handsOffM3Day: null, handsOffEwr: false, lossPct: 0, sizing: 'demand',
+			topUpDam: false, lossReturnPct: 0, lossReturnNodeId: null
+		};
+		const m = { nodes: [out, f, g], crops: [crop], cropAreas: [{ nodeId: f.id, cropId: crop.id, areaM2: 20_000 }, { nodeId: g.id, cropId: crop.id, areaM2: 20_000 }], transfers: [rule] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, m)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(0) } })).status).toBe(200);
+		const rain = Array.from({ length: 365 }, (_, i) => (i % 9 === 0 ? 25 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'export' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/allocations`);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const at = (id: string) => res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === id);
+		const sum = (a: number[]) => a.reduce((t, v) => t + v, 0);
+		const series = async (id: string, key: string) => (await asOwner(`SELECT "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = $3`, [run.body.run.id, id, key]))[0]!.values as number[];
+		const sent = sum(await series(f.id, `transfer_rule@${rule.id}`));
+		expect(sent).toBeGreaterThan(0);
+		const supplied = sum(await series(f.id, 'supplied'));
+		expect(supplied).toBeGreaterThan(0);
+		// The exporting unit's surface use is what it supplied plus what it sent out.
+		expect(at(f.id).surface.years[0].modelledM3).toBeCloseTo(supplied + sent, 3);
+		// Positive control: the neighbour, with no rule out, is its supply alone.
+		expect(at(g.id).surface.years[0].modelledM3).toBeCloseTo(sum(await series(g.id, 'supplied')), 3);
+	});
+
 	it("leaves a forecast run's forecast days out (issue #51); an ordinary run of the same record is the control", async () => {
 		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: forecast' })).body.project.id;
 		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
@@ -541,31 +576,6 @@ describe('the allocations export', () => {
 // force with none (or two) dominating it; a run's water years and the evidence report's totals of other units give
 // them the modelled use and the status only. Each test is the review's repro, which failed before, with an editor
 // positive control.
-
-/** A whole number token in text (digits, maybe grouped by spaces or commas, maybe decimals), never part of an id, a word or a hex run. */
-const NUMBER_TOKEN = /(?<![\w.\-])(\d{1,3}(?:[ ,  ]\d{3})+|\d+)(?:\.\d+)?(?![\w\-])/g;
-/**
- * Where a JSON answer carries v as a figure: a number within 0.5 of v m³ a year, or, for v of 365 000 or more, of its
- * share of a day (smaller day shares are too short to tell from any other number); in a JSON number, or a whole
- * number token in a string. Each match as "path = value", so a failure says what matched (#523 round 6: the old
- * pattern matched 3-digit day shares inside uuids).
- */
-function figuresAt(text: string, v: number): string[] {
-	const targets = v >= 365_000 ? [v, v / 365, v / 366] : [v];
-	const hit = (n: number) => targets.some((t) => Math.abs(n - t) < 0.5);
-	const out: string[] = [];
-	const walk = (x: unknown, at: string) => {
-		if (typeof x === 'number') {
-			if (hit(x)) out.push(`${at} = ${x}`);
-		} else if (typeof x === 'string') {
-			for (const m of x.matchAll(NUMBER_TOKEN)) if (hit(Number(m[0].replace(/[ ,  ]/g, '')))) out.push(`${at} ~ "${m[0]}" in "${x.slice(0, 120)}"`);
-		} else if (Array.isArray(x)) x.forEach((y, i) => walk(y, `${at}[${i}]`));
-		else if (x && typeof x === 'object') for (const [k, y] of Object.entries(x)) walk(y, `${at}.${k}`);
-	};
-	walk(JSON.parse(text), '$');
-	return out;
-}
-const holdsFigure = (text: string, v: number) => figuresAt(text, v).length > 0;
 
 /** A project with units `names` under a weir, rain from `start` for `days`, the editor and viewer as members. */
 async function volumesProject(name: string, names: string[], start: string, days: number) {
@@ -704,6 +714,52 @@ describe('#523 K, L, M: no two figures a viewer reads at the same time differ by
 		expect(r.allocations.units.every((u: Section5['units'][number]) => u.sources.every((s) => s.meanRegisteredA === null))).toBe(true);
 		const text = JSON.stringify(r);
 		for (const v of [V[0]!, LATER, UNMATCHED, V.reduce((s, x) => s + x, 0), V.reduce((s, x) => s + x, 0) + LATER]) expect(figuresAt(text, v), String(v)).toEqual([]);
+	});
+});
+
+describe('#523 G1c: page 1’s "Registered vs modelled use" row counts no other unit’s years for a viewer', () => {
+	// Every unit's whole years over the band, per team scenario run at a fixed band, bound one unit's volume; the
+	// viewer's row and unitYears count the applicant's own units only, and a team scenario or baseline evidence has none.
+	let pid: string;
+	let base: string;
+	let scenarioRun: string;
+	type Row = { id: string; baseline: number | null; application: number | null; notAssessed: string | null; note: string | null };
+	const useRow = (r: { rows: Row[] }) => r.rows.find((x) => x.id === 'registeredUse')!;
+
+	beforeAll(async () => {
+		const p = await volumesProject('Unit-years', ['U1', 'U2', 'U3', 'U4', 'U5'], '2016-10-01', 3 * 365);
+		pid = p.pid;
+		// Small volumes, so every whole year of every unit is over the band.
+		for (let i = 0; i < 5; i++) await p.add(p.units[i]!.id, `Unit Years Holder ${i + 1}`, 10 + i);
+		base = await p.run('unit-years');
+		const sc = await editor.call('POST', `/projects/${pid}/scenarios`, { name: 'Unit-years team', baseRunId: base, ops: [] });
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		const ran = await editor.call('POST', `/projects/${pid}/scenarios/${sc.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		scenarioRun = ran.body.run.id;
+	}, 180_000);
+
+	it('positive control: the editor’s row and unitYears count every unit’s whole years over the band', async () => {
+		for (const run of [base, scenarioRun]) {
+			const r = (await editor.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
+			expect(r.allocations.units.map((u: { nodeId: string }) => u.nodeId)).toEqual(['others:surface']);
+			expect(r.allocations.unitYears.judgedA).toBeGreaterThan(0);
+			expect(r.allocations.unitYears.overA).toBe(r.allocations.unitYears.judgedA);
+			expect(useRow(r).baseline).toBe(r.allocations.unitYears.overA);
+			expect(useRow(r).notAssessed).toBeNull();
+		}
+	});
+
+	it('the viewer’s row is withheld and unitYears counts nothing, on the team scenario and on baseline evidence', async () => {
+		for (const run of [base, scenarioRun]) {
+			const r = (await viewer.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
+			const row = useRow(r);
+			expect([row.baseline, row.application, row.note]).toEqual([null, null, null]);
+			expect(row.notAssessed).toMatch(/^Not shown: this project shows registered volumes to its editors and owners only/);
+			expect(r.allocations.unitYears).toMatchObject({ overA: 0, judgedA: 0 });
+			// The page-1 flag says nothing of the totals either (round 6).
+			expect(r.flags.map((f: { id: string }) => f.id)).not.toContain('allocationsOver');
+		}
 	});
 });
 
@@ -955,21 +1011,20 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 	const STORAGE_CANARY = 765_432_189;
 	/** A sweep member's own registered volume on another farm. */
 	const SWEEP_CANARY = 654_321_879;
-	const CANARIES = [CANARY, SCENARIO_CANARY, STORAGE_CANARY, SWEEP_CANARY];
+	/** An issued licence's granted terms set this on Farm B, not the application's own unit (227, #523 G3). */
+	const GRANTED_CANARY = 543_218_769;
+	/** A variation on appeal sets this on Farm B (228, #523 G4). */
+	const VARIED_CANARY = 432_187_659;
+	const CANARIES = [CANARY, SCENARIO_CANARY, STORAGE_CANARY, SWEEP_CANARY, GRANTED_CANARY, VARIED_CANARY];
 	/** The ladder run's last, partial water year: 400 days from 1 October 2021, so 35 days of 2022's. */
 	const PARTIAL_DAYS = 35;
-	const SEP = "[\\s,.'\\u00a0\\u202f]?";
-	/** A figure's leading `digits` significant digits, with or without a separator between any two, not inside an id or a hash. */
-	const figure = (v: number, digits: number) => {
-		const d = v.toPrecision(Math.max(digits, 1)).replace('.', '').replace(/^0+/, '').replace(/e.*$/, '').slice(0, digits);
-		return new RegExp(`(?<![\\w.])${d.split('').join(SEP)}`);
-	};
 	/**
-	 * The number in every form the API words a volume in: m³ a year (all its digits), megalitres (its leading 6),
-	 * m³ a day and a partial water year's pro-rated share (their leading 7).
+	 * Where an answer carries n, in any form the API words a volume in (__tests__/figures.ts): m³ a year, of either sign,
+	 * in figures or in words ("987 654 321"); its megalitres, its share of a day (365 or 366, m³ or ML) or of the
+	 * partial water year, matched by closeness; never the digits of an id key, a uuid or a hash (#523 G1c).
 	 */
-	const forms = (n: number) => [figure(n, 9), figure(n / 1000, 6), figure(n / 365, 7), figure((n * PARTIAL_DAYS) / 365, 7)];
-	const seen = (text: string, n: number) => forms(n).some((r) => r.test(text));
+	const where = (text: string, n: number) => figuresAt(text, n, { partialDays: [PARTIAL_DAYS] });
+	const seen = (text: string, n: number) => where(text, n).length > 0;
 	/** Where a JSON answer carries a registered volume as a number (a key starting registered or meanRegistered, #523 K/L/M). */
 	const registeredFigures = (text: string): string[] => {
 		let body: unknown;
@@ -1002,6 +1057,9 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 	let baseRun: string;
 	let scenarioRun: string;
 	let sid: string;
+	/** The applicant's application issued with GRANTED_CANARY and varied to VARIED_CANARY, and its run of the varied terms. */
+	let licenceSid: string;
+	let licensedRun: string;
 	let reportJob: string;
 	/** Team scenario runs of the base that cap use at, and scale demand to, the registered volumes (#523 I). */
 	let capRun: string;
@@ -1144,6 +1202,32 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 				)
 			).rows[0]!.id
 		);
+		// A licence's terms (G3) and a variation's (G4) carry volumes too: an applicant's application, issued with granted
+		// terms that set Farm B's volume, then varied on appeal to terms that set another. The applicant is linked to no
+		// farm (an applicant's own units' volumes are theirs to read, and Farm A's and B's carry the other canaries), so
+		// a viewer kept from volumes reads neither (viewerOps.ts): not on the scenario, its decision events, its
+		// licensed-terms run, the evidence report's other applications and combined row, or the pack below.
+		await actForAuthority(ctx.owner, ctx.projectId, ctx.editor.id);
+		const applied = await ctx.contributor.call('POST', `${at}/scenarios`, { name: 'Canary licence', baseRunId: baseRun, ops: [] });
+		expect(applied.status, JSON.stringify(applied.body)).toBe(201);
+		licenceSid = applied.body.scenario.id as string;
+		expect((await ctx.contributor.call('POST', `${at}/scenarios/${licenceSid}/submit`, {})).status).toBe(200);
+		const farmBVolume = (n: number) => ({ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: ctx.otherFarmId, waterSource: 'surface', volumeM3PerYear: n } });
+		const decided = await ctx.editor.call('POST', `${at}/scenarios/${licenceSid}/decide`, {
+			...DECISION,
+			outcome: 'licence_issued',
+			granted: { ops: [{ op: 'node.set', nodeId: ctx.otherFarmId, field: 'damCapacityM3', value: 1500 }, farmBVolume(GRANTED_CANARY)], conditions: 'Release in dry months.' }
+		});
+		expect(decided.status, JSON.stringify(decided.body)).toBe(200);
+		const appeal = async (body: unknown) => {
+			const res = await ctx.editor.call('POST', `${at}/scenarios/${licenceSid}/appeals`, body);
+			expect(res.status, JSON.stringify(res.body)).toBe(201);
+			return res.body.scenario;
+		};
+		await appeal({ kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-02', reference: 'WT canary' });
+		const varied = await appeal({ kind: 'varied', forum: 'water_tribunal', eventDate: '2026-10-05', terms: { ops: [farmBVolume(VARIED_CANARY)], conditions: 'As varied.' } });
+		expect(varied.licence).toMatchObject({ inForce: true, from: 'event' });
+		licensedRun = (await post(`/scenarios/${licenceSid}/runs`, { terms: 'licensed' })).run.id;
 		// An evidence pack of the base run, planted as a draft (a pack of a run that isn't nominated can't be drafted through the route).
 		const ev = (await ctx.owner.call('GET', `${at}/runs/${baseRun}/evidence-report`)).body.report;
 		const packId = crypto.randomUUID();
@@ -1173,6 +1257,10 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		const sweep = (await get(ctx.editor, `${at}/sweeps/${ids.sweepId}`)).text;
 		expect(seen(sweep, CANARY) && seen(sweep, SWEEP_CANARY)).toBe(true);
 		expect(seen((await get(ctx.editor, `${at}/sweeps`)).text, SWEEP_CANARY)).toBe(true);
+		// The licence's granted terms and its variation, on the scenario (G3/G4).
+		const licence = (await get(ctx.editor, `${at}/scenarios/${licenceSid}`)).text;
+		expect(seen(licence, GRANTED_CANARY) && seen(licence, VARIED_CANARY)).toBe(true);
+		expect(seen((await get(ctx.editor, `${at}/runs/${licensedRun}`)).text, VARIED_CANARY)).toBe(true);
 		// § 5's groundwater total of other units carries its registered figures for the editor (control for registeredFigures).
 		expect(registeredFigures((await get(ctx.editor, `${at}/runs/${baseRun}/evidence-report`)).text).some((p) => p.startsWith('report.allocations.units'))).toBe(true);
 	});
@@ -1190,7 +1278,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 				const r = await get(ctx.viewer, path);
 				const expected = (runId === capRun || runId === fullRun ? EXPECTED_BOUND[route] : undefined) ?? EXPECTED[route];
 				if ((r.status < 200 || r.status >= 400) && r.status !== expected?.status) refused.push(`${path} answered ${r.status}`);
-				for (const n of CANARIES) if (seen(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n}`);
+				for (const n of CANARIES) for (const w of where(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n} at ${w}`);
 				// #523 K/L/M: the only registered m³ such a viewer reads is today's total per water source; any other
 				// registered figure (a run's year, a total of other units) can be differenced against it or another.
 				for (const at of registeredFigures(r.text)) if (!(route === '/projects/:id/allocations' && /^totals\.\d+\.registeredM3PerYear$/.test(at))) leaks.push(`${path} carries a registered figure at ${at}`);
@@ -1200,6 +1288,27 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		}
 		expect(leaks).toEqual([]);
 		expect(refused).toEqual([]);
+	}, 300_000);
+
+	// G3/G4 (#523): the issued application's own routes and its licensed-terms run, swept as the viewer. The routes'
+	// statuses differ from a team scenario's (an application's results, questions, packs …), so only what each answer
+	// holds is checked here; the scenario itself must answer, with its terms and events, or the sweep proves nothing.
+	it('no viewer GET of the issued application or its licensed-terms run carries its granted or varied volumes', async () => {
+		const at = `/projects/${ctx.projectId}`;
+		const s = (await ctx.viewer.call('GET', `${at}/scenarios/${licenceSid}`)).body.scenario;
+		expect(s.grantedTerms).toMatchObject({ withheldOps: 1, ops: [{ op: 'node.set', nodeId: ctx.otherFarmId }] });
+		expect(s.decisionEvents.map((e: { kind: string }) => e.kind)).toEqual(['lodged', 'varied']);
+		expect(s.decisionEvents[1].terms).toMatchObject({ withheldOps: 1, ops: [] });
+		const leaks: string[] = [];
+		const answered: string[] = [];
+		for (const route of routes.filter((r) => r.includes(':sid') || r.includes(':runId'))) {
+			const path = pathOf(route, { sid: licenceSid, runId: licensedRun });
+			const r = await get(ctx.viewer, path);
+			if (r.status === 200) answered.push(route);
+			for (const n of CANARIES) for (const w of where(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n} at ${w}`);
+		}
+		expect(leaks).toEqual([]);
+		expect(answered).toEqual(expect.arrayContaining(['/projects/:id/scenarios/:sid', '/projects/:id/runs/:runId/evidence-report']));
 	}, 300_000);
 
 	// Finding I (#523): a capped run's room on a licence's first day is the unit's volume, and a full allocation scales the
@@ -1212,7 +1321,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		for (const runId of [capRun, fullRun]) {
 			for (const path of unitSeriesPaths(`${at}/runs/${runId}`, unit, '2021-10-01')) {
 				const r = await get(ctx.viewer, path);
-				for (const n of CANARIES) if (seen(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n}`);
+				for (const n of CANARIES) for (const w of where(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n} at ${w}`);
 				// Withheld outright (403, coded) or answered without the unit's withheld columns, never a 404 that hides why.
 				if (r.status === 403 && JSON.parse(r.text).code !== 'allocation_series_withheld') answers.push(`${path}: 403 ${r.text}`);
 				if (r.status !== 200 && r.status !== 403) answers.push(`${path}: ${r.status}`);

@@ -109,8 +109,8 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its default `irrigationSystemId`, engine ≥ 1.72.0). |
 | `crop.set` | `cropId, field, value` | Changes one field of a crop definition (engine ≥ 1.35.0): `name` (1–100 characters on one line, unique ignoring case), `cropFactor` (12 values ≥ 0, Oct–Sep) or `irrigationSystemId` (a row of the model's table, or null for none; engine ≥ 1.72.0). It changes the crop on every farm that grows it, except where a unit has put it on a system of its own. A stored op from engine 0.43.0–1.71.0 setting `irrigationEfficiency` still applies: the crop takes the table's row with that efficiency (a row "Scenario, NN %" is added when there is none) and every unit's own choice for it is dropped, which is what that op meant. The systems' table itself is the project's, not a scenario's (the override editor says so). |
 | `crop.remove` | `cropId` | Removes a crop and every farm's area of it (engine ≥ 1.35.0); the note counts the areas dropped. To stop growing it on one farm, `cropArea.set` it to 0 instead. |
-| `transfer.add` | `transfer` | Adds a transfer rule. Months are stored as a sorted set. |
-| `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId`, `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`, `monthlyRateM3s` (engine ≥ 1.14.0: twelve m³/s rates, Oct–Sep, or null; setting it also sets `months` and `maxRateM3s` to match, and a `months` or `maxRateM3s` edit on a rule with monthly rates is skipped, since the save rules refuse the disagreement, [model.md §2.6](./model.md)), and a river off-take's `source`, `handsOffM3Day`, `handsOffEwr`, `lossPct`, `sizing`, `topUpDam` (engine ≥ 1.14.0, [model.md §2.6a](./model.md); an edit that makes an off-take's destination drain into its source is skipped with that rule as its problem), `lossReturnPct` (0–1) and `lossReturnNodeId` (a node id, or null for the source; engine ≥ 1.42.0: canal seepage back to the river, an edit to a unit that isn't the source or a farm below it on the river is skipped with that rule as its problem; in an application the unit must be the applicant's own, as the ends must). `node.remove` of a unit an off-take's seepage rejoins below leaves that off-take returning none (share 0, the source), with a note. `transfer.add` takes the same fields, each optional. |
+| `transfer.add` | `transfer` | Adds a transfer rule. Months are stored as a sorted set. `toNodeId` null sends a dam rule's water out of the catchment (engine ≥ 1.86.0, [model.md §2.6](./model.md)). |
+| `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId` (null: out of the catchment, engine ≥ 1.86.0; a river off-take with none is skipped with that rule as its problem), `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`, `monthlyRateM3s` (engine ≥ 1.14.0: twelve m³/s rates, Oct–Sep, or null; setting it also sets `months` and `maxRateM3s` to match, and a `months` or `maxRateM3s` edit on a rule with monthly rates is skipped, since the save rules refuse the disagreement, [model.md §2.6](./model.md)), and a river off-take's `source`, `handsOffM3Day`, `handsOffEwr`, `lossPct`, `sizing`, `topUpDam` (engine ≥ 1.14.0, [model.md §2.6a](./model.md); an edit that makes an off-take's destination drain into its source is skipped with that rule as its problem), `lossReturnPct` (0–1) and `lossReturnNodeId` (a node id, or null for the source; engine ≥ 1.42.0: canal seepage back to the river, an edit to a unit that isn't the source or a farm below it on the river is skipped with that rule as its problem; in an application the unit must be the applicant's own, as the ends must). `node.remove` of a unit an off-take's seepage rejoins below leaves that off-take returning none (share 0, the source), with a note. `transfer.add` takes the same fields, each optional. |
 | `transfer.remove` | `transferId` | Removes a transfer rule. |
 | `landCover.add` | `patch` | Adds a land-cover patch on a farm (WP-1.35). |
 | `landCover.remove` | `patchId` | Removes a patch, e.g. clearing invasive aliens. |
@@ -190,6 +190,10 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   §2.6b](./model.md)): `reachLossFrac` (0–1) and `reachLossMaxM3Day` (≥ 0,
   null = no cap), on any kind of node, never the outlet (a save rule); always
   a baseline assumption, since the river's losses are no party's proposal.
+  A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1, [model.md
+  §2.6b](./model.md)): `baseflowLossM3Day` and `baseflowGainM3Day` (m³/day,
+  ≥ 0), on a unit only; always a baseline assumption, the land's
+  groundwater, not a proposal.
 
   **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md);
   provisional decision 2026-10-01, to be confirmed by the client's
@@ -222,7 +226,10 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   reads them (level, area, volume, one row per line) and checks them the
   same way; empty is none.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
-  `userPriority`, `pumpCapacityM3Day` (engine ≥ 1.58.0: its river pump, `null`
+  `userPriority`, `userRestrictionPct` (engine 1.86.0, issue #523 B3: a
+  Priority user's fixed restriction, a share 0–1 or `null` = none; a model
+  rule refuses it on a Non-priority user, [model.md §2.7c](./model.md)),
+  `pumpCapacityM3Day` (engine ≥ 1.58.0: its river pump, `null`
   = no limit, [model.md §2.7c](./model.md); the supply rule and trigger levels
   stay a farm's), `abstractionFrom` (engine ≥ 1.30.0), and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
@@ -637,7 +644,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, flow-share method, climate) |
-| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), and the river's bed losses |
+| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
 | `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own; and not a priority other water user (the default priority) | baseline. A priority user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
@@ -645,8 +652,8 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |
 | `crop.add` | always | |
 | `crop.set`, `crop.remove` | the crop is one the scenario itself added (`classifyScenario` passes them; `classifyOp`'s fourth argument) | baseline: a crop's factors and efficiency are agronomic data that apply on every farm growing it, farms the applicant may not see among them, so a change to one isn't theirs to propose (and classing by who grows it would tell an applicant whether a hidden farm does). Stopping a crop on their own farm is `cropArea.set` to 0, a proposal |
-| `transfer.add` | both ends owned | baseline |
-| `transfer.set`, `transfer.remove` | both ends owned, and a new end owned too (needs `input`) | baseline |
+| `transfer.add` | both ends owned (a rule out of the catchment, engine ≥ 1.86.0: its source owned) | baseline |
+| `transfer.set`, `transfer.remove` | both ends owned, and a new end owned too (needs `input`; out of the catchment needs no owner) | baseline |
 | `landCover.remove`, `landCover.set` | the patch is on an owned node (needs `input`) | baseline |
 | `borehole.add` | on an owned node | baseline |
 | `borehole.remove` | the borehole is on an owned node (needs `input`) | baseline |
@@ -969,6 +976,14 @@ effect on the resource and the Reserve). Build plan:
 [roadmap WP-3.11](./roadmap/step-3-licensing.md#wp-311-cumulative-impact-assessment),
 issue #287.
 
+**An issued licence counts on its granted terms** (227/228, issue #523 G3,
+G4). A decided application whose licence is in force (`app_scenario_licence`)
+joins an assessment with the licence's terms, the granted ones or the newest
+variation's, in place of the changes applied for: `assessment_member_guard`
+copies them, and the request's combination check reads the same
+(`countedOps`, backend `scenarios/licence.ts`). A licence set aside, or a
+refused application someone adds anyway, joins with its applied changes.
+
 ### Engine: `combineScenarios` and `cumulativeImpact`
 
 `packages/engine/src/scenario/combine.ts`, `cumulative.ts`. Pure; neither
@@ -1091,7 +1106,11 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   `buildOp`), checks it with the engine's `validateScenarioOps` (so the form
   refuses exactly what the backend would), and `PATCH`es the whole list; the
   answer's check (`applied`, `problems`, `classified`) drives the list. Undo
-  re-sends the list as it was before the last edit.
+  re-sends the list as it was before the last edit. A flow rate the Network
+  form shows in a picked unit (River to dam, every pump capacity, the
+  borehole and pipe capacities) is typed in that pick there too, m³/s, l/s or
+  m³/day, and the op stores m³/day whatever was picked (issue #523 C2,
+  [ui.md § Flow units](./ui.md#flow-units)).
 - **What the editor computes itself**, from the base run's model and settings
   snapshot (`GET …/runs/:runId`) with no series: the input each op meets
   (`stepInputs`, the engine's `scenarioSteps`), for the targets the form
@@ -1369,7 +1388,10 @@ scenario is `'team'`, and behaves exactly as above).
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
   its values blanked but for the bed losses in the reach below it (engine ≥
   1.75.0: the river's, not the farm's use, so the applicant's runs lose water
-  where the base's do); crops, crop areas, transfers, land cover and
+  where the base's do); a unit's base-flow loss and gain (engine 1.86.0) go
+  with its other runoff-dependent figures: the loss is MIN(loss, the unit's
+  runoff), which its zeroed area makes 0, so a kept gain would add water
+  with no loss beside it; crops, crop areas, transfers, land cover and
   boreholes on their own farms only. Of a hidden node's text fields only
   those an explicit list keeps survive (`TEXT_KEPT`: its place, kind and
   the categorical rules: dam release, dates in service, user priority,
@@ -1432,6 +1454,18 @@ scenario is `'team'`, and behaves exactly as above).
     (`application_question`). The editors answer once, on the Applications
     tab; the authority decides what an answer discloses of other users'
     figures. The draft stays the applicant's.
+  - **What the refusal is** (issue #523 G7, the licensing assessor's
+    review). The panel and the submit's `422` say it is the app's check
+    that the model can run the changes, not a refusal of a water use
+    licence under s42 of the National Water Act (no authority has
+    considered the application), and that the applicant can still apply to
+    DWS through its own channels (e-WULAAS). A masked line ("flow shares
+    over 100 %", "no catchment area left") is evidence that the catchment
+    is fully allocated, so the question and the answer are the
+    application's record for the authority's s42 written reasons: a
+    cumulative assessment shows and exports those on its applications, and
+    they outlive a deleted draft (234_question_kept), for the editors
+    only.
 
   Afterwards each hidden node and crop gets its real name back, suffixed
   where an op took it (`Kalkoenkrans` → `Kalkoenkrans (2)` in that application's
@@ -1459,8 +1493,8 @@ scenario is `'team'`, and behaves exactly as above).
   app **records the responsible authority's decision; it never makes one**
   (163_licensing_authority; provisional position, pre-counsel research,
   2026-10-01, D14 in [step-3-licensing.md § 11](./roadmap/step-3-licensing.md)):
-  only an assessor the project's owner marks as acting for the authority
-  (below) records it, with **Record the authority's decision** (`…/decide
+  only an assessor the authority confirmed as acting for it (229, below)
+  records it, with **Record the authority's decision** (`…/decide
   { outcome, authority?, decisionDate, reference?, reasonsReceived, note }`).
   The outcome is in the National Water Act's and GN R267's words:
   `licence_issued` (*Licence issued (see its conditions)*: every licence
@@ -1477,15 +1511,43 @@ scenario is `'team'`, and behaves exactly as above).
   `licence_refused`), with the authority "Not recorded (before 163)" and no
   date. A team scenario an editor only marks decided (no outcome) is the
   team's own what-if and records none of this. The panel says any appeal runs from the authority's decision letter
-  (s148, s41(6)) and works out no deadline. `submitted_at`, `decided_at` and
+  (s148, s41(6)) and works out no deadline.
+  **Granted terms** (227_licence_terms, issue #523 G3): a licence issued
+  records the terms it was granted on, `…/decide { …, granted?: { ops?,
+  conditions? } }`: the "as licensed" revision of the changes (a smaller
+  volume, an added release rule; checked against the base run as the
+  application's own changes are, under its applicant's mask) and the
+  licence's conditions in words; without `ops` it is granted as applied for,
+  and the applied changes are written out as the granted ones. Wherever an
+  issued application counts among the other applications on a baseline
+  (§ Cumulative impact: an assessment's members; the evidence report's § 4
+  and page 1's combined row), the granted terms count, never the changes
+  applied for. A run of them is `…/runs { terms: 'licensed' }`; until one
+  exists (and again after a variation), § 4 names the licence among those
+  with no run of their licensed terms (`evidence-20`) rather than leaving it
+  out ([evidence-pack.md § The responsible authority](./evidence-pack.md#the-responsible-authority)).
+  **What followed the decision** (228_decision_events, #523 G4): a member
+  acting for the authority records, append-only, an appeal lodged (the Water
+  Tribunal, s148, or a court) and then its outcome in that forum, upheld,
+  set aside or varied (`…/appeals`); the decision itself never changes.
+  Lodged changes nothing until resolved; set aside, the licence stops
+  counting; varied records new granted terms that count from then on; upheld
+  keeps what stood (`app_scenario_licence` is the one rule). "Lapsed /
+  deemed withdrawn" (R267's time limits) is not an event after a decision
+  and isn't built ([followups.md](./followups.md)). Applicants read the terms
+  and the events on their own application. `submitted_at`, `decided_at` and
   `decided_by` are stamped by the trigger. The roadmap's "under review" is
   not a status of its own: a submitted application is the assessors' queue.
 - **Who decides: the responsible authority** (163, D1 in step-3 § 11). The
   project names it in `settings.responsibleAuthority { name, kind: 'dws' |
   'cma', office }` (the Project page's *Responsible authority* card; no model
-  input). The owner ticks *Acts for the responsible authority* on the
-  members who act for it (`project_member.acts_for_authority`); as editors or
-  owners they record its decisions and endorse a published baseline for it
+  input). Who acts for it is the authority's call (229_authority_delegates,
+  issue #523 G5): an owner proposes an editor or owner on the Project page's
+  *Acts for the authority* card, and a member already acting for it confirms
+  (the operator confirms a project's first, on the authority's letter); a
+  proposal grants nothing, and the owner can't remove a confirmed delegate
+  (`authority_delegate`, [security.md § Authorization](./security.md)).
+  As editors or owners, confirmed delegates record its decisions and endorse a published baseline for it
   (`POST …/publication/:pubId/endorse`, once per publication, audit event
   `publication.endorsed`), and an evidence report on a baseline nobody
   endorsed says so on page 1. This makes the host matter less: a CMA host, a
@@ -1565,26 +1627,48 @@ scenario is `'team'`, and behaves exactly as above).
     (the use: natural minus outflow is the farms' take), only at five or
     more farm holders (the k rule of the share links and the contributor's
     series, split in 164; provisional position, pre-counsel research,
-    2026-10-01); read under the caller's own RLS;
+    2026-10-01) and when no one holder takes more than 80 % of the run's
+    supply (farms and other water users alike, 235), nor two more than
+    90 % (the dominance rule, over the run and its base, 232, provisional,
+    #92); read under the caller's own RLS;
+  - the outlet's **published DWS gauge record** (`gaugeRecords`, #523 G8),
+    the published base run's, at any holder count and whatever the ops: DWS
+    publishes it, and no op changes it (a record is one only when a DWS
+    river-gauge feed wrote every reading of it, security.md § Share links);
   - their **own units** (their farm links as they read them now) and the
     units their `node.add` ops add, in full: demand, supply, share met, EWR
     charge, the dam;
   - every other farm or water user **downstream** of those units (along
     `downstreamNodeId` in the run's network) under the anonymous name the
-    base projection gives it, with only the change in its mean supply as a
-    whole percentage ("Farm 3 downstream: supply −4 %");
+    base projection gives it, with only the change in its share of demand
+    supplied, in whole percentage points ("Farm 3 downstream: share of
+    demand met −2 pp"). That is the measure the application's evidence pack
+    prints for the same unit (§ 4's `users[].change.run`, rounded by
+    `app_applicant_pack_units`), so the two never disagree (issue #523 G9
+    (a)); a relative change in mean supply, which this was before, reads
+    differently for the same run (50 % → 47.9 % met is −2 pp but −4 %) and
+    has no value for a unit with no supply in the base;
   - **what ran on their units**: their nodes, crops, crop areas, transfers,
     land cover, boreholes and demand objects as the base projection shows
     them, where an item an op added under a hidden item's id (the run holds
     it under a fresh one) shows under the id the applicant gave it.
 
-  **Only when every op was a proposal** (`app_run_all_proposals`, the share
-  link's rule). A baseline assumption can change another unit's inputs (its
-  demand halved, its dam emptied), and every figure that moves with it (the
-  catchment's flow, their own supply, a neighbour's change) could read that
-  unit's values out, so such a run shows the EWR sites' months and the EWR
-  days only, and RLS hands a contributor none of its series (118). The
-  percentage is rounded to a whole number and never comes with a volume. The
+  **The application's side only when every op was a proposal**
+  (`app_run_all_proposals`, the share link's rule). A baseline assumption
+  can change another unit's inputs (its demand halved, its dam emptied, its
+  land cover or area changed), and every figure that moves with it (the
+  catchment's flow, natural flow included, their own supply, a neighbour's
+  change) could read that unit's values out, so of such a run the
+  application's side shows the EWR sites' months and the EWR days only, and
+  RLS hands a contributor none of its series (118). **The base's side
+  always**: it is the published baseline, whose river (natural flow, the
+  EWR requirement) a contributor reads at any holder count and whose use
+  (outflow, EWR deficit) past k (`app_contributor_published_runs`,
+  `app_contributor_catchment_runs`, 164), so the view shows what RLS serves
+  and nothing it doesn't (issue #523 G9 (d): the view used to hide the
+  base's natural flow too, though RLS served it, and the opposite choice,
+  showing the application's natural flow, would hand out the oracle 118
+  closed). The points are whole and never come with a volume. The
   Applicant view shows it all under the changes (ui.md § Applications).
 - **The log.** `scenario.created / changed / submitted / withdrawn /
   reopened / decided / shared / unshared / deleted` and `run.created` carry
@@ -1675,8 +1759,12 @@ applied, classed baseline beside their own farm's proposal), e2e
 the results, their Yield panel, the assessor's
 decision, the owner's party and the applicant's share picker, axe in both
 themes). The results: `applicantResults.test.ts` (the projection: names as
-the base projection gives them, the rounded percentage, what's left out
-after a baseline assumption and below five farm holders, the `reIds` mapped
+the base projection gives them, the whole percentage points of share
+supplied as the pack rounds them, what's left out after a baseline
+assumption (the application's side, never the published base's) and below
+five farm holders, the `reIds` mapped
 back, each with its positive control) and `results.db.test.ts` (118 end to
 end: the string scan, who may ask, the definer function's readers, RLS on a
-baseline-assumption run's series).
+baseline-assumption run's series, beside the base's that it serves), e2e
+`applications.spec.ts` (a run with a baseline assumption shows the
+baseline's column only).

@@ -29,7 +29,7 @@ export function effectiveSettings(raw: RawSettings | undefined): RunSettings {
 	return s;
 }
 
-const RUNOFF_MODEL: Record<StoredRunoffModelId, string> = { gr4j: 'GR4J', legacy: 'Legacy (b023 workbook, removed in engine 1.0.0): workbook comparison only' };
+const RUNOFF_MODEL: Record<StoredRunoffModelId, string> = { gr4j: 'GR4J', legacy: 'Legacy (the original workbook’s, removed in engine 1.0.0): workbook comparison only' };
 
 /** The settings a reader needs to know the run by, as label → value. */
 export function settingsRows(s: RunSettings, run: { startDate: string; endDate: string }): [string, string][] {
@@ -150,7 +150,7 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
 		.sort((a, b) => a.priority - b.priority)
 		.map((t) => [
 			`${name.get(t.fromNodeId) ?? '–'}${isRiverOfftake(t) ? ' (river off-take)' : ''}`,
-			name.get(t.toNodeId) ?? '–',
+			t.toNodeId === null ? 'Outside the catchment' : (name.get(t.toNodeId) ?? '–'),
 			describeMonths(t.months),
 			// A rule with its own rate per month (engine ≥ 1.14.0) lists each month it runs in with its rate.
 			hasMonthlyRates(t) && new Set(transferRatesM3s(t).filter((r) => r > 0)).size > 1

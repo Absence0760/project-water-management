@@ -6,9 +6,9 @@
 // An issued pack's PDF and reproduction bundle name every water user, so they
 // go where NWA s41(2) says the evidence goes: to the authority that decides,
 // never through the applicant (whose copy withholds the others' figures,
-// 165_applicant_copy). An editor emails the members the project's owner
-// marked as acting for the responsible authority (project_member
-// .acts_for_authority and settings.responsibleAuthority, 163). The mail
+// 165_applicant_copy). An editor emails the members the authority confirmed
+// as acting for it (app_authority_members, 229_authority_delegates; a
+// proposed delegate gets nothing) and settings.responsibleAuthority (163). The mail
 // carries no file and no download link: it links the pack's page, where a
 // signed-in editor gets a one-minute signed download, and the verify page.
 // A forwarded mail opens nothing. `pack.sent` in the history names the
@@ -60,22 +60,22 @@ export const packSendRoutes = new Hono<AuthEnv>().post('/:id/packs/:packId/send'
 		const pack = packs[0];
 		if (!pack) throw notFound();
 		if (pack.status !== 'issued') throw new ApiError(409, `only an issued pack is sent to the authority; this one is ${pack.status}`);
-		// The members acting for the authority: an editor or owner the project's owner marked (163). Never the sender.
+		// The members acting for the authority: confirmed delegates holding editor or above, directly or through the team (229). Never the sender.
 		const { rows: acting } = await db.query<Recipient>(
-			`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName"
-			 FROM project_member m JOIN app_user u ON u.id = m.user_id
-			 WHERE m.project_id = $1 AND m.acts_for_authority AND m.role IN ('editor', 'owner') AND m.user_id <> $2
-			 ORDER BY u.display_name, m.user_id`,
+			`SELECT a.user_id AS "userId", u.email, u.display_name AS "displayName"
+			 FROM app_authority_members($1) a JOIN app_user u ON u.id = a.user_id
+			 WHERE a.user_id <> $2
+			 ORDER BY u.display_name, a.user_id`,
 			[id, userId]
 		);
 		if (!acting.length)
-			throw new ApiError(409, 'no other member acts for the responsible authority: the project’s owner marks one in Members (actsForAuthority)');
+			throw new ApiError(409, 'no other member acts for the responsible authority: the authority confirms who acts for it (Project tab, Acts for the authority)');
 		let recipients = acting;
 		if (body.userIds) {
 			const byId = new Map(acting.map((r) => [r.userId, r]));
 			const unknown = body.userIds.filter((u) => !byId.has(u));
 			// One answer for every id that isn't a member acting for the authority, whoever it belongs to.
-			if (unknown.length) throw new ApiError(422, 'send it only to members acting for the responsible authority (members, actsForAuthority)');
+			if (unknown.length) throw new ApiError(422, 'send it only to members acting for the responsible authority (authority-delegates)');
 			recipients = [...new Set(body.userIds)].map((u) => byId.get(u)!);
 		}
 		if (recipients.length > PACK_SEND_MAX) recipients = recipients.slice(0, PACK_SEND_MAX);

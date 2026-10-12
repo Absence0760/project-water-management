@@ -72,8 +72,8 @@ erDiagram
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
 | `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `priority_rank` smallint or null (migration 169, engine ≥ 1.64.0, issue #343: its rank within `first` or `last`, 1 supplied before 2, equal ranks pro rata, CHECKed to 1–99; null = 1, so every object saved before it runs unchanged; ignored on a `shared` object; the API's `rank`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `water_source` text or null (migration 170, engine ≥ 1.65.0, issue #344: where its water comes from, `dam` or `river`, CHECKed to that list; null = the dam), `river_pump_m3_day` and `river_pool_m3` float8 ≥ 0 (finite) or null (its river abstraction's pump capacity, null = no limit, and pool, null or 0 = none; read only under `river`), `monthly_unit` text or null (migration 199, engine ≥ 1.72.0: the unit a monthly object's demand is entered and shown in, `ls` or `m3s`, CHECKed; null = m³/day; display only, `monthly_m3_day` holds the demand), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
-| `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
-| `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. So may catchment or CHIRPS rain: the land unit whose own rain it is (209, [Unit rain series](#unit-rain-series-209_unit_rain_seriessql)); none = the catchment's. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
+| `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`); out of the catchment (migration 224, engine ≥ 1.86.0, [model.md §2.6](./model.md#26-transfers-transfers)): `to_node_id` NULL, a dam rule only (CHECK `transfer_external_from_dam`; every existing row names a unit; a farmer sees such a rule from a linked farm through `transfer_select_farmer`'s `from_node_id` arm) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
+| `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. So may catchment or CHIRPS rain: the land unit whose own rain it is (209, [Unit rain series](#unit-rain-series-209_unit_rain_seriessql)); none = the catchment's. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name, in the name's byte order whatever the database's collation ([Which series a run reads](#which-series-a-run-reads)) | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model, and once that scenario is deleted), `from_scenario` (188), true for a run a scenario made whether or not the scenario still exists, and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
@@ -83,7 +83,7 @@ erDiagram
 | `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
 | `seasonal_outlook` | A seasonal outlook (063, issue #53 R5): a base run × a season (`decision_date`, `season_end`) × demand `levels`, over the record's analogue years, run as one `outlook` job; `planning_share`, `analogue_years`, `status`, `result` (the engine's summary), `engine_version`; see [Seasonal outlooks](#seasonal-outlooks-063_seasonal_outlooksql) | none (the sketch S3 was worked by hand) |
 | `seasonal_outlook_member` | One level in one analogue year of an outlook (063): `level_position`, `water_year`, `status` (`done`, `failed`), `member` (the engine's `OutlookMember`) or `problems`; written once, complete | none |
-| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
+| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow. `meta` is `{ label, unit }`, plus `publishedBy: 'DWS'` and `station` on the outlet's `observed_flow` / `observed_flow_other` when it holds a record a DWS river-gauge feed wrote whole (232, #523 G8: shown to share links and applicants at any holder count; runs/publishedRecords.ts). The trigger `run_series_published_mark` (235) strips the two keys from any row it can't trace to such a record: not the outlet's observed flow, a scenario run, or a run whose input of that kind (`run_input_series.series_id`) isn't a DWS feed's for that station, whole |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
 Model names are one line (migration 189, issue #385): `node.name`,
@@ -128,6 +128,7 @@ data](./api.md#model-data)).
 
 | `user_demand_m3_day` | (none: b023 has no such element) | Kind `user` only (migration 011, engine ≥ 0.22.0, [model.md §2.7c](./model.md#27c-other-water-users-engine--0220-roadmap-wp-133)): demand from the river, m³/day per water-year month (12 values ≥ 0, CHECK); NULL = none |
 | `user_return_pct` | (none) | Kind `user` only: share (0–1) of what it takes that returns below it the same day; default 0 |
+| `user_restriction_pct` | (none) | Kind `user`, Priority only (engine 1.86.0, migration 223): its fixed restriction, the share (0–1) of its demand it gives up in a curtailment and under the drought restriction rule, no basic-needs floor; NULL = none (CHECK 0–1) |
 | `borehole_capacity_m3_day` | (none: b023 has no groundwater) | Farms and users (migration 012, engine ≥ 0.23.0, [model.md §2.7d](./model.md)): most pumped per day, m³/day; NULL = no boreholes (every existing row) |
 | `borehole_rule` | (none) | `supplemental` (default), `primary` or `drought` (CHECK); the API refuses `drought` without a farm dam and any borehole on a gauge |
 | `borehole_trigger_pct` | (none) | Drought rule: runs while the dam is below this fraction of capacity (0–1, default 0.3) |
@@ -140,7 +141,7 @@ data](./api.md#model-data)).
 | `supply_stop_pct` | (none) | `trigger` only: switch back to the dam at this fraction (0–1, default 0.6); the API refuses one below the trigger |
 | `crop_water_source` | (none: b023's crops draw on the dam) | Farms only (migration 170, engine ≥ 1.65.0, issue #344, [model.md §2.7j](./model.md)): where the unit's crops take their water, `dam` (default, every existing row: the dam side under the supply rule) or `river` (a river abstraction of their own beside the dam), CHECKed to that list. The API refuses `river` (or a crop pump or pool) off a farm (`modelRuleIssues`, `cropSourceKind`) |
 | `crop_river_pump_m3_day` | (none) | The crops' river pump capacity, m³/day (≥ 0, finite, CHECK); NULL = no limit (the run warns). Read only under `river` |
-| `crop_river_pool_m3` | (none) | A pool at the crops' river pump, m³ (≥ 0, finite, CHECK); NULL or 0 = none. It starts a run full and its surface is estimated from the capacity. Read only under `river` |
+| `crop_river_pool_m3` | (none) | A pool at the crops' river pump, m³ (≥ 0, finite, CHECK); NULL or 0 = none. It starts a run full and is storage only (engine ≥ 1.86.0, issue #523 B2: no rain, no evaporation, no area; engines 1.65.0–1.85.x estimated a surface from the capacity for its evaporation). Read only under `river` |
 | `crop_share_dam`, `crop_share_river`, `crop_share_remote` | (none: b023's crops draw on the dam) | Farms only (migration 202, engine ≥ 1.73.0, issue #408, [model.md §2.7k](./model.md)): the crop supply table, the share (0–1, CHECK) of the crop demand asked of the unit's dam side, the river (the crops' river abstraction, above) and another unit's dam. All three NULL (default, every existing row) = no table: the crops take `crop_water_source`. The API refuses shares not adding up to 100 % and a table off a farm (`modelRuleIssues`, `cropShareSum`, `cropShareKind`) |
 | `crop_remote_node_id` | (none) | FK → node, ON DELETE SET NULL, indexed, same project (the node's same-project trigger checks it with `downstream_node_id`): the unit whose dam gives `crop_share_remote`. The API refuses a remote share without another unit with a dam, or with one this unit drains into (`cropRemoteNode`, `cropRemoteDam`, `cropRemoteLoop`). The model store sets it with the topology, once every node exists |
 | `crop_remote_cap_m3_day` | (none) | The pipe or canal's capacity from that dam, m³/day (≥ 0, finite, CHECK); NULL = no limit (the run warns) |
@@ -152,6 +153,8 @@ data](./api.md#model-data)).
 | `ga_rate_m3_ha_year` | (none) | Same: the GN 538 Table 2 rate for the property's quaternary, m³/ha/a, CHECK one of 0, 45, 75, 150, 275, 400. NULL = not looked up. Volume = min(area × rate, 40 000), context only |
 | `reach_loss_frac` | (none: b023 routes every outflow whole) | Any node (migration 203, engine ≥ 1.75.0, issue #444, [model.md §2.6b](./model.md)): the share f (0–1, CHECK `node_reach_loss_frac_range`; 1 with a cap is WRSM's fixed monthly Bedloss) of the flow the node passes downstream lost into the river bed in the reach to the next node, out of the catchment. 0 (default, every existing row) = none. The API refuses one on the outlet (`modelRuleIssues`, `reachLossOutlet`), which has no reach below it |
 | `reach_loss_max_m3_day` | (none) | The reach's loss at most, m³/day (≥ 0, finite, CHECK `node_reach_loss_max_size`); NULL (default) = no cap. Read only with `reach_loss_frac` > 0 |
+| `baseflow_loss_m3_day` | (none) | A unit's base-flow loss (migration 222, engine 1.86.0, issue #523 B1, [model.md §2.6b](./model.md)): m³/day of its own runoff lost to groundwater, MIN(this, runoff), out of the catchment (≥ 0, finite, CHECK `node_baseflow_loss_size`). 0 (default, every existing row) = none. Units only (`modelRuleIssues`, `baseflowKind`) |
+| `baseflow_gain_m3_day` | (none) | A unit's base-flow gain: m³/day joining its runoff every day from outside the catchment (≥ 0, finite, CHECK `node_baseflow_gain_size`). 0 (default) = none. Units only |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).
@@ -189,6 +192,41 @@ Why arrays and not one row per day:
 Trade-offs we accept: updating one day rewrites the whole array (fine, since
 inputs are uploaded in bulk), and SQL date-range aggregates need `unnest … WITH
 ORDINALITY` (fine for occasional reports).
+
+### Which series a run reads
+
+A project may hold several series of one kind (001: unique by project, kind
+and name). A run reads one per kind: of the series with no site, the first of
+each kind **by name**; at each site (a gauge's records, a unit's own rain),
+the first of each kind by name among that site's (`runs/execute.ts`
+`loadLiveInput`, `SELECT DISTINCT ON (site_node_id, kind) … ORDER BY
+site_node_id NULLS FIRST, kind, name COLLATE "C"`). The rain-for-each-unit
+proposal names a unit's own CHIRPS series the same way (`feeds/fromUnits.ts`).
+
+"By name" is the **byte order of the name's UTF-8** (`COLLATE "C"`, code point
+order): digits and capitals before lower case ("RAIN-B logger" before
+"average gauge"), any non-ASCII letter after every ASCII one ("Zeta" before
+"Ärea"). It doesn't depend on the database's collation, which differs between
+builds of Postgres for the same name: the local docker image
+(`postgres:17-alpine`, musl) sorts `en_US.utf8` by byte, while production RDS
+(glibc) sorts it linguistically ("average gauge" before "RAIN-B logger").
+Until issue #523 the query used the database's collation, so a project whose
+series of one kind differed in case or punctuation order could run on one
+series locally and another in production. Everything else that names the
+series a run reads uses the same order through the engine's
+`compareSeriesNames`: the Data tab's in-use marks, the data preview and "a
+new series will replace…" (frontend `lib/series/pick.ts`), the fit record's
+"forcing changed since fit" sources, and the scripts that read an exported
+document (`fit-sweep`, `pan-sensitivity`, `import:project --fit`;
+`backend/scripts/fit-project.ts` `inputSeriesOf`). Lists shown to people
+(the Data tab, the export) keep the database's order; only the pick is
+pinned. An API key may not add a second outlet series of a kind
+(100_key_series_kind.sql), since it could name one to sort first. The local
+and CI databases already sort by byte, so no DB test fails if `COLLATE "C"`
+is dropped: `series/pickOrder.test.ts` checks the two queries' text instead.
+Before a release that carries this, list the production projects whose pick
+moves (series of one kind whose linguistic and byte orders differ;
+deployment.md runbook).
 
 ### Series provenance (032_series_provenance.sql)
 
@@ -792,8 +830,20 @@ the result change?", and put back any earlier version.
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
   it is decided; since 163 `scenario.decided` also carries the `authority`
-  and `decisionDate`), `member.authority` (163: an owner marked or unmarked
-  a member as acting for the responsible authority, `actsForAuthority`),
+  and `decisionDate`, and since 227 with a licence issued `granted`,
+  `as_applied` or `changed`, and `grantedOpsSha256`), `scenario.appeal_recorded`
+  (228: what followed a decision: `eventId`, `kind`, `forum`, `eventDate`, a
+  variation's `opsSha256`; never its note), `member.authority` (163: an owner marked or unmarked
+  a member as acting for the responsible authority, `actsForAuthority`;
+  none since 229), the `authority.*` events (229, written by the database's
+  `authority_delegate_audit`, never by `recordAudit`, `{ userId,
+  displayName, via?, reference?, wasConfirmed? }`): `authority.proposed`,
+  `authority.confirmed` (`via`: `member`, or `operator` with the
+  authority's letter as `reference`, actor "Operator"), `authority.withdrawn`,
+  `authority.declined` (the authority refused a proposal),
+  `authority.removed`, `authority.lapsed` (no longer an editor) and
+  `authority.grandfathered` (a 163 flag carried over, its actor the owner
+  who ticked it),
   `publication.endorsed` (163: `publicationId`, `runId`, `note`),
   `member.specialist` (167: an owner appointed or ended a party's
   specialist, `specialist`, `party`), `registration.checked` (167: a
@@ -1443,7 +1493,12 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `created_at`. RLS: read by a viewer and up who reads the application run
   (`model_run`'s RLS in the policy's subquery); an editor inserts, and
   deletes the run's older ones (the route keeps one per run); no `UPDATE`
-  (catalogue `NO_UPDATE`). The pair's runs themselves aren't stored.
+  (catalogue `NO_UPDATE`). The pair's runs aren't stored as runs: since
+  `evidence-19` (issue #523 G2) `result.reproduction` records how to
+  re-derive them and what they give (both results digests, the outcome
+  settings, each registered volume's authorisation as at the baseline run,
+  from `run_allocation_holder.authorisation`, 226), which a pack's
+  reproduction bundle re-runs ([evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)).
 
 **The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
 
@@ -1548,15 +1603,21 @@ were swept and who was mailed.
 `project` and `team`; provisional position (pre-counsel research,
 2026-10-01).
 
-- **`project.licence_outcome`** (`granted`, `refused`, `withdrawn`, NULL),
-  `licence_outcome_on`, `licence_expires_on` (exactly when granted, not
-  before the decision), `licence_outcome_reason`; **`record_closes_on`**
-  (generated: expiry or decision + 3 years); **`record_review_due_on`** (set
+- **`project.licence_outcome`** (NULL, or since 233 the authority's words,
+  D14: `licence_issued`, `licence_refused`, `application_rejected`,
+  `not_considered`, plus `application_withdrawn`, which the authority
+  doesn't decide; 161 said `granted`, `refused`, `withdrawn`, and 233 mapped
+  them), `licence_outcome_on`, `licence_expires_on` (exactly when
+  `licence_issued`, not before the decision), `licence_outcome_reason`;
+  **`record_closes_on`** (generated: expiry or the outcome's date + 3
+  years); **`record_review_due_on`** (set
   by `licence_record_start` when the project first issues a pack or
   nominates a run, + 5 years; backfilled for existing projects); the tick's
   bookkeeping `record_reminders_sent` (0–3), `record_reminded_at`,
   `record_close_notified_at`. Two partial indexes serve the tick.
-- Written only through **`app_set_licence_outcome`** and
+- Written only through **`app_set_licence_outcome`** (since 233 it still
+  takes 161's three words and stores the new ones, for a backend released
+  before 233; dropping them is in [followups.md](./followups.md)) and
   **`app_confirm_licence_record`** (SECURITY DEFINER, owners) and the
   tick's **`app_licence_record_due(limit)`** (marks and returns the due
   notices with the owners to tell); `licence_record_guard` and
@@ -1569,7 +1630,8 @@ were swept and who was mailed.
   `team_public_records_guard` refuse deleting its projects or the team, and
   moving a project out of it, until the disposal is confirmed
   (`app_project_public_records`).
-- Guards: `licence/licence-record.db.test.ts`.
+- Guards: `licence/licence-record.db.test.ts`, `db/migration-233.db.test.ts`
+  (161's words mapped, dates kept).
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
@@ -1627,6 +1689,26 @@ water-use volumes per farm or water user.
   policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
   on their own farm; **viewers read no names**; writes editor. `water_app` has
   `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **One rule for who reads them (231, #523 G6).** `allocation_select` and
+  `allocation_holder_select` read `app_reads_allocation_units(project)` and
+  `app_reads_allocation_holders(project)` (`SECURITY DEFINER`, the current
+  user), which ask the internal `app_user_reads_allocation_units(project,
+  user)` and `app_user_reads_allocation_holders(project, user)` (invoker's
+  rights, closed to `water_app`, as `app_authority_member`, 230). Their first
+  line: a member acting for the responsible authority (`app_authority_member`)
+  always reads every row and name; then an editor or owner; then (rows only) a
+  viewer with the switch on. `app_audit_subject` (190), `report_enqueue`'s
+  `with_volumes` (218) and the API read the same functions;
+  `app_allocation_units_readers(project)` lists the members who read each
+  row, for a viewer or above (who a report with volumes is emailed to).
+  Since 235 both policies ask once per query, not once per row: `project_id
+  IN (SELECT p.id FROM project p WHERE app_reads_allocation_units(p.id))`
+  (the holder policy likewise, and its farmer branch an uncorrelated `IN`
+  over `allocation`). The subquery reads `project` under the user's RLS
+  (viewer or above), which every reader the rule admits is, so who reads
+  what is unchanged; 231's per-row form cost ~5× at the 5,000-row cap
+  (`allocations/allocations.db.perf.test.ts`, under 250 ms for an editor, a
+  viewer with the switch on and the authority's member; measured ~100 ms).
 - **Viewers' switch and totals (162).** `project.allocations_viewer_units`
   (default false) is set only through `app_set_allocations_viewer_units`
   (`SECURITY DEFINER`, owners; `allocation_viewer_units_guard` refuses
@@ -1644,7 +1726,12 @@ water-use volumes per farm or water user.
   `run_allocation_holder` (owner-only, 219) keeps each run's rows' keys as
   they were when it was stored (trigger `model_run_allocation_holders` on
   `model_run` insert; `gone` for a row no living holder had; existing runs
-  filled by 219 from the rows then living), and
+  filled by 219 from the rows then living), with each row's `authorisation`
+  then since 226 (NULL for a row with no living row; existing runs filled by
+  226 from the rows then living; not reset on erasure, it isn't personal
+  information), read through `app_run_allocation_kinds(project, run, ids)`
+  (`SECURITY DEFINER`, viewer and up, the same run rule; no volume, no
+  holder) for the headline board's mix as at the baseline (#523 G2), and
   `app_run_allocation_holders(project, run, ids)` (`SECURITY DEFINER`,
   viewer and up) returns the keys of the given rows of one run, no volume:
   the evidence report's § 5 gate and the authorised mix count holders by
@@ -1751,6 +1838,26 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   proposal), `loaded_at`. Global: loaded by the operator as the schema owner
   (`pnpm import:gauge-stations`), SELECT for anyone signed in, read-only to
   `water_app` (the catalogue guard's `READ_ONLY`).
+- **`gazetteer_reference`** (`225_gazetteer.sql`, issue #523 C5): the
+  named places the Map's search finds after the map's own layers
+  ([maps.md § Search](./maps.md#search)). Keyed `(dataset, place_id)`
+  (GeoNames' geonameid); `name` (1–200, one line), `search_name` (the name
+  folded by `geo/gazetteer.ts` `searchKey`: lower case, accents and
+  punctuation dropped; a trigram GIN index, `pg_trgm`, on `' ' ||
+  search_name` serves the search's word-start test, one `LIKE '% ' || word
+  || '%'` per word, so a search never reads the whole table; 225 creates the
+  `pg_trgm` extension, trusted like 001's `citext`),
+  `feature` (GeoNames' class and code, `P.PPL`, `S.FRM`), `admin1` (the
+  province code, `''` when not given), `lon`, `lat`, `dataset` (`synthetic`
+  for the committed fixture), `source` (1–500, the credit shown with every
+  match), `loaded_at`. Global: loaded by the operator as the schema owner
+  (`pnpm import:gazetteer`, or a production load of kind `gazetteer`),
+  read-only to `water_app` (the catalogue guard's `READ_ONLY`). Its read
+  policy is `USING (true)`, like `language`'s, not "a user is set": a
+  policy's condition runs before a non-leakproof one of the query, and `LIKE`
+  isn't leakproof, so that policy kept the search off its index (a read of
+  every row). The data is public; who may search is the route's check. Migration 225 also adds `gazetteer` to
+  `reference_load`'s kinds.
 - **RLS**: viewers read `geo_source` and `map_feature`, editors write. A
   farmer or contributor reads the boundary, gauges and rivers and the
   features tied to their own linked nodes (`app_farm_nodes`), never another
@@ -1833,7 +1940,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   warnings; a dam marked on or off its river, 194, its `damShares`;
   `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method` (1–1000: each placement rule that ran defined once, or, when nearly every kind ran at once and that would pass 1 000 characters, named by the method version instead, `fitMethod`),
-  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`, `start-12` the windows grown for a river cut at the outlet and placed over the catchment, and a cut click's `unmatched` kept unless its reach is larger than the routed square, `start-13` for `delineate-11`'s head reach reaching them, `start-14` the pans' cross-check: storage on a river listed in `plan.pans.onRiver` and not counted, `start-15` for `delineate-13` reaching them: every point and the outlet on the terrain channel nearest it within 150 m, an outlet with none refused and another point dropped, the mapped river's rules of `start-3`, `-4`, `-7` to `-9`, `-12` and `-13` retired, issue #472; plans stored before it can still hold `placedBy` `matched` or `junction` with `reach` and `unmatched`), `mode` (`start` | `divide`, 182: a
+  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`, `start-12` the windows grown for a river cut at the outlet and placed over the catchment, and a cut click's `unmatched` kept unless its reach is larger than the routed square, `start-13` for `delineate-11`'s head reach reaching them, `start-14` the pans' cross-check: storage on a river listed in `plan.pans.onRiver` and not counted, `start-15` for `delineate-13` reaching them: every point and the outlet on the terrain channel nearest it within 150 m, an outlet with none refused and another point dropped, the mapped river's rules of `start-3`, `-4`, `-7` to `-9`, `-12` and `-13` retired, issue #472; plans stored before it can still hold `placedBy` `matched` or `junction` with `reach` and `unmatched`; `start-16` for the units following the user's boundaries, #523 C1: a unit is a polygon on the map (`role: 'unit'`, its boundary's area, `placedBy: 'unit'` at its most-drained cell, `demAreaM2` the elevation model's check), the dams and abstraction points inside it its `members` (composite dam, river pump; `plan.rest.members` for those in none), never units, no `damShares`; the decision's `boundaryId` names the boundary linked as a unit's area; plans stored before it with a unit of `role` `dam` or `abstraction` can't be applied), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
   `applied`: the ticks, `upstreamToDam` on a unit with `damShares`, the
@@ -1956,7 +2063,7 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
   `imported_by` (→ `app_user`, `ON DELETE SET NULL` since 138, like
   `model_run.created_by`: the record stays with who imported it cleared),
   `source` (`b023-workbook` | `project-file`), `file_name` (≤ 255),
-  `importer_version` (≤ 100, e.g. `b023 browser importer (web build …)`),
+  `importer_version` (≤ 100, e.g. `workbook browser importer (web build …)`; a report from before issue #523 says `b023 browser importer`, which the Project page shows as the workbook importer),
   `notes jsonb` (`ImportNote[]`), `unmapped jsonb` (`UnmappedItem[]`), and
   `notes_omitted` / `unmapped_omitted` (items found beyond the kept 500 per
   list). CHECKs: both lists are arrays of at most 500, and together at most
@@ -2174,7 +2281,7 @@ projection's read and narrows their series further:
   published run of the project (on insert and rebase); only its owner moves
   it (submit, withdraw, back to draft) or edits it; only an editor who isn't
   its owner **and acts for the responsible authority** (163,
-  `app_acts_for_authority`; also for an outcome on a team scenario, though
+  `app_acts_for_authority`: a confirmed delegate since 229; also for an outcome on a team scenario, though
   an editor may still mark a team scenario decided without one) decides it, with an
   outcome, the authority, the date and the reasons flag, and nothing else
   changed; the decision and its record are set once. The one change it lets through is the assessor's
@@ -2185,6 +2292,48 @@ projection's read and narrows their series further:
   change to a decision. `scenario_drop_application_runs` deletes a deleted
   application's runs that nothing keeps (else `SET NULL` would show them to
   every viewer).
+- **Granted terms** (227_licence_terms, issue #523 G3): `scenario.granted_ops`
+  (the "as licensed" revision of the ops, ≤ 500, the API checks them as the
+  scenario's own against the base run, an application's under its
+  applicant's mask), `granted_ops_sha256` (RFC 8785, as `ops_sha256`),
+  `granted_op_names` (as `op_names`: an application keeps only its own
+  nodes' names) and `granted_conditions` (≤ 4000, the licence's conditions in
+  words). Set exactly when the outcome is `licence_issued`
+  (`scenario_granted_terms`), with the decision, once; issued as applied for,
+  the guard writes the applied ops out as the granted ones (`granted_ops_sha256
+  = ops_sha256`). A licence issued before 227 was given its applied ops, the
+  conditions "Not recorded (before 227): counted as applied for.".
+  `scenario_guard` (from 188) refuses terms with any other outcome and keeps
+  them with the decision's record.
+- **`decision_event (id, project_id, scenario_id, position, kind, forum,
+  event_date, reference, note, ops, ops_sha256, op_names, conditions,
+  recorded_by, recorded_at)`** (228_decision_events, issue #523 G4): what
+  followed a decision, one append-only row per event: `lodged` (an appeal,
+  `forum` `water_tribunal` (NWA s148) or `court`), then `upheld`,
+  `set_aside` or `varied` (a variation's new granted terms in 227's shape:
+  `ops` set exactly then). `decision_event_guard` (SECURITY DEFINER, under
+  a per-scenario advisory lock) stamps `position` (from 1), `recorded_by`
+  and `recorded_at`; admits only a member acting for the authority
+  (`app_acts_for_authority`), never an application's owner, on a scenario
+  decided with an outcome; an appeal is lodged only while none is open, an
+  outcome only answers the open one in its forum; each event dated on or
+  after the one before (the decision letter's date first), not in the
+  future. RLS: read by whoever reads the scenario (the policy asks the
+  scenario's own policies); inserted by a member acting for the authority;
+  no UPDATE or DELETE grant or policy (catalogue `APPEND_ONLY`). Goes with
+  its scenario (which a decision keeps) or project; `recorded_by` is SET
+  NULL when the account goes. Covering indexes: `(scenario_id, position)`
+  unique, `(project_id, recorded_at)`, `(recorded_by)`.
+- **`app_scenario_licence(scenario)`** (227, events since 228): the one rule
+  for whether a decided scenario's licence counts, as its caller reads it:
+  `{ inForce, from: 'decision' | 'event', eventId, appealPending, terms }`,
+  NULL until decided with an outcome. The newest `set_aside` or `varied`
+  decides (varied: in force on its terms, also after a refusal; set aside:
+  not in force); without one, a `licence_issued` decision is in force on its
+  granted terms; an open appeal changes only `appealPending`.
+  `assessment_member_guard` (from 145) copies the licence's terms in place
+  of the ops when it is in force; the evidence report's other applications
+  and combined row read the same function (backend `evidence/report.ts`).
 - **`scenario_member (scenario_id, project_id, user_id, added_by,
   added_at)`**: the people an applicant shares an application with.
   `(project_id, user_id)` references `project_member` `ON DELETE CASCADE`
@@ -2195,8 +2344,11 @@ projection's read and narrows their series further:
   removes anyone and anyone listed may leave; no update.
 - **`application_question`** (164_applicant_visibility): "Ask the
   assessors why": an application's party asks about a problem line of its
-  check that a rule hidden from them broke. `scenario_id` (cascade: it goes
-  with the application; `assert_same_project`), `asked_at`, `scenario_name`
+  check that a rule hidden from them broke. `scenario_id` (164 cascaded:
+  it went with the application; since 234_question_kept `ON DELETE SET
+  NULL`, nullable: a deleted draft's questions and answers stay with the
+  editors, the application's record for the authority's s42 written
+  reasons, issue #523 G7; `assert_same_project`), `asked_at`, `scenario_name`
   (the application's name when asked: the assessors can't read a draft's
   row), `problem` (the line as the applicant read it), `op_indexes` and
   `ops` (the ops it names, as they stood), `rules` (the rules' kinds, never
@@ -2210,7 +2362,8 @@ projection's read and narrows their series further:
   `app_answer_assessors_question(project, question, answer)` lets an editor
   answer once (`'answered'`, `'already'`, `'none'`);
   `application_question_guard` refuses a question born answered, a second
-  answer or any other change; `app_application_questions(scenario)` gives
+  answer or any other change (234: but `scenario_id` going to null with
+  nothing else changed, its draft deleted); `app_application_questions(scenario)` gives
   the parties their questions without `assessor_text` or `ops`.
   `app_application_hidden_holders(scenario)` (server only, capped at 5)
   counts the farm holders of an application's hidden farms, its owner left
@@ -2234,15 +2387,49 @@ projection's read and narrows their series further:
   change clears it unless the same update sets it. water_app's column
   `UPDATE` grant now includes it.
 - **`project_member.acts_for_authority`** (163_licensing_authority, boolean,
-  default false): the owner marks the members who act for the project's
-  responsible authority (`settings.responsibleAuthority`, backend
-  `projects/authoritySettings.ts`, no model input). `project_member_authority`
-  forces it false on insert and refuses a change by anyone but an owner of
-  the project; water_app's `UPDATE` grant on `project_member` is now the
-  columns `role`, `party` and `acts_for_authority`. `app_acts_for_authority(project)`
-  (`SECURITY DEFINER`, pinned `search_path`): the current user is editor or
-  above and marked. It gates the decision (`scenario_guard`) and the
-  baseline endorsement (`run_publication_endorse`).
+  default false): superseded by `authority_delegate` (229). Read by nothing;
+  water_app's column `UPDATE` grant on it is revoked (its grant is now
+  `role`, `party`, `specialist`); its pre-229 values were carried over as
+  confirmed delegates. `project_member_authority` (163) stays with it until a
+  later migration drops both (expand/contract).
+- **Who acts for the responsible authority** (`authority_delegate`,
+  229_authority_delegates, issue #523 G5): `(project_id → project CASCADE,
+  user_id → app_user CASCADE)` primary key, `proposed_by → app_user SET
+  NULL`, `proposed_at`, `confirmed_at` (NULL = proposed), `confirmed_by →
+  app_user SET NULL`, `confirmed_via` (`member` | `operator` |
+  `grandfathered`, NULL exactly while proposed), `confirmation_note`
+  (≤ 200, the operator's reference, `''` otherwise). Indexed on `user_id`,
+  `proposed_by`, `confirmed_by`. The authority's own list (the project's
+  `settings.responsibleAuthority` names it, backend
+  `projects/authoritySettings.ts`): an owner or a member acting for it
+  proposes, only a member acting for it confirms (or the operator,
+  `authority_confirm_by_operator(project, user, reference)`, invoker's
+  rights, closed to water_app: the only way to confirm a project's first),
+  the owner withdraws a proposal but can't remove a confirmed delegate, the
+  authority removes anyone, anyone steps down (`authority_delegate_guard`;
+  RLS: read by viewers and above and the person, insert by an owner or the
+  authority, update by the authority, delete by the authority, the person,
+  or an owner while proposed; water_app holds `SELECT`, `INSERT`, `DELETE`
+  and `UPDATE (confirmed_at)`). The person must hold editor or above,
+  directly or through the team, when proposed and confirmed, and lapses
+  when they no longer do (`authority_delegate_prune` from `AFTER` triggers
+  on `project_member` delete or role change, `team_member` delete or role
+  change and `project.team_id`). `app_authority_member(project, user)`: a
+  confirmed delegate holding editor or above (internal since 230: invoker's
+  rights, closed to PUBLIC and water_app, called only from
+  `app_acts_for_authority`, so no account can ask it about a project it
+  can't read); `app_acts_for_authority(project)`
+  (from 163): that, for the current user; `app_authority_members(project)`:
+  the list, for a viewer or above (the members list, the pack's send
+  dialog, `holdsRequiredRole`); `app_authority_candidate(s)`: who may be
+  proposed (editors and owners, direct or team, not yet listed), for an
+  owner or an authority member only. `app_acts_for_authority` gates the
+  decision (`scenario_guard`), the baseline endorsement
+  (`run_publication_endorse`) and the registration check
+  (`app_record_registration_check`). Every change writes an `authority.*`
+  event (above). An account going takes its delegations (`user_id`) and
+  clears the names on others' (`proposed_by`, `confirmed_by`); a project
+  going takes its rows and writes nothing.
 - **The conflict guard** (163, D1 (c)): `app_member_role(project, user)`
   (any user's effective role, direct or through the team; not granted to
   water_app) and `app_assert_no_role_conflict(project, user)`, called by
@@ -3238,6 +3425,7 @@ No job table of its own: `job` holds status, progress and errors.
 | `params` | The request's parameters with their defaults: `pattern`, `assurance`, `tolerance`, `points` (≤ 4 KB) |
 | `points` | `{ point }` for `firm`, `{ baseCapacityM3, assurance, points, monotone }` for `curve`, engine `YieldPoint`s (≤ 64 KB) |
 | `engine_version`, `created_by`, `created_at` | `created_by` and `created_at` are stamped by the insert trigger |
+| `allocation_mode` | The `settings.allocationMode` of the input the yield ran on (`none`, `cap`, `fullAllocation`; 221, #523 G1c), written by the job. A viewer kept from the volumes gets a `cap` or `fullAllocation` result without its points; NULL = a result from before 221, judged on a run by the run's own mode and withheld on a scenario (`yield/store.ts` `yieldsOnCapOrFull`) |
 
 - **RLS**: SELECT for viewers (farmers read nothing: listed in the catalogue
   guard's `FARMERS_NEVER_READ`), INSERT and DELETE for editors. No UPDATE
@@ -3619,10 +3807,11 @@ the restored one.
 
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
-of a map dataset read (`land-cover`, `evaporation`, `rivers`) and the
+of a map dataset read (`land-cover`, `evaporation`, `rivers`, and since
+225 `gazetteer`) and the
 SHA-256 it was checked against. Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
-`replaceEvaporationDataset`, `replaceRivers`, through
+`replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`, through
 `geo/referenceOrigin.ts`), and deleted by any other replace of that
 dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like

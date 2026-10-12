@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 132 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 139 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -91,7 +91,14 @@ The core daily chain, with every setting of it the generator varies:
   balance K … V in network order, gauges.
 - **Transfers** (§2.6): priorities, one rate or monthly rates, daily caps,
   the receiver's room (its dam's own gains and losses, its demand) shared pro
-  rata, and the source's water in bands at each rule's reserve.
+  rata, and the source's water in bands at each rule's reserve; a dam rule
+  out of the catchment (toNodeId null, engine 1.86.0) runs as any rule with
+  no receiver (probe `transfer-out-of-catchment`, and a fifth of the random networks);
+  from engine 1.88.0 its source's surface use, so under a cap the rules out
+  of one source share its surface room pro rata as an outside receiver of
+  their own and the volume counts against the year's volume
+  ([engine-audit.md X1](../docs/engine-audit.md), probe
+  `transfer-out-of-catchment-cap`).
 - **EWR** (§2.7, §2.7b): Y, Z, AA and AB; the outlet and gauge EWR sites
   (`ewrSite` on or off); the attribution with J_int, Σ A + N = D, the charge
   as the largest share, its irrigation part and the binding site.
@@ -162,7 +169,7 @@ the ranks within one (engine ≥ 1.64.0),
 - **River abstractions** (§2.7j, engine ≥ 1.65.0): the crops or a demand
   object on a river pump of their own beside the dam, the dam side serving
   the rest, the takes by supply level from the flow passing the dam above
-  what must pass, pools drawn after the flow, refilled last and evaporating.
+  what must pass, pools drawn after the flow, refilled last; storage only from engine 1.86.0 (no evaporation).
   Not the pump-limited measure of engine 1.66.0 (`river_pump_limited@`): the
   model doesn't write it, so the comparison notes it as engine-only; the
   engine's own self-checks (`checkWorkings`, `checkReportTotals`) bound it.
@@ -178,6 +185,12 @@ the ranks within one (engine ≥ 1.64.0),
   rest; a priority user's claim grossed up through every reach on the way, and
   the requirement crossing each less what the claims were grossed up by for
   it (`reach_loss`, `senior_reach_loss`).
+- **A unit's base-flow loss and gain** (§2.6b, engine 1.86.0): MIN(loss, I)
+  taken off the unit's runoff and the gain added before the dam/river split,
+  the priority pass and the hands-off flow, the runoff column staying I; the
+  EWR attribution's net impact reading the runoff after them
+  (`baseflow_loss`, `baseflow_gain`; probe `baseflow-loss-and-gain`, and a
+  quarter of the random networks).
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent
@@ -305,7 +318,8 @@ docs/followups.md § Verification ("`verify/` phase 2b").
   abstraction from a date), §2.7g;
 - demand factors by part (`partDemandFactor`, the `demand.scale` scenario op
   with a part), dated demand factors (`demandFactorWindows`, the op with
-  `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges;
+  `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges
+  (with a Priority user's fixed restriction %, engine 1.86.0, §2.7i);
 - rain-source periods (§2.4e), the areal rainfall correction (§2.4g), the
   daily A-pan series (§2.3a), CHIRPS fit ranges (§2.4b), the CHIRPS quantile
   map (CR-23), keep-dry periods and the keep-dry guard, listed and kept
@@ -341,7 +355,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (132
+`test_verify.py` breaks `model.py` one documented rule at a time (138
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -377,7 +391,9 @@ the losses not capped at 1 − e (engine 1.71.0); a unit's own system on a
 planting ignored, a crop's default system ignored, and the project's
 systems table ignored for the SABI defaults (engine 1.72.0); bed losses left
 in the river, uncapped, a priority claim not grossed up for them, and the
-priority requirement crossing a reach whole (engine 1.75.0). Per-unit
+priority requirement crossing a reach whole (engine 1.75.0); a base-flow
+loss not capped at the runoff, the gain left out, and the split reading the
+runoff before them (engine 1.86.0). Per-unit
 rain's 21 (engine 1.78.0): the units' records used with the setting off; a
 unit's inflow as natural × share; `catchmentAreaKm2` kept; no land unit
 refused; the catchment's series weighting every unit alike; a unit's
@@ -482,7 +498,10 @@ and written into docs/model.md:
 Coverage probes (rules the docs settle, which the random networks rarely
 reach in a way a mutant would show): `trigger-hysteresis` (the trigger rule
 keeps pumping until the stop level, §2.7e), `junior-user` (a non-priority user
-leaves the priority users’ requirement, §2.7c) and `offtake-keep-bands` (off-takes
+leaves the priority users’ requirement, §2.7c), `priority-user-fixed-restriction`
+(a Priority user's fixed restriction %, engine 1.86.0, issue #523 B3, changes no
+daily series without a drought restriction rule: it acts only in the curtailment
+table and under the rule, both outside this cross-check, §2.7c) and `offtake-keep-bands` (off-takes
 of one priority share the flow in bands at their keeps, so a sibling without
 a hands-off flow doesn't let the others take below theirs, §2.6a, engine
 1.69.0), `offtake-release-keep-and-floor` (an off-take leaves its source's

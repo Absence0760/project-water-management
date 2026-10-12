@@ -87,7 +87,7 @@ describe('pack_reproduce', () => {
 		expect(recorded).toHaveLength(1);
 		const r = recorded[0]!;
 		expect(r).toMatchObject({ packId: K, outcome: 'reproduced', engine: ENGINE_VERSION, runEngines: [ENGINE_VERSION], bundleSha256: bundle.sha256 });
-		expect(r.checks.map((c) => c.id)).toEqual(['stored', 'archive', 'files', 'manifest', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'reproduce:baseline', 'reproduce:application']);
+		expect(r.checks.map((c) => c.id)).toEqual(['stored', 'archive', 'files', 'manifest', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'reproduce:baseline', 'reproduce:application', 'headline']);
 		expect(r.checks.every((c) => c.ok)).toBe(true);
 	});
 

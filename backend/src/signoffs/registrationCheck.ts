@@ -2,8 +2,8 @@
 // sign-off → Registration check; licensing positions item 9, provisional
 // position, pre-counsel research, 2026-10-01). A signer types their SACNASP
 // or ECSA registration in; the project's host checks it against the public
-// register and an owner, or an editor an owner marked as acting for the
-// responsible authority (163_licensing_authority), records that check in the app
+// register and an owner, or an editor the authority confirmed as acting for
+// it (163_licensing_authority, 229_authority_delegates), records that check in the app
 // (POST /projects/:id/members/:userId/registration-checks,
 // app_record_registration_check), never the operator. Issuing a pack binds
 // each sign-off to its signer's current check in the project
@@ -22,6 +22,7 @@ import { readJson } from '../http/body.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import { requireStepUp } from '../auth/stepUp.js';
+import { actsForAuthority } from '../projects/authoritySettings.js';
 
 /**
  * Whether the deployment lets a project require the check: always in
@@ -126,13 +127,12 @@ export const registrationCheckRoutes = new Hono<AuthEnv>()
 		const checkedAt = new Date(body.checkedAt);
 		if (Number.isNaN(checkedAt.getTime()) || checkedAt.getTime() > Date.now() + 60_000) throw new ApiError(400, 'checkedAt must be a date that has passed');
 		return withUser(c.get('userId'), async (db) => {
-			// An owner, or an editor an owner marked as acting for the responsible authority (163); either needs two-step
+			// An owner, or an editor the authority confirmed as acting for it (163, 229); either needs two-step
 			// sign-in. requireRole steps up only when the route's minimum is owner, and this one's is editor, so the
 			// owner's step-up is asked for here too (before, an owner recorded a check on a password alone).
 			const role = await requireRole(db, id, 'editor');
 			if (rank[role] < rank.owner) {
-				const { rows: auth } = await db.query<{ ok: boolean }>('SELECT app_acts_for_authority($1) AS ok', [id]);
-				if (!auth[0]?.ok) throw new ApiError(403, 'requires owner role, or a member acting for the responsible authority');
+				if (!(await actsForAuthority(db, id))) throw new ApiError(403, 'requires owner role, or a member acting for the responsible authority');
 			}
 			await requireStepUp(db);
 			if (!UUID.test(userId)) throw notFound();

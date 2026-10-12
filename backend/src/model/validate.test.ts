@@ -60,9 +60,23 @@ describe('other water users (WP-1.33)', () => {
 		const problems = modelProblems(m).join(' | ');
 		expect(problems).toMatch(/transfer t involves an other water user/);
 		expect(problems).toMatch(/crop area on other water user "Town"/);
-		for (const bad of [{ userDemandM3Day: [1] }, { userDemandM3Day: new Array(12).fill(-1) }, { userReturnPct: 1.5 }, { userPriority: 'first' }]) {
+		for (const bad of [{ userDemandM3Day: [1] }, { userDemandM3Day: new Array(12).fill(-1) }, { userReturnPct: 1.5 }, { userPriority: 'first' }, { userRestrictionPct: 1.5 }, { userRestrictionPct: -0.1 }]) {
 			expect(ModelBody.safeParse({ nodes: [out, { ...town, ...bad }, farm], crops: [], cropAreas: [], transfers: [] }).success, JSON.stringify(bad)).toBe(false);
 		}
+	});
+
+	it('a fixed restriction % (engine 1.86.0, issue #523 B3): null by default; a Priority user’s only', () => {
+		const out = node('Out', null);
+		const town = node('Town', out.id, { kind: 'user', userDemandM3Day: new Array(12).fill(100), userRestrictionPct: 0.3 });
+		const farm = node('A', town.id);
+		const parsed = ModelBody.parse({ nodes: [out, town, farm], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes[1]).toMatchObject({ userRestrictionPct: 0.3 });
+		expect(parsed.nodes[2]).toMatchObject({ userRestrictionPct: null });
+		expect(modelProblems(model([out, town, farm]))).toEqual([]);
+		// A Non-priority user is curtailed for its whole charge; a unit has no %.
+		const junior = node('Mill', out.id, { kind: 'user', userDemandM3Day: new Array(12).fill(100), userPriority: 'junior', userRestrictionPct: 0.3 });
+		expect(modelProblems(model([out, junior, node('B', junior.id)])).join(' | ')).toMatch(/a fixed restriction % is for Priority users/);
+		expect(modelProblems(model([out, town, node('C', town.id, { userRestrictionPct: 0.3 })])).join(' | ')).toMatch(/only an other water user has a fixed restriction %/);
 	});
 });
 
@@ -454,6 +468,18 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 			expect(ModelBody.safeParse({ ...body(monthly), nodes: [gauge, { ...unit, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
 		// The outlet has no reach below it (a model rule).
 		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, reachLossFrac: 0.2 }, unit] })).join()).toMatch(/is the outlet: there is no reach below it/);
+	});
+
+	it('takes a unit’s base-flow loss and gain (engine 1.86.0, issue #523 B1): none by default, sizes ≥ 0, units only', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10) };
+		expect(ModelBody.parse(body(monthly)).nodes[1]).toMatchObject({ baseflowLossM3Day: 0, baseflowGainM3Day: 0 });
+		const set = ModelBody.parse({ ...body(monthly), nodes: [gauge, { ...unit, baseflowLossM3Day: 1500, baseflowGainM3Day: 250.5 }] });
+		expect(set.nodes[1]).toMatchObject({ baseflowLossM3Day: 1500, baseflowGainM3Day: 250.5 });
+		expect(modelProblems(set)).toEqual([]);
+		for (const bad of [{ baseflowLossM3Day: -1 }, { baseflowGainM3Day: -0.5 }, { baseflowLossM3Day: Number.POSITIVE_INFINITY }])
+			expect(ModelBody.safeParse({ ...body(monthly), nodes: [gauge, { ...unit, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
+		// Only a unit has one (a model rule); positive control above.
+		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, baseflowGainM3Day: 10 }, unit] })).join()).toMatch(/only a hydrological unit has a base-flow loss or gain/);
 	});
 
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {

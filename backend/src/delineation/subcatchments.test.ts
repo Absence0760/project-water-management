@@ -4,7 +4,7 @@ import { geometryAreaM2, ringAreaM2 } from '../geo/area.js';
 import { pointInGeometry, type Geometry } from '../geo/geojson.js';
 import { openDem } from './dem.js';
 import { delineate, DelineationRefused, worldPx } from './delineate.js';
-import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
+import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN, valleyUnitRing } from './fixture.js';
 import { accumulate, OUT } from './flow.js';
 import { LARGER_FACTOR } from './place.js';
 import { cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, offChannelOutflow, ownsLand, riverBelow, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
@@ -295,6 +295,47 @@ describe('delineateUnits (synthetic DEM)', () => {
 		// The outlines are simplified for the map: their own areas stay near the cells' but are not them.
 		for (const u of r.units) near(geometryAreaM2(u.geometry!)!, u.areaM2, 0.01);
 		near(geometryAreaM2(r.catchment.geometry)!, r.catchment.areaM2, 0.01);
+	});
+
+	it('takes units drawn as their boundaries (start-16): each at its most-drained cell, the one reaching the outlet taking its piece, a gauge between them in the order', async () => {
+		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
+		const above = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y));
+		const whole = await delineate(dem, outlet);
+		const unit = (id: string, from: number, to: number): UnitPoint => ({ id, role: 'unit', geometry: { type: 'Polygon', coordinates: [valleyUnitRing(from, to)] } });
+		const r = await delineateUnits(dem, {
+			outlet,
+			boundary: null,
+			// The gauge first: a unit's outflow is placed before it whatever the order given (start.ts lists the units first, too).
+			points: [unit('upper', 0, DAM_CELL.y + 1), unit('lower', DAM_CELL.y + 1, 400), point('gauge', DAM_CELL.x, DAM_CELL.y + 50, 'gauge')]
+		});
+		const by = new Map(r.units.map((u) => [u.id, u]));
+		expect([...by.keys()].sort()).toEqual(['gauge', 'lower', 'upper']);
+		expect(r.dropped).toEqual([]);
+		// The upper unit's water leaves at the wall's row; the gauge below it; the lower unit's boundary holds the outlet, so
+		// everything reaching the outlet drains into it, and it into the outflow.
+		expect(by.get('upper')).toMatchObject({ drainsInto: 'gauge', placedBy: 'unit' });
+		expect(by.get('gauge')!.drainsInto).toBe('lower');
+		expect(by.get('lower')).toMatchObject({ drainsInto: null, placedBy: 'unit' });
+		near(by.get('upper')!.areaM2, above.areaM2, 0.03);
+		// The lower unit takes the outlet's own piece, and the rest is nothing.
+		near(by.get('upper')!.areaM2 + by.get('lower')!.areaM2, whole.areaM2, 0.02);
+		expect(r.rest).toMatchObject({ areaM2: 0, geometry: null });
+		near(by.get('lower')!.totalAreaM2, r.catchment.areaM2, 1e-9);
+		expect(r.method).toMatch(/2 points at a unit boundary’s outflow/);
+		expect(r.method).toMatch(/a unit’s boundary: its most-accumulating cell above the outlet/);
+	});
+
+	it('drops a unit boundary outside the catchment, and a second one ending at the outlet, saying why', async () => {
+		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const away: UnitPoint = { id: 'away', role: 'unit', geometry: { type: 'Polygon', coordinates: [[c(10, 10), c(20, 10), c(20, 20), c(10, 20), c(10, 10)]] } };
+		const lower = (id: string): UnitPoint => ({ id, role: 'unit', geometry: { type: 'Polygon', coordinates: [valleyUnitRing(DAM_CELL.y + 1, 400)] } });
+		const r = await delineateUnits(dem, { outlet, boundary: null, points: [lower('first'), lower('second'), away] });
+		expect(r.units.map((u) => u.id)).toEqual(['first']);
+		expect(r.dropped).toEqual([
+			{ id: 'second', reason: expect.stringMatching(/^ends at the outlet, as another unit’s boundary does/), placedBy: 'unit' },
+			{ id: 'away', reason: 'lies outside the catchment above the outlet (or off the elevation model)', placedBy: 'unit' }
+		]);
 	});
 
 	it('finds the outlet inside a boundary when none is given', async () => {
@@ -618,7 +659,7 @@ describe('placementText and startMethod', () => {
 	it('fits start_proposal.method (1 000 characters) whatever ran, every rule at once', () => {
 		// Every placement a point can have (a Record so a new kind fails to compile here until it's listed), twice, with the
 		// longest outlet's and a click outlet's note.
-		const kinds: Record<PlacedBy, true> = { snapped: true, larger: true, exact: true, polygon: true, boundary: true };
+		const kinds: Record<PlacedBy, true> = { snapped: true, larger: true, exact: true, polygon: true, boundary: true, unit: true };
 		const points = Object.keys(kinds) as PlacedBy[];
 		const placement = (brief: boolean) => placementText([...points, ...points], 'boundary', 99_999, brief, ['off_channel', 'on_channel']) + ' (the outlet: the click most water drains through)';
 		// In full it runs past the column, so the stored method names the version for the rules instead of failing the insert.

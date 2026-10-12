@@ -24,11 +24,24 @@ export const TRANSFER_RULE_SERIES = {
 	prefix: 'transfer_rule@',
 	/** The series' label, naming the farm the rule moves water to. */
 	label: (toName: string) => `Transferred to ${toName} by one transfer rule`,
+	/** The label of a rule out of the catchment (engine ≥ 1.86.0, issue #523 B5). */
+	externalLabel: 'Transferred out of the catchment by one transfer rule',
 	unit: 'm³/day'
 } as const;
 
 /** The run series key of one transfer rule's daily volume. */
 export const transferRuleKey = (ruleId: string): string => `${TRANSFER_RULE_SERIES.prefix}${ruleId}`;
+
+/**
+ * The run series keys of a unit's dam rules out of the catchment (engine ≥
+ * 1.86.0, toNodeId null), in the rules' order: what the allocation comparison
+ * counts as the unit's surface use (engine ≥ 1.88.0, docs/engine-audit.md X1;
+ * ../allocations/compare.ts externalTransfers). A rule that can't move water
+ * has no series; a reader skips a key it doesn't find.
+ */
+export function externalRuleKeys(transfers: readonly Pick<Transfer, 'id' | 'fromNodeId' | 'toNodeId'>[] | null | undefined, nodeId: string): string[] {
+	return (transfers ?? []).filter((tr) => tr.toNodeId === null && tr.fromNodeId === nodeId).map((tr) => transferRuleKey(tr.id));
+}
 
 /** The rule id of a transfer_rule@ key; null for any other key. */
 export function parseTransferRuleKey(key: string): string | null {
@@ -51,11 +64,25 @@ export function canMove(tr: Pick<Transfer, 'months' | 'maxRateM3s' | 'dailyCapM3
  * (engine ≥ 1.14.0) one the run doesn't skip (./offtake.ts planOfftakes: its
  * destination doesn't drain into its source).
  */
-export function farmRules(transfers: readonly Transfer[], nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'>[]): Transfer[] {
+export function farmRules(transfers: readonly Transfer[], nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'>[]): (Transfer & { toNodeId: string })[] {
 	const kind = new Map(nodes.map((n) => [n.id, n.kind]));
 	const river = transfers.some((tr) => tr.enabled && isRiverOfftake(tr)) ? new Set(planOfftakes(transfers, nodes, [], () => undefined).map((o) => o.id)) : null;
 	// A rule from a unit to itself runs nowhere (engine ≥ 1.69.0 skips it, as planOfftakes skips such an off-take).
-	return transfers.filter((tr) => tr.enabled && tr.fromNodeId !== tr.toNodeId && kind.get(tr.fromNodeId) === 'farm' && kind.get(tr.toNodeId) === 'farm' && (!isRiverOfftake(tr) || !!river?.has(tr.id)));
+	return transfers.filter(
+		(tr): tr is Transfer & { toNodeId: string } =>
+			tr.enabled && tr.toNodeId !== null && tr.fromNodeId !== tr.toNodeId && kind.get(tr.fromNodeId) === 'farm' && kind.get(tr.toNodeId) === 'farm' && (!isRiverOfftake(tr) || !!river?.has(tr.id))
+	);
+}
+
+/**
+ * The rules runModel runs out of the catchment (engine ≥ 1.86.0, issue #523
+ * B5, run.ts buildPlan): enabled dam rules from a farm with no destination
+ * (toNodeId null), in the model's list order. Their water leaves the source
+ * farm's dam (its `transfer` series counts it out) and the catchment.
+ */
+export function externalRules(transfers: readonly Transfer[], nodes: readonly Pick<NetworkNode, 'id' | 'kind'>[]): Transfer[] {
+	const kind = new Map(nodes.map((n) => [n.id, n.kind]));
+	return transfers.filter((tr) => tr.enabled && tr.toNodeId === null && !isRiverOfftake(tr) && kind.get(tr.fromNodeId) === 'farm');
 }
 
 /**

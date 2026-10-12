@@ -1,9 +1,10 @@
 // The tick's licence-record notices (161_licence_record.sql; docs/evidence-pack.md
 // § Retention). Provisional position (pre-counsel research, 2026-10-01): a
 // licence record is kept until three years after the licence expires, or
-// three years after the application is refused or withdrawn, and reviewed
-// every five years while no outcome is recorded. The app never deletes it;
-// it makes sure the question is asked and the date is held.
+// three years after any other outcome (refused, rejected, not considered,
+// withdrawn; 233), and reviewed every five years while no outcome is
+// recorded. The app never deletes it; it makes sure the question is asked and
+// the date is held.
 //
 //   - review: no outcome recorded and project.record_review_due_on passed.
 //     The owners and the operator are asked to record the outcome or confirm

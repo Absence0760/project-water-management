@@ -26,7 +26,7 @@
 // unit's dam draw, like groundwater pumped into the dam.
 //
 // Pure, like the rest of the engine.
-import type { NetworkPlan, NetworkResult } from '../network/simulate';
+import { EXTERNAL_TO, type NetworkPlan, type NetworkResult } from '../network/simulate';
 
 export const INTAKE_SERIES = {
 	take: {
@@ -83,7 +83,8 @@ export function intakeTakes(plan: NetworkPlan, sim: NetworkResult): { take: Map<
 	// Only a rule that can move water (it has a series, ../network/transferSeries.ts canMove) is a leg, so which
 	// units carry received_at_intake follows the model, never the day's values (a resumed run has the same columns).
 	plan.transfers.forEach((tr, k) => {
-		if (tr.seriesKey) add(tr.to, tr.from, sim.transfers[k]!);
+		// A rule out of the catchment (engine ≥ 1.86.0) reaches no unit.
+		if (tr.seriesKey && tr.to !== EXTERNAL_TO) add(tr.to, tr.from, sim.transfers[k]!);
 	});
 	for (let i = 0; i < n; i++) {
 		const rm = plan.nodes[i]!.remote;

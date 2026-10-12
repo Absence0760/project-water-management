@@ -5,16 +5,21 @@
 // only as "Farm 1", raises their dam, runs it, sees their own view of the
 // results (their farm, nothing downstream, no catchment flows below five farm
 // holders), queues a yield of their own dam and submits it. The assessor (the
-// project's owner, marked as acting for the responsible authority) finds it
-// in the Applications tab and records the authority's decision; an
+// project's owner, confirmed as acting for the responsible authority) finds it
+// in the Applications tab and records the authority's decision, with the
+// licence's granted terms (a smaller dam than applied for, and its conditions;
+// 227_licence_terms), then an appeal lodged with the Water Tribunal and the
+// decision set aside (228_decision_events), which the applicant reads; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
-// warning and can't be decided. Axe on
+// warning and can't be decided; a run with a baseline assumption shows the
+// applicant the published baseline's river beside nothing of theirs but the
+// EWR (issue #523 G9 (d)). Axe on
 // both views, light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember } from '../support/api.ts';
+import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { AUTHORITY, seedApplicantProject, submitApplication } from '../support/applications.ts';
-import { tamperRunSummary } from '../support/db.ts';
+import { plantDwsGaugeRecord, tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
@@ -107,17 +112,76 @@ test('an applicant submits an application on the published baseline, and the ass
 	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
 	await decide.getByLabel('Licence or file reference').fill('WU-SYN-001');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('Yes').check();
-	await decide.getByLabel('Note: the authority’s reasons and conditions').fill('Release 5 % of inflow in dry months.');
+	await decide.getByLabel('Note: the authority’s reasons').fill('Enough is left for the Reserve at a smaller dam.');
+	// The granted terms (227): less than applied for. They start from the changes applied for; the assessor replaces the dam size.
+	const terms = decide.getByTestId('decide-terms');
+	await terms.getByLabel('With changes').check();
+	const granted = terms.getByRole('list', { name: 'Granted changes' });
+	await expect(granted.getByRole('listitem')).toHaveCount(1);
+	await granted.getByRole('button', { name: /^Remove change 1/ }).click();
+	await expect(granted).toHaveCount(0);
+	const grant = terms.getByRole('form', { name: 'Add a change' });
+	await grant.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
+	await grant.getByLabel('Field').selectOption({ label: 'Dam capacity' });
+	await grant.getByLabel('Dam capacity (m³)').fill('180000');
+	await grant.getByRole('button', { name: 'Add change' }).click();
+	await expect(granted.getByRole('listitem')).toHaveCount(1);
+	await expect(granted.getByRole('listitem')).toContainText('180 000');
+	await terms.getByLabel(/^Licence conditions/).fill('Release 5 % of inflow in dry months.');
 	await record.click();
 	const decision = page.getByTestId('application-decision');
 	await expect(decision).toContainText('Licence issued (see its conditions): the decision of Synthetic catchment management agency, dated 30 Sep 2026.');
 	await expect(decision).toContainText('Reference WU-SYN-001. Written reasons received.');
-	await expect(decision).toContainText('Release 5 % of inflow in dry months.');
+	await expect(decision).toContainText('Enough is left for the Reserve at a smaller dam.');
+	const grantedTerms = decision.getByTestId('application-granted-terms');
+	await expect(grantedTerms.getByRole('list', { name: `Granted terms of ${NAME}` }).getByRole('listitem')).toContainText('180 000');
+	await expect(grantedTerms).toContainText('Conditions: Release 5 % of inflow in dry months.');
+	await expect(decision.getByTestId('application-licence')).toHaveText('The licence counts in cumulative assessments on its granted terms, not the changes applied for.');
 
-	// The applicant sees the decision.
+	// An appeal lodged (228): recorded beside the decision, and it changes nothing until it is decided.
+	const appeals = page.getByTestId('application-appeals');
+	await expect(appeals).toContainText('None recorded.');
+	await appeals.getByRole('button', { name: 'Record an appeal…' }).click();
+	const appeal = page.getByRole('form', { name: 'Record what followed the decision' });
+	await expect(appeal.getByLabel('Appeal lodged')).toBeChecked();
+	await expect(appeal.getByTestId('application-appeal-hint')).toHaveText('Lodging an appeal changes nothing until it is decided: the decision keeps counting as it stands.');
+	await appeal.getByLabel('Where').selectOption({ label: 'Water Tribunal (National Water Act s148)' });
+	await appeal.getByLabel('Date lodged').fill('2026-10-02');
+	await appeal.getByLabel(/^Case reference/).fill('WT 12/2026');
+	await appeal.getByRole('button', { name: 'Record it' }).click();
+	await expect(appeals.getByTestId('application-appeal-event')).toHaveCount(1);
+	await expect(appeals.getByTestId('application-appeal-event')).toContainText('Appeal lodged: Water Tribunal, 2 Oct 2026');
+	await expect(appeals.getByTestId('application-appeal-event')).toContainText('Reference WT 12/2026.');
+	await expect(decision.getByTestId('application-licence')).toHaveText(
+		'The licence counts in cumulative assessments on its granted terms, not the changes applied for. An appeal is lodged with the Water Tribunal: nothing changes until it is decided.'
+	);
+
+	// Its outcome, in the forum it was lodged with: set aside, so the licence stops counting; the decision itself stays.
+	await appeals.getByRole('button', { name: 'Record the appeal’s outcome…' }).click();
+	await expect(appeal.getByLabel('Where')).toHaveValue('Water Tribunal');
+	// A variation records new terms, in the same editor as the decision's (axe over the decided panel with it open).
+	await appeal.getByLabel('Decision varied').check();
+	await expect(appeal.getByTestId('appeal-terms').getByRole('list', { name: 'Granted changes' }).getByRole('listitem')).toContainText('180\u202f000');
+	await expectNoViolations(page);
+	await appeal.getByLabel('Decision set aside').check();
+	await expect(appeal.getByTestId('appeal-terms')).toHaveCount(0);
+	await expect(appeal.getByTestId('application-appeal-hint')).toHaveText('A licence set aside stops counting in cumulative assessments.');
+	await appeal.getByLabel('Date of the order').fill('2026-10-05');
+	await appeal.getByRole('button', { name: 'Record it' }).click();
+	await expect(appeals.getByTestId('application-appeal-event')).toHaveCount(2);
+	await expect(appeals.getByTestId('application-appeal-event').nth(1)).toContainText('Decision set aside: Water Tribunal, 5 Oct 2026');
+	await expect(decision.getByTestId('application-licence')).toHaveText('Set aside (Water Tribunal, 5 Oct 2026): it no longer counts in cumulative assessments.');
+	await expect(decision).toContainText('Licence issued (see its conditions)');
+
+	// The applicant sees the decision, its terms and what followed, and can't record anything.
 	await a.reload();
 	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
 	await expect(a.getByTestId('application-decision')).toContainText('Licence issued (see its conditions)');
+	await expect(a.getByTestId('application-granted-terms')).toContainText('Conditions: Release 5 % of inflow in dry months.');
+	await expect(a.getByTestId('application-appeal-event')).toHaveCount(2);
+	await expect(a.getByTestId('application-licence')).toHaveText('Set aside (Water Tribunal, 5 Oct 2026): it no longer counts in cumulative assessments.');
+	await expect(a.getByTestId('application-appeal-open')).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
 });
 
 test('an application whose run was changed behind the API shows the assessor a warning and waits for its decision', async ({ page, owner, signIn }) => {
@@ -145,6 +209,47 @@ test('an application whose run was changed behind the API shows the assessor a w
 	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('No').check();
 	await expect(decide.getByRole('button', { name: 'Record the authority’s decision' })).toBeDisabled();
+});
+
+test('a run with a baseline assumption shows the applicant the published baseline’s river beside nothing of theirs but the EWR', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Assuming applicant');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications assumption', applicant.user);
+	const P = `${API_URL}/projects/${project.id}`;
+	const req = applicant.context.request;
+	const lower = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Lower farm')!.id;
+	// Their own dam (a proposal) and the other farm's demand halved (a baseline assumption).
+	const made = await req.post(`${P}/scenarios`, {
+		data: {
+			name: 'Halve the other farm',
+			baseRunId: runId,
+			ops: [
+				{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 },
+				{ op: 'demand.scale', factor: 0.5, nodeIds: [lower] }
+			]
+		}
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	const sid = (await made.json()).scenario.id as string;
+	expect((await req.post(`${P}/scenarios/${sid}/runs`, { data: {} })).status()).toBe(201);
+
+	const a = applicant.page;
+	await a.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+	const results = a.getByTestId('applicant-results');
+	await expect(results.getByTestId('applicant-results-withheld')).toContainText('is a baseline assumption');
+	// The baseline's natural flow, as RLS serves it of the published run (issue #523 G9 (d)); theirs not shown.
+	const natural = results.getByTestId('applicant-catchment').getByRole('row', { name: /^Natural flow/ });
+	await expect(natural.getByRole('cell')).toHaveCount(2);
+	await expect(natural.getByRole('cell').first()).toHaveText(/^\d/);
+	await expect(natural.getByRole('cell').last()).toHaveText('Not shown');
+	await expect(results.getByTestId('applicant-catchment-assumption')).toHaveText(
+		"Your application's column is not shown for a run with a baseline assumption (above). The baseline's is the published run's."
+	);
+	// Two farm holders: the baseline's outlet flow stays out too.
+	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	await expect(results.getByTestId('applicant-units')).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	await expectNoViolations(a);
 });
 
 test('the Applications tab says so when nothing is submitted, and a draft stays with its applicant', async ({ page, owner, signIn }) => {
@@ -229,37 +334,104 @@ for (const colorScheme of ['light', 'dark'] as const) {
 	});
 }
 
-test('the owner names the responsible authority and marks who acts for it: only they record its decision and endorse the baseline', async ({ page, owner, signIn }) => {
+test('the authority confirms who acts for it: a host owner proposes, an authority member confirms; only then the editor decides and endorses', async ({ page, owner, signIn }) => {
 	void owner;
 	const applicant = await signIn('Authority applicant');
 	const editor = await signIn('Authority editor');
+	const host = await signIn('Authority host');
+	// `page`'s owner acts for the authority (confirmed by the operator, the bootstrap, 229); `host` is a second owner who doesn't.
 	const { project, runId, upper } = await seedApplicantProject(page, 'Applications authority', applicant.user);
 	await addMember(page.request, project.id, editor.user.email, 'editor');
+	await addMember(page.request, project.id, host.user.email, 'owner');
 	const sid = await submitApplication(applicant.context.request, project.id, runId, upper, NAME);
 
-	// An editor nobody marked reads the application but gets no decision form (163_licensing_authority).
+	// An editor nobody confirmed reads the application but gets no decision form.
 	const e = editor.page;
 	await e.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
-	await expect(e.getByTestId('application-decide-who')).toContainText('Only a member the project’s owner marks as acting for the responsible authority');
+	await expect(e.getByTestId('application-decide-who')).toContainText('Only a member the responsible authority has confirmed as acting for it');
 	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toHaveCount(0);
 
-	// The owner's Project page: the authority as named, and the tick box on the editor's row.
-	await page.goto(`/projects/${project.id}?tab=project`);
-	await expect(page.getByRole('region', { name: 'Responsible authority' }).getByLabel('Authority name')).toHaveValue(AUTHORITY.name);
-	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/members/${editor.user.id}`));
-	await page.getByRole('region', { name: 'Members' }).getByRole('row', { name: new RegExp(editor.user.displayName) }).getByLabel('Acts for the responsible authority').check();
-	expect((await saved).status()).toBe(200);
+	// The host proposes the editor on the Project page: listed as proposed, granting nothing.
+	const h = host.page;
+	await h.goto(`/projects/${project.id}?tab=project`);
+	await expect(h.getByRole('region', { name: 'Responsible authority' }).getByLabel('Authority name')).toHaveValue(AUTHORITY.name);
+	const hostPanel = h.getByRole('region', { name: 'Acts for the authority' });
+	await hostPanel.getByLabel('Propose someone').selectOption({ label: `${editor.user.displayName} (editor)` });
+	await hostPanel.getByRole('button', { name: 'Propose', exact: true }).click();
+	const proposedRow = hostPanel.getByRole('list', { name: 'Proposed, not confirmed' }).getByRole('listitem');
+	await expect(proposedRow).toContainText(editor.user.displayName);
+	await expect(proposedRow).toContainText('Proposed');
+	// The host may withdraw it, but has no Confirm.
+	await expect(proposedRow.getByRole('button', { name: `Withdraw ${editor.user.displayName}` })).toBeVisible();
+	await expect(proposedRow.getByRole('button', { name: /^Confirm/ })).toHaveCount(0);
+	await expect(h.getByRole('region', { name: 'Members' }).getByRole('row', { name: new RegExp(editor.user.displayName) }).getByTestId('member-authority')).toHaveText(
+		'Proposed to act for the responsible authority (not confirmed)'
+	);
+	await expectNoViolations(h);
+	await e.reload();
+	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toHaveCount(0);
 
-	// Marked, the editor gets the form; and endorses the published baseline, once.
+	// The owner acting for the authority confirms it.
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const panel = page.getByRole('region', { name: 'Acts for the authority' });
+	const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/authority-delegates/${editor.user.id}/confirm`));
+	await panel.getByRole('button', { name: `Confirm ${editor.user.displayName}` }).click();
+	expect((await saved).status()).toBe(200);
+	const confirmedList = panel.getByRole('list', { name: 'Confirmed' });
+	await expect(confirmedList.getByRole('listitem').filter({ hasText: editor.user.displayName })).toContainText('Confirmed');
+	await expect(panel.getByRole('list', { name: 'Proposed, not confirmed' })).toHaveCount(0);
+
+	// Confirmed, the host can no longer remove them: only the authority can.
+	await h.reload();
+	const hostConfirmed = h.getByRole('region', { name: 'Acts for the authority' }).getByRole('list', { name: 'Confirmed' }).getByRole('listitem').filter({ hasText: editor.user.displayName });
+	await expect(hostConfirmed).toBeVisible();
+	await expect(hostConfirmed.getByRole('button')).toHaveCount(0);
+	await expect(confirmedList.getByRole('listitem').filter({ hasText: editor.user.displayName }).getByRole('button', { name: `Remove ${editor.user.displayName}` })).toBeVisible();
+
+	// Confirmed, the editor gets the form; and endorses the published baseline, once.
 	await e.reload();
 	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toBeVisible();
 	await e.goto(`/projects/${project.id}?tab=runs`);
-	const panel = e.getByRole('region', { name: /^Publication/ });
-	await expect(panel.getByTestId('publication-endorsement')).toContainText('Not endorsed by the responsible authority.');
-	const endorse = panel.getByRole('form', { name: 'Endorse this baseline' });
+	const pub = e.getByRole('region', { name: /^Publication/ });
+	await expect(pub.getByTestId('publication-endorsement')).toContainText('Not endorsed by the responsible authority.');
+	const endorse = pub.getByRole('form', { name: 'Endorse this baseline' });
 	await endorse.getByLabel(/^Endorsement note/).fill('Accepted as the baseline for this season.');
 	await endorse.getByRole('button', { name: 'Endorse as the responsible authority' }).click();
-	await expect(panel.getByTestId('publication-endorsement')).toContainText('Endorsed for the responsible authority');
-	await expect(panel.getByTestId('publication-endorsement')).toContainText('by Authority editor');
+	await expect(pub.getByTestId('publication-endorsement')).toContainText('Endorsed for the responsible authority');
+	await expect(pub.getByTestId('publication-endorsement')).toContainText('by Authority editor');
 	await expect(endorse).toHaveCount(0);
+
+	// The authority removes them: confirmed on the dialog, then gone, and the History says each step.
+	await panel.getByRole('button', { name: `Remove ${editor.user.displayName}` }).click();
+	await answerConfirm(page, true);
+	await expect(confirmedList.getByRole('listitem').filter({ hasText: editor.user.displayName })).toHaveCount(0);
+	const history = await page.request.get(`${API_URL}/projects/${project.id}/history?kind=authority&limit=50`);
+	const kinds = ((await history.json()) as { items: { kind?: string }[] }).items.map((ev) => ev.kind ?? '').filter((k) => k.startsWith('authority.'));
+	expect(kinds).toEqual(expect.arrayContaining(['authority.proposed', 'authority.confirmed', 'authority.removed']));
+});
+
+// Small catchments (#523 G8, 232_small_catchments): observed flow at a DWS gauging station is published by DWS, so an
+// applicant sees the baseline's record however few farms the catchment has, while the outflow stays withheld.
+test('an applicant sees the published DWS gauge record in a catchment with two farms', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Gauge applicant');
+	const project = await seedRunnableProject(page.request, 'DWS gauge record');
+	await plantDwsGaugeRecord(project.id, 'X0H000');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	await addMember(page.request, project.id, applicant.user.email, 'contributor');
+	const a = applicant.page;
+	const created = await a.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: 'Gauge check', baseRunId: runId, ops: [] } });
+	expect(created.status(), await created.text()).toBe(201);
+	const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+	expect((await a.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/runs`, { data: {} })).status()).toBe(201);
+
+	await a.goto(`/projects/${project.id}?scenario=${sid}`);
+	const results = a.getByTestId('applicant-results');
+	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	await expect(results.getByTestId('applicant-catchment').getByRole('rowheader', { name: 'Flow at the outlet' })).toHaveCount(0);
+	const gauge = results.getByTestId('applicant-gauge-records');
+	await expect(gauge).toContainText('Observed flow at DWS gauging station X0H000, in the published baseline');
+	await expect(gauge.getByText('Observed flow at the outlet · DWS gauge record')).toBeVisible();
+	await expectNoViolations(a);
 });

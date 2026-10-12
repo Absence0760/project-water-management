@@ -137,3 +137,62 @@ describe('a yield on a cap or full-allocation run (#523 I)', () => {
 		}
 	});
 });
+
+// #523 G1c: a scenario's yield is judged by the mode it recorded it ran with (221), not by the scenario's current state.
+describe('a yield on a scenario, by the allocation mode it ran with (#523 G1c)', () => {
+	const ids = {} as Record<'cap' | 'none' | 'unknown', string>;
+	beforeAll(async () => {
+		await withUser(ctx.owner.id, async (db) => {
+			for (const [key, mode] of [['cap', 'cap'], ['none', 'none'], ['unknown', null]] as const) {
+				const { rows } = await db.query<{ id: string }>(
+					`INSERT INTO yield_result (project_id, scenario_id, node_id, kind, params, points, engine_version, allocation_mode)
+					 VALUES ($1, $2, $3, 'firm', '{}', '{"point": {"boundM3Day": 4321}}', '1.0.0', $4) RETURNING id`,
+					[ctx.projectId, ctx.ids.sid, ctx.farmId, mode]
+				);
+				ids[key] = rows[0]!.id;
+			}
+		});
+	});
+
+	const points = async (u: LadderCtx['viewer']) => {
+		const res = await u.call('GET', `${at}/yield?scenarioId=${ctx.ids.sid}`);
+		expect(res.status).toBe(200);
+		const byId = new Map((res.body.results as { id: string; points: unknown; withheld?: string[] }[]).map((r) => [r.id, r]));
+		return { cap: byId.get(ids.cap)!, none: byId.get(ids.none)!, unknown: byId.get(ids.unknown)! };
+	};
+	const served = { point: { boundM3Day: 4321 } };
+	const withheld = { points: null, withheld: ['points'] };
+
+	it('withholds one that ran capped, and one from before 221, though the scenario now compares only; serves one that compared (positive control)', async () => {
+		await markMode(ctx.runId, 'none');
+		try {
+			const v = await points(ctx.viewer);
+			expect(v.cap).toMatchObject(withheld);
+			expect(v.unknown).toMatchObject(withheld);
+			expect(v.none.points).toEqual(served);
+			expect(v.none.withheld).toBeUndefined();
+			// The editor reads every one (positive control).
+			const e = await points(ctx.editor);
+			expect([e.cap.points, e.none.points, e.unknown.points]).toEqual([served, served, served]);
+		} finally {
+			await markMode(ctx.runId, 'cap');
+		}
+	});
+
+	it('serves one that ran compare-only though the scenario’s base now caps', async () => {
+		const v = await points(ctx.viewer);
+		expect(v.none.points).toEqual(served);
+		expect(v.cap).toMatchObject(withheld);
+	});
+
+	it('the column takes only an allocation mode', async () => {
+		await expect(
+			withUser(ctx.owner.id, (db) =>
+				db.query(
+					`INSERT INTO yield_result (project_id, scenario_id, node_id, kind, params, points, engine_version, allocation_mode) VALUES ($1, $2, $3, 'firm', '{}', '{}', '1.0.0', 'capped')`,
+					[ctx.projectId, ctx.ids.sid, ctx.farmId]
+				)
+			)
+		).rejects.toThrow(/check constraint/);
+	});
+});

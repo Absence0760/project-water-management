@@ -95,7 +95,7 @@ export function operatingIssues(n: Pick<NetworkNode, 'kind' | 'handsOffM3Day' | 
  */
 export function cropSupplyProblems(model: Pick<ProjectModel, 'nodes' | 'transfers'>): { nodeId: string; message: string }[] {
 	const out: { nodeId: string; message: string }[] = [];
-	const offtakes = model.transfers.filter((t) => t.enabled && isRiverOfftake(t));
+	const offtakes = model.transfers.filter((t): t is typeof t & { toNodeId: string } => t.enabled && isRiverOfftake(t) && t.toNodeId !== null);
 	cropSupplyIssues(model.nodes, offtakes, (key, message) => {
 		const nodeId = key.slice(key.indexOf(':') + 1);
 		const n = model.nodes.find((x) => x.id === nodeId);
@@ -239,6 +239,11 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 		if (!inRange(n.reachLossMaxM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the most lost in the reach below in a day can't be negative.` });
 		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0)
 			issues.push({ area: 'network', itemId: n.id, message: `${label}: the outlet has no reach below it in the model; set its bed losses to 0%.` });
+		// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), as the API checks them: sizes ≥ 0, units only.
+		if (!inRange(n.baseflowLossM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow loss can't be negative.` });
+		if (!inRange(n.baseflowGainM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow gain can't be negative.` });
+		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0))
+			issues.push({ area: 'network', itemId: n.id, message: `${label}: only a hydrological unit has a base-flow loss or gain; set both to 0.` });
 		// A unit's MAP (issue #482), as the API checks it.
 		const map = unitMapIssue(n);
 		if (map) issues.push({ area: 'network', itemId: n.id, message: `${label}: ${map}` });
@@ -255,6 +260,10 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 		// Other water users (WP-1.33), as the API checks them.
 		if (n.kind === 'user') {
 			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the share returned must be between 0% and 100%.` });
+			// A fixed restriction % (engine 1.86.0, issue #523 B3): a share, and a Priority user's only (engine modelRules).
+			const rp = n.userRestrictionPct ?? null;
+			if (rp !== null && !inRange(rp, 0, 1)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the fixed restriction must be between 0% and 100%.` });
+			else if (rp !== null && rp > 0 && n.userPriority === 'junior') issues.push({ area: 'network', itemId: n.id, message: `${label}: a fixed restriction is for Priority users; clear it or make the user Priority.` });
 			if (n.userDemandM3Day && (n.userDemandM3Day.length !== 12 || n.userDemandM3Day.some((v) => !inRange(v, 0, Infinity))))
 				issues.push({ area: 'network', itemId: n.id, message: `${label}: demand needs 12 monthly values, none negative.` });
 			if (cropAreas.some((a) => a.nodeId === n.id)) issues.push({ area: 'crops', message: `${label} is an other water user: its demand is monthly, so remove its crop areas.` });
@@ -396,14 +405,18 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 	// Transfers
 	transfers.forEach((t, i) => {
 		const label = `Transfer ${i + 1}`;
-		if (!nodeIds.has(t.fromNodeId) || !nodeIds.has(t.toNodeId)) {
+		// To null: out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6), a dam rule only.
+		const outside = t.toNodeId === null;
+		if (!nodeIds.has(t.fromNodeId) || (!outside && !nodeIds.has(t.toNodeId!))) {
 			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: choose both a source and a destination hydrological unit.` });
+		} else if (outside && isRiverOfftake(t)) {
+			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: a river off-take delivers to a hydrological unit, so it can't send water outside the catchment; take it from the source’s dam instead.` });
 		} else if (t.fromNodeId === t.toNodeId) {
 			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: source and destination are the same hydrological unit.` });
 		} else {
 			// Both ends a hydrological unit (the API refuses an other water user; the engine skips a gauge's rule
 			// with only a run warning, so it is refused here before it saves as a rule that does nothing).
-			for (const id of [t.fromNodeId, t.toNodeId]) {
+			for (const id of outside ? [t.fromNodeId] : [t.fromNodeId, t.toNodeId!]) {
 				const end = nodes.find((n) => n.id === id)!;
 				if (end.kind === 'user') issues.push({ area: 'transfers', itemId: t.id, message: `${label}: "${nodeName(id)}" is an other water user; transfers run between hydrological units’ dams.` });
 				else if (end.kind === 'gauge') issues.push({ area: 'transfers', itemId: t.id, message: `${label}: "${nodeName(id)}" is a gauge, which can't send or receive water; choose a hydrological unit.` });

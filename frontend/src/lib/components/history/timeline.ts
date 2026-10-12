@@ -34,6 +34,15 @@ const DECISION_WORDS: Record<string, string> = {
 	not_considered: 'not considered (use already authorised)'
 };
 
+/** A licence record's outcome (161; the authority's words since 233, with the applicant's withdrawal; 161's own words in older events). */
+const LICENCE_OUTCOME_WORDS: Record<string, string> = {
+	...DECISION_WORDS,
+	application_withdrawn: 'application withdrawn',
+	granted: 'granted',
+	refused: 'refused',
+	withdrawn: 'withdrawn'
+};
+
 const SOURCE_TITLES: Record<HistoryRevision['source'], string> = {
 	baseline: 'Starting point',
 	model_put: 'Model changed',
@@ -180,8 +189,27 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				? `Appointed ${who} specialist for the applying party ${str(s.party)}`
 				: `${who} is no longer the specialist for ${s.party ? `the applying party ${str(s.party)}` : 'their applying party'}`;
 		case 'member.authority':
-			// 163_licensing_authority: the owner marks who acts for the responsible authority.
+			// 163_licensing_authority: the owner marked who acts for the responsible authority (before 229).
 			return s.actsForAuthority ? `Marked ${who} as acting for the responsible authority` : `${who} no longer acts for the responsible authority`;
+		// 229_authority_delegates (issue #523 G5): the authority confirms its own delegates.
+		case 'authority.proposed':
+			return `Proposed ${who} to act for the responsible authority (it grants nothing until the authority confirms it)`;
+		case 'authority.confirmed':
+			return s.via === 'operator'
+				? `Confirmed ${who} as acting for the responsible authority, on the authority’s request${s.reference ? ` (${str(s.reference)})` : ''}`
+				: `Confirmed ${who} as acting for the responsible authority`;
+		case 'authority.withdrawn':
+			return `Withdrew the proposal that ${who} act for the responsible authority`;
+		case 'authority.declined':
+			return `Declined, for the responsible authority, the proposal that ${who} act for it`;
+		case 'authority.removed':
+			return `${who} no longer acts for the responsible authority (removed)`;
+		case 'authority.lapsed':
+			return s.wasConfirmed
+				? `${who} no longer acts for the responsible authority: they are no longer an editor of the project`
+				: `The proposal that ${who} act for the responsible authority lapsed: they are no longer an editor of the project`;
+		case 'authority.grandfathered':
+			return `${who} acts for the responsible authority, marked by an owner before the authority confirmed its own delegates (carried over as confirmed)`;
 		case 'farmer.linked':
 			return `Linked ${who} to the hydrological unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
@@ -426,12 +454,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const km2 = num(s.areaKm2);
 			return `Saved ${plural(num(s.pieces) ?? 0, 'sub-catchment')} from clicks on the rivers${km2 !== null ? `, ${km2} km² in all` : ''}${str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
 		}
-		// The licence record (161): the outcome, the date the record may be deleted, and why.
+		// The licence record (161): the outcome, the date the record may be deleted, and why. Events before 233 say granted, refused or withdrawn.
 		case 'licence.outcome': {
 			const o = str(s.outcome);
 			const closes = str(s.closesOn) ? `; the record may be deleted from ${str(s.closesOn)}` : '';
 			if (!o) return `Cleared the licence outcome${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
-			const what = o === 'granted' ? `granted on ${str(s.outcomeOn)}, expiring ${str(s.expiresOn)}` : `${o} on ${str(s.outcomeOn)}`;
+			const words = LICENCE_OUTCOME_WORDS[o] ?? o;
+			const what = o === 'licence_issued' || o === 'granted' ? `${words} on ${str(s.outcomeOn)}, expiring ${str(s.expiresOn)}` : `${words} on ${str(s.outcomeOn)}`;
 			return `Recorded the licence outcome: ${what}${closes}`;
 		}
 		case 'licence.confirmed':
@@ -452,6 +481,23 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const what = `${s.application ? 'the application' : 'the scenario'} “${str(s.name)}”`;
 			const outcome = DECISION_WORDS[str(s.outcome)];
 			return outcome ? `Recorded ${str(s.authority) || 'the responsible authority'}’s decision on ${what}: ${outcome}` : `Decided ${what}: ${str(s.outcome).replaceAll('_', ' ')}`;
+		}
+		case 'scenario.appeal_recorded': {
+			// 228_decision_events: what followed a decision; the event's kind, forum and date, never its note.
+			const forum = s.forum === 'court' ? 'court' : 'Water Tribunal';
+			const on = `the decision on “${str(s.name)}”`;
+			switch (s.kind) {
+				case 'lodged':
+					return `Recorded an appeal lodged with the ${forum} against ${on}`;
+				case 'upheld':
+					return `Recorded that the ${forum} upheld ${on}`;
+				case 'set_aside':
+					return `Recorded that the ${forum} set aside ${on}`;
+				case 'varied':
+					return `Recorded that the ${forum} varied ${on}, with new licence terms`;
+				default:
+					return `Recorded what followed ${on}`;
+			}
 		}
 		case 'scenario.shared':
 			return 'Shared an application with another applicant';

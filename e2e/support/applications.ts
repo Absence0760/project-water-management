@@ -4,7 +4,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { addMember, createRun, seedRunnableProject, type TestUser } from './api.ts';
-import { backdateApplication } from './db.ts';
+import { backdateApplication, confirmAuthorityDelegate } from './db.ts';
 import { API_URL } from './env.ts';
 
 export const applicationsCard = (page: Page) => page.getByRole('region', { name: 'Submitted applications' });
@@ -18,14 +18,16 @@ export async function openApplications(page: Page, projectId: string, query = ''
 export const AUTHORITY = { name: 'Synthetic catchment management agency', kind: 'cma', office: 'Test office' } as const;
 
 /**
- * The project names its responsible authority, and the caller (`request`, an owner) marks themself as acting
- * for it, so they record its decisions (163_licensing_authority: editor and marked by an owner).
+ * The project names its responsible authority, and the caller (`request`, an owner) acts for it, so they record its
+ * decisions: they propose themself, and the operator confirms it (229_authority_delegates: only the authority, or the
+ * operator for the first delegate, confirms one).
  */
 export async function actForAuthority(request: APIRequestContext, projectId: string): Promise<void> {
 	const me = ((await (await request.get(`${API_URL}/auth/me`)).json()) as { user: { id: string } }).user.id;
 	expect((await request.patch(`${API_URL}/projects/${projectId}`, { data: { settings: { responsibleAuthority: AUTHORITY } } })).status()).toBe(200);
-	const marked = await request.patch(`${API_URL}/projects/${projectId}/members/${me}`, { data: { actsForAuthority: true } });
-	expect(marked.status(), await marked.text()).toBe(200);
+	const proposed = await request.post(`${API_URL}/projects/${projectId}/authority-delegates`, { data: { userId: me } });
+	expect(proposed.status(), await proposed.text()).toBe(201);
+	await confirmAuthorityDelegate(projectId, me);
 }
 
 /** A published run, and an applicant (a contributor) linked to the Upper farm; the owner acts for the project's authority. */

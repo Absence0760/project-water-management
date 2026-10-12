@@ -7,8 +7,8 @@
 	the project sees the notice. Its actions sit in the panel's head, and a
 	run that can't be published (legacy, scenario) offers none, only why
 	(issue #521). Whether the responsible authority endorsed
-	this run as a baseline, and, for a member the owner marks as acting for
-	it, the action to endorse it, once (163_licensing_authority).
+	this run as a baseline, and, for a member the authority confirmed as
+	acting for it, the action to endorse it, once (163, 229).
 -->
 <script lang="ts">
 	import DayInput from '$lib/components/common/DayInput.svelte';

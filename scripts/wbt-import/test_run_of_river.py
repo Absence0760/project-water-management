@@ -11,12 +11,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from extract_project import as_run_of_river, extract, placeholder_pool_note, run_of_river_note  # noqa: E402
+from extract_project import as_run_of_river, extract, run_of_river_note, small_pool_note  # noqa: E402
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "synthetic_b023.xlsx"
 
 TAIL = (
-    ". b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it "
+    ". The workbook has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it "
     "as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)"
 )
 
@@ -32,7 +32,7 @@ class RunOfRiverNote(unittest.TestCase):
     def test_a_placeholder_under_1_m3_is_flagged_without_a_diversion(self):
         note = run_of_river_note("Pump unit", 1.0, 0.5, 0, 0)
         self.assertIsNotNone(note)
-        self.assertIn("and is a pool of 0.5 m³. b023", note)
+        self.assertIn("and is a pool of 0.5 m³. The workbook", note)
 
     def test_a_dam_holding_a_whole_number_of_m3_s_for_one_day_is_flagged(self):
         self.assertEqual(
@@ -67,25 +67,23 @@ class RunOfRiverNote(unittest.TestCase):
         )
 
 
-class PlaceholderPoolNote(unittest.TestCase):
-    """A near-empty dam taking less than all the upstream inflow (issue #90 Q18); farms.test.ts has the same text."""
+class SmallPoolNote(unittest.TestCase):
+    """A small pool taking less than all the upstream inflow gets a neutral note (issue #90 Q18); farms.test.ts has the same text."""
 
-    def test_a_near_empty_pool_off_the_river_is_flagged(self):
-        self.assertEqual(
-            placeholder_pool_note("Pool", 0, 0.5, 0),
-            "WARNING: farm Pool: probable placeholder pool, for the modeller to confirm: its dam holds 0.5 m³, less than a "
-            "day's peak irrigation of one hectare, and takes 0 % of the upstream inflow, so it stores nothing from one day to "
-            "the next. If it is a placeholder, set the dam capacity to 0; if the unit pumps from the river, set its supply "
-            "rule to run of river with a pump capacity (issue #90 Q18)",
-        )
-        self.assertIsNotNone(placeholder_pool_note("Tank", 0.5, 99.9, 0))
-        self.assertIsNotNone(placeholder_pool_note("Pool", 0.25, 129.5, 12960))  # under 1 % of a day's diversion
+    def test_a_small_pool_off_the_river_gets_a_neutral_note_of_its_capacity(self):
+        note = small_pool_note("Pool", 0, 0.5, 0)
+        self.assertEqual(note, "farm Pool: a small pool of 0.5 m³, imported as entered (a pool's capacity is user defined, issue #90 Q18)")
+        # A pool's capacity is user defined and it stays in the model (answered 2026-10-11): never a warning, never a placeholder.
+        self.assertFalse(note.startswith("WARNING"))
+        self.assertNotIn("placeholder", note)
+        self.assertIsNotNone(small_pool_note("Tank", 0.5, 99.9, 0))
+        self.assertIsNotNone(small_pool_note("Pool", 0.25, 129.5, 12960))  # under 1 % of a day's diversion
 
-    def test_a_real_dam_no_dam_or_a_run_of_river_candidate_is_not(self):
-        self.assertIsNone(placeholder_pool_note("Small dam", 0, 100, 0))
-        self.assertIsNone(placeholder_pool_note("Small dam", 0.5, 4000, 12960))
-        self.assertIsNone(placeholder_pool_note("No dam", 0, 0, 0))
-        self.assertIsNone(placeholder_pool_note("Dummy dam", 1.0, 0.5, 0))  # run_of_river_note's case
+    def test_a_real_dam_no_dam_or_a_run_of_river_candidate_gets_none(self):
+        self.assertIsNone(small_pool_note("Small dam", 0, 100, 0))
+        self.assertIsNone(small_pool_note("Small dam", 0.5, 4000, 12960))
+        self.assertIsNone(small_pool_note("No dam", 0, 0, 0))
+        self.assertIsNone(small_pool_note("Dummy dam", 1.0, 0.5, 0))  # run_of_river_note's case
 
 
 class RunOfRiverOption(unittest.TestCase):

@@ -107,6 +107,9 @@ describe('model store', () => {
 			// Bed losses in the reach below (engine 1.75.0, 203_reach_loss), awkward numbers.
 			reachLossFrac: 0.1 + 0.2,
 			reachLossMaxM3Day: 1 / 3,
+			// A base-flow loss and gain (engine 1.86.0, 222_unit_baseflow), awkward numbers.
+			baseflowLossM3Day: 0.1 + 0.2,
+			baseflowGainM3Day: 123_456.789,
 			// The unit's MAP and its source (issue #482, 209_unit_rain_series), an awkward number.
 			mapMm: 612.3 + 0.1,
 			mapSource: 'Synthetic atlas, 1991–2020'
@@ -117,6 +120,8 @@ describe('model store', () => {
 		// The town carries the GN 538 property area and Table 2 rate (engine 1.12.0, 089_ga538_property)
 		// and a river pump capacity (engine 1.58.0; 060's column, a user's too).
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15', pumpCapacityM3Day: 864.25 });
+		// A Priority user with a fixed restriction % (engine 1.86.0, 223_user_restriction_pct), an awkward number.
+		const mill = node('Mill', outlet.id, { sortOrder: 7, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(250), userPriority: 'senior', userRestrictionPct: 1 / 3 });
 		// A canal head, the river off-take's destination (engine 1.14.0, 091).
 		// It also carries a crop supply table (engine 1.73.0, 202_crop_supply_table): a share from Upper's dam, awkward numbers.
 		const canal = node('Canal', outlet.id, { sortOrder: 6, areaKm2: 0, damCapacityM3: 0, cropShareDam: 0.25, cropShareRiver: 0.5, cropShareRemote: 0.25, cropRemoteNodeId: farm.id, cropRemoteCapM3Day: 0.1 + 0.2 });
@@ -135,7 +140,7 @@ describe('model store', () => {
 		});
 		const model = {
 			// Out of order on purpose: the store orders by sortOrder, then name.
-			nodes: [outlet, weir, town, farm, canal],
+			nodes: [outlet, weir, town, farm, canal, mill],
 			crops: [beans, maize],
 			cropAreas: [
 				{ nodeId: farm.id, cropId: beans.id, areaM2: 1234.5 },
@@ -203,6 +208,7 @@ describe('model store', () => {
 			userDemandM3Day: null,
 			userReturnPct: 0,
 			userPriority: 'senior',
+			userRestrictionPct: null,
 			boreholeCapacityM3Day: null,
 			boreholeRule: 'supplemental',
 			boreholeTriggerPct: 0.3,
@@ -237,12 +243,16 @@ describe('model store', () => {
 			abstractionFrom: null,
 			reachLossFrac: 0,
 			reachLossMaxM3Day: null,
+			baseflowLossM3Day: 0,
+			baseflowGainM3Day: 0,
 			mapMm: null,
 			mapSource: null,
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.
-		expect(got.nodes).toEqual([full(town), full(farm), full(weir), full(outlet), full(canal)]);
+		expect(got.nodes).toEqual([full(town), full(farm), full(weir), full(outlet), full(canal), full(mill)]);
+		// Migration 223's CHECK keeps the fixed restriction % a share, below the API's own check (engine 1.86.0).
+		await expect(asOwner('UPDATE node SET user_restriction_pct = 1.5 WHERE id = $1', [mill.id])).rejects.toMatchObject({ code: '23514' });
 		expect(got.crops).toEqual([maize, beans]);
 		expect([...got.cropAreas].sort((a, b) => a.areaM2 - b.areaM2)).toEqual([model.cropAreas[1], model.cropAreas[0]]);
 		expect(got.transfers).toEqual([model.transfers[1], model.transfers[0]]);
@@ -277,6 +287,43 @@ describe('model store', () => {
 		await expect(asOwner('UPDATE demand_object SET priority_rank = 0 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_priority_rank_range' });
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
+	});
+
+	it('round-trips a transfer out of the catchment (toNodeId null, engine 1.86.0, migration 224); a river off-take can’t be one', async () => {
+		const u = await signUp('ExternalTransfer');
+		const projectId = await newProject(u, 'Transfer out of the catchment');
+		const outlet = node('Outlet', null);
+		const farm = node('Farm', outlet.id, { sortOrder: 1, damCapacityM3: 50_000 });
+		const out = {
+			id: crypto.randomUUID(),
+			fromNodeId: farm.id,
+			toNodeId: null,
+			months: [1, 2, 3],
+			maxRateM3s: 0.01,
+			dailyCapM3: null,
+			minStoragePct: 0.6,
+			enabled: true,
+			priority: 0,
+			monthlyRateM3s: null,
+			source: 'dam',
+			handsOffM3Day: null,
+			handsOffEwr: false,
+			lossPct: 0,
+			sizing: 'demand',
+			topUpDam: false,
+			lossReturnPct: 0,
+			lossReturnNodeId: null
+		};
+		const put = (transfers: Record<string, unknown>[]) => u.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers });
+		expect((await put([out])).status).toBe(200);
+		const got = await withUser(u.id, (db) => loadModel(db, projectId));
+		expect(got.transfers).toEqual([out]);
+		// A river off-take delivers to a unit: the API refuses one with no destination (modelRuleIssues) …
+		const river = await put([{ ...out, source: 'river' }]);
+		expect(river.status).toBe(400);
+		expect(JSON.stringify(river.body)).toMatch(/can't send water out of the catchment/);
+		// … and migration 224's CHECK below it.
+		await expect(asOwner(`UPDATE transfer SET source = 'river' WHERE id = $1`, [out.id])).rejects.toMatchObject({ code: '23514', constraint: 'transfer_external_from_dam' });
 	});
 
 	it('round-trips a crop’s irrigation system (an older document’s own efficiency becoming one, engine 1.72.0) and the monthly effective-rain fraction (issue #54)', async () => {

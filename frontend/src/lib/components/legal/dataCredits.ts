@@ -60,8 +60,20 @@ export const DPET_STATEMENT =
 /** ESA WorldCover's attribution for a map or figure (CC BY 4.0). */
 export const WORLDCOVER_STATEMENT = '© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium';
 
+/** GeoNames' attribution (CC BY 4.0), shown under every Map search that lists a place: the backend's `GEONAMES_SOURCE` (geo/gazetteer.ts), word for word. */
+export const GEONAMES_STATEMENT = 'GeoNames (geonames.org), CC BY 4.0';
+
 /** The map's attribution control while real HydroRIVERS reaches are drawn: short, linking to the full statement. */
 export const HYDRORIVERS_MAP_ATTRIBUTION = 'Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license';
+
+/**
+ * The map's attribution control while a dam outline traced from JRC Global
+ * Surface Water is drawn: JRC's "Source: EC JRC/Google", and that the data was
+ * modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3);
+ * docs/legal/map-data-licences.md § 5.3). The farm map says the same in the
+ * reader's language (farm/farmMap.ts farmMapCredits), the statement as written.
+ */
+export const JRC_WATER_MAP_ATTRIBUTION = `Dam outline: traced from JRC Global Surface Water (${JRC_WATER_STATEMENT}), modified`;
 
 export const DATA_CREDITS: readonly DataCredit[] = [
 	{
@@ -137,6 +149,16 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licenceUrl: 'https://www.chc.ucsb.edu/data/chirps3',
 		read: '2026-10-01',
 		statements: ['Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025).']
+	},
+	{
+		id: 'geonames',
+		name: 'GeoNames gazetteer (South Africa)',
+		usedFor: 'The Map’s search: the place and farm names it finds, after the map’s own layers.',
+		publisher: 'GeoNames (geonames.org)',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+		licenceUrl: 'https://download.geonames.org/export/dump/readme.txt',
+		read: '2026-10-12',
+		statements: [GEONAMES_STATEMENT]
 	},
 	{
 		id: 'fonts',

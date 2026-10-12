@@ -53,6 +53,7 @@ import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/com
 import { curveText, parseDamCurve } from '$lib/components/network/damCurve';
 import { SOURCE_OPTION_LABEL } from '$lib/components/network/demandObjectSource';
 import { PRIORITY_OPTION_LABEL } from '$lib/components/network/demandObjectOrder';
+import { pumpUnit, riverToDamUnit, type FlowUnit } from '$lib/components/network/flowUnit.svelte';
 
 export interface EnumOption {
 	value: string;
@@ -63,10 +64,11 @@ export interface EnumOption {
 export type ValueSpec =
 	/** Text; `optional`: may be left empty (a note), else it is a name and needs one. */
 	| { t: 'text'; optional?: boolean }
-	| { t: 'number'; unit: string; scale: number; nullable: boolean; nullLabel?: string; int?: boolean }
+	/** `flowUnit`: a flow rate whose unit is picked beside it (network/flowUnit.svelte.ts); `unit` and `scale` follow the pick. */
+	| { t: 'number'; unit: string; scale: number; nullable: boolean; nullLabel?: string; int?: boolean; flowUnit?: FlowUnit }
 	| { t: 'enum'; options: readonly EnumOption[]; nullable?: boolean; nullLabel?: string }
 	/** 12 values, one per water-year month (Oct–Sep). */
-	| { t: 'monthly'; unit: string; scale: number; nullable: boolean }
+	| { t: 'monthly'; unit: string; scale: number; nullable: boolean; flowUnit?: FlowUnit }
 	/** A set of calendar months 1–12. */
 	| { t: 'months' }
 	| { t: 'bool' }
@@ -129,6 +131,36 @@ const num = (unit: string, opts: { scale?: number; nullable?: boolean; nullLabel
 	nullLabel: opts.nullLabel,
 	int: opts.int
 });
+/**
+ * A flow rate stored in m³/day and typed in the unit picked beside it, m³/s,
+ * l/s or m³/day (network/flowUnit.svelte.ts), the same pick as the Network
+ * form's field of that kind (issue #523 C2): River to dam, or a pump. Only
+ * the typing and the words change; the op keeps m³/day.
+ */
+const flow = (flowUnit: FlowUnit, opts: { nullable?: boolean; nullLabel?: string } = {}): ValueSpec => ({
+	t: 'number',
+	flowUnit,
+	get unit() {
+		return flowUnit.label;
+	},
+	get scale() {
+		return flowUnit.scale;
+	},
+	nullable: opts.nullable ?? false,
+	nullLabel: opts.nullLabel
+});
+/** The same by month (River to dam by month). */
+const flowMonthly = (flowUnit: FlowUnit): ValueSpec => ({
+	t: 'monthly',
+	flowUnit,
+	get unit() {
+		return flowUnit.label;
+	},
+	get scale() {
+		return flowUnit.scale;
+	},
+	nullable: true
+});
 const pct = (nullable = false, nullLabel?: string): ValueSpec => num('%', { scale: 100, nullable, nullLabel });
 const plain = (list: readonly string[], labels: Record<string, string> = {}): readonly EnumOption[] => list.map((v) => ({ value: v, label: labels[v] ?? v }));
 
@@ -150,8 +182,8 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	damAreaFullM2: { label: 'Dam area when full', spec: num('m²', { nullable: true, nullLabel: 'estimated (7.2 × capacity^0.77)' }) },
 	damAreaExponent: { label: 'Dam area exponent', spec: num('') },
 	damSeepagePerDay: { label: 'Dam seepage per day', spec: pct() },
-	// Entered in m³/s, stored in m³/day, as in the node form.
-	divertCapacityM3Day: { label: 'River to dam', spec: num('m³/s', { scale: 1 / 86_400 }) },
+	// Stored in m³/day, typed in River to dam's picked unit (m³/s until changed), as in the node form.
+	divertCapacityM3Day: { label: 'River to dam', spec: flow(riverToDamUnit) },
 	irrigationEfficiency: { label: 'Irrigation efficiency', spec: pct() },
 	returnFlowFraction: { label: 'Return flow (% of water supplied)', spec: pct() },
 	damReleaseRule: { label: 'Dam release rule', spec: { t: 'enum', options: plain(DAM_RELEASE_RULES, { none: 'none', passInflow: 'pass inflow (releases for the EWR unless amounts are set)', fixed: 'fixed release' }) } },
@@ -164,7 +196,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	damSedimentPctPerYear: { label: 'Dam capacity lost to sediment a year', spec: pct(true, 'none') },
 	damInServiceFrom: { label: 'Dam in service from', spec: { t: 'date', nullLabel: 'the whole run' } },
 	abstractionFrom: { label: 'Abstraction starts', spec: { t: 'date', nullLabel: 'the whole run' } },
-	boreholeCapacityM3Day: { label: 'Borehole capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no boreholes' }) },
+	boreholeCapacityM3Day: { label: 'Borehole capacity', spec: flow(pumpUnit, { nullable: true, nullLabel: 'no boreholes' }) },
 	boreholeRule: { label: 'Borehole rule', spec: { t: 'enum', options: plain(BOREHOLE_RULES) } },
 	boreholeTriggerPct: { label: 'Borehole drought trigger', spec: pct() },
 	streamDepletionFrac: { label: 'Stream depletion share', spec: pct() },
@@ -172,30 +204,36 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	userDemandM3Day: { label: 'Demand by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	userReturnPct: { label: 'Share returned', spec: pct() },
 	userPriority: { label: 'Priority', spec: { t: 'enum', options: plain(USER_PRIORITIES, USER_PRIORITY_LABEL) } },
+	// A Priority user's fixed restriction % (engine 1.86.0, issue #523 B3).
+	userRestrictionPct: { label: 'Fixed restriction', spec: pct(true, 'none') },
 	// Supply rule and river pump (WP-3.8, docs/model.md §2.7e): the rule's words are run comparison's (engine compare.ts).
 	supplyRule: {
 		label: 'Supply rule',
 		spec: { t: 'enum', options: plain(SUPPLY_RULES, SUPPLY_RULE_LABEL) }
 	},
-	pumpCapacityM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	// The pumps' picked unit (m³/day until changed), as in the node form (issue #523 C2).
+	pumpCapacityM3Day: { label: 'River pump capacity', spec: flow(pumpUnit, { nullable: true, nullLabel: 'no limit' }) },
 	supplyTriggerPct: { label: 'Supply switch-to-river level', spec: pct() },
 	supplyStopPct: { label: 'Supply switch-back level', spec: pct() },
 	// Hands-off flow and River to dam by month (engine ≥ 1.32.0, docs/model.md §2.7h).
 	handsOffM3Day: { label: 'Hands-off flow by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	handsOffEwr: { label: 'Hands-off flow keeps the EWR', spec: { t: 'bool' } },
-	divertMonthlyM3Day: { label: 'River to dam by month', spec: { t: 'monthly', unit: 'm³/s', scale: 1 / 86_400, nullable: true } },
+	divertMonthlyM3Day: { label: 'River to dam by month', spec: flowMonthly(riverToDamUnit) },
 	// Where the crops take their water (engine ≥ 1.65.0, docs/model.md §2.7j).
 	cropWaterSource: { label: 'Crops’ water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL) } },
-	cropRiverPumpM3Day: { label: 'Crops’ river pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	cropRiverPumpM3Day: { label: 'Crops’ river pump capacity', spec: flow(pumpUnit, { nullable: true, nullLabel: 'no limit' }) },
 	cropRiverPoolM3: { label: 'Crops’ pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
 	// The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k); which unit's dam gives the remote share is the model's.
 	cropShareDam: { label: 'Crops’ share from the dam', spec: pct(true, 'no table') },
 	cropShareRiver: { label: 'Crops’ share from the river', spec: pct(true, 'no table') },
 	cropShareRemote: { label: 'Crops’ share from another unit’s dam', spec: pct(true, 'no table') },
-	cropRemoteCapM3Day: { label: 'Pipe capacity from the other unit’s dam', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	cropRemoteCapM3Day: { label: 'Pipe capacity from the other unit’s dam', spec: flow(pumpUnit, { nullable: true, nullLabel: 'no limit' }) },
 	// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): the river's, a baseline assumption.
 	reachLossFrac: { label: 'Bed losses in the reach below', spec: pct() },
 	reachLossMaxM3Day: { label: 'Bed losses at most', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): its groundwater's, a baseline assumption.
+	baseflowLossM3Day: { label: 'Base-flow loss', spec: num('m³/day') },
+	baseflowGainM3Day: { label: 'Base-flow gain', spec: num('m³/day') },
 	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
 	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };
@@ -211,7 +249,8 @@ export function nodeFields(kind: NodeKind): { field: NodeSetField; label: string
 
 export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
 	fromNodeId: { label: 'Source', spec: { t: 'node' } },
-	toNodeId: { label: 'Destination', spec: { t: 'node' } },
+	// Empty: out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6), a dam rule only.
+	toNodeId: { label: 'Destination', spec: { t: 'node', nullLabel: 'outside the catchment' } },
 	months: { label: 'Months it runs', spec: { t: 'months' } },
 	maxRateM3s: { label: 'Maximum rate', spec: num('m³/s') },
 	dailyCapM3: { label: 'Daily cap', spec: num('m³', { nullable: true, nullLabel: 'no cap' }) },
@@ -291,7 +330,7 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	source: { label: 'Source of the number', spec: { t: 'enum', options: plain(DEMAND_OBJECT_SOURCES, SOURCE_OPTION_LABEL), nullable: true, nullLabel: 'not recorded' } },
 	// Where its water comes from (engine ≥ 1.65.0, docs/model.md §2.7j): the dam (null), or a river abstraction of its own.
 	waterSource: { label: 'Water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL), nullable: true, nullLabel: 'the unit’s supply' } },
-	riverPumpM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	riverPumpM3Day: { label: 'River pump capacity', spec: flow(pumpUnit, { nullable: true, nullLabel: 'no limit' }) },
 	riverPoolM3: { label: 'Pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
 	note: { label: 'Source details', spec: { t: 'text', optional: true } }
 };
@@ -551,6 +590,18 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 		default:
 			return typeof v === 'string' ? v : String(v);
 	}
+}
+
+/**
+ * The typed text of a flow field (`flowUnit`) after its unit is picked: read
+ * in the unit it was typed in (`fromScale`) and written in the new one, so
+ * "5" l/s becomes "432" m³/day rather than 5 m³/day. Text that doesn't parse
+ * is left as typed for its own error; any other field is unchanged.
+ */
+export function rescaleText(spec: ValueSpec, text: string, fromScale: number): string {
+	if ((spec.t !== 'number' && spec.t !== 'monthly') || !spec.flowUnit || text.trim() === '') return text;
+	const p = parseValue({ ...spec, scale: fromScale }, text);
+	return p.ok && p.value !== null ? valueText(spec, p.value) : text;
 }
 
 /**

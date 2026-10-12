@@ -92,6 +92,25 @@ describe('water account view', () => {
 		expect(b.outBar.reduce((s, x) => s + x.pct, 0)).toBeCloseTo(100, 10);
 	});
 
+	it('what transfer rules sent out of the catchment is an out line and segment (engine 1.86.0)', () => {
+		// 40 of the outflow pumped out of the catchment instead.
+		const r: WaterAccountRow = { ...t, outflowM3: 471, externalTransferM3: 40 };
+		expect(accountLines([r]).map((l) => l.key)).toContain('externalTransferM3');
+		expect(accountBars(r).outBar.map((s) => [s.label, s.m3])).toContainEqual(['Transferred out of the catchment', 40]);
+		expect(accountLines([t]).map((l) => l.key)).not.toContain('externalTransferM3');
+	});
+
+	it('storage set by a storage reset is an in line, so the in lines add up to the account’s in', () => {
+		// A reset set 30 into the dams: 30 more kept in storage.
+		const r: WaterAccountRow = { ...t, storageSetM3: 30, storageChangeM3: 90 };
+		expect(accountLines([r]).map((l) => l.key)).toContain('storageSetM3');
+		expect(accountBars(r).inBar.map((s) => s.m3).reduce((a, b) => a + b, 0)).toBe(630);
+		// Set out of the dams instead: the term goes on the out side.
+		const o: WaterAccountRow = { ...t, storageSetM3: -30, storageChangeM3: 30 };
+		expect(accountBars(o).outBar.map((s) => s.key)).toContain('storageSetM3');
+		expect(accountLines([t]).map((l) => l.key)).not.toContain('storageSetM3');
+	});
+
 	it('a dam that ran down supplies water: storage goes on the in side', () => {
 		const r: WaterAccountRow = { ...t, storageChangeM3: -50, naturalFlowM3: 550 };
 		const b = accountBars(r);

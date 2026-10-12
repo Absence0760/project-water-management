@@ -679,7 +679,7 @@
 							{#if data.a.run.legacy && data.b.run.legacy}Both runs use
 							{:else if data.a.run.legacy}Run A uses
 							{:else}Run B uses{/if}
-							the legacy runoff model (b023 workbook, removed in engine 1.0.0) — it doesn’t conserve water at the event scale (audit H1), so this
+							the legacy runoff model (the original workbook’s, removed in engine 1.0.0) — it doesn’t conserve water at the event scale (audit H1), so this
 							comparison is workbook comparison only, not evidence for a licence, Reserve or compliance assessment.
 						</div>
 					{/if}

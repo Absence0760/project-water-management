@@ -12,7 +12,7 @@ import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
 import { cropTableNotes, grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
-import { asRunOfRiver, type FarmSpec, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote } from './farms';
+import { asRunOfRiver, type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote, smallPoolNote } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
 import { duplicateLogger, type GaugeScaling, gaugeAsReference, validateScaling } from './gauge';
 import { projectIds } from './ids';
@@ -194,8 +194,8 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 			report.note('probable-run-of-river', note, { sheet: 'Farm spec', element: n.name });
 			flagged.push(n);
 		}
-		const pool = placeholderPoolNote(n.name, n.pctUpstreamToDam, n.damCapacityM3, n.divertCapacityM3Day);
-		if (pool) report.note('placeholder-pool', pool, { sheet: 'Farm spec', element: n.name });
+		const pool = smallPoolNote(n.name, n.pctUpstreamToDam, n.damCapacityM3, n.divertCapacityM3Day);
+		if (pool) report.note('small-pool', pool, { sheet: 'Farm spec', element: n.name });
 	}
 	const dams =nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
 	if (dams.length) {
@@ -277,7 +277,8 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		const flaggedIds = new Set(flagged.map((n) => n.id));
 		for (const t of modelTransfers) {
 			const src = byId.get(t.fromNodeId)!;
-			const dst = byId.get(t.toNodeId)!;
+			// The importer only ever names a unit (b023 has no transfer out of the catchment).
+			const dst = byId.get(t.toNodeId!)!;
 			if (!flaggedIds.has(src.id) || dst.kind !== 'farm' || dst.damCapacityM3 > 0 || demanding.has(dst.id)) continue;
 			Object.assign(t, IMPORTED_OFFTAKE);
 			report.note('transfer-river-offtake', offtakeNote(src.name, dst.name, t.maxRateM3s, t.enabled), { sheet: 'Transfers', element: src.name });

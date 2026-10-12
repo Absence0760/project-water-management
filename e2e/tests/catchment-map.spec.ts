@@ -271,7 +271,7 @@ test('an editor marks a dam outline off-channel in its card, kept across a reloa
 	const siting = card(page).getByRole('combobox', { name: 'Where Upper dam stands against its river' });
 	await expect(siting).toHaveValue('');
 	await expect(siting.locator('option:checked')).toHaveText('Not said (from its outline)');
-	await expect(card(page)).toContainText('Start and Divide take only an off-channel dam’s own catchment into it, the river passing it by; unsaid, its outline decides.');
+	await expect(card(page)).toContainText('For your records, and for a water user placed at the dam in Start or Divide; unsaid, its outline decides. Its unit’s composite dam takes the shares of upstream inflow and runoff you enter on the unit.');
 	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/map\/features\//.test(r.url()));
 	await siting.selectOption({ label: 'Off-channel (filled by a pump or a furrow)' });
 	expect((await saved).status()).toBe(200);

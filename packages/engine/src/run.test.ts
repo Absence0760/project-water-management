@@ -1631,7 +1631,7 @@ describe.skipIf(!clientCatchmentFixture)(
 				for (const n of legacy) if (hit.has(n.id)) add(n.downstreamNodeId);
 				for (const t of project.model.transfers) {
 					if (hit.has(t.fromNodeId)) add(t.toNodeId);
-					if (hit.has(t.toNodeId)) add(t.fromNodeId);
+					if (hit.has(t.toNodeId!)) add(t.fromNodeId);
 				}
 			}
 			return hit;
@@ -1687,9 +1687,9 @@ describe.skipIf(!clientCatchmentFixture)(
 		const n4OneEnd = new Set<string>();
 		const n4Joined = new Set<string>();
 		for (const t of project.model.transfers.filter((r) => r.enabled !== false)) {
-			n4Ends.add(t.fromNodeId).add(t.toNodeId);
+			n4Ends.add(t.fromNodeId).add(t.toNodeId!);
 			const a = downstreamOf(t.fromNodeId);
-			const b = downstreamOf(t.toNodeId);
+			const b = downstreamOf(t.toNodeId!);
 			for (const id of new Set([...a, ...b])) (a.has(id) && b.has(id) ? n4Joined : n4OneEnd).add(id);
 		}
 		for (const id of n4Ends) n4OneEnd.delete(id);

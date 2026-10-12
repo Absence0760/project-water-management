@@ -105,7 +105,14 @@ export const INVENTORY = [
 	{ path: 'backend/src/publish/publish.ts', reads: 1, how: 'cut', evidence: ["(summary->'forecast'->>'from')::date - 1"], note: 'the projection stops at observed_until; the forecast is its own part' },
 	{ path: 'backend/src/runs/reproduce.ts', reads: 1, how: 'whole', evidence: ['FROM run_series WHERE run_id = $1'], note: 'reproducing a run compares every stored day' },
 	{ path: 'backend/src/runs/routes.ts', reads: 4, how: 'passes-on', evidence: ['.get(\'/:id/runs/:runId/series\'', '.get(\'/:id/runs/:runId/day\''], note: 'the series route (the client cuts or bands), the series list (no values), and the day trace (one picked day)' },
-	{ path: 'backend/src/scenarios/results.ts', reads: 1, how: 'never', evidence: ['that run is a forecast run; base a scenario on an ordinary run'], in: 'backend/src/scenarios/execute.ts' },
+	{
+		path: 'backend/src/scenarios/results.ts',
+		reads: 2,
+		how: 'never',
+		evidence: ["loadBaseInput(db, projectId, r.baseRunId, 'contributor')", 'the published run is a forecast run; an application needs an ordinary run of the model published'],
+		in: ['backend/src/scenarios/results.ts', 'backend/src/scenarios/execute.ts'],
+		note: 'the river’s series (an application run and its base) and the published DWS gauge records (the base’s); both read only after loadBaseInput has refused a forecast base'
+	},
 	// --- SQL functions (latest definitions) --------------------------------------
 	{ path: 'sql:app_share_series', reads: 1, how: 'cut', evidence: ['pub.forecast_from'], in: 'backend/migrations/190_history_viewer_share_forecast.sql' },
 	{ path: 'sql:app_run_digest_body', reads: 1, how: 'whole', evidence: ['app_run_digest_body'], in: 'backend/migrations/115_scenario_share_notes.sql', note: 'the run’s stamp digests every stored day' }

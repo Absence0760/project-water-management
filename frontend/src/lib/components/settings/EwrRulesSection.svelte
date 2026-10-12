@@ -106,9 +106,8 @@
 				</select>
 				<span class="hint explain" id="{uid}-low-h"
 					>Base flow keeps a flood month from passing its low flows. The total flow is the catchment’s hydrologist’s choice.
-					<!-- issue #507 item 6, docs/model.md §2.9d: the filter's passes and α are not yet checked against the DRM's method. -->
-					<span class="badge badge-warn" data-testid="baseflow-filter-unconfirmed">Filter settings unconfirmed</span>
-					The base-flow filter (Lyne–Hollick, three passes, α 0.995) isn’t yet checked against the Desktop Reserve Model’s own method, which may use one pass.</span
+					<!-- issue #523 D3, docs/model.md §2.9d: the filter as Hughes, Hannart & Watkins (2003) apply it to daily flows. -->
+					<span data-testid="baseflow-filter-method">Base flow is separated as the Desktop Reserve Model’s study does for daily flows: the Lyne–Hollick filter, one pass, α 0.995 (Hughes, Hannart &amp; Watkins 2003).</span></span
 				>
 			</div>
 		</div>

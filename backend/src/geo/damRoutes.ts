@@ -3,13 +3,17 @@
 // docs/maps.md § Dams from the register and the map).
 //
 //   GET  /projects/:id/nodes/:nodeId/dam-proposals                 the proposals for a hydrological unit's dam (viewer)
-//   POST /projects/:id/nodes/:nodeId/dam-capacity-from-register    accept a registered dam's capacity (editor)
 //   POST /projects/:id/nodes/:nodeId/dam-area-from-map             accept the dam polygon's area as the full-supply area (editor)
 //
 // The map proposes, the modeller decides: nothing here changes the model but
-// the two accepts, one value each, each recorded as a model revision whose
-// reason names the source (the pattern of geo/routes.ts area-from-map). The
-// server re-derives every accepted value; the client only names which.
+// the area accept, one value, recorded as a model revision whose reason names
+// the source (the pattern of geo/routes.ts area-from-map). The server
+// re-derives the accepted value; the client only names which. The register of
+// dams is a reference only (#523 C1; #90 "Abstraction points from Start from
+// the map / Divide"): a unit's dam is its composite dam, the total of its farm
+// dams, many of them unregistered, so its volume is the user's to enter and
+// no registered capacity is ever written into it (the accept that did was
+// removed).
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -20,7 +24,6 @@ import { ApiError, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { damLabel, damOnMap, damRegisterDatasets, RADIUS_M, registerDamsNear } from './damProposals.js';
 
-export const DamCapacityFromRegister = z.object({ registerNo: z.string().trim().min(1).max(20) }).strict();
 export const DamAreaFromMap = z.object({ featureId: z.string().uuid() }).strict();
 
 interface DamNode {
@@ -42,7 +45,6 @@ async function damNode(db: Db, projectId: string, nodeId: string): Promise<DamNo
 	return n;
 }
 
-const m3 = (v: number) => `${Math.round(v)} m³`;
 const m2 = (v: number) => `${Math.round(v)} m²`;
 
 export const damRoutes = new Hono<AuthEnv>()
@@ -66,29 +68,6 @@ export const damRoutes = new Hono<AuthEnv>()
 						: null,
 				datasets: await damRegisterDatasets(db)
 			});
-		});
-	})
-	.post('/:id/nodes/:nodeId/dam-capacity-from-register', async (c) => {
-		const body = DamCapacityFromRegister.parse(await readJson(c));
-		const { id, nodeId } = c.req.param();
-		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
-			const n = await damNode(db, id, nodeId);
-			const dam = await damOnMap(db, id, nodeId);
-			if (!dam) throw new ApiError(400, `No dam on the map is linked to ${n.name}: link one on the Map first, so the register can be searched from it.`);
-			// Re-derived here: only a dam the proposals would list (near this unit's dam) may be accepted.
-			const hit = (await registerDamsNear(db, dam.point)).find((d) => d.registerNo === body.registerNo.toUpperCase());
-			if (!hit) throw new ApiError(400, `Registered dam ${body.registerNo} is not within ${RADIUS_M / 1000} km of ${damLabel(dam)}, so it isn't proposed for ${n.name}.`);
-			if (hit.capacityM3 === null) throw new ApiError(400, `The register gives no capacity for ${hit.name} (${hit.registerNo}).`);
-			const change = await beginModelChange(db, id);
-			await db.query('UPDATE node SET dam_capacity_m3 = $3 WHERE id = $1 AND project_id = $2', [nodeId, id, hit.capacityM3]);
-			const revision = await recordModelRevision(db, id, {
-				source: 'model_put',
-				before: change.before,
-				reason:
-					`Dam capacity of ${n.name} from the register of dams: ${hit.name} (${hit.registerNo}, ${m3(hit.capacityM3)}, ${Math.round(hit.distanceM)} m from ${damLabel(dam)}; ${hit.source})`.slice(0, 500)
-			});
-			return c.json({ nodeId, damCapacityM3: hit.capacityM3, registerNo: hit.registerNo, revisionId: revision?.id ?? null });
 		});
 	})
 	.post('/:id/nodes/:nodeId/dam-area-from-map', async (c) => {

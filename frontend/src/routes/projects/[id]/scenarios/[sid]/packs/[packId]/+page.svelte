@@ -247,7 +247,7 @@
 				</div>
 				{#if !fig.volumes}
 					<p class="muted small" data-testid="applicant-pack-volumes-withheld">
-						Flow volumes aren’t shown: with fewer than five farm holders in the catchment, or with a change to the shared baseline, they could reveal another unit’s water use.
+						Flow volumes aren’t shown: with fewer than five farm holders in the catchment, with one or two of them using most of the water, or with a change to the shared baseline, they could reveal another unit’s water use.
 					</p>
 				{/if}
 			</section>

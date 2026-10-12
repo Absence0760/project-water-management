@@ -117,8 +117,8 @@ test('Load crop factors: each workbook source says what its sheet must hold', as
 	const dialog = page.getByRole('dialog', { name: 'Load crop factors' });
 	// The reference library reads no file, so there is nothing to describe.
 	await expect(dialog.getByTestId('format-help')).toHaveCount(0);
-	await dialog.getByRole('radio', { name: 'A b023 workbook' }).check();
-	let help = await openFormat(dialog, /^A b023 Water Balance Tool workbook \(\.xlsx or \.xlsm\)/);
+	await dialog.getByRole('radio', { name: 'A Water Balance Tool workbook' }).check();
+	let help = await openFormat(dialog, /^A Water Balance Tool workbook \(\.xlsx or \.xlsm\)/);
 	await expect(help).toContainText('[Crop demand]');
 	await dialog.getByRole('radio', { name: 'A hydrological-unit-based workbook' }).check();
 	help = await openFormat(dialog, /with a sheet named Crop_Factors/);
@@ -131,7 +131,7 @@ test('Project import and API keys: the expected format of a project file, a work
 	await page.goto('/');
 	await expect(page.getByText('You have no projects yet.')).toBeVisible();
 	for (const [button, title, accepts] of [
-		['Import b023 workbook', 'Import b023 workbook', /^A b023 Water Balance Tool workbook \(\.xlsm or \.xlsx\)/],
+		['Import workbook', 'Import workbook', /^A Water Balance Tool workbook \(\.xlsm or \.xlsx\)/],
 		['Import project file (.json)', 'Import project file', /^A project file \(\.json\), at most 5 MB/]
 	] as const) {
 		await page.getByRole('button', { name: button, exact: true }).click();

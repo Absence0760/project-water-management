@@ -1,4 +1,4 @@
-// Import a b023 workbook in the browser (WP-1.31): "Import b023 workbook" on
+// Import a b023 workbook in the browser (WP-1.31): "Import workbook" on
 // the project list reads the committed synthetic workbook (invented data,
 // scripts/wbt-import/fixtures/) in a Web Worker, shows the review (counts,
 // the importer's notes, the unmapped report with Echo Farm's hand-written
@@ -45,15 +45,15 @@ function hostileWorkbook(payload: string) {
 
 async function openWorkbookImport(page: Page): Promise<Locator> {
 	// The named button, or on a phone Import's list (issue #521).
-	await pickImport(page, 'Import b023 workbook');
-	const dialog = page.getByRole('dialog', { name: 'Import b023 workbook' });
-	await expect(dialog.getByLabel('b023 workbook (.xlsm or .xlsx)')).toBeVisible();
+	await pickImport(page, 'Import workbook');
+	const dialog = page.getByRole('dialog', { name: 'Import workbook' });
+	await expect(dialog.getByLabel('Workbook (.xlsm or .xlsx)')).toBeVisible();
 	return dialog;
 }
 
 /** Pick the file and wait for the review (the name field is filled from the file name). */
 async function review(dialog: Locator, file: { name: string; mimeType: string; buffer: Buffer }, expectedName: string) {
-	await dialog.getByLabel('b023 workbook (.xlsm or .xlsx)').setInputFiles(file);
+	await dialog.getByLabel('Workbook (.xlsm or .xlsx)').setInputFiles(file);
 	await expect(dialog.getByLabel('Name')).toHaveValue(expectedName);
 }
 
@@ -83,7 +83,7 @@ async function expectReportLists(notes: Locator, unmapped: Locator) {
 async function expectImportRecord(page: Page, importedBy: string) {
 	const record = page.getByRole('region', { name: 'Import record' });
 	await expect(record.getByRole('paragraph').first()).toHaveText(
-		new RegExp(`^Imported from the b023 workbook synthetic_b023\\.xlsx on \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} by ${importedBy}\\.$`)
+		new RegExp(`^Imported from the Water Balance Tool workbook synthetic_b023\\.xlsx on \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} by ${importedBy}\\.$`)
 	);
 	const notes = record.getByRole('region', { name: 'Importer notes' });
 	const unmapped = record.getByRole('region', { name: /^Unmapped report/ });
@@ -149,7 +149,7 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	// The CHIRPS column's product and version (issue #40c): v2.0 by default, what b023 workbooks were built on.
 	const chirps = dialog.getByLabel('CHIRPS column');
 	await expect(chirps).toHaveValue('CHIRPS/2.0');
-	await expect(chirps).toHaveAccessibleDescription(/b023 workbooks were built on v2\.0; the CHIRPS data feed writes v3\.0/);
+	await expect(chirps).toHaveAccessibleDescription(/Water Balance Tool workbooks were built on v2\.0; the CHIRPS data feed writes v3\.0/);
 
 	await dialog.getByLabel('Name').fill('Synthetic — from the workbook');
 	await dialog.getByLabel('Run the model after importing').check();
@@ -227,16 +227,16 @@ test('a workbook that is not b023 names the ranges it lacks, and Cancel leaves n
 	void owner;
 	await page.goto('/');
 	const dialog = await openWorkbookImport(page);
-	await dialog.getByLabel('b023 workbook (.xlsm or .xlsx)').setInputFiles(otherWorkbook());
+	await dialog.getByLabel('Workbook (.xlsm or .xlsx)').setInputFiles(otherWorkbook());
 	const alert = dialog.getByRole('alert');
-	await expect(alert).toContainText("This isn't a b023 Water Balance Tool workbook.");
-	await expect(alert).toContainText('Every b023 workbook has these named ranges, and this one lacks 47 of them:');
+	await expect(alert).toContainText("This isn't a Water Balance Tool workbook.");
+	await expect(alert).toContainText('Every Water Balance Tool workbook has these named ranges, and this one lacks 47 of them:');
 	await expect(alert.getByRole('listitem').first()).toHaveText('zNetwork_ElementNameLst');
 	await expect(alert.getByRole('listitem').last()).toHaveText('and 39 more');
 	await expectNoViolations(page);
 
 	// Not a workbook at all, under a workbook's name.
-	await dialog.getByLabel('b023 workbook (.xlsm or .xlsx)').setInputFiles({ name: 'rain.xlsx', mimeType: XLSM, buffer: Buffer.from('date,rain\n') });
+	await dialog.getByLabel('Workbook (.xlsm or .xlsx)').setInputFiles({ name: 'rain.xlsx', mimeType: XLSM, buffer: Buffer.from('date,rain\n') });
 	await expect(dialog.getByRole('alert')).toContainText("The file couldn't be opened as a workbook.");
 
 	await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -271,7 +271,7 @@ test('closing the dialog mid-import: the late answer never overwrites a new pick
 	// The list reloads with the project the first import made …
 	await expect(page.getByRole('rowheader', { name: 'synthetic_b023', exact: true })).toBeVisible();
 	// … and the reopened dialog is still at its file picker.
-	await expect(again.getByLabel('b023 workbook (.xlsm or .xlsx)')).toBeEnabled();
+	await expect(again.getByLabel('Workbook (.xlsm or .xlsx)')).toBeEnabled();
 	await expect(page.getByRole('dialog', { name: 'Project imported' })).toHaveCount(0);
 });
 

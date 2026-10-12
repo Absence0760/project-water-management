@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CumulativeReport, CumulativeRow } from '@water-management/engine';
-import type { Scenario } from '$lib/api/types';
+import type { AssessorQuestion, Scenario } from '$lib/api/types';
 import { assessable, assessmentCsv, assessmentState, changeText, changeTone, interactionWords, pickBlocked, rowLabel, valueText } from './cumulative';
 
 const app = (id: string, status: Scenario['status'], baseRunId = 'r1', name = id): Scenario => ({ id, name, status, baseRunId }) as Scenario;
@@ -83,6 +83,36 @@ describe('assessmentCsv', () => {
 		expect(lines[1]).toBe('Days the EWR is not met,Outlet (Outlet gauge),days,10,12,13,18,2,3,5,8,3');
 		expect(lines[2]).toBe('Mean flow at the outlet,Catchment,m³/day,1000.5,12,13,18,2,3,5,8,');
 		expect(lines[3]).toBe('');
+	});
+
+	it('with questions, a blank line then each "Ask the assessors why" question and its answer (issue #523 G7)', () => {
+		const report: CumulativeReport = { scenarios: [{ id: 'a', name: 'A' }], rows: [row({ singles: [12], singleChanges: [2] })], warnings: [] };
+		const q = (over: Partial<AssessorQuestion>): AssessorQuestion => ({
+			id: 'q1',
+			scenarioId: 'a',
+			scenarioName: 'Raise the dam',
+			askedAt: '2026-10-01T08:00:00.000Z',
+			problem: "op 1 (node.set): doesn't apply to the catchment as modelled",
+			opIndexes: [0],
+			ops: [],
+			rules: ['shares'],
+			assessorText: 'op 1 (node.set): flow shares add up to 125 %',
+			answer: null,
+			answeredAt: null,
+			...over
+		});
+		const lines = assessmentCsv(report, [
+			q({ answer: 'The catchment is fully allocated, so the share can’t grow.', answeredAt: '2026-10-02T09:00:00.000Z' }),
+			q({ id: 'q2', scenarioName: '=Pump, more', problem: 'line "two"' })
+		]).split('\r\n');
+		expect(lines[2]).toBe('');
+		expect(lines[3]).toBe('Application,Asked,The applicant read,In its own words,Answer,Answered');
+		expect(lines[4]).toBe(
+			`Raise the dam,2026-10-01T08:00:00.000Z,op 1 (node.set): doesn't apply to the catchment as modelled,op 1 (node.set): flow shares add up to 125 %,"The catchment is fully allocated, so the share can’t grow.",2026-10-02T09:00:00.000Z`
+		);
+		// User text guarded as the matrix's names are; an unanswered question leaves the answer empty.
+		expect(lines[5]).toBe(`"'=Pump, more",2026-10-01T08:00:00.000Z,"line ""two""",op 1 (node.set): flow shares add up to 125 %,,`);
+		expect(assessmentCsv(report, [])).toBe(assessmentCsv(report));
 	});
 });
 

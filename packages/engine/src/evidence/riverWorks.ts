@@ -125,7 +125,7 @@ export function offtakeRiverWorks(t: Transfer, nodes: readonly Pick<NetworkNode,
 	return {
 		kind: 'offtake',
 		id: t.id,
-		name: `${nameOf(t.fromNodeId)} → ${nameOf(t.toNodeId)}`,
+		name: `${nameOf(t.fromNodeId)} → ${t.toNodeId === null ? 'outside the catchment' : nameOf(t.toNodeId)}`,
 		// Its capacity is the month's rate × 86 400, capped by the daily cap (§2.6a): always a limit unless a rate isn't a number.
 		bounded: size(t.dailyCapM3) || rates.every(size),
 		// One hands-off flow for every month (§2.6a); one the run reads as none (not a number ≥ 0) isn't one.

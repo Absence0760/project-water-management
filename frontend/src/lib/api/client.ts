@@ -84,6 +84,8 @@ import type {
 	PackVerification,
 	SignoffRequest,
 	Member,
+	AuthorityDelegate,
+	AuthorityDelegates,
 	MyInvite,
 	Nomination,
 	Reproduction,
@@ -119,6 +121,7 @@ import type {
 	AssessorQuestion,
 	ApplicantResultsRun,
 	DecideRequest,
+	AppealRequest,
 	ScenarioStatus,
 	ScenarioWithCheck,
 	ShareLink,
@@ -166,6 +169,7 @@ import type {
 	QuaternaryLayer,
 	RiverLayer,
 	GaugeStationLookup,
+	MapSearchAnswer,
 	DamProposals,
 	DelineationProposal,
 	DelineationRequest,
@@ -555,11 +559,22 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Appoint a party member its specialist, who signs its applications' packs, or end it (167); owners only, 409 without a party. */
 			setSpecialist: (id: string, userId: string, specialist: boolean) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { specialist }).then((r) => r.member),
-			/** Mark or unmark a member as acting for the responsible authority (owner; 163). */
-			setActsForAuthority: (id: string, userId: string, actsForAuthority: boolean) =>
-				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { actsForAuthority }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
+		},
+		/**
+		 * Who acts for the responsible authority (229_authority_delegates): an owner proposes, only a member already
+		 * acting for the authority confirms (or the operator, on its letter), the owner withdraws a proposal, and the
+		 * authority removes anyone.
+		 */
+		authorityDelegates: {
+			list: (id: string) => request<AuthorityDelegates>('GET', `${p(id)}/authority-delegates`),
+			propose: (id: string, userId: string) =>
+				request<{ delegate: AuthorityDelegate }>('POST', `${p(id)}/authority-delegates`, { userId }).then((r) => r.delegate),
+			confirm: (id: string, userId: string) =>
+				request<{ delegate: AuthorityDelegate }>('POST', `${p(id)}/authority-delegates/${enc(userId)}/confirm`, {}).then((r) => r.delegate),
+			/** Withdraw or decline a proposal, remove a delegate, or step down yourself. */
+			remove: (id: string, userId: string) => request<void>('DELETE', `${p(id)}/authority-delegates/${enc(userId)}`)
 		},
 		/**
 		 * Farmer members and their farms (WP-2.1), and pending farmer invites
@@ -1002,11 +1017,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			) => request<ScenarioWithCheck>('PATCH', `${p(id)}/scenarios/${enc(sid)}`, body),
 			remove: (id: string, sid: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}`),
 			/** Run it on its base run's stored input; counts toward the project's run cap like any run. */
-			run: (id: string, sid: string, label?: string) =>
+			/** `terms: 'licensed'`: the terms of its licence in force (227/228) instead of its own changes. */
+			run: (id: string, sid: string, label?: string, terms?: 'licensed') =>
 				request<{ run: Run; removedRunIds?: string[]; applied: ScenarioCheck['applied']; classified: ScenarioCheck['classified'] }>(
 					'POST',
 					`${p(id)}/scenarios/${enc(sid)}/runs`,
-					label ? { label } : {}
+					{ ...(label ? { label } : {}), ...(terms ? { terms } : {}) }
 				).then((r) => ({ ...r, removedRunIds: r.removedRunIds ?? [] })),
 			/** Re-apply the ops to another base run: `problems` lists what no longer applies. `dryRun` checks without saving. */
 			rebase: (id: string, sid: string, baseRunId: string, dryRun = false) =>
@@ -1024,10 +1040,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),
 			reopen: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/reopen`),
 			/**
-			 * Record the responsible authority's decision (163): an editor the owner marks as acting for
-			 * the authority, who didn't make the application. `authority` defaults to settings.responsibleAuthority.
+			 * Record the responsible authority's decision (163): an editor the authority confirmed as acting
+			 * for it (229), who didn't make the application. `authority` defaults to settings.responsibleAuthority.
 			 */
 			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
+			/** Record what followed the decision (228): an appeal lodged, upheld, set aside or varied. */
+			appeal: (id: string, sid: string, body: AppealRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/appeals`, body),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>
 				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),
@@ -1159,7 +1177,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
 				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
-			}
+			},
+			/** The Map's search (issue #523 C5): gauges, registered dams and quaternaries by name or code, then the gazetteer's places; our own tables only. */
+			search: (id: string, q: string) => request<MapSearchAnswer>('GET', `${p(id)}/map/search?${new URLSearchParams({ q })}`)
 		},
 		/** A catchment delineated from a click on the Map (issue #326 B-delineate, docs/api.md § Delineation): proposed, then accepted or rejected. */
 		delineation: {
@@ -1203,16 +1223,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		/**
 		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
-		 * docs/api.md § Catchment map). Each accept is one value, saved to the model as a revision naming the source.
+		 * docs/api.md § Catchment map). The register's capacities are a reference only (#523 C1): only the polygon's area is
+		 * accepted, one value, saved to the model as a revision naming the source.
 		 */
 		damProposals: {
 			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
-			capacityFromRegister: (id: string, nodeId: string, registerNo: string) =>
-				request<{ nodeId: string; damCapacityM3: number; registerNo: string; revisionId: string | null }>(
-					'POST',
-					`${p(id)}/nodes/${enc(nodeId)}/dam-capacity-from-register`,
-					{ registerNo }
-				),
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>
 				request<{ nodeId: string; damAreaFullM2: number; areaFeatureId: string; revisionId: string | null }>(
 					'POST',

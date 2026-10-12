@@ -60,7 +60,7 @@ export const FAO56_TABLE5_URL = 'https://www.fao.org/4/x0490e/x0490e08.htm';
 /** The dialog's source kinds, in radio order, each with the shape of its factors and a line saying what it is. A new kind is a row here. */
 export const SOURCE_KINDS = [
 	{ id: 'library', label: 'Reference library', hint: 'ARC/SABI A-pan factors, winter rainfall area', shape: 'a-pan' },
-	{ id: 'b023', label: 'A b023 workbook', hint: 'Its [Crop demand] sheet: A-pan factors', shape: 'a-pan' },
+	{ id: 'b023', label: 'A Water Balance Tool workbook', hint: 'Its [Crop demand] sheet: A-pan factors', shape: 'a-pan' },
 	{ id: 'node', label: 'A hydrological-unit-based workbook', hint: 'Its [Crop_Factors] sheet: FAO-56 Kc values', shape: 'fao-et0' }
 ] as const satisfies readonly { id: string; label: string; hint: string; shape: FactorShape }[];
 export type SourceKind = (typeof SOURCE_KINDS)[number]['id'];
@@ -79,9 +79,9 @@ export const NODE_FACTORS_EXAMPLE = [
 /** Load crop factors' Expected format for a b023 workbook (issue #456; the File formats help page, issue #477). */
 export const B023_FACTORS_FORMAT: FileFormat = {
 	id: 'crop-factors-b023',
-	title: 'Crop factors from a b023 workbook',
-	where: 'Crops & demand → Load crop factors → A b023 workbook',
-	accepts: `A b023 Water Balance Tool workbook (.xlsx or .xlsm), up to ${WORKBOOK_MAX_MB} MB.`,
+	title: 'Crop factors from a Water Balance Tool workbook',
+	where: 'Crops & demand → Load crop factors → A Water Balance Tool workbook',
+	accepts: `A Water Balance Tool workbook (.xlsx or .xlsm), up to ${WORKBOOK_MAX_MB} MB.`,
 	rules: [
 		'The whole tool, with its named ranges: a workbook that lacks them is refused, and the message lists the ones missing.',
 		'The factors come from its [Crop demand] sheet: a row per crop under the month header, twelve A-pan crop factors from Oct to Sep.',

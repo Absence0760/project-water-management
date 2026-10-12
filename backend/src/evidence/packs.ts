@@ -37,8 +37,8 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
-import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
-import { boardVerdicts, reportVerdictsOnly } from '../allocations/verdictsOnly.js';
+import { allocationUnitsHidden, countsOthersYears, redactReportAllocations } from '../allocations/viewerUnits.js';
+import { authorisedVerdicts, boardVerdicts, reportVerdictsOnly } from '../allocations/verdictsOnly.js';
 import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
@@ -412,7 +412,9 @@ async function packOwnUnits(db: Db, projectId: string, pack: Pick<PackMeta, 'sce
  * holder's, #523 G); `pdf` for one whose
  * page-1 prints the full authorised volume mix (the manifest is served with
  * the folded one instead, or none), or whose § 5 prints a total of other
- * units' registered m³ (the manifest is served without it, #523 K/L/M). Null: the redacted manifest and the PDF
+ * units' registered m³ (the manifest is served without it, #523 K/L/M), or
+ * whose page-1 "Registered vs modelled use" row counts other units' years
+ * (the manifest is served recounted over the listed units, #523 G1c). Null: the redacted manifest and the PDF
  * hold nothing more.
  */
 export function packWithheldPart(reportVersion: string, report: PackManifest['report'], origin: ScenarioOrigin | null): 'pack' | 'pdf' | null {
@@ -431,6 +433,8 @@ export function packWithheldPart(reportVersion: string, report: PackManifest['re
 	if (mix && !mix.folded && mix.rows.length) return 'pdf';
 	// The PDF prints § 5's totals of other units with their registered m³, which the redacted manifest leaves out (#523 K/L/M).
 	if (othersRegistered(report)) return 'pdf';
+	// …and page 1's "Registered vs modelled use" row counted over other units' years too, which the redacted manifest recounts over the listed ones (#523 G1c).
+	if (countsOthersYears(report as unknown as Parameters<typeof countsOthersYears>[0])) return 'pdf';
 	// …and, in a cap or full-allocation run, their modelled use, which is the registered volume where supply met demand (#523 R5-2).
 	const holds = (m: unknown) => m === 'cap' || m === 'fullAllocation';
 	if ((holds(report.allocations?.modeA) || holds(report.allocations?.modeB)) && (report.allocations?.units ?? []).some((u) => u.aggregate !== undefined)) return 'pdf';
@@ -550,7 +554,7 @@ export const packRoutes = new Hono<AuthEnv>()
 					manifest: scope
 						? { ...manifest, report: redactReportAllocations(manifest.report, scope.own) }
 						: (await allocationUnitsHidden(db, id, role))
-							? { ...manifest, report: { ...manifest.report, licenceImpact: boardVerdicts(manifest.report.licenceImpact), licenceImpactAuthorised: boardVerdicts(manifest.report.licenceImpactAuthorised) } }
+							? { ...manifest, report: { ...manifest.report, licenceImpact: boardVerdicts(manifest.report.licenceImpact), licenceImpactAuthorised: authorisedVerdicts(manifest.report.licenceImpactAuthorised) } }
 							: manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,

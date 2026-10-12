@@ -1,5 +1,6 @@
 import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type UnitRainSummary, type UnitRainUnit, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
+import { splitCsv } from '../allocations/parse.js';
 import {
 	allocationCapLines,
 	chirpsFactorLines,
@@ -566,6 +567,12 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 			'Unit,Mean demand (m³/day),Mean demand after the restriction (m³/day),Mean cut (m³/day),Mean cut on restricted days (m³/day),Mean supplied (m³/day),Days restricted',
 			'Farm A,100,80,20,43.2,75,105'
 		]);
+		// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3), when there are any.
+		const withUsers = [...droughtRestrictionLines({ ...r, users: [{ nodeId: 't', name: 'Town', restrictionPct: 0.3, avgDemandM3Day: 200, avgRestrictedDemandM3Day: 170, avgSuppliedM3Day: 160, avgCutOnRestrictedDaysM3Day: 60, daysByLevel: [360, 85, 20] }] })];
+		expect(withUsers.slice(-2)).toEqual([
+			'"Priority user (fixed restriction, no basic-needs floor)",Fixed restriction (%),Mean demand (m³/day),Mean demand after the restriction (m³/day),Mean cut (m³/day),Mean cut on restricted days (m³/day),Mean taken (m³/day),Days restricted',
+			'Town,30,200,170,30,60,160,105'
+		]);
 		// In the summary sheet of a run with the rule only.
 		expect([...summaryCsvLines(meta, { ...summary, droughtRestriction: r })]).toContain('Whole run,465,360,85,20');
 		expect([...summaryCsvLines(meta, summary)].some((l) => l.startsWith('Drought restrictions'))).toBe(false);
@@ -652,6 +659,10 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines).toContain('Town,Priority,100,90,10,90,45,5,3');
 		expect(lines).toContain('Town,Priority,100,90,45,5,no (priority),0,0,5');
 		expect(lines.at(-1)).toMatch(/priority user is not curtailed/);
+		// A Priority user with a fixed restriction % (engine 1.86.0, issue #523 B3): curtailed, by at most that share.
+		const fixed = [{ ...otherUsers[0]!, curtailed: true, restrictionPct: 0.3, supplyCutM3Day: -5, supplyCutLs: -5 / 86.4, uncurtailedChargeM3Day: 0 }];
+		const fixedLines = [...otherUserLines({ users, curtailment: { ...c, otherUsers: fixed } } as unknown as RunSummary)];
+		expect(fixedLines.some((l) => l.startsWith('Town,Priority,100,90,45,5,"yes (30 % fixed %, no basic-needs floor)",-5,'))).toBe(true);
 		// No user has a pump capacity: no pump columns.
 		expect(lines[1]).not.toMatch(/pump/);
 	});
@@ -1145,6 +1156,64 @@ describe('water balance block', () => {
 			'Start storage + farm runoff + transfers + rain on dams + groundwater pumped + storage set = consumptive use + dam evaporation + other users’ use + stream depletion + seepage lost + outflow + end storage + residual; the residual should be 0'
 		);
 		expect(lines.find((l) => l.startsWith('Water year,'))).toContain('Storage set into (+) / out of (−) the dams by a storage reset (m³)');
+	});
+
+	it('adds what transfer rules sent out of the catchment as an out term only when a run has it (engine 1.86.0)', () => {
+		const header = (w: WaterBalance) => [...waterBalanceLines(w)].find((l) => l.startsWith('Water year,'))!;
+		expect(header(wb)).not.toContain('out of the catchment');
+		const out: WaterBalance = { ...wb, total: row(null, { externalTransferM3: 500 }) };
+		const lines = [...waterBalanceLines(out)];
+		expect(lines[1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + transferred out of the catchment + outflow + end storage + residual; the residual should be 0'
+		);
+		expect(header(out)).toContain('Transferred out of the catchment (m³)');
+		expect(lines.at(-1)).toContain(',500,');
+	});
+
+	it('names every loss the engine’s residual counts: pool evaporation, off-take and bed losses', () => {
+		const lossy: WaterBalance = { ...wb, total: row(null, { poolEvaporationM3: 4, conveyanceLossM3: 6, reachLossM3: 70 }) };
+		const lines = [...waterBalanceLines(lossy)];
+		expect(lines[1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + pool evaporation + off-take losses + bed losses + outflow + end storage + residual; the residual should be 0'
+		);
+		expect(lines.find((l) => l.startsWith('Water year,'))).toContain('River off-takes: lost on the way (m³),Bed losses in the reaches (m³)');
+	});
+
+	it('adds base flow as an in and an out term only when a run has it, and its columns close to the residual (engine 1.86.0)', () => {
+		const header = (w: WaterBalance) => [...waterBalanceLines(w)].find((l) => l.startsWith('Water year,'))!;
+		expect(header(wb)).not.toContain('Base-flow');
+		// 10 + 1e6 + 0 + 50 + 300 − 180 − 30 − 6 − 70 − 500 − 120 − 999 449 − 0 = 5, the stored residual.
+		const terms = { rainOnDamsM3: 50, damEvaporationM3: 30, baseflowGainM3: 300, conveyanceLossM3: 6, reachLossM3: 70, externalTransferM3: 500, baseflowLossM3: 120, outflowM3: 999_449, residualM3: 5 };
+		const full: WaterBalance = { ...wb, years: [row(1999, terms)], total: row(null, terms) };
+		const lines = [...waterBalanceLines(full)];
+		expect(lines[1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams + base-flow gain = consumptive use + dam evaporation + off-take losses + bed losses + transferred out of the catchment + base-flow loss + outflow + end storage + residual; the residual should be 0'
+		);
+		// Some headers hold a comma ("Transfers, net"), so parse the rows as CSV.
+		const cells = (l: string) => splitCsv(l, ',')[0]!.cells;
+		const cols = cells(header(full));
+		expect(cols).toContain('Base-flow gain from outside the catchment (m³)');
+		expect(cols).toContain('Base-flow loss from the units’ runoff (m³)');
+		for (const l of lines.slice(lines.indexOf(header(full)) + 1)) {
+			const v = cells(l);
+			const c = (h: string) => {
+				expect(cols).toContain(h);
+				return Number(v[cols.indexOf(h)]);
+			};
+			const ins = ['Dam storage at start (m³)', 'Farm runoff (m³)', 'Transfers, net (m³)', 'Rain on dams (m³)', 'Base-flow gain from outside the catchment (m³)'];
+			const outs = [
+				'Consumptive use (m³)',
+				'Dam evaporation (m³)',
+				'River off-takes: lost on the way (m³)',
+				'Bed losses in the reaches (m³)',
+				'Transferred out of the catchment (m³)',
+				'Base-flow loss from the units’ runoff (m³)',
+				'Outflow (m³)',
+				'Dam storage at end (m³)'
+			];
+			const sum = (hs: string[]) => hs.reduce((a, h) => a + c(h), 0);
+			expect(sum(ins) - sum(outs)).toBe(c('Residual (m³)'));
+		}
 	});
 
 	it('says an old run has none', () => {

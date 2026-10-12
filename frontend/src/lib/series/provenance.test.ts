@@ -32,13 +32,19 @@ describe('series provenance choices', () => {
 		);
 	});
 
-	it('finds the CHIRPS label a run would use: the first CHIRPS series, and says when it can’t know', () => {
+	it('finds the CHIRPS label a run would use: the outlet’s first CHIRPS series by byte order, and says when it can’t know', () => {
 		const v2 = { product: 'CHIRPS', productVersion: '2.0' };
-		expect(chirpsSourceOf([{ kind: 'rain_catchment_mm' }, { kind: 'rain_chirps_mm', ...v2 }, { kind: 'rain_chirps_mm', product: 'CHIRPS sat', productVersion: '3.0' }])).toEqual({
-			product: 'CHIRPS',
-			version: '2.0'
-		});
-		expect(chirpsSourceOf([{ kind: 'rain_chirps_mm', product: null, productVersion: null }])).toBeNull();
+		const sat = { product: 'CHIRPS sat', productVersion: '3.0' };
+		// Listed second, but "Grid" sorts before "chirps" by byte (issue #523); a unit's own CHIRPS (sited) is never the run's.
+		expect(
+			chirpsSourceOf([
+				{ kind: 'rain_catchment_mm', name: '' },
+				{ kind: 'rain_chirps_mm', name: 'A unit', siteNodeId: 'u1', ...sat },
+				{ kind: 'rain_chirps_mm', name: 'chirps', ...sat },
+				{ kind: 'rain_chirps_mm', name: 'Grid', ...v2 }
+			])
+		).toEqual({ product: 'CHIRPS', version: '2.0' });
+		expect(chirpsSourceOf([{ kind: 'rain_chirps_mm', name: '', product: null, productVersion: null }])).toBeNull();
 		expect(chirpsSourceOf([])).toBeNull();
 		expect(chirpsSourceOf(null)).toBeUndefined();
 		// A run's snapshot: absent provenance is a run from before it was recorded.
@@ -95,9 +101,11 @@ describe('runChirpsFactors (issue #51)', () => {
 describe('observed records’ source and unit (issue #66, 107_series_source.sql)', () => {
 	it('takes the first record of each kind at each site, as runs pick; undefined while the list is unknown', () => {
 		const list = [
-			{ kind: 'flow_logger_m3s', siteNodeId: 'g1', source: 'at a gauge', sourceUnit: null, sourceUnitFactor: null },
-			{ kind: 'flow_logger_m3s', siteNodeId: null, source: 'Logger 7', sourceUnit: 'l/s', sourceUnitFactor: 0.001 },
-			{ kind: 'flow_observed_m3s', siteNodeId: null, source: null, sourceUnit: null, sourceUnitFactor: null }
+			{ kind: 'flow_logger_m3s', name: 'g', siteNodeId: 'g1', source: 'at a gauge', sourceUnit: null, sourceUnitFactor: null },
+			// Listed first, but "Logger" sorts before "logger" by byte (issue #523): the run reads the one below.
+			{ kind: 'flow_logger_m3s', name: 'logger', siteNodeId: null, source: 'Logger 9', sourceUnit: null, sourceUnitFactor: null },
+			{ kind: 'flow_logger_m3s', name: 'Logger', siteNodeId: null, source: 'Logger 7', sourceUnit: 'l/s', sourceUnitFactor: 0.001 },
+			{ kind: 'flow_observed_m3s', name: '', siteNodeId: null, source: null, sourceUnit: null, sourceUnitFactor: null }
 		];
 		// A gauge's record (engine ≥ 1.41.0, a calibration site) is keyed by its node, as the model input keys it.
 		expect(observedOriginsOf(list)).toEqual({ 'flow_logger_m3s@g1': { source: 'at a gauge', unit: null, factor: null }, flow_observed_m3s: null, flow_logger_m3s: { source: 'Logger 7', unit: 'l/s', factor: 0.001 } });

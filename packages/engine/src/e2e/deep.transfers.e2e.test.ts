@@ -171,7 +171,7 @@ function replay(c: Case, out: ModelOutput): { bad: string | null; full: number; 
 	// A rule keeps the higher of its own minimum and its source dam's minimum operating level (§2.6, Q5).
 	const rules = c.input.model.transfers.map((tr) => {
 		const src = nodes.get(tr.fromNodeId)!;
-		return { id: tr.id, from: tr.fromNodeId, to: tr.toNodeId, limit: tr.dailyCapM3!, reserve: Math.max(tr.minStoragePct, src.damMinPct) * src.damCapacityM3, priority: tr.priority };
+		return { id: tr.id, from: tr.fromNodeId, to: tr.toNodeId!, limit: tr.dailyCapM3!, reserve: Math.max(tr.minStoragePct, src.damMinPct) * src.damCapacityM3, priority: tr.priority };
 	});
 	let full = 0;
 	let rounds = 0;
@@ -235,7 +235,7 @@ describe('deep: random dam-rule networks against the documented proportional rat
 				for (const tr of rules) {
 					const v = series(out, tr.fromNodeId, `transfer_rule@${tr.id}`)[t]!;
 					if (v >= tr.dailyCapM3! - 1e-6) continue;
-					const d = nodes.get(tr.toNodeId)!;
+					const d = nodes.get(tr.toNodeId!)!;
 					const rel = d.damReleaseRule === 'fixed' ? Math.max(0, Math.min(d.damReleaseM3Day![0]!, d.damOutletCapacityM3Day ?? Infinity)) : 0;
 					const roomLeft = d.damCapacityM3 - prev(d.id) + rel - series(out, d.id, 'transfer')[t]!;
 					const src = nodes.get(tr.fromNodeId)!;

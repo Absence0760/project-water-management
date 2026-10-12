@@ -4,7 +4,7 @@ import { blankEwrRuleTable, canonicalJson, type ScenarioOp } from '@water-manage
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { ZodError } from 'zod';
-import { checkOps, CreateScenarioBody, opsSha256, parsePatchOps, PatchScenarioBody, STATUS_MOVES } from './schema.js';
+import { AppealBody, checkOps, CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, ScenarioRunBody, STATUS_MOVES } from './schema.js';
 
 const a = crypto.randomUUID();
 const b = crypto.randomUUID();
@@ -169,5 +169,47 @@ describe('opsSha256', () => {
 		expect(opsSha256([op])).toBe(opsSha256([reordered]));
 		expect(opsSha256([op])).toBe(createHash('sha256').update(canonicalJson([op])).digest('hex'));
 		expect(opsSha256([])).not.toBe(opsSha256([op]));
+	});
+});
+
+describe('a licence’s granted terms and what followed the decision (227, 228)', () => {
+	const decision = { outcome: 'licence_issued', authority: 'CMA', decisionDate: '2026-09-30', reasonsReceived: true } as const;
+	const smaller = [{ op: 'node.set', nodeId: a, field: 'damCapacityM3', value: 150_000 }];
+
+	it('takes granted terms with a licence issued: changed ops (checked as any ops), or none (as applied for) with conditions', () => {
+		expect(DecideBody.parse(decision).granted).toBeUndefined();
+		expect(DecideBody.parse({ ...decision, granted: { conditions: '  Release 5 % in dry months.  ' } }).granted).toEqual({ conditions: 'Release 5 % in dry months.' });
+		expect(DecideBody.parse({ ...decision, granted: { ops: smaller } }).granted).toEqual({ ops: smaller, conditions: '' });
+		// The ops are checked as a scenario's: an id that isn't a UUID, an unknown key dropped.
+		const bad = DecideBody.safeParse({ ...decision, granted: { ops: [{ op: 'node.set', nodeId: 'farm-1', field: 'damCapacityM3', value: 1 }] } });
+		expect(bad.success).toBe(false);
+		expect(JSON.stringify((bad as { error: ZodError }).error.issues)).toContain('must be a UUID');
+		expect(DecideBody.safeParse({ ...decision, granted: { conditions: 'x', extra: 1 } }).success).toBe(false);
+		expect(DecideBody.safeParse({ ...decision, granted: { conditions: 'x'.repeat(4001) } }).success).toBe(false);
+	});
+
+	it('refuses granted terms with any other outcome', () => {
+		for (const outcome of ['licence_refused', 'application_rejected', 'not_considered'])
+			expect(DecideBody.safeParse({ ...decision, outcome, granted: { conditions: '' } }).success, outcome).toBe(false);
+		expect(DecideBody.safeParse({ ...decision, outcome: 'licence_refused' }).success).toBe(true);
+	});
+
+	it('takes an appeal event, with new terms on a variation and only there', () => {
+		const lodged = { kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-05' } as const;
+		expect(AppealBody.parse(lodged)).toEqual({ ...lodged, reference: '', note: '' });
+		expect(AppealBody.safeParse({ ...lodged, kind: 'varied' }).success).toBe(false);
+		expect(AppealBody.parse({ ...lodged, kind: 'varied', terms: { ops: smaller } }).terms).toEqual({ ops: smaller, conditions: '' });
+		expect(AppealBody.safeParse({ ...lodged, terms: { ops: smaller } }).success).toBe(false);
+		expect(AppealBody.safeParse({ ...lodged, kind: 'set_aside', terms: { ops: [] } }).success).toBe(false);
+		expect(AppealBody.safeParse({ ...lodged, kind: 'quashed' }).success).toBe(false);
+		expect(AppealBody.safeParse({ ...lodged, forum: 'minister' }).success).toBe(false);
+		expect(AppealBody.safeParse({ ...lodged, eventDate: '2026-02-30' }).success).toBe(false);
+		expect(AppealBody.safeParse({ ...lodged, by: 'someone' }).success).toBe(false);
+	});
+
+	it('runs the applied ops unless the licensed terms are asked for', () => {
+		expect(ScenarioRunBody.parse({}).terms).toBe('applied');
+		expect(ScenarioRunBody.parse({ terms: 'licensed' }).terms).toBe('licensed');
+		expect(ScenarioRunBody.safeParse({ terms: 'granted' }).success).toBe(false);
 	});
 });

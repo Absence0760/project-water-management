@@ -19,6 +19,24 @@ describe('viewerScenario', () => {
 		const plain = { ops: [node('n1')], origin: 'team', ownedNodeIds: [] } as unknown as ScenarioRow;
 		expect(viewerScenario(plain).scenario).toBe(plain);
 	});
+
+	it('leaves the same ops out of a licence’s granted terms and a variation’s (227, 228)', () => {
+		const terms = (ops: unknown[]) => ({ ops, opsSha256: '0'.repeat(64), opNames: [], conditions: '', asApplied: false });
+		const s = {
+			ops: [node('n1')],
+			origin: 'applicant',
+			ownedNodeIds: ['n1'],
+			grantedTerms: terms([node('n1'), set('n2')]),
+			decisionEvents: [{ id: 'e1', kind: 'lodged', terms: null }, { id: 'e2', kind: 'varied', terms: terms([set('n1'), set('n2'), set('n3')]) }]
+		} as unknown as ScenarioRow;
+		const v = viewerScenario(s).scenario;
+		expect(v.grantedTerms).toMatchObject({ ops: [node('n1')], withheldOps: 1 });
+		expect(v.decisionEvents[0]).toBe(s.decisionEvents[0]);
+		expect(v.decisionEvents[1]!.terms).toMatchObject({ ops: [set('n1')], withheldOps: 2 });
+		// The scenario's own ops had nothing to leave out.
+		expect(v.ops).toEqual([node('n1')]);
+		expect(v.withheldOps).toBeUndefined();
+	});
 });
 
 describe('checkWithout', () => {

@@ -293,7 +293,15 @@ beside the label, which a screen reader still hears ("River to dam (l/s)",
 the unit in a visually hidden span). Every field of that kind follows the
 pick, labels and words included ("Nov–Feb, up to 10 l/s"); the pump
 calculator's sum stays in what it computes, m³/day, with the picked unit in
-brackets ("2 × 9 m³/h × 24 h = 432 m³/day (5 l/s)."). It is
+brackets ("2 × 9 m³/h × 24 h = 432 m³/day (5 l/s)."). A scenario's
+**Add a change** form follows the same two picks for the same fields
+(River to dam and by month; each pump capacity, the borehole capacity and
+the pipe capacity), with the select beside the value's label
+(`scenarios/fields.ts` `flow`, issue #523 C2): the value is typed in the
+picked unit and the op stores m³/day, the change list and the **Now:** line
+read in the pick, and picking another unit with a value typed rewrites it
+in the new one (5 l/s becomes 432 m³/day, `rescaleText`), so a pick never
+changes what is added. It is
 display only: the model keeps each value in its stored unit (River to dam
 and pumps m³/day, a transfer m³/s), so a pick never changes a run, the
 History or another viewer's screen. The pick is kept in this browser
@@ -364,9 +372,9 @@ anchor. `e2e/tests/planted-areas-import.spec.ts` checks the page.
 | Allocations, Import registered volumes | CSV, 2 MB, 5 000 rows, 200 columns | the template's fewest columns, a take and a storage (`ALLOCATIONS_EXAMPLE`); **Download the CSV template** stays beside it | each row's line, in the preview |
 | Project, Invite farmers (CSV) | pasted rows, or .csv/.txt | `invite-farmers-example.csv`, built from the project's first two units (`inviteExampleCsv`) | each row's line, in the preview |
 | Map, Upload a GeoJSON file | .geojson/.json, 5 MB, 500 features | `example-features.geojson` (`map/example-features.geojson`): a boundary, a parcel, a river and a gauge, each with its `kind` | each feature's place (“Feature 3 …”) |
-| Load crop factors, a b023 workbook | .xlsx/.xlsm, the whole tool | – | the missing named ranges; the crops to check |
+| Load crop factors, a Water Balance Tool workbook | .xlsx/.xlsm, the whole tool | – | the missing named ranges; the crops to check |
 | Load crop factors, a hydrological-unit-based workbook | .xlsx/.xlsm with [Crop_Factors] | the table's shape (`NODE_FACTORS_EXAMPLE`) | each warning's cell |
-| Import a b023 workbook | .xlsm/.xlsx, 150 MB, a b02x build | – | the missing named ranges; sheet and cell |
+| Import a workbook | .xlsm/.xlsx, 150 MB, a build the importer reads | – | the missing named ranges; sheet and cell |
 | Import a project file | .json, 5 MB | – (*Download project (JSON)* writes one) | the line and column where the JSON stops (`jsonErrorAt`) |
 | Settings, the daily EWR at the outlet and each Reserve rule table (`settings/DrmFormatHelp.svelte`) | a DRM .rul or .tab (plain text, either line ending); a rule table also a CSV, which opens its paste dialog | `drm-example.rul` (m³/s), `drm-example-mcm.rul`, `drm-example.tab` (`drmFiles.ts drmExampleFiles`) and the CSV layouts (`ewr-example.csv`; `ewr-total-example.csv`, `ewr-low-flow-example.csv`) | the file's line (“line 13: the Jan row of the total Reserve block needs 10 numbers…”) |
 | Settings, API keys (**Expected format of a request**) | JSON to `/ingest/v1/series/merge` | the merge body (`INGEST_EXAMPLE_BODY`) | `details`, each problem's place in the body |
@@ -497,7 +505,10 @@ attribution control while HydroRIVERS reaches are drawn (the River network
 layer's credit, "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund,
 Inc. (2006-2022), used under license", linking to its section, and on any
 map, the farm map included, that draws a river added from a HydroRIVERS
-reach), and from the relief's credit ("licence notice", to the Copernicus
+reach), from a traced dam's credit ("Dam outline: traced from JRC Global
+Surface Water (Source: EC JRC/Google), modified", to the JRC section,
+issue #523 C6; [maps.md § Credits on the map](./maps.md#credits-on-the-map)),
+and from the relief's credit ("licence notice", to the Copernicus
 section). Its line under the title is the latest day a licence was read
 (`LICENCES_READ`, the latest of the credits' `read` dates, each one a date
 the Sources table records). Also linked from the landing page's footer
@@ -1402,7 +1413,8 @@ same way on every screen:
   view, and goes when the file, kind, name, mode or unit changes.
   A name that matches no series creates one; when the kind already has some,
   the form says what a run will make of it (runs read the first of a kind by
-  name): *Creates a second … series. Runs read the first by name, so this one
+  name, in byte order: capitals before lower case, `lib/series/pick.ts`,
+  [data-model.md § Which series a run reads](./data-model.md#which-series-a-run-reads)): *Creates a second … series. Runs read the first by name, so this one
   **will replace “Station 0021” in runs*** or *… so they keep reading “Station
   0021”* (`roles.ts` `newSeriesEffect`), and a name that differs from an
   existing one only in case or spacing gets *Did you mean “Station 0021”?*
@@ -1847,16 +1859,18 @@ for every workspace tab. Its own chunk.
   "33.6800° S, 21.3200° E" as the Map writes it, `searchedFrom`, **Show on map**),
   then a table: one row per registered dam within 1 km ("Capacity:
   Grootdraai Dam (Z100/01)", its distance, wall height, completion year,
-  river and farm under it) and one for the dam polygon's area ("Full-supply
+  river and farm under it), its last cell **Reference only** (#523 C1: a
+  unit's dam is its composite dam, all its farm dams, many unregistered, so
+  its volume is the user's to enter and a registered capacity is never
+  used; the intro says so), and one for the dam polygon's area ("Full-supply
   area: “Grootdraai dam”"), each with **Saved now** (the saved model's
   value, "Not set (estimated from capacity)" for no area), **Proposed**,
-  **Source** (the register's dataset and source line, or "The map: …") and
-  **Use**, or "Saved" when the model already holds it (to the nearest m³ or
-  m²), or "Nothing to use" for a register entry without a capacity. **Use**
-  asks first (`confirmWords`: the unit, the old and new value, the source;
-  "Use this capacity" / "Use this area"), saves that one value on the
-  server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
-  the register of dams (Z100/07). Run the model to see its effect.", its
+  **Source** (the register's dataset and source line, or "The map: …") and,
+  for the area, **Use**, or "Saved" when the model already holds it (to the
+  nearest m²). **Use** asks first (`confirmWords`: the unit, the old and new
+  value, the source; "Use this area"), saves that one value on the server,
+  shows a notice ("Upper farm’s full-supply area is now 39 012 m² (3.9 ha),
+  from the map. Run the model to see its effect.", its
   "Run the model" a link to Runs & results, where Run model is; the notice
   takes the keyboard, since the Use button is gone) and reloads the saved
   model and the proposals. The frame is shared with land cover and
@@ -1952,11 +1966,12 @@ it scrolls, and isn't fitted to the window.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
-  consultant or client in the same one. Others see the party as text. Each
-  editor and owner row has an **Acts for the responsible authority** tick
-  box for owners (163_licensing_authority; others see it as text when set):
-  those members record the authority's decisions and endorse a published
-  baseline. A change that would make an editor also part of an applying
+  consultant or client in the same one. Others see the party as text. A
+  member who acts for the responsible authority shows **Acts for the
+  responsible authority** under their role, and one proposed but not yet
+  confirmed *Proposed to act for the responsible authority (not confirmed)*
+  (229; managed in **Acts for the authority** below, which the list follows
+  after each change). A change that would make an editor also part of an applying
   party is refused with the server's `role_conflict` words. A member with a
   party has a **Specialist for this party** tick box for owners (167_signers;
   others see "Specialist for <party>"): the registered professional the
@@ -1964,8 +1979,28 @@ it scrolls, and isn't fitted to the window.
   applications. The roles, invitations, applying parties, specialists and
   acting for the authority are explained by the ⓘ tips (the heading's
   *roles*, the email box's *invitation*, the party box's *applying party*,
-  the authority box's *responsible authority*) and their glossary entries;
+  the authority card's *responsible authority*) and their glossary entries;
   an 8-line paragraph under **Add** repeated them until issue #521 § 13.
+- **Acts for the authority** (`project/AuthorityDelegatesPanel.svelte`,
+  229_authority_delegates, issue #523 G5; under **Responsible authority**,
+  every project reader): who acts for the responsible authority, which the
+  authority decides, not the host. **Confirmed** delegates first (name, a
+  *Confirmed* badge, who confirmed it and when: a member, *on the
+  authority's request (<reference>)* for the operator, or *marked by an
+  owner before the authority confirmed its own delegates* for a carried-over
+  flag), then **Proposed, not confirmed** (a *Proposed* badge, by whom and
+  when, and the line that a proposal grants nothing). A member acting for
+  the authority gets **Confirm** on each proposal and **Decline** / **Remove**
+  on every row; an owner gets **Withdraw** on a proposal only, never on a
+  confirmed delegate; anyone gets **Turn down** / **Step down** on their own
+  row. Each removal asks first (the confirm dialog) and then puts focus on
+  the card's heading. An owner or a member acting for the authority gets
+  **Propose someone** (or **Add someone**, confirmed at once, for the
+  authority) with a select of the editors and owners not yet listed,
+  directly or through the team (*, through the team*). With nobody confirmed
+  the card says so and, to an owner, that the authority asks the operator in
+  writing to confirm the first. A status line tells a screen reader what
+  each action did.
 - **Registration checks** (`project/RegistrationChecksPanel.svelte`, 167;
   editors and owners): the host's checks of members' registrations against
   the public SACNASP or ECSA register, newest first (member, registration
@@ -2062,9 +2097,12 @@ it scrolls, and isn't fitted to the window.
   how long the issued packs, nominated runs and the names they keep are kept
   ([evidence-pack.md § Retention](./evidence-pack.md#retention)). One line
   says where it stands (nothing to keep yet; the next review; the review is
-  due; granted and expiring, kept until; past its closing date, ask the
-  operator), as a warning when due. Owners record the outcome (Not recorded,
-  Granted with its expiry, Refused, Withdrawn), the date and why, and, while
+  due; issued and expiring, kept until; past its closing date, ask the
+  operator), as a warning when due. Owners record the outcome in the
+  authority's words since 233 (Not recorded, Licence issued with its expiry,
+  Licence refused, Application rejected (formal requirements), Not
+  considered: use already authorised, Application withdrawn), the date
+  (**Withdrawn on** for a withdrawal) and why, and, while
   no outcome is recorded and a review is set, **The record is still
   needed** (the next review five years on).
 - On the **Network** tab, a farm with linked farmers says how many in its
@@ -2089,7 +2127,7 @@ line).
 me?" on the first screen, then lists every project you can see. Its header
 has the title, one line with the count and the EWR status of the catchments
 in view ("50 catchments · EWR, last 30 days: 2 red, 1 amber, 18 green"),
-and **Import b023 workbook**, **Import project file (.json)** and **New
+and **Import workbook**, **Import project file (.json)** and **New
 project**. Both import buttons open the same dialog; the button only
 sets its wording and what the file picker offers, and the picked file's type
 decides how it's read, so a workbook picked from the JSON button still works.
@@ -2312,15 +2350,26 @@ Its preview and submit steps take an already-parsed document
 (`ParsedImport = { file, notes }`), so a second source only has to produce
 one; `ImportPreview`'s `extra` snippet takes whatever else that source shows.
 
-### Import a b023 workbook
+### Import a workbook
 
-**Import b023 workbook** (WP-1.31) turns a Water Balance Tool b023 `.xlsm` or
-`.xlsx` into a project with no Python. The workbook never leaves the browser:
+**Import workbook** (WP-1.31) turns a Water Balance Tool workbook (`.xlsm` or
+`.xlsx`) into a project with no Python. The workbook never leaves the browser:
 it's read in a Web Worker (`lib/spreadsheet/import/import.worker.ts`, loaded
 only now; [architecture.md § Code splitting](./architecture.md#code-splitting-frontend)),
 and only the extracted project is sent to `POST /projects/import`, like a
 `.json` file. The view logic is `import/workbookFile.ts`; the review's
 workbook part is `WorkbookReview.svelte`.
+
+The app never shows the client build's code name ("b023", "b02x"; issue
+#523): the button is *Import workbook*, a file is "a Water Balance Tool
+workbook", and the legacy runoff model is "the original workbook's".
+Stored values keep it (`source: 'b023-workbook'`, the `not-b023` failure
+code), and an import record stored before the rename shows its importer as
+the workbook importer (`importerLabel`). `lib/noB023.test.ts` fails on the
+name in any string a user can meet: template text, attributes and script
+strings of every component, and the string literals of the frontend, backend
+and engine modules (comments, imports, type literals, a help entry's
+`source` and a short list of stored ids aside).
 
 1. **Pick** the workbook (up to 150 MB).
 2. **Reading:** a progress bar and "Reading sheet *Flow data* (7 of 9)…" per
@@ -2328,7 +2377,7 @@ workbook part is `WorkbookReview.svelte`.
    **Cancel**, which stops the worker at once and returns to the picker.
    Failures come back here, each with its own headline and the importer's
    message:
-   - *not a b023 workbook*: the named ranges it lacks (the first eight, then
+   - *not a Water Balance Tool workbook*: the named ranges it lacks (the first eight, then
      "and N more");
    - *unsupported build* (AppSettings `zAppVer` isn't b02x);
    - *too large* (the file, the sheet count, or the parts it reads unpacking
@@ -2866,7 +2915,13 @@ itself.
   **Supply** (with Water for the crops and the hands-off flow), **Irrigation**,
   **Demand objects** (after the supply their "Water for" names), **Combined
   boreholes (one capacity)** and **Individual boreholes** side by side,
-  **Land cover**, and last **Bed losses in the reach below** (engine ≥
+  **Land cover**, **Base-flow loss and gain** (engine 1.86.0, issue #523 B1,
+  [model.md §2.6b](./model.md); units only, bar label "Base flow"): the m³/day
+  the unit's own runoff loses to groundwater (out of the catchment, at most
+  the day's runoff) and gains from outside it, both 0 by default, under a
+  note saying where the water goes and that neither is the unit's use; its
+  line reads "None" or "loses 1 500 m³/day · gains 20 m³/day". And last
+  **Bed losses in the reach below** (engine ≥
   1.75.0, [model.md §2.6b](./model.md); on every kind of node, gauges and
   other water users too): the share of the flow lost (up to 100 %: with a daily maximum, WRSM's bed loss; over half without one, the run warns) and the
   most lost in a day, under a note saying where the water goes. On the outlet
@@ -2978,13 +3033,21 @@ itself.
   *Number of pumps* × *m³/h per pump* × 24 fills it, as on a unit's Supply
   fields (only the m³/day is stored), and the note under it says what the
   value means (for a priority user, that the units upstream pass no more than
-  it for the user). The one-line summary adds "pump N m³/day" when set. A
+  it for the user). The one-line summary adds "pump N m³/day" when set.
+  **Fixed restriction** (%, engine 1.86.0, issue #523 B3, [model.md
+  §2.7c](./model.md)), beside Share returned on a Priority user only: blank
+  is uncurtailed (stored null; 0 stores null too); a % is the share of its
+  demand it gives up in a curtailment and under the drought restriction rule,
+  and the note under it says so, with no basic-needs floor. Switching the
+  user to Non-priority clears it (the API refuses it there). The one-line
+  summary adds "N % fixed restriction". A
   user's Supply group (a stale supply rule left from a farm) no longer shows
   the river pump field: the user's own is under "Other water user". The one-node form shows the same fields
   under "Other water user" instead of the farm groups. The schematic draws a
   user as an open diamond (legend "Other water user"). The client check
   mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
-  return share in 0–100 %.
+  return share in 0–100 %, a fixed restriction in 0–100 % and on a Priority
+  user only.
 - **Combined boreholes (one capacity)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
   one-node form only (`detailOnly`), on farms and other users, just above
   Individual boreholes: a line says to use it when only the total is known,
@@ -3045,9 +3108,15 @@ itself.
   dam, river when low / run of river, engine `SUPPLY_RULE_LABEL`) with a line
   on what the chosen rule does. Every rule but dam only shows the river pump:
   **Number of pumps** × **m³/h per pump**, which fills **River pump capacity**
-  (m³/day, pumps × m³/h × 24, with the sum shown under it), and the capacity
-  itself, which can be typed straight in (typing it clears the calculator).
-  Only the m³/day is stored, so a saved capacity reloads into the m³/day field
+  (pumps × m³/h × 24, with the sum shown under it), and the capacity
+  itself, which can be typed straight in (typing it clears the calculator),
+  in **m³/s**, **l/s** or **m³/day**, picked beside its label (the pumps'
+  pick, [§ Flow units](#flow-units); issue #523 C2, #90 *Run-of-river
+  units*): 5 l/s is stored as 432 m³/day. Every pump capacity takes the same
+  three units: the unit's river pump, the crops' own, an other water user's,
+  a demand object's river abstraction, and River to dam (its own pick,
+  m³/s until changed); the scenario form's **Add a change** offers them too.
+  Only the m³/day is stored, so a saved capacity reloads into the field
   with the calculator empty, whatever the pumps were; that way a capacity that
   isn't a whole pumps × rate product (an imported or licensed figure) shows as
   it is. Blank is no limit, and the note says the run warns. **Switch to river
@@ -3098,8 +3167,9 @@ itself.
   pump calculator, capacity and pool, each label naming the demand (**Number
   of pumps for the crops**, **River pump capacity for the crops** (m³/day,
   blank = no limit, which the run warns about), **Pool at the pump for the
-  crops** (m³, blank = none; its hint says it starts full and its surface
-  is estimated from the capacity)), so they read apart from the unit's own
+  crops** (m³, blank = none; its hint says it starts full and holds up to
+  its capacity with no rain or evaporation, engine ≥ 1.86.0, issue #523
+  B2)), so they read apart from the unit's own
   pump in the same group; each has its history line. The pump and pool are
   kept when the source goes back to the unit's supply, unused. The unit's
   pump, an other water user's and each abstraction's share one
@@ -3450,6 +3520,31 @@ map" card) stays the schematic; this is the geography.
   a basemap configured a small "No basemap configured (docs/maps.md)" under
   Layers (until 2026-10-02 a full-width line above the map: it is an
   operator's matter, and a deployed site has a basemap).
+- **Search** (`MapSearch.svelte`, `mapSearch.ts`; issue #523 C5; anyone who
+  sees the Map, once the map is drawn): a search box over the map's top
+  edge, right of the tools and clear of the zoom buttons, so the map keeps
+  the window (a row above the map until 2026-10-12, which pushed the map
+  down the window; `map-layout.spec.ts`) ("Find a town, farm, river, gauge, dam
+  or quaternary", its label "Find a place on the map", a `role="search"`
+  form with **Find**). Its live line and the places' credit are small chips
+  under it, and the picked name and the tool strip start under those
+  (`--map-inset-top`); the list of matches covers what's under it while
+  open. On a narrow map (46rem or less, a phone) Layers moves down under the
+  search's lines too, and the picked name stops short of it.
+  Enter or Find lists the matches under it: the map's layers first (gauging
+  stations, registered dams, quaternaries), then places from the gazetteer,
+  each a button with its name over what and where ("Gauging station Z1H002 ·
+  Wilgerivier", "Farm · Western Cape", "(sample)" for invented data). One
+  match moves the map at once; picking one moves it and closes the list
+  (Escape closes it too, focus back in the box). A live line says how many
+  matched, that more did, nothing found (with what to try), or "Showing … on
+  the map."; whenever the answer holds places, listed or a single one
+  picked at once, their credit shows under the box ("Place names: GeoNames
+  (geonames.org), CC BY 4.0", linking to the Data sources page), and stays
+  after a pick until the next search.
+  The view moves, nothing else; the map's centre is then the match, so
+  Delineate or Place a point with Enter at the crosshair lands on it. The
+  rules: [maps.md § Search](./maps.md#search).
 - **What an action did** (an upload, a placed point, a saved drawing, a
   split, a download, an area into the model): a toast over the page's foot,
   centred in the content beside the sidebar and above the save bar while it
@@ -3544,10 +3639,11 @@ map" card) stays the schematic; this is the geography.
   nodes of fitting kinds for editors, else the node's name), **Siting** for
   a dam drawn as its outline (194: a select of *Not said (from its
   outline)*, *On the river* and *Off-channel (filled by a pump or a
-  furrow)* for editors, saved on change, with a line saying Start and Divide
-  take only an off-channel dam's own catchment into it, the river passing it
-  by (their review cards then offer the dam's *Upstream inflow to dam* and
-  its runoff share as ticks); the words for a viewer; not
+  furrow)* for editors, saved on change, with a line "For your records, and
+  for a water user placed at the dam in Start or Divide; unsaid, its outline
+  decides. Its unit’s composite dam takes the shares of upstream inflow and
+  runoff you enter on the unit." (`start-16`: Start and Divide no longer
+  propose a dam's shares); the words for a viewer; not
   asked of a point dam; maps.md § Start from the map), **Unit’s
   area** for a parcel or "other" polygon that stands for a hydrological unit
   (its area *typed*, **From the map** this feature, or this feature's
@@ -3592,38 +3688,50 @@ map" card) stays the schematic; this is the geography.
   **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
   boundary**, **Upload a GeoJSON file**; each closes the sheet into that
   tool, and the sheet opens again once it saves; with a gauge on the map
-  and no boundary, "go on to the points". **The points**: each dam, other
-  point and gauge with a select (A unit with a dam / A unit at an
-  abstraction point / Another water user (no land) / Not in the model; a
-  gauge: A gauge in the network (no land), the default, / Not in the model),
-  **Place a point** (into the drawing mode, back after the save), the
-  outlet (The boundary’s own outlet, or a gauge), the count ("1 unit, plus
-  the rest of the catchment."), and **Propose the network**. **The
-  proposal** (drawn on the map piece by piece: each unit's piece tinted
-  with its number on it, the rest R): the catchment's
-  area, the warnings and dropped points, the outflow gauge's name, then one
-  card a unit: its number badge (the piece's number and tint, so the cards
-  are the map's key; the card with the focus or the pointer lights its
-  piece), its name, a gauge's "It measures … of the catchment above it",
-  and a tick for each value proposed (Area … saved
-  as its parcel; Drains into …; All of its own runoff reaches the dam, or
-  for a dam marked off-channel on the map "2.5 % of its runoff reaches the
-  dam: the 0.10 km² draining to the dam’s own outflow, of the unit’s …"
-  and a tick for "Upstream inflow to dam 0 %: off-channel, …" (100 % for
-  one marked on the river), 194),
-  every tick off at first; under a ticked area whose piece holds pans, a
+  and no boundary, "go on to the points". **The points** (units follow the
+  user's boundaries, `start-16`, #523 C1; the lead says a dam or an
+  abstraction point is never a unit of its own): each unit's boundary (an
+  *other* area or a parcel, "(area)": A hydrological unit (this is its
+  boundary), the default, / Not in the model), dam (Part of its unit’s
+  composite dam, the default, / Another water user (no land) / Not in the
+  model), other point (Its unit’s river pump, the default, / Another water
+  user / Not in the model) and gauge (A gauge in the network (no land), the
+  default, / Not in the model) with a select, **Place a point** (into the
+  drawing mode, back after the save), the outlet (The boundary’s own
+  outlet, or a gauge), the count (`countText`: "2 units, plus the rest of
+  the catchment; 1 dam or pump as part of the unit around it."), and
+  **Propose the network**. **The proposal** (drawn on the map piece by
+  piece: each unit's boundary tinted with its number on it, the rest R when
+  it has an outline): the catchment's area, the warnings and dropped
+  points, the outflow gauge's name, then one card a unit: its number badge
+  (the piece's number and tint, so the cards are the map's key; the card
+  with the focus or the pointer lights its piece), its name ("· its
+  boundary: “Upper unit”"), a gauge's "It measures … of the catchment
+  above it", a tick for each value proposed (Area …: its boundary on the
+  map (the elevation model gives … draining to its outflow); Drains into
+  …), "Its composite dam: Valley dam. Its volume and the area draining to
+  it are yours to enter on the unit; the register of dams is a reference
+  only." and "Its river pump: …. Its capacity is yours to enter on the
+  unit." (no share of runoff or upstream inflow is offered); a plan from
+  before `start-16` says to discard it and propose again, Apply disabled;
+  every tick off at first; under a ticked area whose piece holds pans (the
+  rest's outlet piece, with no units' boundaries), a
   **Which area** radio group (`AreaBasisChoice.svelte`, 195): **Gross, …
   (what drains into pans included)**, checked, or **Effective, … (without
   the … draining into pans)**, with "WR2012’s quaternary areas are gross;
   take the effective area if you model the pans as not contributing runoff."
   (unticking the area hides it and drops the choice from what is sent); the rest of the catchment as a unit (a tick,
-  then its name and area, and the same choice); **Tick every value**; **How it was made**
+  then its name and area, and the same choice; beside the units'
+  boundaries "Area …: the catchment less the units’ boundaries (no outline
+  of its own)", and "In no unit’s boundary: …" for the dams and pumps it
+  takes); **Tick every value**; **How it was made**
   (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
   the reason by the names, while a name is empty or used twice),
-  which asks first ("The empty model gets 3 hydrological units, with 2 areas (each saved
-  as its unit’s parcel; Valley dam without what drains into pans) … It is
+  which asks first ("The empty model gets 4 hydrological units, with 3 areas (a unit’s is
+  its boundary on the map) and 2 drains-into from the proposal. Each unit’s
+  dams and pump are linked to it, their sizes yours to enter. … It is
   saved now as one change in History."). **Data and the first run**: links
-  to rain from the boundary, observed flow, evaporation (the A-pan the dams and pools lose, to Settings' Demand group), the dams' capacities, cultivated
+  to rain from the boundary, observed flow, evaporation (the A-pan the dams lose, to Settings' Demand group), each unit’s composite dam (its volume and the area draining to it yours to enter; the register a reference only), cultivated
   area, the Network and **Run the model**. With nodes typed in, the sheet
   says the model isn't started from the map and points to Divide the model.
   With the sheet closed, a piece (or its number) under the pointer shows
@@ -3631,8 +3739,9 @@ map" card) stays the schematic; this is the geography.
   the sheet at its card, focused, and a line over the map ("A proposed
   model is drawn on the map piece by piece, each piece tinted and numbered
   as its card in the sheet (R: the rest of the catchment) …" with **Review
-  it**) says what the pieces are. The points step counts gauges apart ("1
-  unit and 1 gauge, plus the rest of the catchment.").
+  it**) says what the pieces are. The points step counts gauges and water
+  users apart ("1 unit, 1 gauge, plus the rest of the catchment; 1 dam or
+  pump as part of the unit around it.").
   **Where each point went** (`start-15`, issue #472; `placement.ts`):
   the outlet's line under the warnings ("The outlet: On the nearest
   terrain channel, 42 m from the point."), and each card's ("On the
@@ -3652,10 +3761,13 @@ map" card) stays the schematic; this is the geography.
   header's **Divide the model** (an open division is reviewed from the line
   over the map) opens a side
   sheet (`divide=1`, "Divide the model from the map"), read from the
-  server: **the points**: each dam, other point and gauge with a select
-  (Not in the division / the nodes its kind may stand for / A new gauge
-  node for an unlinked gauge), a linked point on its node by default, "Two
-  points stand for …" refusing a node twice, **Place a point**, the outlet,
+  server: **the points**: each unit's boundary (an *other* area or a parcel,
+  "(area)"), dam, other point and gauge with a select (Not in the division
+  / the nodes its kind may stand for: an area only a unit, a dam or other
+  point only an other water user (or a gauge), since a dam or abstraction
+  point never divides, `start-16` / A new gauge node for an unlinked
+  gauge), a linked feature on its node by default, "Two points stand for
+  …" refusing a node twice, **Place a point**, the outlet,
   the count ("3 points in the division."), **Propose the division**; **the
   proposal**: the warnings (dropped points, "No point stands for …: it keeps
   its values", and, as the ticks and the rest's choice change, "After Apply
@@ -3665,15 +3777,21 @@ map" card) stays the schematic; this is the geography.
   (`role="alert"`, Apply disabled while it stands), one card a point with
   its number badge, the node's name (or "A new gauge" with **Add it to the
   model as a gauge node** and its name), and a tick for each value with the
-  value now beside it (Area … Now: 12.00 km², typed; Drains into … Now: …;
-  All of its own runoff reaches the dam. Now: 50 %; a marked dam's share
-  and Upstream inflow to dam as in Start, each with Now), "(the same)" when
-  equal; under a ticked area whose piece holds pans, Start's **Which area**
-  choice; the rest of the catchment ("Its area goes to": Nobody / a unit /
-  A new unit, with its name, and the choice when it holds pans); **How it was made**; **Discard** and **Apply
-  the ticked values** (asks first: "The model takes 2 areas (each saved as
-  its unit’s parcel; 1 without what drains into pans), 3 drains-into
-  … Every value not ticked stays as it is."). Without a DEM the sheet says
+  value now beside it (Area …, its boundary on the map (the elevation model
+  gives … draining to its outflow). Now: 12.00 km², typed; Drains into …
+  Now: …), "(the same)" when equal, then "Joins its composite dam: …" and
+  "Joins its river pump: …" for the unlinked dams and pumps inside the
+  unit's boundary (`start-16`; no share of runoff or upstream inflow is
+  offered); the rest of the catchment ("Its area goes to": Nobody / a unit
+  / A new unit, with its name, and Start's **Which area** choice when it
+  holds pans; beside the units' boundaries "… the catchment less them, with
+  no outline of its own: its area goes in as typed."); a plan from before
+  `start-16` says to discard it and propose again, Apply disabled; **How it
+  was made**; **Discard** and **Apply the ticked values** (asks first: "The
+  model takes 2 areas (a unit’s is its boundary on the map) and 2
+  drains-into, and 1 new gauge. The unlinked dams and pumps inside each
+  unit’s boundary are linked to it. Every value not ticked stays as it
+  is."). Without a DEM the sheet says
   dividing needs one; with no single outflow, that the Network must set it.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
@@ -3758,11 +3876,12 @@ map" card) stays the schematic; this is the geography.
   2026-10-03): accepting a boundary saves a map feature only, so the
   catchment boundary's card (the side column's Details) says so under its
   facts in a tinted box: "This boundary is on the map, not in the model
-  yet. Divide the model splits it into each unit’s area at your dams,
-  abstraction points and gauges, for you to tick." with **Divide the model**
-  (`divide=1`; **Review the proposed division** while one waits), or for an
-  empty model "… Start from the map proposes the model’s units from it: …"
-  with **Start from the map** (`start=1`). It goes once a unit has taken its
+  yet. Divide the model gives each unit its boundary’s area and order, for
+  you to tick." with **Divide the model** (`divide=1`; **Review the
+  proposed division** while one waits), or for an empty model "… Start from
+  the map proposes the model’s units from it: one for each unit’s boundary
+  you put on the map, with its area and order, for you to tick." with
+  **Start from the map** (`start=1`). It goes once a unit has taken its
   area from the map; without a DEM (no Divide) it doesn't show.
 - **The elevation model's channels** (while Delineate or Sub-catchments is
   on; issue #374, [maps.md § The elevation model's channels](./maps.md#the-elevation-models-channels)):
@@ -4548,8 +4667,11 @@ saves the catchment's model, and override mode there edits the scenario's
   the sources and method in [maps.md § Cultivated area from land
   cover](./maps.md#cultivated-area-from-land-cover)): under the areas, for a
   hydrological unit (not another user) that is saved in the model (an
-  unsaved one says "Save the model to see …"). It is in the drawer, not on
-  the Crops page, because the page is sized to the window and a panel below
+  unsaved one says "Save the model to see …"). Under its intro a warning
+  (`cropland-caution`) labels the figure: "This is cultivated land mapped
+  from satellite, including dryland and fallow fields, not the irrigated
+  area: check it before you use it." (#90 Land-cover proposals). It is in
+  the drawer, not on the Crops page, because the page is sized to the window and a panel below
   it would sit out of sight; every page that names a unit opens it. A table
   lists each farm parcel on the map linked to the unit, largest cultivated
   area first, with **Cultivated** ("51.7 ha of 103 ha") and **Share**, and
@@ -4565,8 +4687,9 @@ saves the catchment's model, and override mode there edits the scenario's
   2026-10-01", or "Typed over since: …" once the area no longer matches),
   and **Use**, or "Saved" when the crop already holds the chosen area.
   **Use** asks first (`confirmWords`: the crop, the unit, the old and new
-  area, the dataset, and that the land cover doesn't say what grows there or
-  whether it is irrigated; "Use this area"), saves that one value on the
+  area, the dataset, the same satellite-cropland warning, that the land
+  cover doesn't say what grows there, and that the area is used as it
+  stands, with no discount; "Use this area"), saves that one value on the
   server, shows a notice ("Orchard’s planted area on Upper farm is now
   51.73 ha, from land cover. Run the model to see its effect.", which takes
   the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the
@@ -4842,11 +4965,13 @@ node table above).
 The rules under the section header, which counts them ("3
 transfer rules · 2 active", `workspace/context.ts`) and carries **Show on the
 Network** (the Network diagram, where transfers are dashed arrows; not the
-Map) and **+ Add transfer** (editors, with at least two hydrological units).
+Map) and **+ Add transfer** (editors, with two hydrological units, or one
+with a dam, whose only rule is one out of the catchment, engine ≥ 1.86.0).
 A new rule starts after the existing ones (the highest priority + 1), between
 the first two hydrological units (never the outflow gauge first in the
-list), and the cursor lands in its **From**, scrolled into view. With fewer
-than two units and no rule, the card says transfers need two and links the
+list), or with one unit from its dam to *Outside the catchment*, and the
+cursor lands in its **From**, scrolled into view. With neither and no rule,
+the card says transfers need two units or one with a dam and links the
 Network; a viewer is told the catchment has none instead.
 
 **Transfer rules** is one card per rule (`transfers/TransfersTab.svelte`),
@@ -4855,7 +4980,15 @@ number ("Transfer N", a heading, with an **off** pill when the rule is
 switched off), **From → To** (two selects listing hydrological units only: a
 gauge or an other water user can't take part, and a saved end that isn't a
 unit shows as "<name> (not a hydrological unit)" and is a problem until
-changed), an **Enabled** switch (a checkbox with `role="switch"`, its word
+changed; **To** also offers **Outside the catchment**, engine ≥ 1.86.0,
+issue #523 B5, [model.md §2.6](./model.md#26-transfers-transfers): the water
+leaves the model, and the rule still keeps its months, rates, priority and
+the source dam's minimum storage. It isn't offered to a river off-take, and
+**Takes from**'s *The river* is disabled on a rule out of the catchment,
+which a river off-take can't be. The **To** tip says when to use which: a
+transfer for pumping out while a dam is above a level, a demand object piped
+out for a draw on a schedule, such as a town's), an **Enabled** switch (a
+checkbox with `role="switch"`, its word
 beside it and part of the tap target; the off state is said in the heading)
 and **Remove** (named "Remove transfer N (From → To)"). Remove asks first
 (the app's confirm dialog) when the rule has anything set besides its ends
@@ -5213,7 +5346,7 @@ with the table the data needs).
 Each series shows its role in the model, its last date and age, its period,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
-their kind by name) are marked. The role badge carries its reason in its own
+their kind by name, in byte order as runs pick: `lib/series/pick.ts`) are marked. The role badge carries its reason in its own
 words, and the kind's role is an ⓘ `HelpTip` beside it (`series.<kind>`); a
 gauge record adds a line saying where it is checked and scored
 (`roles.ts` `roleBadge`). None of it is a hover title any more, which
@@ -6634,10 +6767,11 @@ two.
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows; the total flow is the
   catchment's hydrologist's choice, 2026-10-10). Under the low-flow choice a
-  warning badge, **Filter settings unconfirmed** (`data-testid
-  "baseflow-filter-unconfirmed"`), says the base-flow filter's passes and α
-  aren't yet checked against the Desktop Reserve Model's method (issue #507
-  item 6, model.md §2.9d). Each has a help tip; scenarios can change both
+  line (`data-testid "baseflow-filter-method"`) names the filter: one pass,
+  α 0.995, as Hughes, Hannart & Watkins (2003) separate daily flows for the
+  Desktop Reserve Model's study. It replaced the **Filter settings
+  unconfirmed** badge once the paper was checked (issue #523 D3, engine
+  1.87.0, model.md §2.9d). Each has a help tip; scenarios can change both
   with `settings.set`.
 - **Drought restrictions** (`#set-restrict`, engine ≥ 1.54.0, WP-3.8): the
   model's restriction rule, off by default; see
@@ -7549,7 +7683,9 @@ read it before.
      counted). Its caption counts the reaches; without bed losses there is no
      fifth line and no text about them. A how-to-read line heads it: simulated should track observed;
      natural sits above simulated by roughly the use upstream (plus the bed
-     losses in the reaches above the gauge, on such a run); where demand
+     losses in the reaches above the gauge, on such a run; a unit's base-flow
+     loss or gain, engine 1.86.0, isn't drawn: *Natural* is the runoff before
+     it, so on a run with one, natural and simulated also differ by it); where demand
      rises and simulated drops below natural, abstraction is biting. A
      forecast run's lines stop the day before its forecast starts
      (`beforeForecastFlows`, engine `beforeForecast`, as the flow duration
@@ -7927,8 +8063,10 @@ read it before.
   stage; the table has one row per farm (a bar, the whole %, the m³/day), an
   **All hydrological units** total row, then **Other water users (outside
   the equitable share)**: each user its own row with a *priority, not
-  curtailed* or *non-priority, curtailed* badge, and at stage 2 what it takes
-  after its supply cut (non-priority) or all it takes (priority), with an **All
+  curtailed*, *priority, fixed N %* (engine 1.86.0, a fixed restriction %)
+  or *non-priority, curtailed* badge, and at stage 2 what it takes
+  after its supply cut (non-priority, or priority with a fixed %, noted
+  "N % fixed restriction, no basic-needs floor") or all it takes (priority), with an **All
   other users** total. Each farm's equitable share volume stays in the
   per-farm table below.
   Every figure is the engine's `CurtailmentSummary`; nothing is recomputed.
@@ -7982,7 +8120,9 @@ read it before.
   **Other water users** table follows (engine ≥ 0.22.0, §2.7c): demand, taken,
   the % of demand supplied (flagged below 95 %, as the units are; issue
   #137), returned, EWR charge, the supply cut, and the charge left standing, with
-  "Non-priority (curtailed)" or "Priority (not curtailed)"; they are not in the
+  "Non-priority (curtailed)", "Priority (not curtailed)" or, for a Priority
+  user with a fixed restriction % (engine 1.86.0), "Priority (N %: fixed %, no
+  basic-needs floor)", cut by at most that share of its demand; they are not in the
   equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window (all three
@@ -8130,6 +8270,10 @@ read it before.
   a select (`uncertainty/BandFdcChart.svelte`, log flow axis; the chart's
   title says at how many exceedance points the median falls below the EWR).
   With fewer than 30 sets kept no percentiles are shown, only the note why.
+  On a run that caps use at, or scales demand to, the registered volumes, a
+  viewer kept from them reads EWR counts and rates only, and a note says so
+  (`uncertainty-withheld`, from the ensemble's `verdictsOnlyRuns`), so its
+  "–" isn't read as a gated band (issue #523 I).
   An ensemble run on a newer engine than the run says so. **Reproduce in
   this browser** re-runs the stored ensemble from its seed and options and
   reports "Reproduced: the same … members, verdicts, outputs and coverage" or
@@ -8201,7 +8345,7 @@ read it before.
   the badge and the evidence line (a link to the section). Above the results,
   a warning appears when a run made **after** the nominated run uses a
   **different runoff model** ("1 run made after the nominated evidence run “A”
-  uses a different runoff model (legacy (b023 workbook), not GR4J). The
+  uses a different runoff model (legacy (original workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. Since engine 1.0.0 every new run is GR4J, so
   only a stored legacy run made after the nomination can raise it.
@@ -8746,7 +8890,11 @@ see (WP-2.3); every place it shows says so.
   restricted (its own under *Each unit's own dam*); the rule line counts
   the reviews after a day the EWR trigger's site failed. Both lists
   fold after ten (*Show all N water years* / *hydrological units*). The
-  note says the cut shows as a shortfall.
+  note says the cut shows as a shortfall. With a Priority user's fixed
+  restriction % (engine 1.86.0) a last table lists each such user, the most
+  cut first: its %, demand, demand after the restriction, cut, mean cut on
+  restricted days, taken and days restricted, with a note that there is no
+  basic-needs floor; the summary CSV's block gains the same rows.
 - **River & reserve → Seasonal outlook → Review triggers**: under the
   trigger table, the table *As a drought restriction rule* in words
   (`outlook/triggers.ts` `triggerRuleView`, the engine's
@@ -9419,14 +9567,20 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   met, and a table of each EWR site's months met, rate and longest run not
   met, baseline beside theirs); **The catchment** (mean natural and outlet
   flow and a chart of the outlet's flow and EWR, baseline against theirs;
-  below five farm holders natural flow and the EWR only, and why the outlet
-  flow isn't shown); **Your hydrological units**
+  below five farm holders, or when one or two of them take most of the
+  water (the dominance rule, 232), natural flow and the EWR only, and why
+  the outlet flow isn't shown; for a run with a baseline assumption the
+  baseline's column only, theirs "Not shown", and a note why; and, whenever
+  the published baseline has one, the **DWS gauge record** at the outlet,
+  with its station code and a chart, at any holder count and even with a
+  baseline assumption, since DWS publishes it, #523 G8); **Your hydrological units**
   (demand, supply, share met, the dam on the last day, baseline → theirs,
   and what ran: crops with their areas and boreholes; a unit their changes
   add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:
-  supply −4 %", or "No other farm or water user lies downstream of your
-  units"). A run with a baseline assumption shows a note and the Reserve
-  only. Before a run: "Not run yet". Under it, **Yield under this
+  share of demand met −2 pp", whole percentage points as in their evidence
+  pack, or "No other farm or water user lies downstream of your units"). A
+  run with a baseline assumption shows a note, the Reserve and the
+  catchment's baseline column only. Before a run: "Not run yet". Under it, **Yield under this
   scenario** offers only their own units and the ones their changes add;
   the applicant (not the people they share it with) queues a yield and
   follows it on the job list, which shows them their own yield jobs only.
@@ -9449,6 +9603,39 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   applicant never does. An assessor also reads, in an info box, each rule
   the applicant reads without the other units' figures in its own words
   (`check.assessorProblems`, 164).
+- **Granted terms** (227_licence_terms, issue #523 G3): choosing **Licence
+  issued** in **Record the authority's decision** opens **Granted terms**
+  (`LicenceTermsEditor.svelte`): **As applied for**, or **With changes**,
+  which starts from the changes applied for as a list (remove what wasn't
+  granted) with the **Add a change** form under it (add the licence's own: a
+  smaller volume, a release rule), **Start again from the changes applied
+  for**, and **Licence conditions** in words. The hint says these terms, not
+  the changes applied for, count among the other applications in later
+  cumulative assessments. The note under it is now the authority's
+  reasons only. Once decided, the decision block shows **Granted terms**
+  (`LicenceTermsView.svelte`: "As applied for", or the changes in words,
+  and the conditions), a line saying where the licence stands (counting on
+  its granted terms, or a variation's, set aside, or no licence; and, with
+  an appeal open, "nothing changes until it is decided"; `licence.ts`
+  `licenceLine`), and for an assessor while a licence is in force **Run the
+  licensed terms** (the run the evidence report's other applications read).
+- **Appeals** (228_decision_events, #523 G4), under the decision: the
+  events in order ("Appeal lodged: Water Tribunal, 2 Oct 2026", its
+  reference, who recorded it and when, its note, a variation's terms), or
+  "None recorded.". A member acting for the authority gets **Record an
+  appeal…** (or, while one is open, **Record the appeal's outcome…**),
+  which opens **Record what followed the decision**: what happened (only
+  the kinds the sequence allows: an appeal lodged, or the open appeal
+  upheld, set aside or varied), where (the Water Tribunal or a court; fixed
+  to the open appeal's forum for its outcome), the date (on or after the
+  previous event's, said under it), a case reference, the new terms for a
+  variation (the same editor as the decision's, starting from the terms in
+  force) and a note; a hint under the choice says what it does to the
+  licence ("Lodging an appeal changes nothing until it is decided …").
+  The applicant and everyone who reads the application see the events; only
+  the authority's members record them. `applications.spec.ts` decides with
+  changed terms, lodges an appeal and records it set aside, then reads it
+  all as the applicant.
 - **Written objections** (166_public_participation): the warning that a
   comment in the app is not a written objection, and the notice's
   **Address** and **Closing date** ("Not given" until set). The owner edits
@@ -9477,7 +9664,12 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   **Ask the assessors why**, which sends the line, those changes and the
   rule's kind (never anything hidden) to the assessors. The panel says what
   the assessors see (the question, the changes it names and the
-  application's name, not the rest of the draft). Once asked: "Asked
+  application's name, not the rest of the draft), and (issue #523 G7) that
+  this is the app's check that the model can run the changes, not a refusal
+  of a water use licence under section 42 of the National Water Act, that
+  they can still apply to DWS through its own channels (e-WULAAS), and that
+  the assessors keep the question and answer with the application for any
+  written reasons (`ask-in-app-check`). Once asked: "Asked
   <date>; waiting for the assessors' answer", then the answer and **Ask
   again**. Questions about lines the check no longer shows sit under
   **Earlier questions**.
@@ -9551,7 +9743,8 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   **Send the answer** (once; an answer goes to the application's parties,
   so the note above the list says to write only what they may know of
   other water users). A question may be about a draft, which stays the
-  applicant's.
+  applicant's; a deleted draft's questions stay, marked "(draft deleted)"
+  (234, issue #523 G7).
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
@@ -9586,7 +9779,13 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   separate changes; its plain-words reading is the cell's title and is read
   out), with a one-paragraph explanation of the interaction above it and
   **Download CSV** (the raw numbers, names guarded against CSV injection)
-  below.
+  below. Between them, when there are any, **Applicants' questions on these
+  applications (n)** (closed `<details>`, `assess-questions`; issue #523
+  G7): each "Ask the assessors why" question on them, the application's
+  name, when asked, the rule in its own words and the answer or *Not
+  answered yet*, kept for the authority's written reasons. The CSV carries
+  them too, after a blank line: *Application, Asked, The applicant read,
+  In its own words, Answer, Answered*.
 - Workspace English, like the rest of the assessors' tab.
 
 e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
@@ -9597,7 +9796,7 @@ dark).
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it. An editor who isn't its owner and whom the
-owner marks as acting for the responsible authority gets **Record the
+responsible authority confirmed as acting for it (229) gets **Record the
 authority's decision** (163_licensing_authority; provisional position,
 pre-counsel research, 2026-10-01): the outcome in the Act's words with its
 basis beside each (*Licence issued (see its conditions)*, *Licence refused*,
@@ -9958,7 +10157,7 @@ baseline card links to the published run's report (**Report**, beside
     methodology statement it cites (version and a 12-digit hash prefix,
     `docs/methodology/`), the run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
-    ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
+    ("Legacy runoff model (the original workbook’s, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
     caveat, the flagged data-quality years (every one, engine ≥ 1.31.1; an
     older run that hit the old cap of 5 says its list may be cut short) and
@@ -10394,8 +10593,8 @@ their own application's in [their own view](#the-applicants-pack-view).
   `PackSendDialog.svelte`, a side sheet saying why the full pack goes to
   the authority and not through the applicant, the members acting for the
   responsible authority as ticked checkboxes, an optional note and
-  **Send**, then "Sent to …"; with none, it says the owner marks them in
-  Members; [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
+  **Send**, then "Sent to …"; with none, it says the authority confirms
+  them in Acts for the authority (229; a proposal alone isn't enough); [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
   and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash. When an erratum found
   since the manifest was frozen applies to either run's engine or its fit's
@@ -10453,7 +10652,7 @@ their own application's in [their own view](#the-applicants-pack-view).
   that the signer's name, registration and date are shown publicly on the
   verify page, even if the pack is withdrawn, for as long as the licence
   record it supports is kept (three years after the licence expires, or
-  after the application is refused or withdrawn; [evidence-pack.md §
+  after the application is refused, rejected, not considered or withdrawn; [evidence-pack.md §
   Retention](./evidence-pack.md#retention)). An editor chooses **You sign
   as**: "Specialist for the applicant" (the professional responsible for
   the evidence; what issue needs) or "Reviewed for the responsible
@@ -10906,7 +11105,11 @@ published.
   MapLibre a chunk further), with its words, zoom buttons and keyboard hint in
   the reader's language, and a one-line key (the land in its band's colour,
   "Your land · Model: watch", the dam, river, gauge and boundary drawn as the
-  map draws them). The map draws without basemap tiles too (the farm's own
+  map draws them), then the map's credits as one small line under the key
+  instead of over the map (`farm-map-credits`: the basemap's, a HydroRIVERS
+  river's, a traced dam's "Dam outline: traced from JRC Global Surface Water
+  (Source: EC JRC/Google), modified", and **Data sources**; issue #523 C6,
+  [maps.md § Credits on the map](./maps.md#credits-on-the-map)). The map draws without basemap tiles too (the farm's own
   features on a plain background). The page's ready state doesn't wait for
   it: the card carries `data-ready="true"` once the map has drawn or said
   why it can't (no WebGL), or its chunk failed (`CatchmentMap`'s

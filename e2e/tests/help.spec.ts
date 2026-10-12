@@ -450,7 +450,7 @@ test('the glossary lists every term by topic, as many as the help page counts, a
 	await expect(dam.locator('.short')).toHaveText(
 		'Combined full-supply volume of the hydrological unit’s dams, in m³. 0 means no storage: water not used the same day flows on.'
 	);
-	await expect(dam.locator('.long')).toHaveText([/^b023 treats a hydrological unit’s dams as one composite dam\./]);
+	await expect(dam.locator('.long')).toHaveText([/^The Water Balance Tool workbook treats a hydrological unit’s dams as one composite dam\./]);
 	await expect(dam.getByRole('term')).toHaveText(['Units', 'Also called', 'See also']);
 	await expect(dam.getByRole('definition')).toHaveText(['m³', 'composite dam, storage capacity, full supply', /Spill/]);
 	await expect(page.getByRole('main').getByRole('term').filter({ hasText: 'Source' })).toHaveCount(0);

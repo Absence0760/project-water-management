@@ -55,6 +55,10 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 		}
 	}),
 	'PUT /projects/:id/registration-check-required': () => ({ body: { required: true } }),
+	// Who acts for the authority (229): the ladder's editor, proposed by an owner (the editor's own call is refused by the route's rules).
+	'POST /projects/:id/authority-delegates': (c) => ({ body: { userId: c.editor.id } }),
+	'POST /projects/:id/authority-delegates/:userId/confirm': (c) => ({ params: { userId: c.editor.id } }),
+	'DELETE /projects/:id/authority-delegates/:userId': (c) => ({ params: { userId: c.editor.id } }),
 	'PUT /projects/:id/model': (c) => ({ body: c.model }),
 	'PUT /projects/:id/series': () => ({ body: { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-01-01', values: [1, 2] } }),
 	'PATCH /projects/:id/series/:seriesId': () => ({ body: { product: 'Ladder gauge', productVersion: '1' } }),
@@ -73,6 +77,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'PATCH /projects/:id/scenarios/:sid': () => ({ body: { description: 'ladder' } }),
 	'POST /projects/:id/scenarios/:sid/rebase': (c) => ({ body: { baseRunId: c.runId } }),
 	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'licence_issued', authority: 'Ladder CMA', decisionDate: '2026-09-30', reasonsReceived: true } }),
+	'POST /projects/:id/scenarios/:sid/appeals': () => ({ body: { kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-01' } }),
 	'POST /projects/:id/scenarios/:sid/members': (c) => ({ body: { userId: c.contributor.id } }),
 	'POST /projects/:id/scenarios/:sid/questions': () => ({ body: { problem: 0, line: 'op 1 (node.set): ladder' } }),
 	'POST /projects/:id/application-questions/:qid/answer': () => ({ body: { answer: 'Ladder answer' } }),
@@ -145,6 +150,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/nodes/:nodeId/area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	'GET /projects/:id/map/quaternary': () => ({ query: { lon: '21.35', lat: '-33.65' } }),
 	'GET /projects/:id/map/quaternaries': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
+	// The Map's search (issue #523 C5, geo/searchRoutes.ts): a code the synthetic stations and quaternaries start with.
+	'GET /projects/:id/map/search': () => ({ query: { q: 'Z1' } }),
 	// The river network (issue #345, geo/rivers.ts): a bbox round the synthetic network, and one of its reaches.
 	'GET /projects/:id/map/rivers': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
 	'GET /projects/:id/map/map-grid': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
@@ -152,7 +159,6 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	// The DEM's channels: the tile holding the synthetic DEM's valley (the ladder turns DEM_URL on with it).
 	'GET /projects/:id/map/channels': () => ({ query: { tile: '103,-168' } }),
 	'POST /projects/:id/map/rivers/add': () => ({ body: { dataset: 'synthetic', reachId: 90000005 } }),
-	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': () => ({ body: { registerNo: 'Z100/07' } }),
 	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	// Delineation (175): the ladder turns DEM_URL on with the committed synthetic DEM, and this is its valley's outlet.
 	'POST /projects/:id/map/delineation': () => ({ body: { lon: 20.7428741, lat: -33.5396777, from: 'outlet' } }),
@@ -183,7 +189,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/api-keys': () => ({ body: { name: 'Ladder key' } }),
 	'PUT /projects/:id/alert-rules': (c) => ({ body: { rules: [{ kind: 'dam_below', nodeId: c.farmId, threshold: 0.25, enabled: false }] } }),
 	'PUT /me/alerts/:projectId': () => ({ body: { items: [{ kind: 'all', mode: 'immediate' }] } }),
-	'PUT /projects/:id/licence-record': () => ({ body: { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'ladder' } }),
+	'PUT /projects/:id/licence-record': () => ({ body: { outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'ladder' } }),
 	'PUT /projects/:id/allocations/viewer-units': () => ({ body: { on: true } })
 };
 

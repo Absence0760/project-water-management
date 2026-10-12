@@ -764,7 +764,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	// Engine ≥ 1.49.0; provenance only (a lake-factor preset's note). A snapshot without it had none.
 	lakeEvapFactorSource: { label: 'Dam evaporation factor source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
-	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
+	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (the original workbook’s recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
 		label: 'CHIRPS bias correction',
 		fmt: (v) => (v === 'monthly' ? 'monthly factors' : v === 'none' ? 'raw CHIRPS' : String(v))
@@ -1275,6 +1275,8 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
 	['userReturnPct', 'share returned', pct],
 	['userPriority', 'user class', (v) => userPriorityWord(v as UserPriority)],
+	// A Priority user's fixed restriction % (engine 1.86.0, issue #523 B3); null (and absent, upgraded) = none.
+	['userRestrictionPct', 'fixed restriction', (v) => (typeof v === 'number' ? pct(v) : 'none')],
 	// Boreholes (WP-1.34).
 	['boreholeCapacityM3Day', 'borehole capacity', withUnit('m³/day', 0)],
 	['boreholeRule', 'borehole rule', plain],
@@ -1307,6 +1309,9 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): the share of the flow and its daily cap.
 	['reachLossFrac', 'bed losses in the reach below', (v) => (typeof v === 'number' && v > 0 ? `${pct(v)} of the flow` : 'none')],
 	['reachLossMaxM3Day', 'bed losses cap', (v) => (v === null || v === undefined ? 'no cap' : `${fmtValue(v)} m³/day`)],
+	// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b).
+	['baseflowLossM3Day', 'base-flow loss', (v) => (typeof v === 'number' && v > 0 ? `${fmtValue(v)} m³/day` : 'none')],
+	['baseflowGainM3Day', 'base-flow gain', (v) => (typeof v === 'number' && v > 0 ? `${fmtValue(v)} m³/day` : 'none')],
 	// Hands-off flow (engine ≥ 1.32.0); its monthly amounts and River to dam by month are diffed below.
 	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
@@ -1639,9 +1644,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 	}
 
 	// --- transfers: by id, then by "from → to" route (A's route in B's names) ---
-	const route = (m: typeof na, t: Transfer) => `${m.node(t.fromNodeId)} → ${m.node(t.toNodeId)}`;
+	// A rule out of the catchment (engine ≥ 1.86.0) has no destination unit.
+	const OUTSIDE = 'outside the catchment';
+	const route = (m: typeof na, t: Transfer) => `${m.node(t.fromNodeId)} → ${t.toNodeId === null ? OUTSIDE : m.node(t.toNodeId)}`;
 	const routeInB = (t: Transfer) =>
-		`${nodeRename.get(t.fromNodeId) ?? na.node(t.fromNodeId)} → ${nodeRename.get(t.toNodeId) ?? na.node(t.toNodeId)}`;
+		`${nodeRename.get(t.fromNodeId) ?? na.node(t.fromNodeId)} → ${t.toNodeId === null ? OUTSIDE : (nodeRename.get(t.toNodeId) ?? na.node(t.toNodeId))}`;
 	const tm = matchByIdThenName(
 		a.transfers.map((t) => ({ t, key: routeInB(t) })),
 		b.transfers.map((t) => ({ t, key: route(nb, t) })),

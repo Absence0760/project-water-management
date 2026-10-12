@@ -47,7 +47,7 @@ const base: ModelInput = {
 	model: {
 		nodes: [
 			node(G, 'Gauge', 'gauge', null, 0),
-			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000, reachLossFrac: 0.2, reachLossMaxM3Day: 300 }),
+			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000, reachLossFrac: 0.2, reachLossMaxM3Day: 300, baseflowLossM3Day: 40, baseflowGainM3Day: 15 }),
 			node(MINE, 'Rooikloof', 'farm', G, 1, { cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 }),
 			// A crop supply table (engine ≥ 1.73.0) drawing a share on the applicant's own dam.
 			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null, cropShareDam: 0.5, cropShareRiver: 0.3, cropShareRemote: 0.2, cropRemoteNodeId: MINE, cropRemoteCapM3Day: 900, mapMm: 840, mapSource: 'Study of the neighbour’s gauge' }),
@@ -143,6 +143,15 @@ describe('projectBaseForApplicant', () => {
 		expect(byId.get(N2)).toMatchObject({ reachLossFrac: 0.2, reachLossMaxM3Day: 300 });
 		// Its use is still blanked beside them.
 		expect(byId.get(N2)!.damCapacityM3).toBe(0);
+	});
+
+	it('drops a hidden unit’s base-flow loss and gain with its runoff, so a run of the view gets no gain without the loss (engine 1.86.0)', () => {
+		// The zeroed area leaves no runoff, so the loss (at most the runoff) would be 0 while a kept gain still added water.
+		expect(byId.get(N2)!.areaKm2).toBe(0);
+		expect(byId.get(N2)!.baseflowLossM3Day).toBe(0);
+		expect(byId.get(N2)!.baseflowGainM3Day).toBe(0);
+		// Positive control: the base has them.
+		expect(base.model.nodes.find((n) => n.id === N2)).toMatchObject({ baseflowLossM3Day: 40, baseflowGainM3Day: 15 });
 	});
 
 	it('keeps only what is on their own farm: crops, crop areas, transfers, land cover, boreholes', () => {

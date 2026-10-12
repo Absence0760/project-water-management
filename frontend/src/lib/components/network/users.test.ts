@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeUser, userDemandOf, userPriorityNote, userPumpNote } from './users';
+import { describeUser, userDemandOf, userPriorityNote, userPumpNote, userRestrictionNote } from './users';
 
 describe('other water users in the Network tab (WP-1.33)', () => {
 	it('reads a missing or short demand as zeros', () => {
@@ -35,5 +35,19 @@ describe('an other water user’s pump (engine 1.58.0)', () => {
 		expect(userPumpNote({ pumpCapacityM3Day: 0 })).toMatch(/takes nothing from the river/);
 		expect(userPumpNote({ pumpCapacityM3Day: 1200 })).toBe('It takes at most 1\u202f200 m³/day from the river; units upstream pass no more than that for it. Or enter the pumps and their rate to work it out.');
 		expect(userPumpNote({ pumpCapacityM3Day: 1200, userPriority: 'junior' }, true)).toBe('It takes at most 1\u202f200 m³/day from the river.');
+	});
+});
+
+describe('a Priority user’s fixed restriction % (engine 1.86.0, issue #523 B3)', () => {
+	it('names it in the one-line description, never on a Non-priority user', () => {
+		expect(describeUser({ userDemandM3Day: new Array(12).fill(100), userReturnPct: 0, userPriority: 'senior', userRestrictionPct: 0.3 })).toBe('priority · 100 m³/day on average · 30 % fixed restriction');
+		expect(describeUser({ userDemandM3Day: new Array(12).fill(100), userReturnPct: 0, userPriority: 'senior', userRestrictionPct: null })).toBe('priority · 100 m³/day on average');
+		expect(describeUser({ userDemandM3Day: new Array(12).fill(100), userReturnPct: 0, userPriority: 'junior', userRestrictionPct: 0.3 })).toBe('non-priority · 100 m³/day on average');
+	});
+
+	it('says blank is uncurtailed, and that a % has no basic-needs floor', () => {
+		expect(userRestrictionNote(null)).toMatch(/^Blank is uncurtailed/);
+		expect(userRestrictionNote(0)).toMatch(/^Blank is uncurtailed/);
+		expect(userRestrictionNote(0.25)).toBe('Restricted, it gives up 25 % of its demand: in a curtailment, and while the drought restriction rule is at a level that cuts water. No basic-needs floor: the model doesn’t know the people it serves.');
 	});
 });

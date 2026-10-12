@@ -1148,9 +1148,9 @@ A catchment reaches production through the app instead
 ([api.md § Import a project file](./api.md#import-a-project-file)):
 
 1. Either import the b023 workbook itself: sign in to production, choose
-   **Import b023 workbook** on the project list and pick the `.xlsm`. It is
+   **Import workbook** on the project list and pick the `.xlsm`. It is
    read in the browser (only the project is sent), and the review shows the
-   importer's notes and the unmapped report ([ui.md](./ui.md#import-a-b023-workbook)).
+   importer's notes and the unmapped report ([ui.md](./ui.md#import-a-workbook)).
 2. Or, locally, extract the workbook (`scripts/wbt-import/extract_project.py`,
    [run-locally.md](./run-locally.md)) or build and check the project in the
    local app and download it (**Download project (JSON)** on its Overview),
@@ -1785,6 +1785,7 @@ Lambda's list against the Sources table):
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
 | `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
+| `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt` (gzip it); the kinds the search doesn't keep (roads, schools, …) are left out at load | download `ZA.zip` from download.geonames.org/export/dump/, unzip, `gzip -k ZA.txt` (maps.md § Gazetteer) |
 | `quaternaries`, `dam-register`, `gauge-stations`, `map-grid` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
 ```bash
@@ -1797,7 +1798,10 @@ Evaporation is the same with `kind=evaporation` and a key under
 `reference/evaporation/`; the file carries dPET's source, version and
 attribution (`-f source=…` overrides the source). For rivers add `-f source="<the attribution line>"` (the one
 `bin/tiles-dev.sh` uses, `RIVERS_SOURCE`) and, to keep only the larger
-streams, `-f min_order=<n>`. Approve the run in the `production`
+streams, `-f min_order=<n>`. The gazetteer is `kind=gazetteer` with a key under
+`reference/gazetteer/` (e.g. `za-2026-10-12.txt.gz`) and a dataset such as
+`GeoNames-ZA-2026-10`; `-f source=…` overrides GeoNames' attribution, which
+is the default. Approve the run in the `production`
 environment. Never load the synthetic fixtures into production (the label
 `synthetic` is refused).
 
@@ -1811,7 +1815,9 @@ grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
 HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
 32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
 Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
-Africa about 50 MB, so anything bigger is the wrong file. A load costs cents (3 GB × a few
+Africa about 50 MB, so anything bigger is the wrong file. So has the
+gazetteer, 64 MiB uploaded and 128 MiB unzipped: South Africa's dump is
+about 20 MB of text, all of GeoNames' about 1.6 GB. A load costs cents (3 GB × a few
 minutes of Lambda) and runs one at a time (reserved concurrency 1, the
 workflow's concurrency group). Migrations use the same memory and timeout,
 billed only while they run. Don't run a load while a backend deploy is
@@ -1830,6 +1836,115 @@ between them. If freeable memory settles near the 64 MiB threshold
 afterwards rather than climbing back, the instance is too small for the data:
 move `db_instance_class` to `db.t4g.small` (2 GiB). On this single-AZ
 instance the resize restarts it, a few minutes down.
+
+## Read-only production checks
+
+Some follow-ups need a question asked of production's data, and RDS is
+private with no bastion. The migrate Lambda, which already reads the
+owner's credentials, answers a fixed set of them: an event
+`{ "check": "<name>" }` runs that one named query from the registry in
+`backend/src/checks/readOnlyChecks.ts` and nothing else. The event never
+carries SQL: one with any other field, or a name not in the registry, is
+refused (`code: "refused"`) before anything connects. The query runs as
+the owner inside a `READ ONLY` transaction (any write fails, SQLSTATE
+25006) with a 120 s statement timeout, and is always rolled back. It runs
+no migration and no role sync, and needs no new permission: the operator's
+SSO session invokes the function, and the function reads only the secret
+it already reads.
+
+The answer is `{ check, count, truncated, rows }`: ids, engine versions,
+allocation modes, dates and flags only, never a person's name, an email, a
+volume or a note, so it can be pasted into an issue (`series-pick-moves`
+also answers with series names, which are project data, not personal
+data). At most 500 rows come back;
+`count` is the total and `truncated` says whether more were held back. A
+failure is a `CheckFailed` error whose message is `{ code, reason,
+logStream, requestId }`; the detail is in the function's CloudWatch log
+(`/aws/lambda/water-management-migrate`). The migrate function runs one at
+a time (reserved concurrency 1), so don't run a check while a backend
+deploy is migrating or a reference load is running: the second invocation
+is throttled, and running it again afterwards is safe.
+
+Run each from any directory after `aws sso login --profile
+water-management`; the answer is written to the named file, then printed:
+
+- **`unit-rain-reference-runs`** (issue #500,
+  [followups.md § Blocking releases](./followups.md#blocking-releases-operator)):
+  runs on engines 1.80.0–1.84.0 whose `settings.unitRain` is `perUnit` with
+  a `reference` gauge object, the rejected reference-gauge formula. Each
+  row is `run_id`, `project_id`, `engine_version`, `created_at`.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"unit-rain-reference-runs"}' --cli-read-timeout 300 --region af-south-1 --profile water-management unit-rain-reference-runs.json && jq . unit-rain-reference-runs.json
+  ```
+
+  `count: 0`: no production run used the formula; tick the follow-up. Any
+  rows: add the errata row the follow-up describes to
+  [engine-errata.md](./engine-errata.md) and follow
+  [legal/known-defect-procedure.md](./legal/known-defect-procedure.md) for
+  those runs.
+
+- **`pre-213-cap-runs`** (issue #523 finding I,
+  [security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)):
+  every publication, outlook and outlook publication resting on a run that
+  caps use at, or scales demand to, the registered volumes
+  (`summary.allocations.mode` `cap` or `fullAllocation`). Since 213 the API
+  refuses to make one, so only one from before 213 can show. Each row is
+  `kind` (`run_publication`, `seasonal_outlook` or `outlook_publication`),
+  its `id`, `project_id`, `run_id`, `mode`, `engine_version`,
+  `run_created_at`, `at` (published or created) and `current` (farmers see
+  it now: a publication not superseded, an outlook publication not ended,
+  an outlook with a current publication).
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"pre-213-cap-runs"}' --cli-read-timeout 300 --region af-south-1 --profile water-management pre-213-cap-runs.json && jq . pre-213-cap-runs.json
+  ```
+
+  `count: 0`: nothing to do; tick the follow-up. For each `current` row:
+  a `run_publication`: run the model on that project (it compares only
+  now) and publish the new run, which supersedes it (`POST
+  /projects/:id/publication`, **Publish this run** in the run's
+  Publication panel); an
+  `outlook_publication` (and its `seasonal_outlook`): withdraw it (`DELETE
+  /projects/:id/outlook-publication`, **Withdraw** in the outlook's
+  Farmers section) and, if
+  farmers need an outlook, start a new one on a compare-only run and
+  publish that. Rows with `current: false` need nothing: viewers kept from
+  the volumes already get none of their figures (farm previews refused,
+  farm history drops them). An outlook publication whose outlook was
+  trimmed has lost its link to the run and can't be found by this check.
+
+- **`series-pick-moves`** (issue #523, runbook step 19,
+  [data-model.md § Which series a run reads](./data-model.md#which-series-a-run-reads)):
+  projects whose series of one kind (at one site) pick a different first
+  series when names sort by byte (`COLLATE "C"`) instead of
+  linguistically. Each row is `project_id`, `kind`, `site_node_id`, `was`
+  (the names in the old order) and `will` (in the new); the first of each
+  is the series a run read and will read.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"series-pick-moves"}' --cli-read-timeout 300 --region af-south-1 --profile water-management series-pick-moves.json && jq . series-pick-moves.json
+  ```
+
+  `count: 0`: no project's pick moves. Any rows: step 19.
+
+- **`authority-grandfathered`** (issue #523 G5, runbook step 18): the
+  delegates 229 carried over from an owner's "acts for the authority"
+  flag (`authority.grandfathered` events). Each row is `project_id`,
+  `user_id` and `created_at`; the person is an id, never a name or an
+  email: find them in the project's members list in the app.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"authority-grandfathered"}' --cli-read-timeout 300 --region af-south-1 --profile water-management authority-grandfathered.json && jq . authority-grandfathered.json
+  ```
+
+  `count: 0`: nobody was grandfathered. Any rows: step 18.
+
+Adding a check is a code change: an entry in the registry (a `SELECT`
+with no parameters, its columns from the allowlist its unit test holds), a
+DB test that plants a row it must find and one it must not
+(`checks/readOnlyChecks.db.test.ts`), and its command here, shipped by a
+`backend@` release.
 
 ## Who can sign up
 
@@ -2189,6 +2304,65 @@ Every step is an ordinary app action by an owner unless it says "operator".
     that it holds its records or has a disposal authority, recorded as
     `team.records_disposal_confirmed_on` (operator agreement 3A.2). Record
     the confirmation, the date and what was deleted in the operator log.
+17. **The responsible authority confirms who acts for it** (operator;
+    229_authority_delegates, issue #523 G5; [security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Who acts for a project's responsible
+    authority is the authority's call, not the host's: in the app an owner
+    only proposes someone, and only a member already acting for the
+    authority confirms them. A project with nobody confirmed yet (a new
+    licensing project, or after the last delegate left) needs the operator
+    for the first. Act only on the authority's **written** request (a letter
+    or email from the CMA or the DWS regional office, on its letterhead or
+    from its domain, naming the project and the person), never on the
+    host's word; confirm it with the authority out of band (a number it
+    publishes, not one in the request). The person must already be an
+    editor or owner of the project, directly or through its team (the host
+    adds them). Then, as the schema owner:
+    `SELECT authority_confirm_by_operator('<project id>', (SELECT id FROM app_user WHERE email = '<address>'), '<the letter''s reference and date>');`
+    It confirms their proposal or adds them confirmed, and refuses someone
+    who isn't an editor (`23514`) or an empty reference; the project's
+    History shows `authority.confirmed` by "Operator" with the reference.
+    From then on the authority confirms (and removes) its own delegates in
+    the app. To remove someone at the authority's request when none of its
+    delegates can (as the schema owner): `DELETE FROM authority_delegate
+    WHERE project_id = '…' AND user_id = '…';` (logged as
+    `authority.removed`). Locally the same is `pnpm dev:authority:confirm
+    <project-id> <email> --reference "<letter>"`. Record the request, how
+    it was checked and the outcome in the operator log.
+18. **Each authority reviews the delegates 229 grandfathered** (operator,
+    once, after the deploy that runs 229; issue #523 G5). 229 carried every
+    "acts for the authority" flag an owner had set (on someone still an
+    editor or above) over as a **confirmed** delegate, so no decision in
+    progress stopped, but the host chose those people, not the authority.
+    List them per project with the read-only check
+    `authority-grandfathered` ([§ Read-only production
+    checks](#read-only-production-checks)):
+    `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"authority-grandfathered"}' --cli-read-timeout 300 --region af-south-1 --profile water-management authority-grandfathered.json && jq . authority-grandfathered.json`
+    It answers with project and user ids only; find each person in that
+    project's members list in the app (each project's History shows the
+    same `authority.grandfathered` events, naming the owner who ticked the
+    flag). Send each project's
+    responsible authority its list in writing and ask it to confirm each
+    person or remove them: a delegate removes anyone in the app
+    (Responsible authority › Acts for the authority), or, at its written
+    request, the operator does as in step 17 (`DELETE FROM
+    authority_delegate …`, logged as `authority.removed`). Remove anyone
+    the authority doesn't recognise; until it answers, the grandfathered
+    delegates keep acting. Record what was sent, the answers and the
+    removals in the operator log.
+19. **List the projects whose series pick moves** (operator, straight
+    after the backend release that orders series picks by byte, issue
+    #523; data-model.md § Which series a run reads). Production sorted
+    names linguistically until then, so a project whose series of one kind
+    (at one site) differ in case or punctuation order runs on another
+    series once it deploys. The answer depends only on series names, so
+    the read-only check `series-pick-moves` ([§ Read-only production
+    checks](#read-only-production-checks)), which ships in that release,
+    can run straight after the deploy:
+    `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"series-pick-moves"}' --cli-read-timeout 300 --region af-south-1 --profile water-management series-pick-moves.json && jq . series-pick-moves.json`
+    Then, for each row, tell the project's owner which series its runs now
+    read (the first of `will`; before, the first of `was`); rename a
+    series (so the one they mean sorts first) if they want the old pick.
+    Record the list in the operator log.
 
 ## Rollback
 

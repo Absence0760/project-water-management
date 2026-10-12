@@ -66,6 +66,17 @@ MUTANTS = [
         "if n >= ACC_MAX_BLANK_DAYS:",
     ),
     ("transfers ignore the receiver's room (N4)", "room_left[dst] = max(0.0, rm)", "room_left[dst] = math.inf"),
+    ("a transfer out of the catchment moves nothing, as if outside had no room (engine 1.86.0, issue #523 B5)", 'room_left[("out", src)] = math.inf', 'room_left[("out", src)] = 0.0'),
+    (
+        "an allocation cap doesn't hold back a transfer out of the catchment (engine-audit.md X1)",
+        'room_left[("out", src)] = max(0.0, sr_[0] - rm_ask.get(src, 0.0) - ext_out[src])',
+        'room_left[("out", src)] = math.inf',
+    ),
+    (
+        "a transfer out of the catchment isn't counted against its source's cap (engine-audit.md X1)",
+        'spend(xid, "surface", G - GW + g_riv + gin + gx)',
+        'spend(xid, "surface", G - GW + g_riv + gin)',
+    ),
     (
         "a source's rules share one pool down to the lowest reserve (N6, before engine 1.36.0)",
         'elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]',
@@ -168,7 +179,7 @@ MUTANTS = [
     ),
     (
         "an off-take into a capped unit sizes to its whole demand (before engine 1.70.0)",
-        "need = min(dam_dem(dst, i), sr_[0] if sr_ else math.inf)",
+        "need = min(dam_dem(dst, i), max(0.0, sr_[0] - ext_out[dst]) if sr_ else math.inf)",
         "need = dam_dem(dst, i)",
     ),
     ("the licence rate ignores its months", 'if a["months"] and m not in a["months"]:\n            continue', "if False:\n            continue"),
@@ -205,6 +216,7 @@ MUTANTS = [
     # River abstractions beside a unit's dam (§2.7j).
     ("a river abstraction takes what must pass the unit", "free = max(0.0, past - keep)", "free = max(0.0, past)"),
     ("a river abstraction's pool never refills", "if rsum > 0 and free > 0:", "if False:"),
+    ("a river abstraction's pool evaporates (engines before 1.86.0)", "held = list(q)", "held = [v * 0.99 for v in q]"),
     # River off-takes and canal seepage (§2.6a).
     ("the canal loses nothing on the way", "append((t, v * (1 - lp)))", "append((t, v))"),
     (
@@ -263,7 +275,7 @@ MUTANTS = [
     # Other water users (§2.7c).
     ("a junior user takes the seniors' water", 'river = H if x.get("userPriority", "senior") != "junior" else max(0.0, H - zs_in)', "river = H"),
     ("a user returns nothing", 'T = (x.get("userReturnPct") or 0.0) * G', "T = 0.0"),
-    ("farms pass nothing for senior users", "need = min(zs, H + I)", "need = 0.0"),
+    ("farms pass nothing for senior users", "need = min(zs, H + Ib)", "need = 0.0"),
     # Supply rules and the river pump (§2.7e).
     ("the trigger rule has no stop level", "on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap", "on = s_prev < trig * cap"),
     ("the river pump has no capacity", 'pc = math.inf if pc is None else pc', "pc = math.inf"),
@@ -303,6 +315,10 @@ MUTANTS = [
         "                zs_in += ZS[u] - min(ZS[u], sen_led[u][i]) if u in sen_led else ZS[u]",
         "                zs_in += ZS[u]",
     ),
+    # A unit's base-flow loss and gain (§2.6b, engine 1.86.0).
+    ("a base-flow loss is not capped at the runoff", "                lost_bf = min(bl_, I) if I > 0 else 0.0", "                lost_bf = bl_"),
+    ("the base-flow gain is left out of the runoff", "                Ib = I - lost_bf + bg_", "                Ib = I - lost_bf"),
+    ("the runoff split reads the runoff before the base flow", '                M = Ib * x["pctRunoffToDam"]', '                M = I * x["pctRunoffToDam"]'),
     # Runoff from each unit's own rain (§2.4h, engine 1.78.0).
     ("per-unit rain off: the units' records are used whatever the mode", 'per_unit = isinstance(ur, dict) and ur.get("mode") == "perUnit"', "per_unit = isinstance(ur, dict)"),
     ("a unit's local inflow is natural × share, not its own runoff", "I = natural[i] * shares.get(xid, 0.0) if local is None else", "I = natural[i] * shares.get(xid, 0.0) if True else"),
@@ -419,7 +435,7 @@ class CrossCheck(unittest.TestCase):
             "borehole_days", "borehole_to_dam_days", "borehole_annual_cap_days", "depletion_owed_days",
             "cap_bound_days", "full_allocation_units", "floor_days", "object_shortage_days", "offtake_days",
             "offtake_return_days", "user_days", "junior_short_days", "senior_pass_days", "river_pump_days",
-            "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days", "reach_loss_days",
+            "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days", "reach_loss_days", "baseflow_days",
             # Per-unit rain (§2.4h).
             "unit_rule_gauge", "unit_rule_gauge_map", "unit_rule_chirps", "unit_rule_catchment", "unit_clamped",
             "unit_map_all_years", "unit_chirps_bias", "unit_link_days", "unit_catchment_days",

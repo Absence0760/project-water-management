@@ -75,7 +75,7 @@ test('a form refuses to submit a day it can’t read', async ({ page, owner }) =
 	await nominateRun(page.request, project.id, run, 'Evidence for the typed days test');
 	await page.goto(`/projects/${project.id}?tab=project`);
 	const form = page.getByTestId('licence-record').getByRole('form', { name: 'Record the licence outcome' });
-	await form.getByLabel('Outcome').selectOption('refused');
+	await form.getByLabel('Outcome').selectOption('licence_refused');
 	const on = form.getByLabel('Decided on');
 	// A day, then text that isn't one: the day typed before must not go out behind the person's back.
 	await on.fill('1/3/2026');
@@ -94,7 +94,7 @@ test('a form refuses to submit a day it can’t read', async ({ page, owner }) =
 	// A day it reads (day first) submits, as YYYY-MM-DD.
 	await on.fill('1 March 2026');
 	await form.getByRole('button', { name: 'Save the outcome' }).click();
-	await expect(page.getByTestId('licence-record').getByTestId('licence-record-status')).toHaveText('Refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(page.getByTestId('licence-record').getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
 });
 
 // A field's error line never moves its row (issue #521, round 6; app.css, after .form-row): rows align their fields

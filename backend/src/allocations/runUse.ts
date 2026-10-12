@@ -6,6 +6,10 @@
 // from one (`received_at_intake`). A run from engine 1.79.0–1.81.0 also stored
 // `diverted_loss` (the superseded rule, issue #513); it isn't read, so such a run,
 // like any run before 1.82.0, is compared by the draws rule (docs/allocations.md).
+// What a unit's dam rules sent out of the catchment (their `transfer_rule@<id>`
+// series, the rules with no destination unit in the run's own inputs) is its
+// surface use too (engine ≥ 1.88.0, docs/engine-audit.md X1); a run from before
+// engine 1.86.0 has no such rule.
 // Record days only (a forecast run's forecast days are left out, issue #51).
 // The Allocations tab compares it with the project's allocations now; the
 // evidence report with the run's own (runAllocationComparison).
@@ -13,6 +17,7 @@ import {
 	beforeForecast,
 	compareAllocations,
 	DEFAULT_ALLOCATION_TOLERANCE,
+	externalRuleKeys,
 	usableAllocations,
 	type AllocationComparison,
 	type AllocationEntry,
@@ -28,13 +33,28 @@ export interface RunUseNode {
 	damCapacityM3?: number;
 }
 
+/** A transfer rule as the run's inputs stored it: only what tells a rule out of the catchment apart. */
+export interface RunUseTransfer {
+	id: string;
+	fromNodeId: string;
+	toNodeId: string | null;
+}
+
 /** The run's farms and water users with a `supplied` series, each with its use series. */
-export async function runUseNodes(db: Db, runId: string, startDate: string, forecastFrom: string | null, nodes: readonly RunUseNode[] | null): Promise<AllocationUseNode[]> {
+export async function runUseNodes(
+	db: Db,
+	runId: string,
+	startDate: string,
+	forecastFrom: string | null,
+	nodes: readonly RunUseNode[] | null,
+	transfers: readonly RunUseTransfer[] | null = null
+): Promise<AllocationUseNode[]> {
 	const users = (nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
+	const external = Array.isArray(transfers) ? transfers.filter((t) => t && typeof t.id === 'string' && t.toNodeId === null) : [];
 	const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
 		`SELECT node_id AS "nodeId", key, "values" FROM run_series
-		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used', 'intake_take', 'received_at_intake', 'dam_evaporation', 'dam_seepage_lost') OR key LIKE 'river\\_take@%') AND node_id = ANY($2::uuid[])`,
-		[runId, users.map((n) => n.id)]
+		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used', 'intake_take', 'received_at_intake', 'dam_evaporation', 'dam_seepage_lost') OR key LIKE 'river\\_take@%' OR key = ANY($3::text[])) AND node_id = ANY($2::uuid[])`,
+		[runId, users.map((n) => n.id), users.flatMap((n) => externalRuleKeys(external, n.id))]
 	);
 	const get = (nodeId: string, key: string) => {
 		const values = series.find((s) => s.nodeId === nodeId && s.key === key)?.values;
@@ -55,6 +75,8 @@ export async function runUseNodes(db: Db, runId: string, startDate: string, fore
 			// A dam beside the river measured at its intake, and water from one (engine ≥ 1.82.0, §2.12); absent before.
 			intakeTake: get(n.id, 'intake_take') ?? null,
 			receivedAtIntake: get(n.id, 'received_at_intake') ?? null,
+			// What its dam rules sent out of the catchment: surface use (engine ≥ 1.88.0, X1).
+			...(externalRuleKeys(external, n.id).length ? { externalTransfers: externalRuleKeys(external, n.id).map((k) => get(n.id, k) ?? null) } : {}),
 			damCapacityM3: n.damCapacityM3 ?? null,
 			// A dam's losses, shown beside a dam on the river's use (engine ≥ 1.83.0, §2.12); only for a unit with a dam.
 			...((n.damCapacityM3 ?? 0) > 0 ? { damEvaporation: get(n.id, 'dam_evaporation') ?? null, damSeepageLost: get(n.id, 'dam_seepage_lost') ?? null } : {})
@@ -73,11 +95,11 @@ export async function runAllocationComparison(
 	db: Db,
 	run: { id: string; startDate: string; forecastFrom: string | null; inputs: Pick<RunInputsSnapshot, 'settings' | 'model'> }
 ): Promise<AllocationComparison | null> {
-	const model = run.inputs.model as { nodes?: RunUseNode[]; allocations?: AllocationEntry[] } | undefined;
+	const model = run.inputs.model as { nodes?: RunUseNode[]; allocations?: AllocationEntry[]; transfers?: RunUseTransfer[] } | undefined;
 	const allocations = usableAllocations(model?.allocations, []);
 	if (!allocations.length) return null;
 	const t = (run.inputs.settings as { allocationTolerance?: unknown } | undefined)?.allocationTolerance;
 	const tolerance = typeof t === 'number' && t >= 0 && t < 1 ? t : DEFAULT_ALLOCATION_TOLERANCE;
-	const nodes = await runUseNodes(db, run.id, run.startDate, run.forecastFrom, model?.nodes ?? null);
+	const nodes = await runUseNodes(db, run.id, run.startDate, run.forecastFrom, model?.nodes ?? null, model?.transfers ?? null);
 	return compareAllocations({ startDate: run.startDate, nodes, tolerance, allocations });
 }

@@ -62,6 +62,27 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 	await expect(page.getByLabel('Enabled, transfer 1', { exact: true })).not.toBeChecked();
 });
 
+test('To offers Outside the catchment for a dam rule (engine 1.86.0, issue #523 B5), not for a river off-take, and it saves', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers out of the catchment');
+	await putModel(page.request, project.id, sampleModel());
+	await openTransfers(page, project.id);
+	const to = page.getByLabel('To, transfer 1', { exact: true });
+	const takesFrom = page.getByLabel('Takes from, transfer 1', { exact: true });
+	await to.selectOption({ label: 'Outside the catchment' });
+	await expect(to.locator('option:checked')).toHaveText('Outside the catchment');
+	// A river off-take delivers to a unit: the river source is disabled on a rule out of the catchment.
+	await expect(takesFrom.getByRole('option', { name: /^The river/ })).toBeDisabled();
+	// The rule keeps the source dam's minimum storage.
+	await expect(page.getByLabel('Min source storage of transfer 1, %', { exact: true })).toBeVisible();
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toBeHidden();
+	await page.reload();
+	await expect(page.getByLabel('To, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Outside the catchment');
+	await expectNoViolations(page);
+});
+
 test('each month has its own rate: a workbook rule shows its rate in its months, an edit changes that month only', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
@@ -205,16 +226,17 @@ test('a viewer sees every rule, with nothing to change', async ({ page, owner, s
 	// Read-only rather than disabled, as MonthRates draws them for a viewer: still readable and focusable.
 	await expect(v.getByLabel('Max rate of transfer 1 in Nov, m³/s', { exact: true })).toHaveAttribute('readonly', '');
 
-	// A catchment with too few units to have any: the viewer is told so, not asked to add units.
+	// A catchment that can't have any (one unit, no dam): the viewer is told so, not asked to add units.
 	const lone = await createProject(page.request, 'Transfers viewer one unit');
-	await putModel(page.request, lone.id, { ...sampleModel(), nodes: sampleModel().nodes.slice(0, 2), cropAreas: [], transfers: [] });
+	const [gauge, unit] = sampleModel().nodes;
+	await putModel(page.request, lone.id, { ...sampleModel(), nodes: [gauge!, { ...unit!, damCapacityM3: 0 }], cropAreas: [], transfers: [] });
 	await addMember(page.request, lone.id, viewer.user.email, 'viewer');
 	await v.goto(`/projects/${lone.id}?tab=transfers`);
-	await expect(rulesCard(v)).toHaveText('This catchment has fewer than two hydrological units, so it has no transfers.');
+	await expect(rulesCard(v)).toHaveText('This catchment has no transfers: it has fewer than two hydrological units, and none with a dam to send water out of the catchment.');
 	await expect(rulesCard(v).getByRole('link')).toHaveCount(0);
 });
 
-test('empty states: no rules yet offers Add transfer; fewer than two hydrological units points to the Network', async ({ page, owner }) => {
+test('empty states: no rules yet offers Add transfer; one unit with a dam can send water out; one without points to the Network', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Transfers empty');
@@ -229,11 +251,29 @@ test('empty states: no rules yet offers Add transfer; fewer than two hydrologica
 	await rulesCard(page).getByRole('button', { name: 'Add transfer', exact: true }).click();
 	await expect(page.getByLabel('From, transfer 1', { exact: true })).toBeFocused();
 
-	// The outflow gauge and one unit: two nodes, but a gauge can't take part, so no rule is possible.
+	// The outflow gauge and one unit with a dam (a gauge can't take part): its only rule is one out of the catchment (engine 1.86.0).
+	// Node ids are a project's own: each project gets a fresh sample model.
+	const oneUnit = (dam: boolean) => {
+		const m = sampleModel();
+		const [gauge, unit] = m.nodes;
+		return { ...m, nodes: [gauge!, dam ? unit! : { ...unit!, damCapacityM3: 0 }], cropAreas: [], transfers: [] };
+	};
+	const withDam = oneUnit(true);
+	const unit = withDam.nodes[1]!;
+	const one = await createProject(page.request, 'Transfers one unit with a dam');
+	await putModel(page.request, one.id, withDam);
+	await openTransfers(page, one.id);
+	await expect(page.getByText('No transfer rules.', { exact: true })).toBeVisible();
+	await header(page).getByRole('button', { name: '+ Add transfer', exact: true }).click();
+	await expect(page.getByLabel('From, transfer 1', { exact: true }).locator('option:checked')).toHaveText(String(unit.name));
+	await expect(page.getByLabel('To, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Outside the catchment');
+	await expect(ruleCard(page, 1).locator('.rule-problems')).toHaveCount(0);
+
+	// One unit without a dam: no rule is possible, and the card points to the Network.
 	const lone = await createProject(page.request, 'Transfers one unit');
-	await putModel(page.request, lone.id, { ...sampleModel(), nodes: sampleModel().nodes.slice(0, 2), cropAreas: [], transfers: [] });
+	await putModel(page.request, lone.id, oneUnit(false));
 	await openTransfers(page, lone.id);
-	await expect(rulesCard(page)).toContainText('Transfers need at least two hydrological units');
+	await expect(rulesCard(page)).toHaveText('Transfers need two hydrological units, or one with a dam to send water out of the catchment. Add a unit or a dam on the Network tab.');
 	await expect(rulesCard(page).getByRole('link', { name: 'Network tab' })).toHaveAttribute('href', '?tab=network');
 	await expect(page.getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 });

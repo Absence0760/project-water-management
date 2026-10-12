@@ -220,7 +220,7 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	}
 
 	// --- transfers: remove, add, then each changed field
-	const bTransfers = new Map(b.transfers.filter((t) => !removed.has(t.fromNodeId) && !removed.has(t.toNodeId)).map((t) => [t.id, t]));
+	const bTransfers = new Map(b.transfers.filter((t) => !removed.has(t.fromNodeId) && (t.toNodeId === null || !removed.has(t.toNodeId))).map((t) => [t.id, t]));
 	const aTransfers = new Map(after.transfers.map((t) => [t.id, t]));
 	for (const id of bTransfers.keys()) if (!aTransfers.has(id)) ops.push({ op: 'transfer.remove', transferId: id });
 	for (const t of after.transfers)

@@ -10,6 +10,7 @@ import {
 	GEO_MAX_FEATURES,
 	GEO_MAX_VERTICES,
 	holesNested,
+	interiorPoint,
 	kindFromWord,
 	parseGeoJson,
 	pointInGeometry,
@@ -158,6 +159,22 @@ describe('pointInGeometry and centerOf', () => {
 		expect(centerOf({ type: 'Polygon', coordinates: [box(20, -34, 22, -32)] })).toEqual([21, -33]);
 		expect(centerOf({ type: 'MultiPolygon', coordinates: [[box(0, 0, 1, 1)], [box(10, 0, 14, 4)]] })).toEqual([12, 2]);
 		expect(centerOf({ type: 'LineString', coordinates: [[0, 0], [1, 1], [2, 2]] })).toEqual([1, 1]);
+	});
+});
+
+describe('interiorPoint (the frontend pieces.ts copy’s parity cases)', () => {
+	const sq = (x: number, y: number, s: number): Position[] => [[x, y], [x + s, y], [x + s, y + s], [x, y + s], [x, y]];
+	it('lands inside a U and beside a hole, where the centroid would not', () => {
+		const u: Position[] = [[0, 0], [3, 0], [3, 3], [2, 3], [2, 1], [1, 1], [1, 3], [0, 3], [0, 0]];
+		const uPoly: Geometry = { type: 'Polygon', coordinates: [u] };
+		expect(pointInGeometry(centerOf(uPoly), uPoly)).toBe(false);
+		expect(pointInGeometry(interiorPoint({ type: 'Polygon', coordinates: [u] })!, uPoly)).toBe(true);
+		const holed: Geometry = { type: 'Polygon', coordinates: [sq(0, 0, 3), sq(1, 1, 1)] };
+		expect(pointInGeometry(interiorPoint({ type: 'Polygon', coordinates: [sq(0, 0, 3), sq(1, 1, 1)] })!, holed)).toBe(true);
+	});
+	it('takes the largest part of a multipolygon, and is null for a degenerate ring', () => {
+		expect(interiorPoint({ type: 'MultiPolygon', coordinates: [[sq(0, 0, 1)], [sq(10, 10, 4)]] })![0]).toBeGreaterThan(10);
+		expect(interiorPoint({ type: 'Polygon', coordinates: [[[0, 0], [1, 1], [0, 0]]] })).toBeNull();
 	});
 });
 

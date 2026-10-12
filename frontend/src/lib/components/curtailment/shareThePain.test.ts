@@ -214,6 +214,16 @@ describe('shareThePain: other water users', () => {
 		expect(userLeftM3Day(user({ curtailed: true, suppliedM3Day: 10, supplyCutM3Day: -12 }))).toBe(0);
 	});
 
+	it('a priority user with a fixed restriction % (engine 1.86.0): cut by its supply cut, marked fixed %, no basic-needs floor', () => {
+		const city = user({ nodeId: 'c', name: 'City', priority: 'senior', curtailed: true, restrictionPct: 0.3, demandM3Day: 1000, suppliedM3Day: 1000, ewrChargeM3Day: -500, supplyCutM3Day: -300, uncurtailedChargeM3Day: -200 });
+		const [row] = shareThePain(summary([farm({})], 1, [city])).users;
+		expect(row!.priority).toBe('senior');
+		expect(row!.priorityLabel).toBe('priority, fixed 30 %');
+		expect(row!.ewr).toMatchObject({ volumeM3Day: 700, pct: '70%' });
+		expect(row!.ewrNotes).toEqual(['30 % fixed restriction, no basic-needs floor', '200 m³/day of its EWR charge is beyond its fixed % and stands']);
+		expect(board.users.map((r) => r.priorityLabel)).toEqual(['priority, not curtailed', 'non-priority, curtailed', 'non-priority, curtailed']);
+	});
+
 	it('totals the users apart from the farms', () => {
 		expect(board.userTotals).toMatchObject({ demand: '1\u202f100', today: { volumeM3Day: 880, pct: '80%' }, ewr: { volumeM3Day: 650, pct: '59%' } });
 		expect(board.farmTotals.demand).toBe('100');

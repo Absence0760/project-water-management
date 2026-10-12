@@ -1174,21 +1174,109 @@ result without signing in, until it expires or its owner revokes it.
   quaternary record); **the use** (`simulated_outflow`, `observed_flow`,
   `ewr_shortfall`) only when the catchment has at least `FARMER_K` = 5 farm
   holders (counted from nobody's point of view: one user's farms once, an
-  unlinked farm on its own). In a smaller catchment natural flow minus
+  unlinked farm on its own) **and** passes the dominance rule (below). In a
+  smaller catchment natural flow minus
   outflow is the farms' use, and with one farm it is that farm's
   (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)),
   so it stays linkable to a person "by a reasonably foreseeable method"
-  (POPIA s1, de-identify). The volume rows of the scenario and pack links
-  (`app_share_run_projection`, `app_share_pack_projection`) keep k as they
-  were. An applicant reads the same split (`run_series_select_contributor`,
-  `app_contributor_published_runs`; `scenarios/applicantResults.ts`
-  `naturalShown` / `impactedShown`). Five is a judgement in line with
-  statistical-disclosure practice, not a number in any statute; k alone
-  doesn't protect a catchment where one holder does almost all the
-  abstraction (a dominance rule is a follow-up,
-  [followups.md § Applicants](./followups.md#applicants-wp-33)).
+  (POPIA s1, de-identify). An applicant reads the same split
+  (`run_series_select_contributor`, `app_contributor_published_runs`,
+  `app_contributor_use_runs`; `scenarios/applicantResults.ts`
+  `impactedShown`), of the published base always and of an application run
+  only when every op was a proposal (`appShown`, 118): the results view and
+  RLS draw the same line (issue #523 G9 (d)). Five is a judgement in line with
+  statistical-disclosure practice, not a number in any statute.
   Farm keys are refused in the API and again in the function. The literal 5
   in the SQL is pinned to the engine's `FARMER_K` by `share.db.test.ts`.
+- **The dominance rule beside k** (232_small_catchments, issue #523 G8;
+  provisional, pending the CISO and counsel's D3 review, #92). k alone
+  doesn't protect a catchment where one holder does almost all the
+  abstraction: natural flow less the outflow is then mostly that holder's
+  use. `app_run_use_shown(run)` is the one place that decides whether a
+  run's use may be shown to someone kept from each farm: k as above, and,
+  over the run's modelled supply per holder (`avgSuppliedM3Day` of
+  `summary.farms` **and** `summary.users`, the other water users: a mine, a
+  town, an industrial or private abstractor, since 235; a holder's nodes
+  summed; an application's new farms and users its owner's), either no
+  supply at all (nobody takes water, so natural flow less the outflow is
+  no holder's use) or 5 or more holders with some, none above 80 % of the
+  total and no two above 90 %. Before 235 only the farms were parts, so a
+  dominant other water user beside 5 even farms passed, and so did any user
+  when every farm took nothing. k still counts farm holders only: it is the
+  number of farmers each is hidden among, and a mine or a town makes no
+  catchment of four farms safe to show; the users count in the dominance
+  rule, where their take is part of the use. One loosening follows: with
+  5 or more farm holders, fewer than 5 of them taking water plus enough
+  users can now pass (232 withheld it), since the use is then spread over
+  5 or more holders (pinned by the five-even-users case). The limits are the
+  registered volumes' (engine `allocations/holders.ts` `totalShown`,
+  `DOMINANCE_TOP1` / `DOMINANCE_TOP2`; the second limb keeps a reader who
+  knows one holder's use, such as an applicant's own, from reading the
+  largest of the rest as the total less theirs). It governs the use's
+  series of a share link (`app_share_series`) and an applicant
+  (`app_contributor_use_runs`, `app_contributor_catchment_runs`), the
+  applicant's results (`app_application_run_results` `farm_holders_ok`,
+  over the run and its base), a scenario link's volumes per run
+  (`app_share_run_projection`) and a pack's volume rows over both its runs
+  (`app_share_pack`, `app_applicant_pack`). The arithmetic is
+  `app_use_parts_shown`, pinned to `totalShown` on fixed and random sums by
+  `share/small-catchments.db.test.ts`, which also works out
+  `app_run_use_shown` from a run's summary (farms and users) on each run of
+  its dominant-user cases (a mine above 80 % beside six even farms
+  withheld, a small user shown as the control; every farm at zero supply
+  with one user withheld, five even users shown; five users and one farm
+  holder withheld); both helpers are invoker's rights,
+  closed to `water_app`, called only from SECURITY DEFINER functions. A
+  farmer's own even share (`app_other_farm_holders`, 020) is a different
+  aggregate and keeps k alone.
+- **A published DWS gauge record shows at any holder count** (232, #523 G8,
+  from the licensing assessors' review). Observed flow at a DWS gauging
+  station is published by DWS Hydrological Services, so hiding it below
+  five holders protects no one. A run marks the outlet's observed series
+  that holds one (`run_series.meta` `publishedBy: 'DWS'`, `station`;
+  `runs/publishedRecords.ts`, decided in the statement that reads the
+  values): an outlet flow record whose **every reading a DWS river-gauge
+  feed wrote** (`time_series.feed_id` + `feed_days`; a person's upload or
+  edit releases the days it covers), and not gap-filled (a filled day may
+  be a donor record's, a private logger's among them). Not the series'
+  free-text `source`: an editor's word would let a mislabelled private
+  logger through, so a DWS record imported from a workbook stays under the
+  rule until a DWS feed writes it (fail closed). A scenario run is never
+  marked; an applicant reads the published base run's record, in
+  `run_series_select_contributor` and in the results' `gaugeRecords`; a
+  share link's `observed_flow` likewise. Private loggers, the simulated
+  outflow and the EWR shortfall keep k and dominance, but that doesn't keep
+  the use itself: **accepted residual (for the CISO and counsel's D3
+  review, #92).** Where the DWS gauge is at the outlet, its record is in
+  effect the measured outflow, and natural flow is shown at any holder
+  count (164), so natural flow less the shown DWS record gives the use
+  upstream of the gauge at any holder count, k and dominance
+  notwithstanding. DWS publishes the record anyway, and a share link's
+  natural flow beside DWS's own published record already allowed the same
+  sum since 164, so 232 adds no inference anyone couldn't make from public
+  data; the withheld outflow still keeps the *modelled* use from such a
+  reader. Runs stored before 232 carry no
+  mark. **The database checks the mark** (235, defence in depth behind
+  storeRun): `run_series_published_mark`, a BEFORE INSERT and UPDATE OF
+  meta trigger, strips `publishedBy` and `station` unless the row is the
+  outlet's `observed_flow` / `observed_flow_other` of a run that is no
+  scenario run (`from_scenario`), and the run's input of that record's
+  kind (`run_input_series.series_id`, by the label's kind) is an outlet
+  series a DWS feed for that very river-gauge station wrote whole (the same
+  `feed_days` check as storeRun's, on the live series; storeRun stores the
+  run's inputs before its series so the trigger can see them). So a future
+  insert path, or a bug in `publishedRecordMeta`, can't mark a private
+  logger. The gap-filled exclusion stays the app's (the `_fill` sibling may
+  be stored after). It checks the series link and the feed, not that the
+  run's stored input equals the live values, and an editor can already
+  create a `dws` feed and set `feed_id` / `feed_days`: it stops a future app
+  path or a bug, not a determined editor (who owns the catchment's data
+  anyway). Tests: `share/small-catchments.db.test.ts` (an uploaded record
+  hidden below k as the control; a DWS-fed one shown to the applicant, the
+  share link and the results; a day a person wrote, and a private logger,
+  never marked; a forged mark stripped by the trigger on another key,
+  another station, a scenario run and a record with a person's day, a
+  genuine one kept), `runs/publishedRecords.test.ts`.
 - **Rate limiting.** Nothing app-level: the WAF's per-IP rule on `/api/*`
   (`waf_rate_limit_per_ip`, `infra/waf.tf`) covers `/api/share/*`, and a
   256-bit token can't be enumerated. `last_used_at` moves at most once an
@@ -2296,8 +2384,10 @@ In short:
     leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
     EWR sites, the catchment under the split k rule (the river always, the
     use at 5 or more holders), their own units, other units
-    downstream only as "Farm 3" and a whole percentage, and nothing but the
-    EWR when an op was a baseline assumption). The DB test
+    downstream only as "Farm 3" and whole percentage points of share
+    supplied (the pack's measure), and of a run with a baseline assumption
+    nothing of the application's side but the EWR, beside the published
+    base's side as RLS serves it, issue #523 G9 (d)). The DB test
     (`scenarios/results.db.test.ts`) scans the answer for every other farm's
     name and the hidden crop.
   - **Drafts are private, even from the assessors.** Who reads an
@@ -2327,18 +2417,73 @@ In short:
   - **Only a member acting for the responsible authority records its
     decision** (163_licensing_authority; provisional position, pre-counsel
     research, 2026-10-01: under the National Water Act only the responsible
-    authority decides a licence, s27, s41, s42). `project_member.acts_for_authority`
-    is set by an owner only (`project_member_authority` refuses anyone else,
-    and an insert, an invite or a new project, always starts it false;
-    water_app's `UPDATE` on `project_member` is the columns `role`, `party`
-    and `acts_for_authority` only). `scenario_guard` refuses the move to
-    `decided` unless `app_acts_for_authority` (editor or above **and**
-    marked), and the route says so first (`403`). The same right, checked
-    by `run_publication_endorse`, endorses a published baseline; an
-    endorsement is set once and never changes (`run_publication_final`),
-    except that the endorser's account going clears `endorsed_by`.
-    `projects/authority.db.test.ts` tries each through the route and past
-    it, with a marked editor as the positive control.
+    authority decides a licence, s27, s41, s42). `scenario_guard` refuses
+    the move to `decided` unless `app_acts_for_authority`, and the route says
+    so first (`403`). The same right, checked by `run_publication_endorse`,
+    endorses a published baseline; an endorsement is set once and never
+    changes (`run_publication_final`), except that the endorser's account
+    going clears `endorsed_by`. `projects/authority.db.test.ts` tries each
+    through the route and past it, with a confirmed editor as the positive
+    control.
+  - **The same members record a licence's granted terms and what followed
+    the decision** (227_licence_terms, 228_decision_events, issue #523 G3,
+    G4). The granted terms go with the decision (`scenario_guard`: only with
+    `licence_issued`, set once, never changed). An appeal event is a new
+    `decision_event` row: its insert policy asks `app_acts_for_authority`
+    and `decision_event_guard` (SECURITY DEFINER) asks it again, refuses an
+    application's owner, holds the sequence under a per-scenario lock and
+    stamps the author and time; `water_app` has no `UPDATE` or `DELETE` on
+    it, so the record of an appeal can't be rewritten or removed. The events
+    are read by whoever reads the scenario (the policy asks the scenario's
+    own policies): the applicant and their shared members see the events on
+    their own application, another applicant sees nothing. Granted terms are
+    checked under the applicant's mask like the application's own changes,
+    and stored with only the application's own nodes' names, so they quote
+    no hidden farm's name to the applicant; for a viewer kept from each
+    farm's volume, the terms' volume changes are left out as the scenario's
+    are (`viewerScenario`). `scenarios/licence.db.test.ts` tries each,
+    through the route and past it, with positive controls.
+  - **The authority, not the host, decides who acts for it**
+    (229_authority_delegates, issue #523 G5; the licensing assessor's review,
+    D1: "the host controls who acts for us"). `app_acts_for_authority` (and
+    `app_authority_members`, the list) count only a **confirmed** row of
+    `authority_delegate` whose person holds editor or above in the project,
+    directly or through its team (`app_member_role`); a proposal grants
+    nothing. `authority_delegate_guard` (with RLS saying the same) holds
+    water_app to:
+    - **propose**: an owner, or a member already acting for the authority
+      (whose proposal is confirmed at once: they are the authority);
+    - **confirm**: only a member already acting for the authority. With
+      none confirmed in a project, only the operator confirms the first,
+      as the schema owner, on the authority's written request
+      (`authority_confirm_by_operator`, closed to water_app; deployment.md
+      runbook; `pnpm dev:authority:confirm` locally), so the host can't
+      bootstrap the authority by itself;
+    - **withdraw** a proposal: the owner (or the authority, a *decline*, or
+      the person). **The owner can't remove a confirmed delegate**; any
+      member acting for the authority can, and anyone can step down.
+    The person must hold editor or above when proposed and when confirmed;
+    one who loses it (removed, demoted, out of the team, the project moved
+    team) lapses at once (`authority_delegate_prune`, from triggers on
+    `project_member`, `team_member` and `project`), so coming back needs the
+    authority again. Every change is in the History, written by the database
+    itself (`authority_delegate_audit`, so the operator's SQL is logged too):
+    `authority.proposed`, `.confirmed` (with `via` and the operator's
+    reference), `.withdrawn`, `.declined`, `.removed`, `.lapsed`,
+    `.grandfathered`. Confirming and removing need two-step sign-in always
+    (as deciding does); an owner's proposal or withdrawal, where the project
+    requires it. 163's `project_member.acts_for_authority` is no longer read,
+    and water_app can't set it (its column grant is revoked; dropped by a
+    later migration). **Residual:** the host still controls access: an owner
+    who removes or demotes a delegate ends their delegation (logged as
+    `authority.lapsed`); it can never make someone act for the authority.
+    **Grandfathered:** every flag set before 229 on a member who still held
+    editor or above was carried over as confirmed (`confirmed_via
+    'grandfathered'`, an `authority.grandfathered` event whose actor is the
+    owner who last ticked it), so decisions in progress didn't stop; the
+    authority can remove any of them. `projects/authority-delegates.db.test.ts`
+    tries each rule through the route and past it, with positive controls,
+    and replays the carry-over.
   - **No editor is also an applicant** (the conflict guard, D1 (c), 163).
     Someone who edits the project (editor or owner, directly or through its
     team, `app_member_role`) can't be in an applying party, own an
@@ -2845,6 +2990,7 @@ database:
 
   | Reader | Names | Per-unit volumes |
   | --- | --- | --- |
+  | Members acting for the responsible authority (confirmed delegates, 229) | **always** | **always**, with how each is held (#523 G6: one rule, `app_user_reads_allocation_units` / `_holders`, 231, its first line the authority's) |
   | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
   | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise only today's total per water source, at ≥ 5 registered users in force and none (or two) dominating it (provisional, #92); a run's years and § 5's totals of other units as status and modelled use, no registered m³ (#523 G–O) |
@@ -2903,7 +3049,19 @@ database:
   band, for the baseline or the application (`withoutOthersRegistered`,
   `othersRegisteredWithheld`; page 1's "above the registered volume" flag
   is rebuilt without them); their modelled use stays, and so do an
-  applicant's own units. **No status per year** (#523 round 6;
+  applicant's own units. Page 1's **"Registered vs modelled use"** row and
+  § 5's `unitYears` count that viewer only the units § 5 lists one by one,
+  an applicant's own (`ownUnitYears`, `registeredUseRow` `ownOnly`,
+  `withOwnUnitYears` in `allocations/viewerUnits.ts`; #523 G1c): counted
+  over every unit, the totals' units and those left out below 5 holders
+  included, a team scenario's run-years over the band at a fixed band
+  bounded one unit's volume as the statuses did (round 6), and a single
+  left-out unit's count was its own judgement. With no unit of the
+  applicant's own judged (a team scenario, baseline evidence) the row reads
+  "Not shown" (`ALLOCATIONS_NOT_ASSESSED.othersWithheld`). A pack whose
+  frozen row counts other units' years (`countsOthersYears`) is served with
+  the row recounted, and its PDF, which prints the frozen count, is refused
+  (`packWithheldPart` `pdf`). **No status per year** (#523 round 6;
   operator's decision 2026-10-11, **provisional**, pending the CISO and
   the D3 privacy review, #92): every year with the same rows in force has
   the same registered total, so the statuses of many run-years at a fixed
@@ -2945,7 +3103,10 @@ database:
   freezes its rows' keys when it is stored (`run_allocation_holder`,
   owner-only, written by a trigger, read only through
   `app_run_allocation_holders` for the given rows of one run the caller can
-  read under `model_run_select`'s rule), so rows
+  read under `model_run_select`'s rule; since 226 the table also freezes each
+  row's authorisation, read the same way through `app_run_allocation_kinds`,
+  no volume or holder, for the headline board's mix as at the baseline,
+  #523 G2), so rows
   deleted later can't count as new holders (#523 N; a row no living
   holder had, one a scenario op adds, shares one key `gone`). A key is a
   pseudonym of the holder's name: it can't be turned back without the
@@ -3020,8 +3181,15 @@ database:
   (`403 allocation_series_withheld`), `…/series/bulk`, `…/day` (a unit's and
   the catchment's), the daily, all-farms and summary CSVs and the `.xlsx`
   workbook, the compare route, History, sweep members (`withheld:
-  ["series"]`), uncertainty ensembles, yields computed on such a run or
-  scenario (`points: null`, `withheld`), the evidence report live, in a
+  ["series"]`), uncertainty ensembles (a paired band when **either** run
+  is one, the run it is listed under or its baseline ensemble's: the band is
+  the difference of the two runs' members, so either side's figures give the
+  other's back; `ensemblesAsSeen` in `runs/uncertainty.ts`, #523 G1c), yields computed on such a run or
+  scenario (`points: null`, `withheld`; judged by the mode the yield job
+  recorded it ran with, `yield_result.allocation_mode` from 221, #523 G1c,
+  so dropping a scenario's cap op afterwards doesn't release one; a
+  scenario's yield from before 221 has no mode and is withheld, a run's is
+  judged by the run's own mode, which never changes), the evidence report live, in a
   pack's served manifest (its PDF refused, `packWithheldPart`) and in a
   report PDF printed without the volumes. The summary is marked
   `allocations.verdictsOnly` with `withheld` naming the fields left out, the
@@ -3035,8 +3203,13 @@ database:
   authorised one, which runs at full allocation on every application) give
   each year class's verdict and months or days below only, no waterfall
   (existing use, the application's, storage change) and no class bounds
-  (`boardVerdicts`; round 5, finding 1). Nothing of such a run is served
-  as a flow, so no flow differencing is left to accept.
+  (`boardVerdicts`; round 5, finding 1), and the authorised one without its
+  pair's reproduction record (`authorisedVerdicts`, #523 G2: both results
+  digests, which would let a guess at the volumes be confirmed by re-running
+  it, and each registered volume's authorisation by allocation id; they are
+  for re-running the pair from the reproduction bundle, which that viewer is
+  refused). Nothing of such a run is served as a flow, so no flow
+  differencing is left to accept.
 
   **The canary sweep** (`allocations.db.test.ts`): every `GET /projects/:id/…`
   route in `app.routes` (and `/me/alerts/:projectId`, and two comparisons)
@@ -3056,8 +3229,14 @@ database:
   (`allocations/verdictsOnly.test.ts`), and a sweep, an
   uncertainty ensemble, a (draft) evidence pack, an impact report, an
   assessment and a delineation request as fixtures; no answer may hold any
-  of the numbers in m³ a year, megalitres, m³ a day or the run's partial
-  water year's share. A route whose `:param` has no fixture fails the test,
+  of the numbers, of either sign, in m³ a year (in figures or grouped in
+  words, within 0.5) or as a share matched by closeness: megalitres, a
+  day's (÷ 365 or 366, in m³ or ML), a second's, or the run's partial water
+  year's, each printed with 6 or more significant digits and agreeing to its
+  printed precision (a part in ten million at full precision). The values
+  under id keys and the digits of uuids and hashes are skipped, so the
+  closeness can be that tight without an id matching (#523 G1c,
+  `__tests__/figures.ts`, unit-tested beside it). A route whose `:param` has no fixture fails the test,
   and every answer must succeed or be one of its listed refusals (with the
   reason). An editor reads each number where it is (positive control).
   What it doesn't cover: routes outside `/projects/:id` (`/teams/:id/portfolio`,
@@ -3146,11 +3325,12 @@ placed points. The server never trusts the browser with geometry:
 - Every **area is computed on the server** (`geo/area.ts`); a client's figure
   is never accepted. An area reaches the model only through
   `area-from-map`, an editor's explicit action recorded as a model revision;
-  a dam's capacity and full-supply area only through `dam-capacity-from-register`
-  and `dam-area-from-map` (issue #326 B-dams), which take a register number or
-  a feature id, never a value: the server re-derives the value (the register
-  entry must be within 1 km of the unit's own dam on the map; the polygon must
-  be a dam linked to that unit). A planted area from land cover only through
+  a dam's full-supply area only through `dam-area-from-map` (issue #326
+  B-dams), which takes a feature id, never a value: the server re-derives
+  the value (the polygon must be a dam linked to that unit). A dam's
+  capacity never comes from the map: the register of dams is a reference
+  only (#523 C1), and the accept that wrote a registered capacity
+  (`dam-capacity-from-register`) was removed. A planted area from land cover only through
   `crop-area-from-land-cover` (issue #326 B-landcover), which takes a crop, a
   dataset and optionally a parcel, never a value: the server sums the
   cropland in the unit's own linked parcels as they are now. Evaporation
@@ -3178,9 +3358,18 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207) and `river_reference` (171) are public reference data, readable by any
+  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
-  schema owner). The shared CHIRPS cell cache (`chirps_cell_year`, 208,
+  schema owner). The gazetteer's read policy is `FOR SELECT USING (true)`
+  with `SELECT` granted to `water_app` and no write policy or grant; it is
+  written only by the operator's load (`pnpm import:gazetteer`, or
+  `load-reference.yml` in production). 225 also creates the `pg_trgm`
+  extension (trusted, as the schema owner) for its trigram index. The
+  Map's search, `GET /projects/:id/map/search?q=` (issue #523 C5), is
+  viewer-gated (`requireRole … 'viewer'` under `withUser`), validates `q`
+  (2–100 characters after trimming, at least one letter or digit;
+  `SearchQuery`), reads only our own reference tables (no third-party
+  geocoder, so what is typed leaves nowhere) and writes nothing. The shared CHIRPS cell cache (`chirps_cell_year`, 208,
   and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`) is read
   the same way but written by the data feeds, through checked functions
   (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`;
@@ -3434,7 +3623,9 @@ PDF someone else asked for kept the person as a recipient
 | A pseudonym of each registered user's name, frozen with each run to count holders (219, #523): `md5` of a per-project salt and the name | `run_allocation_holder`, `allocation_holder_salt` (owner-only) | With the run; reset to `gone` in every run once the name leaves the project (`allocation_holder_erased`, indexed on the normalised name: undoing a 2 500-row import in a 5 000-row project takes about 70 ms locally) | Not linked to an account | Deleted |
 | Registered users' names in issued evidence: none as a field. A run's input and the evidence report carry no holder name (§ 5 names units; Appendix A.1's model rows and A.2's diff have no holder field), so a frozen pack manifest has none either. A name can reach one only as text someone typed (a unit named after its owner, notes, the applicant statement) | `evidence_pack.manifest` (frozen, hashed) | With the pack: an issued pack is never edited (its hash is verified publicly); whether issued evidence is kept against an erasure request is a legal-hold question for counsel (#92) | Not linked to an account | Kept while the project is a licence record |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
-| Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
+| What followed a decision (an appeal lodged, upheld, set aside or varied): the member who recorded it (228) | `decision_event.recorded_by` | Kept with its scenario (the record of the appeal) | Who cleared; the event stays | Deleted |
+| An applicant's "Ask the assessors why" question and the assessors' answer (164): the application's name, the line as they read it, the changes it names, the rule in its real words; no account id (who asked and answered is the audit trail's), but the applicant's own typed text (`scenario_name`, `problem`, and `ops` with their node names and free text), which may be personal information | `application_question` | With the project. Kept when its draft is deleted, `scenario_id` cleared (234, issue #523 G7): the application's record for the authority's s42 written reasons, read by the editors only | The account id is never on the row, but the typed text is **not** removed: a detached question keeps `scenario_name`, `problem` and `ops` after the draft and the account are gone (the scenario's owner is set null, 138; the question no longer goes with the scenario, 234). Whether erasure should redact them is open for counsel ([followups.md](./followups.md) "Redact detached questions on account erasure", #92) | Deleted |
+| Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or any other outcome (refused, rejected, not considered or withdrawn) (233), + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
 | Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
@@ -3921,6 +4112,14 @@ key there would let any read-only principal forge any user's session.
   Its answer and its failure summary carry counts, codes and fixed text
   only, since the Actions log is public; the file's problems go to
   CloudWatch.
+- **Read-only production checks** (deployment.md § Read-only production
+  checks) go through the same function, invoked by the operator's SSO
+  session: an event `{ "check": "<name>" }` runs one query of a reviewed
+  registry (`backend/src/checks/readOnlyChecks.ts`). The event takes no SQL
+  and no other field (refused before anything connects), the query runs in
+  a `READ ONLY` transaction that is always rolled back, and the answer
+  carries ids, engine versions, modes, dates and flags only (a unit test
+  holds the column allowlist; a DB test shows a write inside fails).
 - **No role can write either bucket** but the operator's own SSO session;
   the deploy role touches neither, and a guardrail test (`guardrails.tftest.hcl`) fails if any other role policy names either bucket. Uploading to the tiles bucket is itself
   publishing (the behaviour serves what is there), so the licence steps come

@@ -3,18 +3,19 @@
 	// build item 13; provisional position, pre-counsel research, 2026-10-01;
 	// docs/ui.md § Evidence pack). The pack's PDF and bundle name every water
 	// user, so they go to the authority that decides (NWA s41(2)), never
-	// through the applicant: an editor picks among the members the project's
-	// owner marked as acting for it (Members, 163), adds a note, and each gets
+	// through the applicant: an editor picks among the members the authority
+	// confirmed as acting for it (229_authority_delegates, a team editor
+	// included), adds a note, and each gets
 	// an email linking the pack's page (sign-in needed to download) and the
 	// verify page. Never a file, never a link that works on its own.
 	import { untrack } from 'svelte';
-	import { api, type Member } from '$lib/api';
+	import { api, type AuthorityDelegate } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 
 	let { open = $bindable(false), projectId, packId, version, authority }: { open: boolean; projectId: string; packId: string; version: number; authority: string | null } = $props();
 
-	let members = $state.raw<Member[] | null>(null);
+	let members = $state.raw<AuthorityDelegate[] | null>(null);
 	let picked = $state<Record<string, boolean>>({});
 	let note = $state('');
 	let error = $state<string | null>(null);
@@ -22,15 +23,15 @@
 	let done = $state<string | null>(null);
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-	/** The members acting for the authority, editors and up, never the sender: whom the API sends to. */
-	const acting = $derived((members ?? []).filter((m) => m.actsForAuthority && (m.role === 'editor' || m.role === 'owner') && m.userId !== session.user?.id));
+	/** The confirmed delegates holding editor or above, never the sender: whom the API sends to (a proposal gets nothing). */
+	const acting = $derived((members ?? []).filter((m) => m.active && m.userId !== session.user?.id));
 	const chosen = $derived(acting.filter((m) => picked[m.userId]));
 
 	async function load() {
 		error = null;
 		done = null;
 		try {
-			members = await api.members.list(projectId);
+			members = (await api.authorityDelegates.list(projectId)).delegates;
 			picked = Object.fromEntries(members.map((m) => [m.userId, true]));
 		} catch (e) {
 			error = msg(e);
@@ -67,7 +68,7 @@
 			<p class="muted" role="status">Loading the members…</p>
 		{:else if members !== null && !acting.length}
 			<p class="alert alert-info" data-testid="pack-send-none">
-				No other member acts for the responsible authority. The project’s owner marks the authority’s assessors in Members (“Acts for the responsible authority”).
+				No other member acts for the responsible authority. The authority confirms who acts for it on the Project page (“Acts for the authority”); a proposal alone isn’t enough.
 			</p>
 		{:else if acting.length}
 			<fieldset>

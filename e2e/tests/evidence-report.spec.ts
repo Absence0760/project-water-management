@@ -165,6 +165,8 @@ test('an application on the nominated run gives the full evidence report, draft 
 	const cumulative = page.getByTestId('evidence-cumulative');
 	await expect(cumulative.getByRole('rowheader', { name: /^“Second dam 150 000 m³”/ })).toBeVisible();
 	await expect(cumulative.getByRole('row', { name: /^“Second dam/ })).toContainText('submitted');
+	// It has a run of its ops, so no application is named as missing one (evidence-20; licence.db.test.ts has the named case).
+	await expect(page.getByTestId('evidence-cumulative-not-run')).toHaveCount(0);
 	// No sum of separate runs in a document since evidence-11.
 	await expect(cumulative.getByRole('rowheader', { name: 'With this application' })).toHaveCount(0);
 

@@ -20,7 +20,7 @@ test('GR4J is the only runoff model: no picker, its parameters save, and a run r
 
 	const flow = page.getByRole('region', { name: 'Flow calibration', exact: true });
 	await expect(flow.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
-	await expect(flow).toContainText('The legacy b023 workbook model was removed in engine 1.0.0');
+	await expect(flow).toContainText('The legacy runoff model (the original workbook’s) was removed in engine 1.0.0');
 	// Nothing to choose, and none of the legacy model's parameters.
 	await expect(page.getByLabel('Runoff model', { exact: true })).toHaveCount(0);
 	await expect(page.getByLabel(/^Peak-flow coefficient a/)).toHaveCount(0);
@@ -92,7 +92,7 @@ test('an old legacy run opens read-only with a clear badge, and can’t be nomin
 	// Its report says what it is and offers no sign-off.
 	await page.goto(`/projects/${project.id}/report?run=${legacy}`);
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
-	await expect(page.getByText(/^Legacy runoff model \(b023 workbook, removed in engine 1\.0\.0\): it does not conserve water/).first()).toBeVisible();
+	await expect(page.getByText(/^Legacy runoff model \(the original workbook’s, removed in engine 1\.0\.0\): it does not conserve water/).first()).toBeVisible();
 	const signoff = page.locator('#rep-signoff');
 	await expect(signoff).toContainText(/cannot be signed off/);
 	await expect(signoff.getByRole('button', { name: 'Sign off this run…' })).toHaveCount(0);
@@ -118,9 +118,9 @@ test('run comparison shows an old legacy run against a GR4J run', async ({ page,
 
 	await page.goto(`/compare?a=${project.id}:${legacyRun}&b=${project.id}:${gr4jRun}`);
 	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
-	await expect(whatChanged(page).getByText('Runoff model: legacy (b023 recession) → GR4J')).toBeVisible();
+	await expect(whatChanged(page).getByText('Runoff model: legacy (the original workbook’s recession) → GR4J')).toBeVisible();
 	await expect(whatChanged(page).getByText('GR4J production store X1: 350 mm → 300 mm')).toBeVisible();
-	await expect(page.getByRole('status').filter({ hasText: /^Run A uses the legacy runoff model \(b023 workbook, removed in engine 1\.0\.0\)/ })).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: /^Run A uses the legacy runoff model \(the original workbook’s, removed in engine 1\.0\.0\)/ })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Runoff coefficient (flow ÷ rain)' })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Kling–Gupta (KGE)' })).toBeVisible();
 	// Neither run's parameters were fitted, so neither side is called in-sample (issue #45).

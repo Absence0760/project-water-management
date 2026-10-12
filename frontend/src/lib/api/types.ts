@@ -251,7 +251,7 @@ export interface Project extends ProjectSummary {
 	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
-	/** The caller acts for the responsible authority (163): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
+	/** The caller acts for the responsible authority (163, 229): a confirmed delegate holding editor or above, so they record its decisions and endorse a baseline. */
 	actsForAuthority?: boolean;
 	/** The project's own two-step sign-in setting (204_mfa_opt_in): its owners' actions need a code. Absent from an older API. */
 	requireMfa?: boolean;
@@ -339,8 +339,48 @@ export interface Member {
 	party: string | null;
 	/** The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party. */
 	specialist: boolean;
-	/** The owner marked them as acting for the responsible authority (163). Absent from an older API. */
+	/** They act for the responsible authority: a confirmed delegate holding editor or above (229). Absent from an older API. */
 	actsForAuthority?: boolean;
+	/** Their delegation, if any (229_authority_delegates): proposed (grants nothing yet) or confirmed. Absent from an older API. */
+	authority?: AuthorityDelegateStatus | null;
+}
+
+/** A delegation's state (229_authority_delegates): a proposal grants nothing until the authority confirms it. */
+export type AuthorityDelegateStatus = 'proposed' | 'confirmed';
+
+/** Someone proposed or confirmed to act for the responsible authority (GET /projects/:id/authority-delegates, 229). */
+export interface AuthorityDelegate {
+	userId: string;
+	displayName: string;
+	status: AuthorityDelegateStatus;
+	/** Confirmed and an editor or owner now: what counts for decisions and endorsements. */
+	active: boolean;
+	proposedBy: { userId: string; displayName: string } | null;
+	proposedAt: string;
+	confirmedBy: { userId: string; displayName: string } | null;
+	confirmedAt: string | null;
+	/** member: by someone acting for the authority; operator: on the authority's letter; grandfathered: an owner's flag from before 229. */
+	confirmedVia: 'member' | 'operator' | 'grandfathered' | null;
+	/** The operator's reference (the authority's letter); '' otherwise. */
+	reference: string;
+}
+
+/** An editor or owner (directly or through the team) who may be proposed. Names only. */
+export interface AuthorityCandidate {
+	userId: string;
+	displayName: string;
+	role: Role;
+	via: 'direct' | 'team';
+}
+
+export interface AuthorityDelegates {
+	delegates: AuthorityDelegate[];
+	/** Empty unless the caller may propose. */
+	candidates: AuthorityCandidate[];
+	/** An owner, or a member acting for the authority. */
+	canPropose: boolean;
+	/** The caller acts for the authority: they confirm, decline and remove. */
+	canConfirm: boolean;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
@@ -848,6 +888,13 @@ export interface Ensemble {
 	/** Null once the starter's account is deleted (138). */
 	createdById: string | null;
 	completedAt: string | null;
+	/**
+	 * Present only for a viewer kept from the registered volumes when the
+	 * ensemble is served as EWR counts and rates only: the runs (this one, or
+	 * a paired band's baseline run) that cap use at or scale demand to those
+	 * volumes (#523 I, G1c; docs/security.md).
+	 */
+	verdictsOnlyRuns?: string[];
 }
 
 /** An ensemble with what it was built from (GET …/uncertainty/:uid). */
@@ -1095,6 +1142,15 @@ export interface Scenario {
 	decisionDate?: string | null;
 	decisionReference?: string;
 	reasonsReceived?: boolean | null;
+	/**
+	 * The licence's granted terms (227, issue #523 G3): set exactly when the
+	 * outcome is licence_issued. `asApplied`: the changes applied for, written out.
+	 */
+	grantedTerms?: LicenceTerms | null;
+	/** What followed the decision (228, #523 G4): appeals lodged and their outcomes, in order. */
+	decisionEvents?: DecisionEvent[];
+	/** Whether its licence counts now, and from what (the decision, or the newest set aside or varied event); null until decided with an outcome. */
+	licence?: LicenceStanding | null;
 	/** Who else reads an application: the applicant's consultant or client. */
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
@@ -1119,6 +1175,62 @@ export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
 	application_rejected: 'Application rejected (formal requirements)',
 	not_considered: 'Not considered: use already authorised'
 };
+/** A licence's granted terms (227): the changes as licensed, their hash and names, and its conditions in words. */
+export interface LicenceTerms {
+	ops: ScenarioOp[];
+	opsSha256: string;
+	opNames: { id: string; name: string }[];
+	conditions: string;
+	/** The changes applied for, unchanged. */
+	asApplied: boolean;
+	/** How many changes a viewer kept from each farm's volume doesn't get (as Scenario.withheldOps). */
+	withheldOps?: number;
+}
+
+export type DecisionEventKind = 'lodged' | 'upheld' | 'set_aside' | 'varied';
+export type DecisionEventForum = 'water_tribunal' | 'court';
+export const DECISION_EVENT_KINDS: readonly DecisionEventKind[] = ['lodged', 'upheld', 'set_aside', 'varied'];
+export const DECISION_EVENT_LABEL: Record<DecisionEventKind, string> = {
+	lodged: 'Appeal lodged',
+	upheld: 'Decision upheld',
+	set_aside: 'Decision set aside',
+	varied: 'Decision varied'
+};
+export const DECISION_EVENT_FORUM_LABEL: Record<DecisionEventForum, string> = { water_tribunal: 'Water Tribunal', court: 'Court' };
+
+/** One event after a decision (228): an appeal lodged, or its outcome; `terms` only on `varied`. */
+export interface DecisionEvent {
+	id: string;
+	position: number;
+	kind: DecisionEventKind;
+	forum: DecisionEventForum;
+	eventDate: string;
+	reference: string;
+	note: string;
+	terms: LicenceTerms | null;
+	recordedBy: string | null;
+	recordedAt: string;
+}
+
+/** Whether a decided scenario's licence counts in cumulative impact now (app_scenario_licence, 228). */
+export interface LicenceStanding {
+	inForce: boolean;
+	from: 'decision' | 'event';
+	eventId: string | null;
+	/** An appeal is lodged and not yet decided: nothing changes until it is. */
+	appealPending: boolean;
+}
+
+/** POST …/appeals: "Record what followed the decision" (228). `terms` with `varied` only. */
+export interface AppealRequest {
+	kind: DecisionEventKind;
+	forum: DecisionEventForum;
+	eventDate: string;
+	reference?: string;
+	note?: string;
+	terms?: { ops: ScenarioOp[]; conditions?: string };
+}
+
 /** POST …/decide: "Record the authority's decision" (163). */
 export interface DecideRequest {
 	outcome: ScenarioOutcome;
@@ -1130,6 +1242,8 @@ export interface DecideRequest {
 	reference?: string;
 	reasonsReceived: boolean;
 	note?: string;
+	/** With licence_issued only (227): the granted terms; `ops` left out, granted as applied for. */
+	granted?: { ops?: ScenarioOp[]; conditions?: string };
 }
 
 /** The outcome's basis in the Act or the regulations, printed beside the choice. */
@@ -1182,19 +1296,30 @@ export interface ApplicantUnitFigures {
 	damLowM3: number | null;
 }
 
-/** Why the catchment figures or the per-unit figures are left out. */
+/** Why the catchment figures or the per-unit figures are left out. 'few_farm_holders': fewer than 5 farm holders, or one or two of them take most of the water (the dominance rule, 232). */
 export type ApplicantWithheld = 'baseline_assumptions' | 'few_farm_holders';
+
+/** A published DWS gauge record at the outlet, the published baseline's, shown at any holder count (#523 G8, 232). */
+export interface ApplicantGaugeRecord {
+	key: 'observed_flow' | 'observed_flow_other';
+	label: string;
+	/** The DWS station code, e.g. A2H012. */
+	station: string;
+	series: { startDate: string; values: (number | null)[] };
+}
 
 interface ApplicantSeriesPair {
 	base: { startDate: string; values: (number | null)[] };
-	application: { startDate: string; values: (number | null)[] };
+	/** Null when an op was a baseline assumption (the base is the published baseline, shown anyway). */
+	application: { startDate: string; values: (number | null)[] } | null;
 }
 
 /**
  * GET …/scenarios/:sid/results (WP-3.3, D2's default, pending the client): a
  * run of an application as its applicant sees it against its base. Every
  * other farm or water user only downstream of theirs, by the anonymous name
- * the base gives it ("Farm 3") and a whole percentage.
+ * the base gives it ("Farm 3") and its change in share of demand supplied in
+ * whole percentage points (the pack's measure).
  */
 export interface ApplicantResults {
 	allProposals: boolean;
@@ -1202,14 +1327,16 @@ export interface ApplicantResults {
 	catchment: {
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
-		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		/** The EWR requirement whenever the figures show; the outflow only past the k rule (164). */
+		/** The base's always (the published baseline); the application's null when an op was a baseline assumption. */
+		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures | null };
+		/** The EWR requirement at any holder count; the outflow only past the k rule (164). Null when not read. */
 		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
-		/** Why the use's figures (outflow, its series, the EWR deficit) are left out. */
+		/** Why the application's figures (`baseline_assumptions`) or the use's (outflow, its series, the EWR deficit: `few_farm_holders`) are left out. */
 		withheld: ApplicantWithheld | null;
 	};
 	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
-	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePct: number | null }[];
+	/** supplyChangePts: the change in share of demand supplied, whole percentage points (null without a share in either run). */
+	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePts: number | null }[];
 	unitsWithheld: ApplicantWithheld | null;
 	/** What ran on their units, by the ids they gave. */
 	model: {
@@ -1220,6 +1347,8 @@ export interface ApplicantResults {
 		/** Demand objects on their units (engine ≥ 1.45.0: a demandObject.add under a hidden object's id is shown by the id they gave). */
 		demandObjects?: { id: string; nodeId: string; name: string }[];
 	};
+	/** The published DWS gauge records at the outlet, always (#523 G8); [] when the baseline has none. */
+	gaugeRecords: ApplicantGaugeRecord[];
 }
 
 export interface ApplicantResultsRun {
@@ -1295,7 +1424,8 @@ export interface ApplicationQuestion {
 
 /** The same question as the assessors read it: the application, the ops it named and the line in its real words. */
 export interface AssessorQuestion extends ApplicationQuestion {
-	scenarioId: string;
+	/** Null once its draft was deleted: the question and its answer stay the assessors' (234). */
+	scenarioId: string | null;
 	scenarioName: string;
 	ops: ScenarioOp[];
 	assessorText: string;
@@ -2242,21 +2372,21 @@ export interface AllocationSource {
 	rows: number;
 }
 
-/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record, docs/api.md § Licence record). */
-export type LicenceOutcome = 'granted' | 'refused' | 'withdrawn';
+/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record; the authority's words since 233, docs/api.md § Licence record). */
+export type LicenceOutcome = 'licence_issued' | 'licence_refused' | 'application_rejected' | 'not_considered' | 'application_withdrawn';
 export interface LicenceRecord {
 	outcome: LicenceOutcome | null;
 	outcomeOn: string | null;
 	expiresOn: string | null;
 	reason: string;
-	/** When the record may be deleted: the expiry (granted) or the decision date, + 3 years; null without an outcome. */
+	/** When the record may be deleted: the expiry (licence_issued) or the outcome's date, + 3 years; null without an outcome. */
 	closesOn: string | null;
 	/** While no outcome is recorded: when the owners must next confirm the record is still needed; null before the first issued pack or nomination. */
 	reviewDueOn: string | null;
 }
 export type LicenceOutcomeInput =
-	| { outcome: 'granted'; outcomeOn: string; expiresOn: string; reason: string }
-	| { outcome: 'refused' | 'withdrawn'; outcomeOn: string; reason: string }
+	| { outcome: 'licence_issued'; outcomeOn: string; expiresOn: string; reason: string }
+	| { outcome: Exclude<LicenceOutcome, 'licence_issued'>; outcomeOn: string; reason: string }
 	| { outcome: null; reason: string };
 
 export interface AllocationList {
@@ -2469,6 +2599,12 @@ export interface Assessment {
 	createdAt: string;
 	completedAt: string | null;
 	members: AssessmentMember[];
+	/**
+	 * Only on GET …/assessments/:aid: the applicants' "Ask the assessors why"
+	 * questions on its applications with the answers, oldest first, exported
+	 * with the matrix for the authority's s42 written reasons (issue #523 G7).
+	 */
+	questions?: AssessorQuestion[];
 }
 
 /** POST /projects/:id/assessments. */
@@ -2694,8 +2830,11 @@ export interface FarmMapFeature {
 	geometry: MapGeometry;
 	areaM2: number | null;
 	center: MapPosition;
-	/** The licence credit the map shows while it draws this feature: 'hydrorivers' on a river added from a HydroRIVERS reach. */
-	credit?: 'hydrorivers';
+	/**
+	 * The licence credit the map shows while it draws this feature: 'hydrorivers' on a river added from a HydroRIVERS
+	 * reach, 'jrc-water' on an outline (a dam) traced from JRC Global Surface Water (backend farms/view.ts).
+	 */
+	credit?: 'hydrorivers' | 'jrc-water';
 }
 
 /** GET /projects/:id/farm/:nodeId/map: empty when the farm has no parcel or dam of its own on the map. */
@@ -3025,6 +3164,36 @@ export interface GaugeStationLookup {
 	datasets: { dataset: string; count: number }[];
 }
 
+/** What the Map's search found (GET …/map/search, issue #523 C5): the map's layers first, then the gazetteer's places. */
+export interface MapSearchHit {
+	kind: 'gauge' | 'dam' | 'quaternary' | 'place';
+	/** The gauge's code, the dam's register number, the quaternary's code; null for a place. */
+	code: string | null;
+	name: string;
+	/** The gauge's or dam's river ('' when not given). */
+	river: string;
+	/** A place's GeoNames feature class and code ('P.PPL', 'S.FRM'); null for the map's layers. */
+	feature: string | null;
+	/** A place's province (GeoNames' admin1 code; '' when not given); null for the map's layers. */
+	admin1: string | null;
+	lon: number;
+	lat: number;
+	/** A quaternary's box (west, south, east, north); null for a point. */
+	bbox: [number, number, number, number] | null;
+	dataset: string;
+	/** The repo's invented datasets: never a real place. */
+	synthetic: boolean;
+	/** A place's credit (GeoNames' CC BY 4.0 attribution); null for the map's layers. */
+	source: string | null;
+}
+
+export interface MapSearchAnswer {
+	q: string;
+	hits: MapSearchHit[];
+	/** Some group had more matches than it lists: type more to narrow it. */
+	truncated: boolean;
+}
+
 /** A loaded land-cover product (issue #326 B-landcover; docs/maps.md § Cultivated area from land cover). */
 export interface CroplandDataset {
 	dataset: string;
@@ -3221,8 +3390,20 @@ export interface PanReport {
 	method: string;
 }
 
-/** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
-export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
+/**
+ * What a feature on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md): `unit`, a
+ * hydrological unit drawn as its own boundary (start-16, #523 C1); `dam`, part of the composite dam of the unit whose boundary
+ * holds it; `abstraction`, that unit's river pump; `user` and `gauge`, in the order with no land. In a plan from before
+ * start-16, `dam` and `abstraction` were units of their own (at a dam, at an abstraction point).
+ */
+export type StartRole = 'unit' | 'dam' | 'abstraction' | 'user' | 'gauge';
+
+/** A dam (part of the composite dam) or an abstraction point (the river pump) inside a unit's boundary (start-16). */
+export interface StartMember {
+	featureId: string;
+	name: string;
+	role: 'dam' | 'abstraction';
+}
 
 /**
  * How a point of a start or division was put on the elevation model's channel (backend delineation/pointPlacement.ts): on the
@@ -3232,7 +3413,8 @@ export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
  * since start-15 (issue #472).
  */
 export interface PointPlacement {
-	placedBy: 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' | 'polygon' | 'boundary';
+	/** `unit`: a unit's boundary, at its most-drained cell above the outlet (start-16). */
+	placedBy: 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' | 'polygon' | 'boundary' | 'unit';
 	reach?: { dataset: string; reachId: number; upstreamKm2: number; chosen: boolean } | null;
 	/** Beside a much larger channel: that channel (Use that channel puts the point on it). */
 	larger: LargerChannel | null;
@@ -3254,10 +3436,17 @@ export interface StartUnit {
 	name: string;
 	point: MapPosition;
 	snapDistanceM: number | null;
-	/** Its own sub-catchment's area (m²) and outline; null without an elevation model, and for a water user or a gauge (they own no land). */
+	/**
+	 * Its own area (m²) and outline: a unit's boundary (start-16); before start-16 its own sub-catchment's, null without an
+	 * elevation model; null for a water user or a gauge (they own no land).
+	 */
 	areaM2: number | null;
 	totalAreaM2: number | null;
-	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null;
+	/** A unit (start-16), with an elevation model: what drains to its boundary's outflow and to no unit above it (m²), the check on its area. */
+	demAreaM2?: number | null;
+	/** A unit (start-16): its dams (the composite dam) and abstraction points (the river pump). */
+	members?: StartMember[];
 	/** The unit it drains into (its key), or null for the outflow gauge. */
 	drainsInto: string | null;
 	/** Whether drainsInto was proposed from the elevation model (false: only the default). */
@@ -3267,7 +3456,7 @@ export interface StartUnit {
 	/** Of its own area and its whole catchment, what drains into pans (m²; absent without an elevation model or before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
-	/** A dam marked on or off the river on the map (194): the dam shares proposed for its unit (backend start.ts damSharesOf). */
+	/** Plans before start-16: a dam marked on or off the river on the map (194), the dam shares proposed for its unit. Never proposed since. */
 	damShares?: DamShares;
 }
 
@@ -3292,7 +3481,8 @@ export interface StartPlan {
 	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null; placement?: PointPlacement | null };
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
-	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
+	/** Beside units' boundaries (start-16): the catchment less them, with no outline; `members` the dams and pumps in no unit's boundary. */
+	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number; members?: StartMember[] };
 	/** What of the catchment drains into pans (start-11; absent without an elevation model or before). */
 	pans?: PanReport;
 	/** `placement`: how a dropped point was put on the channel (start-7): one beside a larger channel can be moved there. */
@@ -3348,9 +3538,14 @@ export interface DivideUnit {
 	role: StartRole;
 	point: MapPosition;
 	snapDistanceM: number | null;
+	/** A unit's boundary's area and outline (start-16; before, its own piece's); null for a water user or a gauge. */
 	areaM2: number | null;
 	totalAreaM2: number | null;
-	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null;
+	/** A unit (start-16): what drains to its boundary's outflow and to no unit above it (m²), the check on its area. */
+	demAreaM2?: number | null;
+	/** A unit (start-16): the unlinked dams (its composite dam) and abstraction points (its river pump) inside its boundary, linked to it on apply. */
+	members?: StartMember[];
 	drainsInto: string | null;
 	current: DivideCurrent | null;
 	/** How its point was put on the channel (absent before start-7). */
@@ -3358,7 +3553,7 @@ export interface DivideUnit {
 	/** Of its own area and its whole catchment, what drains into pans (m²; absent before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
-	/** A dam marked on or off the river on the map (194): the dam shares proposed for its unit (backend start.ts damSharesOf). */
+	/** Plans before start-16: a dam marked on or off the river on the map (194), the dam shares proposed for its unit. Never proposed since. */
 	damShares?: DamShares;
 }
 

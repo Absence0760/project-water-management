@@ -19,6 +19,15 @@
 //
 // <run> is `baseline` and, for an application pack, `application`.
 //
+// bundle-2 (issue #523 G2) adds `headline` to bundle.json: the results digests
+// of the full-allocation pair behind page 1's headline board, which the
+// manifest records with how each registered volume was held as at the
+// baseline (authorisedPair.ts). The pair isn't stored as runs, so the check
+// re-derives it (the baseline input at fullAllocation, scenario.json's ops on
+// it), re-runs it, and compares the digests, the board and the mix. A
+// bundle-1 bundle (a pack issued before) is checked as it was, and says the
+// headline isn't included.
+//
 // What ties it together: manifest.json hashes to the pack's manifest hash
 // (which the public verify lookup returns); the manifest names both runs and
 // lists every input series' hash, the baseline's settings and model, the
@@ -36,9 +45,14 @@ import { ENGINE_VERSION } from '../version';
 import { ZipArchive, zip, type ZipEntry } from '../zip';
 import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
+import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
+import type { ScenarioOp } from '../scenario/ops';
 
-/** Bumped whenever the bundle's layout changes; bundle.json records it. */
-export const PACK_BUNDLE_VERSION = 'bundle-1';
+/** Bumped whenever the bundle's layout changes; bundle.json records it. bundle-2: the headline pair's digests (#523 G2). */
+export const PACK_BUNDLE_VERSION = 'bundle-2';
+/** The layouts checkPackBundle reads: every one ever issued, so an older pack verifies as it did. */
+export const PACK_BUNDLE_VERSIONS = ['bundle-1', 'bundle-2'] as const;
+export type PackBundleVersion = (typeof PACK_BUNDLE_VERSIONS)[number];
 /** Bumped whenever runResultsText's shape changes; results.json records it. */
 export const RUN_RESULTS_VERSION = 'results-1';
 
@@ -96,11 +110,17 @@ export interface RunResultsFile {
 
 /** bundle.json. */
 export interface PackBundleIndex {
-	version: typeof PACK_BUNDLE_VERSION;
+	version: PackBundleVersion;
 	pack: { id: string; version: number; manifestSha256: string; shortCode: string };
 	/** The engine that built the manifest (manifest.engine). */
 	engine: { version: string; build: string | null };
 	runs: Record<BundleRunName, { runId: string; engineVersion: string; resultsSha256: string } | null>;
+	/**
+	 * bundle-2: the full-allocation pair behind page 1's headline board (not stored as runs; re-derived and
+	 * re-run by the check), its results digests as the manifest records them; null when the pack has no such
+	 * board, or one built before the pair was recorded. Absent from a bundle-1 bundle.
+	 */
+	headline?: { baselineResultsSha256: string; applicationResultsSha256: string } | null;
 	/** Every other entry of the zip, by name, with its SHA-256. */
 	files: Record<string, string>;
 }
@@ -198,6 +218,15 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'## Runs',
 		'',
 		...runs,
+		...(index.headline
+			? [
+					'',
+					"The headline board against full authorised use (page 1) is over a pair of runs that isn't stored: the baseline's input with every holder at their registered volume (`allocationMode: fullAllocation`), and the application's ops (scenario.json) applied to it. The check re-derives and re-runs both:",
+					'',
+					`- full-allocation baseline: results digest \`${index.headline.baselineResultsSha256}\``,
+					`- full-allocation application: results digest \`${index.headline.applicationResultsSha256}\``
+				]
+			: []),
 		'',
 		'## Reproduce it',
 		'',
@@ -213,6 +242,9 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'```',
 		'',
 		'It checks that every file matches its hash in bundle.json, that manifest.json hashes to the manifest hash, that the inputs and stored results are the ones the manifest lists, and then re-runs each run from its stored inputs and compares the results digest. It exits non-zero on any mismatch.',
+		...(index.headline
+			? ["It also re-derives the headline pair, re-runs it and checks both results digests, the board and the authorised volume's mix (from how each registered volume was held as at the baseline, which the manifest records) against the manifest (`headline`, `reproduce:headline`)."]
+			: []),
 		...(m.report.localityMap
 			? ["It also draws § 1's locality map again from the map features in manifest.json and checks the SVG against the SHA-256 the manifest names (`figure:locality`)."]
 			: []),
@@ -220,7 +252,7 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'',
 		'## Files',
 		'',
-		'- `bundle.json`: the index (pack, engine, each run\'s results digest, every other file\'s SHA-256).',
+		'- `bundle.json`: the index (pack, engine, each run\'s results digest, the headline pair\'s digests, every other file\'s SHA-256).',
 		'- `manifest.json`: the pack\'s manifest, as its canonical (RFC 8785) text.',
 		...(index.runs.application ? ['- `scenario.json`: the application\'s scenario as its run recorded it (ops, their hash, the base run).'] : []),
 		'- `runs/<run>/input.json`: the run\'s stored inputs: settings, model, and each series\' first day, days and SHA-256.',
@@ -228,6 +260,12 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'- `series/<sha256>.csv`: each input series\' values, `date,value`, a missing day empty; named by the SHA-256 of the values\' JSON array.',
 		''
 	].join('\n');
+}
+
+/** The headline board's pair record, when the manifest's board is built and records one (evidence-19). */
+function headlineRecord(m: PackManifest): AuthorisedPairRecord | null {
+	const lia = m.report.licenceImpactAuthorised;
+	return lia?.status === 'ok' && lia.reproduction ? lia.reproduction : null;
 }
 
 /**
@@ -269,11 +307,13 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 	}
 	if (input.application?.inputs.scenario) put('scenario.json', canonicalJson(input.application.inputs.scenario));
 
+	const pair = headlineRecord(m);
 	const head = {
 		version: PACK_BUNDLE_VERSION,
 		pack: { id: m.pack.id, version: m.pack.version, manifestSha256, shortCode: packShortCode(manifestSha256) },
 		engine: { version: m.engine.version, build: m.engine.build },
-		runs
+		runs,
+		headline: input.application && pair ? { baselineResultsSha256: pair.baselineResultsSha256, applicationResultsSha256: pair.applicationResultsSha256 } : null
 	} as const;
 	put('README.md', readme(m, head, `pack-${head.pack.shortCode}.zip`));
 	const names = [...files.keys()].sort();
@@ -290,7 +330,7 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 // ---------------------------------------------------------------------------
 
 export interface BundleCheck {
-	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `reproduce:<run>`. */
+	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `headline`, `reproduce:<run>`, `reproduce:headline`. */
 	id: string;
 	ok: boolean;
 	detail: string;
@@ -304,6 +344,12 @@ export interface BundleCheckResult {
 	pack: PackBundleIndex['pack'] | null;
 	/** The engine this code is, and the runs' engines: a re-run on another engine version is expected to differ. */
 	engine: { here: string; runs: string[] };
+	/**
+	 * The headline board's pair (issue #523 G2): `checked` when the bundle records it (and, with `rerun`, it
+	 * was re-run), `older` for a bundle-1 bundle or a board built before the pair was recorded, `none` for a
+	 * baseline pack or one with no headline board, null when the bundle couldn't be read that far.
+	 */
+	headline: 'checked' | 'older' | 'none' | null;
 }
 
 export interface CheckPackBundleOptions {
@@ -364,7 +410,7 @@ export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: Chec
 		// doesn't parse, a manifest or input missing a part): the bundle is
 		// malformed, a failing check like any other, never an exception.
 		checks.push({ id: 'structure', ok: false, detail: `the bundle is malformed: ${message(e)}` });
-		return { ok: false, checks, pack: null, engine: { here: ENGINE_VERSION, runs: [] } };
+		return { ok: false, checks, pack: null, engine: { here: ENGINE_VERSION, runs: [] }, headline: null };
 	}
 }
 
@@ -380,11 +426,13 @@ function packRefProblem(pack: unknown): string | null {
 async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundleOptions, checks: BundleCheck[]): Promise<BundleCheckResult> {
 	const { hash } = opts;
 	const add = (id: string, ok: boolean, detail: string) => (checks.push({ id, ok, detail }), ok);
+	let headline: BundleCheckResult['headline'] = null;
 	const result = (pack: BundleCheckResult['pack'], runs: string[]): BundleCheckResult => ({
 		ok: checks.length > 0 && checks.every((c) => c.ok),
 		checks,
 		pack,
-		engine: { here: ENGINE_VERSION, runs }
+		engine: { here: ENGINE_VERSION, runs },
+		headline
 	});
 
 	// The archive and its index.
@@ -396,7 +444,8 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 		const inArchive = new Set(archive.names);
 		if (!inArchive.has('bundle.json')) throw new Error('it has no bundle.json');
 		index = JSON.parse(dec.decode(await archive.read('bundle.json'))) as PackBundleIndex;
-		if (index.version !== PACK_BUNDLE_VERSION) throw new Error(`its bundle.json is version ${String(index.version)}; this code reads ${PACK_BUNDLE_VERSION}`);
+		if (!(PACK_BUNDLE_VERSIONS as readonly unknown[]).includes(index.version))
+			throw new Error(`its bundle.json is version ${String(index.version)}; this code reads ${PACK_BUNDLE_VERSIONS.join(' and ')}`);
 		const packProblem = packRefProblem(index.pack);
 		if (packProblem) throw new Error(packProblem);
 		if (typeof index.runs !== 'object' || index.runs === null || !index.runs.baseline) throw new Error("its bundle.json doesn't name the baseline run");
@@ -607,5 +656,96 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 			add(`reproduce:${r}`, false, `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, not ${named.resultsSha256}: ${why.join('; ') || 'the digests differ'}.${engineNote}`);
 		}
 	}
+
+	// The headline board's full-allocation pair (bundle-2, #523 G2): recorded in the manifest, re-derived and re-run here.
+	if (index.runs.application) {
+		headline = await checkHeadline(index, manifest, inputs.baseline?.input ?? null, inputs.application?.snapshot.scenario ?? null, opts, add);
+	}
 	return result(index.pack, runEngines);
+}
+
+/** An older pack's headline: checked as it was, said so. */
+export const HEADLINE_NOT_INCLUDED = 'headline not included (older pack)';
+
+async function checkHeadline(
+	index: PackBundleIndex,
+	manifest: PackManifest,
+	baseline: ModelInput | null,
+	scenario: { opsSha256?: string; ops?: unknown } | null,
+	opts: CheckPackBundleOptions,
+	add: (id: string, ok: boolean, detail: string) => boolean
+): Promise<BundleCheckResult['headline']> {
+	const { hash } = opts;
+	const lia = manifest.report.licenceImpactAuthorised ?? null;
+	const rec = headlineRecord(manifest);
+	if (index.version === 'bundle-1') {
+		add('headline', true, `${HEADLINE_NOT_INCLUDED}: its bundle (bundle-1) predates the record of the full-authorised-use pair, so the headline board is not re-run`);
+		return 'older';
+	}
+	if (!rec) {
+		if (index.headline) {
+			add('headline', false, "bundle.json names a headline pair the manifest doesn't record");
+			return 'none';
+		}
+		if (lia?.status === 'ok') {
+			add('headline', true, `${HEADLINE_NOT_INCLUDED}: its headline board was built before the full-authorised-use pair was recorded, so it is not re-run`);
+			return 'older';
+		}
+		add('headline', true, `no headline board to re-run (${lia ? `the board is ${lia.status}` : 'the report has none'})`);
+		return 'none';
+	}
+	const identity = manifest.report.identity;
+	const problems: string[] = [];
+	if (rec.version !== AUTHORISED_PAIR_VERSION) problems.push(`the pair's record is ${String(rec.version)}; this code reads ${AUTHORISED_PAIR_VERSION}: check out the engine that built the report (${manifest.report.builtBy})`);
+	if (rec.resultsVersion !== RUN_RESULTS_VERSION) problems.push(`its digests are of ${String(rec.resultsVersion)}; this code computes ${RUN_RESULTS_VERSION}`);
+	if (rec.allocationMode !== 'fullAllocation') problems.push(`it was derived at allocation mode ${String(rec.allocationMode)}, not fullAllocation`);
+	if (!index.headline || index.headline.baselineResultsSha256 !== rec.baselineResultsSha256 || index.headline.applicationResultsSha256 !== rec.applicationResultsSha256)
+		problems.push("bundle.json's headline digests aren't the ones the manifest records");
+	if ((rec.opsSha256 ?? null) !== (identity.application?.opsSha256 ?? null)) problems.push("the pair applied other ops than the application's (its ops hash isn't the manifest's)");
+	if (lia?.engineVersion && lia.engineVersion !== identity.baseline.engineVersion) problems.push(`the pair ran on engine ${lia.engineVersion}, the baseline on ${identity.baseline.engineVersion}`);
+	// The mix, from the baseline input's registered volumes and how each was held as at the baseline (the record's kinds).
+	if (!baseline) problems.push("the mix can't be checked: the baseline's inputs failed a check above");
+	else {
+		const mix = mixFromRecord(baseline, rec.kinds);
+		const frozen = lia?.mix ?? null;
+		if (mix === 'mismatch') problems.push("the record's kinds aren't the baseline input's registered volumes (one each)");
+		else if (frozen && 'folded' in frozen && frozen.folded) problems.push('the manifest carries only a folded mix');
+		else if (!sameJson(mix, frozen)) problems.push(`the mix from the baseline's volumes and the recorded kinds isn't the manifest's (${differingPaths(mix, frozen).join(', ')})`);
+	}
+	const named = `full-allocation pair: baseline ${rec.baselineResultsSha256}, application ${rec.applicationResultsSha256}`;
+	add('headline', problems.length === 0, problems.join('; ') || `the manifest records the ${named}; the mix of ${rec.kinds.length} registered volume${rec.kinds.length === 1 ? '' : 's'} as at the baseline is the manifest's`);
+	if (opts.rerun === false) return 'checked';
+
+	// Re-derive the pair from the bundle's inputs and re-run it.
+	const ops = scenario?.ops;
+	if (!baseline || !Array.isArray(ops)) {
+		add('reproduce:headline', false, 'not re-run: the baseline input or the scenario failed a check above');
+		return 'checked';
+	}
+	const pair = authorisedPairInputs(baseline, ops as ScenarioOp[]);
+	if (pair.problems.length) {
+		add('reproduce:headline', false, `the application's ops don't all apply to the baseline at full allocation: ${pair.problems.slice(0, 5).join('; ')}`);
+		return 'checked';
+	}
+	let ran;
+	try {
+		ran = runAuthorisedPair(pair);
+	} catch (e) {
+		add('reproduce:headline', false, `this engine (${ENGINE_VERSION}) refuses the full-allocation pair: ${message(e)}`);
+		return 'checked';
+	}
+	const why: string[] = [];
+	const b = await freshResultsDigest(ran.background, hash);
+	const a = await freshResultsDigest(ran.application, hash);
+	if (b !== rec.baselineResultsSha256) why.push(`the full-allocation baseline's results digest is ${b}, not ${rec.baselineResultsSha256}`);
+	if (a !== rec.applicationResultsSha256) why.push(`the full-allocation application's results digest is ${a}, not ${rec.applicationResultsSha256}`);
+	const board = authorisedPairBoard(pair.baseline, ran.background, ran.application, { yearClassMethod: rec.yearClassMethod, siteNodeId: rec.siteNodeId });
+	if (!sameJson(board, lia?.board ?? null)) why.push(`the board built again isn't the manifest's (${differingPaths(board, lia?.board ?? null).join(', ')})`);
+	const engineNote = identity.baseline.engineVersion !== ENGINE_VERSION ? ` The baseline was run with engine ${identity.baseline.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
+	add(
+		'reproduce:headline',
+		why.length === 0,
+		why.length === 0 ? `re-derived and re-run with engine ${ENGINE_VERSION}: both results digests and the headline board are the same` : `re-derived and re-run with engine ${ENGINE_VERSION}: ${why.join('; ')}.${engineNote}`
+	);
+	return 'checked';
 }

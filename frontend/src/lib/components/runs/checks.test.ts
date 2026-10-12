@@ -90,18 +90,31 @@ describe('water balance table', () => {
 			'Start storage + hydrological unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage'
 		);
 		// Every term the engine's residual counts (verify.ts): with all of them, each gain and loss is a column.
-		const full = row({ groundwaterM3: 3e4, storageSetM3: -1e4, otherUseM3: 5e4, streamDepletionM3: 2e4, damSeepageLostM3: 1e3, poolEvaporationM3: 400, conveyanceLossM3: 600, reachLossM3: 7e3 });
+		const full = row({ groundwaterM3: 3e4, storageSetM3: -1e4, otherUseM3: 5e4, streamDepletionM3: 2e4, damSeepageLostM3: 1e3, poolEvaporationM3: 400, conveyanceLossM3: 600, reachLossM3: 7e3, externalTransferM3: 9e3 });
 		const cols = balanceColumns([row(), full]);
 		expect(cols.map((c) => c.key)).toEqual([
 			'rain', 'runoffCoef', 'opening', 'runoff', 'transfers', 'groundwater', 'storageSet', 'rainOnDams',
-			'consumptive', 'damEvaporation', 'otherUse', 'streamDepletion', 'seepageLost', 'poolEvaporation', 'conveyanceLoss', 'reachLoss', 'outflow', 'closing', 'residual'
+			'consumptive', 'damEvaporation', 'otherUse', 'streamDepletion', 'seepageLost', 'poolEvaporation', 'conveyanceLoss', 'reachLoss', 'externalTransfer', 'outflow', 'closing', 'residual'
 		]);
+		expect(cols.find((c) => c.key === 'externalTransfer')!.value(full)).toBeCloseTo(0.009, 12);
 		expect(cols.find((c) => c.key === 'reachLoss')!.value(full)).toBeCloseTo(0.007, 12);
 		expect(cols.find((c) => c.key === 'otherUse')!.value(full)).toBeCloseTo(0.05, 12);
 		expect(cols.find((c) => c.key === 'storageSet')!.value(full)).toBeCloseTo(-0.01, 12);
 		expect(balanceEquation(cols)).toBe(
-			'Start storage + hydrological unit runoff + transfers + groundwater + storage set + rain on dams = consumptive use + other users’ use + stream depletion + dam evaporation + pool evaporation + seepage lost + off-take losses + bed losses + outflow + end storage'
+			'Start storage + hydrological unit runoff + transfers + groundwater + storage set + rain on dams = consumptive use + other users’ use + stream depletion + dam evaporation + pool evaporation + seepage lost + off-take losses + bed losses + transferred out + outflow + end storage'
 		);
+	});
+
+	it('shows the units’ base-flow gain as a gain and their loss as a loss, only on a run with them (engine 1.86.0)', () => {
+		const cols = balanceColumns([row(), row({ baseflowGainM3: 2e3, baseflowLossM3: 5e3 })]);
+		const keys = cols.map((c) => c.key);
+		expect(keys.indexOf('baseflowGain')).toBeLessThan(keys.indexOf('rainOnDams'));
+		expect(keys.indexOf('baseflowLoss')).toBeGreaterThan(keys.indexOf('consumptive'));
+		expect(cols.find((c) => c.key === 'baseflowLoss')!.value(row({ baseflowLossM3: 5e3 }))).toBeCloseTo(0.005, 12);
+		expect(balanceEquation(cols)).toBe(
+			'Start storage + hydrological unit runoff + transfers + base-flow gain + rain on dams = consumptive use + dam evaporation + base-flow loss + outflow + end storage'
+		);
+		expect(balanceColumns([row()]).some((c) => c.key.startsWith('baseflow'))).toBe(false);
 	});
 });
 
@@ -188,6 +201,9 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		// Bed losses in the reach below (engine 1.75.0): only on a node that has them.
 		reach_loss: 0,
 		senior_reach_loss: 0,
+		// A unit's base-flow loss and gain (engine 1.86.0): only on a unit that has them.
+		baseflow_loss: 0,
+		baseflow_gain: 0,
 		dam_storage_set: 0,
 		depletion_store: 0,
 		baseflow_depletion: 0,
@@ -265,6 +281,17 @@ describe('day trace', () => {
 		expect(c.consumptive).toBeCloseTo((9 * F) / 10, 9);
 		expect(c.storageChange).toBe(500);
 		expect(Math.abs(c.residual)).toBeLessThan(1e-9);
+	});
+
+	it('counts a unit’s base-flow gain in and its loss out of the runoff (engine 1.86.0)', () => {
+		const day = farmDay();
+		// The runoff I stays 750; the gain and loss change what reached the dam and the river.
+		day.columns = day.columns.filter((c) => c.key !== 'baseflow_loss' && c.key !== 'baseflow_gain');
+		expect(dayClosure(day)!.baseflow).toBeUndefined();
+		day.columns.push({ key: 'baseflow_loss', label: 'baseflow_loss', unit: 'm³/day', value: 40 }, { key: 'baseflow_gain', label: 'baseflow_gain', unit: 'm³/day', value: 10 });
+		const c = dayClosure(day)!;
+		expect(c.baseflow).toBe(true);
+		expect(c.inflow).toBeCloseTo(970, 9);
 	});
 
 	it('counts the rain on the dam in and the evaporation out (N2)', () => {

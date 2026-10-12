@@ -22,7 +22,8 @@ pnpm setup
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
 then the synthetic reference data (`pnpm import:quaternaries`,
-`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:evaporation`; see
+`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:evaporation`,
+`import:map-grid`, `import:rivers`, `import:gazetteer`; see
 [Map](#map)), then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
 (MinIO, for report PDFs and evidence packs' reproduction bundles, see
 [Reports](#reports)).
@@ -216,7 +217,7 @@ aside by name, once its evidence nomination keeps it for good).
 | **Map** | The boundary, a parcel and a dam for each unit, both gauges, the town's works, the river, the boreholes, the river pump and the plantation, on the synthetic reference data's footprint, so the quaternary lookup, cultivated area from land cover and evaporation from the map all answer. |
 | **Runs & results / Compare** | *Before calibration (GR4J defaults)*, *Calibrated baseline* (pinned, with notes, **published** with a 20 % restriction notice in English and Afrikaans, nominated as **evidence**, with an uncertainty **ensemble**) and *Forecast (next 10 days)*: compare the first two to see the fit's effect. A **sensitivity sweep** and a **seasonal outlook** (demand at 100, 90 and 80 %). |
 | **Scenarios** | Five on the calibrated baseline, each with its run: a bigger dam, a new feedlot (a new demand), WUA **drought restrictions**, a crop change, and a drier climate (−15 % rain); and a cumulative **assessment** of the dam raise and the feedlot together. |
-| **Applications** | applicant@'s submitted *Raise the Vleiplaas dam*, run, with its prompts answered, for demo@ or analyst@ to assess: the dam raised by half, with a **pass-inflow release** that lets the EWR required at Vleiplaas through its on-channel dam before it stores (a hands-off flow would bind nothing there: the unit has no river pump and no River to dam). |
+| **Applications** | applicant@'s submitted *Raise the Vleiplaas dam*, run, with its prompts answered, for demo@ or analyst@ to assess: the dam raised by half, with a **pass-inflow release** that lets the EWR required at Vleiplaas through its on-channel dam before it stores (a hands-off flow would bind nothing there: the unit has no river pump and no River to dam). The seeds confirm nobody as acting for the responsible authority, so nobody can record the decision locally until you confirm one, as the operator does on the authority's letter: `pnpm dev:authority:confirm <project-id> <email> --reference "<letter>"` (an editor or owner of the project, e.g. demo@example.com; 229, docs/deployment.md runbook). |
 | **Allocations** | Five registered water uses: a licence with months and a condition, an existing lawful use, a registration, a groundwater general authorisation and a dam's storage (21b); shown to viewers by unit. |
 | **Report / Evidence pack** | The evidence report of the calibrated baseline, and an evidence **pack** left a draft (signing and issuing need two-step sign-in). |
 | **Notes / History / Alerts / Share** | Notes on the project, a unit, a run and a scenario; the history of everything above; alert rules (a dam below 30 %, an EWR forecast failure, farms short) and demo@'s own subscription; a share link to the published baseline. |
@@ -485,6 +486,8 @@ pnpm import:rivers          # the synthetic river network (pnpm setup runs it): 
 pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal, or docker), cut to South Africa and loaded as HydroRIVERS-v10
 pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
 pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Settings → Evaporation from the map averages over the boundary
+pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
+pnpm import:gazetteer       # the synthetic place and farm names (pnpm setup runs it): what the Map's search finds after the map's own layers
 pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: starts MinIO, uploads the cached tiles and fonts if MinIO
                             # lacks them (first time: downloads the SA extract, about 1 GB at maxzoom 15, needs the pmtiles CLI on PATH),
                             # and sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL in frontend/.env.development.local (PUBLIC_TERRAIN_URL
@@ -614,8 +617,8 @@ WBT_GAUGE_SCALE_FACTOR=F
 and, for a workbook with units that pump straight from the river, to
 import the units the importer flags as probable run-of-river with the
 run-of-river supply rule (issue #54, 2c/2d; off unless set; the in-app
-**Import b023 workbook** review has the same option as its *River pumping
-units* checkbox, [ui.md](./ui.md#import-a-b023-workbook)):
+**Import workbook** review has the same option as its *River pumping
+units* checkbox, [ui.md](./ui.md#import-a-workbook)):
 
 ```bash
 WBT_RUN_OF_RIVER=1
@@ -677,7 +680,7 @@ It's the same code path as `import:project` (`POST /projects/import`,
 how a catchment gets into production ([deployment.md](./deployment.md#getting-a-catchment-into-production)).
 
 **Or import the workbook itself in the UI**, with no Python at all: choose
-**Import b023 workbook** on the project list and pick the `.xlsm` (or
+**Import workbook** on the project list and pick the `.xlsm` (or
 `.xlsx`). It's read in the browser, in a Web Worker, with progress per sheet
 and Cancel; then the review shows what's in it, the importer's notes (with
 warnings marked), the **unmapped report** (what couldn't be carried across as

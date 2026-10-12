@@ -21,6 +21,7 @@ import {
 	type SeriesProvenance
 } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
+import { byKindThenName, firstOutletSeries } from './pick';
 
 /** The kinds a person is asked the product and version of: the CHIRPS series. */
 export const asksProvenance = (kind: string) => kind === 'rain_chirps_mm';
@@ -54,30 +55,31 @@ export function provenanceFields(key: string): { product: string | null; product
 }
 
 /**
- * The CHIRPS series' label a run would use: the first CHIRPS series by name
- * (the list comes ordered by kind and name, as runs pick), null when there is
+ * The CHIRPS series' label a run would use: the outlet's first CHIRPS series
+ * by name, in byte order as runs pick (./pick.ts; not the list's own order,
+ * which the database's collation sorts, and never a unit's own), null when there is
  * none or it isn't recorded, undefined when the list isn't known. For the fit
  * record's "forcing changed since fit" (engine fitRecordStatus).
  */
-export function chirpsSourceOf(list: readonly Pick<SeriesMeta, 'kind' | 'product' | 'productVersion'>[] | null | undefined): SeriesProvenance | null | undefined {
+export function chirpsSourceOf(list: readonly Pick<SeriesMeta, 'kind' | 'name' | 'siteNodeId' | 'product' | 'productVersion'>[] | null | undefined): SeriesProvenance | null | undefined {
 	if (!list) return undefined;
-	return seriesProvenance(list.find((s) => s.kind === 'rain_chirps_mm'));
+	return seriesProvenance(firstOutletSeries(list, 'rain_chirps_mm'));
 }
 
 /**
  * The source and given unit (107_series_source.sql) of each observed record a
- * run would read: the first series of each kind at each site by name, as runs
- * pick (null = not recorded), keyed as the model input keys them (the kind at
+ * run would read: the first series of each kind at each site by name, in
+ * byte order as runs pick (./pick.ts; null = not recorded), keyed as the model input keys them (the kind at
  * the outlet, `<kind>@<node id>` at a gauge, engine calibrationSeriesKey);
  * undefined when the list isn't known. For the fit record's "calibration
  * record changed since fit".
  */
 export function observedOriginsOf(
-	list: readonly Pick<SeriesMeta, 'kind' | 'siteNodeId' | 'source' | 'sourceUnit' | 'sourceUnitFactor'>[] | null | undefined
+	list: readonly Pick<SeriesMeta, 'kind' | 'name' | 'siteNodeId' | 'source' | 'sourceUnit' | 'sourceUnitFactor'>[] | null | undefined
 ): Partial<Record<string, SeriesOrigin | null>> | undefined {
 	if (!list) return undefined;
 	const out: Partial<Record<string, SeriesOrigin | null>> = {};
-	for (const s of list) {
+	for (const s of byKindThenName(list)) {
 		if (!(CALIBRATION_FLOW_KINDS as readonly string[]).includes(s.kind)) continue;
 		const key = calibrationSeriesKey(s.kind as CalibrationFlowKind, s.siteNodeId ?? null);
 		if (!(key in out)) out[key] = seriesOrigin(s);

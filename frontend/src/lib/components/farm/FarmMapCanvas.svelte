@@ -6,13 +6,18 @@
 	// (farmMap.ts, the reader's language); the colours are the map's own
 	// (mapStyle.ts overlayColours) and, for the farm's land, its band's token
 	// (farmMap.ts FARM_BAND_TOKEN), read again when the app's theme changes.
+	// The credits are a line under the key, not MapLibre's control over the
+	// map, which covered about a fifth of the 280 px phone map (farmMap.ts
+	// farmMapCredits; issue #523 C6).
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
 	import type { ModelBand } from '@water-management/engine';
 	import type { FarmMapFeature } from '$lib/api/types';
 	import CatchmentMap from '$lib/components/map/CatchmentMap.svelte';
 	import { appIsDark, watchAppTheme } from '$lib/components/map/appTheme';
-	import { overlayColours } from '$lib/components/map/mapStyle';
-	import { asMapFeatures, FARM_BAND_TOKEN, farmFills, mapWords, type LegendItem } from './farmMap';
+	import { mapCredits } from '$lib/components/map/mapLayers';
+	import { BASEMAP_ATTRIBUTION, overlayColours } from '$lib/components/map/mapStyle';
+	import { asMapFeatures, FARM_BAND_TOKEN, farmFills, farmMapCredits, mapWords, type LegendItem } from './farmMap';
 
 	let {
 		features,
@@ -42,13 +47,14 @@
 		void dark;
 		return farmFills(features, band, readToken);
 	});
+	const credits = $derived(farmMapCredits(mapCredits(drawn), tilesUrl ? BASEMAP_ATTRIBUTION : null, `${base}/data-sources`));
 	const landColour = $derived(band ? `var(${FARM_BAND_TOKEN[band]})` : colours.parcel);
 
 	onMount(() => watchAppTheme(() => (dark = appIsDark())));
 </script>
 
 <div class="farm-map">
-	<CatchmentMap features={drawn} {selectedId} onselect={(id) => (selectedId = selectedId === id ? null : id)} {tilesUrl} {label} {fills} words={mapWords()} {onstatus} />
+	<CatchmentMap features={drawn} {selectedId} onselect={(id) => (selectedId = selectedId === id ? null : id)} {tilesUrl} {label} {fills} words={mapWords()} {onstatus} attribution="outside" />
 	<ul class="legend" aria-label={legendLabel} data-testid="farm-map-legend">
 		{#each legend as item (item.kind)}
 			<li
@@ -68,6 +74,9 @@
 			</li>
 		{/each}
 	</ul>
+	<p class="credits" data-testid="farm-map-credits">
+		{#each credits as c, i (c.text)}{#if i > 0}<span aria-hidden="true">{' · '}</span>{/if}{#if c.href}<a href={c.href}>{c.text}</a>{:else}<span>{c.text}</span>{/if}{/each}
+	</p>
 </div>
 
 <style>
@@ -98,5 +107,13 @@
 	}
 	.legend svg {
 		flex: none;
+	}
+	.credits {
+		margin: 6px 0 0;
+		/* The farm pages' 13 px floor (farm-view.spec.ts), not the workspace's 12 px --font-sm. */
+		font-size: 13px;
+		line-height: 1.5;
+		color: var(--text-2);
+		overflow-wrap: anywhere;
 	}
 </style>

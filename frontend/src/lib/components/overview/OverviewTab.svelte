@@ -243,7 +243,7 @@
 	// pill, "Setup complete" once it is.
 	$effect(() => fillHeader({ context: runContext, status: setupDone ? setupPill : undefined }, !!pick));
 	const LEGACY_TITLE =
-		'Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.';
+		'Legacy runoff model (the original workbook’s, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.';
 </script>
 
 {#snippet runContext()}

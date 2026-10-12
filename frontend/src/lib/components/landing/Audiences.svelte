@@ -31,7 +31,7 @@
 		<li>
 			<DrawnIcon name="hydrologist" {armed} draw={seen} />
 			<h3>{t('Consulting hydrologists')}</h3>
-			<p>{t('Build and calibrate a catchment model, or import your b023 workbook. Run decades of daily flows in seconds and compare what-ifs.')}</p>
+			<p>{t('Build and calibrate a catchment model, or import your Water Balance Tool workbook. Run decades of daily flows in seconds and compare what-ifs.')}</p>
 		</li>
 		<li>
 			<DrawnIcon name="association" {armed} draw={seen} />

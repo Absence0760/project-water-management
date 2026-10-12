@@ -42,7 +42,7 @@ and [data-model.md](./data-model.md)):
 - Time series are stored as `double precision[]`, and run outputs as one array
   per series. Sessions use a JWT in an httpOnly cookie. Migrations are plain
   SQL. Charts use uPlot.
-- **Excel import:** **Import b023 workbook** reads the workbook in the browser
+- **Excel import:** **Import workbook** reads the workbook in the browser
   (a TypeScript port of the Python extractor on its own streaming workbook
   reader, in a Web Worker, WP-1.31). The Python extractor (`scripts/wbt-import`) stays for the
   regression fixtures and `pnpm seed:demo`; both give the same `project.json`.
@@ -124,10 +124,10 @@ departure, and it lists each affected column with its finding ID.
 - ✅ **Import project file (.json)** on the project list (WP-1.8,
   `POST /projects/import`) takes the same `project.json`, or a project's own
   download, into any account, including production.
-- ✅ **Import b023 workbook** on the project list (WP-1.31) reads the `.xlsm`
+- ✅ **Import workbook** on the project list (WP-1.31) reads the `.xlsm`
   itself in the browser, with no Python: a Web Worker, progress per sheet,
   Cancel, a review, then the same `POST /projects/import`
-  ([ui.md § Import a b023 workbook](./ui.md#import-a-b023-workbook)). For
+  ([ui.md § Import a workbook](./ui.md#import-a-workbook)). For
   the client workbook it gives the same `project.json` as the Python, and
   the imported project's run summary is identical.
 - ✅ The importer reports whatever it could not map: hand-written transfer
@@ -559,6 +559,10 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >    issue #66):** Settings → Calibration record → Quality flags takes each
 >    record's highest and lowest gauging with its source; until it is
 >    entered, no day is flagged as extrapolated (model.md §2.10h).
+>    **Answered by the client's hydrologist 2026-10-11 (issue #90 B5):** no
+>    field gaugings are available, so the rating's extrapolated flows are
+>    used as they are and the ranges stay blank; the data-quality note that
+>    nothing can be flagged as extrapolated stays.
 > 3. **Area:** which catchment area should the project use where published
 >    figures disagree?
 > 4. **Accept the limitation:** where a calibration record can't pin down
@@ -735,14 +739,17 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     #64, `settings.ewrChargeSource`, the pragmatic EWR by default).* Should a
     low-flow requirement be judged on the month's base flow rather than its
     volume, and with which filter parameter? *Built as an option
-    (`settings.lowFlowMeasure`, Lyne–Hollick α 0.995, three passes, the volume
+    (`settings.lowFlowMeasure`, Lyne–Hollick α 0.995, one pass from engine 1.87.0, three before, the volume
     by default; from engine 1.6.0 each month filtered over its own days and
     the two years before it, so later days never change a month's verdict;
     model.md §2.9d). **Answered 2026-10-10 (the client's hydrologist, issue
     #507 item 6):** judged on the simulated total flow (the default); the
-    base-flow option stays, marked "Filter settings unconfirmed" until its
-    passes and α are checked against Hughes, Hannart & Watkins (2003).* Is ±15 % the right tolerance between the run's natural
-    MAR and the determination's before a run warns? For high flows (§2.9d):
+    base-flow option stays. **Checked 2026-10-12 (issue #523 D3, engine
+    1.87.0):** Hughes, Hannart & Watkins (2003) apply the filter once with
+    α 0.995 for daily flows, so the option now runs one pass (three
+    before).* Is ±15 % the right tolerance between the run's natural
+    MAR and the determination's before a run warns? **Confirmed 2026-10-10
+    (the client's hydrologist, issue #90 B3): keep ±15 %.** For high flows (§2.9d):
     is an event found in daily flow as at least half its duration at or
     above half its peak, or should the level sit on the base flow? Should a
     year be asked for no more events than its natural flow had (as built),

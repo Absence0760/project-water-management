@@ -303,6 +303,17 @@
 		}
 	}
 
+	/** Run the licence's terms in force (227/228): the run the evidence report's other applications read. Throws for the panel to show. */
+	async function runLicensed() {
+		running = true;
+		try {
+			const r = await api.scenarios.run(projectId, s.id, undefined, 'licensed');
+			onran(r.run, r.removedRunIds ?? []);
+		} finally {
+			running = false;
+		}
+	}
+
 	// --- rebase ------------------------------------------------------------------------
 	let proposerOpen = $state(false);
 	let rebaseOpen = $state(false);
@@ -597,7 +608,22 @@
 	</section>
 
 	{#if isApplication}
-		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && actsForAuthority && !isOwner} {canEdit} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} canReadPacks={!applicant} onchange={(d) => onchange(d)} onleft={ondeleted} />
+		<ApplicationPanel
+			{projectId}
+			scenario={s}
+			{isOwner}
+			canDecide={canEdit && actsForAuthority && !isOwner}
+			{canEdit}
+			{problems}
+			unverifiedRuns={data.unverifiedRunIds?.length ?? 0}
+			locked={busy}
+			canReadPacks={!applicant}
+			base={anonymised.size ? null : baseInput}
+			{names}
+			onrunlicensed={canEdit ? runLicensed : undefined}
+			onchange={(d) => onchange(d)}
+			onleft={ondeleted}
+		/>
 	{/if}
 </section>
 

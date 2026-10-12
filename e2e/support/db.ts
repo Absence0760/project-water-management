@@ -324,6 +324,30 @@ export async function plantGefsForecastDays(projectId: string): Promise<void> {
 }
 
 /**
+ * Make the project's outlet gauge record (flow_observed_m3s) a DWS feed's,
+ * every day of it, as the feed's ingest leaves a record it wrote whole
+ * (031_feed_days): a run then marks it a published DWS gauge record (#523 G8,
+ * 232_small_catchments). The feed is disabled, so no tick fetches for it. The
+ * marking rule itself is covered by backend/src/share/small-catchments.db.test.ts.
+ */
+export async function plantDwsGaugeRecord(projectId: string, station: string): Promise<void> {
+	await withDb(async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled)
+			 SELECT $1, 'dws', jsonb_build_object('station', $2::text), 'flow_observed_m3s', name, false
+			 FROM time_series WHERE project_id = $1 AND kind = 'flow_observed_m3s' AND site_node_id IS NULL RETURNING id`,
+			[projectId, station]
+		);
+		if (rows.length !== 1) throw new Error(`project ${projectId}: no single outlet gauge record`);
+		await db.query(
+			`UPDATE time_series SET feed_id = $2, feed_days = datemultirange(daterange(start_date, start_date + cardinality("values")))
+			 WHERE project_id = $1 AND kind = 'flow_observed_m3s' AND site_node_id IS NULL`,
+			[projectId, rows[0]!.id]
+		);
+	});
+}
+
+/**
  * Move an application's submission `days` back (and its decision, if it has
  * one, to the day after), as one submitted that long ago sits in the
  * database. The scenario trigger stamps both with now() and never lets them
@@ -514,4 +538,15 @@ export async function plantRunEngine(runId: string, engineVersion: string): Prom
 		const r = await db.query('UPDATE model_run SET engine_version = $2 WHERE id = $1', [runId, engineVersion]);
 		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
 	});
+}
+
+/**
+ * The operator's confirmation that `userId` acts for the project's responsible
+ * authority (229_authority_delegates, authority_confirm_by_operator), as the
+ * schema owner on the authority's letter: the only way to confirm the first
+ * delegate of a project (docs/deployment.md runbook). Confirms a proposal, or
+ * adds the person confirmed; they must be an editor or owner of the project.
+ */
+export async function confirmAuthorityDelegate(projectId: string, userId: string, reference = 'Synthetic authority letter 1'): Promise<void> {
+	await withDb((db) => db.query('SELECT authority_confirm_by_operator($1, $2, $3)', [projectId, userId, reference]));
 }

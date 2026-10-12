@@ -35,6 +35,7 @@ import { loadModel } from '../model/store.js';
 import { requireRole } from '../projects/access.js';
 import { mergeSettings } from '../projects/settings.js';
 import { stampRun } from './stamp.js';
+import { type PublishedRecords, publishedRecordMeta, riverGauge } from './publishedRecords.js';
 import { logEvent } from '../logging/logEvent.js';
 
 /**
@@ -53,10 +54,11 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 export type InputSeriesIds = Partial<Record<keyof ModelInput['series'], string>>;
 
 /** loadModelInput, with the id of the series each kind came from. */
-async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelInput; seriesIds: InputSeriesIds }> {
+async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelInput; seriesIds: InputSeriesIds; publishedRecords: PublishedRecords }> {
 	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
 	const model = await loadModel(db, projectId);
-	// First series of each kind (ordered by name) — the engine takes one per kind.
+	// First series of each kind by name — the engine takes one per kind. By the name's bytes (COLLATE "C"), not the
+	// database's collation, which differs between musl and glibc Postgres (issue #523; engine compareSeriesNames).
 	const { rows: s } = await db.query<{
 		id: string;
 		kind: SeriesKind;
@@ -68,18 +70,33 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		source: string | null;
 		source_unit: string | null;
 		source_unit_factor: number | null;
+		dws_station: string | null;
 	}>(
 		// The outlet's: the first of each kind among the series with no site. A gauge node's own
 		// flow records (084_gauge_records): the first of each kind per site, keyed `<kind>@<node id>`
 		// (engine gaugeSeriesKey), which only the plausibility checks read. A land unit's own rain likewise (209).
+		// dws_station: an outlet flow record whose every reading a DWS feed wrote, read in the same statement as the
+		// values (#523 G8, runs/publishedRecords.ts): the station, else null.
 		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id,
-			source, source_unit, source_unit_factor
-		 FROM time_series WHERE project_id = $1 ORDER BY site_node_id NULLS FIRST, kind, name`,
+			source, source_unit, source_unit_factor,
+			CASE WHEN site_node_id IS NULL AND kind IN ('flow_observed_m3s', 'flow_logger_m3s') AND feed_days IS NOT NULL THEN (
+				SELECT f.config->>'station' FROM data_feed f
+				WHERE f.project_id = t.project_id AND f.id = t.feed_id AND f.source = 'dws'
+				  AND EXISTS (SELECT 1 FROM unnest(t."values") v WHERE v IS NOT NULL)
+				  AND NOT EXISTS (
+					SELECT 1 FROM unnest(t."values") WITH ORDINALITY u(v, o)
+					WHERE u.v IS NOT NULL AND NOT t.feed_days @> (t.start_date + (u.o - 1)::int)
+				  )
+			) END AS dws_station
+		 FROM time_series t WHERE project_id = $1 ORDER BY site_node_id NULLS FIRST, kind, name COLLATE "C"`,
 		[projectId]
 	);
 	const series: ModelInput['series'] = {};
 	const seriesIds: InputSeriesIds = {};
+	const publishedRecords: PublishedRecords = {};
 	for (const r of s) {
+		const station = riverGauge(r.dws_station);
+		if (station && r.site_node_id === null) publishedRecords[r.kind as CalibrationFlowKind] = station;
 		// A land unit's own rain (209_unit_rain_series, issue #482): `<kind>@<unit id>` (engine unitRainSeriesKey), which
 		// only settings.unitRain `perUnit` reads. The site CHECK allows no other kind a site.
 		const key =
@@ -115,7 +132,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// rules that keep water for it are a scenario's, so whatever the store holds, the baseline runs without them.
 	// A save refuses them and 220 switched the stored ones off, so this normally changes nothing.
 	const baseline = withoutEwrKeepingRules({ settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model }).project;
-	return { input: { settings: baseline.settings, model: baseline.model, series }, seriesIds };
+	return { input: { settings: baseline.settings, model: baseline.model, series }, seriesIds, publishedRecords };
 }
 
 /**
@@ -365,6 +382,8 @@ export interface RunPlan {
 	seriesIds?: InputSeriesIds;
 	/** A forecast run of the live model: where its forecast days' rain came from (inputs.forecastRainSource, forecastRainSource below). */
 	forecastRainSource?: ForecastRainSource;
+	/** A run of the live model: its outlet flow records a DWS feed wrote whole (#523 G8, runs/publishedRecords.ts); storeRun marks their series. */
+	publishedRecords?: PublishedRecords;
 }
 
 /** The engine half of a run: no database. Injectable in tests (runOutsideTransaction). */
@@ -391,11 +410,11 @@ export async function prepareRun(
 	label: string | ((input: ModelInput) => string),
 	trigger: RunTrigger = 'manual'
 ): Promise<RunPlan> {
-	const { input: live, seriesIds } = await loadLiveInput(db, projectId);
+	const { input: live, seriesIds, publishedRecords } = await loadLiveInput(db, projectId);
 	const forecastFrom = trigger === 'forecast' ? forecastSplit(live).forecastFrom : null;
 	if (trigger === 'forecast' && !forecastFrom) throw new NoForecastRainError();
 	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
-	const plan: RunPlan = { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds };
+	const plan: RunPlan = { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds, publishedRecords };
 	if (forecastFrom) {
 		plan.forecastRainSource = await forecastRainSource(db, seriesIds.rain_forecast_mm, forecastFrom);
 		// The engine reads it too (engine ≥ 1.85.0): under per-unit rain a CHIRPS-GEFS forecast takes each unit's CHIRPS level.
@@ -568,19 +587,24 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8, $9, $10)`,
 		[runId, projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null, trigger]
 	);
+	// The inputs before the series: the database checks a series' DWS mark against the run's input of that kind
+	// (235_round6_security.sql run_series_published_mark), and strips one it can't trace to a DWS feed.
+	await storeRunInputs(db, projectId, runId, input.series, hashes, plan.seriesIds ?? {});
+	// A published DWS gauge record's series carries who published it (#523 G8, 232): the policies show it at any holder count.
+	const published = publishedRecordMeta(output.series, plan.publishedRecords);
 	// Batch the per-series inserts to keep round-trips low (~150 series per run).
 	const BATCH = 25;
 	for (let i = 0; i < output.series.length; i += BATCH) {
 		const chunk = output.series.slice(i, i + BATCH);
 		const params: unknown[] = [runId, projectId];
 		const values = chunk.map((s, j) => {
-			params.push(s.nodeId, s.key, JSON.stringify({ label: s.label, unit: s.unit }), s.values.map((v) => (Number.isFinite(v) ? v : null)));
+			const mark = s.nodeId === null ? published.get(s.key) : undefined;
+			params.push(s.nodeId, s.key, JSON.stringify({ label: s.label, unit: s.unit, ...mark }), s.values.map((v) => (Number.isFinite(v) ? v : null)));
 			const b = 3 + j * 4;
 			return `($1, $2, $${b}::uuid, $${b + 1}, $${b + 2}::jsonb, $${b + 3}::float8[])`;
 		});
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
-	await storeRunInputs(db, projectId, runId, input.series, hashes, plan.seriesIds ?? {});
 	// Last of the run's rows: sign what was stored (077_run_stamp, runs/stamp.ts),
 	// so a run written past this path (a direct insert as water_app) is told apart.
 	await stampRun(db, runId);

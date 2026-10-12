@@ -258,7 +258,9 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_phase_two(rng, doc, start, days, dense)
     add_irrigation_systems(random.Random(seed * 104729 + 3), doc, dense)
     add_unit_rain(random.Random(seed * 15485863 + 11), doc, start, days, dense)
+    add_baseflow(random.Random(seed * 2750159 + 7), doc, dense)
     add_unit_rain_decisions(random.Random(seed * 32452843 + 7), doc)
+    add_external_transfers(random.Random(seed * 49979687 + 13), doc, dense)
     return doc
 
 
@@ -396,6 +398,53 @@ def add_unit_rain_decisions(rng: random.Random, doc: dict) -> None:
 
 
 SABI_SYSTEMS = [("drip", "Drip", 0.9), ("micro", "Micro-sprinkler", 0.82), ("pivot", "Centre pivot / linear move", 0.85), ("sprinkler", "Sprinkler (permanent)", 0.8), ("movable", "Sprinkler (movable)", 0.75), ("surface", "Flood / furrow", 0.7)]
+
+
+def add_baseflow(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0), from their
+    own stream so the rest of a network is unchanged: in 25 % of networks
+    (70 % dense), on each unit half the time, a loss, a gain or both, from a
+    trickle to more than a day's runoff (so the loss takes all of it some
+    days)."""
+    if rng.random() >= (0.7 if dense else 0.25):
+        return
+    for x in doc["model"]["nodes"]:
+        if x["kind"] != "farm" or rng.random() >= 0.5:
+            continue
+        which = rng.randrange(3)
+        size = lambda: rng.choice([round(rng.uniform(1, 200), 1), round(rng.uniform(200, 20000)), round(rng.uniform(20000, 500000))])
+        if which != 1:
+            x["baseflowLossM3Day"] = size()
+        if which != 0:
+            x["baseflowGainM3Day"] = size()
+
+
+def add_external_transfers(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """Dam rules out of the catchment (§2.6, engine >= 1.86.0, toNodeId
+    null), from their own stream so the rest of a network is unchanged: in
+    20 % of networks (50 % dense), a third of the dam rules (never a river
+    off-take) sent out instead, and one or two new ones from a unit with a
+    dam, some at a rate the dam can't keep up, some above a minimum level."""
+    if rng.random() >= (0.5 if dense else 0.2):
+        return
+    m = doc["model"]
+    kind = {x["id"]: x["kind"] for x in m["nodes"]}
+    for t in m["transfers"]:
+        if t.get("source") != "river" and kind.get(t["fromNodeId"]) == "farm" and rng.random() < 0.35:
+            t["toNodeId"] = None
+    dams = [x for x in m["nodes"] if x["kind"] == "farm" and x.get("damCapacityM3", 0) > 0]
+    if not dams:
+        return
+    for _ in range(rng.randint(1, 2)):
+        src = rng.choice(dams)
+        m["transfers"].append({
+            "id": _uuid(rng), "fromNodeId": src["id"], "toNodeId": None,
+            "months": sorted(rng.sample(range(1, 13), rng.randint(1, 12))),
+            "maxRateM3s": rng.choice([round(rng.uniform(0.0001, 0.01), 5), round(rng.uniform(0.01, 0.2), 4)]),
+            "dailyCapM3": None if rng.random() < 0.6 else round(rng.uniform(100, 8000)),
+            "minStoragePct": rng.choice([0, 0.2, round(rng.uniform(0, 0.6), 2)]),
+            "enabled": rng.random() > 0.1, "priority": rng.randint(0, 2),
+        })
 
 
 def add_irrigation_systems(rng: random.Random, doc: dict, dense: bool = False) -> None:

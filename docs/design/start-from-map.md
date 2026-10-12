@@ -7,7 +7,11 @@ point**, deferred from [delineation.md](./delineation.md) § Not built) and
 before the build, then built to it (migration 178,
 `backend/src/delineation/subcatchments.ts` and `start.ts`, the Map tab's
 **Start from the map** sheet); where the build had to differ, the section
-says so.
+says so. Since `start-16` (#523 C1) the units follow the user's own
+boundaries and a dam or an abstraction point is never a unit:
+[§ Units follow the user's boundaries](#units-follow-the-users-boundaries-start-16)
+replaces what the sections below say about units at dams and abstraction
+points.
 
 ## The flow
 
@@ -24,12 +28,16 @@ reload) lands on the same step.
    offers Delineate, Draw the boundary and Upload (the existing tools; the
    sheet closes into them).
 2. **The points.** Every dam (a point or a polygon), every *other* point
-   and every gauge on the map is listed. For each the editor says what it is
-   in the model:
-   - **A unit with a dam** (dams' default): a hydrological unit whose
-     sub-catchment ends at the dam wall;
-   - **A unit at an abstraction point** (other points' default): a unit
-     whose sub-catchment ends where it takes water from the river;
+   and every gauge on the map is listed (since `start-16` every unit's
+   boundary too, an *other* area or a parcel: **A hydrological unit**; a dam
+   is then **Part of its unit's composite dam** and an other point **Its
+   unit's river pump**, below). As first built, for each the editor said
+   what it is in the model:
+   - **A unit with a dam** (dams' default until `start-16`): a hydrological
+     unit whose sub-catchment ends at the dam wall;
+   - **A unit at an abstraction point** (other points' default until
+     `start-16`): a unit whose sub-catchment ends where it takes water from
+     the river;
    - **Another water user** (a town, industry: a *user* node, no land);
    - **Not in the model** (gauges' default, except the outlet).
    The **outlet** is picked from the gauges, or *the boundary's own outlet*
@@ -59,7 +67,7 @@ reload) lands on the same step.
    existing Part B proposals, each with its own accept, and where it is:
    rain from the boundary (the CHIRPS feed, on this sheet), the nearest
    gauging station (Settings → Data feeds), evaporation (Settings &
-   calibration → Demand, which links Evaporation from the map: the monthly A-pan the dams, river pools and crops lose,
+   calibration → Demand, which links Evaporation from the map: the monthly A-pan the dams and crops lose (river pools are storage only since engine 1.86.0),
    since an ET₀ row from the map feeds the runoff model only and with no
    A-pan the dams lose nothing; round 4), each dam's capacity from the
    register and full-supply area from its polygon (Dams), cultivated area
@@ -90,6 +98,58 @@ the method, steps 2 and 3); `start-8` to `start-14` are listed in
 data-model.md § `start_proposal`; `start-15`, issue #472, puts every point
 on the nearest terrain channel and retires the mapped river's rules of
 `start-3`, `start-4`, `start-7` to `start-9`, `start-12` and `start-13`.)
+
+## Units follow the user's boundaries (start-16)
+
+The client's hydrologist answered on #90 ("Abstraction points from Start
+from the map / Divide", 2026-10-11): each hydrological unit has **one
+composite dam**, the total of all its farm dams, whose contributing area is
+the user's input (the rest of the unit drains straight to the river), and
+its river pump draws on the upstream inflow, the unit's runoff that misses
+the dam and the dam's spill. An abstraction point is that pump, **not a
+unit of its own**, and units follow the hydrologist's boundaries, not the
+points. The composite dam's volume and contributing area are not
+automated: many farm dams are unregistered, so the register of dams stays a
+reference, never the composite's value. Built in #523 C1:
+
+- **A unit is its boundary.** The points step lists each *other* area and
+  parcel as **A hydrological unit (this is its boundary)**; the unit's area
+  is the polygon's geodesic area (`map_feature.area_m2`), and on apply the
+  polygon is linked to the unit as its area (`area_feature_id`, from the
+  map, gross), no copy made. A boundary redrawn since the proposal is
+  refused when its area is ticked (409).
+- **Dams and abstraction points are parts of their unit.** A dam is **Part
+  of its unit's composite dam**, an other point **Its unit's river pump**
+  (or another water user); each goes to the first unit whose boundary holds
+  it (a polygon by a point inside its outline, so a long or concave dam
+  can't land in the next unit), else to the rest of the catchment, or is
+  dropped outside the catchment boundary. They are never placed on the
+  elevation model, never units, and on apply only linked to their unit
+  (`map_feature.node_id`, never a link a feature has). Nothing is filled:
+  no capacity from the register, no share of runoff or of the upstream
+  inflow to the dam (a ticked one is refused), no pump capacity. The
+  review card lists them ("Its composite dam: …", "Its river pump: …").
+- **The elevation model orders and checks.** Each unit is placed at its
+  boundary's most-drained cell inside the catchment and drains into the
+  first unit or gauge its flow meets; the unit whose boundary holds the
+  outlet drains into the outflow, everything reaching the outlet into it.
+  The cells reaching its outflow (`demAreaM2`) only check the boundary's
+  area, with a warning past 10 %, the hydrologist's "the unit boundaries
+  summed, with the trace as the check" (#523, B4). Beside the boundaries
+  the rest of the catchment is the catchment less them, typed, with no
+  outline. Without an elevation model the boundaries still give the areas;
+  the order is the user's.
+- **Gauges** stay in the order as before (the answer is about abstraction
+  points and dams only); a gauge on a unit's outflow cell goes one cell
+  down, so the unit drains into it.
+- **Divide** follows the same rule: a unit's boundary stands for it, a dam
+  or point never does, and the unlinked dams and points inside a boundary
+  join its unit on apply.
+- **The Dams page** keeps listing the registered dams near a unit's dam,
+  for reference only: its **Use** for a registered capacity was removed.
+- **Older plans.** A plan from before `start-16` (a unit with `role` `dam`
+  or `abstraction`) can't be applied: the sheet says to discard it and
+  propose again. Applied ones keep their record.
 
 ## Sub-catchments: the method
 
@@ -358,7 +418,16 @@ API: `POST /projects/:id/map/divide` and `…/map/divide/:spid/apply`
 
 ## Not built (and why)
 
-- **Place search**: decided against for now (#326 D-C3).
+- **Place search**: decided against at first (#326 D-C3), then built
+  (#523 C5, the hydrologist's answer to #90 Q23): the Map's search box,
+  [maps.md § Search](../maps.md#search). Not built yet: the
+  Surveyor-General's farm-name register (once its reuse licence is confirmed
+  in writing), and searching the project's own features (the feature list
+  holds them).
+- **Sizing the composite dam or the pump from the map** (`start-16`):
+  decided against by the client's hydrologist (#90): the composite dam's
+  volume and contributing area and the pump's capacity are the user's
+  input, the register a reference only.
 - **Catchments larger than about 100 km across**: refused, as delineation
   is (followups.md, the worker-job path).
 - **Dividing without an elevation model**: there is nothing to divide by;

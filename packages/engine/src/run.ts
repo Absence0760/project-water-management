@@ -39,13 +39,14 @@ import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
 import { cropSharesOf, planRemoteSupply, REMOTE_SERIES } from './network/cropSupply';
-import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
-import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
+import { RIVER_TAKE_SERIES, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
+import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey, userRestrictionShare } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
+import { baseflowOf, BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, hasBaseflow } from './network/baseflow';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
 import { flowShares, overAllocationError } from './network/shares';
-import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
+import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
 import { INTAKE_SERIES, intakeTakes } from './allocations/intake';
@@ -335,7 +336,8 @@ function runNetwork(
 	// natural flow at the outlet net of them (naturalAtOutlet below).
 	const wr2012Of = (flow: Float64Array) =>
 		wr2012Report({ settings: settings.wr2012, startDate, natural: flow, areaKm2: resolveCatchmentAreaKm2(settings.calibration, input), rainMm: catchmentRain }, warnings);
-	const lossy = hasReachLosses(input.model.nodes);
+	// A unit's base-flow loss or gain (engine 1.86.0, ./network/baseflow.ts) is the land's too: the natural flow is net of it.
+	const lossy = hasReachLosses(input.model.nodes) || hasBaseflow(input.model.nodes);
 	let wr2012 = lossy ? null : wr2012Of(natural);
 
 	// --- network ----------------------------------------------------------------
@@ -579,7 +581,9 @@ function runNetwork(
 		upstream: plan.upstream,
 		order: ranked,
 		inflow: sim.nodes.map((r) => r.inflowUpstream),
-		runoff: sim.nodes.map((r) => r.runoff),
+		// A unit's base-flow loss and gain (engine 1.86.0) are the land's, not its use: its impact e = H + I + J − U
+		// reads the runoff after them, so neither is charged to it.
+		runoff: sim.nodes.map((r) => (r.baseflowLoss || r.baseflowGain ? Float64Array.from(r.runoff, (v, t) => v - (r.baseflowLoss?.[t] ?? 0) + (r.baseflowGain?.[t] ?? 0)) : r.runoff)),
 		outflow: sim.nodes.map((r) => r.outflow),
 		supplied: sim.nodes.map((r) => r.supplied),
 		storage: sim.nodes.map((r) => r.storage),
@@ -591,7 +595,8 @@ function runNetwork(
 		// losses are charged to its destination, for which the water was taken.
 		// A crop supply table's remote share (engine ≥ 1.73.0) moves water from the supplying dam to the receiving unit, as a transfer does.
 		transfers: [
-			...plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
+			// A rule out of the catchment (engine ≥ 1.86.0) is never inside a site's catchment: an export charged to its source.
+			...plan.transfers.flatMap((tr, k) => (tr.to === EXTERNAL_TO ? [] : [{ from: tr.from, to: tr.to, volume: sim.transfers[k]! }])),
 			...(plan.offtakes ?? []).map((o, k) => ({ from: o.from, to: o.to, volume: sim.offtakes![k]! })),
 			...plan.nodes.flatMap((n, i) => (n.remote ? [{ from: n.remote.from, to: i, volume: sim.nodes[i]!.remoteIn! }] : []))
 		],
@@ -612,7 +617,7 @@ function runNetwork(
 	// attribution counts a rule only at the sites with both its ends upstream,
 	// which the farms' net `transfer` series can't tell apart.
 	plan.transfers.forEach((tr, k) => {
-		if (tr.seriesKey) push(nodes[tr.from]!.id, tr.seriesKey, TRANSFER_RULE_SERIES.label(nodes[tr.to]!.name), TRANSFER_RULE_SERIES.unit, sim.transfers[k]!);
+		if (tr.seriesKey) push(nodes[tr.from]!.id, tr.seriesKey, tr.to === EXTERNAL_TO ? TRANSFER_RULE_SERIES.externalLabel : TRANSFER_RULE_SERIES.label(nodes[tr.to]!.name), TRANSFER_RULE_SERIES.unit, sim.transfers[k]!);
 	});
 	// A river off-take's (engine ≥ 1.14.0): what it took from the river, before losses, under the same key.
 	(plan.offtakes ?? []).forEach((o, k) => {
@@ -636,7 +641,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss' | 'baseflowLoss' | 'baseflowGain'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -697,8 +702,17 @@ function runNetwork(
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
 		// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): on any node that has them.
 		if (r.reachLoss) push(node.id, REACH_LOSS_SERIES.key, REACH_LOSS_SERIES.label, REACH_LOSS_SERIES.unit, r.reachLoss);
+		// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): on a unit that has them.
+		if (r.baseflowLoss) push(node.id, BASEFLOW_LOSS_SERIES.key, BASEFLOW_LOSS_SERIES.label, BASEFLOW_LOSS_SERIES.unit, r.baseflowLoss);
+		if (r.baseflowGain) push(node.id, BASEFLOW_GAIN_SERIES.key, BASEFLOW_GAIN_SERIES.label, BASEFLOW_GAIN_SERIES.unit, r.baseflowGain);
 		// The priority users' claims' share of them, which the node below takes off the priority requirement.
-		const srl = plan.nodes[i]!.seniorReachLoss;
+		// On the days the drought restriction cuts the Priority users with a fixed % (engine 1.86.0), their claims' share:
+		// a level that cuts some part of a unit's demand (engine-audit.md P2).
+		const srl0 = plan.nodes[i]!.seniorReachLoss;
+		const srlCut = plan.nodes[i]!.seniorReachLossCut;
+		const ulv = sim.restrictionUserLevel;
+		const cutsAt = plan.restriction?.cutsDemand;
+		const srl = srl0 && srlCut && ulv && cutsAt ? Float64Array.from(srl0, (v, t) => (cutsAt[ulv[t]!]! > 0 ? srlCut[t]! : v)) : srl0;
 		if (srl) push(node.id, SENIOR_REACH_LOSS_SERIES.key, SENIOR_REACH_LOSS_SERIES.label, SENIOR_REACH_LOSS_SERIES.unit, srl);
 		if (plan.nodes[i]!.borehole) {
 			// Boreholes (WP-1.34): what they gave and what the river loses for it.
@@ -720,7 +734,8 @@ function runNetwork(
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
 		// The unit's demand after the drought restriction (engine ≥ 1.54.0): on every unit the rule cuts.
-		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
+		// A Priority user's with a fixed restriction % too (engine 1.86.0).
+		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, node.kind === 'user' ? RESTRICTION_SERIES.restrictedUserLabel : RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
 		// Under the 'own' basis (engine ≥ 1.54.0) each unit's own level, beside its restricted demand.
 		const ul = sim.restrictionUnitLevel?.[i];
 		if (ul) push(node.id, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.unitLabel, RESTRICTION_SERIES.level.unit, ul);
@@ -755,15 +770,12 @@ function runNetwork(
 			const floor = basicNeeds[i];
 			if (floor) push(node.id, BASIC_NEEDS_SERIES.key, BASIC_NEEDS_SERIES.label, BASIC_NEEDS_SERIES.unit, floor);
 		}
-		// River abstractions (engine ≥ 1.65.0, docs/model.md §2.7j): each one's take and, with a pool, its storage and evaporation.
+		// River abstractions (engine ≥ 1.65.0, docs/model.md §2.7j): each one's take and, with a pool, its storage (storage only from engine 1.86.0: no evaporation series).
 		const riv = plan.nodes[i]!.river;
 		if (riv && r.riverTakes) {
 			riv.takes.forEach((x, a) => {
 				push(node.id, riverTakeKey(x.key), RIVER_TAKE_SERIES.take.label(x.name), RIVER_TAKE_SERIES.take.unit, r.riverTakes!.got[a]!);
-				if (x.pool) {
-					push(node.id, riverPoolKey(x.key), RIVER_TAKE_SERIES.pool.label(x.name), RIVER_TAKE_SERIES.pool.unit, r.riverTakes!.pool[a]!);
-					push(node.id, riverPoolEvaporationKey(x.key), RIVER_TAKE_SERIES.poolEvaporation.label(x.name), RIVER_TAKE_SERIES.poolEvaporation.unit, r.riverTakes!.poolEvaporation[a]!);
-				}
+				if (x.pool) push(node.id, riverPoolKey(x.key), RIVER_TAKE_SERIES.pool.label(x.name), RIVER_TAKE_SERIES.pool.unit, r.riverTakes!.pool[a]!);
 				// Its pump's limit (engine ≥ 1.66.0): only with a pump capacity.
 				const pl = r.riverTakes!.pumpLimited[a];
 				if (pl) push(node.id, riverPumpLimitedKey(x.key), RIVER_TAKE_SERIES.pumpLimited.label(x.name), RIVER_TAKE_SERIES.pumpLimited.unit, pl);
@@ -931,7 +943,7 @@ function runNetwork(
 		curtailment.otherUsers = otherUserCurtailment(
 			nodes.flatMap((node, i) =>
 				node.kind === 'user'
-					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!) }]
+					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!), ...(userRestrictionShare(node) > 0 ? { restrictionPct: userRestrictionShare(node), ...(sim.nodes[i]!.restrictedDemand ? { restrictedDemand: sim.nodes[i]!.restrictedDemand } : {}) } : {}) }]
 					: []
 			),
 			window
@@ -1059,6 +1071,14 @@ function runNetwork(
 
 	// Assurance of supply, stress classes and the water account (engine ≥ 0.32.0, WP-3.4): new outputs only.
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	// What each unit's dam sent out of the catchment by transfer rules (engine ≥ 1.86.0), rules in plan (id) order.
+	const externalOut: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	plan.transfers.forEach((tr, k) => {
+		if (tr.to !== EXTERNAL_TO) return;
+		const a = (externalOut[tr.from] ??= new Float64Array(days));
+		const v = sim.transfers[k]!;
+		for (let t = 0; t < days; t++) a[t] = a[t]! + v[t]!;
+	});
 	const assurance = assuranceOf?.({
 		startDate,
 		days,
@@ -1097,6 +1117,9 @@ function runNetwork(
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
 				...(r.offtakeReturn ? { offtakeReturn: r.offtakeReturn } : {}),
 				...(r.reachLoss ? { reachLoss: r.reachLoss } : {}),
+				...(externalOut[i] ? { externalOut: externalOut[i] } : {}),
+				...(r.baseflowLoss ? { baseflowLoss: r.baseflowLoss } : {}),
+				...(r.baseflowGain ? { baseflowGain: r.baseflowGain } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),
@@ -1532,12 +1555,18 @@ export function buildNetworkPlan(
 		// River off-takes (engine ≥ 1.14.0) are planned below.
 		if (!tr.enabled || isRiverOfftake(tr)) continue;
 		const from = indexById.get(tr.fromNodeId);
-		const to = indexById.get(tr.toNodeId);
+		// Outside the catchment (engine ≥ 1.86.0, issue #523 B5): toNodeId null, planned with `to` = EXTERNAL_TO.
+		const to = tr.toNodeId === null ? EXTERNAL_TO : indexById.get(tr.toNodeId);
 		if (from === undefined || to === undefined) {
 			warnings.push(`transfer ${tr.id} references a hydrological unit that does not exist; skipped`);
 			continue;
 		}
-		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
+		if (to === EXTERNAL_TO) {
+			if (nodes[from]!.kind !== 'farm') {
+				warnings.push(`transfer ${nodes[from]!.name} → outside the catchment: transfers run from a unit's dam; skipped`);
+				continue;
+			}
+		} else if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
 			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between units; skipped`);
 			continue;
 		}
@@ -1548,7 +1577,7 @@ export function buildNetworkPlan(
 			continue;
 		}
 		if (tr.monthlyRateM3s != null && !validMonthlyRates(tr.monthlyRateM3s))
-			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: its monthly rates aren't twelve numbers ≥ 0 (m³/s, Oct–Sep); its max rate in its months is used`);
+			warnings.push(`transfer ${nodes[from]!.name} → ${to === EXTERNAL_TO ? 'outside the catchment' : nodes[to]!.name}: its monthly rates aren't twelve numbers ≥ 0 (m³/s, Oct–Sep); its max rate in its months is used`);
 		// b023 "Transfer capacity max" = max rate m³/s × 86400 (the workbook rounds it), or the month's own
 		// rate (engine ≥ 1.14.0, ./network/transferRates.ts); an explicit daily cap can only lower it.
 		transfers.push({
@@ -1582,12 +1611,11 @@ export function buildNetworkPlan(
 		if ((a === a ? a : settings.apanMm[m]!) > 0) anyApan = true;
 	}
 	// No A-pan on any day (a new project's default row; an ET0 grid fills GR4J's PE only, docs/maps.md): open water
-	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4).
+	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4). Only
+	// the dams: a river abstraction's pool is storage only from engine 1.86.0 (issue #523 B2), with no evaporation.
 	if (!anyApan && days > 0) {
-		const pooled = (model.demandObjects ?? []).some((o) => o.enabled !== false && o.waterSource === 'river' && typeof o.riverPoolM3 === 'number' && o.riverPoolM3 > 0);
-		const open = nodes.filter((n) => n.kind === 'farm' && (n.damCapacityM3 > 0 || (n.cropWaterSource === 'river' && typeof n.cropRiverPoolM3 === 'number' && n.cropRiverPoolM3 > 0)));
-		if (open.length || pooled)
-			warnings.push('A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
+		if (nodes.some((n) => n.kind === 'farm' && n.damCapacityM3 > 0))
+			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
 	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
@@ -1632,6 +1660,9 @@ export function buildNetworkPlan(
 				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too (docs/model.md §2.6b)`
 				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
 		);
+	// The Priority users' fixed restriction % (engine 1.86.0, issue #523 B3, ./network/restriction.ts): the curtailment
+	// table reads it always, the drought restriction rule when there is one.
+	const userCuts = nodes.map((n) => userRestrictionShare(n, warnings));
 	const users = otherUsers(
 		nodes,
 		topo,
@@ -1645,14 +1676,22 @@ export function buildNetworkPlan(
 			d.fill(0, 0, abstractFrom[i]!);
 			scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 		},
-		datedOf
+		datedOf,
+		settings.droughtRestriction != null ? (i) => userCuts[i]! : undefined
 	);
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	// The drought restriction rule (engine ≥ 1.54.0, ./network/restriction.ts): its review and lift days need the run start.
 	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
 	if (restrictionRule && start === undefined) throw new Error('buildNetworkPlan: settings.droughtRestriction needs the run start');
 	const restriction = restrictionRule
-		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite })), start!, days, warnings, topo.outflow)
+		? planRestriction(
+				restrictionRule,
+				nodes.map((n, i) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite, ...(userCuts[i]! > 0 ? { userCut: userCuts[i]! } : {}) })),
+				start!,
+				days,
+				warnings,
+				topo.outflow
+			)
 		: null;
 	// First filling (engine ≥ 1.70.0, §2.7i): a dam that comes into service after the first day of the record (a
 	// resumed run's capture run's) starts filling; a resumed run takes the snapshot's state instead.
@@ -1749,8 +1788,11 @@ export function buildNetworkPlan(
 				...(remotes[i] ? { remote: remotes[i] } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
+				...(restriction?.userCut && users.claimsCut?.[i] ? { seniorClaimCut: users.claimsCut[i] } : {}),
 				...(reaches[i] ? { reachLoss: reaches[i] } : {}),
+				...baseflowOf(n, warnings),
 				...(users.reachClaims[i] ? { seniorReachLoss: users.reachClaims[i] } : {}),
+				...(restriction?.userCut && users.reachClaimsCut?.[i] ? { seniorReachLossCut: users.reachClaimsCut[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
 			};
 		})
@@ -1852,7 +1894,7 @@ function restrictionSummary(
 	};
 	const units = nodes
 		.map((node, i) => ({ node, r: sim.nodes[i]!, ul: sim.restrictionUnitLevel?.[i] ?? lv }))
-		.filter((x) => x.r.restrictedDemand)
+		.filter((x) => x.r.restrictedDemand && x.node.kind === 'farm')
 		.sort((a, b) => cmpStr(a.node.id, b.node.id))
 		.map(({ node, r, ul }) => {
 			// The cut on the days a level was in force only: the run means dilute it with every unrestricted day.
@@ -1875,6 +1917,35 @@ function restrictionSummary(
 				daysByLevel: byLevel
 			};
 		});
+	// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3): at the users' level each day.
+	const ulv = sim.restrictionUserLevel;
+	const users = ulv
+		? nodes
+				.map((node, i) => ({ node, r: sim.nodes[i]!, c: rp.userCut?.[i] ?? 0 }))
+				.filter((x) => x.c > 0 && x.r.restrictedDemand)
+				.sort((a, b) => cmpStr(a.node.id, b.node.id))
+				.map(({ node, r, c }) => {
+					let cut = 0;
+					let k = 0;
+					const byLevel = new Array<number>(n).fill(0);
+					for (let t = 0; t < days; t++) {
+						byLevel[ulv[t]!]!++;
+						if (ulv[t] === 0) continue;
+						cut += r.demand[t]! - r.restrictedDemand![t]!;
+						k++;
+					}
+					return {
+						nodeId: node.id,
+						name: node.name,
+						restrictionPct: c,
+						avgDemandM3Day: mean(r.demand),
+						avgRestrictedDemandM3Day: mean(r.restrictedDemand!),
+						avgSuppliedM3Day: mean(r.supplied),
+						avgCutOnRestrictedDaysM3Day: k ? cut / k : null,
+						daysByLevel: byLevel
+					};
+				})
+		: [];
 	// First filling (engine ≥ 1.70.0, §2.7i): each dam filling at the start, and the day it joined.
 	const joined = sim.restrictionJoined;
 	const filling = joined
@@ -1887,7 +1958,8 @@ function restrictionSummary(
 	const startState = resumed
 		? {
 				start: {
-					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
+					// A Priority user with a fixed restriction % holds a level too (engine 1.86.0).
+					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] || (rp.userCut?.[i] ?? 0) > 0 ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
 					ewrFailedBefore: rp.initialEwrFailed === true,
 					...(rp.filling ? { fillingBefore: nodes.flatMap((node, i) => (rp.filling![i] ? [node.id] : [])).sort(cmpStr) } : {}),
 					damStorageBeforeM3: Object.fromEntries(nodes.flatMap((node, i) => (node.kind === 'farm' && plan.nodes[i]!.damCapacityM3 > 0 ? [[node.id, plan.nodes[i]!.initialStorageM3]] : [])))
@@ -1901,6 +1973,7 @@ function restrictionSummary(
 		reviews,
 		...(ewrReviews !== undefined ? { ewrReviews } : {}),
 		units,
+		...(users.length ? { users } : {}),
 		...startState,
 		...(filling.length ? { filling } : {})
 	};
@@ -2166,11 +2239,29 @@ function otherUsers(
 	factorFrom: number,
 	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down, and (engine ≥ 1.70.0) before its demand factor. */
 	scale?: (i: number, demand: Float64Array) => void,
-	datedOf?: DatedFactorOf
-): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[]; reachClaims: (Float64Array | undefined)[] } {
+	datedOf?: DatedFactorOf,
+	/**
+	 * Each user's fixed restriction share (engine 1.86.0, issue #523 B3,
+	 * userRestrictionShare; 0 = none): when a Priority user with claims has
+	 * one, `claimsCut` and `reachClaimsCut` are every claim again with that
+	 * user's demand × (1 − share), what the farms pass on the days the
+	 * drought restriction cuts it.
+	 */
+	cutOf?: (i: number) => number
+): {
+	byNode: Map<number, OtherUser>;
+	claims: (Float64Array | undefined)[];
+	reachClaims: (Float64Array | undefined)[];
+	claimsCut: (Float64Array | undefined)[] | null;
+	reachClaimsCut: (Float64Array | undefined)[] | null;
+} {
 	const byNode = new Map<number, OtherUser>();
 	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
 	const reachClaims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	// The claims on the days the restriction cuts the users with a fixed %, made only when one of them claims (engine 1.86.0).
+	const cutClaims = nodes.some((n, i) => n.kind === 'user' && (cutOf?.(i) ?? 0) > 0 && (n.userPriority ?? 'senior') !== 'junior');
+	const claimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
+	const reachClaimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
 	// Each node's downstream node, only when some reach has bed losses to gross the claims up for (engine ≥ 1.75.0).
 	let down: Int32Array | null = null;
 	if (reaches.some((p) => p)) {
@@ -2221,35 +2312,42 @@ function otherUsers(
 			const total = up.reduce((s, j) => s + share[j]!, 0);
 			if (total > 0) {
 				claimed = true;
-				for (const j of up) {
-					const c = (claims[j] ??= new Float64Array(days));
-					const f = share[j]! / total;
-					// The reaches with bed losses between the farm and the user, nearest the user first (engine ≥ 1.75.0).
-					const path: number[] = [];
-					if (down) for (let k = j; k !== i && k >= 0; k = down[k]!) if (reaches[k]) path.unshift(k);
-					if (path.length) {
-						const add = path.map((k) => (reachClaims[k] ??= new Float64Array(days)));
-						for (let t = 0; t < days; t++) {
-							let v = (pump === undefined ? demand[t]! : Math.min(demand[t]!, pump)) * f;
-							for (let a = 0; a < path.length; a++) {
-								const g = reachGross(reaches[path[a]!]!, v);
-								add[a]![t]! += g - v;
-								v = g;
+				// Its claims as they are, then (with a fixed restriction %, engine 1.86.0) at the restricted demand on
+				// the cut set, the others' claims added to it unchanged.
+				const uc = cutOf?.(i) ?? 0;
+				const restricted = uc > 0 ? demand.map((d) => d * (1 - uc)) : demand;
+				const sets: [(Float64Array | undefined)[], (Float64Array | undefined)[], Float64Array][] = [[claims, reachClaims, demand]];
+				if (claimsCut) sets.push([claimsCut, reachClaimsCut!, restricted]);
+				for (const [claimSet, reachSet, dem] of sets)
+					for (const j of up) {
+						const c = (claimSet[j] ??= new Float64Array(days));
+						const f = share[j]! / total;
+						// The reaches with bed losses between the farm and the user, nearest the user first (engine ≥ 1.75.0).
+						const path: number[] = [];
+						if (down) for (let k = j; k !== i && k >= 0; k = down[k]!) if (reaches[k]) path.unshift(k);
+						if (path.length) {
+							const add = path.map((k) => (reachSet[k] ??= new Float64Array(days)));
+							for (let t = 0; t < days; t++) {
+								let v = (pump === undefined ? dem[t]! : Math.min(dem[t]!, pump)) * f;
+								for (let a = 0; a < path.length; a++) {
+									const g = reachGross(reaches[path[a]!]!, v);
+									add[a]![t]! += g - v;
+									v = g;
+								}
+								c[t]! += v;
 							}
-							c[t]! += v;
 						}
+						// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
+						else if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += dem[t]! * f;
+						else for (let t = 0; t < days; t++) c[t]! += Math.min(dem[t]!, pump) * f;
 					}
-					// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
-					else if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
-					else for (let t = 0; t < days; t++) c[t]! += Math.min(demand[t]!, pump) * f;
-				}
 			} else {
 				warnings.push(`priority user "${n.name}" has no unit with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
 			}
 		}
 		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });
 	}
-	return { byNode, claims, reachClaims };
+	return { byNode, claims, reachClaims, claimsCut, reachClaimsCut };
 }
 
 /**
@@ -2284,6 +2382,8 @@ function runAllocations(
 	if (!raw?.length) return null;
 	const units = nodes.flatMap((n, i) => (n.kind === 'farm' || n.kind === 'user' ? [i] : []));
 	const tolerance = settings.allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
+	// Each unit's dam rules out of the catchment (engine-audit.md X1), the ones stored as series, in plan order.
+	const externalOf = (i: number) => plan.transfers.flatMap((tr, k) => (tr.to === EXTERNAL_TO && tr.from === i && tr.seriesKey ? [sim.transfers[k]!] : []));
 	const cmp = compareAllocations({
 		startDate,
 		tolerance,
@@ -2302,6 +2402,8 @@ function runAllocations(
 				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])],
 				intakeTake: intake.take.get(i) ?? null,
 				receivedAtIntake: intake.received.get(i) ?? null,
+				// What its dam rules sent out of the catchment: surface use (X1).
+				...(externalOf(i).length ? { externalTransfers: externalOf(i) } : {}),
 				// A unit's dam losses, shown beside a dam on the river's use (engine ≥ 1.83.0, §2.12); only when it has a dam.
 				...(nodes[i]!.kind === 'farm' && nodes[i]!.damCapacityM3 > 0 ? { damEvaporation: sim.workings?.[i]?.damEvaporation ?? null, damSeepageLost: plan.nodes[i]!.seepageReturn !== undefined ? (sim.workings?.[i]?.damSeepageLost ?? null) : null } : {})
 			};
@@ -2329,7 +2431,7 @@ function runAllocations(
 				const cap = plan.nodes[i]!.allocationCap!;
 				const limit = side.waterSource === 'surface' ? cap.surfaceLimit : cap.groundwaterLimit;
 				const outside = outsideMonths(ap.byNode.get(i) ?? [], side.waterSource, toEpochDay(startDate), budget.length);
-				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3, (ap.byNode.get(i) ?? []).filter((a) => a.waterSource === side.waterSource)));
+				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3, (ap.byNode.get(i) ?? []).filter((a) => a.waterSource === side.waterSource), externalOf(i)));
 			}
 			sources.push(src);
 		}
@@ -2359,7 +2461,9 @@ function capYears(
 	startDate: string,
 	before?: readonly [number, number],
 	/** The unit's allocations of `source`: a resumed run's first year counts as capped when one was in force before the snapshot. */
-	own: readonly AllocationEntry[] = []
+	own: readonly AllocationEntry[] = [],
+	/** What its dam rules sent out of the catchment each day: surface use, as the cap counted it (engine-audit.md X1). */
+	external: readonly Float64Array[] = []
 ): { capReached: { waterYear: number; budgetM3: number; usedM3: number }[]; limitBound: AllocationLimitBound[] } {
 	const capReached: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
 	const limitBound: AllocationLimitBound[] = [];
@@ -2389,7 +2493,8 @@ function capYears(
 		}
 		if (!(budget[t]! < Infinity)) continue;
 		b = budget[t]!;
-		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		let use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		if (source === 'surface') for (const x of external) use += x[t]!;
 		const kind = limitBoundKind(Math.max(0, b - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, b);
 		if (kind) {
 			bound!.days++;
@@ -2537,10 +2642,15 @@ function catchmentRunoffCoefficient(
 	return coefficient;
 }
 
-/** The plan as the natural flow crosses it (./network/reachLoss.ts routeNatural), or null when no reach loses (engine ≥ 1.76.0). */
+/**
+ * The plan as the natural flow crosses it (./network/reachLoss.ts routeNatural), or null when no reach loses
+ * (engine ≥ 1.76.0) and no unit loses or gains base flow (engine 1.86.0, ./network/baseflow.ts).
+ */
 export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>): NaturalReaches | null {
 	const reach = plan.nodes.map((n) => n.reachLoss);
-	return reach.some((p) => p) ? { order: plan.order, upstream: plan.upstream, reach } : null;
+	const baseflow = plan.nodes.map((n) => n.baseflow);
+	const hasBase = baseflow.some((p) => p);
+	return reach.some((p) => p) || hasBase ? { order: plan.order, upstream: plan.upstream, reach, ...(hasBase ? { baseflow } : {}) } : null;
 }
 
 /**
@@ -2881,26 +2991,22 @@ export function resolveReportWindow(
 
 /**
  * A unit's river abstractions' pools for the water account (engine ≥ 1.65.0):
- * their storage and evaporation summed per day, in `river.takes` order, and
- * their start (full, or a resumed run's). {} without a pool.
+ * their storage summed per day, in `river.takes` order, and their start
+ * (full, or a resumed run's). {} without a pool. A pool is storage only
+ * (engine ≥ 1.86.0, issue #523 B2), so it has no evaporation to account.
  */
-function poolAccount(p: PlanNode, r: NodeResult, days: number): { pool?: { storage: Float64Array; evaporation: Float64Array; initialM3: number } } {
+function poolAccount(p: PlanNode, r: NodeResult, days: number): { pool?: { storage: Float64Array; initialM3: number } } {
 	const tk = p.river?.takes;
 	if (!tk || !r.riverTakes || !tk.some((x) => x.pool)) return {};
 	const storage = new Float64Array(days);
-	const evaporation = new Float64Array(days);
 	let initialM3 = 0;
 	tk.forEach((x, a) => {
 		if (!x.pool) return;
 		initialM3 += p.initialPoolM3 ? p.initialPoolM3[a]! : x.pool.capM3;
 		const q = r.riverTakes!.pool[a]!;
-		const e = r.riverTakes!.poolEvaporation[a]!;
-		for (let t = 0; t < days; t++) {
-			storage[t]! += q[t]!;
-			evaporation[t]! += e[t]!;
-		}
+		for (let t = 0; t < days; t++) storage[t]! += q[t]!;
 	});
-	return { pool: { storage, evaporation, initialM3 } };
+	return { pool: { storage, initialM3 } };
 }
 
 /**

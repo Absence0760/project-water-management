@@ -4,8 +4,8 @@ import { planMonthlyPaste } from '$lib/spreadsheet/paste/monthlyRows';
 import { applyTransferPaste, planTransferPaste, transferRows, transfersCsv, TRANSFERS_FORMAT } from './transfersPaste';
 
 const names: Record<string, string> = { u: 'Upper farm', l: 'Lower farm' };
-const name = (id: string) => names[id] ?? '(unnamed)';
-const rule = (id: string, from: string, to: string, extra: Partial<Transfer> = {}): Transfer =>
+const name = (id: string | null) => (id === null ? 'Outside the catchment' : (names[id] ?? '(unnamed)'));
+const rule = (id: string, from: string, to: string | null, extra: Partial<Transfer> = {}): Transfer =>
 	({ id, fromNodeId: from, toNodeId: to, enabled: true, months: [], maxRateM3s: 0, minStoragePct: 0, priority: 1, dailyCapM3: null, ...extra }) as unknown as Transfer;
 const rules = () => [
 	// A workbook rule: one max rate in its ticked months (Oct, Nov).
@@ -25,6 +25,12 @@ describe('transfers paste (issue #477)', () => {
 			['Transfer 2', ['Lower farm → Upper farm', 'Lower farm -> Upper farm']]
 		]);
 		expect(rows[0]!.values.slice(0, 3)).toEqual([0.05, 0.05, 0]);
+	});
+
+	it('names a rule out of the catchment by its route too (engine 1.86.0)', () => {
+		const rows = transferRows([rule('t3', 'u', null, { months: [1], maxRateM3s: 0.01 })], name, 1, 'm³/s');
+		expect(rows[0]!.aliases).toEqual(['Upper farm → Outside the catchment', 'Upper farm -> Outside the catchment']);
+		expect(transfersCsv([rule('t3', 'u', null)], name, 1, 'm³/s')).toContain('Upper farm,Outside the catchment');
 	});
 
 	it('reads rates in the shown unit and writes m³/s back, the months and max rate in step', () => {

@@ -5,7 +5,7 @@
 // this browser across a reload. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
-import { createProject, putModel, sampleModel } from '../support/api.ts';
+import { createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
 import { openTransfers } from '../support/transfers.ts';
@@ -70,4 +70,42 @@ test('River to dam, a river pump and a transfer entered in l/s are stored in the
 	const again = await openNodeForm(page, 'Upper farm');
 	await expect(again.getByLabel('River to dam (l/s)')).toHaveValue('200');
 	await expect(again.getByLabel('River pump capacity (l/s)')).toHaveValue('5');
+});
+
+test('a scenario change to a river pump typed in l/s is stored in m³/day, and a new pick rewrites the typed value (issue #523 C2)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Flow units scenario');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=scenarios&new=1`);
+	const create = page.getByRole('dialog', { name: 'New scenario' });
+	await create.getByLabel('Name', { exact: true }).fill('A bigger pump');
+	await create.getByRole('button', { name: 'Create scenario' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'A bigger pump' })).toBeVisible();
+
+	const form = page.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'River pump capacity' });
+	// The pumps' unit beside the label, m³/day until changed; the label keeps it for a screen reader.
+	const unit = form.getByLabel('Unit of river pump capacity');
+	await expect(unit).toHaveValue('m3day');
+	await expect(form.getByLabel('River pump capacity (m³/day)')).toBeVisible();
+	await unit.selectOption('ls');
+	const value = form.getByLabel('River pump capacity (l/s)');
+	await value.fill('5');
+	// Picking m³/day rewrites the typed 5 l/s as 432 m³/day, and back.
+	await unit.selectOption('m3day');
+	await expect(form.getByLabel('River pump capacity (m³/day)')).toHaveValue('432');
+	await unit.selectOption('ls');
+	await expect(value).toHaveValue('5');
+	await expectNoViolations(page, { include: '.op-form' });
+	await form.getByRole('button', { name: 'Add change' }).click();
+	const changes = page.getByRole('list', { name: 'Changes in A bigger pump' }).getByRole('listitem');
+	await expect(changes).toHaveCount(1);
+	await expect(changes.nth(0)).toContainText('Upper farm: River pump capacity no limit → 5 l/s');
+
+	// The op holds m³/day.
+	const listed = (await (await page.request.get(`${API_URL}/projects/${project.id}/scenarios`)).json()) as { scenarios: { name: string; ops: { field?: string; value?: unknown }[] }[] };
+	const ops = listed.scenarios.find((sc) => sc.name === 'A bigger pump')!.ops;
+	expect(ops).toEqual([expect.objectContaining({ field: 'pumpCapacityM3Day', value: 432 })]);
 });

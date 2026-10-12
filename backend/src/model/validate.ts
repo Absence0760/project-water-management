@@ -58,6 +58,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				userDemandM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				userReturnPct: frac.default(0),
 				userPriority: z.enum(USER_PRIORITIES).default('senior'),
+				// A Priority user's fixed restriction % (engine 1.86.0, issue #523 B3): a share; null = none. Only on a
+				// Priority user (modelRuleProblems refuses it elsewhere).
+				userRestrictionPct: frac.nullable().default(null),
 				// Boreholes (WP-1.34): capacity null = none; depletion share and lag of the river's loss.
 				boreholeCapacityM3Day: nonNeg.nullable().default(null),
 				boreholeRule: z.enum(BOREHOLE_RULES).default('supplemental'),
@@ -111,6 +114,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// daily cap (null = none). Any kind of node; none on the outlet is a model rule (reachLossOutlet).
 				reachLossFrac: z.number().finite().min(0).max(REACH_LOSS_FRAC_MAX).default(0),
 				reachLossMaxM3Day: nonNeg.nullable().default(null),
+				// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), m³/day; 0 = none. Units only is a model rule (baseflowKind).
+				baseflowLossM3Day: nonNeg.default(0),
+				baseflowGainM3Day: nonNeg.default(0),
 				// The land unit's MAP, mm, and where it came from (issue #482, docs/model.md §2.4h): null = none. A MAP needs
 				// its source (the engine's mapMmError, checked below); a source without a MAP is not stored.
 				mapMm: z.number().finite().min(MAP_MM_MIN).max(MAP_MM_MAX).nullable().default(null),
@@ -167,7 +173,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 			z.object({
 				id: uuid,
 				fromNodeId: uuid,
-				toNodeId: uuid,
+				// null: out of the catchment (engine ≥ 1.86.0, migration 224, docs/model.md §2.6); a dam rule only (modelRuleIssues).
+				toNodeId: uuid.nullable(),
 				months: z.array(z.number().int().min(1).max(12)).max(12),
 				maxRateM3s: nonNeg,
 				dailyCapM3: nonNeg.nullable(),

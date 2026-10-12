@@ -4,6 +4,9 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { anon, app, monthly, node, signUp } from '../__tests__/helpers.js';
 import type { ProjectDocument } from './document.js';
 import { IMPORT_MAX_BYTES } from './import.js';
+import { withUser } from '../db/tx.js';
+import { loadModelInput } from '../runs/execute.js';
+import { inputSeriesOf } from '../../scripts/fit-project.js';
 
 // Fails the model save of the next import when set, so a failure lands
 // after the project row is in: the whole import must roll back.
@@ -70,7 +73,7 @@ function normalize(d: ProjectDocument) {
 		cropAreas: d.model.cropAreas
 			.map((a) => ({ node: nodeName.get(a.nodeId), crop: cropName.get(a.cropId), areaM2: a.areaM2 }))
 			.sort((a, b) => `${a.node}/${a.crop}`.localeCompare(`${b.node}/${b.crop}`)),
-		transfers: d.model.transfers.map(({ id: _id, fromNodeId, toNodeId, ...t }) => ({ ...t, from: nodeName.get(fromNodeId), to: nodeName.get(toNodeId) })),
+		transfers: d.model.transfers.map(({ id: _id, fromNodeId, toNodeId, ...t }) => ({ ...t, from: nodeName.get(fromNodeId), to: nodeName.get(toNodeId!) })),
 		landCover: (d.model.landCover ?? []).map(({ id: _id, nodeId, ...p }) => ({ ...p, node: nodeName.get(nodeId) }))
 	};
 }
@@ -355,5 +358,26 @@ describe('POST /projects/import', () => {
 			expect(res.body.error).toMatch(/^project file larger than 5 MB — /);
 		}
 		expect(await projectNames(u)).toEqual(['Large import']);
+	});
+});
+
+describe('the scripts read a document as a run does (issue #523 F2)', () => {
+	it('picks the same series of a kind the app runs, when a project holds two', async () => {
+		// fit-sweep, fit-project and pan-sensitivity read the exported document; the app's run reads the
+		// database (runs/execute.ts). Two catchment rain series: by byte order (COLLATE "C") "RAIN-B logger" is
+		// first, though it's listed second and a linguistic collation (glibc's en_US.utf8) puts "average gauge" first.
+		const doc = syntheticDoc('Two rain series');
+		const rain = doc.series[0]!;
+		doc.series = [{ ...rain, name: 'average gauge', values: rain.values.map((v) => v * 3) }, { ...rain, name: 'RAIN-B logger' }, doc.series[1]!];
+		const res = await importFile(owner, doc);
+		expect(res.status).toBe(201);
+		const projectId = res.body.project.id as string;
+		const live = await withUser(owner.id, (db) => loadModelInput(db, projectId));
+		const exported = await exportDoc(owner, projectId);
+		const picked = inputSeriesOf(exported.series as Parameters<typeof inputSeriesOf>[0]);
+		expect(Object.keys(picked).sort()).toEqual(Object.keys(live.series).sort());
+		for (const k of Object.keys(live.series) as (keyof typeof live.series)[]) expect(picked[k]!.values, k).toEqual(live.series[k]!.values);
+		// Positive control: the run takes the logger by byte order, not the gauge listed first, whatever the database's collation.
+		expect(live.series.rain_catchment_mm!.values).toEqual(rain.values);
 	});
 });

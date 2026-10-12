@@ -57,9 +57,10 @@
 	// each click on a river an outlet: the map draws every click's incremental
 	// catchment, numbered by click, and Save keeps them as areas.
 	// On an empty model, editors can Start the model from the map (`start=1`,
-	// #326 C3, docs/design/start-from-map.md): units at the dams and
-	// abstraction points, their sub-catchments and order proposed and ticked
-	// value by value; the empty map leads with Delineate and Draw (D4).
+	// #326 C3, docs/design/start-from-map.md): units from the user's own
+	// boundaries (start-16), the dams and pumps inside each linked to it, their
+	// order proposed and ticked value by value; the empty map leads with
+	// Delineate and Draw (D4).
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -111,6 +112,8 @@
 	import DrawBar from './draw/DrawBar.svelte';
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import MapRainLink from './MapRainLink.svelte';
+	import MapSearch from './MapSearch.svelte';
+	import { frameFor } from './mapSearch';
 	import MapSetupPill from './MapSetupPill.svelte';
 	import { mapSetupSteps, type RainReads } from './mapSetup';
 	import MapToolPalette from './MapToolPalette.svelte';
@@ -880,7 +883,7 @@
 		}
 	}
 
-	/** Where a dam stands against its river (194): Start and Divide place it by this, '' leaving it to its outline. */
+	/** Where a dam stands against its river (194): Start and Divide place a water user at the dam by this, '' leaving it to its outline. */
 	async function setDamPosition(f: MapFeature, value: string) {
 		busy = f.id;
 		rowError = null;
@@ -948,7 +951,7 @@
 		}
 	}
 
-	let mapRef = $state<{ showAll: () => void; frameGeometry: (g: MapGeometry) => void; focusMap: () => void }>();
+	let mapRef = $state<{ showAll: () => void; frameGeometry: (g: MapGeometry) => void; focusMap: () => void; frameBox: (b: readonly [number, number, number, number], maxZoom?: number) => void }>();
 
 	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
 	let dark = $state(appIsDark());
@@ -1027,6 +1030,10 @@
 	/** The tool palette's size: the picked name and the Key panel keep clear of it. */
 	let toolsW = $state(0);
 	let toolsH = $state(0);
+	/** The search box's height over the map's top edge, and its open list's: the picked name and the tool strip start under the box
+	    and its lines; the list covers them while it's open, as a list under a box does. */
+	let searchH = $state(0);
+	let searchListH = $state(0);
 	const strip = $derived(
 		toolStrip({
 			measuring: measure.active,
@@ -1124,13 +1131,13 @@
 	{/if}
 {/snippet}
 
-<!-- A dam outline's position against its river (194): a select for editors, else its words. Start and Divide place the dam by it. -->
+<!-- A dam outline's position against its river (194): a select for editors, else its words. Start and Divide place a water user at the dam by it (a dam that is part of a unit is never placed, start-16). -->
 {#snippet damPosition(f: MapFeature)}
 	{#if canEdit}
 		<select class="cap" aria-label="Where {featureName(f)} stands against its river" aria-describedby="{uid}-dam-position" value={f.damPosition ?? ''} disabled={busy === f.id} onchange={(e) => setDamPosition(f, e.currentTarget.value)} data-testid="map-dam-position">
 			{#each ['', 'on_channel', 'off_channel'] as const as v (v)}<option value={v}>{DAM_POSITION_LABEL[v]}</option>{/each}
 		</select>
-		<p class="hint muted" id="{uid}-dam-position">Start and Divide take only an off-channel dam’s own catchment into it, the river passing it by; unsaid, its outline decides.</p>
+		<p class="hint muted" id="{uid}-dam-position">For your records, and for a water user placed at the dam in Start or Divide; unsaid, its outline decides. Its unit’s composite dam takes the shares of upstream inflow and runoff you enter on the unit.</p>
 	{:else}
 		<span data-testid="map-dam-position">{DAM_POSITION_LABEL[f.damPosition ?? '']}</span>
 	{/if}
@@ -1290,7 +1297,7 @@
 			<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
 			{#if canStart}
 				<p class="empty-line small">
-					<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then your dams and abstraction points, and the app proposes the units, their areas and their order.
+					<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then each unit’s own boundary, and the app proposes their order and links the dams and pumps inside each.
 				</p>
 			{/if}
 		{/if}
@@ -1361,7 +1368,7 @@
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
 						<!-- At least the tools' height and the key row under them, so the tool column stays inside the card while the map's chunk loads or when it fails (on a phone it ran over the Features list, issue #521). -->
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
@@ -1380,6 +1387,22 @@
 									onplace={startPlace}
 									ondelineate={() => (dividing ? doneDividing() : startDelineate())}
 									ontrace={startTrace}
+								/>
+							</div>
+						{/if}
+						{#if mapState === 'ready'}
+							<!-- Find the area before drawing or starting (issue #523 C5): over the map's top edge, between the tools and the zoom
+							     buttons, so it costs the map no height (until 2026-10-12 a row above the map). Our own reference tables only; the
+							     view moves, nothing is saved. Once the map is drawn (there is a view to move); without WebGL there is none. The
+							     picked name and the tool strip start under it (--map-inset-top). -->
+							<div class="search-at ov" bind:clientHeight={searchH}>
+								<MapSearch
+									{projectId}
+									bind:listHeight={searchListH}
+									onpick={(h) => {
+										const f = frameFor(h);
+										mapRef?.frameBox(f.bbox, f.maxZoom);
+									}}
 								/>
 							</div>
 						{/if}
@@ -1815,7 +1838,7 @@
 	.map-top {
 		position: absolute;
 		z-index: 3;
-		top: 0.5rem;
+		top: calc(0.5rem + var(--map-inset-top, 0px));
 		left: calc(var(--map-inset-left, 0px) + 0.6rem);
 		right: 3.4rem;
 		display: flex;
@@ -1838,6 +1861,19 @@
 		border-color: var(--accent);
 		color: var(--text);
 	}
+	/* The search box over the map's top edge: right of the tools, clear of MapLibre's zoom buttons (10 px in, 29 px wide), above
+	   the corners' boxes so its list of matches covers them while open. Clicks pass through beside its controls. */
+	.search-at {
+		position: absolute;
+		z-index: 5;
+		top: 0.6rem;
+		left: calc(var(--map-inset-left, 0px) + 0.6rem);
+		right: calc(10px + 29px + 0.6rem);
+		pointer-events: none;
+	}
+	.search-at > :global(*) {
+		pointer-events: auto;
+	}
 	.tools-at {
 		position: absolute;
 		z-index: 4;
@@ -1856,6 +1892,17 @@
 		gap: 6px;
 		max-height: calc(100% - 76px - 10px);
 		max-width: calc(100% - var(--map-inset-left, 0px) - 1.2rem);
+	}
+	/* A narrow map (a phone): the search's lines reach the Layers button's column, so Layers starts under them (its open list covers it). */
+	@container map-body (max-width: 46rem) {
+		.layers-at {
+			top: max(76px, calc(var(--map-inset-top, 0px) + 0.6rem));
+			max-height: calc(100% - max(76px, calc(var(--map-inset-top, 0px) + 0.6rem)) - 10px);
+		}
+		/* The picked name, under the search too, stops short of the Layers button beside it (CatchmentMap's --map-inset-right). */
+		.map-body > :global(:not(.ov)) {
+			--map-inset-right: 7.5rem;
+		}
 	}
 	/* The corners' boxes pass clicks through between their controls (a feature under the gap stays clickable). */
 	.layers-at,
@@ -2080,6 +2127,7 @@
 		color: var(--danger);
 	}
 	.map-body {
+		container: map-body / inline-size;
 		position: relative;
 		min-height: 0;
 	}

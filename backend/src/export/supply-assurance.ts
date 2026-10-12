@@ -109,22 +109,33 @@ function* stressLines(a: SupplyAssurance | undefined): Generator<string> {
 	}
 }
 
-/** The account's columns: in, out, storage, residual; memo columns at the end. */
-const ACCOUNT_COLUMNS: [header: string, value: (r: WaterAccountRow) => Cell][] = [
+/**
+ * The account's columns: in, out, storage, residual; memo columns at the end.
+ * A column marked optional appears only when some row has it (a term only
+ * some runs have), so the IN columns always add up to `Total in` and the OUT
+ * columns to `Total out`.
+ */
+const ACCOUNT_COLUMNS: [header: string, value: (r: WaterAccountRow) => Cell, optional?: true][] = [
 	['Days', (r) => r.days],
 	['IN natural flow (m³)', (r) => r.naturalFlowM3],
 	['IN rain on dams (m³)', (r) => r.rainOnDamsM3],
 	['IN groundwater pumped (m³)', (r) => r.groundwaterM3],
 	['IN net transfers (m³)', (r) => r.transfersM3],
+	['IN storage set into (+) / out of (−) the dams by a storage reset (m³)', (r) => r.storageSetM3 ?? null, true],
+	['IN base-flow gain from outside the catchment (m³)', (r) => r.baseflowGainM3 ?? null, true],
 	['Total in (m³)', (r) => r.inM3],
 	['OUT removed by land cover (m³)', (r) => r.landCoverM3],
 	['OUT natural flow not allocated to a farm (m³)', (r) => r.unallocatedM3],
 	['OUT consumptive irrigation (m³)', (r) => r.consumptiveIrrigationM3],
 	['OUT other users: taken − returned (m³)', (r) => r.otherUseM3],
 	['OUT dam evaporation (m³)', (r) => r.damEvaporationM3],
-	['OUT evaporation from river abstractions’ pools (m³)', (r) => r.poolEvaporationM3 ?? null],
-	['OUT dam seepage lost from the catchment (m³)', (r) => r.damSeepageLostM3 ?? null],
+	['OUT evaporation from river abstractions’ pools (m³)', (r) => r.poolEvaporationM3 ?? null, true],
+	['OUT dam seepage lost from the catchment (m³)', (r) => r.damSeepageLostM3 ?? null, true],
 	['OUT stream depletion from pumping (m³)', (r) => r.streamDepletionM3],
+	['OUT river off-takes: lost on the way (m³)', (r) => r.conveyanceLossM3 ?? null, true],
+	['OUT bed losses in the reaches (m³)', (r) => r.reachLossM3 ?? null, true],
+	['OUT transferred out of the catchment (m³)', (r) => r.externalTransferM3 ?? null, true],
+	['OUT base-flow loss from the units’ runoff (m³)', (r) => r.baseflowLossM3 ?? null, true],
 	['OUT outflow at the outlet (m³)', (r) => r.outflowM3],
 	['Total out (m³)', (r) => r.outM3],
 	['Dam storage at start (m³)', (r) => r.openingStorageM3],
@@ -135,7 +146,7 @@ const ACCOUNT_COLUMNS: [header: string, value: (r: WaterAccountRow) => Cell][] =
 	['Memo: rain not reaching the river (m³)', (r) => r.catchmentLossM3],
 	['Memo: irrigation supplied (m³)', (r) => r.irrigationSuppliedM3],
 	['Memo: dam seepage, rejoins the river (m³)', (r) => r.damSeepageM3],
-	['Memo: released below the dams (m³)', (r) => r.damReleaseM3 ?? null]
+	['Memo: released below the dams (m³)', (r) => r.damReleaseM3 ?? null, true]
 ];
 
 function* waterAccountLines(a: SupplyAssurance | undefined): Generator<string> {
@@ -147,8 +158,9 @@ function* waterAccountLines(a: SupplyAssurance | undefined): Generator<string> {
 	const w = a.waterAccount;
 	yield csvRow(['In − out − change in storage = residual; the residual is float noise. Dam releases are not modelled yet.']);
 	const rows = [...w.years, w.total];
-	yield csvRow(['Water year', ...ACCOUNT_COLUMNS.map(([h]) => h)]);
-	for (const r of rows) yield csvRow([waterYearText(r.waterYear), ...ACCOUNT_COLUMNS.map(([, f]) => f(r))]);
+	const cols = ACCOUNT_COLUMNS.filter(([, f, optional]) => !optional || rows.some((r) => f(r) !== null));
+	yield csvRow(['Water year', ...cols.map(([h]) => h)]);
+	for (const r of rows) yield csvRow([waterYearText(r.waterYear), ...cols.map(([, f]) => f(r))]);
 	const sites = w.total.ewr;
 	if (!sites.length) return;
 	yield '';

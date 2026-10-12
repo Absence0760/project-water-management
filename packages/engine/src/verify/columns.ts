@@ -169,7 +169,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'allocation_room_surface',
 		letter: null,
 		formula:
-			'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered surface volume − its surface use so far that year (G − GW each day), never < 0, the licence limit today: 0 outside the months of use, else the maximum rates × 86 400, engine ≥ 1.37.0), at the start of the day; off-take water used, the river pump and the dam together give at most this, and a demand-sized off-take into the unit asks for at most MIN(D, this) (engine ≥ 1.70.0); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
+			'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered surface volume − its surface use so far that year (G − GW each day, plus what its dam rules sent out of the catchment, engine ≥ 1.88.0), never < 0, the licence limit today: 0 outside the months of use, else the maximum rates × 86 400, engine ≥ 1.37.0), at the start of the day; its rules out of the catchment first (sharing it pro rata, less a remote share it asked for), then off-take water used, the river pump and the dam together give at most what they left, and a demand-sized off-take into the unit asks for at most MIN(D, that) (engine ≥ 1.70.0); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
 		optional: true
 	},
 	{
@@ -181,7 +181,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{
 		key: 'allocation_left_surface',
 		letter: null,
-		formula: 'allocation cap with licence conditions (engine ≥ 1.40.0): the water year’s registered surface volume − its surface use so far that year (G − GW each day), never < 0, at the start of the day, before the licence limit; allocation_room_surface = MIN(this, the limit); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
+		formula: 'allocation cap with licence conditions (engine ≥ 1.40.0): the water year’s registered surface volume − its surface use so far that year (G − GW each day, plus what its dam rules sent out of the catchment, engine ≥ 1.88.0), never < 0, at the start of the day, before the licence limit; allocation_room_surface = MIN(this, the limit); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)',
 		optional: true
 	},
 	{
@@ -209,7 +209,9 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		optional: true
 	},
 	{ key: 'reach_loss', letter: null, formula: 'bed losses in the reach below (engine ≥ 1.75.0): MIN(cap, f × U), lost from the catchment; the element below receives U − this; only with bed losses', optional: true },
-	{ key: 'senior_reach_loss', letter: null, formula: 'Σ over the priority claims crossing the reach below of what their gross-up added for its bed losses, MIN(x ÷ (1 − f), x + cap) − x (engine ≥ 1.75.0); the element below receives Zs − MIN(Zs, this); only with priority claims across a losing reach', optional: true }
+	{ key: 'senior_reach_loss', letter: null, formula: 'Σ over the priority claims crossing the reach below of what their gross-up added for its bed losses, MIN(x ÷ (1 − f), x + cap) − x (engine ≥ 1.75.0); the element below receives Zs − MIN(Zs, this); only with priority claims across a losing reach', optional: true },
+	{ key: 'baseflow_loss', letter: null, formula: 'base-flow loss (engine 1.86.0): MIN(the unit’s loss, I), lost from the catchment before the runoff split, so M + N = I − this + the gain; only with a base-flow loss', optional: true },
+	{ key: 'baseflow_gain', letter: null, formula: 'base-flow gain (engine 1.86.0): the unit’s gain every day, from outside the catchment, joining I before the runoff split; only with a base-flow gain', optional: true }
 ];
 
 /** Other water users (engine ≥ 0.22.0, WP-1.33, docs/model.md §2.7c). No letters: the workbook has no such element. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
-import { buildImportReport, clip, importerVersion, projectFileNotes, REPORT_LIMITS, REPORT_MAX_BYTES, REPORT_MAX_ITEMS } from './importReport';
+import { buildImportReport, clip, importerLabel, importerVersion, projectFileNotes, REPORT_LIMITS, REPORT_MAX_BYTES, REPORT_MAX_ITEMS } from './importReport';
 
 const note: ImportNote = { code: 'dam-area-unknown', severity: 'info', message: 'dams have no surface area', sheet: 'Farm spec' };
 const item: UnmappedItem = { code: 'transfer-inout-formula', message: 'hand-written InOut formula', sheet: 'Transfers', cell: 'T7', element: 'Echo Farm', text: '=S7*0.9-V7' };
@@ -79,7 +79,14 @@ describe('projectFileNotes / importerVersion', () => {
 	});
 
 	it('names the importer and the build', () => {
-		expect(importerVersion('b023-workbook', '123')).toBe('b023 browser importer (web build 123)');
+		expect(importerVersion('b023-workbook', '123')).toBe('workbook browser importer (web build 123)');
 		expect(importerVersion('project-file', '123')).toBe('project file (web build 123)');
+	});
+
+	it('shows a report stored under the old importer name as the workbook importer (issue #523)', () => {
+		expect(importerLabel('b023 browser importer (web build 1)')).toBe('workbook browser importer (web build 1)');
+		expect(importerLabel('b023 web importer 1; engine 0.30.0')).toBe('workbook web importer 1; engine 0.30.0');
+		expect(importerLabel('workbook browser importer (web build 2)')).toBe('workbook browser importer (web build 2)');
+		expect(importerLabel('project file (web build 3)')).toBe('project file (web build 3)');
 	});
 });

@@ -115,6 +115,20 @@ describe('validateModel', () => {
 		]);
 	});
 
+	it('checks a unit’s base-flow loss and gain as the API does: sizes ≥ 0, units only (engine 1.86.0)', () => {
+		const g = node('g', 'G', null);
+		const a = node('a', 'A', 'g');
+		a.baseflowLossM3Day = 1500;
+		a.baseflowGainM3Day = 20;
+		// Positive control: on a unit, sizes ≥ 0 are fine.
+		expect(messages(model([g, a]))).toEqual([]);
+		a.baseflowLossM3Day = -1;
+		g.baseflowGainM3Day = 5;
+		expect(messages(model([g, a]))).toEqual(
+			expect.arrayContaining(['"A": the base-flow loss can\'t be negative.', '"G": only a hydrological unit has a base-flow loss or gain; set both to 0.'])
+		);
+	});
+
 	it('needs an irrigation efficiency above 0% (abstraction = crop requirement ÷ efficiency, N1)', () => {
 		const a = node('a', 'A', null);
 		a.irrigationEfficiency = 0;
@@ -135,6 +149,20 @@ describe('validateModel', () => {
 		const t = { id: 't', fromNodeId: 'f', toNodeId: 'g', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0.5 };
 		expect(messages(model([g, f], { transfers: [t] }))).toContain('Transfer 1: priority must be a whole number.');
 		expect(messages(model([g, f], { transfers: [{ ...t, priority: 2 }] }))).not.toContain('Transfer 1: priority must be a whole number.');
+	});
+
+	it('lets a dam rule send water out of the catchment (To empty, engine 1.86.0), not a river off-take, as the API does', () => {
+		const g = node('g', 'Gauge', null);
+		const f = node('f', 'F', 'g');
+		const t = { id: 't', fromNodeId: 'f', toNodeId: null, months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0.5, enabled: true, priority: 0 };
+		const ok = model([g, f], { transfers: [t] });
+		expect(messages(ok)).toEqual([]);
+		expect(modelRuleIssues(ok).size).toBe(0);
+		const river = model([g, f], { transfers: [{ ...t, source: 'river' as const }] });
+		expect(messages(river)).toEqual(["Transfer 1: a river off-take delivers to a hydrological unit, so it can't send water outside the catchment; take it from the source’s dam instead."]);
+		expect([...modelRuleIssues(river).values()].join()).toMatch(/can't send water out of the catchment/);
+		// A gauge can't send it either.
+		expect(messages(model([g, f], { transfers: [{ ...t, fromNodeId: 'g' }] }))).toEqual(['Transfer 1: "Gauge" is a gauge, which can\'t send or receive water; choose a hydrological unit.']);
 	});
 
 	it('flags a transfer to or from a gauge or an other water user, whatever its source (the engine skips such a rule)', () => {
@@ -223,6 +251,15 @@ describe('validateModel', () => {
 			'"Town" is an other water user: its demand is monthly, so remove its crop areas.',
 			'Transfer 1: "Town" is an other water user; transfers run between hydrological units’ dams.'
 		]);
+	});
+
+	it('checks a fixed restriction % as the API does (engine 1.86.0, issue #523 B3)', () => {
+		const town: NetworkNode = { ...node('u', 'Town', 'g'), kind: 'user', userDemandM3Day: new Array(12).fill(10), userReturnPct: 0, userPriority: 'senior', userRestrictionPct: 0.3 };
+		const with_ = (u: Partial<NetworkNode>) => messages(model([node('g', 'Gauge', null), { ...town, ...u }, node('a', 'A', 'u')]));
+		expect(with_({})).toEqual([]);
+		expect(with_({ userRestrictionPct: 1.2 })).toEqual(['"Town": the fixed restriction must be between 0% and 100%.']);
+		expect(with_({ userPriority: 'junior' })).toEqual(['"Town": a fixed restriction is for Priority users; clear it or make the user Priority.']);
+		expect(with_({ userPriority: 'junior', userRestrictionPct: null })).toEqual([]);
 	});
 
 	it('checks boreholes as the API does (WP-1.34)', () => {

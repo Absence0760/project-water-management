@@ -813,6 +813,10 @@ export const af: Catalogue = {
 	'a3583899': 'Zoem in',
 	// Zoom out
 	'8570fe3a': 'Zoem uit',
+	// Dam outline: traced from {dataset} ({source}), modified
+	'876212bd': 'Damomtrek: nagetrek uit {dataset} ({source}), gewysig',
+	// Data sources
+	'51f21a4b': 'Databronne',
 	// {deg}° S
 	'1044c926': '{deg}° S',
 	// {deg}° N
@@ -1065,8 +1069,8 @@ export const af: Catalogue = {
 	'00ffc54f': 'Vir wie dit is',
 	// Consulting hydrologists
 	'e7a496c2': 'Raadgewende hidroloë',
-	// Build and calibrate a catchment model, or import your b023 workbook. Run decades of daily flows in seconds and compare what-ifs.
-	'79147a4a': 'Bou en kalibreer ’n opvanggebiedmodel, of voer jou b023-werkboek in. Bereken dekades se daaglikse vloei in sekondes en vergelyk wat-as-scenario’s.',
+	// Build and calibrate a catchment model, or import your Water Balance Tool workbook. Run decades of daily flows in seconds and compare what-ifs.
+	'289a7338': 'Bou en kalibreer ’n opvanggebiedmodel, of voer jou werkboek van die Water Balance Tool in. Bereken dekades se daaglikse vloei in sekondes en vergelyk wat-as-scenario’s.',
 	// Water user associations
 	'f78d4851': 'Watergebruikersverenigings',
 	// One shared model for the whole catchment: who is short this week, and what a restriction would do before you apply it.
@@ -1101,8 +1105,8 @@ export const af: Catalogue = {
 	'd03ba450': 'Hoe dit werk',
 	// Build the network
 	'9325094e': 'Bou die netwerk',
-	// Draw the hydrological units, dams, transfers and gauges on the river, or import your b023 workbook as it is.
-	'a5bd3aa3': 'Teken die hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, of voer jou b023-werkboek in soos dit is.',
+	// Draw the hydrological units, dams, transfers and gauges on the river, or import your Water Balance Tool workbook as it is.
+	'6594338d': 'Teken die hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, of voer jou werkboek van die Water Balance Tool in soos dit is.',
 	// Add the data
 	'ac61f1bd': 'Voeg die data by',
 	// Upload rainfall, flow and evaporation, or let the CHIRPS and DWS feeds keep them up to date every day.
@@ -1123,8 +1127,6 @@ export const af: Catalogue = {
 	'575cffd2': 'Voetskrif',
 	// How the model is checked
 	'69391154': 'Hoe die model nagegaan word',
-	// Data sources
-	'51f21a4b': 'Databronne',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
@@ -1303,8 +1305,8 @@ export const af: Catalogue = {
 	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Couldn’t load the flow chart just now.
 	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
-	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
-	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
+	// The flow chart isn’t shown for this catchment: with so few hydrological units, or with one or two of them using most of the water, the river’s flows could reveal a hydrological unit’s water use.
+	'0b3c4f73': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede, of met een of twee van hulle wat die meeste van die water gebruik, kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
 	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
 	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
@@ -1339,8 +1341,8 @@ export const af: Catalogue = {
 	'a1de2fdd': 'Verandering',
 	// Not assessed
 	'a0119bb9': 'Nie beoordeel nie',
-	// Flow volumes aren’t shown for this catchment: with so few hydrological units, or with a change to the shared baseline, they could reveal a hydrological unit’s water use.
-	'ab7c31f2': 'Vloeivolumes word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede, of met ’n verandering aan die gedeelde basislyn, kan hulle ’n hidrologiese eenheid se watergebruik verklap.',
+	// Flow volumes aren’t shown for this catchment: with so few hydrological units, with one or two of them using most of the water, or with a change to the shared baseline, they could reveal a hydrological unit’s water use.
+	'209e4f40': 'Vloeivolumes word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede, met een of twee van hulle wat die meeste van die water gebruik, of met ’n verandering aan die gedeelde basislyn, kan hulle ’n hidrologiese eenheid se watergebruik verklap.',
 	// Days below the EWR by month
 	'0fb6d799': 'Dae onder die EWR per maand',
 	// The change this application makes to the days below the EWR at the outlet, each calendar month.
@@ -1509,6 +1511,8 @@ export const af: Catalogue = {
 	'a8fa584c': '{unit}: ’n gewas se oppervlakte op {ha} ha gestel',
 	// A new crop, “{name}”
 	'687a8dd0': '’n Nuwe gewas, “{name}”',
+	// A new transfer from {from} out of the catchment
+	'5e2256ee': '’n Nuwe oordrag van {from} uit die opvanggebied',
 	// A new transfer from {from} to {to}
 	'9c9dcc15': '’n Nuwe oordrag van {from} na {to}',
 	// A transfer changed: {field}

@@ -271,13 +271,21 @@ export async function plantCompleteOutlook(
 }
 
 /**
- * Mark a member as acting for the project's responsible authority (163_licensing_authority):
- * the owner's PATCH, as the members page sends it. Only a marked editor or owner
- * records a decision (POST …/decide) or endorses a baseline.
+ * Make a member act for the project's responsible authority (229_authority_delegates): the owner proposes them
+ * (POST …/authority-delegates, as the Project page sends it), then the operator confirms the proposal on the
+ * authority's letter (authority_confirm_by_operator, as the schema owner), the bootstrap when nobody acts for it yet.
+ * Only a confirmed editor or owner records a decision (POST …/decide) or endorses a baseline. `owner` is any member
+ * who may propose (an owner, or someone already acting for the authority, whose proposal is confirmed at once).
  */
 export async function actForAuthority(owner: { call: Call }, projectId: string, userId: string): Promise<void> {
-	const res = await owner.call('PATCH', `/projects/${projectId}/members/${userId}`, { actsForAuthority: true });
-	if (res.status !== 200) throw new Error(`marking ${userId} as acting for the authority failed: ${res.status} ${JSON.stringify(res.body)}`);
+	const res = await owner.call('POST', `/projects/${projectId}/authority-delegates`, { userId });
+	if (res.status !== 201) throw new Error(`proposing ${userId} to act for the authority failed: ${res.status} ${JSON.stringify(res.body)}`);
+	if (res.body.delegate.status !== 'confirmed') await confirmAsOperator(projectId, userId);
+}
+
+/** The operator's confirmation of a delegate (authority_confirm_by_operator, 229), as the schema owner. */
+export async function confirmAsOperator(projectId: string, userId: string, reference = 'Test authority letter 1'): Promise<void> {
+	await asOwner('SELECT authority_confirm_by_operator($1, $2, $3)', [projectId, userId, reference]);
 }
 
 /** The authority's part of a decision body (POST …/decide), beside `outcome` and `note`. */

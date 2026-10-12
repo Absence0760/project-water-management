@@ -216,11 +216,11 @@ export function cropRiverShareOf(n: NetworkNode): number {
  * enabled river off-takes as links): for each, the supplying and receiving node's index. For views that read
  * a saved run's remote_dam_in series (only these units have one).
  */
-export function plannedRemoteLegs(nodes: readonly NetworkNode[], transfers: readonly { enabled: boolean; source?: unknown; fromNodeId: string; toNodeId: string }[]): { from: number; to: number }[] {
+export function plannedRemoteLegs(nodes: readonly NetworkNode[], transfers: readonly { enabled: boolean; source?: unknown; fromNodeId: string; toNodeId: string | null }[]): { from: number; to: number }[] {
 	const index = new Map(nodes.map((n, i) => [n.id, i]));
 	const links = transfers.flatMap((tr) => {
 		const from = index.get(tr.fromNodeId);
-		const to = index.get(tr.toNodeId);
+		const to = tr.toNodeId === null ? undefined : index.get(tr.toNodeId);
 		return tr.enabled && tr.source === 'river' && from !== undefined && to !== undefined && from !== to && nodes[from]!.kind === 'farm' && nodes[to]!.kind === 'farm' ? [{ from, to }] : [];
 	});
 	const remotes = planRemoteSupply(nodes, nodes.map((n) => cropSharesOf(n, []).shares), links, []);

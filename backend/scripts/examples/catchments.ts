@@ -32,6 +32,7 @@ import {
 	WATER_SOURCE_DEFAULTS,
 	CROP_SUPPLY_DEFAULTS,
 	REACH_LOSS_DEFAULTS,
+	BASEFLOW_DEFAULTS,
 	PAN_COEFFICIENT_PRESETS,
 	calibrate,
 	defaultProjectSettings,
@@ -299,6 +300,8 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			// No bed losses in the reach below (engine ≥ 1.75.0) unless the spec gives some.
 			...REACH_LOSS_DEFAULTS,
 			...(f.reachLoss ? { reachLossFrac: f.reachLoss.frac, reachLossMaxM3Day: f.reachLoss.maxM3Day } : {}),
+			// No base-flow loss or gain on the unit (engine ≥ 1.86.0, issue #523 B1).
+			...BASEFLOW_DEFAULTS,
 			ewrSite: true,
 			gaPropertyAreaHa: null,
 			gaRateM3HaYear: null

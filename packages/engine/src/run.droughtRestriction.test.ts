@@ -215,6 +215,8 @@ describe('the drought restriction rule (engine 1.54.0)', () => {
 				const base = randomInput(seed);
 				base.settings.droughtRestriction = undefined;
 				delete base.settings.droughtRestriction;
+				// A Priority user's fixed restriction % (engine 1.86.0) is kept: it applies only at a level that cuts some
+				// part of a unit's demand (engine-audit.md P2, decided 2026-10-12), so a rule cutting nothing leaves it whole too.
 				let off: ModelOutput;
 				try {
 					off = runModel(base);

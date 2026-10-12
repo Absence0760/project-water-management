@@ -3,8 +3,10 @@
 	issue #326 C3, docs/design/start-from-map.md, docs/ui.md § Map). Four
 	steps, each read from the server's state, so a reload lands where the
 	editor was: the boundary (Delineate, Draw or Upload, the existing tools),
-	the points (what each dam, other point and gauge is in the model, and the
-	outlet), the proposal (every value ticked one by one, nothing applied
+	the points (what each unit's boundary, dam, other point and gauge is in the
+	model, and the outlet; a dam or an abstraction point is part of the unit
+	whose boundary holds it, never a unit of its own: start-16, #523 C1), the
+	proposal (every value ticked one by one, nothing applied
 	unticked), and data and the first run (the existing proposals, linked in
 	order). Typing the model in on the Network stays the other way.
 	Each proposed unit's card carries its piece's number and tint, as on the
@@ -24,12 +26,13 @@
 	import { offersEffective } from './areaBasis';
 	import PieceBadge from './PieceBadge.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
-	import { damShareLines, OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import { OUTLET_KEY, placementLine, withPlacement } from './placement';
 	import {
 		applySummary,
 		applyTicks,
 		candidatePoints,
 		choicesFor,
+		countText,
 		defaultChoice,
 		defaultOutlet,
 		drainsIntoName,
@@ -39,6 +42,7 @@
 		km2Text,
 		openStart,
 		outletGauges,
+		planBeforeBoundaries,
 		proposeBody,
 		restOffersArea,
 		ROLE_LABEL,
@@ -102,8 +106,8 @@
 	const choiceOf = (f: MapFeature): PointChoice => draft.picked[f.id] ?? defaultChoice(f);
 	const outlet = $derived(draft.outlet ?? defaultOutlet(features));
 	const chosen = $derived(candidates.filter((f) => f.id !== outlet && choiceOf(f) !== 'none'));
-	const units = $derived(chosen.filter((f) => choiceOf(f) !== 'gauge').length);
-	const gaugeNodes = $derived(chosen.length - units);
+	const kindWord = (f: MapFeature) => (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon' ? (f.kind === 'dam' ? 'dam' : 'area') : f.kind === 'dam' ? 'dam' : f.kind === 'gauge' ? 'gauge' : 'point');
+	const memberNames = (ms: { name: string }[] | undefined) => (ms ?? []).map((m) => m.name || 'unnamed').join(', ');
 
 	let busy = $state<null | 'propose' | 'apply' | 'discard'>(null);
 	let error = $state<string | null>(null);
@@ -252,15 +256,15 @@
 			{/if}
 		{:else if step === 'points'}
 			<form id="{uid}-points" onsubmit={propose} novalidate data-testid="start-points">
-				<h3 class="sub">Say what each point on the map is <HelpTip key="dam-siting" label="About dams on the river and off-channel" /></h3>
+				<h3 class="sub">Say what each feature on the map is <HelpTip key="start-from-map" /></h3>
 				<p class="lead">
-					Each unit’s area becomes what drains to its point and to no unit above it{info.elevation ? '' : ' (with an elevation model on the server; without one, the areas and the order are yours to type)'}. Put a dam on the map at its wall, an abstraction point where water is taken from the river.
+					Each unit is its own boundary on the map (draw, upload or save sub-catchments for them), and its area is the boundary’s{info.elevation ? '; the elevation model proposes their order and checks each area' : '; without an elevation model on the server, the order is yours to set'}. A dam or an abstraction point is never a unit of its own: the dams inside a unit’s boundary make up its composite dam, and the abstraction points are its river pump. Their volume, the area draining to the dam and the pump’s capacity are yours to enter.
 				</p>
 				{#if candidates.length}
 					<ul class="points">
 						{#each candidates as f (f.id)}
 							<li data-feature={f.id}>
-								<label for="{uid}-role-{f.id}" class="pname">{featureName(f)} <span class="muted small">({f.kind === 'dam' ? 'dam' : f.kind === 'gauge' ? 'gauge' : 'point'})</span></label>
+								<label for="{uid}-role-{f.id}" class="pname">{featureName(f)} <span class="muted small">({kindWord(f)})</span></label>
 								{#if f.id === outlet}
 									<span class="muted small">The outlet</span>
 								{:else}
@@ -272,7 +276,7 @@
 						{/each}
 					</ul>
 				{:else}
-					<p class="muted" data-testid="start-no-points">No dams or points on the map yet: the whole catchment becomes one unit unless you place some.</p>
+					<p class="muted" data-testid="start-no-points">No units’ boundaries, dams or points on the map yet: the whole catchment becomes one unit unless you draw or upload the units’ boundaries.</p>
 				{/if}
 				<p><button type="button" class="btn btn-sm" onclick={onplace} data-testid="start-place">Place a point</button></p>
 				<div class="field">
@@ -283,9 +287,7 @@
 					</select>
 					<span class="hint">{boundary ? 'Where the river leaves the boundary, unless a gauge on the map marks it.' : 'Without a boundary the outlet is a gauge on the map.'}</span>
 				</div>
-				<p class="hint" data-testid="start-count">{units === 0 && gaugeNodes === 0
-						? 'No units: the catchment becomes one.'
-						: `${units} ${units === 1 ? 'unit' : 'units'}${gaugeNodes ? ` and ${gaugeNodes} ${gaugeNodes === 1 ? 'gauge' : 'gauges'}` : ''}, plus the rest of the catchment.`}</p>
+				<p class="hint" data-testid="start-count">{countText(chosen.map(choiceOf))}</p>
 			</form>
 		{:else if step === 'review' && pending && ticks}
 			{@const p = pending.plan}
@@ -293,6 +295,9 @@
 				<p class="lead">
 					Tick each value to take it; anything unticked is left for you to type. The catchment above the outlet: <strong data-testid="start-catchment">{km2Text(p.catchment.areaM2 ?? p.catchment.boundaryAreaM2)}</strong>.
 				</p>
+				{#if planBeforeBoundaries(p)}
+					<p class="err" role="alert" data-testid="start-before-boundaries">This proposal makes a unit at each dam and abstraction point, from before units followed your boundaries: discard it and propose again.</p>
+				{/if}
 				{#if p.warnings.length || p.dropped.length}
 					<ul class="warnings" data-testid="start-warnings">
 						{#each p.warnings as w (w)}<li>{w}</li>{/each}
@@ -331,7 +336,7 @@
 						>
 							<div class="field">
 								<label for="{uid}-name-{u.key}" class="named"
-									><PieceBadge label={pieceOf.get(u.key)?.label ?? String(i + 1)} tint={pieceOf.get(u.key)?.tint ?? -1} /> <span>Name <span class="muted small">· {ROLE_LABEL[u.role].toLowerCase()}, from “{u.featureName}”</span></span></label
+									><PieceBadge label={pieceOf.get(u.key)?.label ?? String(i + 1)} tint={pieceOf.get(u.key)?.tint ?? -1} /> <span>Name <span class="muted small">· {u.role === 'unit' ? 'its boundary' : ROLE_LABEL[u.role].toLowerCase()}: “{u.featureName}”</span></span></label
 								>
 								<input id="{uid}-name-{u.key}" bind:value={t.name} maxlength="100" aria-invalid={bad(t.name) ? 'true' : undefined} aria-describedby={bad(t.name) ? `${uid}-names` : undefined} />
 							</div>
@@ -339,7 +344,11 @@
 							{#if offer.area}
 								<label class="check">
 									<input type="checkbox" bind:checked={t.area} data-testid="start-tick-area" />
-									<span>Area <strong>{km2Text(u.areaM2)}</strong>: what drains to it and to no unit above it (its whole catchment: {km2Text(u.totalAreaM2)}), saved as its parcel</span>
+									{#if u.role === 'unit'}
+										<span>Area <strong>{km2Text(u.areaM2)}</strong>: its boundary on the map{u.demAreaM2 ? ` (the elevation model gives ${km2Text(u.demAreaM2)} draining to its outflow)` : ''}</span>
+									{:else}
+										<span>Area <strong>{km2Text(u.areaM2)}</strong>: what drains to it and to no unit above it (its whole catchment: {km2Text(u.totalAreaM2)}), saved as its parcel</span>
+									{/if}
 								</label>
 								{#if t.area && offersEffective(u.areaM2, u.nonContributingM2)}
 									<!-- Its piece holds pans (195): gross (the default) or effective, chosen here, never silently. -->
@@ -356,17 +365,11 @@
 							{:else}
 								<p class="hint">Drains into the outflow gauge until you set the order on the Network.</p>
 							{/if}
-							{#if offer.runoffToDam}
-								<label class="check">
-									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="start-tick-dam" />
-									<span>{damShareLines(u.damShares, u.areaM2, t.area ? (t.areaBasis ?? 'gross') : 'gross', u.nonContributingM2)?.runoff ?? 'All of its own runoff reaches the dam (its area ends at the wall)'}</span>
-								</label>
+							{#if u.members?.some((m) => m.role === 'dam')}
+								<p class="hint" data-testid="start-composite-dam">Its composite dam: {memberNames(u.members.filter((m) => m.role === 'dam'))}. Its volume and the area draining to it are yours to enter on the unit; the register of dams is a reference only.</p>
 							{/if}
-							{#if offer.upstreamToDam}
-								<label class="check">
-									<input type="checkbox" bind:checked={t.upstreamToDam} data-testid="start-tick-upstream" />
-									<span>{damShareLines(u.damShares, u.areaM2)?.upstream}</span>
-								</label>
+							{#if u.members?.some((m) => m.role === 'abstraction')}
+								<p class="hint" data-testid="start-river-pump">Its river pump: {memberNames(u.members.filter((m) => m.role === 'abstraction'))}. Its capacity is yours to enter on the unit.</p>
 							{/if}
 							{#if placementLine(u.placement, u.snapDistanceM, pending.methodVersion)}<p class="hint" data-testid="start-placement">{placementLine(u.placement, u.snapDistanceM, pending.methodVersion)}</p>{/if}
 							{#if u.placement?.larger}
@@ -388,6 +391,9 @@
 							<input type="checkbox" bind:checked={ticks.rest.include} data-testid="start-tick-rest" />
 							<span>Add <strong>the rest of the catchment</strong> as a unit (what drains to the outlet through no unit; without it the model’s catchment is only the units’)</span>
 						</label>
+						{#if p.rest.members?.length}
+							<p class="hint" data-testid="start-rest-members">In no unit’s boundary: {memberNames(p.rest.members)}{ticks.rest.include ? '; linked to the rest of the catchment' : ''}.</p>
+						{/if}
 						{#if ticks.rest.include}
 							<div class="field">
 								<label for="{uid}-rest-name">Its name</label>
@@ -396,7 +402,11 @@
 							{#if restOffersArea(p)}
 								<label class="check">
 									<input type="checkbox" bind:checked={ticks.rest.area} data-testid="start-tick-rest-area" />
-									<span>Area <strong>{km2Text(p.rest.areaM2)}</strong>{p.fromDem ? '' : ' (the boundary)'}, saved as its parcel</span>
+									{#if p.rest.geometry}
+										<span>Area <strong>{km2Text(p.rest.areaM2)}</strong>{p.fromDem ? '' : ' (the boundary)'}, saved as its parcel</span>
+									{:else}
+										<span>Area <strong>{km2Text(p.rest.areaM2)}</strong>: the catchment less the units’ boundaries (no outline of its own)</span>
+									{/if}
 								</label>
 								{#if ticks.rest.area && offersEffective(p.rest.areaM2, p.rest.nonContributingM2)}
 									<AreaBasisChoice
@@ -429,8 +439,8 @@
 				<ol class="todo">
 					{#if boundary}<li><a href="?tab=settings&rain=boundary#set-feeds">Rain from the boundary</a>: the CHIRPS feed over its cells (Settings → Data feeds).</li>{/if}
 					<li><a href="?tab=settings#set-feeds">Observed flow</a>: the nearest gauging stations to the outlet (Settings → Data feeds).</li>
-					<li><a href="?tab=settings#set-demand">Evaporation</a>: the monthly A-pan the dams, river pools and crops lose (Settings &amp; calibration → Demand; Evaporation from the map under Flow calibration proposes it). An ET₀ row from the map feeds the runoff model only; with no A-pan the dams lose nothing.</li>
-					<li><a href="?tab=dams">Each dam’s capacity</a> from the register of dams, and its full-supply area from its polygon (Dams).</li>
+					<li><a href="?tab=settings#set-demand">Evaporation</a>: the monthly A-pan the dams and crops lose (Settings &amp; calibration → Demand; Evaporation from the map under Flow calibration proposes it). An ET₀ row from the map feeds the runoff model only; with no A-pan the dams lose nothing.</li>
+					<li><a href="?tab=dams">Each unit’s composite dam</a>: its volume and the area draining to it are yours to enter (Dams; the register of dams there is a reference only, since many farm dams aren’t on it).</li>
 					<li><a href="?tab=crops">Cultivated area</a> from land cover, per unit (Crops).</li>
 					<li><a href="?tab=network">The Network</a>: anything not ticked (areas, the order), dam sizes and irrigation.</li>
 					<li><a href="?tab=runs" data-testid="start-run">Run the model</a> once rainfall is in (Runs &amp; results).</li>
@@ -450,7 +460,7 @@
 		{:else if step === 'review' && pending}
 			{@const p = pending}
 			<button type="button" class="btn btn-ghost" disabled={!!busy} onclick={() => discard(p)} data-testid="start-discard">{busy === 'discard' ? 'Discarding…' : 'Discard'}</button>
-			<button type="button" class="btn btn-primary" disabled={!!busy || !!dup || blank} onclick={() => apply(p)} data-testid="start-apply">{busy === 'apply' ? 'Applying…' : 'Apply the ticked values'}</button>
+			<button type="button" class="btn btn-primary" disabled={!!busy || !!dup || blank || planBeforeBoundaries(p.plan)} onclick={() => apply(p)} data-testid="start-apply">{busy === 'apply' ? 'Applying…' : 'Apply the ticked values'}</button>
 		{/if}
 	{/snippet}
 </Dialog>

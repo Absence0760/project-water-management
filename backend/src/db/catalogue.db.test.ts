@@ -45,8 +45,11 @@ const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespa
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
-	// A membership's project, user and join date are fixed; an owner changes its role, party, authority flag (163_licensing_authority.sql) and specialist flag (167_signers.sql).
-	project_member: ['acts_for_authority', 'party', 'role', 'specialist'],
+	// A membership's project, user and join date are fixed; an owner changes its role, party and specialist flag (167_signers.sql).
+	// The authority flag (163) is no longer the app's to set: authority_delegate replaced it (229_authority_delegates.sql).
+	project_member: ['party', 'role', 'specialist'],
+	// A proposal changes only by being confirmed, once (229_authority_delegates.sql, authority_delegate_guard).
+	authority_delegate: ['confirmed_at'],
 	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
@@ -124,7 +127,9 @@ const APPEND_ONLY = new Set([
 	'audit_event',
 	'signoff',
 	'outlook_publication_farm',
-	'note_revision'
+	'note_revision',
+	// What followed a recorded decision: an appeal lodged and its outcome, each a new row; the decision never changes (228_decision_events).
+	'decision_event'
 ]);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
@@ -180,7 +185,8 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`),
  * the register of dams (157_dam_register.sql, `pnpm import:dam-register`),
  * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`)
- * and the evaporation grid (180_evaporation_reference.sql, `pnpm import:evaporation`).
+ * the evaporation grid (180_evaporation_reference.sql, `pnpm import:evaporation`)
+ * and the gazetteer the Map's search reads (225_gazetteer.sql, `pnpm import:gazetteer`).
  * An applicant's "Ask the assessors why" question is filed and answered only
  * through 164_applicant_visibility's app_ask_assessors (the project and the
  * name from the application) and app_answer_assessors_question (an editor,
@@ -205,6 +211,7 @@ const READ_ONLY = new Set([
 	'evaporation_cell_reference',
 	'rain_map_dataset',
 	'rain_map_cell_reference',
+	'gazetteer_reference',
 	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
 	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
 	'registration_check',
@@ -270,6 +277,10 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'api_key.created_by': 'set null',
 	'api_key.revoked_by': 'set null',
 	'audit_event.actor_user_id': 'set null',
+	// Who acts for the authority (229): the delegation goes with the account; who proposed or confirmed it is cleared.
+	'authority_delegate.confirmed_by': 'set null',
+	'authority_delegate.proposed_by': 'set null',
+	'authority_delegate.user_id': 'cascade',
 	'data_feed.acting_user_id': 'set null',
 	'data_feed.created_by': 'set null',
 	'account_mail_quota.user_id': 'cascade',
@@ -318,6 +329,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'run_uncertainty.created_by': 'set null',
 	// The assessor who decided an application (045, WP-3.3): the decision stays with who cleared.
 	'scenario.decided_by': 'set null',
+	// What followed a decision (228_decision_events): the record stays with who recorded it cleared.
+	'decision_event.recorded_by': 'set null',
 	'scenario.owner_user_id': 'set null',
 	'scenario_member.added_by': 'set null',
 	// A sweep is derived (its base run is the evidence); it stays with who asked cleared (062_scenario_sweeps.sql).
@@ -389,10 +402,12 @@ const SCENARIO_ID_NULL_TESTS = new Map<string, string>([
 	['function app_own_new_scenario_run', 'link: a contributor reads their own run of a live application'],
 	['function app_purge_deleted_notes', 'note.scenario_id'],
 	['function app_run_allocation_holders', 'access: who reads the run (as the model_run_select policy, 219)'],
+	['function app_run_allocation_kinds', 'access: who reads the run (as the model_run_select policy, 226)'],
 	['function app_run_brief', 'access: who reads the run (as the model_run_select policy)'],
 	['function app_run_digest', 'access: who reads the run (as the model_run_select policy)'],
 	['function app_run_digest_body', 'the stamp: a set scenario_id matches the inputs.scenario it ran (077); unchanged, so stamps hold'],
 	['function app_signoff_registration_check', 'evidence_pack.scenario_id'],
+	['function application_question_guard', 'application_question.scenario_id: its draft deleted (234)'],
 	['function model_run_scenario_same_project', 'link: a set scenario is of the run’s project'],
 	['function yield_result_guard', 'yield_result.scenario_id'],
 	['policy evidence_pack.evidence_pack_select', 'evidence_pack.scenario_id'],

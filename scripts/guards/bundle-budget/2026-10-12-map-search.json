@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "The Map's search box (issue #523 C5): MapSearch.svelte and mapSearch.ts in the Map tab's chunk, plus the GeoNames credit; measured 1994 KB against the draft branch's own 1992 KB at a690968fd"
+}

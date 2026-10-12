@@ -532,7 +532,7 @@
 								{#each cum.applications as o (o.scenarioId)}
 									<tr>
 										<th scope="row">“{o.scenarioName}”<span class="sub">run {fmtDate(o.runCreatedAt)}</span></th>
-										<td>{statusText(o)}{#if o.reason}<span class="sub">{o.reason}</span>{/if}</td>
+										<td>{statusText(o)}{#if o.terms === 'licensed'}<span class="sub">run of its licensed terms</span>{/if}{#if o.reason}<span class="sub">{o.reason}</span>{/if}</td>
 										<td class="num">{o.ewrDays === null ? '–' : `${signed(o.ewrDays, 0)} days`}</td>
 										<td class="num">{o.reservePp === null ? '–' : `${signed(o.reservePp, 1)} pp`}</td>
 									</tr>
@@ -558,8 +558,12 @@
 							{/if}
 						</table>
 					</div>
-				{:else}
+				{:else if !cum.notRunNote}
 					<p class="na" data-testid="evidence-cumulative-none">None: no other submitted or approved application has a run of its ops on this baseline visible to the account that built this report.</p>
+				{/if}
+				{#if cum.notRunNote}
+					<!-- evidence-20: an application that counts but has no run of the ops it counts with is named, never dropped. -->
+					<p class="na" data-testid="evidence-cumulative-not-run">{cum.notRunNote}</p>
 				{/if}
 				{#if cum.combined}
 					{@const cb = cum.combined}

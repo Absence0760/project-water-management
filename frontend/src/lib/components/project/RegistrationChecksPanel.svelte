@@ -10,17 +10,15 @@
 	// project requires it (the owner's switch, on by default), issuing a pack
 	// waits until each specialist signer has a current check (a year, and the
 	// latest check says registered). Editors read the list; owners, and the
-	// editors an owner marked as acting for the responsible authority (163),
-	// record.
+	// editors the authority confirmed as acting for it (163, 229), record.
 	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { onMount, tick } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '$lib/api';
 	import { REGISTRATION_BODIES, registrationBody as bodyInfo, registrationCategoriesOf, type RegistrationBodyCode } from '@water-management/engine';
-	import { session } from '$lib/auth/session.svelte';
 	import { fmtDate, localIsoDate, pastDayMoment } from '$lib/format/number';
 
-	let { projectId, isOwner }: { projectId: string; isOwner: boolean } = $props();
+	let { projectId, isOwner, actsForAuthority = false }: { projectId: string; isOwner: boolean; actsForAuthority?: boolean } = $props();
 
 	let checks = $state.raw<RegistrationCheck[] | null>(null);
 	let required = $state(true);
@@ -52,8 +50,8 @@
 	const register = $derived(bodyInfo(form.registrationBody));
 	const name = (userId: string | null) => members.find((m) => m.userId === userId)?.displayName ?? 'A former member';
 	const signers = $derived(members.filter((m) => m.role !== 'farmer'));
-	/** An owner, or an editor an owner marked as acting for the responsible authority (163), records a check. */
-	const canRecord = $derived(isOwner || members.some((m) => m.userId === session.user?.id && m.actsForAuthority && (m.role === 'editor' || m.role === 'owner')));
+	/** An owner, or a confirmed delegate of the responsible authority (project.actsForAuthority, 229: a team editor too), records a check. */
+	const canRecord = $derived(isOwner || actsForAuthority);
 
 	async function load() {
 		error = null;

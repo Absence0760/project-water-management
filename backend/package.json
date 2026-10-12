@@ -10,6 +10,7 @@
 		"jobs:tick": "tsx src/jobs/worker.ts --once",
 		"feeds:run": "tsx src/jobs/worker.ts --once --all-feeds",
 		"mail:bounce": "tsx scripts/mail-bounce.ts",
+		"authority:confirm": "tsx scripts/authority-confirm.ts",
 		"build": "esbuild src/lambda.ts --external:playwright-core --bundle --platform=node --target=node24 --format=esm --minify --keep-names --sourcemap --outfile=dist/lambda.mjs --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run --project unit",
@@ -37,7 +38,8 @@
 		"gen:water-fixture": "tsx scripts/water-fixture.ts",
 		"import:land-cover": "tsx scripts/import-land-cover.ts",
 		"import:evaporation": "tsx scripts/import-evaporation.ts",
-		"import:map-grid": "tsx scripts/import-map-grid.ts"
+		"import:map-grid": "tsx scripts/import-map-grid.ts",
+		"import:gazetteer": "tsx scripts/import-gazetteer.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.1141.0",

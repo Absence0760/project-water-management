@@ -3,7 +3,7 @@
 // ops that set a volume on a unit that isn't an application's own, and its
 // check renumbered to the ops left.
 import { withheldAllocationOps, withoutPositions } from '../allocations/viewerUnits.js';
-import type { ScenarioRow } from './execute.js';
+import type { LicenceTerms, ScenarioRow } from './execute.js';
 
 /** "op 3" / "ops 3–5" / "ops 2, 4" as a problem line starts (engine opNumbers): 1-based. */
 const OP_LABEL = /^(ops?) ([0-9–, ]+) \(/;
@@ -61,7 +61,21 @@ export function checkWithout<C extends { applied: { index: number }[]; problems:
  * and `withheldOps`, how many were left out. `drop`: their positions.
  */
 export function viewerScenario<S extends ScenarioRow>(s: S): { scenario: S & { withheldOps?: number }; drop: Set<number> } {
-	const drop = withheldAllocationOps(s.ops, s.origin === 'applicant' ? s.ownedNodeIds : []);
-	if (!drop.size) return { scenario: s, drop };
-	return { scenario: { ...s, ops: withoutPositions(s.ops, drop), withheldOps: drop.size }, drop };
+	const own = s.origin === 'applicant' ? s.ownedNodeIds : [];
+	// A licence's terms (227) and a variation's (228) carry volumes too: the same ops left out of each.
+	const terms = (t: LicenceTerms | null): LicenceTerms | null => {
+		if (!t) return t;
+		const gone = withheldAllocationOps(t.ops, own);
+		return gone.size ? { ...t, ops: withoutPositions(t.ops, gone), withheldOps: gone.size } : t;
+	};
+	const granted = terms(s.grantedTerms ?? null);
+	const events = (s.decisionEvents ?? []).map((e) => {
+		const t = terms(e.terms);
+		return t === e.terms ? e : { ...e, terms: t };
+	});
+	const termsChanged = granted !== (s.grantedTerms ?? null) || events.some((e, i) => e !== s.decisionEvents[i]);
+	const withTerms = termsChanged ? { ...s, grantedTerms: granted, decisionEvents: events } : s;
+	const drop = withheldAllocationOps(s.ops, own);
+	if (!drop.size) return { scenario: withTerms, drop };
+	return { scenario: { ...withTerms, ops: withoutPositions(s.ops, drop), withheldOps: drop.size }, drop };
 }

@@ -240,7 +240,7 @@ export interface CalibrationParams {
  * model, which engine 1.0.0 removed (issue #16): it ran GR4J instead.
  */
 export const LEGACY_UPGRADED_WARNING =
-	'LEGACY_UPGRADED: this project was set to the legacy runoff model (b023 workbook), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Settings → Flow calibration) or refit them.';
+	'LEGACY_UPGRADED: this project was set to the legacy runoff model (the original workbook’s), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Settings → Flow calibration) or refit them.';
 
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
 export const RETIRED_CALIBRATION_KEYS = [
@@ -1459,6 +1459,18 @@ export interface NetworkNode {
 	/** kind 'user' only: priority against the farms. Default 'senior'. */
 	userPriority?: UserPriority;
 	/**
+	 * kind 'user', Priority only (engine 1.86.0, issue #523 B3, docs/model.md
+	 * §2.7c): a fixed restriction, the share (0–1) of its demand it gives up
+	 * when restricted, with no basic-needs floor (a user has no population).
+	 * It caps the user's supply cut for its EWR charge in the curtailment
+	 * table, and the drought restriction rule (§2.7i) cuts the user's demand
+	 * by it on every day its level cuts some part of a unit's demand (a watch
+	 * level, every cut 0 %, restricts nobody; engine-audit.md P2). null / absent /
+	 * 0 = uncurtailed (the default, every run before 1.86.0). Ignored, with a
+	 * warning, on a Non-priority user (curtailed for its whole charge).
+	 */
+	userRestrictionPct?: number | null;
+	/**
 	 * Demand factor (engine ≥ 0.41.0, issue #53 R1): a multiplier on the
 	 * node's demand per water-year month (Oct–Sep), for a farm its crop water
 	 * requirement F (so the abstraction D = F ÷ e scales with it, and the
@@ -1526,7 +1538,7 @@ export interface NetworkNode {
 	cropWaterSource?: WaterSource;
 	/** The crops' river pump capacity, m³/day, under `cropWaterSource` 'river'; null / absent = no limit (the run warns); 0 = no pump. */
 	cropRiverPumpM3Day?: number | null;
-	/** A pool at the crops' river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	/** A pool at the crops' river pump, m³ (starts full; storage only from engine 1.86.0: no rain, no evaporation); null / absent / 0 = none. Read only under 'river'. */
 	cropRiverPoolM3?: number | null;
 	/**
 	 * Farms only (engine ≥ 1.73.0, issue #408, docs/model.md §2.7k): the crop
@@ -1608,6 +1620,21 @@ export interface NetworkNode {
 	reachLossFrac?: number;
 	/** The reach's bed losses at most, m³/day; null / absent = no cap. Read only with `reachLossFrac` > 0. */
 	reachLossMaxM3Day?: number | null;
+	/**
+	 * A unit's base-flow loss (engine 1.86.0, issue #523 B1, #90 R4 (a),
+	 * docs/model.md §2.6b): m³/day of its own runoff lost to groundwater
+	 * before it reaches the river or its dam, at most the day's runoff
+	 * (MIN(this, I)). The lost water leaves the catchment. 0 / absent = none,
+	 * every engine before 1.86.0. Units only.
+	 */
+	baseflowLossM3Day?: number;
+	/**
+	 * A unit's base-flow gain (engine 1.86.0, issue #523 B1): m³/day that
+	 * joins its runoff from groundwater every day (a spring, an aquifer
+	 * draining into the river), from outside the modelled catchment. 0 /
+	 * absent = none. Units only.
+	 */
+	baseflowGainM3Day?: number;
 }
 
 /**
@@ -1700,7 +1727,7 @@ export const BOREHOLE_DEFAULTS = {
 } as const;
 
 /** What a user node without the fields runs as (WP-1.33). */
-export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' } as const;
+export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior', userRestrictionPct: null } as const;
 
 /** One row of a dam's survey curve (WP-3.5): water level (m), surface area (m²) and volume stored (m³) at that level. */
 export interface DamCurvePoint {
@@ -1733,6 +1760,12 @@ export const DAM_STORAGE_DEFAULTS = {
 export const REACH_LOSS_DEFAULTS = {
 	reachLossFrac: 0,
 	reachLossMaxM3Day: null
+} as const;
+
+/** What a unit without the base-flow fields (engine 1.86.0, docs/model.md §2.6b) runs as: no base-flow loss or gain. */
+export const BASEFLOW_DEFAULTS = {
+	baseflowLossM3Day: 0,
+	baseflowGainM3Day: 0
 } as const;
 
 /** What a node without the development fields (engine ≥ 1.30.0, docs/model.md §2.7g) runs as: its entered dam and demand throughout. */
@@ -1928,6 +1961,8 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 		...CROP_SUPPLY_DEFAULTS,
 		// No bed losses in the reach below (engine 1.75.0).
 		...REACH_LOSS_DEFAULTS,
+		// No base-flow loss or gain (engine 1.86.0).
+		...BASEFLOW_DEFAULTS,
 		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
 		ewrSite: true
 	};
@@ -2013,6 +2048,8 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.userDemandM3Day === undefined) n.userDemandM3Day = USER_DEFAULTS.userDemandM3Day;
 				n.userReturnPct ??= USER_DEFAULTS.userReturnPct;
 				n.userPriority ??= USER_DEFAULTS.userPriority;
+				// A Priority user's fixed restriction % (engine 1.86.0): none unless set.
+				if (n.userRestrictionPct === undefined) n.userRestrictionPct = USER_DEFAULTS.userRestrictionPct;
 				// Boreholes (WP-1.34): none unless set.
 				if (n.boreholeCapacityM3Day === undefined) n.boreholeCapacityM3Day = BOREHOLE_DEFAULTS.boreholeCapacityM3Day;
 				n.boreholeRule ??= BOREHOLE_DEFAULTS.boreholeRule;
@@ -2041,6 +2078,9 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				// Bed losses in the reach below (engine ≥ 1.75.0): none unless set.
 				n.reachLossFrac ??= REACH_LOSS_DEFAULTS.reachLossFrac;
 				if (n.reachLossMaxM3Day === undefined) n.reachLossMaxM3Day = REACH_LOSS_DEFAULTS.reachLossMaxM3Day;
+				// A unit's base-flow loss and gain (engine 1.86.0): none unless set.
+				n.baseflowLossM3Day ??= BASEFLOW_DEFAULTS.baseflowLossM3Day;
+				n.baseflowGainM3Day ??= BASEFLOW_DEFAULTS.baseflowGainM3Day;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
@@ -2142,7 +2182,16 @@ export interface CropArea {
 export interface Transfer {
 	id: string;
 	fromNodeId: string;
-	toNodeId: string;
+	/**
+	 * The unit the water goes to, or null: outside the catchment (engine ≥
+	 * 1.86.0, issue #523 B5, docs/model.md §2.6). An external rule runs as any
+	 * dam rule (its months, rates, priority and the source dam's reserve) but
+	 * the water leaves the model, like a demand object piped out
+	 * (destination 'external'): it is counted as water leaving the catchment
+	 * in the water balance (`externalTransferM3`). Only a dam rule (source
+	 * 'dam') can send water out; a river off-take needs a unit to deliver to.
+	 */
+	toNodeId: string | null;
 	/** Calendar months 1–12 in which the transfer runs. */
 	months: number[];
 	maxRateM3s: number;
@@ -2525,7 +2574,7 @@ export interface DemandObject {
 	waterSource?: WaterSource | null;
 	/** Its river pump capacity, m³/day, under 'river'; null / absent = no limit (the run warns); 0 = no pump. */
 	riverPumpM3Day?: number | null;
-	/** A pool at its river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	/** A pool at its river pump, m³ (starts full; storage only from engine 1.86.0: no rain, no evaporation); null / absent / 0 = none. Read only under 'river'. */
 	riverPoolM3?: number | null;
 	/** The detail of where the number comes from (which meter, which strategy and year, which norm), for the report. */
 	note: string;
@@ -2982,14 +3031,28 @@ export interface CurtailmentUser {
 	returnedM3Day: number;
 	/** Mean EWR charge, ≤ 0. */
 	ewrChargeM3Day: number;
-	/** Junior users only. */
+	/** Junior users, and (engine 1.86.0) a senior user with a fixed restriction %. */
 	curtailed: boolean;
-	/** −ΔG ≤ 0: the cut in what it takes that removes the charge (0 for a senior user). */
+	/** −ΔG ≤ 0: the cut in what it takes that removes the charge (0 for a senior user without a fixed restriction %). */
 	supplyCutM3Day: number;
 	supplyCutLs: number;
-	/** The charge the cut does not remove, ≤ 0: all of it for a senior user, the part beyond what it took for a junior one. */
+	/** The charge the cut does not remove, ≤ 0: all of it for a senior user without a fixed %, the part beyond what it took (or beyond its fixed % of its demand) otherwise. */
 	uncurtailedChargeM3Day: number;
+	/**
+	 * A senior user's fixed restriction % (engine 1.86.0, issue #523 B3,
+	 * NetworkNode.userRestrictionPct), a share 0–1: its cut is at most this
+	 * share of its demand, with no basic-needs floor (USER_RESTRICTION_NOTE).
+	 * Absent for a junior user and for a senior one without it.
+	 */
+	restrictionPct?: number;
 }
+
+/**
+ * How the curtailment table and the share-the-pain board mark a Priority
+ * user curtailed by its fixed restriction % (engine 1.86.0, issue #523 B3):
+ * the cut has no basic-needs floor, since a user has no population yet.
+ */
+export const USER_RESTRICTION_NOTE = 'fixed %, no basic-needs floor';
 
 /**
  * What land cover took from the river over the run (engine ≥ 0.24.0, WP-1.35).
@@ -3744,6 +3807,25 @@ export interface DroughtRestrictionSummary {
 		/** The unit's days at each level over the run (index 0 = none; engine ≥ 1.54.0): the catchment's under a shared basis, its own under 'own'. */
 		daysByLevel: number[];
 	}[];
+	/**
+	 * Per Priority user with a fixed restriction % (engine 1.86.0, issue #523
+	 * B3, in id order; absent when none has one): the % (a share 0–1), its
+	 * mean demand, the mean after the cut (what it asked the river and its
+	 * boreholes for) and the mean taken, m³/day over the run, its mean cut on
+	 * the days it was restricted, and its days at each level: the
+	 * catchment's under a shared basis, the EWR trigger's alone under 'own'
+	 * (a user has no dam of its own).
+	 */
+	users?: {
+		nodeId: string;
+		name: string;
+		restrictionPct: number;
+		avgDemandM3Day: number;
+		avgRestrictedDemandM3Day: number;
+		avgSuppliedM3Day: number;
+		avgCutOnRestrictedDaysM3Day: number | null;
+		daysByLevel: number[];
+	}[];
 }
 
 export interface RunSummary {
@@ -4018,13 +4100,13 @@ export interface WaterBalanceRow {
 	returnFlowM3: number;
 	/** Supplied − return flow: the water that leaves the river. */
 	consumptiveUseM3: number;
-	/** Net transfers across all farms; 0 up to float noise. */
+	/** Net transfers between the units; 0 up to float noise (what transfer rules send out of the catchment, engine ≥ 1.86.0, is `externalTransferM3`). */
 	transfersM3: number;
 	/** Rain falling on the dams' surface (engine ≥ 0.16.0, audit N2); absent on older runs. */
 	rainOnDamsM3?: number;
 	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
 	damEvaporationM3?: number;
-	/** Evaporation from the river abstractions' pools (engine ≥ 1.65.0, docs/model.md §2.7j); their storage is in the opening and closing storage. Absent without a pool. */
+	/** Evaporation from the river abstractions' pools (engines 1.65.0–1.85.x, docs/model.md §2.7j); their storage is in the opening and closing storage. Absent without a pool, and on every run from engine 1.86.0, where a pool is storage only (issue #523 B2); kept so a stored run reads. */
 	poolEvaporationM3?: number;
 	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
 	otherUseM3?: number;
@@ -4044,10 +4126,16 @@ export interface WaterBalanceRow {
 	conveyanceLossM3?: number;
 	/** Lost into the river bed in the reaches between nodes (engine ≥ 1.75.0, docs/model.md §2.6b), a loss from the catchment; absent without bed losses. */
 	reachLossM3?: number;
+	/** Sent out of the catchment by transfer rules (engine ≥ 1.86.0, issue #523 B5, docs/model.md §2.6), out of the source dams; absent without such a rule. `transfersM3` is then the transfers between units only. */
+	externalTransferM3?: number;
+	/** The units' base-flow gains, from outside the catchment (engine 1.86.0, docs/model.md §2.6b), an in term; absent without one. */
+	baseflowGainM3?: number;
+	/** The units' base-flow losses, out of the catchment (engine 1.86.0); absent without one. */
+	baseflowLossM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − bed losses − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation (engines 1.65.0–1.85.x) − other use − stream depletion − seepage lost − conveyance losses − bed losses − transfers out of the catchment (engine ≥ 1.86.0) − outflow − closing (+ base-flow gains − base-flow losses, engine 1.86.0). */
 	residualM3: number;
 }
 

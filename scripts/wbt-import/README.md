@@ -114,11 +114,11 @@ rows and columns don't break it.
   limit, where b023's formula gave it nothing (issue #54). The run warns about it too (docs/model.md §2.7e).
   A farm whose dam takes **less** than 100 % of the upstream inflow but holds
   under 100 m³ (less than a day of one hectare's peak irrigation) or under
-  1 % of a day of its diversion capacity gets a `WARNING:` "probable
-  placeholder pool, for the modeller to confirm" (issue #90 Q18): it stores
-  nothing from one day to the next, so it is either a placeholder (set the
-  capacity to 0) or a unit pumping from the river (run of river with a pump
-  capacity). It is imported as it is; `--run-of-river` doesn't convert it.
+  1 % of a day of its diversion capacity gets a neutral note of its capacity,
+  "a small pool of … m³, imported as entered" (issue #90 Q18, answered
+  2026-10-11: a pool's capacity is user defined and even a small pool stays
+  in the model, so it is no longer flagged as a probable placeholder). It is
+  imported as it is; `--run-of-river` doesn't convert it.
   **`--run-of-river`** (off by default; the seed turns it on per workbook with
   `WBT_RUN_OF_RIVER=1` in `wbt-import.<Prefix>.env`, bin/seed-demo.sh) imports
   every unit so flagged as run of river instead (issue #54, 2c/2d):
@@ -509,11 +509,11 @@ fixture cells whose text SheetJS read differently; `sourceWorkbooks.test.ts`
 compares the client workbooks, allowing only differences that
 `explainedByDecoding()` puts down to the text decoding.
 
-**In the UI.** **Import b023 workbook** on the project list runs the port in a
+**In the UI.** **Import workbook** on the project list runs the port in a
 Web Worker (`import.worker.ts`: the picked file goes in, progress per sheet
 comes out, then the project, notes and unmapped report), shows the review,
 and posts the project to `POST /projects/import`, the same route and
-validation as a `.json` file ([docs/ui.md](../../docs/ui.md#import-a-b023-workbook)).
+validation as a `.json` file ([docs/ui.md](../../docs/ui.md#import-a-workbook)).
 The review's gauge option is `gaugeAsReference` (a date and factor for the
 scaling), and its *River pumping units* option, shown only when a unit is
 flagged as probable run-of-river, is `runOfRiver` (`--run-of-river`, same

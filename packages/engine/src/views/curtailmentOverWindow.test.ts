@@ -15,6 +15,9 @@ import { randomInput } from '../testing/fuzz';
 import { curtailmentOverWindow, curtailmentSeriesKeys, prepareCurtailment, ProjectionInputError, type CurtailmentRun } from './farmProjection';
 
 /** A saved run as the API stores it (a non-finite day is null), recording which series are read. */
+/** The series curtailmentOverWindow looks for and reads only where the run stored them. */
+const probedOnly = (k: string) => k.endsWith('|ewr_charge_shortfall') || k.endsWith('|restricted_demand');
+
 function asRun(input: ModelInput, out: ModelOutput, read?: Set<string>): CurtailmentRun {
 	const byKey = new Map(out.series.map((s) => [`${s.nodeId ?? ''}|${s.key}`, s.values.map((v) => (Number.isFinite(v) ? v : null))]));
 	return {
@@ -143,8 +146,9 @@ describe('curtailmentOverWindow', () => {
 			for (const otherUsers of [true, false]) {
 				const read = new Set<string>();
 				curtailmentOverWindow(asRun(input, run, read), win(run, 0, run.days - 1), { otherUsers });
-				// ewr_charge_shortfall is looked for at every site, and read only where the run stored it.
-				const used = new Set([...read].filter((k) => !k.endsWith('|ewr_charge_shortfall') || stored.has(k)));
+				// ewr_charge_shortfall is looked for at every site, and a Priority user's restricted_demand on one with a
+				// fixed % (engine 1.86.0); each is read only where the run stored it.
+				const used = new Set([...read].filter((k) => !probedOnly(k) || stored.has(k)));
 				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, demandObjects: input.model.demandObjects }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
 				expect(new Set(keys)).toEqual(used);
 				expect(keys).toHaveLength(used.size);
@@ -161,11 +165,12 @@ describe('curtailmentOverWindow', () => {
 			const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
 			const read = new Set<string>();
 			curtailmentOverWindow(asOldRun(input, run, read), win(run, 0, run.days - 1));
-			for (const k of [...read]) if (k.endsWith('|ewr_charge_shortfall') && !stored.has(k)) read.delete(k);
+			for (const k of [...read]) if (probedOnly(k) && !stored.has(k)) read.delete(k);
 			const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { demandObjects: input.model.demandObjects }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
 			// Without `has` too (and the rule-table sites as the Runs tab passes them): the flows are listed.
 			const ruleTableSites = run.summary.curtailment!.ewrSites!.filter((s) => s.ewrSource === 'ruleTable').map((s) => (s.isOutlet ? null : s.nodeId));
-			const blind = new Set(curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { ruleTableSites, demandObjects: input.model.demandObjects }).map((k) => `${k.nodeId ?? ''}|${k.key}`));
+			// Blind, a user's restricted_demand is listed whether or not the run stored it (the loader skips a missing one).
+			const blind = new Set(curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { ruleTableSites, demandObjects: input.model.demandObjects }).map((k) => `${k.nodeId ?? ''}|${k.key}`).filter((k) => !k.endsWith('|restricted_demand') || stored.has(k)));
 			const needsRecompute = run.series.some((s) => s.key === EWR_BINDING_SERIES.key);
 			if (needsRecompute) {
 				recomputed++;
@@ -250,8 +255,9 @@ describe('curtailmentOverWindow', () => {
 			for (const otherUsers of [true, false]) {
 				const read = new Set<string>();
 				curtailmentOverWindow(asRun(input, run, read), win(run, 0, run.days - 1), { otherUsers });
-				// ewr_charge_shortfall is looked for at every site, and read only where the run stored it.
-				const used = new Set([...read].filter((k) => !k.endsWith('|ewr_charge_shortfall') || stored.has(k)));
+				// ewr_charge_shortfall is looked for at every site, and a Priority user's restricted_demand on one with a
+				// fixed % (engine 1.86.0); each is read only where the run stored it.
+				const used = new Set([...read].filter((k) => !probedOnly(k) || stored.has(k)));
 				// With the run's stored series too, as the Runs tab passes them: its binding sites (engine ≥ 1.5.0) replace the flows.
 				const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
 				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, ruleTableSites, demandObjects: input.model.demandObjects }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);

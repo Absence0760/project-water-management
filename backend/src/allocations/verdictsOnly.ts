@@ -122,6 +122,21 @@ export function boardVerdicts<T>(board: T): T {
 	return walk(board) as T;
 }
 
+/**
+ * Page 1's board against full authorised use (evidence-14) as a viewer kept
+ * from the volumes reads it: boardVerdicts, and without its pair's
+ * reproduction record (evidence-19, #523 G2): the results digests and how each
+ * registered volume, by id, was held. Those are for re-running the pair from
+ * the reproduction bundle, which that viewer is refused (the digests would be
+ * an oracle for guessed volumes).
+ */
+export function authorisedVerdicts<T>(board: T): T {
+	const b = boardVerdicts(board);
+	if (!isObj(b) || !('reproduction' in b)) return b;
+	const { reproduction: _withheld, ...rest } = b;
+	return rest as T;
+}
+
 /** A member's metrics (MemberMetrics) that are EWR counts and rates. */
 const METRIC_VERDICTS = ['ewrDaysNotMet', 'ewrDaysNotMetByMonth', 'reserveRate', 'noFlowDays', 'ewrSiteDaysNotMet'] as const;
 /** An ensemble's bands (EnsembleBands) that are EWR counts and rates; the rest null or empty. */
@@ -212,7 +227,7 @@ const REPORT_VERDICTS: Record<string, (v: unknown) => unknown> = {
 			fdcChange: null
 		})),
 	licenceImpact: boardVerdicts,
-	licenceImpactAuthorised: boardVerdicts,
+	licenceImpactAuthorised: authorisedVerdicts,
 	uncertainty: ensembleVerdicts,
 	servedWhileFailing: (v) => ({
 		notAssessed: VERDICTS_ONLY_NOTE,

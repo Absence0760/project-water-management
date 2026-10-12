@@ -20,7 +20,7 @@ let farmer: User;
 let projectId: string;
 let published: string;
 
-// Gauge ← Waterval ← Rooikloof (A's); four more farms straight to the gauge: six farm holders.
+// Gauge ← Waterval ← Rooikloof (A's); four more farms straight to the gauge: six farm holders, each watering a crop.
 const outlet = node('Gauge', null);
 const waterval = node('Waterval', outlet.id, { damCapacityM3: 60_000 });
 const rooikloof = node('Rooikloof', waterval.id, { damCapacityM3: 20_000 });
@@ -57,9 +57,11 @@ beforeAll(async () => {
 	const model = {
 		nodes: [outlet, waterval, rooikloof, ...others],
 		crops: [citrus, lucerne],
+		// Every farm waters a crop, so no one or two of them take most of the supply (the dominance rule, 232).
 		cropAreas: [
 			{ nodeId: rooikloof.id, cropId: citrus.id, areaM2: 80_000 },
-			{ nodeId: waterval.id, cropId: lucerne.id, areaM2: 120_000 }
+			{ nodeId: waterval.id, cropId: lucerne.id, areaM2: 120_000 },
+			...others.map((o) => ({ nodeId: o.id, cropId: lucerne.id, areaM2: 100_000 }))
 		],
 		transfers: []
 	};
@@ -101,7 +103,12 @@ describe("an applicant's results", () => {
 		expect(anon).toMatch(/^Farm \d$/);
 		expect(r.downstream).toHaveLength(1);
 		expect(r.downstream[0]).toMatchObject({ nodeId: waterval.id, name: anon, kind: 'farm' });
-		expect(Number.isInteger(r.downstream[0].supplyChangePct) || r.downstream[0].supplyChangePct === null).toBe(true);
+		// Whole percentage points of share supplied, the pack's measure (issue #523 G9 (a)).
+		const sharePts = (s: { farms: { nodeId: string; fractionSupplied: number }[] }) => s.farms.find((f) => f.nodeId === waterval.id)!.fractionSupplied;
+		const [b, a] = (await withUser(owner.id, async (db) =>
+			(await db.query<{ summary: { farms: { nodeId: string; fractionSupplied: number }[] } }>('SELECT summary FROM model_run WHERE id = ANY($1::uuid[]) ORDER BY id = $2', [[published, raise.runId], raise.runId])).rows.map((x) => sharePts(x.summary))
+		)) as [number, number];
+		expect(r.downstream[0].supplyChangePts).toBe(Math.sign(a - b) * Math.round(Math.abs((a - b) * 100)) || 0);
 		// Six farm holders and a proposal: the catchment's figures and its outlet series.
 		expect(r.catchment.withheld).toBeNull();
 		expect(r.catchment.figures.base.meanNaturalFlowM3Day).toBeGreaterThan(0);
@@ -150,15 +157,26 @@ describe("an applicant's results", () => {
 		expect(await call(owner)).toHaveLength(1);
 	});
 
-	it('shows only the EWR when an op is a baseline assumption, and RLS hands over none of that run’s series (control: a proposal run’s)', async () => {
+	it('shows of the application only the EWR when an op is a baseline assumption, with the published base as RLS serves it, and RLS hands over none of that run’s series (control: a proposal run’s)', async () => {
 		const assumed = await application(applicantA, 'Halve Waterval', [{ op: 'demand.scale', factor: 0.5, nodeIds: [waterval.id] }]);
 		const res = await results(applicantA, assumed.sid);
 		expect(res.status).toBe(200);
 		const r = res.body.results;
 		expect(r).toMatchObject({ allProposals: false, units: [], downstream: [], unitsWithheld: 'baseline_assumptions' });
-		expect(r.catchment).toMatchObject({ figures: null, series: null, withheld: 'baseline_assumptions' });
+		expect(r.catchment).toMatchObject({ withheld: 'baseline_assumptions' });
+		expect(r.catchment.figures.application).toBeNull();
+		expect(r.catchment.series.ewr.application).toBeNull();
+		expect(r.catchment.series.outflow.application).toBeNull();
 		expect(typeof r.catchment.ewrDaysNotMet.application).toBe('number');
 		expect(await seriesOf(applicantA, assumed.runId)).toEqual([]);
+		// The base's side agrees with RLS (issue #523 G9 (d)): the published baseline's river, and its use at six holders,
+		// which the applicant reads of that run anyway.
+		expect(r.catchment.figures.base.meanNaturalFlowM3Day).toBeGreaterThan(0);
+		expect(r.catchment.figures.base.meanSimulatedOutflowM3Day).not.toBeNull();
+		expect(r.catchment.series.ewr.base.values).toHaveLength(90);
+		expect(r.catchment.series.outflow.base.values).toHaveLength(90);
+		const baseSeries = (await seriesOf(applicantA, published)).filter((s) => s.node_id === null).map((s) => s.key);
+		expect(baseSeries).toEqual(expect.arrayContaining(['ewr', 'natural_flow', 'simulated_outflow']));
 		// Positive control: of the proposal run, the catchment allowlist and their own unit.
 		const own = await seriesOf(applicantA, raise.runId);
 		expect(own.some((s) => s.node_id === null && s.key === 'simulated_outflow')).toBe(true);

@@ -459,7 +459,7 @@
 				{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
 			</select>
 			<span class="hint muted" id={id('provenance-h')}>
-				CHIRPS v2.0 and v3.0 differ by an amount that changes over the years, so one series holds one of them. A b023 workbook’s CHIRPS
+				CHIRPS v2.0 and v3.0 differ by an amount that changes over the years, so one series holds one of them. A Water Balance Tool workbook’s CHIRPS
 				column is usually v2.0; the CHIRPS data feed writes v3.0.
 			</span>
 		</div>

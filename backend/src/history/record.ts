@@ -171,8 +171,20 @@ export type AuditKind =
 	| 'member.role'
 	| 'member.party'
 	| 'member.specialist'
-	// An owner marked or unmarked a member as acting for the responsible authority (163).
+	// An owner marked or unmarked a member as acting for the responsible authority (163; before 229, kept for the old events).
 	| 'member.authority'
+	// Who acts for the responsible authority (229_authority_delegates, issue #523 G5), written by the database
+	// (authority_delegate_audit), never by recordAudit: proposed by an owner, confirmed by a member acting for it (or the
+	// operator: via 'operator', its letter in reference), a proposal withdrawn or declined, a delegate removed, lapsed
+	// (no longer an editor) or carried over from 163's flag (grandfathered, its actor the owner who ticked it).
+	// { userId, displayName, via?, reference?, wasConfirmed? }.
+	| 'authority.proposed'
+	| 'authority.confirmed'
+	| 'authority.withdrawn'
+	| 'authority.declined'
+	| 'authority.removed'
+	| 'authority.lapsed'
+	| 'authority.grandfathered'
 	| 'farmer.linked'
 	| 'farmer.unlinked'
 	| 'invite.sent'
@@ -266,6 +278,9 @@ export type AuditKind =
 	| 'scenario.withdrawn'
 	| 'scenario.reopened'
 	| 'scenario.decided'
+	// What followed a decision (228_decision_events, issue #523 G4): an appeal lodged, upheld, set aside or varied. The event's
+	// id, kind, forum and date, and a variation's terms' hash; never its note.
+	| 'scenario.appeal_recorded'
 	| 'scenario.shared'
 	| 'scenario.unshared'
 	// "Ask the assessors why" (164_applicant_visibility): a party asked about a check line a hidden rule broke, an editor answered.

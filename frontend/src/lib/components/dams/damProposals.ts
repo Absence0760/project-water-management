@@ -1,9 +1,12 @@
 // The rows of the Dams page's "Proposed from the register and the map" box
 // (issue #326 B-dams; docs/ui.md § Dams, docs/maps.md § Dams from the
 // register and the map): each registered dam near the unit's dam on the map
-// proposes its capacity, and the dam polygon proposes its area as the
-// full-supply area. One row per value, each with its source and what the
-// saved model holds now; the page accepts them one at a time.
+// lists its capacity for reference, and the dam polygon proposes its area as
+// the full-supply area. One row per value, each with its source and what the
+// saved model holds now. A unit's dam is its composite dam, the total of its
+// farm dams (many unregistered), so its volume is the user's to enter: a
+// registered capacity is never used for it (#523 C1; #90). Only the area is
+// accepted, and the page asks first.
 import type { DamProposals, RegisterDamProposal } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
 import { positionText } from '$lib/components/map/mapData';
@@ -108,15 +111,8 @@ export function damProposalRows(p: DamProposals): DamProposalRow[] {
 	return rows;
 }
 
-/** The confirmation before a value is saved to the model. */
-export function confirmWords(p: DamProposals, r: DamProposalRow): { title: string; message: string; confirmLabel: string } {
-	if (r.kind === 'capacity') {
-		return {
-			title: `Set ${p.nodeName}’s dam capacity from the register?`,
-			message: `${p.nodeName}’s dam capacity changes from ${r.now} to ${r.proposed}, the registered capacity of ${r.label.replace(/^Capacity: /, '')}. The change is saved to the model now and recorded in History with its source; the next run uses it.`,
-			confirmLabel: 'Use this capacity'
-		};
-	}
+/** The confirmation before the polygon's area is saved to the model (a registered capacity is a reference only, never used). */
+export function confirmWords(p: DamProposals, r: Extract<DamProposalRow, { kind: 'area' }>): { title: string; message: string; confirmLabel: string } {
 	return {
 		title: `Set ${p.nodeName}’s full-supply area from the map?`,
 		message: `${p.current.damAreaFullM2 === null ? `${p.nodeName}’s dam has no area when full set (the run estimates one from its capacity); it becomes` : `${p.nodeName}’s dam area when full changes from ${r.now} to`} ${r.proposed}, the area of ${r.label.replace(/^Full-supply area: /, '')} computed on the server. The change is saved to the model now and recorded in History; the next run uses it for evaporation.`,

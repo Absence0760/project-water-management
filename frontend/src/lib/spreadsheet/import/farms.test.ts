@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asRunOfRiver, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote, UPSTREAM_INTO_DAM_MARKER } from './farms';
+import { asRunOfRiver, farmOperatingRules, readFarmSpec, runOfRiverNote, smallPoolNote, UPSTREAM_INTO_DAM_MARKER } from './farms';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -109,7 +109,7 @@ describe('readFarmSpec', () => {
 // Ported from scripts/wbt-import/test_run_of_river.py (issue #54, 2d): the same cases and text.
 describe('runOfRiverNote (run_of_river_note)', () => {
 	const TAIL =
-		'. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it ' +
+		'. The workbook has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it ' +
 		'as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)';
 
 	it('flags a pool with a large diversion', () => {
@@ -121,7 +121,7 @@ describe('runOfRiverNote (run_of_river_note)', () => {
 	});
 
 	it('flags a placeholder under 1 m³ without a diversion', () => {
-		expect(runOfRiverNote('Pump unit', 1, 0.5, 0, 0)).toContain('and is a pool of 0.5 m³. b023');
+		expect(runOfRiverNote('Pump unit', 1, 0.5, 0, 0)).toContain('and is a pool of 0.5 m³. The workbook');
 	});
 
 	it('flags a dam that holds a whole number of m³/s for one day', () => {
@@ -173,7 +173,7 @@ describe('asRunOfRiver (as_run_of_river): the run-of-river option', () => {
 		expect(Object.keys(node)).toEqual(['name', 'damCapacityM3', 'damInitialPct', 'damSeepagePerDay', 'supplyRule', 'pumpCapacityM3Day']);
 		expect(note).toBe(
 			'WARNING: farm River pool: imported as run of river (--run-of-river): its 259200 m³ dummy dam is dropped, and a river pump ' +
-				"takes its demand from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this unit's " +
+				"takes its demand from the river below it. The workbook gives no pump capacity (it has none, and nothing there capped this unit's " +
 				"take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply section (issue #54, 2c/2d)"
 		);
 	});
@@ -196,23 +196,22 @@ describe('asRunOfRiver (as_run_of_river): the run-of-river option', () => {
 	});
 });
 
-// Same cases and text as test_run_of_river.py PlaceholderPoolNote (issue #90 Q18).
-describe('placeholder pool note', () => {
-	it('flags a near-empty dam that takes less than all the upstream inflow', () => {
-		expect(placeholderPoolNote('Pool', 0, 0.5, 0)).toBe(
-			"WARNING: farm Pool: probable placeholder pool, for the modeller to confirm: its dam holds 0.5 m³, less than a " +
-				"day's peak irrigation of one hectare, and takes 0 % of the upstream inflow, so it stores nothing from one day to " +
-				'the next. If it is a placeholder, set the dam capacity to 0; if the unit pumps from the river, set its supply ' +
-				'rule to run of river with a pump capacity (issue #90 Q18)'
-		);
-		expect(placeholderPoolNote('Tank', 0.5, 99.9, 0)).not.toBeNull();
-		expect(placeholderPoolNote('Pool', 0.25, 129.5, 12960)).not.toBeNull();
+// Same cases and text as test_run_of_river.py SmallPoolNote (issue #90 Q18).
+describe('small pool note', () => {
+	it('gives a small pool off the river a neutral note of its capacity', () => {
+		const note = smallPoolNote('Pool', 0, 0.5, 0);
+		expect(note).toBe("farm Pool: a small pool of 0.5 m³, imported as entered (a pool's capacity is user defined, issue #90 Q18)");
+		// A pool's capacity is user defined and it stays in the model (answered 2026-10-11): never a warning, never a placeholder.
+		expect(note).not.toMatch(/^WARNING/);
+		expect(note).not.toContain('placeholder');
+		expect(smallPoolNote('Tank', 0.5, 99.9, 0)).not.toBeNull();
+		expect(smallPoolNote('Pool', 0.25, 129.5, 12960)).not.toBeNull();
 	});
 
 	it('leaves a real dam, no dam and a run-of-river candidate alone', () => {
-		expect(placeholderPoolNote('Small dam', 0, 100, 0)).toBeNull();
-		expect(placeholderPoolNote('Small dam', 0.5, 4000, 12960)).toBeNull();
-		expect(placeholderPoolNote('No dam', 0, 0, 0)).toBeNull();
-		expect(placeholderPoolNote('Dummy dam', 1, 0.5, 0)).toBeNull();
+		expect(smallPoolNote('Small dam', 0, 100, 0)).toBeNull();
+		expect(smallPoolNote('Small dam', 0.5, 4000, 12960)).toBeNull();
+		expect(smallPoolNote('No dam', 0, 0, 0)).toBeNull();
+		expect(smallPoolNote('Dummy dam', 1, 0.5, 0)).toBeNull();
 	});
 });

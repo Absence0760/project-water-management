@@ -305,7 +305,7 @@ bottom:
    forcing — nothing to compare). A run whose parameters
    didn't come from Fit automatically reads "none". A stored legacy run
    compared with a GR4J run (every run since engine 1.0.0) reads *"Runoff
-   model: legacy (b023 recession) → GR4J"* in the input diff, followed by any
+   model: legacy (the original workbook’s recession) → GR4J"* in the input diff, followed by any
    GR4J parameter or pan-coefficient changes. The legacy model's own
    calibration settings (`a`, `b`, the season factors, summer months, the
    initial base flow, the recession tables) changed a run only if it ran
@@ -457,6 +457,13 @@ headline results, for two runs of **one project**:
   the server re-runs the first pair and three at random before storing it
   under run B ([api.md](./api.md#uncertainty-bands)). Cross-project pairs
   get a note instead: the parameter sets describe one catchment.
+- A viewer kept from the registered volumes reads a band that rests on a
+  run that caps use at, or scales demand to, those volumes (A's or B's own
+  band, and the paired band when **either** run does) as EWR counts and
+  rates only; the panel says which run in a note (`paired-uncertainty-withheld`,
+  from the ensembles' `verdictsOnlyRuns`), so a withheld "–" isn't read as a
+  band gated for too few sets (issue #523 G1c,
+  [security.md](./security.md)).
 
 Every change is **B − A**. A change is shown with a sign and ▲/▼. Green means
 better and red means worse (for example, less deficit or fewer EWR days not

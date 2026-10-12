@@ -42,8 +42,8 @@ const run = (id: string, createdAt: string, runoffModel?: string): RunMeta => ({
 describe('runoffModelName', () => {
 	it('names the models, treating absent as legacy', () => {
 		expect(runoffModelName('gr4j')).toBe('GR4J');
-		expect(runoffModelName('legacy')).toBe('legacy (b023 workbook)');
-		expect(runoffModelName(undefined)).toBe('legacy (b023 workbook)');
+		expect(runoffModelName('legacy')).toBe('legacy (original workbook)');
+		expect(runoffModelName(undefined)).toBe('legacy (original workbook)');
 		expect(runoffModelName('awbm')).toBe('awbm');
 	});
 });
@@ -74,11 +74,11 @@ describe('modelDriftWarning', () => {
 
 	it('warns about newer runs with a different runoff model, naming the models', () => {
 		expect(modelDriftWarning([run('b', '2026-08-05T00:00:00Z', 'legacy')], h)).toBe(
-			'1 run made after the nominated evidence run “Run A” uses a different runoff model (legacy (b023 workbook), not GR4J). ' +
+			'1 run made after the nominated evidence run “Run A” uses a different runoff model (legacy (original workbook), not GR4J). ' +
 				'The nomination still stands: results from those runs are not the evidence unless one is nominated, with a reason.'
 		);
 		expect(modelDriftWarning([run('b', '2026-08-05T00:00:00Z', 'legacy'), run('c', '2026-08-06T00:00:00Z', 'awbm')], h)).toMatch(
-			/^2 runs made after .* use a different runoff model \(legacy \(b023 workbook\), awbm, not GR4J\)/
+			/^2 runs made after .* use a different runoff model \(legacy \(original workbook\), awbm, not GR4J\)/
 		);
 	});
 

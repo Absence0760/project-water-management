@@ -1,4 +1,4 @@
-import { CROP_SUPPLY_DEFAULTS, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, REACH_LOSS_DEFAULTS, WATER_SOURCE_DEFAULTS, type ProjectModel } from '@water-management/engine';
+import { BASEFLOW_DEFAULTS, CROP_SUPPLY_DEFAULTS, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, REACH_LOSS_DEFAULTS, WATER_SOURCE_DEFAULTS, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
@@ -21,6 +21,7 @@ const MODEL_JSON = `json_build_object(
 			return_flow_fraction AS "returnFlowFraction", dam_area_full_m2 AS "damAreaFullM2",
 			dam_area_exponent AS "damAreaExponent", dam_seepage_per_day AS "damSeepagePerDay",
 			user_demand_m3_day AS "userDemandM3Day", user_return_pct AS "userReturnPct", user_priority AS "userPriority",
+			user_restriction_pct AS "userRestrictionPct",
 			borehole_capacity_m3_day AS "boreholeCapacityM3Day", borehole_rule AS "boreholeRule",
 			borehole_trigger_pct AS "boreholeTriggerPct", stream_depletion_frac AS "streamDepletionFrac",
 			stream_depletion_lag_days AS "streamDepletionLagDays",
@@ -35,6 +36,7 @@ const MODEL_JSON = `json_build_object(
 			crop_remote_node_id AS "cropRemoteNodeId", crop_remote_cap_m3_day AS "cropRemoteCapM3Day",
 			hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr", divert_monthly_m3_day AS "divertMonthlyM3Day",
 			ewr_site AS "ewrSite", reach_loss_frac AS "reachLossFrac", reach_loss_max_m3_day AS "reachLossMaxM3Day",
+			baseflow_loss_m3_day AS "baseflowLossM3Day", baseflow_gain_m3_day AS "baseflowGainM3Day",
 			map_mm AS "mapMm", map_source AS "mapSource",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
 		FROM node WHERE project_id = $1) r), '[]'),
@@ -149,6 +151,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
+			user_restriction_pct,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
@@ -156,11 +159,12 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year,
-			reach_loss_frac, reach_loss_max_m3_day, map_mm, map_source)
+			reach_loss_frac, reach_loss_max_m3_day, baseflow_loss_m3_day, baseflow_gain_m3_day, map_mm, map_source)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
+			user_restriction_pct,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
@@ -168,7 +172,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year,
-			reach_loss_frac, reach_loss_max_m3_day, map_mm, map_source
+			reach_loss_frac, reach_loss_max_m3_day, baseflow_loss_m3_day, baseflow_gain_m3_day, map_mm, map_source
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 			-- An area accepted from the map (152, geo/routes.ts area-from-map) stays 'map' until the area is typed over (or the node changes kind).
@@ -184,7 +188,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			return_flow_fraction = EXCLUDED.return_flow_fraction, dam_area_full_m2 = EXCLUDED.dam_area_full_m2,
 			dam_area_exponent = EXCLUDED.dam_area_exponent, dam_seepage_per_day = EXCLUDED.dam_seepage_per_day,
 			user_demand_m3_day = EXCLUDED.user_demand_m3_day, user_return_pct = EXCLUDED.user_return_pct,
-			user_priority = EXCLUDED.user_priority, borehole_capacity_m3_day = EXCLUDED.borehole_capacity_m3_day,
+			user_priority = EXCLUDED.user_priority, user_restriction_pct = EXCLUDED.user_restriction_pct,
+			borehole_capacity_m3_day = EXCLUDED.borehole_capacity_m3_day,
 			borehole_rule = EXCLUDED.borehole_rule, borehole_trigger_pct = EXCLUDED.borehole_trigger_pct,
 			stream_depletion_frac = EXCLUDED.stream_depletion_frac, stream_depletion_lag_days = EXCLUDED.stream_depletion_lag_days,
 			dam_curve = EXCLUDED.dam_curve, dam_release_rule = EXCLUDED.dam_release_rule,
@@ -204,6 +209,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			ewr_site = EXCLUDED.ewr_site,
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year,
 			reach_loss_frac = EXCLUDED.reach_loss_frac, reach_loss_max_m3_day = EXCLUDED.reach_loss_max_m3_day,
+			baseflow_loss_m3_day = EXCLUDED.baseflow_loss_m3_day, baseflow_gain_m3_day = EXCLUDED.baseflow_gain_m3_day,
 			map_mm = EXCLUDED.map_mm, map_source = EXCLUDED.map_source
 		 WHERE node.project_id = EXCLUDED.project_id`,
 		m.nodes.map((n) => ({
@@ -229,6 +235,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			user_demand_m3_day: n.userDemandM3Day ?? null,
 			user_return_pct: n.userReturnPct ?? 0,
 			user_priority: n.userPriority ?? 'senior',
+			user_restriction_pct: n.userRestrictionPct ?? null,
 			borehole_capacity_m3_day: n.boreholeCapacityM3Day ?? null,
 			borehole_rule: n.boreholeRule ?? 'supplemental',
 			borehole_trigger_pct: n.boreholeTriggerPct ?? 0.3,
@@ -266,6 +273,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			// Bed losses in the reach below (engine ≥ 1.75.0, migration 203); absent = none.
 			reach_loss_frac: n.reachLossFrac ?? REACH_LOSS_DEFAULTS.reachLossFrac,
 			reach_loss_max_m3_day: n.reachLossMaxM3Day ?? REACH_LOSS_DEFAULTS.reachLossMaxM3Day,
+			// A unit's base-flow loss and gain (engine 1.86.0, migration 222); absent = none.
+			baseflow_loss_m3_day: n.baseflowLossM3Day ?? BASEFLOW_DEFAULTS.baseflowLossM3Day,
+			baseflow_gain_m3_day: n.baseflowGainM3Day ?? BASEFLOW_DEFAULTS.baseflowGainM3Day,
 			// The unit's MAP and its source (issue #482, migration 209); absent = none. A source without a MAP isn't kept.
 			map_mm: n.mapMm ?? null,
 			map_source: n.mapMm === null || n.mapMm === undefined ? null : (n.mapSource?.trim() || null)

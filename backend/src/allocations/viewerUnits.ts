@@ -23,26 +23,47 @@ import {
 	type ScenarioOp,
 	allocationsOverFlag,
 	mixShares,
+	ownUnitYears,
+	registeredUseRow,
 	shownWithin,
 	takesWithin,
 	totalShown,
-	waterYearWithin,
 	type AuthorisedMix,
 	type AuthorisedMixShares,
-	type EvidenceAllocations
+	type EvidenceAllocations,
+	type EvidenceRow
 } from '@water-management/engine';
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
-import { boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
+import { authorisedVerdicts, boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 
-/** A viewer on a project whose owners haven't let viewers read each registered volume. */
+/**
+ * Whether the caller is kept from each registered volume: a viewer on a
+ * project whose owners haven't let viewers read each one. Who reads them is
+ * decided in one place, the database's app_reads_allocation_units (231), the
+ * function allocation_select reads too: a member acting for the responsible
+ * authority always (#523 G6), an editor or owner, a viewer with the switch
+ * on. Farmers and applicants (contributors) aren't answered here: their own
+ * views decide what they read of their farms and applications.
+ */
 export async function allocationUnitsHidden(db: Db, projectId: string, role: Role): Promise<boolean> {
 	// A report render queued without registered volumes (218, #523 G1): every project, whatever the role.
 	if (requestAuth.getStore()?.redactAllocations) return true;
-	if (role !== 'viewer') return false;
-	const { rows } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [projectId]);
-	return !rows[0]?.on;
+	if (role === 'farmer' || role === 'contributor') return false;
+	return !(await readsAllocationUnits(db, projectId));
+}
+
+/** The current user reads each of the project's allocation rows (app_reads_allocation_units, 231; #523 G6). */
+export async function readsAllocationUnits(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ on: boolean }>('SELECT app_reads_allocation_units($1) AS "on"', [projectId]);
+	return rows[0]?.on === true;
+}
+
+/** The current user reads the names of the project's registered users (app_reads_allocation_holders, 231; #523 G6). */
+export async function readsAllocationHolders(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ on: boolean }>('SELECT app_reads_allocation_holders($1) AS "on"', [projectId]);
+	return rows[0]?.on === true;
 }
 
 /** One row behind a viewer's totals (app_allocation_volumes): no name, number or property. */
@@ -294,6 +315,7 @@ type ReportLike = {
 	allocations?: unknown;
 	mode?: string;
 	flags?: { id: string; text: string }[];
+	rows?: { id: string }[];
 };
 
 /** A run mode that holds use to the registered volume: its modelled use is the volume wherever supply meets demand (#523 R5-2). */
@@ -364,6 +386,38 @@ function withoutOthersOver<F extends { id: string; text: string }>(flags: F[], a
 }
 
 /**
+ * Page 1's "Registered vs modelled use" row and § 5's `unitYears` counted
+ * over the units § 5 lists one by one only (the applicant's own), not every
+ * unit (#523 G1c): each run's count of every unit's years over the band,
+ * pooled over several team scenarios at a fixed band, bounds one unit's
+ * volume, as the totals' statuses would (round 6). Rebuilt whether the other
+ * units are in a total or left out (`othersLeftOut`); with no unit of the
+ * applicant's own judged, the row says it is withheld.
+ */
+function withOwnUnitYears<R extends ReportLike>(report: R, al: EvidenceAllocations): { allocations: EvidenceAllocations; rows?: R['rows'] } {
+	const app = report.mode === 'application';
+	const ownOnly = () => ({ ...al, unitYears: ownUnitYears(al, app) });
+	const rows = report.rows?.map((r) => (r.id === 'registeredUse' ? (registeredUseRow(ownOnly(), app, { ownOnly: true }) satisfies EvidenceRow) : r));
+	// A document without `unitYears` (before evidence-15) keeps none: its row is rebuilt above all the same.
+	return { allocations: al.unitYears ? ownOnly() : al, ...(rows ? { rows: rows as R['rows'] } : {}) };
+}
+
+/**
+ * Whether a frozen report's page-1 "Registered vs modelled use" row counts
+ * units other than those § 5 lists one by one (#523 G1c): its PDF prints that
+ * count, which a viewer kept from each volume isn't given (packWithheldPart).
+ * A report without `unitYears` (before evidence-15) counts the units § 5
+ * lists, which are every unit.
+ */
+export function countsOthersYears(report: Pick<ReportLike, 'allocations' | 'mode'>): boolean {
+	const al = report.allocations as EvidenceAllocations | undefined;
+	if (!al || !Array.isArray(al.units) || !al.unitYears || al.notAssessed) return false;
+	const own = ownUnitYears(al, report.mode === 'application');
+	const uy = al.unitYears;
+	return uy.judgedA !== own.judgedA || uy.overA !== own.overA || (uy.judgedB ?? 0) !== (own.judgedB ?? 0) || (uy.overB ?? 0) !== (own.overB ?? 0);
+}
+
+/**
  * An evidence report as a viewer who can't read each registered volume gets
  * it (issue #523 G1): Appendix A.1's baseline model without its allocation
  * rows, each run summary's allocations without the per-unit part, as
@@ -375,7 +429,9 @@ function withoutOthersOver<F extends { id: string; text: string }>(flags: F[], a
  * mixShares; none for a board built before, #523 H/J). § 5 lists only the
  * applicant's own units (`evidence-15`; none of a team scenario's since
  * `evidence-17`), the rest as totals, whose registered m³ is left out
- * (withoutOthersRegistered, #523 K/L/M): their status and modelled use stay.
+ * (withoutOthersRegistered, #523 K/L/M): their modelled use stays; page 1's
+ * "Registered vs modelled use" row and `unitYears` count the listed units
+ * only (withOwnUnitYears, #523 G1c).
  * A report on a cap or full-allocation run is then its verdicts and counts
  * only (verdictsReport), and on every report the licence-impact boards give
  * their verdicts without the waterfall's use totals (boardVerdicts; the
@@ -395,12 +451,16 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 	const out = {
 		...report,
 		...(report.ops ? { ops: withoutPositions(report.ops, drop) } : {}),
-		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one; its verdicts without the waterfall (#523 I).
-		...(lia ? { licenceImpactAuthorised: boardVerdicts((({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia)) } : {}),
+		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one; its verdicts without the waterfall (#523 I), and without the pair's reproduction record (#523 G2).
+		...(lia ? { licenceImpactAuthorised: authorisedVerdicts((({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia)) } : {}),
 		...('licenceImpact' in report ? { licenceImpact: boardVerdicts((report as { licenceImpact?: unknown }).licenceImpact) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
-		...(report.allocations ? { allocations: withoutOthersRegistered(report.allocations as EvidenceAllocations) } : {}),
+		...(Array.isArray((report.allocations as EvidenceAllocations | undefined)?.units)
+			? withOwnUnitYears(report, withoutOthersRegistered(report.allocations as EvidenceAllocations))
+			: report.allocations
+				? { allocations: report.allocations }
+				: {}),
 		...(report.flags ? { flags: withoutOthersOver(report.flags, report.allocations as EvidenceAllocations | undefined, report.mode === 'application') } : {})
 	};
 	// A report on a cap or full-allocation run: its verdicts and counts only (#523 I).

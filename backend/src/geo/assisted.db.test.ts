@@ -62,6 +62,22 @@ describe('splitting a polygon', () => {
 		expect(JSON.stringify(ev!.subject)).not.toMatch(/coordinates/);
 	});
 
+	it('keeps a JRC-traced dam’s credit on both parts (issue #523 C6), and adds none to a dam that had none', async () => {
+		const traced = await editor.call('POST', at('/features'), { kind: 'dam', name: 'Traced dam', geometry: square(21.5, -33.7, 0.02) });
+		// As tracing from the real archive stores it (the synthetic raster names no source).
+		const description = 'Traced from JRC GSW v1.5 (trace-dam-2): water in at least 25 % of the observations, clicked at 33.6900° S, 21.5100° E. Check it against the map. Source: EC JRC/Google.';
+		await asOwner('UPDATE map_feature SET properties = $2 WHERE id = $1', [traced.body.feature.id, JSON.stringify({ description })]);
+		const res = await editor.call('POST', at(`/features/${traced.body.feature.id}/split`), { parts: splitHalves(21.5, -33.7, 0.02) });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		const [a, b] = res.body.features;
+		expect(a.properties.description).toBe(description);
+		expect(b.properties.description).toBe('Split from “Traced dam” along a drawn line. Source: EC JRC/Google.');
+		// Positive control: a drawn dam's part names no source.
+		const drawn = await editor.call('POST', at('/features'), { kind: 'dam', name: 'Drawn dam', geometry: square(21.55, -33.7, 0.02) });
+		const plain = await editor.call('POST', at(`/features/${drawn.body.feature.id}/split`), { parts: splitHalves(21.55, -33.7, 0.02) });
+		expect(plain.body.features[1].properties.description).toBe('Split from “Drawn dam” along a drawn line.');
+	});
+
 	it('checks the parts against the shape’s own area, not its stored one (a delineated piece stores its cells’ area, start-6)', async () => {
 		const made = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Delineated', geometry: square(21.3, -33.7, 0.02) });
 		// As divide stores a piece: its area from the DEM's cells, half a per cent off its simplified outline's.

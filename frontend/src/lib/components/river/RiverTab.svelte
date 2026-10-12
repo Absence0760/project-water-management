@@ -203,7 +203,7 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 
 	const LEGACY_TITLE =
-		'Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.';
+		'Legacy runoff model (the original workbook’s): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.';
 </script>
 
 {#snippet headerContext()}

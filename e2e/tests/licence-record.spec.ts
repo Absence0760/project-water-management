@@ -7,6 +7,7 @@
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 test('an owner records the licence outcome, and the panel says how long the record is kept', async ({ page, owner, signIn }) => {
 	void owner;
@@ -23,23 +24,32 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	await page.reload();
 	await expect(panel.getByTestId('licence-record-status')).toHaveText(/^No outcome is recorded\. Next review: \d{4}-\d{2}-\d{2}\.$/);
 
-	// The owner records a refusal: kept until three years after the decision.
+	// The owner records a refusal, in the authority's words (233): kept until three years after the decision.
 	const form = panel.getByRole('form', { name: 'Record the licence outcome' });
-	await form.getByLabel('Outcome').selectOption('refused');
+	await form.getByLabel('Outcome').selectOption('licence_refused');
 	await form.getByLabel('Decided on').fill('2026-03-01');
 	await expect(form.getByRole('button', { name: 'Save the outcome' })).toBeDisabled();
 	await form.getByLabel('Why').fill('Invented decision letter 1');
 	await form.getByRole('button', { name: 'Save the outcome' }).click();
 	await expect(panel.getByRole('status')).toHaveText('Saved.');
-	await expect(panel.getByTestId('licence-record-status')).toHaveText('Refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(panel.getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
 	await expect(panel).toContainText('Recorded because: Invented decision letter 1');
 	await expectNoViolations(page);
+
+	// On a phone the outcome picker keeps to the form, also on its longest words (233's outcomes pushed a 320 px page sideways).
+	await form.getByLabel('Outcome').selectOption('application_rejected');
+	await expect(form.getByLabel('Outcome')).toHaveValue('application_rejected');
+	for (const width of [320, 390]) {
+		await resizeTo(page, { width, height: 740 });
+		await expectNoSidewaysScroll(page);
+	}
+	await resizeTo(page, { width: 1280, height: 800 });
 
 	// An editor reads it, without the form; a viewer doesn't see the panel.
 	const editor = await signIn('Licence record editor');
 	await addMember(page.request, project.id, editor.user.email, 'editor');
 	await editor.page.goto(`/projects/${project.id}?tab=project`);
-	await expect(editor.page.getByTestId('licence-record-status')).toHaveText('Refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(editor.page.getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
 	await expect(editor.page.getByRole('form', { name: 'Record the licence outcome' })).toHaveCount(0);
 	const viewer = await signIn('Licence record viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');

@@ -57,6 +57,7 @@ import {
 	type EvidenceInput,
 	type EvidenceMonthChange,
 	type EvidenceOtherApplicationInput,
+	type EvidenceCombinedOtherInput,
 	type EvidenceReport,
 	type EvidenceRow,
 	type EvidenceRunInput,
@@ -171,7 +172,7 @@ export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
 		id: 'notLegacy',
 		label: 'The baseline runs a current runoff model',
 		passed: !legacy,
-		detail: legacy ? 'The legacy (b023 workbook) runoff model does not conserve water at the event scale (audit H1): workbook comparison only.' : `Runoff model ${modelName(b.runoffModel)}.`,
+		detail: legacy ? 'The legacy runoff model (the original workbook’s) does not conserve water at the event scale (audit H1): workbook comparison only.' : `Runoff model ${modelName(b.runoffModel)}.`,
 		refuses: true,
 		blocksIssue: true,
 		fix: 'Run the model again: every run since engine 1.0.0 uses GR4J.'
@@ -407,7 +408,10 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	const river = sites(b, a, fdcBandsOf(input, cited, baseSum, paired, change));
 	const users = userRows(b, a, paired, change);
 	const served = servedSection(b, a);
-	const cumulative: EvidenceCumulative = { ...cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated), combined: combinedOf(a, input.combined) };
+	const cumulative: EvidenceCumulative = {
+		...cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated, input.otherApplicationsNotRun ?? [], input.otherApplicationsNotRunCount ?? null),
+		combined: combinedOf(a, input.combined)
+	};
 	const licenceImpact = licenceImpactSection(b, a, input.impact);
 	if (a) rows.push(combinedRow(cumulative.combined!));
 	const errata = dedupe([
@@ -1151,8 +1155,40 @@ export const COMBINED_NO_OUTLET = 'Not assessed: the assessment has no pragmatic
 /** Page 1 names at most this many; § 4 lists every one, so the row stays one row high (G6). */
 const COMBINED_NAMED = 3;
 
+/**
+ * § 4's fixed line for the other applications that count on the baseline but have no run there of the ops they
+ * count with (evidence-20), so they are in neither the table nor its sum: never left out silently. Names the first
+ * few; null when there are none.
+ */
+export function CUMULATIVE_NOT_RUN(notRun: readonly EvidenceCombinedOtherInput[], count: number = notRun.length): string | null {
+	if (count <= 0) return null;
+	const licences = notRun.filter((o) => o.status === 'decided');
+	const submitted = notRun.filter((o) => o.status !== 'decided');
+	const names = (xs: readonly EvidenceCombinedOtherInput[]) => {
+		const q = xs.map((x) => `“${x.scenarioName}”`);
+		return q.length > COMBINED_NAMED ? `${q.slice(0, COMBINED_NAMED).join(', ')} and ${q.length - COMBINED_NAMED} more` : q.join(', ');
+	};
+	const parts: string[] = [];
+	if (licences.length)
+		parts.push(`${licences.length} ${licences.length === 1 ? 'licence in force has' : 'licences in force have'} no run of ${licences.length === 1 ? 'its' : 'their'} licensed terms on this baseline (${names(licences)})`);
+	if (submitted.length)
+		parts.push(`${submitted.length} submitted ${submitted.length === 1 ? 'application has' : 'applications have'} no run of ${submitted.length === 1 ? 'its' : 'their'} ops on it (${names(submitted)})`);
+	const more = count - notRun.length;
+	return `Not in the table or its sum: ${parts.join(', and ')}${more > 0 ? `, and ${more} more not listed` : ''}, so the table leaves ${count === 1 ? 'its' : 'their'} change out: run ${count === 1 ? 'it' : 'them'} from the application (a licence: Run the licensed terms) and build the report again.`;
+}
+
 /** Other applications on the baseline, each one's own change, and their sum (§ 4, and page 1's row). */
-function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: readonly EvidenceOtherApplicationInput[], truncated: boolean): EvidenceCumulative {
+function cumulativeOf(
+	b: EvidenceRunInput,
+	a: EvidenceRunInput | null,
+	others: readonly EvidenceOtherApplicationInput[],
+	truncated: boolean,
+	notRunIn: readonly EvidenceCombinedOtherInput[],
+	notRunCountIn: number | null
+): EvidenceCumulative {
+	const notRun = notRunIn.map((o) => ({ scenarioId: o.scenarioId, scenarioName: o.scenarioName, status: o.status, outcome: o.outcome }));
+	const notRunCount = Math.max(notRunCountIn ?? notRun.length, notRun.length);
+	const missing = { notRun, notRunCount, notRunNote: CUMULATIVE_NOT_RUN(notRun, notRunCount) };
 	const outlet = (b.summary.ewrAssurance ?? []).find((s) => s.isOutlet) ?? null;
 	const baseRate = outlet?.overall.rate ?? null;
 	const baseDays = b.summary.catchment.ewrDaysNotMet;
@@ -1177,6 +1213,8 @@ function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: r
 				runCreatedAt: o.runCreatedAt,
 				comparable: reason === null,
 				reason,
+				// A decided application counts only while its licence is in force, and then on its licensed terms (227/228).
+				terms: o.status === 'decided' ? ('licensed' as const) : ('applied' as const),
 				ewrDays: diff(baseDays, o.ewrDaysNotMet),
 				reservePp: pp(o.reserveOutlet?.rate)
 			};
@@ -1189,8 +1227,8 @@ function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: r
 		const own = { ewrDays: diff(baseDays, a.summary.catchment.ewrDaysNotMet), reservePp: pp(outlet ? matchSite(a.summary.ewrAssurance ?? [], outlet)?.overall.rate : null) };
 		withThis = { ewrDays: sumOf([total.ewrDays, own.ewrDays]), reservePp: sumOf([total.reservePp, own.reservePp]) };
 	}
-	if (truncated) return { applications, counted: counted.length, truncated, total: { ewrDays: null, reservePp: null }, withThis: a ? { ewrDays: null, reservePp: null } : null };
-	return { applications, counted: counted.length, truncated, total, withThis };
+	if (truncated) return { applications, counted: counted.length, truncated, total: { ewrDays: null, reservePp: null }, withThis: a ? { ewrDays: null, reservePp: null } : null, ...missing };
+	return { applications, counted: counted.length, truncated, total, withThis, ...missing };
 }
 
 /**
@@ -1401,7 +1439,10 @@ export const ALLOCATIONS_NOT_ASSESSED = {
 	none: 'Not assessed: the runs carry no registered volumes (WARMS registrations, licences), so modelled use can’t be compared with a registered volume. An editor adds them on the Allocations tab; the model then has to run again.',
 	notMatched: (n: number) =>
 		`Not assessed: none of the runs’ ${n} registered volume${n === 1 ? ' is' : 's are'} matched to a farm or water user in them. Match them on the Allocations tab and run the model again.`,
-	noWholeYear: 'Not assessed: the runs cover no whole water year, so no year’s use is judged.'
+	noWholeYear: 'Not assessed: the runs cover no whole water year, so no year’s use is judged.',
+	/** Served to a viewer kept from each registered volume when no unit of the applicant's own is judged (#523 G1c). */
+	othersWithheld:
+		'Not shown: this project shows registered volumes to its editors and owners only, so this row counts an applicant’s own units alone, and none here has a whole water year judged.'
 } as const;
 
 const SOURCES: readonly AllocationWaterSource[] = ['surface', 'groundwater'];
@@ -1707,21 +1748,40 @@ const bandsWords = (al: EvidenceAllocations, app: boolean) =>
 		: bandWords(al.toleranceA ?? al.toleranceB);
 const modeWords = (m: EvidenceAllocations['modeA']) => (m === null ? 'not recorded' : ALLOCATION_MODE_LABEL[m]);
 
-/** Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the registered volume, both runs. */
-function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
+/**
+ * The page-1 row's unit-years (`unitYears`) over the units § 5 lists one by
+ * one only (the applicant's own; never a total of other units): what a
+ * viewer kept from each registered volume is counted (#523 G1c). Every
+ * unit's count, pooled over several runs at a fixed band, bounds one unit's
+ * volume.
+ */
+export function ownUnitYears(al: Pick<EvidenceAllocations, 'units'>, app: boolean): NonNullable<EvidenceAllocations['unitYears']> {
+	const listed = { units: al.units.filter((u) => u.aggregate === undefined) };
+	const A = allocationTotals(listed, 'A');
+	const B = app ? allocationTotals(listed, 'B') : null;
+	return { overA: A.over, judgedA: A.judged, overB: B ? B.over : null, judgedB: B ? B.judged : null };
+}
+
+/**
+ * Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the
+ * registered volume, both runs. `ownOnly`: counted over the units § 5 lists
+ * one by one (`unitYears` as ownUnitYears gives it), for a viewer kept from
+ * each registered volume (#523 G1c); with none judged, said as withheld.
+ */
+export function registeredUseRow(al: EvidenceAllocations, app: boolean, opts: { ownOnly?: boolean } = {}): EvidenceRow {
 	// Per unit, before § 5's totals of other units (evidence-15).
 	const uy = al.unitYears;
 	const A = uy ? { over: uy.overA, judged: uy.judgedA } : allocationTotals(al, 'A');
 	const B = app ? (uy && uy.overB !== null && uy.judgedB !== null ? { over: uy.overB, judged: uy.judgedB } : allocationTotals(al, 'B')) : null;
 	const judged = A.judged + (B?.judged ?? 0);
-	const notAssessed = al.notAssessed ?? (judged === 0 ? ALLOCATIONS_NOT_ASSESSED.noWholeYear : null);
+	const notAssessed = al.notAssessed ?? (judged === 0 ? (opts.ownOnly ? ALLOCATIONS_NOT_ASSESSED.othersWithheld : ALLOCATIONS_NOT_ASSESSED.noWholeYear) : null);
 	const mode =
 		!app || al.modeA === al.modeB ? `allocation mode: ${modeWords(al.modeA)}` : `allocation mode: baseline ${modeWords(al.modeA)}, application ${modeWords(al.modeB)}`;
 	const capped = al.modeA === 'cap' || al.modeB === 'cap' ? '; a capped run’s use can’t go far above its volume' : '';
 	return {
 		id: 'registeredUse',
 		label: 'Registered vs modelled use',
-		basis: `Whole water years in which a unit’s modelled use is more than ${bandsWords(al, app)} above its registered volume, summed over units and water sources (modelled, not metered)`,
+		basis: `Whole water years in which a unit’s modelled use is more than ${bandsWords(al, app)} above its registered volume, summed over ${opts.ownOnly ? 'the applicant’s own units' : 'units'} and water sources (modelled, not metered)`,
 		subject: null,
 		unit: 'unit-years',
 		higherIsWorse: true,
@@ -1977,7 +2037,7 @@ const dedupe = (list: Erratum[]): Erratum[] => [...new Map(list.map((e) => [e.id
 const finite = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const day = (iso: string) => iso.slice(0, 10);
 const short = (id: string) => id.slice(0, 8);
-const modelName = (m: string) => (m === 'gr4j' ? 'GR4J' : m === 'legacy' ? 'legacy (b023 recession)' : m);
+const modelName = (m: string) => (m === 'gr4j' ? 'GR4J' : m === 'legacy' ? 'legacy (the original workbook’s recession)' : m);
 const fixed = (v: number, d: number) => v.toFixed(d);
 const signed = (s: string) => (s.startsWith('-') ? `−${s.slice(1)}` : `+${s}`);
 const pct0 = (f: number) => `${Math.round(f * 100)} %`;

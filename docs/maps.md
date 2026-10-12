@@ -19,9 +19,11 @@ Two rules hold throughout:
   model by itself. A polygon's area enters a hydrological unit only through
   **Use … km²** and a confirmation (a model revision naming the feature); a
   quaternary's values enter the WR2012 check only through **Use**, value by
-  value, and then **Save**; a dam's capacity (from the register of dams) or
-  full-supply area (from its polygon) enters the model only through **Use**
-  on the Dams page and a confirmation; a unit's cultivated area (from land
+  value, and then **Save**; a dam's full-supply area (from its polygon)
+  enters the model only through **Use** on the Dams page and a confirmation
+  (the register of dams' capacities are a reference only, never used: a
+  unit's dam is its composite dam, [§ Dams from the register and the
+  map](#dams-from-the-register-and-the-map)); a unit's cultivated area (from land
   cover) enters a crop's planted area only through **Use** in the unit's planted-areas drawer,
   for a crop the modeller picks, and a confirmation; the boundary's monthly
   evaporation enters GR4J's PE (or the A-pan row) only through **Use** in
@@ -520,7 +522,8 @@ answer, with no database connection held.
   check:pins` holds it), through docker. Each tile is checked against its
   SHA-256 ([§ Checksums](#checksums)). The
   archive's attribution is "Source: EC JRC/Google", carried into each
-  traced feature's description. Then
+  traced feature's description, and so credited on every map that draws it
+  ([§ Credits on the map](#credits-on-the-map)). Then
   `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production:
   upload it as `tiles/water.pmtiles` and set `dam_trace_water = true` in the
   tfvars, which sets `WATER_URL=s3://<tiles bucket>/tiles/water.pmtiles` on
@@ -896,7 +899,12 @@ and gauges by name, the place in degrees, and that no other unit is shown),
 and is left out when the farm has nothing of its own on the map. The map
 reuses `CatchmentMap.svelte` in a chunk of its own (`farm/FarmMapCanvas.svelte`),
 passing its words in the reader's language (`words`, `farmMap.ts`
-`mapWords`), since the shared component imports no catalogue. The screen is
+`mapWords`), since the shared component imports no catalogue. Its credits
+are a line under the key, not MapLibre's control over the map (issue #523
+C6; [§ Credits on the map](#credits-on-the-map)): the basemap's when tiles
+are drawn, HydroRIVERS' and JRC's as written, the words around JRC's
+("Dam outline: traced from …, modified") in the reader's language, then
+**Data sources** (`farmMap.ts` `farmMapCredits`). The screen is
 in [ui.md § Farmer view](./ui.md#farmer-view-farm).
 
 ## Rain from the boundary
@@ -1184,31 +1192,33 @@ proposes two values for a hydrological unit's dam, each with its source,
 from the dam on the map linked to that unit (a polygon first, else a point;
 the earliest when there are several):
 
-- **Capacity, from the register of dams.** The registered dams within
+- **The register of dams, for reference only.** The registered dams within
   **1 km** of the dam's place on the map (a polygon's centroid, or the
   point), nearest first, at most five, each with its register number,
   distance, capacity, wall height, completion year, river and farm, and
-  the dataset's source line. Matching is by great-circle distance only:
-  names on the register rarely match a farm's dam name. The wall height
-  and completion year are shown for reference; the model has no field for
-  them.
+  the dataset's source line, marked **Reference only**. Matching is by
+  great-circle distance only: names on the register rarely match a farm's
+  dam name. A unit's dam is its composite dam, the total of all its farm
+  dams, and many farm dams are unregistered, so a registered capacity is
+  never written into it (#523 C1, the hydrologist's answer on #90): its
+  volume and the area draining to it are the user's to enter. Until
+  2026-10-12 **Use** saved a registered capacity as the unit's
+  (`POST …/dam-capacity-from-register`, removed); revisions it made keep
+  their reasons.
 - **Full-supply area, from the dam polygon** (followups.md "Dam polygons →
   the area–volume curve", first half): the polygon's geodesic area
   (`map_feature.area_m2`, [§ Areas](#areas)) as the dam's area when full
   (`damAreaFullM2`), which the run uses for evaporation instead of the
   7.2 · C^0.77 m² estimate (engine ≥ 1.63.0, model.md §2.7a). A point has no area to propose.
 
-**Use** asks first, then saves that one value to the model straight away
-(`POST …/dam-capacity-from-register` with the register number, or
-`POST …/dam-area-from-map` with the feature; [api.md § Catchment
-map](./api.md#catchment-map)), as a model revision whose reason names the
-source ("Dam capacity of Upper farm from the register of dams: Bo-dam
-(Z100/07, 140000 m³, 250 m from “Upper dam”; SYNTHETIC …)", "Dam full-supply
-area of Upper farm from the map: “Upper dam” (39012 m², computed from its
-polygon)"), so History and the run comparison show where it came from. The
-server re-derives each value: a register number that isn't within 1 km of
-this unit's dam, a dam point, a dam linked to another unit, or a unit with
-no dam capacity (for the area) is refused. While the model has unsaved
+**Use** (the area only) asks first, then saves that one value to the model
+straight away (`POST …/dam-area-from-map` with the feature; [api.md §
+Catchment map](./api.md#catchment-map)), as a model revision whose reason
+names the source ("Dam full-supply area of Upper farm from the map: “Upper
+dam” (39012 m², computed from its polygon)"), so History and the run
+comparison show where it came from. The server re-derives the value: a dam
+point, a dam linked to another unit, or a unit with no dam capacity is
+refused. While the model has unsaved
 changes, Use waits. Viewers see the proposals but not Use.
 
 ### The register of dams
@@ -1431,6 +1441,92 @@ these lines draw is one a click can go on, both at 1 km²).
   that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
   309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
 
+## Search
+
+A search box sits over the map's top edge, between the tools and the zoom
+buttons, once the map is drawn, so it costs the map no height (a row above
+the map until 2026-10-12; docs/ui.md § Map has the layout) (issue #523 C5, from the hydrologist's answer to #90 Q23, which reverses
+#326 D-C3; `MapSearch.svelte`, `GET /projects/:id/map/search?q=`): for
+finding the area before drawing, delineating or **Start the model from the
+map**. **Find** (or Enter) asks our own backend, never a third-party
+geocoder, so what is typed leaves the app for no one.
+
+- **What it searches, in this order** (`backend/src/geo/gazetteer.ts`
+  `searchMap`): the map's own layers first, then the gazetteer.
+  1. gauging stations, by code or name (`gauge_station_reference`,
+     [§ Gauging stations](#gauging-stations)), at most 5;
+  2. the register of dams, by register number or name
+     (`dam_register_reference`, [§ The register of dams](#the-register-of-dams)), at most 5;
+  3. quaternary catchments, by code (`quaternary_reference`), at most 5;
+  4. places from the gazetteer: towns, farms, rivers, pans, peaks and areas
+     (`gazetteer_reference`, 225, [§ Gazetteer](#gazetteer)), at most 10.
+  The project's own features aren't searched: the feature list beside the
+  map already holds them.
+- **The match rule.** Every word typed starts some word of the name, in any
+  order (case, accents and punctuation ignored: "morester" finds Môrester,
+  "sandlaagte oos" Sandlaagte-Oos, "klein vaal" Klein Vaalbank Dam; "aalbank"
+  finds nothing). A code matches from its start, spaces ignored ("z1h 00"
+  finds Z1H001…, "A21" the quaternaries A21A…). Within each group the whole
+  name comes first, then names that start with what was typed, then the rest
+  by name; among places, towns before farms before rivers and water. A group
+  with more matches than it lists says so ("type more to narrow it").
+- **Moving the view.** One match moves the map to it at once; several are
+  listed, each a button with what and where ("Gauging station Z1H002 ·
+  Wilgerivier", "Farm · Western Cape"), and picking one moves the map and
+  closes the list (Escape closes it too). A quaternary is framed whole; a
+  point is centred, at zoom 14 for a gauge or dam and 13 for a place. The
+  map's centre is then the match, so a Delineate or a placed point from the
+  keyboard (Enter at the crosshair) lands on it. Nothing is drawn or saved:
+  the view moves.
+- **Credits.** Whenever the answer holds places, listed or a single one
+  picked at once, their credit shows under the box ("Place names: GeoNames
+  (geonames.org), CC BY 4.0", linking to the Data sources page's
+  `#geonames`), and stays after a pick until the next search; the invented fixtures' matches are marked "(sample)".
+- **Who can search.** A viewer's read, like the station proposals (the tables
+  are global, the route a project's): a farmer gets 403, a non-member 404.
+  A query is 2 to 100 characters with a letter or digit; at most six words
+  are compared. Without WebGL there is no map to move, so there is no box.
+
+### Gazetteer
+
+The search's places come from `gazetteer_reference` (225), which the
+**operator** loads as the schema owner; the app never writes it.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/gazetteer.synthetic.txt`
+  holds eleven invented places in GeoNames' dump format (ids 9000001…,
+  every one made up): four in the synthetic DEM's valley (**Kwartsvallei** at
+  its outlet, where the e2e find-then-start delineates from), five round
+  region Z's stations and dams, and a school and a railway the loader leaves
+  out. `pnpm import:gazetteer` with no argument loads it (`pnpm setup` does)
+  as dataset `synthetic`, each place's source "SYNTHETIC test data…".
+- **Real data: GeoNames' South Africa dump** (CC BY 4.0, § Sources):
+  `ZA.zip` from <https://download.geonames.org/export/dump/>, unzipped, loads
+  with `pnpm import:gazetteer ZA.txt --dataset GeoNames-ZA-2026-10` (the
+  source defaults to "GeoNames (geonames.org), CC BY 4.0"; `--source`
+  overrides it). Never commit the file.
+- **What a load keeps** (`backend/src/geo/loadGazetteer.ts`): GeoNames'
+  feature classes A (administrative areas), H (rivers, dams, pans), L (areas),
+  P (towns, settlements) and T (peaks, hills), and of S (spots, buildings)
+  only farms (`FRM`, `FRMS`, `FRMT`); roads, railways, schools and the rest
+  are left out and counted. A place whose country code isn't `ZA` is left
+  out and counted apart, with a warning (a file holding other countries,
+  `allCountries.txt` or a neighbour's dump, is the wrong file). A line
+  without a place id, a feature class or a WGS84 position is skipped and
+  listed. The name is stored as published and
+  folded for the search (`search_name`: lower case, accents and punctuation
+  dropped), with a trigram index (`pg_trgm`) the word-start match goes
+  through, so a search reads only the rows the index offers, not the whole
+  table (about 150 000 rows for South Africa; `geo/search.db.perf.test.ts`
+  holds a budget on that many). A load
+  replaces every row of its dataset in one transaction.
+- **Production loading** goes through the reference-dataset path
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),
+  kind `gazetteer`: the dump gzipped (`gzip -k ZA.txt`) under
+  `reference/gazetteer/`, at most 64 MB (128 MB unzipped).
+- **Later:** the Surveyor-General's farm-name register (farm names and
+  numbers, as the title deeds give them), once its reuse licence is confirmed
+  in writing (§ Sources).
+
 ## Start from the map
 
 On an empty model, editors get **Start the model from the map** (issue #326
@@ -1441,21 +1537,59 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 
 - **The flow.** A sheet (`start=1`) with four steps, each read from the
   server so a reload lands on it: the boundary (Delineate, Draw or Upload),
-  the points (each dam, other point and gauge is *a unit with a dam*, *a unit
-  at an abstraction point*, *another water user* or *not in the model*; the
-  outlet is a gauge or the boundary's own), the proposal (each value ticked
-  on its own: the unit's area, what it drains into, all of a dam unit's
-  runoff to its dam, the rest of the catchment as a unit), and data and the
-  first run (the existing proposals, linked in order: rain from the
-  boundary, the nearest gauging station, the dams from the register, land
-  cover, then Runs). Typing the model in on the Network stays the other
-  way; upload works at every step.
-- **Sub-catchments.** With a DEM, the server routes one window around the
-  catchment once (the same fill and D8 as Delineation), puts the outlet and
-  every point on the channel (below), and
-  gives each unit the cells whose flow meets it before any other unit: its
-  own piece, outlined with its holes (a unit upstream lying wholly inside
-  it). **Every area comes from the cells** (`start-6`): each cell's own
+  the points (each unit's boundary, an *other* area or a parcel, is *a
+  hydrological unit*; each dam is *part of its unit's composite dam*, each
+  other point *its unit's river pump* or *another water user*, each gauge *a
+  gauge in the network*; any of them *not in the model*; the outlet is a
+  gauge or the boundary's own), the proposal (each value ticked on its own:
+  the unit's area, what it drains into, the rest of the catchment as a
+  unit), and data and the first run (the existing proposals, linked in
+  order: rain from the boundary, the nearest gauging station, evaporation,
+  each unit's composite dam to enter, land cover, then Runs). Typing the
+  model in on the Network stays the other way; upload works at every step.
+- **Units follow your boundaries** (`start-16`, #523 C1; the
+  hydrologist's answer on #90, "Abstraction points from Start from the map /
+  Divide"). Each hydrological unit is a boundary you put on the map (drawn,
+  uploaded, or saved from [Sub-catchments from
+  clicks](#sub-catchments-from-clicks)), and its area is that boundary's
+  geodesic area, never the elevation model's. A dam or an abstraction point
+  is **never a unit of its own**: each unit has one composite dam (the total
+  of all its farm dams), and the dams inside a unit's boundary (a polygon by
+  a point inside its outline, never its centre, which for a long or concave
+  dam can lie outside it) are its parts, linked to the unit on apply; the abstraction
+  points inside it are its river pump, linked too. A dam or point in no
+  unit's boundary goes with the rest of the catchment (linked to it when it
+  is added), and one outside the catchment boundary is dropped. Nothing
+  about them is filled in: the composite dam's volume and the area draining
+  to it, and the pump's capacity, are the user's to enter, because many farm
+  dams are unregistered (the register of dams stays a reference,
+  [§ Dams from the register and the map](#dams-from-the-register-and-the-map)),
+  so Start and Divide propose no share of runoff or of the upstream inflow
+  to a dam any more, and refuse one ticked (400). Gauges still sit in the
+  order (below), since the answer leaves them as they were. Before
+  `start-16` each dam and abstraction point was a unit of its own, its area
+  the cells draining to it; an open proposal from then can't be applied
+  (409, "propose again"), and an applied one keeps its record.
+- **Sub-catchments: the order and the check.** With a DEM, the server routes
+  one window around the catchment once (the same fill and D8 as
+  Delineation), puts the outlet and each gauge or water user on the channel
+  (below), and places each unit at its boundary's outflow: the
+  most-drained cell of the boundary inside the catchment (`placedBy:
+  'unit'`). Each unit drains into the first unit (or gauge) its flow path
+  meets; the unit whose boundary holds the outlet itself drains into the
+  outflow gauge, and everything reaching the outlet drains into it. The
+  cells reaching each unit's outflow and no unit above it are only a check
+  (`demAreaM2`): a boundary more than 10 % off them is warned about ("Upper
+  unit’s boundary is 10.00 km², but what drains to its outflow and to no
+  unit above it is 12.00 km² on the elevation model. The area follows your
+  boundary; …"), and so are boundaries adding up to more than 10 % past the
+  catchment. Beside the units' boundaries the rest of the catchment is the
+  catchment (the boundary's area, else the elevation model's) less theirs,
+  never below 0, with no outline of its own: its area goes in typed, with
+  no parcel. A gauge on a unit's outflow cell is put one cell further down,
+  so the unit drains into it. With no unit boundary at all the rest is the
+  outlet's own piece, as before; the rest of this bullet is how every area
+  was made before `start-16`, and how that rest's still is. **Every area comes from the cells** (`start-6`): each cell's own
   area on the WGS84 ellipsoid (a Web Mercator cell is a longitude ×
   latitude rectangle, so `subcatchments.ts` `cellRowAreaM2` is exact, the
   measure `geo/area.ts` uses), summed per piece, so the pieces and the
@@ -1477,14 +1611,21 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   areas themselves are unchanged (gross); each area tick whose piece holds
   pans asks which area to take, gross (the default) or effective
   ([§ Pans and the effective area](#pans-and-the-effective-area)), and the
-  parcel keeps the piece's figure. A depression at a
+  parcel keeps the piece's figure. A unit's boundary (`start-16`) keeps its
+  own area and offers no effective one (the pans figure is the elevation
+  model's piece, not the boundary's): the warning says so ("Each unit keeps
+  its boundary’s area (start-16): type a smaller one if you model them as
+  non-contributing."); only the rest's outlet piece, with no boundaries,
+  still offers it. A depression at a
   unit's point (a dam's basin) is that unit's own, never a pan. A saved
   sub-catchment from clicks ([§ Sub-catchments from clicks](#sub-catchments-from-clicks))
   says the same in its description.
 - **Placing the points: as Delineate does** (`start-15`, issue #472;
   `delineation/pointPlacement.ts`, `place.ts`). The outlet gauge and each
-  point (a gauge, an abstraction point, a dam drawn as a point) go on the
-  nearest terrain channel, the nearest cell within 150 m with at least
+  point in the order (a gauge, another water user at a point or a dam; since
+  `start-16` a dam or abstraction point that is part of a unit is never
+  placed, and the dam rules below place only a water user at a dam) go on
+  the nearest terrain channel, the nearest cell within 150 m with at least
   1 km² draining through it ([§ Delineation](#delineation)); the mapped
   river network never moves or chooses them. An outlet gauge with no
   terrain channel within 150 m is refused ("No terrain channel runs within
@@ -1542,7 +1683,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   the method counts them ("1 point at a dam polygon’s outflow (1 marked
   off-channel)", with the rule) only when one is marked; an unmarked dam is
   placed exactly as before, so marking dams didn't bump the method
-  version (it was `start-14` then; `start-15` today). A
+  version (it was `start-14` then; `start-16` today). A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the nearest
   terrain channel, 42 m from the point."), and the method names only the
@@ -1551,14 +1692,20 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   outlets in gullies of a fraction of a km² beside their rivers; now a
   point lands only on a cell with 1 km² or more draining through it, and
   the warning names a much larger channel beside it.
-- **Without a DEM** (`DEM_URL` empty): the units come from the points with
-  no area and all drain into the outflow gauge; the rest of the catchment is
-  the boundary.
+- **Without a DEM** (`DEM_URL` empty): each unit has its boundary's area
+  and drains into the outflow gauge (the order is set on the Network); the
+  rest of the catchment is the boundary less the units' boundaries (the
+  whole boundary, saved as its parcel, with none).
 - **Applying** writes only what is ticked, only into an empty model (409
-  once it has nodes), as one model revision: the nodes, each ticked area
-  saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-11)") and its area from it (*from the map*), the
-  points linked to their nodes. The proposal keeps the plan and the ticks.
+  once it has nodes), as one model revision: the nodes; each ticked unit's
+  area its own boundary, linked to it as **Use this area** links one
+  (`area_feature_id`, *from the map*, gross; no copy is made, and the
+  decision records it as `boundaryId`); the rest's area from its outline
+  saved as a parcel (`farm_parcel`, "Sub-catchment delineated from …"), or
+  typed beside the boundaries; the boundaries, gauges and users linked to
+  their nodes, and each unit's dams and pump to it. A boundary redrawn
+  since the proposal is refused (409) when its area is ticked. The proposal
+  keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
   above drain into it), owning no land; applied, a `gauge` node linked to
@@ -1569,21 +1716,29 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   away from the parcel green, water blue and boundary amber; touching
   pieces never share one) under the proposal's dash, its **number** on it
   as a badge (a unit with no land beside its point, the rest of the
-  catchment R), and a line over the map saying so while the sheet is
-  closed. The
+  catchment R when it has an outline: beside units' boundaries it has none,
+  so no R), and a line over the map saying so while the sheet is closed. A
+  unit's piece is its boundary (`start-16`). The
   sheet's cards carry the same number and tint, so they are the key; a card
   with the focus or the pointer lights its piece in the selection colour,
   and with the sheet closed a piece under the pointer names itself over the
   map's corner and a click opens its card ([design/start-from-map.md § Each
   unit's piece on the map](./design/start-from-map.md#each-units-piece-on-the-map)).
 - **Divide the model** (a model that has nodes, with a DEM; `divide=1`,
-  migration 182): each point on the map stands for a node (or an unlinked
-  gauge for a new gauge node); the same partition proposes each one's own
-  area, what it drains into and a dam's runoff to its dam, **beside the
-  node's value now**, each taken only when ticked, and the rest of the
-  catchment to a unit, a new unit or nobody. A ticked value that changed
-  since the proposal is refused (409), never overwritten unseen; dividing
-  again redraws the parcel an earlier division made in place
+  migration 182): each unit's boundary (an area on the map) stands for its
+  unit, a point for an other water user, a gauge for a gauge node (or an
+  unlinked gauge for a new gauge node); a dam or an abstraction point never
+  stands for a unit (400: "a dam or an abstraction point is part of its
+  unit …, not where the unit ends"), and the unlinked ones inside a unit's
+  boundary are listed on its card ("Joins its composite dam: …", "Joins its
+  river pump: …") and linked to it on apply, never moving a link a feature
+  has. The same routing proposes each unit's area (its boundary's, checked
+  against the elevation model) and what it drains into, **beside the node's
+  value now**, each taken only when ticked, and the rest of the catchment
+  (beside the boundaries, the catchment less them, typed) to a unit, a new
+  unit or nobody. A ticked value that changed since the proposal, or a
+  boundary redrawn since, is refused (409), never overwritten unseen;
+  dividing again redraws in place the rest's parcel an earlier division made
   ([design/start-from-map.md § Dividing a model that has
   nodes](./design/start-from-map.md#dividing-a-model-that-has-nodes)).
 - **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
@@ -1778,7 +1933,8 @@ reads it.
   attribution control credits it ("Rivers: HydroRIVERS, HydroSHEDS v1 ©
   World Wildlife Fund, Inc. (2006-2022), used under license"), linking to
   the full Exhibit B statement on the public **Data sources and credits**
-  page (`/data-sources#hydrorivers`, `lib/components/legal/dataCredits.ts`).
+  page (`/data-sources#hydrorivers`, `lib/components/legal/dataCredits.ts`;
+  the farm map's line under it, [§ Credits on the map](#credits-on-the-map)).
 - **Any other network** loads the same way:
   `pnpm import:rivers rivers.geojson --dataset <label> --source "<product, version, attribution>" [--min-order <n>]`,
   a FeatureCollection of LineStrings or MultiLineStrings in WGS84 with the
@@ -1817,6 +1973,17 @@ it.
   So nothing is assigned to a crop until the modeller chooses one, and the
   confirmation says so. A unit with several crops on one parcel splits the
   area by typing afterwards; the proposal never splits it.
+- **Labelled as satellite cropland, not irrigated area** (#90 Land-cover
+  proposals, issue #523 C4). The box opens with a warning
+  (`cropland-caution`, `CAUTION` in `crops/croplandProposals.ts`): "This is
+  cultivated land mapped from satellite, including dryland and fallow
+  fields, not the irrigated area: check it before you use it." The
+  confirmation repeats it, and the help entry (`cultivated-area`) says the
+  same. The area is never applied without the modeller pressing **Use** and
+  confirming (the one write path is `POST …/crop-area-from-land-cover`; no
+  start, import or run applies it), and it is used as it stands, with no
+  fixed discount for the irrigated share: where only part is irrigated, the
+  modeller types the irrigated area over it.
 - **Pre-summarised at import, local-first.** The app never reads a raster.
   The operator's `pnpm import:land-cover` (`backend/scripts/import-land-cover.ts`,
   `geo/loadCropland.ts`) reads each GeoTIFF tile itself (no GDAL, no
@@ -2242,7 +2409,37 @@ fixtures only.
 | ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
+| GeoNames gazetteer, South Africa (`ZA.txt`: place and farm names, feature class, province, position): the Map's search ([§ Search](#search)) | GeoNames ([geonames.org](https://www.geonames.org), [download.geonames.org/export/dump](https://download.geonames.org/export/dump/)) | **CC BY 4.0**: "This work is licensed under a Creative Commons Attribution 4.0 License" (the dump's `readme.txt`, read 2026-10-12); commercial use allowed with attribution | "GeoNames (geonames.org), CC BY 4.0", stored on every place and shown under every search that lists one, and on the Data sources and credits page (`/data-sources#geonames`) | the operator's download date (`--dataset GeoNames-ZA-<date>`) | daily dumps; refreshed when the operator re-loads | **Allowed.** The operator's own download, never committed; built and tested against the synthetic gazetteer |
+| Surveyor-General's farm names (registered farm names and numbers), considered for the search | Chief Surveyor-General, Department of Agriculture, Land Reform and Rural Development | **Unconfirmed**: no reuse terms for a commercial service found in writing | – | – | – | **Blocked: licence unconfirmed.** Not loaded; a later dataset once its reuse licence is confirmed in writing, recorded here with the date |
+| Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+
+### Credits on the map
+
+Licensed data drawn on a map is credited while it is drawn (issue #523 C6;
+the research is [legal/map-data-licences.md](./legal/map-data-licences.md)
+§ 5.3). `mapLayers.ts` `mapCredits` lists them in a fixed order, each id
+also its section on the **Data sources and credits** page:
+
+| Credit | When | Line |
+| --- | --- | --- |
+| `hydrorivers` | the River network layer draws HydroRIVERS reaches, or a river added from one is drawn (`creditedFeature`) | "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license" |
+| `jrc-water` | an outline traced from JRC Global Surface Water is drawn (`jrcCreditedFeature`: its description carries the archive's "Source: EC JRC/Google", which tracing writes, [§ Assisted drawing](#assisted-drawing); a trace from the synthetic raster names no source and is credited nothing) | "Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified": JRC's attribution for a published map, and that the data was modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3)) |
+
+On the Map tab each is its own empty source with an invisible layer, so the
+always-expanded attribution control lists it beside the basemap's
+("© Protomaps © OpenStreetMap contributors") and the relief's, linking to
+`/data-sources#<id>` (`mapStyle.ts` `creditLink`, `CatchmentMap.svelte`
+`syncCredits`). The farm map draws no attribution control
+(`CatchmentMap`'s `attribution="outside"`): the same credits are one line
+under its key ([§ The farmer's map](#the-farmers-map)), so they never cover
+the 280 px phone map; OpenStreetMap's guidelines allow a credit adjacent to
+the map. The farm map's route sends no properties, so the server flags a
+credited feature (`credit: 'hydrorivers' | 'jrc-water'`, `farms/view.ts`,
+`geo/credits.ts` `jrcTraced`; never the description it reads). A traced dam
+split in two keeps the credit on both parts (the new part's description
+ends with the statement, `geo/routes.ts`). The GeoJSON download carries the
+same two credits ([§ Download GeoJSON](#download-geojson)).
 
 ### Checksums
 

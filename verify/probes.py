@@ -271,6 +271,20 @@ def junior_user() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(60, 8.0)}
 
 
+def priority_user_fixed_restriction() -> dict:
+    """A Priority user's fixed restriction % (§2.7c, engine 1.86.0, issue #523
+    B3) with no drought restriction rule: it acts only in the curtailment table
+    and under the rule (§2.7i), both outside this cross-check, so every daily
+    series is the user's without it: it takes its whole demand, and the farm
+    upstream passes its whole claim."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "user", "o", userDemandM3Day=[3000] * 12, userPriority="senior", userReturnPct=0, userRestrictionPct=0.4),
+        _node("f", "farm", "s", areaKm2=2, damCapacityM3=50000, damInitialPct=0.5, pctUpstreamToDam=1, pctRunoffToDam=1),
+    ]
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(60, 8.0)}
+
+
 def offtake_keep_bands() -> dict:
     """Three river off-takes of one priority from one farm (§2.6a): two keep a
     hands-off flow of 2 000 m³/day, the third keeps nothing and may take
@@ -522,6 +536,66 @@ def dam_rules_rationing_and_release() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": _dry(4)}
 
 
+def transfer_out_of_catchment() -> dict:
+    """Engine 1.86.0 (issue #523 B5, §2.6): a dam rule out of the catchment
+    (toNodeId null) runs as any dam rule, but no unit receives it, so it has
+    no room to fill. From a full 1 000 m³ dam keeping 50 %: rule xo (out, 300
+    m³/day) and rule xi (into x's empty dam, 300 m³/day) share the 500 m³
+    above the reserve pro rata, 250 each on day 0, nothing after. A second
+    source t (1 000 m³, full) sends out at priority 0, 400 m³/day keeping 20 %,
+    and into y (room 100) at priority 1: day 0 out 400 and y 100 (its room);
+    day 1 out the 300 left above the reserve, y nothing (no room, none free)."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=1),
+        _node("x", "farm", "o", areaKm2=1, damCapacityM3=100000, damInitialPct=0),
+        _node("t", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=1),
+        _node("y", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=0.9),
+    ]
+    rules = [
+        _rule("xo", "s", None, 300, 0.5),
+        _rule("xi", "s", "x", 300, 0.5),
+        _rule("to", "t", None, 400, 0.2),
+        _rule("ty", "t", "y", 400, 0.2, priority=1),
+    ]
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": rules}, "series": _dry(4)}
+
+
+def transfer_out_of_catchment_cap() -> dict:
+    """Engine-audit.md X1 (decided 2026-10-12): water pumped out of the
+    catchment is its source unit's surface use, so under an allocation cap it
+    is held to the source's surface room. s (1 000 m³, full, keeping 50 %) has
+    250 m³ a year. Priority 0: the source shares its 500 m³ above the reserve
+    among xo1 out (100 m³/day), xo2 out (300) and xi into x's empty dam (300);
+    the two rules out share the 250 of room 1 : 3 (62.5 and 187.5), and xi
+    (water into a dam is not use) gets the 250 m³ of dam water they leave.
+    Priority 1: xo3 out 50 m³/day finds no room left, and from day 1 nothing
+    moves out of s (the room is spent). t (2 000 m³, full, keeping 20 %) has
+    1 000 m³ a year: its rule out (100 m³/day) runs ten days, until the volume
+    is spent, with 600 m³ still above its reserve."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=1, damCapacityM3=1000, damInitialPct=1, pctUpstreamToDam=1),
+        _node("x", "farm", "o", areaKm2=1, damCapacityM3=100000, damInitialPct=0),
+        _node("t", "farm", "o", areaKm2=1, damCapacityM3=2000, damInitialPct=1, pctUpstreamToDam=1),
+    ]
+    rules = [
+        _rule("xo1", "s", None, 100, 0.5),
+        _rule("xo2", "s", None, 300, 0.5),
+        _rule("xi", "s", "x", 300, 0.5),
+        _rule("xo3", "s", None, 50, 0.5, priority=1),
+        _rule("to", "t", None, 100, 0.2),
+    ]
+    alloc = [
+        {"id": "as", "nodeId": "s", "waterSource": "surface", "volumeM3PerYear": 250, "storageM3": None,
+         "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None},
+        {"id": "at", "nodeId": "t", "waterSource": "surface", "volumeM3PerYear": 1000, "storageM3": None,
+         "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None},
+    ]
+    return {"settings": _settings(allocationMode="cap"), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": rules, "allocations": alloc},
+            "series": _dry(14, "2020-10-01")}
+
+
 # Runoff from each unit's own rain (§2.4h, engine >= 1.78.0).
 
 
@@ -734,6 +808,28 @@ def unit_rain_reference_not_land() -> dict:
     return doc
 
 
+def baseflow_loss_and_gain() -> dict:
+    """A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0): unit a
+    loses up to 3 000 m³/day of its own runoff, all of it on the dry days, and
+    sends half of what is left into its dam; unit b gains 500 m³/day from
+    outside the catchment on every day, rain or not, and a priority user
+    below both takes from the river. The runoff column stays natural × share;
+    the split, the dam, the priority pass and the outflow read I − MIN(loss,
+    I) + gain. Read on the gross runoff instead, or with the loss uncapped,
+    the dam and the user's take differ."""
+    days = 120
+    rain = [0.0] * days
+    for t in range(days):
+        if t % 9 in (0, 1):
+            rain[t] = 25.0 if t % 27 < 9 else 8.0
+    nodes = [
+        _node("o", "gauge", None),
+        _node("p", "user", "o", userDemandM3Day=[1500] * 12, userPriority="senior"),
+        _node("a", "farm", "p", areaKm2=6, pctRunoffToDam=0.5, damCapacityM3=40000, damInitialPct=0.2, baseflowLossM3Day=3000),
+        _node("b", "farm", "p", areaKm2=2, baseflowGainM3Day=500),
+    ]
+    s = _settings(gr4j={"x1": 250, "x2": 0, "x3": 60, "x4": 1.5, "warmupDays": 0})
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": {"rain_catchment_mm": {"startDate": "2020-01-01", "values": rain}}}
 # Issue #500's decisions (operator, 2026-10-09; built in engine 1.84.x+): k_unit, the
 # 10-year minimum, unusable CHIRPS, the CHIRPS-GEFS forecast, checked gauges.
 
@@ -1076,6 +1172,23 @@ def unit_rain_reference_unit_gauge_checked() -> dict:
     return doc
 
 
+def pool_storage_only() -> dict:
+    """A pool at the crops' river pump (§2.7j) under a high A-pan with a lake
+    factor of 1, on a unit with no dam: it holds up to its capacity with no
+    rain and no evaporation (engine 1.86.0, issue #523 B2), so it loses only
+    what the pump draws on dry days and refills from the flow left on wet
+    ones. Engines 1.65.0–1.85.x took ~200 m³/day of evaporation off it."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=1, cropWaterSource="river", cropRiverPumpM3Day=2000, cropRiverPoolM3=30000),
+    ]
+    crops, areas = _crop("f", 80000)
+    s = _settings(apanMm=[300] * 12, lakeEvapFactor=1, effectiveRainFraction=0)
+    rain = [60.0 if t % 15 == 0 else 0.0 for t in range(90)]
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []},
+            "series": {"rain_catchment_mm": {"startDate": "2020-01-01", "values": rain}}}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -1092,6 +1205,7 @@ PROBES = {
     "full-allocation-tail-new-year": full_allocation_tail_new_year(),
     "trigger-hysteresis": trigger_hysteresis(),
     "junior-user": junior_user(),
+    "priority-user-fixed-restriction": priority_user_fixed_restriction(),
     "offtake-keep-bands": offtake_keep_bands(),
     "cap-before-licence": cap_before_licence(),
     "offtake-into-capped-unit": offtake_into_capped_unit(),
@@ -1099,12 +1213,15 @@ PROBES = {
     "full-allocation-gap-year": full_allocation_gap_year(),
     "offtake-release-keep-and-floor": offtake_release_keep_and_floor(),
     "dam-rules-rationing-and-release": dam_rules_rationing_and_release(),
+    "transfer-out-of-catchment": transfer_out_of_catchment(),
+    "transfer-out-of-catchment-cap": transfer_out_of_catchment_cap(),
     "unit-rain-rules": unit_rain_rules(),
     "unit-rain-forecast-warmup": unit_rain_forecast_warmup(),
     "unit-rain-map-period": unit_rain_map_period(),
     "unit-rain-no-land-unit": unit_rain_no_land_unit(),
     "unit-rain-reference": unit_rain_reference(),
     "unit-rain-reference-not-land": unit_rain_reference_not_land(),
+    "baseflow-loss-and-gain": baseflow_loss_and_gain(),
     # Issue #500's decisions.
     "unit-rain-reference-kunit": unit_rain_reference_kunit(),
     "unit-rain-unusable-chirps": unit_rain_unusable_chirps(),
@@ -1115,4 +1232,5 @@ PROBES = {
     "unit-rain-gauge-catchment-settings": unit_rain_gauge_catchment_settings(),
     "unit-rain-reference-checked": unit_rain_reference_checked(),
     "unit-rain-reference-unit-gauge-checked": unit_rain_reference_unit_gauge_checked(),
+    "pool-storage-only": pool_storage_only(),
 }

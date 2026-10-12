@@ -41,14 +41,35 @@ The checklist for these is issue #62; the history scrub is #63.
       reference gauge set by × unit MAP ÷ the reference unit's MAP, which the
       operator's 2026-10-09 decisions replaced with k_unit (engine 1.85.0;
       engine-audit.md U1 says why it is not an erratum). Per-unit rain is off
-      by default, but that doesn't prove no production run used it. Run, on
-      production (operator; read-only):
-      `SELECT project_id, id, engine_version, created_at FROM model_run WHERE engine_version IN ('1.80.0','1.81.0','1.82.0','1.83.0','1.84.0') AND inputs->'settings'->'unitRain'->>'mode' = 'perUnit' AND jsonb_typeof(inputs->'settings'->'unitRain'->'reference') = 'object';`
-      If it returns no rows, tick this. If it returns any, add an errata
+      by default, but that doesn't prove no production run used it. Run the
+      read-only check `unit-rain-reference-runs` on production (operator; the
+      one-line `aws lambda invoke` in
+      [deployment.md § Read-only production checks](./deployment.md#read-only-production-checks),
+      which runs `SELECT project_id, id, engine_version, created_at FROM model_run WHERE engine_version IN ('1.80.0','1.81.0','1.82.0','1.83.0','1.84.0') AND inputs->'settings'->'unitRain'->>'mode' = 'perUnit' AND jsonb_typeof(inputs->'settings'->'unitRain'->'reference') = 'object'`
+      in a read-only transaction through the migrate Lambda).
+      If it answers `count: 0`, tick this. If it returns any, add an errata
       row to docs/engine-errata.md (keyed `run`, 1.80.0 to 1.84.0, fixed
       1.85.0, condition: `settings.unitRain.reference` set) and follow
       docs/legal/known-defect-procedure.md. Trigger: before the release that
       ships engine 1.85.0.
+- [ ] **Cap or full-allocation runs published or outlooked before 213
+      (issue #523 finding I).** Before migration 213 a project's baseline
+      could cap use at, or scale demand to, the registered volumes; such a
+      run's farm views carry each farm's figures worked out from its volume.
+      The API now refuses to publish one or start an outlook on one, and
+      withholds an older one's farm previews and outlook from viewers kept
+      from the volumes, but a publication or outlook publication made before
+      213 can still be what farmers see. Run the read-only check
+      `pre-213-cap-runs` on production (operator; the one-line `aws lambda
+      invoke` in
+      [deployment.md § Read-only production checks](./deployment.md#read-only-production-checks)).
+      `count: 0`: tick this. For each row with `current: true`: a
+      `run_publication`, run the model on that project (it compares only
+      since 213) and publish the new run, which supersedes it; an
+      `outlook_publication`, withdraw it (and start and publish a new
+      outlook on a compare-only run if farmers need one). Rows with
+      `current: false` need nothing. Trigger: before the release that ships
+      #527 (issue #523's operator list).
 - [ ] **GitHub variables for the background Lambdas (2026-09-25).** The
       backend release preflight (`deploy-backend.yml`, `REQUIRED_CONFIG`)
       refuses every `backend@` release until these repository variables
@@ -376,10 +397,12 @@ runs and accumulations are real) can't be decided without the client.
       1981) where that narrows it. Trigger:
       the client's first per-unit run, or the hydrologist's review of the
       unit MAPs.
-- [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
+- [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
-      EWR). Awaiting the hydrologist: which scale factor (natural MAR or area
+      EWR). **Confirmed by the client's hydrologist 2026-10-10 (#90 A8, via
+      B1a and B2):** the daily lookup is their own process; both scalings
+      stay, the area ratio the default. It asked: which scale factor (natural MAR or area
       ratio) a project should use; the model's MAR from the natural flow at
       the outlet over the historical days, before land cover and net of
       natural bed losses; a rising natural percentile row read as its
@@ -398,9 +421,11 @@ runs and accumulations are real) can't be decided without the client.
       m² (Maaren & Moolman 1985, via Sawunyama 2013) instead of capacity ÷
       3 m, whose source was never found; a save takes a dam area exponent
       0 < b ≤ 1; the sediment warning asks for a dam's in-service date; and
-      both importers flag a near-empty placeholder pool (Q18). Everything
+      both importers flagged a near-empty placeholder pool (Q18; since
+      2026-10-12 only a neutral note of a small pool's capacity, issue #523
+      C3). Everything
       else was kept. **Still the client's data**, each surfaced in the app:
-      which dams keep a reserve (form hint), Q18 pools (import warning), Q19
+      which dams keep a reserve (form hint), Q19
       upstream-to-dam % per farm (run warning on a dam-less farm), which
       units are run of river and their pump capacities (import flag, run
       warning, evidence-pack gate), each priority user's population (for the
@@ -421,14 +446,18 @@ runs and accumulations are real) can't be decided without the client.
       no pipe losses. Trigger: the hydrologist's answer on #90; a change is a
       new engine version.
 
-- [ ] **River abstractions beside a dam (engine 1.65.0, issue #344):**
+- [x] **River abstractions beside a dam (engine 1.65.0, issue #344):**
+      **confirmed as built by the client's hydrologist 2026-10-11 (#90 R2);
+      engine-audit R2 and model.md §2.7j say so.**
       confirm the decisions of [model.md §2.7j](./model.md) (open question R2
       in engine-audit.md): the abstractions take after the dam side from the
       flow passing the dam (its spill too), keep the unit's hands-off flow,
       share the river by the demand objects' supply order, and a pool (issue
-      #90 Q18) starts full, refills only from the flow above what must pass
-      and gains no rain. Trigger: the hydrologist's answer on #90; a change
-      is a new engine version.
+      #90 Q18) starts full and refills only from the flow above what must
+      pass. Trigger: the hydrologist's answer on #90; a change is a new
+      engine version. The pools are settled (2026-10-11, #90
+      River-abstraction pools; engine 1.86.0, issue #523 B2): storage only,
+      no rain, no evaporation, no area.
 
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
@@ -524,8 +553,15 @@ runs and accumulations are real) can't be decided without the client.
       counted and applies the milder, until the dam first starts a day at the
       mildest level's share of its capacity (no published source covers first
       filling; judgement).
-- [ ] **Drought restrictions on the other water users: decide whether and
-      how** (engine 1.54.0, [model.md §2.7i](./model.md)). The rule cuts
+- [x] **Drought restrictions on the other water users: decide whether and
+      how** (engine 1.54.0, [model.md §2.7i](./model.md)). **Answered
+      2026-10-11 (issue #90, other water users): option (d), per user.**
+      Built in engine 1.86.0 (issue #523 B3, [model.md §2.7c](./model.md)):
+      each Priority user has an optional fixed restriction % (default none),
+      applied to its demand in a curtailment and by the drought restriction
+      rule, marked "fixed %, no basic-needs floor"; the rest of its EWR
+      charge stands and is never moved onto the farms. Option (b) stays the
+      durable fix, tracked below. The question as it was put: the rule cuts
       only hydrological units: an other water user's demand has no category
       and no population, so a cut on it could take a town below basic needs
       with nothing to stop it. Options, for the hydrologist and the client:
@@ -538,6 +574,52 @@ runs and accumulations are real) can't be decided without the client.
       already apply; (d) one % cut for every user with no floor, marked as
       unprotected. Trigger: a catchment where a municipal abstractor sits on
       the river as an other water user and is restricted in practice.
+- [ ] **A basic-needs floor for Priority users** (option (b) above; the
+      durable fix behind engine 1.86.0's fixed restriction %, [model.md
+      §2.7c](./model.md)). A Priority user's fixed % has no floor, since a
+      user has no population: a large % can take a town below 25 l a person
+      a day. The fix: a population (and a restriction category) on user
+      nodes, cut through the demand objects' floor (§2.7f) in a curtailment
+      and under the drought restriction rule, as the NWA reading in §2.7c
+      asks. Trigger: the client gives the population each Priority user
+      serves.
+- [x] **A level that cuts nothing still applies a Priority user's fixed %**
+      (engine 1.86.0, issue #523 B3, [engine-audit.md P2](./engine-audit.md),
+      [model.md §2.7c, §2.7i](./model.md)). Under the drought restriction rule
+      a Priority user with a fixed % asked for D × (1 − c) on every day its
+      level was above 0, so a "watch" level whose cuts are all 0 % restricted
+      every such user by its full %. **Decided by the operator 2026-10-12 and
+      built (issue #523):** the % applies only at a level that cuts some part
+      of a unit's demand (any cut above 0), so a watch level restricts nobody:
+      `network/simulate.ts` (`usersCut`, from `PlanRestriction.cutsDemand`)
+      and the drought restriction self-check; the Python cross-check doesn't
+      model the rule, so it is unchanged. Released with #523's engine bump.
+- [x] **Count a transfer out of the catchment as its source unit's use in
+      the allocations comparison and under the cap** (engine 1.86.0, issue
+      #523 B5, [engine-audit.md X1](./engine-audit.md), [model.md §2.6 and
+      §2.12a](./model.md); provisional, needs the hydrologist). Today §2.12's
+      modelled use M and the cap's surface use (G − GW) leave a dam rule's
+      water pumped out of the catchment out, so a capped scenario doesn't
+      limit it and the Allocations tab doesn't show it, while the licence
+      impact board (§2.14a) counts it as use. The durable fix (recommended):
+      count it as the source's surface use, in M (as a dam draw, for a dam on
+      the river; for a dam beside the river it was already counted at the
+      intake when diverted, so not again) and in the cap (the rule's volume
+      within the source's surface room, shared pro rata between its external
+      rules of one priority), with the self-checks and the Python cross-check.
+      Not built in #523: it changes the transfer rounds in `simulate.ts`, the
+      intake measure in `allocations/compare.ts` and their checks, and
+      whether water pumped out rides on the unit's licence or on a transfer
+      authorisation of its own is the hydrologist's call. Trigger: the
+      hydrologist's answer, or a catchment with a transfer out and a licence.
+      — *Done 2026-10-12 (engine 1.88.0, issue #523): decided by the
+      operator and built as recommended. M counts it as a dam draw (not again
+      on a dam beside the river, measured at its intake); under a cap each
+      source's rules out share its surface room pro rata in the transfer
+      rounds; the self-checks, the backend's reading and the Python
+      cross-check (probe `transfer-out-of-catchment-cap`) follow. It rides
+      on the unit's licence, which never under-counts use
+      ([engine-audit.md X1](./engine-audit.md)).*
 - [ ] **A pump capacity on other water users (WP-3.8) to confirm** (engine
       1.58.0, [model.md §2.7c](./model.md); to put to the hydrologist through
       #90 / #46). Built off by default (null = no limit) on these choices;
@@ -582,7 +664,8 @@ runs and accumulations are real) can't be decided without the client.
         passed down by the farms upstream (fragmented by flow share like the
         EWR; farms divert less, then pass inflow below the dam), and it is
         **not curtailed** for the EWR (its charge stands, not moved onto
-        farms); a non-priority user takes what reaches it and is curtailed like a
+        farms; from engine 1.86.0 only by its fixed restriction %, when it has
+        one); a non-priority user takes what reaches it and is curtailed like a
         farm. Confirm both rules and which priority each user has. Known
         limit: a farm never releases stored water for a priority user, and
         development (users, their demand) can't vary within a run.
@@ -720,8 +803,9 @@ runs and accumulations are real) can't be decided without the client.
       flat-lines by the record's resolution (1.12.0, migration 089).
       Waiting on the real hydrologist, because they change defaults or rest on
       judgement no published standard settles: `ewrChargeSource` →
-      `ruleTable` and `lowFlowMeasure` → `baseflow`; the base-flow filter's
-      three passes (the Desktop Reserve method used one, Hughes et al. 2003);
+      `ruleTable` and `lowFlowMeasure` → `baseflow` (decided 2026-10-10: total
+      flow); the base-flow filter's three passes (settled 2026-10-12: one
+      pass, as Hughes et al. 2003, engine 1.87.0, issue #523 D3);
       τ 0.2; outcome cut-offs 0.95 / 0.85 and the 5 % / 20 % days; the 0.9
       annual assurance threshold; priority users exempt only for basic human
       needs, with an optional restriction % (provisionally 2026-10-01: the
@@ -738,7 +822,7 @@ runs and accumulations are real) can't be decided without the client.
       natural-MAR tolerance. Still to build, not a judgement: a scenario op
       for a dam's surveyed curve (§ Yield) and GN 538's quaternary → rate
       schedule as data (Appendix B is a scan; the rate is an input today).
-      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** for the items in this pass (`ewrChargeSource`, `lowFlowMeasure`, the filter's passes, τ, the outcome cut-offs and the 5 % / 20 % days, the ±15 % natural-MAR tolerance) keep the built defaults; the pass count is the first thing to check if base flow is switched on ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** for the items in this pass (`ewrChargeSource`, `lowFlowMeasure`, the filter's passes, τ, the outcome cut-offs and the 5 % / 20 % days, the ±15 % natural-MAR tolerance) keep the built defaults; the pass count is the first thing to check if base flow is switched on ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)). (settled 2026-10-12: one pass, engine 1.87.0)
 - [x] **Client regression suite is thinner since N1** (fixed 2026-09-28,
       issue #68). The suite now compares the N1 columns against an **N1
       replay**: each farm with e < 1 runs with a demand factor of e, so it
@@ -1100,6 +1184,37 @@ runs and accumulations are real) can't be decided without the client.
       §2.9d. Open: whether the engine should take the gazette's
       instantaneous peak and a per-site peak-to-daily ratio instead.
 
+**Round 7's modelling follow-ups (issue #523 F2, PR #527, 2026-10-12).**
+The refit was reported privately to the hydrologist (client data stays in
+the private source repo); these are what it left open:
+
+- [ ] **The PE level.** The hydrologist chooses, from the private refit
+      report, which pan the client catchment's PE stands on (A-pan with the
+      project's coefficient, or S-pan). Fix: record the choice in the
+      project's settings and in calibration-research.md. Trigger: the
+      hydrologist's answer.
+- [ ] **An S-pan PE preset, only if S-pan is chosen.** `fit-sweep` already
+      compares A-pan and S-pan with a per-month coefficient (F1 was not
+      needed), but the app has no preset for it. Fix: an S-pan entry in
+      `PAN_COEFFICIENT_PRESETS` that fills the monthly factors and records
+      their source, with an `ENGINE_VERSION` bump if it changes a run, and
+      model.md §2.4a. Trigger: the hydrologist picks S-pan.
+- [ ] **X1's upper bound.** Whether GR4J's X1 bound in the fit
+      (`CalibrationBounds`) is wide enough at the chosen PE level, or
+      constrains the fit there. Fix: widen or confirm the bound, documented
+      in model.md §2.10b. Trigger: with the PE-level choice.
+- [ ] **A refit with per-unit rain.** Fit again with each unit's own rain
+      (`settings.unitRain.mode = 'perUnit'`, #526) to see whether it
+      changes the parameters or the scores. Fix: a private refit report,
+      and the project's settings if the hydrologist adopts it. Trigger:
+      #526 is in the client project's release, after the PE-level choice.
+- [ ] **A second-seed check of the non-parametric fits.** Both
+      non-parametric fits (`kgeNp`) landed exactly on X4's bound, 2.00,
+      which may be the optimiser stopping at a bound rather than an optimum.
+      Fix: rerun them with another seed and more starts (`fit-sweep
+      --seed --starts`); if X4 stays pinned, review its bound with X1's.
+      Trigger: before anyone relies on those fits, and with the refit above.
+
 ## Issue #4 Phase 6: simulated review findings (2026-09-24)
 
 The `persona-hydrologist` and `persona-licensing-authority` agents answered
@@ -1332,7 +1447,8 @@ the reports):
             1.3.0 (issue #64, [model.md §2.9d](./model.md)):
             `settings.lowFlowMeasure: 'baseflow'` judges a low-flow
             requirement on the month's base flow from a three-pass
-            Lyne–Hollick filter (α 0.995, Smakhtin & Watkins 1997); the
+            Lyne–Hollick filter (α 0.995, Smakhtin & Watkins 1997; one pass
+            from engine 1.87.0, after Hughes, Hannart & Watkins 2003); the
             default stays the month's total volume. Engine ≥ 1.6.0 filters
             each month over its own days and the 730 before it only, so a
             completed month's base flow never moves with later days and a
@@ -2481,6 +2597,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       is nie veiliger as jou inkassie nie." The i18n-checker corrected the
       translator's "net so veilig soos", which softened the warning; confirm
       the corrected wording reads naturally. Do it with the catalogue review.
+- [ ] **A native speaker's look at row `876212bd`** (issue #523 C6, 2026-10-12):
+      the traced dam's credit under the farm map, "Damomtrek: nagetrek uit
+      {dataset} ({source}), gewysig". The i18n-checker kept it but asked
+      whether "nagetrek **van**" reads more naturally than "uit"; "gewysig"
+      must stay (the licence asks for the modified note). Do it with the
+      catalogue review.
 - [x] **Translation turnaround.** All 607 rows of
       `docs/i18n/af-translation-sheet.md` (505 site messages, some with a
       row per plural form; 70 email strings; 8 glossary entries of three
@@ -3800,9 +3922,13 @@ from the WP:
 - [ ] **Confirm the dominance rule's limits** (#523 O, provisional: no
       holder above 80 % of a total a restricted reader sees, no two above
       90 %; `DOMINANCE_TOP1` / `DOMINANCE_TOP2`, engine
-      `allocations/holders.ts`). Pending the CISO and counsel's D3 review
-      (#92). Trigger: that review, or a client's catchment where the rule
-      withholds a total they need.
+      `allocations/holders.ts`). Since 232 (#523 G8) the same limits also
+      withhold the use's catchment series and volume rows from share links
+      and applicants (`app_run_use_shown` over the run's supply per holder;
+      its SQL literals pinned to the engine's by
+      `share/small-catchments.db.test.ts`, so a change moves both). Pending
+      the CISO and counsel's D3 review (#92). Trigger: that review, or a
+      client's catchment where the rule withholds a total they need.
 - [x] **A full-allocation run's per-unit figures give the volume** (issue
       #523 G1 security review, finding 7; real by the model's definition,
       model.md §2.12a: demand is scaled per water year to the registered
@@ -3925,12 +4051,9 @@ from the WP:
       ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
       Nothing is left as an accepted flow differencing. The modelled use
       on `GET …/runs/:runId/allocations` for such a run (round 5, finding 3)
-      is fixed on `fix/523-g-holder-totals`. Still to do by the operator: run
-      the read-only check for cap or full-allocation publications in
-      production (`SELECT p.project_id, p.id, p.superseded_at FROM
-      run_publication p JOIN model_run r ON r.id = p.run_id WHERE
-      r.summary->'allocations'->>'mode' IN ('cap','fullAllocation')`, and
-      the same on `seasonal_outlook` by `base_run_id`); supersede any found.
+      is fixed on `fix/523-g-holder-totals`. Still to do by the operator: the
+      read-only check `pre-213-cap-runs` in production, tracked under
+      [§ Blocking releases](#blocking-releases-operator).
 - [x] **Registration numbers in History** (2026-10-03): viewers read
       `allocation.created/changed/deleted` with `registrationNo` (a "unique
       identifier", POPIA s1) and `allocation.created` with the volume. Done:
@@ -4471,7 +4594,8 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       ([model.md §2.7j](./model.md)). The node form's **Water for …**
       fields, a scenario `node.set` / `demandObject.set`, the run comparison,
       the series `river_take@`, `river_pool@`, `river_pool_evaporation@`,
-      `FarmSummary.riverTakes` and the water balance's pool evaporation.
+      `FarmSummary.riverTakes` and the water balance's pool evaporation
+      (both dropped in engine 1.86.0, issue #523 B2: a pool is storage only).
       Supersedes draft PR #341's pool on a dam-less run-of-river unit. No
       importer sets it (b023 has no such abstraction). The decisions are
       open question R2 in engine-audit.md, listed under § Hydrologist.
@@ -5018,8 +5142,39 @@ Applicant view and the Applications tab. Left:
       165_applicant_copy); D3 (names to editors, owners and the linked
       farmer; volumes outside the organisation as totals, 162; [allocations.md § Who sees what](./allocations.md#who-sees-what));
       and the outcome words (D14: `licence_issued`, `licence_refused`,
-      `application_rejected`, `not_considered`, 163), whose labels may follow
-      the pilot authority's house style. Trigger: the client's answers.
+      `application_rejected`, `not_considered`, 163; the project's licence
+      record uses them too since 233, plus `application_withdrawn`), whose
+      labels may follow the pilot authority's house style. Trigger: the
+      client's answers.
+- [ ] **Drop 161's licence-record words (the contract step of 233).**
+      233_licence_record_outcome_words (issue #523 G9 (b)) moved
+      `project.licence_outcome` to the authority's words, but
+      `app_set_licence_outcome` and `PUT /projects/:id/licence-record` still
+      take `granted`, `refused` and `withdrawn` (`LEGACY_OUTCOMES`,
+      `backend/src/licence/routes.ts`) and store the new ones, so a backend or
+      web release from before 233 keeps working while the other catches up.
+      Fix: a migration that replaces `app_set_licence_outcome` without the
+      mapping, and the route's enums without the legacy words (the
+      licence-record DB test's "161's words" case turns into a `400`).
+      Older `licence.outcome` audit events keep their words; the timeline
+      reads them. Trigger: the first `backend@` and `web@` releases that both
+      contain 233 are in production.
+- [ ] **Drop `project_member.acts_for_authority` and 163's
+      `project_member_authority` trigger (the contract step of 229).**
+      229_authority_delegates (issue #523 G5) moved who acts for the
+      responsible authority to `authority_delegate` and redefined
+      `app_acts_for_authority` to read only its confirmed rows, but left
+      the old flag in place (read by nothing new; `water_app` may no longer
+      set it), so a backend release from before 229 keeps working during a
+      deploy. Fix: a migration that drops the column and 163's
+      `project_member_authority()` trigger and function (from their latest
+      definitions), and the DB tests that still write the column
+      (`projects/authority.db.test.ts`, `authority-delegates.db.test.ts`)
+      turn into checks that it is gone; the catalogue guards stay green.
+      Trigger: the first `backend@`
+      and `web@` releases that both contain 229 are in production, and
+      deployment.md runbook step 18 (each authority reviews its
+      grandfathered delegates) is done.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
@@ -5141,7 +5296,7 @@ Applicant view and the Applications tab. Left:
       from the members list keeps the farms. Tests:
       `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
       `farmer-invites.spec.ts`.
-- [ ] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
+- [x] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
       split, 164; provisional position, pre-counsel research, 2026-10-01).
       The use's catchment series (outflow, observed flow, EWR shortfall) and
       the volume rows show at 5 or more farm holders, but k alone doesn't
@@ -5154,6 +5309,47 @@ Applicant view and the Applications tab. Left:
       at 69 and 71 %). Trigger: counsel's answer on question 5 of the
       licensing positions (k and "reasonably foreseeable method"), or the
       first pilot catchment with one dominant user.
+      **Built (232_small_catchments, issue #523 G8, before a small-catchment
+      pilot):** `app_run_use_shown(run)`, k and the dominance rule over the
+      run's modelled supply per holder, at the registered volumes' limits
+      (80 % / 90 %, `totalShown`, so one rule, not a second ~70 % one; the
+      limits stay provisional under "Confirm the dominance rule's limits"
+      above). Used by `app_share_series`, `run_series_select_contributor`
+      (through `app_contributor_use_runs`), `app_application_run_results`,
+      `app_share_run_projection`, `app_share_pack` and `app_applicant_pack`.
+      Tests at the limits (80 / 80.5 %, 90 / 91 %) and on random sums
+      against `totalShown`, and end to end with a positive control:
+      `share/small-catchments.db.test.ts`. With it, a published DWS gauge
+      record shows at any holder count ([security.md § Share
+      links](./security.md#share-links)). **235 (round 6 security
+      review):** the other water users' supply (`summary.users`) is among
+      the parts, so a dominant mine, town or abstractor beside even farms
+      withholds the use, as does one user when every farm takes nothing; k
+      still counts farm holders only (decided: a user is no farmer's
+      neighbour in the count).
+
+- [ ] **Redact detached questions on account erasure** (filed 2026-10-12,
+      the round 6 security review of #523; for counsel with the D3 review,
+      #92). Since 234 an "Ask the assessors why" question outlives its
+      draft, for the authority's s42 written reasons, and so it also
+      outlives the applicant's account: the row keeps `scenario_name`,
+      `problem` and `ops`, the applicant's own typed text (their node names,
+      free text), which may be personal information, after the draft and the
+      account are gone (`scenario.owner_user_id` is set null, 138, and the
+      question no longer cascades from the scenario). The account id was
+      never on the row, so security.md's retention row now says the typed
+      text stays. Reads are safe: parties read only through
+      `app_application_questions(scenario)`, which a NULL never matches;
+      the table is editors-only. Durable fix, if counsel says erasure must
+      reach it: on account deletion, redact `scenario_name` and the
+      free-text and name fields in `ops` of that applicant's detached
+      questions (keeping the rule kinds, the assessor text and the answer
+      the s42 reasons need), in the same deletion path as 048's
+      pseudonymisation, with a catalogue-style test that the account's
+      deletion leaves none of their typed text; and tell the applicant in
+      the Ask the assessors notice that the question stays even if they
+      delete the draft. Trigger: counsel's answer on #92 (D3), or the first
+      erasure request from an applicant who asked a question.
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +
@@ -6226,3 +6422,41 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       cells), and matching only within the snap radius turned 41 of 90
       clicks into asks
       ([delineation-snapping.md § The head reach's upper end](./design/delineation-snapping.md#the-head-reachs-upper-end-seventh-experiment-delineate-11)).
+
+## Licence terms and appeals (issue #523 G3, G4, 2026-10-12)
+
+Built: a licence issued records its granted terms, which count in cumulative
+impact in place of the changes applied for (227_licence_terms); appeal
+events after a decision, append-only (228_decision_events). Left open:
+
+- [ ] **"Lapsed / deemed withdrawn"** (the licensing assessor's review, §
+      Outcome words (D14)): an application that misses GN R267's time limits
+      ends without a decision, so it isn't an event after one and doesn't fit
+      `decision_event`. Today the assessor can only leave it submitted, or the
+      applicant withdraws it. Durable fix: a fifth outcome word (or a
+      `withdrawn` status the authority records, with the regulation it lapsed
+      under) in `scenario_outcome_check`, `SCENARIO_OUTCOMES`, the labels and
+      the evidence report's outcome words, through counsel as D14 was.
+      Trigger: the pilot authority's first lapsed application, or counsel's D14
+      review.
+- [ ] **Share links don't print the terms.** A decided application's
+      read-only share link (`app_share_scenario`, 115) shows the outcome and
+      note but not the granted terms or the appeal events. (§ 4 of the
+      evidence report now says a licence's run applied its licensed terms,
+      `terms: 'licensed'`, `evidence-20`.) Durable fix: add the terms and
+      events to the share projection. Trigger: a pilot reader of a share
+      link asking which terms were granted.
+- [ ] **The licensed-terms run isn't made for the assessor.** An issued
+      licence whose granted terms differ from the ops applied for, or one
+      varied on appeal, counts in § 4's table only once someone runs its
+      licensed terms (**Run the licensed terms**). Since `evidence-20` the
+      report names every such licence (`cumulative.notRunNote`), so nothing
+      drops out silently, but the assessor still has to run it. Not built
+      with the decision: a scenario run is an engine run on the request path
+      (`scenarios/execute.ts` `runScenario`), and no job kind runs a scenario.
+      Durable fix: a `scenario_run` job kind (migration for the `job.kind`
+      CHECK, a handler that stores the run as the deciding member, cost caps
+      as for the other kinds) queued by `…/decide` with changed terms and by
+      a `varied` appeal event. Trigger: a pilot assessor's report showing the
+      line, or a second report-request feature that needs a scenario run off
+      the request path.

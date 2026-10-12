@@ -41,7 +41,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'project',
 		term: 'Project (catchment)',
-		short: 'One catchment model: its network, crops, settings, input series and runs. One b023 workbook becomes one project.',
+		short: 'One catchment model: its network, crops, settings, input series and runs. One Water Balance Tool workbook becomes one project.',
 		category: 'basics'
 	},
 	{
@@ -552,6 +552,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.userReturnPct']
 	},
 	{
+		id: 'user-restriction',
+		term: 'Fixed restriction (Priority user)',
+		short: 'Share of a Priority user’s demand it gives up when restricted, in a curtailment and under the drought restriction. Blank is none.',
+		units: '%',
+		category: 'network',
+		fields: ['node.userRestrictionPct']
+	},
+	{
 		id: 'user-pump',
 		term: 'Pump capacity (other user)',
 		short: 'The most an other water user takes from the river in a day. Blank is no limit; a priority user’s claim upstream is capped to it too.',
@@ -666,6 +674,14 @@ export const TIPS: HelpTipText[] = [
 		units: 'share of the flow (shown as %); cap m³/day',
 		category: 'network',
 		fields: ['node.reachLossFrac', 'node.reachLossMaxM3Day', 'run.reach_loss']
+	},
+	{
+		id: 'base-flow-loss-gain',
+		term: 'Base-flow loss and gain',
+		short: 'Groundwater a hydrological unit’s own runoff loses (out of the catchment) or gains (from outside it) each day, before the river or dam.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['node.baseflowLossM3Day', 'node.baseflowGainM3Day', 'run.baseflow_loss', 'run.baseflow_gain']
 	},
 	{
 		id: 'outflow-gauge',
@@ -932,7 +948,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'effective-rainfall',
 		term: 'Effective rainfall fraction',
-		short: 'Share of rain on cropped land that counts towards the crop’s need and so reduces irrigation (b023 default 0.65).',
+		short: 'Share of rain on cropped land that counts towards the crop’s need and so reduces irrigation (the workbook’s default is 0.65).',
 		units: 'fraction 0–1',
 		category: 'crops',
 		fields: ['settings.effectiveRainFraction', 'settings.effectiveRainFractionMonthly']
@@ -984,7 +1000,14 @@ export const TIPS: HelpTipText[] = [
 		term: 'Transfer',
 		short: 'Water moved from one hydrological unit’s dam to another hydrological unit (pipeline or canal), in chosen months and up to a maximum rate.',
 		category: 'transfers',
-		fields: ['transfer.fromNodeId', 'transfer.toNodeId', 'transfer.enabled', 'run.transfer']
+		fields: ['transfer.fromNodeId', 'transfer.enabled', 'run.transfer']
+	},
+	{
+		id: 'transfer-outside',
+		term: 'Transfer out of the catchment',
+		short: 'Pumped out of the source dam while it is above its minimum storage, then gone. For a draw on a schedule, use a piped-out demand object.',
+		category: 'transfers',
+		fields: ['transfer.toNodeId']
 	},
 	{
 		id: 'transfer-months',
@@ -1069,7 +1092,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'runoff-model',
 		term: 'Runoff model',
-		short: 'The model that turns rain into natural flow: GR4J, the only one since engine 1.0.0 removed the legacy b023 model.',
+		short: 'The model that turns rain into natural flow: GR4J, the only one since engine 1.0.0 removed the original workbook’s legacy model.',
 		category: 'flow',
 		fields: ['settings.runoffModel']
 	},
@@ -1267,7 +1290,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'rain-threshold',
 		term: 'Rain threshold',
-		short: 'Daily rain at or below this (mm) doesn’t reduce irrigation demand. GR4J uses all the rain. b023 default 2 mm.',
+		short: 'Daily rain at or below this (mm) doesn’t reduce irrigation demand. GR4J uses all the rain. The workbook’s default is 2 mm.',
 		units: 'mm',
 		category: 'flow',
 		fields: ['calibration.rainThresholdMm']
@@ -1283,7 +1306,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'legacy-runoff-model',
 		term: 'Legacy runoff model',
-		short: 'The b023 workbook’s rain → peak → recession routine, removed in engine 1.0.0. Runs made with it still open, labelled, but can’t be re-run.',
+		short: 'The workbook’s rain → peak → recession routine, removed in engine 1.0.0. Runs made with it still open, labelled, but can’t be re-run.',
 		category: 'flow',
 		fields: ['run.is_summer', 'run.rain_flow', 'run.response_flow']
 	},
@@ -1299,7 +1322,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'pragmatic-ewr',
 		term: 'Pragmatic EWR',
-		short: 'b023’s simplification: one fixed m³/day per month at the outlet, instead of a requirement that varies with wetness.',
+		short: 'The workbook’s simplification: one fixed m³/day per month at the outlet, instead of a requirement that varies with wetness.',
 		units: 'm³/day per month',
 		category: 'ewr',
 		fields: ['settings.ewrPragmaticM3PerDay', 'run.ewr']
@@ -1435,7 +1458,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'low-flow-measure',
 		term: 'Low flows judged on',
-		short: 'The month’s total flow (default, the hydrologist’s choice), or its base flow (filter settings unconfirmed), so a flood can’t hide low flows.',
+		short: 'The month’s total flow (default, the hydrologist’s choice), or its base flow (a one-pass digital filter), so a flood can’t hide low flows.',
 		units: 'Mm³ per month or m³/s',
 		category: 'ewr',
 		fields: ['settings.lowFlowMeasure']
@@ -1793,19 +1816,19 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'start-from-map',
 		term: 'Start the model from the map',
-		short: 'On an empty model: proposes the units, their areas and their order from the boundary and the dams, abstraction points and gauges.',
+		short: 'On an empty model: a unit from each boundary you put on the map, with its area and order, and the dams and pumps inside it linked to it.',
 		category: 'data'
 	},
 	{
 		id: 'divide-model',
 		term: 'Divide the model from the map',
-		short: 'For a model with units: proposes each unit’s own area, what it drains into and its dam’s runoff share, beside its value now.',
+		short: 'For a model with units: proposes each unit’s area from its boundary and what it drains into, beside its value now.',
 		category: 'data'
 	},
 	{
 		id: 'dam-siting',
 		term: 'Dam siting: on the river or off-channel',
-		short: 'Whether a dam sits on the river or is filled by a pump or furrow. Start and Divide place its unit and propose its dam shares by it.',
+		short: 'Whether a dam sits on the river or is filled by a pump or furrow. A water user placed at the dam in Start or Divide goes by it.',
 		category: 'data'
 	},
 	{
@@ -1829,13 +1852,13 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'dam-proposals',
 		term: 'Dam values from the register and the map',
-		short: 'A dam’s capacity from the register of dams (registered dams within 1 km) and its full-supply area from its polygon on the map.',
+		short: 'Registered dams within 1 km, their capacities for reference only, and a dam’s full-supply area from its polygon on the map.',
 		category: 'data'
 	},
 	{
 		id: 'cultivated-area',
 		term: 'Cultivated area from land cover',
-		short: 'The cropland ESA WorldCover maps in a unit’s parcels, proposed as one crop’s planted area. It never says which crop, or if irrigated.',
+		short: 'Cultivated land from satellite in a unit’s parcels, dryland and fallow included: not irrigated area. Check it before you use it.',
 		units: 'ha',
 		category: 'data'
 	},
@@ -1876,7 +1899,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'chirps-version',
 		term: 'CHIRPS product and version',
-		short: 'Which CHIRPS a series holds: v2.0 (usual in b023) or v3.0, sat or rnl. One series holds one; two are never spliced together.',
+		short: 'Which CHIRPS a series holds: v2.0 (usual in the workbooks) or v3.0, sat or rnl. One series holds one; two are never spliced together.',
 		category: 'data'
 	},
 	{
@@ -1912,8 +1935,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'workbook-import',
-		term: 'b023 workbook import',
-		short: 'Turns a b023 workbook into a new project, read in your browser: network, units, crops, transfers, settings and Flow data series.',
+		term: 'Workbook import',
+		short: 'Turns a Water Balance Tool workbook into a project, read in your browser: network, units, crops, transfers, settings and Flow data series.',
 		category: 'data'
 	},
 

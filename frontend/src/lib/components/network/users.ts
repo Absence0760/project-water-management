@@ -9,8 +9,8 @@ export function userDemandOf(n: Pick<NetworkNode, 'userDemandM3Day'>): number[] 
 	return Array.from({ length: 12 }, (_, i) => (d && Number.isFinite(d[i]) ? d[i]! : 0));
 }
 
-/** "priority · 1 200 m³/day on average · 40 % returned · pump 800 m³/day", or a hint when it has no demand. */
-export function describeUser(n: Pick<NetworkNode, 'userDemandM3Day' | 'userReturnPct' | 'userPriority'> & Partial<Pick<NetworkNode, 'pumpCapacityM3Day'>>): string {
+/** "priority · 1 200 m³/day on average · 40 % returned · pump 800 m³/day · 30 % fixed restriction", or a hint when it has no demand. */
+export function describeUser(n: Pick<NetworkNode, 'userDemandM3Day' | 'userReturnPct' | 'userPriority'> & Partial<Pick<NetworkNode, 'pumpCapacityM3Day' | 'userRestrictionPct'>>): string {
 	const d = userDemandOf(n);
 	const mean = d.reduce((a, b) => a + b, 0) / 12;
 	const priority = userPriorityWord(n.userPriority);
@@ -18,7 +18,10 @@ export function describeUser(n: Pick<NetworkNode, 'userDemandM3Day' | 'userRetur
 	const ret = n.userReturnPct ?? 0;
 	// Its pump capacity (engine ≥ 1.58.0), when set.
 	const pump = typeof n.pumpCapacityM3Day === 'number' ? ` · pump ${fmtNum(n.pumpCapacityM3Day, 0)} m³/day` : '';
-	return `${priority} · ${fmtNum(mean, 0)} m³/day on average${ret > 0 ? ` · ${fmtNum(ret * 100, 0)} % returned` : ''}${pump}`;
+	// A Priority user's fixed restriction % (engine 1.86.0), when set.
+	const rp = n.userRestrictionPct ?? 0;
+	const restricted = rp > 0 && n.userPriority !== 'junior' ? ` · ${fmtNum(rp * 100, 0)} % fixed restriction` : '';
+	return `${priority} · ${fmtNum(mean, 0)} m³/day on average${ret > 0 ? ` · ${fmtNum(ret * 100, 0)} % returned` : ''}${pump}${restricted}`;
 }
 
 /**
@@ -33,6 +36,17 @@ export function userPumpNote(n: Pick<NetworkNode, 'pumpCapacityM3Day' | 'userPri
 	const senior = (n.userPriority ?? 'senior') !== 'junior';
 	const calc = readonly ? '' : ' Or enter the pumps and their rate to work it out.';
 	return `It takes at most ${fmtNum(pump, 0)} m³/day from the river${senior ? '; units upstream pass no more than that for it' : ''}.${calc}`;
+}
+
+/**
+ * The line under a Priority user's fixed restriction % (engine 1.86.0, issue
+ * #523 B3, docs/model.md §2.7c): blank is uncurtailed; a share is what it
+ * gives up in a curtailment and under the drought restriction rule, with no
+ * basic-needs floor.
+ */
+export function userRestrictionNote(pct: number | null | undefined): string {
+	if (!(typeof pct === 'number' && pct > 0)) return 'Blank is uncurtailed: its EWR charge stands and the drought restriction rule doesn’t cut it.';
+	return `Restricted, it gives up ${fmtNum(pct * 100, 0)} % of its demand: in a curtailment, and while the drought restriction rule is at a level that cuts water. No basic-needs floor: the model doesn’t know the people it serves.`;
 }
 
 /**

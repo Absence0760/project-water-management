@@ -29,6 +29,20 @@ export interface GenOptions {
 	 * stream, and so the rest of each seed, is unchanged.
 	 */
 	allocationModes?: boolean;
+	/**
+	 * true: give the units base-flow losses and gains (engine 1.86.0,
+	 * addBaseflow), from their own stream, so the rest of each seed is
+	 * unchanged. Off by default, so every seed pinned before them keeps its
+	 * network; run.invariants.test.ts soaks seeds with it on.
+	 */
+	baseflow?: boolean;
+	/**
+	 * true: send some dam rules out of the catchment (toNodeId null, engine
+	 * 1.86.0, issue #523 B5, addExternalTransfers), from their own stream, so
+	 * the rest of each seed is unchanged. Off by default, so every seed pinned
+	 * before them keeps its network; run.invariants.test.ts soaks seeds with it on.
+	 */
+	externalTransfers?: boolean;
 }
 
 const monthly = (f: (m: number) => number): Monthly => Array.from({ length: 12 }, (_, m) => f(m)) as unknown as Monthly;
@@ -418,6 +432,12 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addCropSupply(new Rng(seed ^ 0x5bd1e995), nodes);
 	// Bed losses in the reaches (engine ≥ 1.75.0, issue #444), from their own stream, last of all.
 	addReachLosses(new Rng(seed ^ 0x6c8e9cf5), nodes);
+	// A fixed restriction % on Priority users (engine 1.86.0, issue #523 B3), from its own stream, last of all.
+	addUserRestrictions(new Rng(seed ^ 0x0d1c2b3a), nodes);
+	// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), from their own stream, only when asked for.
+	if (opts.baseflow) addBaseflow(new Rng(seed ^ 0x3a8f05c5), nodes);
+	// Dam rules out of the catchment (engine 1.86.0, issue #523 B5), from their own stream, only when asked for.
+	if (opts.externalTransfers) addExternalTransfers(new Rng(seed ^ 0x47b1e2d9), nodes, transfers);
 	return {
 		settings,
 		model: {
@@ -803,6 +823,54 @@ function addReachLosses(g: Rng, nodes: NetworkNode[]): void {
 }
 
 /**
+ * A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1,
+ * docs/model.md §2.6b) on each unit 60 % of the time: a loss, a gain or
+ * both, from a trickle to more than any day's runoff (so the loss takes all
+ * of it some days, part on others), now and then not a size ≥ 0 (which the
+ * run treats as none, with a warning). Gauges and users get one now and then
+ * too, which the run ignores with a warning.
+ */
+function addBaseflow(g: Rng, nodes: NetworkNode[]): void {
+	const size = () => (g.bool(0.05) ? -1 : g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e5), g.logFloat(1, 1e7)]));
+	for (const n of nodes) {
+		if (!g.bool(n.kind === 'farm' ? 0.6 : 0.05)) continue;
+		const which = g.int(0, 2);
+		if (which !== 1) n.baseflowLossM3Day = size();
+		if (which !== 0) n.baseflowGainM3Day = size();
+	}
+}
+
+/**
+ * Dam rules out of the catchment (engine 1.86.0, issue #523 B5, docs/model.md
+ * §2.6): a third of the dam rules (never a river off-take, which delivers to a
+ * unit) sent out instead, and in half the seeds one to two new ones from
+ * random farms (with a dam or not), each from a trickle to more than the dam
+ * holds, monthly rates now and then, tied priorities, some off.
+ */
+function addExternalTransfers(g: Rng, nodes: NetworkNode[], transfers: Transfer[]): void {
+	const kind = new Map(nodes.map((n) => [n.id, n.kind]));
+	for (const t of transfers) if (t.source !== 'river' && kind.get(t.fromNodeId) === 'farm' && g.bool(0.35)) t.toNodeId = null;
+	const farms = nodes.filter((n) => n.kind === 'farm').map((n) => n.id);
+	if (!farms.length || !g.bool(0.5)) return;
+	const count = g.int(1, 2);
+	for (let k = 0; k < count; k++) {
+		const t: Transfer = {
+			id: `x${k}`,
+			fromNodeId: g.pick(farms),
+			toNodeId: null,
+			months: g.bool(0.2) ? [...new Set(Array.from({ length: g.int(1, 8) }, () => g.int(1, 12)))] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+			maxRateM3s: g.pick([0, g.logFloat(1e-5, 0.05), g.logFloat(1e-3, 10)]),
+			dailyCapM3: g.bool(0.6) ? null : g.logFloat(1, 1e5),
+			minStoragePct: g.frac(0.3, 0.2),
+			enabled: g.bool(0.9),
+			priority: g.pick([0, 0, 1, k])
+		};
+		if (g.bool(0.2)) Object.assign(t, withMonthlyRates(Array.from({ length: 12 }, () => (g.bool(0.3) ? 0 : g.logFloat(1e-4, 1)))));
+		transfers.push(t);
+	}
+}
+
+/**
  * A pump capacity on other water users (engine ≥ 1.58.0, WP-3.8, docs/model.md
  * §2.7c) in 30 % of seeds, on each user half the time: 0 (no pump), a trickle,
  * or anything up to more than any flow, so the cap binds some days, every day
@@ -814,6 +882,24 @@ function addUserPumps(g: Rng, nodes: NetworkNode[]): void {
 	for (const n of nodes) {
 		if (n.kind !== 'user' || !g.bool(0.5)) continue;
 		n.pumpCapacityM3Day = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
+	}
+}
+
+/**
+ * A fixed restriction % on other water users (engine 1.86.0, issue #523 B3,
+ * docs/model.md §2.7c) in 30 % of seeds, on each user half the time: a small
+ * share, anything up to all of it, or 100 %, on Priority users only (a
+ * Non-priority user's breaks a model rule; the engine ignores it with a
+ * warning, userRestriction.test.ts). It applies with a drought restriction
+ * rule and in the curtailment table. The rule
+ * itself comes from addDroughtRestriction (25 % of seeds), so some seeds
+ * have both, with every basis and the EWR trigger.
+ */
+function addUserRestrictions(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'user' || !g.bool(0.5) || n.userPriority === 'junior') continue;
+		n.userRestrictionPct = g.pick([g.float(0.01, 0.1), g.frac(), 1, 0]);
 	}
 }
 

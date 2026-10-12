@@ -105,6 +105,31 @@ describe('GET /projects/:id/farm/:nodeId/map', () => {
 		}
 	});
 
+	it('flags a dam traced from JRC Global Surface Water for its credit, never sending the description (issue #523 C6)', async () => {
+		const traced = 'Traced from JRC GSW v1.5 (trace-dam-2): water in at least 25 % of the observations, clicked at 33.6800° S, 21.3200° E. Check it against the map. Source: EC JRC/Google.';
+		// A trace from the synthetic raster names no source: no credit (positive control for the flag below).
+		await asOwner(`UPDATE map_feature SET properties = $2 WHERE id = $1`, [ids['Home dam'], JSON.stringify({ description: 'Traced from Synthetic water occurrence (trace-dam-2): water in at least 25 % of the observations.' })]);
+		try {
+			const synthetic = (await farmer.call('GET', mapOf(home.id))).body.features as (Feature & { credit?: string })[];
+			expect(synthetic.filter((f) => f.credit)).toEqual([]);
+			await asOwner(`UPDATE map_feature SET properties = $2 WHERE id = $1`, [ids['Home dam'], JSON.stringify({ description: traced })]);
+			const after = (await farmer.call('GET', mapOf(home.id))).body.features as (Feature & { credit?: string })[];
+			expect(after.filter((f) => f.credit).map((f) => [f.name, f.credit])).toEqual([['Home dam', 'jrc-water']]);
+			const text = (await raw(farmer, mapOf(home.id))).text;
+			expect(text).not.toContain('Traced from');
+			expect(text).not.toContain('EC JRC');
+			// A traced outline whose kind was changed after (here the boundary) is still JRC's data, and keeps the flag.
+			await asOwner(`UPDATE map_feature SET properties = $2 WHERE id = $1`, [ids['Synthetic catchment'], JSON.stringify({ description: traced })]);
+			const boundary = (await farmer.call('GET', mapOf(home.id))).body.features as (Feature & { credit?: string })[];
+			expect(boundary.filter((f) => f.credit).map((f) => [f.name, f.credit])).toEqual([
+				['Home dam', 'jrc-water'],
+				['Synthetic catchment', 'jrc-water']
+			]);
+		} finally {
+			await asOwner(`UPDATE map_feature SET properties = '{}' WHERE id = ANY($1)`, [[ids['Home dam'], ids['Synthetic catchment']]]);
+		}
+	});
+
 	it('leaves out the name a reach got for want of one ("Reach <id>"), keeping a reach’s own name and its credit', async () => {
 		await asOwner(`UPDATE map_feature SET name = 'Reach 1050000001', properties = '{"ref":"river-network:HydroRIVERS-v10:1050000001"}' WHERE id = $1`, [ids['Sand river']]);
 		try {

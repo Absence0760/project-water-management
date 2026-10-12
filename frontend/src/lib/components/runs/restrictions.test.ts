@@ -37,4 +37,12 @@ describe('restrictionView (engine 1.54.0, WP-3.8)', () => {
 		// No demand: no share of it cut.
 		expect(v.units[1]!.cutShare).toBeNull();
 	});
+	it('lists the Priority users with a fixed restriction %, none when none has one (engine 1.86.0)', () => {
+		expect(restrictionView(summary)!.users).toEqual([]);
+		const v = restrictionView({
+			...summary,
+			users: [{ nodeId: 't', name: 'Town', restrictionPct: 0.3, avgDemandM3Day: 200, avgRestrictedDemandM3Day: 170, avgSuppliedM3Day: 160, avgCutOnRestrictedDaysM3Day: 60, daysByLevel: [360, 85, 20] }]
+		})!;
+		expect(v.users).toEqual([{ nodeId: 't', name: 'Town', restrictionPct: 0.3, demand: 200, restricted: 170, cut: 30, supplied: 160, cutOnRestrictedDays: 60, daysRestricted: 105 }]);
+	});
 });

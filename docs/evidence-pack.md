@@ -60,7 +60,12 @@ dominating (a year too few hold, or one or two hold most of, reads "not
 shown", its modelled use kept; holders counted by keys frozen with each
 run), with the folded
 mix frozen as whole-percent shares with no m³ (report format
-`evidence-18`, issue #523 G/H/J, 2026-10-11). What is left is
+`evidence-18`, issue #523 G/H/J, 2026-10-11); page 1's headline against
+full authorised use recording how to re-derive its pair (report format
+`evidence-19`, issue #523 G2); and § 4 naming every other application
+that counts but has no run of the ops it counts with, and saying which
+terms each listed run applied (report format `evidence-20`, issue #523
+G3/G4, 2026-10-12; [§ The responsible authority](#the-responsible-authority)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -393,15 +398,57 @@ for and whether that authority accepted the baseline:
   the responsible authority.* (a fixed row: absence is printed, never
   omitted, G6).
 - **§ 4's decided applications** carry the authority's outcome words; only
-  `licence_issued` counts among the other applications on the baseline (a
+  a licence in force counts among the other applications on the baseline (a
   pack drafted before keeps its frozen `approved` /
-  `approved_with_conditions`, which it still words).
+  `approved_with_conditions`, which it still words). Since 227/228 (issue
+  #523 G3, G4) it counts on its **granted terms**, never the changes applied
+  for: § 4 reads its newest run of those terms (an assessor's **Run the
+  licensed terms**; the run of the applied changes no longer stands for
+  it), each row saying its run applied the licensed terms (`terms:
+  'licensed'`, a submitted application's `applied`), and page 1's combined
+  row matches an assessment that took those terms. A licence set aside on
+  appeal stops counting; one varied counts on the variation's terms, read
+  from a run of them; an appeal only lodged changes nothing.
+  **Nothing drops out silently** (report format `evidence-20`): an issued
+  licence with no run of its licensed terms on this baseline (granted on
+  other terms than applied for, or varied since its run), and a submitted
+  application never run on it, can't be in the table or its sum, so § 4
+  names them with a fixed line (`cumulative.notRun`, `notRunCount`,
+  `notRunNote`: *Not in the table or its sum: N licences in force have no
+  run of their licensed terms on this baseline (…), so the table leaves
+  their change out: run them from the application (a licence: Run the
+  licensed terms) and build the report again.*), under the reader's RLS as
+  the table is (a viewer sees no submitted application, so isn't told its
+  name). The licensed-terms run isn't made automatically when the decision
+  or variation is recorded: a scenario run is an engine run on the request
+  path (`runScenario`), and no job kind runs a scenario, so the line is the
+  guard ([followups.md § Licence terms and appeals](./followups.md#licence-terms-and-appeals-issue-523-g3-g4-2026-10-12)). A pack
+  freezes which applications and runs it read, so a decision or appeal
+  recorded later changes the live report, never an issued pack; one
+  drafted before `evidence-20` has no such line or `terms`. The applicant reads the
+  granted terms and the appeal events on their own application (§
+  Applicants).
 
 Both are part of the report, so a pack freezes them when it is drafted: an
 authority named, or an endorsement made, after a pack is issued changes
 the live report, never the pack or its hash (`evidence/packs.db.test.ts`).
 A pack drafted before `evidence-13` has neither field; its identity block
 says nothing about the authority and it has no such flag.
+
+**Who acts for the authority is the authority's own call**
+(229_authority_delegates, issue #523 G5; the assessor's review of D1). An
+endorsement, a decision, a registration check and the pack's *Send to the
+authority* count only a **confirmed** delegate holding editor or above in
+the project (directly or through its team): an owner (the host) may
+propose someone, but a proposal grants nothing until a member already
+acting for the authority confirms it, or, for a project's first delegate,
+the operator on the authority's written request. The owner can withdraw a
+proposal but not remove a confirmed delegate; the authority removes anyone.
+So *Not endorsed by the responsible authority* stays printed until someone
+the authority confirmed endorses the baseline, whatever the host does.
+Every change is in the project's History ([security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls), [data-model.md](./data-model.md) `authority_delegate`).
+The flags owners set before 229 were carried over as confirmed, each with
+an `authority.grandfathered` event naming who set it.
 
 ### Both impact bases
 
@@ -437,19 +484,59 @@ the application twice, both labelled:
   baseline as it ran, so "existing use" is what the model found holders
   use; it answers what changes tomorrow.
 
+Both pairs apply **this application's own applied ops** (the ops its run
+recorded) to the baseline, and nothing else: never another licence's
+granted terms or a variation's, which count only among the other
+applications (§ 4's table and page 1's combined row, above). The baseline
+is the published run as it is; another application issued since isn't
+folded into it.
+
 The pair is two model runs, which a report request (a viewer's GET, a pack
 draft) must not carry, so an editor runs it from the evidence report
 (**Run at full authorised use**, `POST …/runs/:runId/authorised-impact`):
-the board the engine builds over it, the mix (from the allocations' rows as
-they are then) and when and on which engine are kept for that application
-run (`authorised_impact`, the newest only); the pair's runs aren't stored.
-The report reads it only when it was run on the baseline's engine with the
-project's outcome settings as they are now; otherwise, or without one, or
-when the baseline ran with no registered volumes, a fixed row says which
-(*Not assessed: …*, never left out). A pack freezes whichever page 1 had
-when it was drafted; one drafted before `evidence-14` has no such board and
-says so. Tests: `backend/src/evidence/authorised-impact.db.test.ts`,
-`packages/engine/src/evidence/authorised.test.ts`,
+the board the engine builds over it, the mix and when and on which engine
+are kept for that application run (`authorised_impact`, the newest only).
+The pair's runs aren't stored as runs (nothing in the run list, no run
+cap), so since `evidence-19` (issue #523 G2) the board records how to
+re-derive them and what they give (`reproduction`, engine
+`evidence/authorisedPair.ts`), and a pack's reproduction bundle re-runs
+them ([§ Reproduction](#reproduction)):
+
+- **The derivation**: the baseline run's stored input with
+  `allocationMode: 'fullAllocation'`, and the application's recorded ops
+  (their hash, `opsSha256`) applied to it (`authorisedPairInputs`). An
+  applicant's ops are checked in their own namespace (the mask that hides
+  other farms); when that would give another input than applying them plain
+  (an op that adds an item under a hidden one's name or id), the pair
+  couldn't be re-derived from the bundle, so it isn't built (`409`).
+- **Both results digests** (`baselineResultsSha256`,
+  `applicationResultsSha256`, `runResultsText` `results-1`), the same
+  digest the bundle uses for the stored runs.
+- **The outcome settings** it was built with (how years are classed, the
+  Reserve site).
+- **The mix as at the baseline**: how each registered volume the pair held
+  a holder to was held, by allocation id (`kinds`), from the authorisation
+  frozen with the baseline run when it was stored (migration
+  `226_run_allocation_authorisation`, beside 219's holder keys), not the
+  allocation rows as they are when the board is built: re-recording a
+  licence as a registration after the baseline ran doesn't move the mix;
+  a new baseline does. Runs stored before 226 took the authorisation of
+  the rows living when it was applied (as 219 did for the holder keys).
+
+The report reads the board only when it was run on the baseline's engine
+with the project's outcome settings as they are now and records its pair;
+otherwise, or without one, or when the baseline ran with no registered
+volumes, a fixed row says which (*Not assessed: …*, never left out): a board
+built before `evidence-19` is `stale` (*run it again*). A viewer kept from
+each registered volume reads the board without its `reproduction` (the
+digests would be an oracle for guessed volumes, and the kinds are by
+allocation id; they are refused the bundle that uses them too). A pack
+freezes whichever page 1 had when it was drafted; one drafted before
+`evidence-14` has no such board and says so. Tests:
+`backend/src/evidence/authorised-impact.db.test.ts` (the record, the mix as
+at the baseline with its control, the stale board, and a bundle of the
+report re-run offline), `packages/engine/src/evidence/authorised.test.ts`,
+`packages/engine/src/evidence/authorisedPair.test.ts`,
 `e2e/tests/evidence-allocations.spec.ts`.
 
 ### Sending it to the authority
@@ -460,8 +547,9 @@ so they go where s41(2) says the evidence goes, to the authority that
 decides, not through the applicant (whose printable copy withholds the
 others' figures, [§ Applicants](#applicants)). On an issued pack's page an
 editor picks **Send to the authority…** (`POST …/packs/:packId/send`): the
-members the project's owner marked as acting for the responsible authority
-(editors and owners with `acts_for_authority`, 163), all of them or those
+members the authority confirmed as acting for it (confirmed delegates
+holding editor or above, directly or through the team,
+`app_authority_members`, 229; a proposal gets nothing), all of them or those
 picked, never the sender, each get an email (`pack_sent`) naming the pack,
 its version, code and the authority, with the editor's note. The email
 holds **no file and no download link**: it links the pack's page, where
@@ -617,9 +705,9 @@ make the authority's side its author.
   `specialist`; a run's sign-off is always `specialist`. Verify and the
   sign-off lists print the kind.
 - **The registration check.** Someone at the host looks the signer up on
-  the public SACNASP or ECSA register, and an owner, or an editor an owner
-  marked as acting for the responsible authority
-  (`project_member.acts_for_authority`, 163), records what they found on the
+  the public SACNASP or ECSA register, and an owner, or an editor the
+  authority confirmed as acting for it (`app_acts_for_authority`, 163,
+  229), records what they found on the
   Project page's Registration checks panel
   (`POST /projects/:id/members/:userId/registration-checks`,
   `app_record_registration_check`; insert-only). A check is current for a
@@ -661,11 +749,14 @@ its makers under the hash the verify page checks (POPIA s14(1)(b), s14(6)(b);
 (161_licence_record, the Project page's **Licence record** panel, [api.md §
 Licence record](./api.md#licence-record)):
 
-- **Granted**: the licence's expiry date (NWA s28(1)(e), at most 40 years)
-  **+ 3 years**, for a professional-negligence claim on the assessment
-  (Prescription Act s11(d), s12(3)).
-- **Refused or withdrawn**: the decision date **+ 3 years** (PAJA's 180
-  days, Water Tribunal appeals and prescription).
+- **Licence issued**: the licence's expiry date (NWA s28(1)(e), at most 40
+  years) **+ 3 years**, for a professional-negligence claim on the
+  assessment (Prescription Act s11(d), s12(3)).
+- **Licence refused, application rejected, not considered, or application
+  withdrawn**: the outcome's date **+ 3 years** (PAJA's 180 days, Water
+  Tribunal appeals and prescription). The outcome words are the authority's
+  (D14, as an application's decision records them; 233, issue #523 G9 (b));
+  the withdrawal is the applicant's, which the authority doesn't decide.
 - **No outcome recorded**: a review every **5 years**, from the first pack
   issued or run nominated (mirroring the NWA s28(1)(f) review interval).
   The owners record the outcome, or confirm the record is still needed,
@@ -848,11 +939,12 @@ non-member `404`, as for every pack route; share links, the verify page and
 the applicant's view never offer the bundle, the manifest or the PDF.
 
 **What it holds** (engine `packages/engine/src/evidence/bundle.ts`,
-`buildPackBundle`, layout `bundle-1`):
+`buildPackBundle`, layout `bundle-2` since issue #523 G2; `checkPackBundle`
+reads `bundle-1` and `bundle-2`):
 
 | Entry | What |
 | --- | --- |
-| `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, and the SHA-256 of every other entry |
+| `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, the headline pair's two results digests (`headline`, `bundle-2`; null without a recorded pair), and the SHA-256 of every other entry |
 | `manifest.json` | the manifest as its RFC 8785 text: its SHA-256 *is* the manifest hash |
 | `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash), `<run>` `baseline` and, for an application, `application` |
 | `runs/<run>/results.json` | the run's stored summary and the SHA-256 of each daily output (results `results-1`) |
@@ -922,16 +1014,22 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | `changes`, `scenario` | the application's inputs differ from the baseline's by exactly the changes the manifest lists, and the scenario's ops hash to the hash it names (application packs) |
 | `results:<run>` | the stored summary is the manifest's, and `results.json` gives the digest `bundle.json` names |
 | `reproduce:<run>` | re-running the run's input with this checkout's engine gives the same results digest (skipped with `--no-run`) |
+| `headline` | application packs: the manifest's headline board records its pair (`evidence-19`) with the digests `bundle.json` names, the application's ops hash and the baseline's engine, and the full mix built again from the baseline input's registered volumes and the recorded kinds (as at the baseline) is the manifest's. Passes with *headline not included (older pack)* for a `bundle-1` bundle or a board built before the pair was recorded, and with *no headline board to re-run* when page 1 has none |
+| `reproduce:headline` | the pair re-derived from the bundle (the baseline input at `fullAllocation`, `scenario.json`'s ops on it) and re-run with this checkout's engine gives both recorded results digests, and the board built again over it is the manifest's (skipped with `--no-run`) |
 
-It exits 0 when every check passes, 1 when any fails (naming what differs:
+The folded mix a restricted viewer reads isn't checked: it counts holders by
+219's salted keys, which never leave the server. It exits 0 when every check passes, 1 when any fails (naming what differs:
 the summary's paths, the daily outputs), and 2 on a usage error. A run made
 with another engine version is expected to differ: the output says which
 engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
 (round trip, determinism, and each tampering beside a positive control),
 `packages/engine/src/zip/zip.test.ts`,
-`scripts/reproduce-pack/reproduce-pack.test.ts` and, against the database and
-MinIO, `backend/src/evidence/packs.db.test.ts` (issue, download, reproduce
-both a baseline and an application pack; the setter's refusals).
+`scripts/reproduce-pack/reproduce-pack.test.ts` (with the headline pair: a
+tampered digest fails, an older bundle passes with the note) and, against
+the database and MinIO, `backend/src/evidence/packs.db.test.ts` (issue,
+download, reproduce both a baseline and an application pack; the setter's
+refusals) and `backend/src/evidence/authorised-impact.db.test.ts` (a bundle
+of a report with a recorded pair re-runs it offline).
 
 **Re-run on the server** (154_pack_reproduce, 2026-10-01). Issue checks the
 bundle as `--no-run` would; the re-run takes as long as the runs, so the
@@ -1130,6 +1228,18 @@ link as an editor and was demoted since, and isn't a party, no longer sees
 or revokes it. The link shows the public projection above
 ([§ Sharing and comments](#sharing-and-comments)), which names no unit, the
 applicant's own included.
+
+**The decision, its terms and what followed** (227_licence_terms,
+228_decision_events, issue #523 G3, G4). On the Application panel the
+applicant reads the authority's decision, the licence's granted terms (as
+applied for, or the changes as licensed, naming only their own units; a
+neighbour's is an anonymous farm to them, as in their base) with its
+conditions, and the appeal events recorded after it (lodged, upheld, set
+aside, varied, with a variation's terms), with a line saying whether the
+licence counts in cumulative assessments now. They come with the scenario
+(`GET …/scenarios/:sid`): the events table's policy asks the scenario's own,
+so whoever reads the application reads them and nobody else does. Only a
+member acting for the responsible authority records any of them.
 
 **Why functions, not a policy.** A row policy for contributors on
 `evidence_pack` would hand them the whole manifest (RLS picks rows, not

@@ -158,10 +158,14 @@ export interface WaterAccountEwr {
  *   out = land-cover reduction + natural flow not allocated to a farm
  *       + consumptive irrigation + other users' consumptive use
  *       + dam evaporation + dam seepage lost from the catchment (WP-3.5)
- *       + evaporation from the river abstractions' pools (engine ≥ 1.65.0)
+ *       + evaporation from the river abstractions' pools (engines 1.65.0–1.85.x;
+ *         a pool is storage only from 1.86.0, so the term is gone)
  *       + stream depletion + river off-takes' conveyance losses (engine ≥ 1.14.0,
  *         less the share that seeps back to the river, engine ≥ 1.42.0)
  *       + bed losses in the reaches between nodes (engine ≥ 1.75.0)
+ *       + the units' base-flow losses (engine 1.86.0; their gains are an in term)
+ *       + transfers out of the catchment (engine ≥ 1.86.0; the net transfers
+ *         in `in` are then those between units)
  *       + outflow at the outlet
  * A dam release (WP-3.5) joins the river below the dam, so it is already in
  * the outflow (or taken again downstream): a memo, not a term.
@@ -184,7 +188,7 @@ export interface WaterAccountRow {
 	 * only on a run with the reset.
 	 */
 	storageSetM3?: number;
-	/** Σ transfers in − out over all farms: 0 up to float noise (a transfer moves water inside the network). */
+	/** Σ transfers in − out over all farms: 0 up to float noise (a transfer moves water inside the network). What transfer rules send out of the catchment (engine ≥ 1.86.0) is `externalTransferM3`, not here. */
 	transfersM3: number;
 	inM3: number;
 	/** Natural runoff removed by land cover (invasive plants, forestry) before it reached the farms. */
@@ -196,7 +200,12 @@ export interface WaterAccountRow {
 	/** Other water users: taken − returned. */
 	otherUseM3: number;
 	damEvaporationM3: number;
-	/** Evaporation from the river abstractions' pools (engine ≥ 1.65.0); present only on a run with a pool. */
+	/**
+	 * Evaporation from the river abstractions' pools: engines 1.65.0–1.85.x
+	 * only, on a run with a pool. A pool is storage only from engine 1.86.0
+	 * (issue #523 B2), so a newer run never has it; kept so a stored run's
+	 * account still reads and still balances.
+	 */
 	poolEvaporationM3?: number;
 	/**
 	 * Dam seepage that leaves the catchment instead of returning below the dam
@@ -210,6 +219,12 @@ export interface WaterAccountRow {
 	conveyanceLossM3?: number;
 	/** Lost into the river bed in the reaches between nodes (engine ≥ 1.75.0, docs/model.md §2.6b); present only on a run with bed losses. */
 	reachLossM3?: number;
+	/** Sent out of the catchment by transfer rules (engine ≥ 1.86.0, issue #523 B5, docs/model.md §2.6); present only on a run with such a rule. */
+	externalTransferM3?: number;
+	/** The units' base-flow gains (engine 1.86.0, docs/model.md §2.6b), an in term; present only on a run with one. */
+	baseflowGainM3?: number;
+	/** The units' base-flow losses (engine 1.86.0), out of the catchment; present only on a run with one. */
+	baseflowLossM3?: number;
 	/** Simulated outflow at the outlet. */
 	outflowM3: number;
 	outM3: number;
@@ -288,8 +303,8 @@ export interface AccountNodeInput {
 	depletion: ArrayLike<number>;
 	/** End-of-day storage. */
 	storage: ArrayLike<number>;
-	/** The river abstractions' pools (engine ≥ 1.65.0): their end-of-day storage (counted with the dams'), evaporation and start, summed over the unit's pools; missing = none. */
-	pool?: { storage: ArrayLike<number>; evaporation: ArrayLike<number>; initialM3: number };
+	/** The river abstractions' pools (engine ≥ 1.65.0): their end-of-day storage (counted with the dams') and start, summed over the unit's pools; missing = none. Storage only from engine 1.86.0: no evaporation. */
+	pool?: { storage: ArrayLike<number>; initialM3: number };
 	/** The storage reset's step on its day (settings.damStorageReset, engine ≥ 0.46.0); missing = none. */
 	storageSet?: ArrayLike<number>;
 	/** River off-takes (engine ≥ 1.14.0): taken from the flow leaving this node, and delivered into it; missing = none. */
@@ -299,6 +314,11 @@ export interface AccountNodeInput {
 	offtakeReturn?: ArrayLike<number>;
 	/** Bed losses in the reach below this node (engine ≥ 1.75.0); missing = none. */
 	reachLoss?: ArrayLike<number>;
+	/** What its dam sent out of the catchment by transfer rules (engine ≥ 1.86.0, issue #523 B5), counted out in `transfer` too; missing = none. */
+	externalOut?: ArrayLike<number>;
+	/** A unit's base-flow loss and gain (engine 1.86.0); missing = none. */
+	baseflowLoss?: ArrayLike<number>;
+	baseflowGain?: ArrayLike<number>;
 	initialStorageM3: number;
 }
 
@@ -534,7 +554,9 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 	const natural = s(cum.natural);
 	const rainOnDams = s(cum.rainOnDam);
 	const groundwater = s(cum.groundwater);
-	const transfers = s(cum.transfer);
+	// The farms' J counts what left the catchment out too (engine ≥ 1.86.0): add it back here, an out term below.
+	const external = cum.external ? s(cum.external) : null;
+	const transfers = external === null ? s(cum.transfer) : s(cum.transfer) + external;
 	const storageSet = cum.storageSet ? s(cum.storageSet) : null;
 	const landCover = s(cum.landCover);
 	const unallocated = natural - s(cum.runoff) - landCover;
@@ -545,17 +567,19 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 	const seepageLost = s(cum.seepageLost);
 	const depletion = s(cum.depletion);
 	const conveyance = cum.conveyance ? s(cum.conveyance) : null;
-	const poolEvap = cum.poolEvaporation ? s(cum.poolEvaporation) : null;
 	const reach = cum.reachLoss ? s(cum.reachLoss) : null;
+	const bfGain = cum.baseflowGain ? s(cum.baseflowGain) : null;
+	const bfLoss = cum.baseflowLoss ? s(cum.baseflowLoss) : null;
 	const outflow = s(cum.outflow);
 	const opening = from === 0 ? cum.initialStorage : cum.storage[from - 1]!;
 	const closing = to < from ? opening : cum.storage[to]!;
 	const inBase = natural + rainOnDams + groundwater + transfers;
-	const inM3 = storageSet === null ? inBase : inBase + storageSet;
+	const inSet = storageSet === null ? inBase : inBase + storageSet;
+	const inM3 = bfGain === null ? inSet : inSet + bfGain;
 	const outBase = landCover + unallocated + consumptive + otherUse + evap + seepageLost + depletion + outflow;
 	const outConveyed = conveyance === null ? outBase : outBase + conveyance;
-	const outPooled = poolEvap === null ? outConveyed : outConveyed + poolEvap;
-	const outM3 = reach === null ? outPooled : outPooled + reach;
+	const outReach = reach === null ? outConveyed : outConveyed + reach;
+	const outM3 = outReach + (bfLoss ?? 0) + (external ?? 0);
 	const terms = [
 		natural,
 		rainOnDams,
@@ -570,8 +594,10 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 		seepageLost,
 		depletion,
 		...(conveyance === null ? [] : [conveyance]),
-		...(poolEvap === null ? [] : [poolEvap]),
 		...(reach === null ? [] : [reach]),
+		...(external === null ? [] : [external]),
+		...(bfGain === null ? [] : [bfGain]),
+		...(bfLoss === null ? [] : [bfLoss]),
 		outflow,
 		opening,
 		closing
@@ -606,11 +632,13 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 		consumptiveIrrigationM3: nz(consumptive),
 		otherUseM3: nz(otherUse),
 		damEvaporationM3: nz(evap),
-		...(poolEvap !== null ? { poolEvaporationM3: nz(poolEvap) } : {}),
 		damSeepageLostM3: nz(seepageLost),
 		streamDepletionM3: nz(depletion),
 		...(conveyance !== null ? { conveyanceLossM3: nz(conveyance) } : {}),
 		...(reach !== null ? { reachLossM3: nz(reach) } : {}),
+		...(external !== null ? { externalTransferM3: nz(external) } : {}),
+		...(bfGain !== null ? { baseflowGainM3: nz(bfGain) } : {}),
+		...(bfLoss !== null ? { baseflowLossM3: nz(bfLoss) } : {}),
 		outflowM3: nz(outflow),
 		outM3: nz(outM3),
 		damSeepageM3: nz(s(cum.seepage) - seepageLost),
@@ -653,14 +681,17 @@ interface DailyTotals {
 	outflow: Float64Array;
 	/** End-of-day storage over all nodes (not a prefix sum): the dams', and the river abstractions' pools' (engine ≥ 1.65.0). */
 	storage: Float64Array;
-	/** Evaporation from the river abstractions' pools over all nodes; null without a pool (engine ≥ 1.65.0). */
-	poolEvaporation: Float64Array | null;
 	/** The storage reset's steps over all nodes; null without one (engine ≥ 0.46.0). */
 	storageSet: Float64Array | null;
 	/** River off-takes' conveyance losses lost from the catchment (taken − delivered − seeped back) over all nodes; null without off-takes (engine ≥ 1.14.0). */
 	conveyance: Float64Array | null;
 	/** Bed losses in the reaches over all nodes; null without any (engine ≥ 1.75.0). */
 	reachLoss: Float64Array | null;
+	/** Sent out of the catchment by transfer rules over all nodes; null without such a rule (engine ≥ 1.86.0). */
+	external: Float64Array | null;
+	/** The units' base-flow gains and losses over all nodes; null without any (engine 1.86.0). */
+	baseflowGain: Float64Array | null;
+	baseflowLoss: Float64Array | null;
 	initialStorage: number;
 }
 
@@ -671,8 +702,10 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 	c.storage = new Float64Array(days);
 	c.storageSet = x.accountNodes.some((n) => n.storageSet) ? new Float64Array(days) : null;
 	c.conveyance = x.accountNodes.some((n) => n.offtakeOut) ? new Float64Array(days) : null;
-	c.poolEvaporation = x.accountNodes.some((n) => n.pool) ? new Float64Array(days) : null;
 	c.reachLoss = x.accountNodes.some((n) => n.reachLoss) ? new Float64Array(days) : null;
+	c.external = x.accountNodes.some((n) => n.externalOut) ? new Float64Array(days) : null;
+	c.baseflowGain = x.accountNodes.some((n) => n.baseflowGain) ? new Float64Array(days) : null;
+	c.baseflowLoss = x.accountNodes.some((n) => n.baseflowLoss) ? new Float64Array(days) : null;
 	c.initialStorage = x.accountNodes.reduce((a, n) => a + n.initialStorageM3 + (n.pool ? n.pool.initialM3 : 0), 0);
 	// Node by node, each over every day: a day's total still adds the nodes in
 	// the list's (node-id) order, starting from 0, so every total is the same
@@ -711,12 +744,12 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 		for (let t = 0; t < days; t++) c.groundwater[t] = c.groundwater[t]! + (gw[t]! + (gwDam?.[t] ?? 0));
 		add(c.depletion, n.depletion);
 		add(c.storage, n.storage);
-		if (n.pool) {
-			add(c.storage, n.pool.storage);
-			add(c.poolEvaporation!, n.pool.evaporation);
-		}
+		if (n.pool) add(c.storage, n.pool.storage);
 		if (c.storageSet) addOptional(c.storageSet, n.storageSet);
 		if (c.reachLoss) addOptional(c.reachLoss, n.reachLoss);
+		if (c.external) addOptional(c.external, n.externalOut);
+		if (c.baseflowGain) addOptional(c.baseflowGain, n.baseflowGain);
+		if (c.baseflowLoss) addOptional(c.baseflowLoss, n.baseflowLoss);
 		if (c.conveyance) {
 			const o = n.offtakeOut;
 			const d = n.offtakeIn;

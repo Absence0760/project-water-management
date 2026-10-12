@@ -77,7 +77,7 @@ function convertUpstreamPct(wb: B023Workbook, farms: Map<string, FarmSpec>, repo
 	for (const f of farms.values()) f.pctUpstreamToDam = 1 - f.pctUpstreamToDam;
 	report.note(
 		'upstream-pct-converted',
-		"[Farm spec] Upstream inflow above dam %: b023's formula sends that share past the dam, not into it, so the import " +
+		"[Farm spec] Upstream inflow above dam %: the workbook's formula sends that share past the dam, not into it, so the import " +
 			"stores 100 % − the workbook's value, which keeps what the workbook ran: 100 % there is an off-channel dam (0 % " +
 			'here), 0 % a dam on the river (100 % here). Check each dam (docs/model.md §3 Q1)',
 		{ sheet }
@@ -222,28 +222,24 @@ export function runOfRiverNote(name: string, pctUpstream: number, capacity: numb
 	}
 	return (
 		`WARNING: farm ${name}: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the upstream ` +
-		`inflow and ${why}. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; ` +
+		`inflow and ${why}. The workbook has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; ` +
 		'the app imports it as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)'
 	);
 }
 
-// A probable placeholder pool (issue #90 Q18): extract_project.py
-// placeholder_pool_note, whose comment has the reasoning. A farm dam that takes
-// less than 100 % of the upstream inflow (so runOfRiverNote never flags it) and
-// holds under 100 m³ (less than a day of one hectare's peak irrigation) or under
-// 1 % of a day of its diversion capacity stores nothing across a daily step.
-const PLACEHOLDER_POOL_MAX_M3 = 100;
+// A small pool (issue #90 Q18, answered 2026-10-11): extract_project.py
+// small_pool_note, whose comment has the reasoning. A farm dam that takes less
+// than 100 % of the upstream inflow (so runOfRiverNote never flags it) and holds
+// under 100 m³ or under 1 % of a day of its diversion capacity. A pool's
+// capacity is user defined and even a small one stays in the model, so this is
+// a neutral note of the capacity, not a warning.
+const SMALL_POOL_MAX_M3 = 100;
 
-/** placeholder_pool_note(): a WARNING for a near-empty dam runOfRiverNote leaves alone (same text). */
-export function placeholderPoolNote(name: string, pctUpstream: number, capacity: number, divert: number): string | null {
+/** small_pool_note(): a neutral note of a small pool's capacity, for a dam runOfRiverNote leaves alone (same text). */
+export function smallPoolNote(name: string, pctUpstream: number, capacity: number, divert: number): string | null {
 	if (capacity <= 0 || pctUpstream >= RUN_OF_RIVER_PCT_UPSTREAM) return null;
-	if (!(capacity < PLACEHOLDER_POOL_MAX_M3 || capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert)) return null;
-	return (
-		`WARNING: farm ${name}: probable placeholder pool, for the modeller to confirm: its dam holds ${pyFormatG(capacity)} m³, ` +
-		`less than a day's peak irrigation of one hectare, and takes ${pyFormatG(pctUpstream * 100)} % of the upstream inflow, ` +
-		'so it stores nothing from one day to the next. If it is a placeholder, set the dam capacity to 0; if the unit ' +
-		'pumps from the river, set its supply rule to run of river with a pump capacity (issue #90 Q18)'
-	);
+	if (!(capacity < SMALL_POOL_MAX_M3 || capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert)) return null;
+	return `farm ${name}: a small pool of ${pyFormatG(capacity)} m³, imported as entered (a pool's capacity is user defined, issue #90 Q18)`;
 }
 
 /**
@@ -274,7 +270,7 @@ export function asRunOfRiver(
 	const what = dropped > 0 ? `its ${Math.floor(dropped + 0.5)} m³ dummy dam is dropped` : 'it has no dam';
 	return (
 		`WARNING: farm ${name}: imported as run of river (--run-of-river): ${what}, and a river pump takes its demand ` +
-		'from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this ' +
+		'from the river below it. The workbook gives no pump capacity (it has none, and nothing there capped this ' +
 		"unit's take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply " +
 		'section (issue #54, 2c/2d)'
 	);

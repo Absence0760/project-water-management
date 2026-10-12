@@ -17,7 +17,7 @@ const INFO_HEADINGS = ['From', 'To'];
 type Rule = Pick<Transfer, 'id' | 'fromNodeId' | 'toNodeId' | 'months' | 'maxRateM3s' | 'monthlyRateM3s'>;
 
 /** Each rule as a row of the paste: "Transfer N", also matched by "From → To" (or "From -> To"). */
-export function transferRows(transfers: readonly Rule[], nodeName: (id: string) => string, scale: number, unit: string): MonthlyRow[] {
+export function transferRows(transfers: readonly Rule[], nodeName: (id: string | null) => string, scale: number, unit: string): MonthlyRow[] {
 	return transfers.map((t, i) => {
 		const [from, to] = [nodeName(t.fromNodeId), nodeName(t.toNodeId)];
 		return { id: t.id, name: `Transfer ${i + 1}`, aliases: [`${from} → ${to}`, `${from} -> ${to}`], unit, values: transferRatesM3s(t).map((r) => r * scale) };
@@ -43,7 +43,7 @@ export function applyTransferPaste(plan: PastePlan, transfers: readonly Transfer
 }
 
 /** The rules as a CSV to fill in and paste back: Transfer, From, To, then Oct … Sep in the shown unit (0 = off). */
-export function transfersCsv(transfers: readonly Rule[], nodeName: (id: string) => string, scale: number, unit: string): string {
+export function transfersCsv(transfers: readonly Rule[], nodeName: (id: string | null) => string, scale: number, unit: string): string {
 	const rows = transferRows(transfers, nodeName, scale, unit);
 	const rule = (r: MonthlyRow) => transfers.find((t) => t.id === r.id)!;
 	return monthlyRowsCsv(

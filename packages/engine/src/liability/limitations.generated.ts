@@ -74,39 +74,11 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Fixed, engine 1.22.0 (issue #66; provisional decision 2026-10-01 keeps the defaults, the hydrologist's confirmation pending; zero-flow stretches changed in engine 1.62.0, C3)"
 	},
 	{
-		"id": "A1",
-		"source": "finding",
-		"severity": "Medium (Reserve rule-table sites whose natural flow falls below the table's driest point: (100 − P_last) % of months with the percentile from the run, 1 % at the DRM's 99 % point; more with the gazette's curve when the model runs drier)",
-		"title": "Below a rule table's driest point the requirement is scaled down with the flow, not held at the drought flow",
-		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
-	},
-	{
-		"id": "A2",
-		"source": "finding",
-		"severity": "Low",
-		"title": "A rule table is interpolated linearly between its % points; Sawunyama & Hughes (2010) interpolate on a log scale",
-		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
-	},
-	{
-		"id": "A3",
-		"source": "finding",
-		"severity": "Medium (sites whose modelled natural flow differs from the determination's)",
-		"title": "By default a month's natural percentile comes from the run's own natural flow, not the gazette's natural curve",
-		"status": "Decided (from the literature and the persona drafts, engines 0.21.0 and 1.11.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
-	},
-	{
 		"id": "A4",
 		"source": "finding",
 		"severity": "Medium (sites with a Reserve rule table)",
 		"title": "The daily EWR charge, curtailment and the water account follow the pragmatic EWR by default, while the Reserve compliance report follows the rule table",
 		"status": "Built (engine 1.3.0, issue #64), off by default; provisional decision 2026-10-01 keeps it; the hydrologist's or the assessor's confirmation pending"
-	},
-	{
-		"id": "A5",
-		"source": "finding",
-		"severity": "Medium (sites with a low-flow requirement and floods in dry months)",
-		"title": "By default a low-flow requirement is judged on the month's total volume, so a flood month can pass its low flows while its base flow was short",
-		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; the filter's settings pending a check against the DRM's published method"
 	},
 	{
 		"id": "A6",
@@ -149,13 +121,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"severity": "Medium (full-allocation runs of a unit with a domestic or municipal demand object whose registered volume is below its demand)",
 		"title": "A full allocation rescales a domestic or municipal object below its basic-needs floor unless a restriction is in force that day",
 		"status": "Needs hydrologist (engine 1.44.0, issue #123)"
-	},
-	{
-		"id": "R2",
-		"source": "finding",
-		"severity": "Low (units with a demand on a river abstraction of its own, engine 1.65.0)",
-		"title": "A demand's own river abstraction beside a unit's dam runs on choices the hydrologist hasn't confirmed",
-		"status": "Needs hydrologist (engine 1.65.0, issue #344)"
 	},
 	{
 		"id": "R3",

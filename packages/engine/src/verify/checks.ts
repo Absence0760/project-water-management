@@ -18,19 +18,20 @@ import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../ne
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
-import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
+import { canMove, externalRuleKeys, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { reachLossDay, reachLossOf, REACH_LOSS_SERIES, SENIOR_REACH_LOSS_SERIES } from '../network/reachLoss';
+import { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, baseflowLossDay, baseflowOf } from '../network/baseflow';
 import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
-import { hasPumpLimit, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
-import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
+import { hasPumpLimit, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
+import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES, userRestrictionShare } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
+import { DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -75,6 +76,27 @@ const capRoomOn = (c: ArrayLike<number> | undefined, t: number): number => {
 	const v = c?.[t];
 	return v === undefined || Number.isNaN(v) ? Infinity : v;
 };
+/**
+ * What a unit's dam rules sent out of the catchment each day (engine ≥
+ * 1.86.0), from their own `transfer_rule@` series: its surface use under an
+ * allocation cap and in the comparison (engine ≥ 1.88.0,
+ * docs/engine-audit.md X1). Null without such a rule (or its series).
+ */
+function externalSent(input: ModelInput, nodeId: string, get: SeriesMap, days: number): Float64Array | null {
+	const list = externalRuleKeys(input.model.transfers, nodeId).flatMap((k) => {
+		const v = get.get(`${nodeId}|${k}`);
+		return v ? [v] : [];
+	});
+	if (!list.length) return null;
+	const out = new Float64Array(days);
+	for (const v of list) for (let t = 0; t < days; t++) out[t] = out[t]! + (v[t] ?? 0);
+	return out;
+}
+/** A surface room column less what was sent out of the catchment first, never below 0; a blank day stays blank. */
+function roomAfterExternal(room: ArrayLike<number> | undefined, ext: Float64Array | null): ArrayLike<number> | undefined {
+	if (!room || !ext) return room;
+	return Float64Array.from({ length: room.length }, (_, t) => (Number.isNaN(room[t]!) ? NaN : ext[t]! > 0 ? Math.max(0, room[t]! - ext[t]!) : room[t]!));
+}
 const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site', ...ALLOCATION_CAP_COLUMNS]);
 
 /**
@@ -139,10 +161,16 @@ interface RiverColumns {
 	objOnRiver: Uint8Array;
 	got: number[][];
 	pool: (number[] | null)[];
-	evap: (number[] | null)[];
 	/** The pump-limited column (engine ≥ 1.66.0), exactly with a pump capacity; null without one. */
 	pumpLimited: (number[] | null)[];
 }
+
+/**
+ * The prefix of the pool evaporation column engines 1.65.0–1.85.x published.
+ * A pool is storage only from engine 1.86.0 (issue #523 B2), so such a
+ * column is always stray.
+ */
+const LEGACY_POOL_EVAPORATION_PREFIX = 'river_pool_evaporation@';
 
 /**
  * A unit's river abstractions as the model states them and the run's columns
@@ -151,7 +179,7 @@ interface RiverColumns {
  */
 function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): RiverColumns | string | null {
 	const river = riverSourcesOf(n, demandObjectsByNode(input.model, []).get(n.id), []).river;
-	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, RIVER_TAKE_SERIES.poolEvaporation.prefix, RIVER_TAKE_SERIES.pumpLimited.prefix];
+	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, LEGACY_POOL_EVAPORATION_PREFIX, RIVER_TAKE_SERIES.pumpLimited.prefix];
 	const stray = out.series.find(
 		(x) =>
 			x.nodeId === n.id &&
@@ -159,24 +187,22 @@ function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: Mo
 			!river?.takes.some(
 				(k) =>
 					x.key === riverTakeKey(k.key) ||
-					(k.pool && (x.key === riverPoolKey(k.key) || x.key === riverPoolEvaporationKey(k.key))) ||
+					(k.pool && x.key === riverPoolKey(k.key)) ||
 					(hasPumpLimit(k) && x.key === riverPumpLimitedKey(k.key))
 			)
 	);
 	if (stray) return `${n.id}: a ${stray.key} column without the river abstraction behind it`;
 	if (!river) return null;
-	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, cropShare: river.cropShare, objOnRiver: river.objOnRiver, got: [], pool: [], evap: [], pumpLimited: [] };
+	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, cropShare: river.cropShare, objOnRiver: river.objOnRiver, got: [], pool: [], pumpLimited: [] };
 	for (const k of river.takes) {
 		const g = get.get(`${n.id}|${riverTakeKey(k.key)}`);
 		const p = k.pool ? get.get(`${n.id}|${riverPoolKey(k.key)}`) : null;
-		const e = k.pool ? get.get(`${n.id}|${riverPoolEvaporationKey(k.key)}`) : null;
-		if (!g || (k.pool && (!p || !e))) return `${n.id}: river abstraction ${k.key} has no ${!g ? 'take' : 'pool'} column`;
+		if (!g || (k.pool && !p)) return `${n.id}: river abstraction ${k.key} has no ${!g ? 'take' : 'pool'} column`;
 		// Its pump's limit (engine ≥ 1.66.0): exactly with a pump capacity.
 		const pl = hasPumpLimit(k) ? get.get(`${n.id}|${riverPumpLimitedKey(k.key)}`) : null;
 		if (!pl && hasPumpLimit(k)) return `${n.id}: river abstraction ${k.key} has a pump capacity and no pump-limited column`;
 		cols.got.push(g);
 		cols.pool.push(p ?? null);
-		cols.evap.push(e ?? null);
 		cols.pumpLimited.push(pl ?? null);
 	}
 	return cols;
@@ -447,10 +473,15 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		// A crop supply table's remote share (engine ≥ 1.73.0): into this unit's crops, out of this unit's dam.
 		const RIN = get.get(`${n.id}|${REMOTE_SERIES.in.key}`);
 		const ROUT = get.get(`${n.id}|${REMOTE_SERIES.out.key}`);
-		// River abstractions' pools (engine ≥ 1.65.0): their change and evaporation leave the unit's balance; each starts full.
+		// River abstractions' pools (engine ≥ 1.65.0): their change leaves the unit's balance; each starts full. Storage only (engine ≥ 1.86.0): no evaporation.
 		const riv = riverColumns(input, n, get, out);
 		if (typeof riv === 'string') return riv;
 		const poolPrev = riv ? riv.takes.map((k) => k.pool?.capM3 ?? 0) : [];
+		// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): a series exactly when the setting has one.
+		const BFL = get.get(`${n.id}|${BASEFLOW_LOSS_SERIES.key}`);
+		const BFG = get.get(`${n.id}|${BASEFLOW_GAIN_SERIES.key}`);
+		const bf = baseflowOf(n, []).baseflow;
+		if (!!BFL !== !!bf?.lossM3Day || !!BFG !== !!bf?.gainM3Day) return `${n.id}: base-flow series ${BFL ? 'loss' : ''}${BFG ? ' gain' : ''} don't match the setting`;
 		for (let t = 0; t < out.days; t++) {
 			let pools = 0;
 			if (riv) {
@@ -460,8 +491,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 					const v = p[t]!;
 					const capP = riv.takes[a]!.pool!.capM3;
 					if (v < -1e-9 || v > capP + tol(capP)) return `${n.id} day ${t}: pool of river abstraction ${riv.takes[a]!.key} holds ${v}, outside [0, ${capP}]`;
-					if (riv.evap[a]![t]! < 0) return `${n.id} day ${t}: pool evaporation ${riv.evap[a]![t]} < 0`;
-					pools += v - poolPrev[a]! + riv.evap[a]![t]!;
+					pools += v - poolPrev[a]!;
 					poolPrev[a] = v;
 				}
 			}
@@ -482,9 +512,17 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const gw = (GW?.[t] ?? 0) + (GD?.[t] ?? 0);
 			const dep = DEP?.[t] ?? 0;
 			const spl = SPL?.[t] ?? 0;
-			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret + rin;
-			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout + pools + rout;
 			const where = `${n.id} day ${t}`;
+			// The day's base-flow loss is MIN(L, I), its gain the setting's, every day.
+			const bfl = BFL?.[t] ?? 0;
+			const bfg = BFG?.[t] ?? 0;
+			if (bf) {
+				const want = baseflowLossDay(bf, I![t]!);
+				if (Math.abs(bfl - want) > tol(want)) return `${where}: base-flow loss ${bfl} ≠ MIN(${bf.lossM3Day}, runoff ${I![t]}) = ${want}`;
+				if (bfg !== bf.gainM3Day) return `${where}: base-flow gain ${bfg} ≠ ${bf.gainM3Day}`;
+			}
+			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret + rin + bfg;
+			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout + pools + rout + bfl;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
 			if (spl < 0 || spl > (Sp?.[t] ?? 0) + tol(spl)) return `${where}: seepage lost ${spl} outside [0, seepage ${Sp?.[t]}]`;
 			if (pd < 0 || ev < 0 || (Sp?.[t] ?? 0) < 0) return `${where}: rain on dam ${pd}, evaporation ${ev} and seepage ${Sp?.[t]} must be ≥ 0`;
@@ -506,8 +544,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const AB = ABs![t]!;
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
-			totIn += I![t]! + pd + gw + xin + xret + rin;
-			totOut += G![t]! - T + ev + dep + spl + xout + pools + rout;
+			totIn += I![t]! + pd + gw + xin + xret + rin + bfg;
+			totOut += G![t]! - T + ev + dep + spl + xout + pools + rout + bfl;
 			qPrev = Q![t]!;
 		}
 		totOut += qPrev;
@@ -515,14 +553,26 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	const sim = get.get('null|simulated_outflow')!;
 	const outletU = get.get(`${outlet.id}|outflow`)!;
 	const farmJ = nodes.filter((n) => n.kind === 'farm').map((n) => get.get(`${n.id}|transfer`)!);
+	// Transfers out of the catchment (engine ≥ 1.86.0): each rule's own volume, which its source's J counts out.
+	const extVol = externalRules(input.model.transfers, nodes)
+		.filter(canMove)
+		.map((tr) => get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`));
+	if (extVol.some((v) => !v)) return 'a transfer rule out of the catchment has no stored volume';
 	const catEwr = get.get('null|ewr')!;
 	const catShort = get.get('null|ewr_shortfall')!;
 	for (let t = 0; t < out.days; t++) {
 		if (sim[t] !== outletU[t]) return `day ${t}: simulated outflow ≠ the outlet's outflow`;
 		totOut += sim[t]!;
+		let ext = 0;
+		for (const v of extVol) {
+			if (!(v![t]! >= 0)) return `day ${t}: a transfer out of the catchment moved ${v![t]}, must be ≥ 0`;
+			ext += v![t]!;
+		}
+		// What left the catchment is an out term; the rest of the transfers move water between units.
+		totOut += ext;
 		let Jsum = 0;
 		for (const a of farmJ) Jsum += a[t]!;
-		if (Math.abs(Jsum) > 1e-6) return `day ${t}: transfers do not net to 0 (${Jsum})`;
+		if (Math.abs(Jsum + ext) > 1e-6) return `day ${t}: transfers between units do not net to 0 (${Jsum + ext}${ext ? `, ${ext} sent out of the catchment` : ''})`;
 		const e = catEwr[t]!;
 		const sh = catShort[t]!;
 		if (sh > 0 || Math.abs(sh - Math.min(sim[t]! - e, 0)) > 1e-12 * Math.max(Math.abs(sim[t]!), Math.abs(e))) return `day ${t}: catchment EWR shortfall ${sh}`;
@@ -606,6 +656,18 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 }
 
 /**
+ * A unit's runoff as it reaches the river or its dam: I − its base-flow loss + its base-flow gain (engine 1.86.0,
+ * docs/model.md §2.6b); the runoff series itself on a unit without them.
+ */
+function runoffAfterBaseflow(get: SeriesMap, id: string): number[] | undefined {
+	const I = get.get(`${id}|runoff`);
+	const L = get.get(`${id}|${BASEFLOW_LOSS_SERIES.key}`);
+	const G = get.get(`${id}|${BASEFLOW_GAIN_SERIES.key}`);
+	if (!I || (!L && !G)) return I;
+	return I.map((v, t) => v - (L?.[t] ?? 0) + (G?.[t] ?? 0));
+}
+
+/**
  * The priority users' requirement a node passes, less the claims' share of the bed losses in the reach below it
  * (`senior_reach_loss`, engine ≥ 1.75.0, docs/model.md §2.6b), what they need below the reach.
  */
@@ -618,6 +680,9 @@ const arrivingSenior = (zs: number, claimsLost: ArrayLike<number> | undefined, t
  * it returns T = r × G; U = H − G + T; deficit = D − G; its EWR shortfall is
  * MIN(U − Z, 0) with Z the upstream requirement (it has no share of its own);
  * a priority user takes its demand out of the priority requirement below it.
+ * A Priority user with a fixed restriction % (engine 1.86.0, issue #523 B3)
+ * asks for its restricted_demand instead of D (checkDroughtRestriction checks
+ * the cut itself); its deficit stays D − G.
  */
 function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<ModelInput['model']['boreholes']>, day0: number, get: SeriesMap, ups: readonly NetworkNode[], days: number): string | null {
 	const g = (k: string) => get.get(`${n.id}|${k}`);
@@ -641,12 +706,16 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 	const PL = g('pump_limited');
 	if ((pump !== null) !== !!PL) return `${n.id}: user pump_limited ${pump !== null ? 'missing for a pump capacity' : 'without a pump capacity'}`;
 	if (g('river_abstraction')) return `${n.id}: a user has no river_abstraction series (its river take is supplied − groundwater_used)`;
+	// Its demand after the drought restriction's fixed % (engine 1.86.0): what it asked the river and its boreholes for.
+	const DR = g(RESTRICTION_SERIES.restricted.key);
 	for (let t = 0; t < days; t++) {
 		const where = `${n.id} day ${t}`;
 		let zIn = 0;
 		for (let k = 0; k < upZs.length; k++) zIn += arrivingSenior(upZs[k]?.[t] ?? 0, upLost[k], t);
 		const h = H[t]!;
-		const d = D[t]!;
+		const d0 = D[t]!;
+		const d = DR ? DR[t]! : d0;
+		if (DR && (d < 0 || d > d0 + tol(d0))) return `${where}: user restricted demand ${d} outside [0, demand ${d0}]`;
 		const gw = GW?.[t] ?? 0;
 		const dep = DEP?.[t] ?? 0;
 		const avail = senior ? h : Math.max(0, h - zIn);
@@ -657,7 +726,7 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		const want = rp.surface + wantGw;
 		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − priority requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
 		if (Math.abs(gw - wantGw) > tol(d)) return `${where}: user pumped ${gw} ≠ ${wantGw} (borehole rule)`;
-		if (Math.abs(W[t]! - (d - G[t]!)) > tol(d)) return `${where}: user deficit ≠ demand − taken`;
+		if (Math.abs(W[t]! - (d0 - G[t]!)) > tol(d0)) return `${where}: user deficit ≠ demand − taken`;
 		if (Math.abs(T[t]! - r * G[t]!) > tol(G[t]!)) return `${where}: user return ${T[t]} ≠ ${r} × taken ${G[t]}`;
 		if (Math.abs(U[t]! - (h - (G[t]! - gw) + T[t]! - dep)) > tol(Math.max(h, gw))) return `${where}: user balance: outflow ${U[t]} ≠ inflow ${h} − taken from the river ${G[t]! - gw} + returned ${T[t]} − depletion ${dep}`;
 		const noise = 1e-12 * Math.max(Math.abs(U[t]!), Math.abs(Z[t]!));
@@ -675,8 +744,14 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 	return null;
 }
 
+/** Rule.to of a rule out of the catchment (engine ≥ 1.86.0): no node has this id. */
+const OUTSIDE = '\u0000outside';
+/** The destination a rule out of the catchment is checked against: a farm with endless room, never a node. */
+const OUTSIDE_NODE = { id: OUTSIDE, kind: 'farm' } as const;
+
 interface Rule {
 	from: string;
+	/** The receiving farm's id, or OUTSIDE: out of the catchment (engine ≥ 1.86.0). */
 	to: string;
 	/** Whether the rule runs, by calendar month (index 1–12). */
 	on: Uint8Array;
@@ -719,7 +794,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const ruleDefs: Transfer[] = [];
 	for (const tr of input.model.transfers) {
 		const a = byId.get(tr.fromNodeId);
-		const b = byId.get(tr.toNodeId);
+		// Out of the catchment (engine ≥ 1.86.0): a destination with endless room, so only the source's limits apply.
+		const b = tr.toNodeId === null ? OUTSIDE_NODE : byId.get(tr.toNodeId);
 		// River off-takes (engine ≥ 1.14.0) have their own limits (checkOfftakes, below).
 		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm' || a === b || isRiverOfftake(tr)) continue;
 		// The month's own rate (engine ≥ 1.14.0), or the one max rate in the listed months.
@@ -745,6 +821,17 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		return { active, ins: farms.map((f) => active.filter((r) => r.to === f.id)), outs: farms.map((f) => active.filter((r) => r.from === f.id)) };
 	});
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
+	// Each farm's rules out of the catchment and their stored volumes (engine ≥ 1.86.0); null when one is missing.
+	const outsideSent = (id: string, t: number): number | null => {
+		let v = 0;
+		for (const tr of ruleDefs) {
+			if (tr.toNodeId !== null || tr.fromNodeId !== id || !canMove(tr)) continue;
+			const x = get.get(`${id}|${transferRuleKey(tr.id)}`)?.[t];
+			if (x === undefined) return null;
+			v += x;
+		}
+		return v;
+	};
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
 	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.54.0).
 	// A unit with river abstractions (engine ≥ 1.65.0): its dam side's part of it only, as the dam serves no other.
@@ -804,20 +891,25 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			const outs = outsOf[fi]!;
 			if (outs.length === 0 || insOf[fi]!.length) continue;
 			const dests = new Set(outs.map((r) => r.to));
-			if ([...dests].some((d) => active.some((r) => (r.to === d && r.from !== f.id) || r.from === d))) continue;
+			// The outside (engine ≥ 1.86.0) is shared by every source without limiting any: its room is endless.
+			if ([...dests].some((d) => d !== OUTSIDE && active.some((r) => (r.to === d && r.from !== f.id) || r.from === d))) continue;
 			const sent = -get.get(`${f.id}|transfer`)![t]!;
-			const got = [...dests].reduce((s, d) => s + get.get(`${d}|transfer`)![t]!, 0);
+			// What left the catchment is read from its rules' own volumes (none stored before engine 1.6.0: skip the source).
+			const outside = dests.has(OUTSIDE) ? outsideSent(f.id, t) : 0;
+			if (outside === null) continue;
+			const got = [...dests].reduce((s, d) => s + (d === OUTSIDE ? outside : get.get(`${d}|transfer`)![t]!), 0);
 			const where = `${f.id} day ${t}`;
 			if (Math.abs(sent - got) > tol(sent)) return `${where}: sent ${sent} but its destinations got ${got}`;
 			const prev = storage(f.id, t);
-			// What the destinations could take: per destination MIN(Σ limits into it, its room).
+			// What the destinations could take: per destination MIN(Σ limits into it, its room). Out of the catchment
+			// the room is the source's surface allocation room today (engine ≥ 1.88.0, docs/engine-audit.md X1),
+			// less a remote share it asked for, which the run doesn't store: with one, no floor is read for it.
+			const RSsrc = get.get(`${f.id}|${ALLOCATION_SERIES.surfaceRoom.key}`);
+			const outsideRoom = !RSsrc ? Infinity : get.has(`${f.id}|remote_dam_in`) ? 0 : capRoomOn(RSsrc, t);
 			let limit = 0;
 			for (const d of dests) {
-				const di = farmIndex.get(d)!;
-				limit += Math.min(
-					outs.filter((r) => r.to === d).reduce((s, r) => s + r.maxDaily, 0),
-					Math.max(0, roomOf(di, t))
-				);
+				const into = outs.filter((r) => r.to === d).reduce((s, r) => s + r.maxDaily, 0);
+				limit += d === OUTSIDE ? Math.min(into, outsideRoom) : Math.min(into, Math.max(0, roomOf(farmIndex.get(d)!, t)));
 			}
 			const floor = Math.min(limit, Math.max(prev - capOn(f.id, t) * Math.max(...outs.map((r) => r.reserve)), 0));
 			if (sent < floor - tol(Math.max(floor, prev))) return `${where}: sent only ${sent}; the rules and the destinations' room allowed ${floor} (storage ${prev})`;
@@ -948,7 +1040,7 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 	const byId = new Map(input.model.nodes.map((n) => [n.id, n]));
 	const warnings: string[] = [];
 	const rules = input.model.transfers
-		.filter((tr) => tr.enabled && isRiverOfftake(tr) && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm' && tr.fromNodeId !== tr.toNodeId)
+		.filter((tr): tr is Transfer & { toNodeId: string } => tr.enabled && isRiverOfftake(tr) && tr.toNodeId !== null && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm' && tr.fromNodeId !== tr.toNodeId)
 		.map((tr) => ({ tr, o: offtakeOf(tr, 0, 0, '', '', warnings), volume: get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`) }));
 	if (!rules.length) return null;
 	// Where each rule's returned seepage rejoins (engine ≥ 1.42.0), as planOfftakes resolves it; −1 = none returns.
@@ -1223,6 +1315,8 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
  * 0 ≤ supplied ≤ demand; a priority user is never cut and keeps its whole
  * charge; a non-priority user's cut −ΔG = MAX(charge ÷ k, −supplied) ≤ 0 with
  * k = 1 − return share, and the charge left standing = MIN(0, charge − k·cut).
+ * A priority user with a fixed restriction % c (engine 1.86.0) is cut by
+ * −ΔG = MAX(charge ÷ k, −supplied, −MAX(0, c·H − mean(D − restricted_demand))).
  */
 function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, from: number, to: number): string | null {
 	const users = input.model.nodes.filter((n) => n.kind === 'user');
@@ -1260,8 +1354,17 @@ function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, f
 		if (row.suppliedM3Day > row.demandM3Day || row.ewrChargeM3Day > 0) return `${w}: supplied ${row.suppliedM3Day} > demand or charge ${row.ewrChargeM3Day} > 0`;
 		const k = 1 - Math.min(Math.max(u.userReturnPct ?? 0, 0), 1);
 		const senior = (u.userPriority ?? 'senior') !== 'junior';
-		const cut = senior || !(k > 0) ? 0 : Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day);
-		if (row.curtailed === senior || !close(row.supplyCutM3Day, cut) || row.supplyCutM3Day > 0) return `${w}: supply cut ${row.supplyCutM3Day} ≠ ${cut} (${senior ? 'senior: not curtailed' : 'junior'})`;
+		// A senior user's fixed restriction % (engine 1.86.0, issue #523 B3): curtailed, by at most that share of its demand.
+		const rv = u.userRestrictionPct;
+		const c = senior && typeof rv === 'number' && Number.isFinite(rv) && rv > 0 && rv <= 1 ? rv : 0;
+		const curtailed = !senior || c > 0;
+		// What the drought restriction rule already took of its demand counts against the % (engine 1.86.0): the two cut at most c × H together.
+		const DR = c > 0 ? get.get(`${u.id}|${RESTRICTION_SERIES.restricted.key}`) : undefined;
+		const taken = DR ? Math.max(0, row.demandM3Day - sum(DR as number[], from, to) / n) : 0;
+		const room = Math.max(0, c * row.demandM3Day - taken);
+		const cut = !curtailed || !(k > 0) ? 0 : senior ? Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day, -room) : Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day);
+		if ((row.restrictionPct ?? 0) !== c) return `${w}: restriction % ${row.restrictionPct} ≠ the user's fixed ${c}`;
+		if (row.curtailed !== curtailed || !close(row.supplyCutM3Day, cut) || row.supplyCutM3Day > 0) return `${w}: supply cut ${row.supplyCutM3Day} ≠ ${cut} (${senior ? (c > 0 ? `senior, fixed ${c}` : 'senior: not curtailed') : 'junior'})`;
 		if (!close(row.uncurtailedChargeM3Day, Math.min(0, row.ewrChargeM3Day - cut * k))) return `${w}: charge left standing ${row.uncurtailedChargeM3Day}`;
 		if (!close(row.supplyCutLs, row.supplyCutM3Day / 86.4)) return `${w}: l/s ≠ m³/day ÷ 86.4`;
 	}
@@ -1459,7 +1562,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const returnPerSupplied = runReturnFlow(n.returnFlowFraction, e);
 		// Registered volumes (engine ≥ 1.18.0): a full allocation's factor on the demand, a cap's room per source.
 		const KF = g(ALLOCATION_SERIES.demandFactor.key);
-		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
+		// The surface room left to the unit's own sources: the day's room less what its dam rules sent out of the
+		// catchment first (engine ≥ 1.88.0, docs/engine-audit.md X1); blank stays blank.
+		const RS = roomAfterExternal(g(ALLOCATION_SERIES.surfaceRoom.key), externalSent(input, n.id, get, out.days));
 		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 		// The demand factor on F each day (the demand.scale scenario op from settings.demandFactorFrom, × a full allocation's).
 		// On F, the crops' own factor too (engine ≥ 1.45.0, demand.scale with part 'crops').
@@ -1527,9 +1632,12 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// The unit's own level under the 'own' basis (engine ≥ 1.54.0), else the catchment's.
 		const LV = g(RESTRICTION_SERIES.level.key) ?? get.get(`null|${RESTRICTION_SERIES.level.key}`);
 		if (DR && (!rule || !LV)) return `${n.id}: a restricted_demand column without a drought restriction rule and its level column`;
+		// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): the runoff the split reads is I − loss + gain.
+		const BFL = g(BASEFLOW_LOSS_SERIES.key);
+		const BFG = g(BASEFLOW_GAIN_SERIES.key);
 		for (let t = 0; t < out.days; t++) {
 			if (SET) qPrev += SET[t]!;
-			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
+			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = BFL || BFG ? I![t]! - (BFL?.[t] ?? 0) + (BFG?.[t] ?? 0) : I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
 			const kd = ks ? ks[t]! : 1;
@@ -1581,15 +1689,12 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					heldAfter[a] = 0;
 					if (x.pool) {
 						const vp = rivPrev[a]!;
-						const area = vp > 0 ? x.pool.areaFullM2 * Math.pow(Math.min(vp / x.pool.capM3, 1), DAM_AREA_EXPONENT) : 0;
-						const evWant = Math.min((evapMmDay[t]! * area) / 1000, Math.max(vp, 0));
-						const ev = riv.evap[a]![t]!;
-						if (!near(ev, evWant, vp)) return `${where}: pool of river abstraction ${x.key} evaporated ${ev}, not ${evWant} (its start-of-day surface ${area} m²)`;
+						// Storage only (engine ≥ 1.86.0): the pool loses only what its abstraction draws.
 						const vq = riv.pool[a]![t]!;
-						const drawn = Math.max(0, vp - ev - vq);
+						const drawn = Math.max(0, vp - vq);
 						fromFlow[a] = v - drawn;
-						heldAfter[a] = Math.min(vq, vp - ev);
-						poolChg += vq - vp + ev;
+						heldAfter[a] = Math.min(vq, vp);
+						poolChg += vq - vp;
 						rivPrev[a] = vq;
 					}
 				}
@@ -2191,14 +2296,17 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		return set;
 	};
 	const rules = farmRules(input.model.transfers, nodes);
+	// Rules out of the catchment (engine ≥ 1.86.0), after the farm-to-farm ones so a rule's index k is the same in both.
+	const outside = externalRules(input.model.transfers, nodes);
+	const allRules = [...rules, ...outside];
 	const col = (id: string, k: string) => get.get(`${id}|${k}`)!;
 	// Each rule's daily volume (engine ≥ 1.6.0: a series for every rule that can move water; null for an older run, which stores none).
-	const movable = rules.filter(canMove);
+	const movable = allRules.filter(canMove);
 	const storedRules = movable.filter((r) => get.has(`${r.fromNodeId}|${transferRuleKey(r.id)}`)).length;
 	if (storedRules > 0 && storedRules < movable.length) return `transfer rules: ${storedRules} of the ${movable.length} that can move water have a stored volume`;
-	const ruleVol = readRuleVolumes(rules, out.days, (id, k) => get.get(`${id}|${k}`));
+	const ruleVol = readRuleVolumes(allRules, out.days, (id, k) => get.get(`${id}|${k}`));
 	if (ruleVol) {
-		const err = checkRuleVolumes(rules, ruleVol, farms, get, out.days);
+		const err = checkRuleVolumes(allRules, ruleVol, farms, get, out.days);
 		if (err) return err;
 	}
 	const byRule = input.settings.ewrChargeSource === 'ruleTable';
@@ -2223,7 +2331,8 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		const key = si === 0 ? 'null' : s.id;
 		// A rule with one end inside counts at neither end here: without the per-rule volumes it can't be told apart from the farm's other transfers.
 		// A river off-take (engine ≥ 1.14.0) isn't in the farms' J: with one, the per-rule volumes always count.
-		const crossed = rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)) || rules.some(isRiverOfftake) || remoteLegs.length > 0;
+		// A rule out of the catchment (engine ≥ 1.86.0) from upstream is an export, charged to its source as one to a farm outside is.
+		const crossed = rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)) || outside.some((r) => up.has(r.fromNodeId)) || rules.some(isRiverOfftake) || remoteLegs.length > 0;
 		return {
 			name: s.id,
 			key,
@@ -2271,7 +2380,7 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			// A unit with demand objects (engine ≥ 1.7.0): consumptive use is G − T day by day, its objects returning their own shares.
 			const T = !user && demandObjectsByNode(input.model, []).has(f.id) ? col(f.id, 'return_flow') : null;
 			// A user has no runoff or transfers, and no irrigation-part series (checked as 0).
-			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : col(f.id, 'runoff'), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k, T }];
+			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : (runoffAfterBaseflow(get, f.id) ?? col(f.id, 'runoff')), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k, T }];
 		})
 	);
 	const allExact = new Map(farms.map((f) => [f.id, siteInfo.every((s) => s.exact || !s.farms.includes(f))]));
@@ -2441,7 +2550,8 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 		if (!L || !N || !O || !S || !Z) return `${n.id}: the columns L, N, O, S and Z are needed to check its operating rules`;
 		if (sup && !GR) return `${n.id}: river_abstraction column missing for a supply rule that pumps from the river`;
 		const H = g('inflow_upstream');
-		const I = g('runoff');
+		// After a base-flow loss or gain (engine 1.86.0): what the unit's runoff brings to the river.
+		const I = runoffAfterBaseflow(get, n.id);
 		if (!H || !I) return `${n.id}: the columns H and I are needed to check its operating rules`;
 		const divertOf = { divertCapacityM3Day: ops.divertCapacityM3Day ?? n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
 		// The day's dam capacity factor (engine ≥ 1.30.0), as runModel resolves it: a dam with capacity 0 today is none.
@@ -2485,6 +2595,10 @@ function checkedLevel(share: number, thresholds: readonly number[]): number {
 }
 function checkedCut(rule: DroughtRestrictionRule, level: number, part: DemandPart): number {
 	return level > 0 ? (rule.levels[level - 1]!.cuts[part] ?? 0) : 0;
+}
+/** Whether level `level` cuts some part of a unit's demand: the levels a Priority user's fixed % applies at (engine-audit.md P2). */
+function levelCutsDemand(rule: DroughtRestrictionRule, level: number): boolean {
+	return DEMAND_PARTS.some((p) => checkedCut(rule, level, p) > 0);
 }
 function checkedObjectDemand(d: number, cut: number, floor: number | null): number {
 	const r = d * (1 - cut);
@@ -2617,6 +2731,13 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	if (basis === 'own') for (const d of own.values()) if (d && (!d.Q || d.before0 === undefined)) return `${d.n.id}: dam_storage column or starting storage missing`;
 	const held = new Map(units.map((u) => [u.id, resumed?.levelsBefore?.[u.id] ?? 0]));
 	const unitLevels = new Map(units.map((u) => [u.id, new Array<number>(out.days).fill(0)]));
+	// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3): at the shared level, or under 'own'
+	// (no dam of their own) at the EWR trigger's alone; held and lifted with the units.
+	const cutUsers = nodes.filter((n) => userRestrictionShare(n) > 0);
+	for (const u of cutUsers) {
+		held.set(u.id, resumed?.levelsBefore?.[u.id] ?? 0);
+		unitLevels.set(u.id, new Array<number>(out.days).fill(0));
+	}
 	let ewrReviews = 0;
 	let reviewCount = 0;
 	for (let t = 0; t < out.days; t++) {
@@ -2639,8 +2760,9 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 				const d = own.get(u.id);
 				held.set(u.id, basis === 'own' ? Math.max(d ? levelOf([d], t) : 0, ewr) : Math.max(sharedLevel, ewr));
 			}
-		} else if (e === 2) for (const u of units) held.set(u.id, 0);
-		for (const u of units) unitLevels.get(u.id)![t] = held.get(u.id)!;
+			for (const u of cutUsers) held.set(u.id, basis === 'own' ? ewr : Math.max(sharedLevel, ewr));
+		} else if (e === 2) for (const u of [...units, ...cutUsers]) held.set(u.id, 0);
+		for (const u of [...units, ...cutUsers]) unitLevels.get(u.id)![t] = held.get(u.id)!;
 	}
 	// The summary's dams that were filling, and the day each joined the reviews.
 	const wantFill = [...joinedOn].sort((a, b) => cmpStr(a[0], b[0])).map(([nodeId, on]) => ({ nodeId, inServiceFrom: nodes.find((n) => n.id === nodeId)!.damInServiceFrom!, joinedOn: on }));
@@ -2670,8 +2792,25 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	}
 	// Each unit's demand after the cut.
 	const inScope = new Set(units.map((u) => u.id));
+	const userIds = new Set(cutUsers.map((u) => u.id));
 	for (const n of nodes) {
 		const DR = get.get(`${n.id}|${RESTRICTION_SERIES.restricted.key}`);
+		if (userIds.has(n.id)) {
+			// A Priority user with a fixed restriction %: D × (1 − c) on the days its level cuts some part of a unit's
+			// demand (a watch level, every cut 0 %, restricts nobody; engine-audit.md P2), no floor.
+			if (!DR) return `${n.id}: no restricted_demand column for a Priority user with a fixed restriction %`;
+			const c = userRestrictionShare(n);
+			const D = get.get(`${n.id}|demand`);
+			const G = get.get(`${n.id}|supplied`);
+			if (!D || !G) return `${n.id}: demand and supplied are needed to check the drought restriction`;
+			const lvs = unitLevels.get(n.id)!;
+			for (let t = 0; t < out.days; t++) {
+				const want = levelCutsDemand(rule, lvs[t]!) ? D[t]! * (1 - c) : D[t]!;
+				if (Math.abs(DR[t]! - want) > tol(D[t]!)) return `${n.id} day ${t}: user restricted demand ${DR[t]} ≠ ${want} (level ${lvs[t]}, fixed ${c})`;
+				if (G[t]! > DR[t]! + tol(Math.max(DR[t]!, G[t]!))) return `${n.id} day ${t}: user supplied ${G[t]}, more than its restricted demand ${DR[t]}`;
+			}
+			continue;
+		}
 		if (!inScope.has(n.id)) {
 			if (DR) return `${n.id}: restricted_demand on a ${n.kind === 'farm' ? 'unit the rule doesn’t cut' : n.kind}`;
 			continue;
@@ -2755,6 +2894,38 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		if (want === null ? u.avgCutOnRestrictedDaysM3Day !== null : u.avgCutOnRestrictedDaysM3Day === null || Math.abs(u.avgCutOnRestrictedDaysM3Day - want) > tol(want))
 			return `${u.nodeId}: the drought restriction summary's cut on restricted days ${u.avgCutOnRestrictedDaysM3Day} ≠ ${want}`;
 		if (u.daysByLevel.length !== nl || u.daysByLevel.some((v, i) => v !== byLevel[i])) return `${u.nodeId}: the drought restriction summary's days by level don't match its levels`;
+	}
+	// The Priority users with a fixed restriction % (engine 1.86.0): their summary rows.
+	const su = sum.users ?? [];
+	if (su.length !== cutUsers.length) return `the drought restriction summary lists ${su.length} users with a fixed restriction %, the model has ${cutUsers.length}`;
+	for (const u of su) {
+		const lvs = unitLevels.get(u.nodeId);
+		const node = cutUsers.find((n) => n.id === u.nodeId);
+		if (!lvs || !node) return `${u.nodeId}: in the drought restriction summary's users but not a Priority user with a fixed restriction %`;
+		if (u.restrictionPct !== userRestrictionShare(node)) return `${u.nodeId}: the summary's restriction % ${u.restrictionPct} ≠ the user's`;
+		const D = get.get(`${u.nodeId}|demand`) ?? [];
+		const R = get.get(`${u.nodeId}|${RESTRICTION_SERIES.restricted.key}`) ?? [];
+		const G = get.get(`${u.nodeId}|supplied`) ?? [];
+		const m = (a: ArrayLike<number>) => {
+			let x = 0;
+			for (let t = 0; t < a.length; t++) x += a[t]!;
+			return a.length ? x / a.length : 0;
+		};
+		if (Math.abs(u.avgDemandM3Day - m(D)) > tol(m(D)) || Math.abs(u.avgRestrictedDemandM3Day - m(R)) > tol(m(R)) || Math.abs(u.avgSuppliedM3Day - m(G)) > tol(m(G)))
+			return `${u.nodeId}: the drought restriction summary's user means don't match its columns`;
+		let cut = 0;
+		let days = 0;
+		const byLevel = new Array<number>(nl).fill(0);
+		for (let t = 0; t < out.days; t++) {
+			byLevel[lvs[t]!]!++;
+			if (lvs[t] === 0) continue;
+			cut += D[t]! - R[t]!;
+			days++;
+		}
+		const want = days ? cut / days : null;
+		if (want === null ? u.avgCutOnRestrictedDaysM3Day !== null : u.avgCutOnRestrictedDaysM3Day === null || Math.abs(u.avgCutOnRestrictedDaysM3Day - want) > tol(want))
+			return `${u.nodeId}: the drought restriction summary's user cut on restricted days ${u.avgCutOnRestrictedDaysM3Day} ≠ ${want}`;
+		if (u.daysByLevel.length !== nl || u.daysByLevel.some((v, i) => v !== byLevel[i])) return `${u.nodeId}: the drought restriction summary's user days by level don't match its levels`;
 	}
 	return null;
 }
@@ -2927,7 +3098,9 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 				const GW = g('groundwater_used');
 				const GD = g('groundwater_to_dam');
 				if (!G) return `${n.id}: supplied series missing`;
-				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
+				// Surface use counts what its dam rules sent out of the catchment (engine ≥ 1.88.0, docs/engine-audit.md X1).
+				const EXT = source === 'surface' ? externalSent(input, n.id, get, out.days) : null;
+				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) + (EXT ? EXT[t]! : 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
 				// The licence conditions (engine ≥ 1.37.0): the room is at most the day's limit, which the
 				// input gives (0 outside the months of use, else the maximum rates × 86 400).
 				const limit = dailyLimits(allocs, source, day0, out.days);
@@ -3094,6 +3267,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					riverTakes: [...get.entries()].filter(([k]) => k === `${n.id}|offtake_used` || k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v),
 					intakeTake: get.get(`${n.id}|${INTAKE_SERIES.take.key}`) ?? null,
 					receivedAtIntake: get.get(`${n.id}|${INTAKE_SERIES.received.key}`) ?? null,
+					// What its dam rules sent out of the catchment (engine ≥ 1.88.0, X1), from their own series.
+					externalTransfers: externalRuleKeys(input.model.transfers, n.id).map((k) => get.get(`${n.id}|${k}`) ?? null),
 					// A unit's dam losses (engine ≥ 1.83.0): its own dam_evaporation and dam_seepage_lost columns, when it has a dam.
 					...(n.kind === 'farm' && n.damCapacityM3 > 0 ? { damEvaporation: get.get(`${n.id}|dam_evaporation`) ?? null, damSeepageLost: get.get(`${n.id}|dam_seepage_lost`) ?? null } : {})
 				}

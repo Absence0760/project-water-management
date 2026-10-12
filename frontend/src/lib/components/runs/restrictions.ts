@@ -29,6 +29,12 @@ export interface RestrictionView {
 	 * means dilute with every unrestricted day.
 	 */
 	units: { nodeId: string; name: string; demand: number; restricted: number; cut: number; cutShare: number | null; supplied: number; cutOnRestrictedDays: number | null; daysRestricted: number | null }[];
+	/**
+	 * The Priority users with a fixed restriction % (engine 1.86.0, issue #523
+	 * B3), the most cut first, with the same means and the % (a share); empty
+	 * when none has one.
+	 */
+	users: { nodeId: string; name: string; restrictionPct: number; demand: number; restricted: number; cut: number; supplied: number; cutOnRestrictedDays: number | null; daysRestricted: number }[];
 }
 
 const pct = (x: number) => `${Math.round(x * 1000) / 10} %`;
@@ -59,6 +65,19 @@ export function restrictionView(s: Summary | undefined, nodeName: (id: string) =
 					daysRestricted: u.daysByLevel ? restricted(u.daysByLevel) : null
 				};
 			})
+			.sort((a, b) => b.cut - a.cut || a.name.localeCompare(b.name)),
+		users: (s.users ?? [])
+			.map((u) => ({
+				nodeId: u.nodeId,
+				name: u.name,
+				restrictionPct: u.restrictionPct,
+				demand: u.avgDemandM3Day,
+				restricted: u.avgRestrictedDemandM3Day,
+				cut: Math.max(0, u.avgDemandM3Day - u.avgRestrictedDemandM3Day),
+				supplied: u.avgSuppliedM3Day,
+				cutOnRestrictedDays: u.avgCutOnRestrictedDaysM3Day,
+				daysRestricted: restricted(u.daysByLevel)
+			}))
 			.sort((a, b) => b.cut - a.cut || a.name.localeCompare(b.name))
 	};
 }

@@ -159,7 +159,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	allHref: { why: 'projects/NeedsAttention prop: the list page passes hrefWith(…)', in: ['lib/components/projects/NeedsAttention.svelte'] },
 	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `${base}/`', in: ['routes/+page.svelte'] },
 	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
-	'c.href': { why: 'RunSummaryView: credibility.ts "#res-…" anchors', in: ['lib/components/runs/RunSummaryView.svelte'] },
+	'c.href': {
+		why: 'RunSummaryView: credibility.ts "#res-…" anchors; FarmMapCanvas: farmMap.ts farmMapCredits, "{base}/data-sources" and its "#hydrorivers" / "#jrc-water" anchors, or null',
+		in: ['lib/components/runs/RunSummaryView.svelte', 'lib/components/farm/FarmMapCanvas.svelte']
+	},
 	// Values that come from outside the component, each checked where it enters.
 	'api.packs.pdfUrl': {
 		why: 'an issued evidence pack’s PDF download: PUBLIC_API_URL + an encoded path of the project and pack ids (lib/api/client.ts packs.pdfUrl); the API answers 302 to a signed URL of its own (119_pack_render)',

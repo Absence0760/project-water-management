@@ -2,10 +2,12 @@
 	Dams → "Proposed from the register and the map" (issue #326 B-dams;
 	docs/ui.md § Dams, docs/maps.md § Dams from the register and the map).
 	For one hydrological unit's dam: the registered dams within 1 km of its dam
-	on the map, each proposing its capacity, and the dam polygon proposing its
-	area as the full-supply area. Each row shows the source and what the saved
-	model holds now; Use (editors) asks first, then saves that one value to the
-	model as a revision naming the source. Nothing is applied by itself.
+	on the map, each listing its capacity for reference only (the unit's dam is
+	its composite dam, all its farm dams, many unregistered: its volume is the
+	user's to enter, #523 C1), and the dam polygon proposing its area as the
+	full-supply area. Each row shows the source and what the saved model holds
+	now; Use (editors, the area only) asks first, then saves that one value to
+	the model as a revision naming the source. Nothing is applied by itself.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
@@ -17,7 +19,6 @@
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { fmtNum } from '$lib/format/number';
 	import { confirmWords, damProposalRows, fmtDamArea, searchedFrom, type DamProposalRow } from './damProposals';
-	import { fmtVolume } from './dams';
 
 	let {
 		id,
@@ -93,20 +94,15 @@
 	const capacityRows = $derived(rows.filter((r) => r.kind === 'capacity'));
 	const synthetic = $derived(rows.some((r) => r.synthetic));
 
-	async function use(r: DamProposalRow) {
+	async function use(r: Extract<DamProposalRow, { kind: 'area' }>) {
 		if (!data) return;
 		const d = data;
 		if (!(await confirmDialog(confirmWords(d, r)))) return;
 		busy = r.key;
 		rowError = null;
 		try {
-			if (r.kind === 'capacity') {
-				const res = await api.damProposals.capacityFromRegister(projectId, d.nodeId, r.registerNo);
-				notice = `${d.nodeName}’s dam capacity is now ${fmtVolume(res.damCapacityM3)}, from the register of dams (${res.registerNo}).`;
-			} else {
-				const res = await api.damProposals.areaFromMap(projectId, d.nodeId, r.featureId);
-				notice = `${d.nodeName}’s full-supply area is now ${fmtDamArea(res.damAreaFullM2)}, from the map.`;
-			}
+			const res = await api.damProposals.areaFromMap(projectId, d.nodeId, r.featureId);
+			notice = `${d.nodeName}’s full-supply area is now ${fmtDamArea(res.damAreaFullM2)}, from the map.`;
 			await Promise.all([load(d.nodeId), onModelChanged()]);
 			await frame?.focusNotice();
 		} catch (e) {
@@ -134,8 +130,9 @@
 >
 	{#snippet intro()}
 		<p class="hint muted">
-			A dam’s capacity from the register of dams (the registered dams within 1 km of its dam on the map) and its area when full from
-			the dam’s polygon on the map. Each value shows its source; nothing changes until you use it.
+			The registered dams within 1 km of the unit’s dam on the map, with their capacities for reference only: the unit’s dam is its
+			composite dam (all its farm dams, many of them unregistered), so its volume is yours to enter. And its area when full from the
+			dam’s polygon on the map. Each value shows its source; nothing changes until you use it.
 		</p>
 	{/snippet}
 	{#snippet controls()}
@@ -185,7 +182,9 @@
 										<td class="num">{r.proposed}</td>
 										<td class="src small" data-testid="dam-proposal-source">{r.source}</td>
 										<td>
-											{#if r.missing}
+											{#if r.kind === 'capacity'}
+												<span class="muted small" data-testid="dam-proposal-reference">Reference only</span>
+											{:else if r.missing}
 												<span class="muted small">Nothing to use</span>
 											{:else if r.same}
 												<span class="muted small">Saved</span>
@@ -195,7 +194,7 @@
 													class="btn btn-sm"
 													disabled={busy !== null || dirty}
 													aria-describedby={dirty ? `${uid}-dirty` : undefined}
-													aria-label="Use {r.kind === 'capacity' ? `the capacity of ${r.registerNo}` : 'the map’s area'}"
+													aria-label="Use the map’s area"
 													onclick={() => use(r)}>{busy === r.key ? 'Saving…' : 'Use'}</button
 												>
 											{/if}

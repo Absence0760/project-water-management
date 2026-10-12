@@ -23,7 +23,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, asOwner, node, signUp } from '../__tests__/helpers.js';
+import { anon, asOwner, confirmAsOperator, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -242,16 +242,20 @@ describe('the registration check', () => {
 		expect(audit).toHaveLength(1);
 	});
 
-	it('is recorded by an editor once an owner marks them as acting for the responsible authority (163; control: unmarked, 403 above)', async () => {
-		expect((await owner.call('PATCH', `${P()}/members/${assessor.id}`, { actsForAuthority: true })).status).toBe(200);
+	it('is recorded by an editor once the authority confirms them as acting for it (163, 229; control: unconfirmed, 403 above)', async () => {
+		// Proposed by the owner only: grants nothing (229).
+		expect((await owner.call('POST', `${P()}/authority-delegates`, { userId: assessor.id })).status).toBe(201);
+		expect((await record(assessor, specialistB)).status).toBe(403);
+		await confirmAsOperator(projectId, assessor.id);
 		try {
 			const r = await record(assessor, specialistB);
 			expect(r.status, JSON.stringify(r.body)).toBe(201);
 			expect(r.body.check).toMatchObject({ userId: specialistB.id, recordedBy: 'Sgassessor' });
 		} finally {
-			expect((await owner.call('PATCH', `${P()}/members/${assessor.id}`, { actsForAuthority: false })).status).toBe(200);
+			// Removed by the authority (the assessor stepping down): refused again.
+			expect((await assessor.call('DELETE', `${P()}/authority-delegates/${assessor.id}`)).status).toBe(204);
 		}
-		// Unmarked again: refused again, in the API and the database.
+		// No longer acting for it: refused again, in the API and the database.
 		expect((await record(assessor, specialistB)).status).toBe(403);
 		await expect(
 			withUser(assessor.id, (db) =>

@@ -40,8 +40,8 @@ client goes live. Not customer-facing.
   application go with the account. Two things keep the name: a sign-off's
   typed name and registration and the names printed in an evidence pack's
   hashed manifest, both for a **bounded** period, until the licence
-  record's closing date (the licence's expiry, or the refusal or withdrawal,
-  + 3 years; a 5-yearly review while no outcome is recorded; 161), defended under s14(1)(b) and s14(6)(b) (pre-counsel
+  record's closing date (the licence's expiry, or any other outcome (refused, rejected, not considered or withdrawn),
+  + 3 years; 233; a 5-yearly review while no outcome is recorded; 161), defended under s14(1)(b) and s14(6)(b) (pre-counsel
   research, fact-check of 2026-09-30 on #112). The only refusal left is the
   only owner of a project or admin of a team, until it is handed over.
   Self-service deletion (Account → Delete my account, 143, #112) is the
@@ -187,8 +187,10 @@ A and C remain owed and should be done as soon as possible; setting
   not legal advice): §9 covers § 2.1.2–2.1.3 but probably not the licence
   as a whole (own use only, the GeoJSON export, the disclaimer, the
   operator's indemnity to WWF); replacement wording is drafted there for
-  counsel (#92), not adopted. The farm map's missing JRC credit is code,
-  #523 C6.
+  counsel (#92), not adopted. The farm map's missing JRC credit was code:
+  built in #523 C6 (2026-10-12), a traced dam credited on every map and the
+  farm map's credits as a line under it ([maps.md § Credits on the
+  map](./maps.md#credits-on-the-map)).
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
   instructions, with security measures. **Template drafted** (2026-09-27):
@@ -294,7 +296,7 @@ cl. 3). The licensing ones are rows in
 - [ ] **The life of the licence record** (Privacy §7, evidence-pack.md §
   Retention): *Provisional position (pre-counsel research, 2026-10-01):* a
   date the project holds (161_licence_record): the licence's expiry, or
-  the refusal or withdrawal, + 3 years (Prescription Act s11(d), s12(3);
+  any other outcome (refused, rejected, not considered or withdrawn), + 3 years (233; Prescription Act s11(d), s12(3);
   PAJA; NWA s28(1)(e)), with a 5-yearly review while no outcome is
   recorded (NWA s28(1)(f)'s interval). The tick emails the owners and the
   operator; it never deletes: the operator deletes on the client's written
@@ -320,7 +322,7 @@ cl. 3). The licensing ones are rows in
   assigned or delegated to; s1, s40(1), s41, s42) and whose evidence it
   accepts (s41(2)), not who hosts the model. *Built
   (163_licensing_authority):* each project names its responsible
-  authority; only members the owner marks as acting for it record its
+  authority; only members the authority confirms as acting for it (229: the owner only proposes) record its
   decision or endorse a published baseline; packs print whom they are for
   and whether the baseline was endorsed; a database conflict guard keeps
   editors out of applying parties, so a consultancy host can't also act
@@ -347,9 +349,16 @@ cl. 3). The licensing ones are rows in
   practice, not a statutory number). *Built (164):* share links and
   applicants see natural flow and the EWR always; outflow, observed flow
   below the farms, the EWR shortfall and the volume rows stay at five
-  holders. A dominance rule (one holder taking most of the use) is a
-  tracked follow-up. *For counsel:* whether 5 is defensible, and whether a
-  dominance rule is needed before go-live.
+  holders. *Built (232, #523 G8):* the dominance rule beside k (the use
+  withheld when one holder takes more than 80 % of the run's supply, or two
+  more than 90 %; the registered volumes' provisional limits), and a
+  published DWS gauge record (a record a DWS feed wrote whole) shown at any
+  holder count, since DWS publishes it (the licensing assessors' review).
+  *For counsel:* whether 5 is defensible, and whether the dominance limits
+  are (with the CISO, #92); and the accepted residual of a DWS gauge at the
+  outlet: natural flow less its shown record is the upstream use at any
+  holder count, as it was from DWS's own publication since 164
+  ([security.md § Share links](./security.md#share-links)).
 - [ ] **Rules broken by hidden farms.** *Provisional position (pre-counsel
   research, 2026-10-01):* a validation refusal the applicant can't fix
   blind is a fairness problem; an aggregate over five or more holders
@@ -358,8 +367,14 @@ cl. 3). The licensing ones are rows in
   the catchment's aggregate past five hidden holders, the generic words
   below; the assessors read the rule's real words; the applicant's **Ask
   the assessors why** sends the line, the changes it names and the rule's
-  kind (nothing hidden), and an editor answers once. *For counsel:* how
-  much third-party detail the authority's reasons may carry (PAJA s5(4)).
+  kind (nothing hidden), and an editor answers once. *Built (issue #523
+  G7, the licensing assessor's review):* the refusal says it is the app's
+  check, not a refusal under s42, and that the applicant can still apply
+  through DWS (e-WULAAS); the question and its answer stay with the
+  application (and after a draft is deleted, 234) and a cumulative
+  assessment exports them, for the authority's s42 written reasons.
+  *For counsel:* how much third-party detail the authority's reasons may
+  carry (PAJA s5(4)).
 - [ ] **The applicant's printable copy, and the full pack to the
   authority.** *Provisional position (pre-counsel research, 2026-10-01):*
   the applicant files the technical report (R267 reg 11(1)) and what they
@@ -409,7 +424,11 @@ cl. 3). The licensing ones are rows in
   is **Record the authority's decision**, with the authority's name, the
   decision letter's date, its reference and whether written reasons were
   received; the app says appeals run from the decision letter and computes
-  no deadline. Older decisions were mapped. *For counsel and the pilot
+  no deadline. Older decisions were mapped. *Built (233, issue #523 G9
+  (b)):* the project's licence record (161) records its outcome in the same
+  words, plus *Application withdrawn*, which the authority doesn't decide;
+  every outcome but an issued licence closes the record three years after
+  its date, as refused and withdrawn did. *For counsel and the pilot
   authority:* the exact labels (its house style), and whether the R267
   "rejection" stages need their own record.
 - [ ] **D15, the impact basis.** *Provisional position (pre-counsel
@@ -418,7 +437,11 @@ cl. 3). The licensing ones are rows in
   potential impacts"), and the authorised volume's mix, since only a
   licence or verified existing lawful use is an entitlement. *Built (165,
   report format `evidence-14`):* both boards on page 1; an editor runs the
-  full-allocation pair; a fixed row says when there is none. *For counsel
+  full-allocation pair; a fixed row says when there is none. Since
+  `evidence-19` (issue #523 G2, the assessor review's D15 defect) the board
+  records its pair's results digests and the mix as at the baseline, and
+  `pnpm reproduce:pack` re-derives and re-runs the pair from a pack's
+  bundle. *For counsel
   and the client's hydrologist:* which basis an authority expects first,
   and how to treat registered but unverified volumes.
 - [ ] **D16, signers (item 9).** *Provisional position (pre-counsel
@@ -531,7 +554,7 @@ cl. 3). The licensing ones are rows in
   entries are treated as personal information, and deletion now also
   blanks the masked address in invitation entries (160).
   **Licence record**: "the life of the licence record" is a date the
-  project holds (161): the licence's expiry, or the refusal or withdrawal,
+  project holds (161, 233): the licence's expiry, or any other outcome (refused, rejected, not considered or withdrawn),
   + 3 years, with a 5-yearly review while no outcome is recorded; the tick
   emails the owners and the operator, the operator deletes on the client's
   written confirmation (deployment.md runbook item 16); the pack signer is

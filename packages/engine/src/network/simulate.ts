@@ -9,12 +9,13 @@ import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
-import { hasPumpLimit, poolLosses, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
+import { hasPumpLimit, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
 import { damHasFilled, PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
 import type { PlanOfftake } from './offtake';
 import type { PlanRemote } from './cropSupply';
 import type { AllocationCap } from '../allocations/mode';
 import { reachLossDay, type PlanReachLoss } from './reachLoss';
+import { baseflowLossDay, type PlanBaseflow } from './baseflow';
 
 /**
  * Relative size of float noise treated as zero in a shortfall. A difference
@@ -138,12 +139,24 @@ export interface PlanNode {
 	 */
 	reachLoss?: PlanReachLoss;
 	/**
+	 * A unit's base-flow loss and gain (engine 1.86.0, ./baseflow.ts,
+	 * docs/model.md §2.6b): its runoff I becomes I − MIN(loss, I) + gain
+	 * before the dam/river split. Absent = neither.
+	 */
+	baseflow?: PlanBaseflow;
+	/**
 	 * The senior users' claims' share of those bed losses, m³/day (engine ≥
 	 * 1.75.0, ../run.ts otherUsers): Σ over the claims crossing the reach of
 	 * what their gross-up added for it. The node below receives the senior
 	 * requirement less this. Absent = no claim crosses the reach.
 	 */
 	seniorReachLoss?: Float64Array;
+	/**
+	 * seniorReachLoss on the days the drought restriction cuts the Priority
+	 * users with a fixed restriction % (engine 1.86.0, issue #523 B3): their
+	 * claims at the restricted demand. Absent = the same every day.
+	 */
+	seniorReachLossCut?: Float64Array;
 	/** Daily crop water requirement (F, net irrigation need); zeros for gauges; a user's own demand from the river (WP-1.33). */
 	demand: Float64Array;
 	/** A user's share of what it takes that returns below it the same day (WP-1.33); 0 for other kinds. */
@@ -216,6 +229,13 @@ export interface PlanNode {
 	 */
 	seniorClaim?: Float64Array;
 	/**
+	 * seniorClaim on the days the drought restriction cuts the Priority users
+	 * with a fixed restriction % (engine 1.86.0, issue #523 B3, run.ts
+	 * otherUsers): their claims at the restricted demand D × (1 − cut).
+	 * Absent = the same every day.
+	 */
+	seniorClaimCut?: Float64Array;
+	/**
 	 * Gross demand before effective rain, the effective rain used against it
 	 * (m³/day) and the soil-water store at the end of the day (mm); only
 	 * needed for workings (../demand.ts farmDailyDemand).
@@ -225,10 +245,18 @@ export interface PlanNode {
 	soilWater?: Float64Array;
 }
 
+/**
+ * PlanTransfer.to of a rule whose water leaves the catchment (engine ≥ 1.86.0,
+ * issue #523 B5, docs/model.md §2.6): it draws on its source dam as any dam
+ * rule does, but no unit receives it, so it has no room to fill.
+ */
+export const EXTERNAL_TO = -1;
+
 export interface PlanTransfer {
 	/** The run series key its volume is stored under (`transfer_rule@<rule id>`, engine ≥ 1.6.0, ./transferSeries.ts); absent for a rule that can never move water. */
 	seriesKey?: string;
 	from: number;
+	/** The receiving node, or EXTERNAL_TO: out of the catchment (engine ≥ 1.86.0). */
 	to: number;
 	/** activeMonth[m] for calendar month m (1–12). */
 	activeMonth: Uint8Array;
@@ -373,12 +401,12 @@ export interface NodeResult {
 	/**
 	 * The unit's river abstractions (engine ≥ 1.65.0, docs/model.md §2.7j), in
 	 * `river.takes` order: what each pumped (part of `supplied`) and, with a
-	 * pool, the pool's storage at the end of the day and its evaporation (null
-	 * without one), and with a pump capacity the demand the pump left unmet
+	 * pool, the pool's storage at the end of the day (null without one; a pool
+	 * is storage only from engine 1.86.0, so it has no evaporation), and with a pump capacity the demand the pump left unmet
 	 * although the water was there (engine ≥ 1.66.0; null without a capacity).
 	 * Absent on a unit without a river-sourced demand.
 	 */
-	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; poolEvaporation: (Float64Array | null)[]; pumpLimited: (Float64Array | null)[] };
+	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; pumpLimited: (Float64Array | null)[] };
 	/** Supplied to the crops from another unit's dam (engine ≥ 1.73.0, docs/model.md §2.7k), part of `supplied`; absent on a unit without a remote share. */
 	remoteIn?: Float64Array;
 	/** Given from this unit's dam to other units' crops (engine ≥ 1.73.0), out of its storage; absent on a unit no remote share draws on. */
@@ -417,6 +445,10 @@ export interface NodeResult {
 	 * Absent on a node without bed losses.
 	 */
 	reachLoss?: Float64Array;
+	/** A unit's base-flow loss, MIN(loss, I) (engine 1.86.0, ./baseflow.ts); absent without one. */
+	baseflowLoss?: Float64Array;
+	/** A unit's base-flow gain (engine 1.86.0); absent without one. */
+	baseflowGain?: Float64Array;
 }
 
 /**
@@ -526,6 +558,12 @@ export interface NetworkResult {
 	restrictionLevel?: Uint8Array;
 	/** Under the 'own' basis, each unit's level each day (node order; null for a unit the rule doesn't cut). */
 	restrictionUnitLevel?: (Uint8Array | null)[];
+	/**
+	 * The level the Priority users with a fixed restriction % were at each day
+	 * (engine 1.86.0, issue #523 B3; one for all of them: the shared level, or
+	 * the EWR trigger's under 'own'); absent when no user has one.
+	 */
+	restrictionUserLevel?: Uint8Array;
 	/** Days a review found the EWR trigger's site failed the day before (engine ≥ 1.54.0); 1 = yes. */
 	restrictionEwrFailed?: Uint8Array;
 	/**
@@ -744,15 +782,16 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			r.riverAbstraction = new Float64Array(days);
 			r.pumpLimited = new Float64Array(days);
 		}
-		if (plan.restriction?.inScope[i]) r.restrictedDemand = new Float64Array(days);
+		if (plan.restriction?.inScope[i] || (plan.restriction?.userCut?.[i] ?? 0) > 0) r.restrictedDemand = new Float64Array(days);
 		if (n.reachLoss) r.reachLoss = new Float64Array(days);
+		if (n.baseflow?.lossM3Day) r.baseflowLoss = new Float64Array(days);
+		if (n.baseflow?.gainM3Day) r.baseflowGain = new Float64Array(days);
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (n.river) {
 			const tk = n.river.takes;
 			r.riverTakes = {
 				got: tk.map(() => new Float64Array(days)),
 				pool: tk.map((x) => (x.pool ? new Float64Array(days) : null)),
-				poolEvaporation: tk.map((x) => (x.pool ? new Float64Array(days) : null)),
 				pumpLimited: tk.map((x) => (hasPumpLimit(x) ? new Float64Array(days) : null))
 			};
 		}
@@ -844,6 +883,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const levelOut = rp ? new Uint8Array(days) : null;
 	const unitOut = rp && !rp.shared ? nodes.map((_, i) => (rp.inScope[i] ? new Uint8Array(days) : null)) : null;
 	const ewrOut = rp && rp.ewrSite >= 0 ? new Uint8Array(days) : null;
+	// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3): one level for all of them each day.
+	const userCut = rp?.userCut;
+	const firstUser = userCut ? userCut.findIndex((c) => c > 0) : -1;
+	const userOut = firstUser >= 0 ? new Uint8Array(days) : null;
+	// The levels held, under a name the node loop's own `lv` (the off-take levels) doesn't shadow.
+	const heldLevels = lv;
 	const rD = rp ? new Float64Array(nodes.length) : null;
 	const rF = rp ? new Float64Array(nodes.length) : null;
 	const rObjs = rp ? nodes.map((n) => (n.kind === 'farm' && n.objects ? { ...n.objects, demand: n.objects.demand.map(() => new Float64Array(days)), total: new Float64Array(days) } : null)) : null;
@@ -899,6 +944,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const own = rp!.ownDam[i]!;
 			lv![i] = rp!.shared ? shared : Math.max(own >= 0 ? storageLevel([own], t) : 0, ewr);
 		}
+		// A Priority user with a fixed restriction % (engine 1.86.0) is at the shared level, or under 'own' (it has no
+		// dam to read) at the EWR trigger's alone, as a unit without a dam is.
+		if (userCut) for (let i = 0; i < nodes.length; i++) if (userCut[i]! > 0) lv![i] = rp!.shared ? shared : ewr;
 	};
 	/** Unit i's demand today after the level's cuts: writes rF, rObjs and returns D = F′ / e + Σ objects′. */
 	const restrictDay = (i: number, t: number): number => {
@@ -977,15 +1025,26 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const otAct = new Int32Array(offtakes.length);
 	const otCapInto = new Float64Array(nodes.length);
 	const trOut = transfers.map(() => new Float64Array(days));
-	const jToday = new Float64Array(nodes.length);
+	// A rule out of the catchment (EXTERNAL_TO, engine ≥ 1.86.0) settles into an extra receiver slot after the
+	// nodes, one per source unit (XS + its index). Water pumped out of the catchment is its source unit's surface
+	// use (engine-audit.md X1, decided 2026-10-12): the slot's room is the source's surface allocation room today
+	// (endless without a cap, so then only its source dam and its own limit hold it back), so the rules out of one
+	// source share that room pro rata, as the rules into one dam share its room.
+	const XS = nodes.length;
+	const toSlot = Int32Array.from(transfers, (tr) => (tr.to === EXTERNAL_TO ? XS + tr.from : tr.to));
+	const anyExternal = transfers.some((tr) => tr.to === EXTERNAL_TO);
+	const jToday = new Float64Array(2 * nodes.length);
 	// Volume already committed today by earlier transfers from each source dam,
 	// and already scheduled into each destination.
 	const drawnToday = new Float64Array(nodes.length);
-	const intoToday = new Float64Array(nodes.length);
+	const intoToday = new Float64Array(2 * nodes.length);
+	// What each unit's rules out of the catchment have sent today (engine-audit.md X1): its surface use, counted
+	// against its allocation cap with the rest of its use today.
+	const extToday = new Float64Array(nodes.length);
 	// Transfer rules by priority, lowest first (audit Q18).
 	const levels = [...new Set(transfers.map((tr) => tr.priority))].sort((a, b) => a - b).map((p) => transfers.flatMap((tr, k) => (tr.priority === p ? [k] : [])));
 	const want = new Float64Array(transfers.length);
-	const sumBy = new Float64Array(nodes.length);
+	const sumBy = new Float64Array(2 * nodes.length);
 	// Each level's rules grouped by source, highest reserve first (ties in rule order), for step 3 below.
 	// A dam's rules share one capacity factor, so the reserves keep this order every day.
 	const levelSources = levels.map((level) =>
@@ -1000,10 +1059,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	// The rounds of proportional rationing (engine ≥ 1.70.0): what each rule still asks, each receiver's room
 	// left and whether it is full, and what each source has given this priority so far.
 	const rem = new Float64Array(transfers.length);
-	const roomLeft = new Float64Array(nodes.length);
-	const roomFull = new Uint8Array(nodes.length);
+	const roomLeft = new Float64Array(2 * nodes.length);
+	const roomFull = new Uint8Array(2 * nodes.length);
 	const srcTaken = new Float64Array(nodes.length);
-	const levelDests = levels.map((level) => Int32Array.from(new Set(level.map((k) => transfers[k]!.to))));
+	// The receiving nodes of each priority (the outside slots apart).
+	const levelDests = levels.map((level) => Int32Array.from(new Set(level.flatMap((k) => (toSlot[k]! >= XS ? [] : [toSlot[k]!])))));
+	// The units each priority sends out of the catchment from: each one's outside slot gets its room per priority.
+	const levelExt = levels.map((level) => Int32Array.from(new Set(level.flatMap((k) => (toSlot[k]! >= XS ? [transfers[k]!.from] : [])))));
 
 	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
 	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, Math.min(days, plan.historyDays ?? days)));
@@ -1043,7 +1105,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				levelOut![t] = deepest;
 			}
 			for (let i = 0; i < nodes.length; i++) if (nodes[i]!.kind === 'farm') rD![i] = restrictDay(i, t);
+			if (userOut) userOut[t] = lv![firstUser]!;
 		}
+		// Whether the Priority users with a fixed restriction % are cut today (engine 1.86.0): their level cuts some part
+		// of a unit's demand (a watch level, every cut 0 %, restricts nobody; engine-audit.md P2). The farms upstream then
+		// pass their claims at the restricted demand.
+		const usersCut = userOut !== null && rp!.cutsDemand[userOut[t]!]! > 0;
 		// The dam-side demand of each unit with river abstractions (engine ≥ 1.65.0): its dam-sourced demands only,
 		// after the restriction's cut when the rule is on.
 		// A crop supply table's dam share (engine ≥ 1.73.0) asks the dam side for that share of the crops only.
@@ -1109,6 +1176,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		jToday.fill(0);
 		drawnToday.fill(0);
 		intoToday.fill(0);
+		if (anyExternal) extToday.fill(0);
 		const prevQ = (n: number) => startStorage(n, t);
 		for (let li = 0; li < levels.length; li++) {
 			const level = levels[li]!;
@@ -1135,6 +1203,22 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const rel = dst.damCapacityM3 * kd > 0 ? fixedReleaseRoom(dst.release, month[t]!) : 0;
 				roomLeft[d] = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[d]!);
 				roomFull[d] = roomLeft[d]! > 0 ? 0 : 1;
+			}
+			// The outside slot of each unit sending out of the catchment at this priority (engine-audit.md X1): the
+			// unit's surface allocation room today, less a remote share it asked for (its first surface use, already
+			// bounded by that room) and what its lower priorities sent out today; endless without a surface cap.
+			const ext = levelExt[li]!;
+			for (let a = 0; a < ext.length; a++) {
+				const s = ext[a]!;
+				const c = nodes[s]!.allocationCap;
+				let room = Infinity;
+				if (c?.surface) {
+					room = capRoom(c.surface, c.surfaceLimit, allocUsed[s]![0]!, t);
+					if (nodes[s]!.remote) room -= rmAsk[s]!;
+					room = Math.max(0, room - extToday[s]!);
+				}
+				roomLeft[XS + s] = room;
+				roomFull[XS + s] = room > 0 ? 0 : 1;
 			}
 			for (const sx of levelSources[li]!) srcTaken[sx.from] = 0;
 			// What each active rule still asks: its daily limit (engine ≥ 1.70.0, issue #90 Q25: never first cut to
@@ -1164,7 +1248,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					for (let j = 0; j < rules.length; j++) {
 						const k = rules[j]!;
 						given[k] = 0;
-						if (rem[k]! > 0 && !roomFull[transfers[k]!.to]) {
+						if (rem[k]! > 0 && !roomFull[toSlot[k]!]) {
 							act[n++] = k;
 							left[k] = rem[k]!;
 						}
@@ -1200,13 +1284,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				}
 				// 2. Each receiver's room, pro rata to what the sources gave.
 				sumBy.fill(0);
-				for (const k of level) if (rem[k]! > 0 && !roomFull[transfers[k]!.to]) sumBy[transfers[k]!.to]! += given[k]!;
+				for (const k of level) if (rem[k]! > 0 && !roomFull[toSlot[k]!]) sumBy[toSlot[k]!]! += given[k]!;
 				let filled = false;
 				for (const k of level) {
 					const tr = transfers[k]!;
-					if (!(rem[k]! > 0) || roomFull[tr.to]) continue;
-					const total = sumBy[tr.to]!;
-					const room = roomLeft[tr.to]!;
+					const to = toSlot[k]!;
+					if (!(rem[k]! > 0) || roomFull[to]) continue;
+					const total = sumBy[to]!;
+					const room = roomLeft[to]!;
 					let x = total > room ? (given[k]! * room) / total : given[k]!;
 					// The shares of a band can add up one ulp past the water they split, and the rounds add them up:
 					// a source never gives more than it still holds (rules in the level's order, ids).
@@ -1225,6 +1310,16 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						filled = true;
 					} else roomLeft[d] = roomLeft[d]! - sumBy[d]!;
 				}
+				// An outside slot fills like a receiver when its source's surface room is shared out (endless: never).
+				for (let a = 0; a < ext.length; a++) {
+					const d = XS + ext[a]!;
+					if (roomFull[d]) continue;
+					if (sumBy[d]! > roomLeft[d]!) {
+						roomLeft[d] = 0;
+						roomFull[d] = 1;
+						filled = true;
+					} else roomLeft[d] = roomLeft[d]! - sumBy[d]!;
+				}
 				// 3. Only a receiver filling this round can have left water at a source unused: offer it again.
 				if (!filled) break;
 			}
@@ -1234,9 +1329,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const v = want[k]!;
 				trOut[k]![t] = v;
 				drawnToday[tr.from]! += v;
-				intoToday[tr.to]! += v;
-				jToday[tr.to]! += v;
+				// Out of the catchment (engine ≥ 1.86.0): it leaves the source's dam like any rule, into the outside slot,
+				// and is the source unit's surface use today (engine-audit.md X1).
+				intoToday[toSlot[k]!]! += v;
+				jToday[toSlot[k]!]! += v;
 				jToday[tr.from]! -= v;
+				if (toSlot[k]! >= XS) extToday[tr.from]! += v;
 			}
 		}
 
@@ -1264,7 +1362,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// 1.70.0 the rule sized to the full demand, the extra flowed on below the unit, and its losses left the
 				// catchment. The top-up room below isn't capped: water into a dam is not use (§2.12a).
 				const dc = dst.allocationCap;
-				if (dc?.surface) need = Math.min(need, capRoom(dc.surface, dc.surfaceLimit, allocUsed[o.to]![0]!, t));
+				if (dc?.surface) need = Math.min(need, extToday[o.to]! > 0 ? Math.max(0, capRoom(dc.surface, dc.surfaceLimit, allocUsed[o.to]![0]!, t) - extToday[o.to]!) : capRoom(dc.surface, dc.surfaceLimit, allocUsed[o.to]![0]!, t));
 				const dstCap = dst.damCapacityM3 * capacityK(dst, t);
 				if (o.topUpDam && dstCap > 0) {
 					// The dam's room after today's step (§2.7a): its losses clamped as the step clamps them (it can't
@@ -1314,7 +1412,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					rl[t] = l;
 					sumU += q - l;
 					const zs = ur.seniorRequirement[t]!;
-					const sl = un.seniorReachLoss;
+					const sl = usersCut && un.seniorReachLossCut ? un.seniorReachLossCut : un.seniorReachLoss;
 					sumZs += sl ? zs - Math.min(zs, sl[t]!) : zs;
 				} else {
 					sumU += ur.outflow[t]!;
@@ -1345,7 +1443,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// junior one leaves the senior requirement passing it for the senior
 				// users below. What it returns (treated wastewater) joins its outflow
 				// the same day. Like a gauge it has no EWR share of its own.
-				const D = node.demand[t]!;
+				const D0 = node.demand[t]!;
+				// A Priority user with a fixed restriction % (engine 1.86.0, issue #523 B3): on a day the drought
+				// restriction cuts it (its level cuts some part of a unit's demand, engine-audit.md P2), it asks the
+				// river and its boreholes for D × (1 − cut), with no basic-needs floor. Its demand and deficit stay the
+				// unrestricted demand's, as a unit's do.
+				const uc = userCut ? userCut[i]! : 0;
+				const D = uc > 0 && rp!.cutsDemand[heldLevels![i]!]! > 0 ? D0 * (1 - uc) : D0;
+				if (r.restrictedDemand) r.restrictedDemand[t] = D;
 				const avail = node.senior ? sumU : Math.max(0, sumU - sumZs);
 				// Its river pump (engine ≥ 1.58.0): it takes at most its capacity from the river; no pump = no limit.
 				const pump = node.userPumpM3Day;
@@ -1370,9 +1475,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const Uriver = sumU - Gs + T;
 				const U = Uriver - deplete(node, r, t, dGw, Uriver);
 				r.groundwater[t] = Ggw;
-				r.demand[t] = D;
+				r.demand[t] = D0;
 				r.supplied[t] = G;
-				r.deficit[t] = D - G;
+				r.deficit[t] = D0 - G;
 				r.inflowUpstream[t] = sumU;
 				r.outflow[t] = U;
 				r.userReturn[t] = T;
@@ -1401,6 +1506,19 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const lc = node.landCover ? landCoverReduction(I0, qLow * node.share, node.landCover) : 0;
 			const I = I0 - lc;
 			r.landCoverReduction[t] = lc;
+			// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): taken off and added to its runoff
+			// before it reaches the river or the dam, so Ib is what the unit's runoff brings in. Ib = I without them.
+			const bf = node.baseflow;
+			let Ib = I;
+			let bfLoss = 0;
+			let bfGain = 0;
+			if (bf) {
+				bfLoss = baseflowLossDay(bf, I);
+				bfGain = bf.gainM3Day;
+				Ib = I - bfLoss + bfGain;
+				if (r.baseflowLoss) r.baseflowLoss[t] = bfLoss;
+				if (r.baseflowGain) r.baseflowGain[t] = bfGain;
+			}
 			const J = jToday[i]!;
 			// The percentage is the share of upstream inflow that enters the dam
 			// (K); the rest passes below it (L), where the diversion capacity (O)
@@ -1413,17 +1531,18 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const ror = sup !== undefined && sup.rule === 3;
 			let K = ror ? 0 : Math.min(H * node.pctUpstreamToDam, H);
 			let L = H - K;
-			let M = ror ? 0 : Math.min(I * node.pctRunoffToDam, I);
-			let N = I - M;
+			let M = ror ? 0 : Math.min(Ib * node.pctRunoffToDam, Ib);
+			let N = Ib - M;
 			let O = ror ? 0 : Math.min(node.divertM3DayByMonth ? divertCapacityToday(node, month[t]!) : node.divertCapacityM3Day, L + N);
 			// Senior users below (WP-1.33): the farm passes their requirement Zs
 			// below the dam (S) before it fills the dam, as far as its inflow
 			// allows: it diverts less first, then takes less of the upstream
 			// inflow and its own runoff into the dam, pro rata. Zs = 0 changes nothing.
-			const Zs = sumZs + (node.seniorClaim ? node.seniorClaim[t]! : 0);
+			const claim = usersCut && node.seniorClaimCut ? node.seniorClaimCut : node.seniorClaim;
+			const Zs = sumZs + (claim ? claim[t]! : 0);
 			let passed = 0;
 			if (Zs > 0) {
-				let short = Math.min(Zs, H + I) - (L + N - O);
+				let short = Math.min(Zs, H + Ib) - (L + N - O);
 				if (short > 0) {
 					const dO = Math.min(short, O);
 					O -= dO;
@@ -1444,7 +1563,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 							M = Math.max(0, M - (cut - dK));
 						}
 						L = H - K;
-						N = I - M;
+						N = Ib - M;
 						passed += cut;
 					}
 				}
@@ -1467,7 +1586,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				if (cap > 0) {
 					if (O > 0) O = Math.min(O, Math.max(0, L + N - hk));
 				} else {
-					let short = Math.min(hk, H + I) - (L + N - O);
+					let short = Math.min(hk, H + Ib) - (L + N - O);
 					if (short > 0) {
 						const dO = Math.min(short, O);
 						O -= dO;
@@ -1484,7 +1603,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 								M = Math.max(0, M - (short - dK));
 							}
 							L = H - K;
-							N = I - M;
+							N = Ib - M;
 						}
 					}
 				}
@@ -1513,7 +1632,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Another unit's dam has already given this unit's crops their remote share (engine ≥ 1.73.0): its first
 			// surface use, so the unit's own sources share what is left of the room.
 			const Gin = node.remote ? rmGot[i]! : 0;
-			const sRoom = Gin > 0 ? Math.max(0, sRoom0 - Gin) : sRoom0;
+			// What its rules sent out of the catchment today is surface use too (engine-audit.md X1), settled first.
+			const Gext = extToday[i]!;
+			const sRoom1 = Gext > 0 ? Math.max(0, sRoom0 - Gext) : sRoom0;
+			const sRoom = Gin > 0 ? Math.max(0, sRoom1 - Gin) : sRoom1;
 			// In the rules' id order (§6), each source being simulated before this unit.
 			let Xin = 0;
 			let XinDam = 0;
@@ -1590,7 +1712,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Gs + (D − Gs) can round one ulp above D, and so can Xused + (D − Xused) (fuzz seed 15467).
 			const G = Xused > 0 ? Math.min(Xused + Math.min(Gs + Ggw + Gr, Dl), Dr) : Math.min(Gs + Ggw + Gr, Dr);
 			const au = allocUsed[i];
-			if (au) countUse(node.allocationCap!, au, t, Gin > 0 ? G - Ggw + Gin : G - Ggw, Ggw + Gd);
+			if (au) countUse(node.allocationCap!, au, t, Gext > 0 ? (Gin > 0 ? G - Ggw + Gin : G - Ggw) + Gext : Gin > 0 ? G - Ggw + Gin : G - Ggw, Ggw + Gd);
 			// Other units' crops take their remote share from this dam (engine ≥ 1.73.0, docs/model.md §2.7k): after its
 			// own dam side and release, from the storage above dead storage, before the spill (so what they take comes
 			// out of what would have spilled first), pro rata to their asks when it is short.
@@ -1642,7 +1764,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			if (Xpass > 0) Uriver += Xpass;
 			// River abstractions beside the dam (engine ≥ 1.65.0, ./riverSource.ts, docs/model.md §2.7j): after the dam
 			// side, from the flow passing the dam (its spill, release and returned seepage too, not the return flows),
-			// above what the unit pump must leave, by supply level; each pool first loses its evaporation, refills last.
+			// above what the unit pump must leave, by supply level; each pool refills last. A pool is storage only
+			// (engine ≥ 1.86.0, issue #523 B2): no rain, no evaporation.
 			let Griver = 0;
 			let poolChange = 0;
 			if (riv) {
@@ -1654,12 +1777,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				for (let a = 0; a < tk.length; a++) {
 					const x = tk[a]!;
 					want[a] = x.obj < 0 ? cropAskOf(node, riv.cropShare, rp ? rF![i]! : F) : rp ? rObjs![i]!.demand[x.obj]![t]! : objs!.demand[x.obj]![t]!;
-					if (x.pool) {
-						const [, Ep] = poolLosses(x.pool, q[a]!, lakeEvapMmDay ? lakeEvapMmDay[t]! : 0);
-						rt.poolEvaporation[a]![t] = Ep;
-						poolChange -= q[a]!;
-						q[a] = q[a]! - Ep;
-					}
+					if (x.pool) poolChange -= q[a]!;
 				}
 				const keep = ho ? Math.max(Zs, relTarget, hk) : Math.max(Zs, relTarget);
 				let flowPast = Rr + (S - Gr) + SpRet;
@@ -1681,7 +1799,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					}
 					if (x.pool) {
 						rt.pool[a]![t] = q[a]!;
-						poolChange += q[a]! + rt.poolEvaporation[a]![t]!;
+						poolChange += q[a]!;
 					}
 				}
 				T += back;
@@ -1829,7 +1947,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				w.damRelease[t] = Rel;
 				// Another unit's dam: what came in to the crops, and what this dam gave out (engine ≥ 1.73.0).
 				const V0 =
-					Xin > 0 || Xout > 0 || Xret > 0 ? H + I + J + Pd + Ggw + Gd + Xin + Xret - Xout - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost;
+					Xin > 0 || Xout > 0 || Xret > 0 ? H + Ib + J + Pd + Ggw + Gd + Xin + Xret - Xout - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost : H + Ib + J + Pd + Ggw + Gd - (Gall - T) - E - (Q - qPrev) - U - Dep - SpLost;
 				const V = Gin > 0 || Xr > 0 ? V0 + Gin - Xr : V0;
 				// The river abstractions' pools: their change and evaporation (engine ≥ 1.65.0).
 				w.balanceResidual[t] = riv ? V - poolChange : V;
@@ -1850,6 +1968,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		...(captured ? { captured } : {}),
 		...(levelOut ? { restrictionLevel: levelOut } : {}),
 		...(unitOut ? { restrictionUnitLevel: unitOut } : {}),
+		...(userOut ? { restrictionUserLevel: userOut } : {}),
 		...(ewrOut ? { restrictionEwrFailed: ewrOut } : {}),
 		...(joined ? { restrictionJoined: joined } : {})
 	};

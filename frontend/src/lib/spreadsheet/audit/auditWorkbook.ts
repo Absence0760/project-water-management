@@ -113,7 +113,7 @@ function aboutRows(input: AuditWorkbookInput, largest: number): (XlsxCell | unde
 			s(`Columns ${colName(firstFormula + 1)} to ${colName(plan.columns.length)} are formulas over the inputs, the ${SHEETS.params} sheet and the row above (the dam's storage carries from day to day; day one starts from the storage parameter).`)
 		],
 		[s('Model'), s(`The ${SHEETS.model} sheet holds the model's own numbers in the same columns. The last column of ${SHEETS.audit} is each day's largest difference: float noise, far below a litre, when the two agree. Excel sets a difference within about 1e-15 of zero to exactly 0, so it can read 0 where the model's own check shows 1e-12: the two agree.`)],
-		[s('Letters'), s('Letters in brackets are the b023 FarmTemplate columns (docs/model.md §2.7).')],
+		[s('Letters'), s('Letters in brackets are the Water Balance Tool workbook’s FarmTemplate columns (docs/model.md §2.7).')],
 		[
 			s('Editing'),
 			s(

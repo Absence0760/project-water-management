@@ -20,6 +20,7 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import type { ProjectDetailsDraft } from './detailsDraft.svelte';
 	import AuthorityPanel from './AuthorityPanel.svelte';
+	import AuthorityDelegatesPanel from './AuthorityDelegatesPanel.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { projectAnchor } from './links';
@@ -96,6 +97,8 @@
 	// fill in as their data arrives, after the browser's own jump, so wait for the heading, then
 	// scroll there and hold it while the page settles (as River & reserve does), focusing it.
 	let body: HTMLDivElement | undefined = $state();
+	// Bumped by Acts for the authority after each change, so the members list's authority lines follow it (229).
+	let authorityVersion = $state(0);
 	let releaseAnchor = () => {};
 	let stopWaiting = () => {};
 	onMount(() => {
@@ -186,11 +189,12 @@
 		<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->
 		<div class="col access">
 			<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
-			<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
+			<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} {authorityVersion} />
 			<!-- The host's checks of signers' registrations (167_signers): editors read them, owners record them. -->
-			{#if canEdit}<RegistrationChecksPanel projectId={project.id} {isOwner} />{/if}
-			<!-- Who decides the project's licence applications (163_licensing_authority). -->
+			{#if canEdit}<RegistrationChecksPanel projectId={project.id} {isOwner} actsForAuthority={project.actsForAuthority ?? false} />{/if}
+			<!-- Who decides the project's licence applications (163_licensing_authority), and who acts for it: the authority's own call (229). -->
 			<AuthorityPanel {project} {canEdit} {onProjectChange} />
+			<AuthorityDelegatesPanel projectId={project.id} {currentUserId} {onProjectChange} {project} onChange={() => authorityVersion++} />
 			<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 			<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
 			{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}

@@ -15,7 +15,8 @@ documented), GR4J, crop demand with the soil-water store and efficiency /
 return share (N1), the farm dam balance (evaporation, rain on the dam,
 seepage and its return share, minimum operating level, spill), routing down
 the tree, dam-to-dam transfers (priority, bands at each rule's reserve, pro
-rata, the receiver's room) and the EWR at sites with its attribution (Q17).
+rata, the receiver's room; and, engine 1.86.0, a dam rule out of the
+catchment, which has no receiver) and the EWR at sites with its attribution (Q17).
 Phase 2a adds boreholes and stream depletion (§2.7d), allocations, the
 licence cap and full-allocation runs (§2.12a, with the summary's capReached,
 limitBound and scaled rows), demand factors (§2.3 item 4a), demand objects
@@ -1008,7 +1009,7 @@ def run(doc: dict) -> dict:
                 cap_bound_days=0, full_allocation_units=0, floor_days=0, object_shortage_days=0,
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
-                divert_by_month_days=0, reach_loss_days=0,
+                divert_by_month_days=0, reach_loss_days=0, baseflow_days=0,
                 # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
                 unit_rule_gauge=0, unit_rule_gauge_map=0, unit_rule_chirps=0, unit_rule_catchment=0, unit_clamped=0,
                 unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0,
@@ -1374,7 +1375,8 @@ def run(doc: dict) -> dict:
 
     # ---- river abstractions beside a unit's dam (§2.7j) -------------------
     # Each demand with water source 'river' (the crops, or an enabled object) has its own pump (None = no
-    # limit) and a pool (capacity > 0; it starts full, its full area 7.2 × capacity^0.77, b = 0.7). Its supply
+    # limit) and a pool (capacity > 0; it starts full; storage only from engine 1.86.0, no rain and no
+    # evaporation, issue #523 B2). Its supply
     # level is its place in the unit's supply order (supply_key; the crops with 'shared'). The dam side serves
     # the other demands only.
     # ---- the crop supply table (§2.7k) ------------------------------------
@@ -1507,6 +1509,18 @@ def run(doc: dict) -> dict:
         if f_ > 0 and c_ > 0:
             reach[x["id"]] = (f_, c_)
 
+    # A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0): m³/day sizes >= 0 (anything else none), units only.
+    def _size(v):
+        return float(v) if isinstance(v, (int, float)) and math.isfinite(v) and v >= 0 else 0.0
+
+    baseflow: dict[str, tuple[float, float]] = {}
+    for x in nodes:
+        if x["kind"] != "farm":
+            continue
+        bl_, bg_ = _size(x.get("baseflowLossM3Day")), _size(x.get("baseflowGainM3Day"))
+        if bl_ > 0 or bg_ > 0:
+            baseflow[x["id"]] = (bl_, bg_)
+
     def reach_loss(xid, q):
         f_, c_ = reach[xid]
         return min(c_, f_ * q) if q > 0 else 0.0
@@ -1558,6 +1572,11 @@ def run(doc: dict) -> dict:
     offtakes = []
     for t in model.get("transfers", []):
         if not t.get("enabled", True):
+            continue
+        # Out of the catchment (engine >= 1.86.0, §2.6): toNodeId null, a dam rule from a unit only.
+        if t["toNodeId"] is None:
+            if t["fromNodeId"] in by_id and by_id[t["fromNodeId"]]["kind"] == "farm" and t.get("source", "dam") != "river":
+                rules.append(t)
             continue
         if t["fromNodeId"] not in by_id or t["toNodeId"] not in by_id:
             continue
@@ -1650,13 +1669,13 @@ def run(doc: dict) -> dict:
         "baseflow_depletion", "depletion_deficit", "depletion_store", "senior_requirement", "passed_for_senior",
         "offtake_out", "offtake_in", "offtake_used", "offtake_to_dam", "offtake_loss_return",
         "allocation_room_surface", "allocation_room_groundwater", "allocation_left_surface", "allocation_left_groundwater",
-        "basic_needs", "remote_dam_in", "remote_dam_out", "reach_loss",
+        "basic_needs", "remote_dam_in", "remote_dam_out", "reach_loss", "baseflow_loss", "baseflow_gain",
     ]
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
     obj_sup = {ob["id"]: [0.0] * n for lst in objs.values() for ob in lst}
-    # Each river abstraction's take, pool storage and pool evaporation (§2.7j).
-    river_cols = {fid: {t["key"]: {"take": [0.0] * n, "pool": [0.0] * n, "evap": [0.0] * n} for t in ts} for fid, ts in riv.items()}
+    # Each river abstraction's take and pool storage (§2.7j).
+    river_cols = {fid: {t["key"]: {"take": [0.0] * n, "pool": [0.0] * n} for t in ts} for fid, ts in riv.items()}
     storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] for f in farms}
     on_river = {f["id"]: False for f in farms}
     sd_store = {x["id"]: 0.0 for x in nodes}
@@ -1765,7 +1784,26 @@ def run(doc: dict) -> dict:
                 v = min(v, s_[0])
             return v
 
+        # The remote shares' asks (§2.7k), known before any unit runs: the share of the crop demand, up to the pipe
+        # and, under a cap, the receiver's surface room at the start of the day. What each got is set at its source.
+        rm_ask: dict[str, float] = {}
+        rm_got: dict[str, float] = {}
+        for fid, r_ in remote.items():
+            a_ = min(r_["share"] * fd[fid]["Dc"][i], r_["cap"])
+            sr_ = room.get((fid, "surface"))
+            if sr_:
+                a_ = min(a_, sr_[0])
+            rm_ask[fid] = max(a_, 0.0)
+            rm_got[fid] = 0.0
+
         # Dam transfers (§2.6): by priority; each rule above its own reserve.
+        # What each unit's rules sent out of the catchment today: its surface use (engine-audit.md X1).
+        ext_out = {f["id"]: 0.0 for f in farms}
+
+        def recv(t):
+            # A rule out of the catchment settles into its source's own outside receiver (X1).
+            return t["toNodeId"] if t["toNodeId"] is not None else ("out", t["fromNodeId"])
+
         J = {f["id"]: 0.0 for f in farms}
         drawn = {f["id"]: 0.0 for f in farms}
         sched = {f["id"]: 0.0 for f in farms}
@@ -1784,9 +1822,10 @@ def run(doc: dict) -> dict:
                 src = by_id[t["fromNodeId"]]
                 reserve[t["id"]] = src["damCapacityM3"] * max(t.get("minStoragePct") or 0.0, src.get("damMinPct") or 0.0)
                 rem[t["id"]] = lim
-            # Each receiver's room.
+            # Each receiver's room. Outside the catchment (engine >= 1.86.0, §2.6) no unit receives the water:
+            # its room is endless, so only the source's free water and the rule's own limit hold a rule back.
             room_left = {}
-            for dst in sorted({t["toNodeId"] for t, _ in group}):
+            for dst in sorted({t["toNodeId"] for t, _ in group if t["toNodeId"] is not None}):
                 f = by_id[dst]
                 area, pd, e_raw, sp_raw = pre[dst]
                 after = storage[dst] + pd - e_raw - sp_raw
@@ -1797,6 +1836,15 @@ def run(doc: dict) -> dict:
                     floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))
                 rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
                 room_left[dst] = max(0.0, rm)
+            # Outside the catchment (engine-audit.md X1): each source's own receiver, whose room is its surface
+            # allocation room today less a remote share it asked for and what it sent out at lower priorities;
+            # endless without a cap.
+            for src in sorted({t["fromNodeId"] for t, _ in group if t["toNodeId"] is None}):
+                sr_ = room.get((src, "surface"))
+                if sr_ is not None and math.isfinite(sr_[0]):
+                    room_left[("out", src)] = max(0.0, sr_[0] - rm_ask.get(src, 0.0) - ext_out[src])
+                else:
+                    room_left[("out", src)] = math.inf
             full = {d for d, v in room_left.items() if not v > 0}
             vol = {t["id"]: 0.0 for t, _ in group}
             taken = {}
@@ -1805,7 +1853,7 @@ def run(doc: dict) -> dict:
                 # to what each rule into a receiver that isn't full still asks.
                 given = {t["id"]: 0.0 for t, _ in group}
                 for src in sorted({t["fromNodeId"] for t, _ in group}):
-                    from_src = [t for t, _ in group if t["fromNodeId"] == src and rem[t["id"]] > 0 and t["toNodeId"] not in full]
+                    from_src = [t for t, _ in group if t["fromNodeId"] == src and rem[t["id"]] > 0 and recv(t) not in full]
                     cur = storage[src] - drawn[src] - taken.get(src, 0.0)
                     left = {t["id"]: rem[t["id"]] for t in from_src}
                     levels = sorted({reserve[t["id"]] for t in from_src}, reverse=True)
@@ -1825,10 +1873,10 @@ def run(doc: dict) -> dict:
                 # (2) Each receiver's room, pro rata to what the sources gave; a receiver given more is full.
                 basis = given
                 filled = False
-                for dst in sorted(room_left):
+                for dst in sorted(room_left, key=lambda d: (isinstance(d, tuple), d[1] if isinstance(d, tuple) else d)):
                     if dst in full:
                         continue
-                    into = [t for t, _ in group if t["toNodeId"] == dst and rem[t["id"]] > 0]
+                    into = [t for t, _ in group if recv(t) == dst and rem[t["id"]] > 0]
                     tot = sum(basis[t["id"]] for t in into)
                     rm_left = room_left[dst]
                     for t in into:
@@ -1853,9 +1901,13 @@ def run(doc: dict) -> dict:
                 v = vol[t["id"]]
                 rule_vol[t["id"]][i] = v
                 J[t["fromNodeId"]] -= v
-                J[t["toNodeId"]] += v
                 drawn[t["fromNodeId"]] += v
-                sched[t["toNodeId"]] += v
+                # Out of the catchment: it leaves the source's dam and the model, the source's surface use (X1).
+                if t["toNodeId"] is not None:
+                    J[t["toNodeId"]] += v
+                    sched[t["toNodeId"]] += v
+                else:
+                    ext_out[t["fromNodeId"]] += v
 
         # River off-takes (§2.6a): each rule's share of its destination's
         # need, fixed before the day runs.
@@ -1883,21 +1935,11 @@ def run(doc: dict) -> dict:
                 # Under an allocation cap, the demand the cap still allows (§2.6a, §2.12a, engine >= 1.70.0):
                 # at most the destination's surface room at the start of the day; the top-up isn't capped.
                 sr_ = room.get((dst, "surface"))
-                need = min(dam_dem(dst, i), sr_[0] if sr_ else math.inf) + (rm_dst if t.get("topUpDam") else 0.0)
+                # Less what it sent out of the catchment today (X1).
+                need = min(dam_dem(dst, i), max(0.0, sr_[0] - ext_out[dst]) if sr_ else math.inf) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
         arrived: dict[str, list[float]] = {}
         back_to: dict[str, list[tuple[str, float]]] = {}
-        # The remote shares' asks (§2.7k), known before any unit runs: the share of the crop demand, up to the pipe
-        # and, under a cap, the receiver's surface room at the start of the day. What each got is set at its source.
-        rm_ask: dict[str, float] = {}
-        rm_got: dict[str, float] = {}
-        for fid, r_ in remote.items():
-            a_ = min(r_["share"] * fd[fid]["Dc"][i], r_["cap"])
-            sr_ = room.get((fid, "surface"))
-            if sr_:
-                a_ = min(a_, sr_[0])
-            rm_ask[fid] = max(a_, 0.0)
-            rm_got[fid] = 0.0
 
         # Nodes in network order (§2.7, §2.7c, §2.6a).
         U: dict[str, float] = {}
@@ -2007,6 +2049,10 @@ def run(doc: dict) -> dict:
             if xid in Dd:
                 dem = Dd[xid][i]
             d = fd[xid]
+            # What its rules sent out of the catchment today is surface use, settled first (X1).
+            gx = ext_out.get(xid, 0.0)
+            if gx > 0:
+                s_left = max(0.0, s_left - gx)
             # The remote share (§2.7k) has arrived (its source ran first): the unit's first surface use.
             gin = rm_got.get(xid, 0.0)
             if gin > 0:
@@ -2018,6 +2064,17 @@ def run(doc: dict) -> dict:
             rule_ = supply_rule(x)
             # Per-unit rain (§2.4h): the unit's own runoff in place of natural × share.
             I = natural[i] * shares.get(xid, 0.0) if local is None else (local[xid][i] if xid in local else 0.0)
+            # The unit's base-flow loss and gain (§2.6b): Ib = I − MIN(loss, I) + gain is what its runoff brings to
+            # the dam and the river; the runoff column stays I.
+            Ib = I
+            if xid in baseflow:
+                bl_, bg_ = baseflow[xid]
+                lost_bf = min(bl_, I) if I > 0 else 0.0
+                Ib = I - lost_bf + bg_
+                cc["baseflow_loss"][i] = lost_bf
+                cc["baseflow_gain"][i] = bg_
+                if lost_bf > 0 or bg_ > 0:
+                    diag["baseflow_days"] += 1
             y_ewr = ewr[i] * ewr_share[xid]
             z = y_ewr + zu
             zs = sen_y[xid][i] + zs_in
@@ -2025,9 +2082,9 @@ def run(doc: dict) -> dict:
                 K = M = 0.0
             else:
                 K = H * x["pctUpstreamToDam"]
-                M = I * x["pctRunoffToDam"]
+                M = Ib * x["pctRunoffToDam"]
             L = H - K
-            N = I - M
+            N = Ib - M
             dm = x.get("divertMonthlyM3Day")
             dcap = float(dm[m]) if dm else (x.get("divertCapacityM3Day") or 0.0)
             if x["pctUpstreamToDam"] >= 1:
@@ -2035,24 +2092,24 @@ def run(doc: dict) -> dict:
             O = 0.0 if rule_ == "runOfRiver" else min(dcap, L + N)
             # The senior users' pass (§2.7c): O first, then K and M pro rata.
             passed = 0.0
-            need = min(zs, H + I)
+            need = min(zs, H + Ib)
             if L + N - O < need:
                 cut = min(O, need - (L + N - O))
                 O -= cut
                 passed += cut
                 rest = need - (L + N - O)
-                if need >= H + I and K + M > 0:
+                if need >= H + Ib and K + M > 0:
                     # Everything passes: K and M exactly 0.
                     passed += K + M
                     K = M = 0.0
-                    L, N = H, I
+                    L, N = H, Ib
                 elif rest > 0 and K + M > 0:
                     kc = rest * K / (K + M)
                     mc = rest - kc
                     K -= kc
                     M -= mc
                     L = H - K
-                    N = I - M
+                    N = Ib - M
                     passed += rest
             # The hands-off flow (§2.7h).
             ho = x.get("handsOffM3Day")
@@ -2062,21 +2119,21 @@ def run(doc: dict) -> dict:
                 if cap > 0:
                     O = min(O, max(0.0, L + N - keep_h))
                 else:
-                    need = min(H + I, keep_h)
+                    need = min(H + Ib, keep_h)
                     if L + N - O < need:
                         cut = min(O, need - (L + N - O))
                         O -= cut
                         rest = need - (L + N - O)
-                        if need >= H + I and K + M > 0:
+                        if need >= H + Ib and K + M > 0:
                             K = M = 0.0
-                            L, N = H, I
+                            L, N = H, Ib
                         elif rest > 0 and K + M > 0:
                             kc = rest * K / (K + M)
                             mc = rest - kc
                             K -= kc
                             M -= mc
                             L = H - K
-                            N = I - M
+                            N = Ib - M
             if keep_h > 0 and O < o_before:
                 diag["hands_off_days"] += 1
             S = L + N - O
@@ -2249,16 +2306,8 @@ def run(doc: dict) -> dict:
                 free = max(0.0, past - keep)
                 rroom = (sroom[0] if sroom else math.inf) - gin - (G - GW)
                 q = pool_q[xid]
-                held = []
-                evs = []
-                for a, t in enumerate(ts):
-                    ev = 0.0
-                    if t["pool"]:
-                        prev = q[a]
-                        ar = 7.2 * t["pool"] ** 0.77 * min(prev / t["pool"], 1.0) ** 0.7 if prev > 0 else 0.0
-                        ev = min(k_lake[m] * apan[m] / mdays[m] / 1000 * ar, prev)
-                    evs.append(ev)
-                    held.append(q[a] - ev)
+                # A pool is storage only (engine ≥ 1.86.0): it starts the day holding what it ended the last with.
+                held = list(q)
                 want_t = [crop_share(xid, "river") * d["Dc"][i] if t["ob"] is None else obj_dem[t["ob"]["id"]][i] for t in ts]
                 got = [0.0] * len(ts)
                 left_p = [t["pump"] for t in ts]
@@ -2310,10 +2359,9 @@ def run(doc: dict) -> dict:
                     cc_t = river_cols[xid][t["key"]]
                     cc_t["take"][i] = got[a]
                     if t["pool"]:
-                        pool_chg += held[a] - q[a] + evs[a]
+                        pool_chg += held[a] - q[a]
                         q[a] = held[a]
                         cc_t["pool"][i] = held[a]
-                        cc_t["evap"][i] = evs[a]
                 T += back_r
                 flow = max(0.0, past - from_flow - refill) + T
                 diag["river_take_days"] += 1 if g_riv > 0 else 0
@@ -2323,7 +2371,7 @@ def run(doc: dict) -> dict:
             for k_ in range(len(ulist)):
                 used_u[k_] += pumped[k_]
             if sroom:
-                spend(xid, "surface", G - GW + g_riv + gin)
+                spend(xid, "surface", G - GW + g_riv + gin + gx)
             if groom:
                 spend(xid, "groundwater", GW + GWd)
             # The unit's whole use, demand and shortfall: its river abstractions' too (§2.7j).
@@ -2331,7 +2379,7 @@ def run(doc: dict) -> dict:
             g_all = G + g_riv + gin
             if xid in tab:
                 g_all = min(g_all, dem_all)
-            note_limit(lb_days, xid, wy, room, "surface", G - GW + g_riv + gin, sroom, dem_all, dem_all - g_all, o, ald)
+            note_limit(lb_days, xid, wy, room, "surface", G - GW + g_riv + gin + gx, sroom, dem_all, dem_all - g_all, o, ald)
             note_limit(lb_days, xid, wy, room, "groundwater", GW + GWd, groom, dem_all, dem_all - g_all, o, ald)
             # Off-takes from this unit (§2.6a), by priority.
             taken = 0.0
@@ -2388,7 +2436,7 @@ def run(doc: dict) -> dict:
             for _, bv in sorted(back_to.get(xid, [])):
                 back += bv
             Uo = U0 - taken + back
-            V = (H + I + j + pd + GW + GWd + arrives + back + gin) - (g_all - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg - xr
+            V = (H + Ib + j + pd + GW + GWd + arrives + back + gin) - (g_all - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg - xr
             aa = noise_short(z, Uo)
             ab = min(aa - aau, 0.0)
             for key, val in (
@@ -2460,7 +2508,9 @@ def run(doc: dict) -> dict:
         site_series[site_key] = (members, [0.0] * n, [0.0] * n)
     legs = []  # (from, to, volume series): the internal legs a site may count
     for t in rules:
-        legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
+        # A rule out of the catchment is never internal to a site: an export, charged to its source.
+        if t["toNodeId"] is not None:
+            legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
     for t in offtakes:
         legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
         lp = t.get("lossPct") or 0.0
@@ -2500,8 +2550,10 @@ def run(doc: dict) -> dict:
             imp = {}
             for f in members:
                 cc = col[f]
-                e_f = cc["inflow_upstream"][i] + cc["runoff"][i] + jint[f] - cc["outflow"][i]
-                scale = max(abs(cc["inflow_upstream"][i]), abs(cc["runoff"][i]), abs(cc["outflow"][i]), abs(jint[f]))
+                # A unit's base-flow loss and gain (§2.6b) are the land's, not its use: e reads the runoff after them.
+                ib_f = cc["runoff"][i] - cc["baseflow_loss"][i] + cc["baseflow_gain"][i]
+                e_f = cc["inflow_upstream"][i] + ib_f + jint[f] - cc["outflow"][i]
+                scale = max(abs(cc["inflow_upstream"][i]), abs(ib_f), abs(cc["outflow"][i]), abs(jint[f]))
                 imp[f] = e_f if e_f > 1e-12 * scale else 0.0
             members_sorted = sorted(members, key=lambda f: (-depth[f], f))
             E_s = 0.0
@@ -2550,7 +2602,7 @@ def run(doc: dict) -> dict:
     intake_ids = {f["id"] for f in farms if at_intake(f)}
     given: dict[tuple, list] = {}
     for t in rules:
-        if t["fromNodeId"] != t["toNodeId"] and can_move(t):
+        if t["toNodeId"] is not None and t["fromNodeId"] != t["toNodeId"] and can_move(t):
             given.setdefault((t["toNodeId"], t["fromNodeId"] in intake_ids), []).append(rule_vol[t["id"]])
     for fid in sorted(remote):
         given.setdefault((fid, remote[fid]["from"] in intake_ids), []).append(col[fid]["remote_dam_in"])
@@ -2595,6 +2647,11 @@ def run(doc: dict) -> dict:
             put(xid, "reach_loss", cc["reach_loss"])
         if xid in sen_led:
             put(xid, "senior_reach_loss", sen_led[xid])
+        if xid in baseflow:
+            if baseflow[xid][0] > 0:
+                put(xid, "baseflow_loss", cc["baseflow_loss"])
+            if baseflow[xid][1] > 0:
+                put(xid, "baseflow_gain", cc["baseflow_gain"])
         if x["kind"] == "farm":
             d = fd[xid]
             put(xid, "gross_demand", d["gross"])
@@ -2636,7 +2693,6 @@ def run(doc: dict) -> dict:
                 put(xid, f"river_take@{t['key']}", c_["take"])
                 if t["pool"]:
                     put(xid, f"river_pool@{t['key']}", c_["pool"])
-                    put(xid, f"river_pool_evaporation@{t['key']}", c_["evap"])
             for k in extra:
                 put(xid, k, cc[k])
             put(xid, "ewr_charge", charge[xid])

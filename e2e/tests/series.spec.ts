@@ -382,7 +382,7 @@ test('a CHIRPS upload is asked its product and version, and the series row shows
 	const form = await upload(page, 'Rainfall — CHIRPS', 'rainfall-daily.csv');
 	const version = form.getByLabel('CHIRPS product and version');
 	await expect(version).toHaveValue('');
-	await expect(version).toHaveAccessibleDescription(/A b023 workbook’s CHIRPS column is usually v2\.0; the CHIRPS data feed writes v3\.0/);
+	await expect(version).toHaveAccessibleDescription(/A Water Balance Tool workbook’s CHIRPS column is usually v2\.0; the CHIRPS data feed writes v3\.0/);
 	await version.selectOption({ label: 'CHIRPS v2.0' });
 	await form.getByRole('button', { name: 'Upload' }).click();
 	await expect(uploadedNote(page)).toContainText('Uploaded 92 days');

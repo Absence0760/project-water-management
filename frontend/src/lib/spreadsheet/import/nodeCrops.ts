@@ -232,7 +232,7 @@ export function readNodeCrops(source: WorkbookSource, fileName: string): NodeCro
 		warn.add({
 			code: 'missing-sheet',
 			sheet: CROP_FACTORS_SHEET,
-			message: `The workbook has no [${CROP_FACTORS_SHEET}] sheet, so it has no crop factors to load. Is it a node-based workbook? (A b023 workbook's crops load from its [Crop demand] sheet.)`
+			message: `The workbook has no [${CROP_FACTORS_SHEET}] sheet, so it has no crop factors to load. Is it a node-based workbook? (A Water Balance Tool workbook's crops load from its [Crop demand] sheet.)`
 		});
 	} else readFactors(wb, factorsSheet, out, warn);
 	if (areasSheet === null) {

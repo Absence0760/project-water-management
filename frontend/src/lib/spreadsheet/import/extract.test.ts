@@ -213,6 +213,24 @@ describe('extractProject errors and options', () => {
 	});
 });
 
+describe('a small pool (issue #90 Q18)', () => {
+	it('gets a neutral info note of its capacity, never a placeholder warning, and is imported as entered', () => {
+		// Farm A's dam becomes a 0.5 m³ pool that takes none of the upstream inflow (all of it passes, in b023's terms).
+		const { project, notes } = extractProject(syntheticB023().set('Farm spec', 'P30', 0.5).set('Farm spec', 'N30', 1).build(), { fileName: FILE });
+		expect(project.model.nodes[0]).toMatchObject({ name: 'Farm A', damCapacityM3: 0.5, pctUpstreamToDam: 0 });
+		expect(notes.filter((n) => n.code === 'small-pool')).toEqual([
+			{
+				code: 'small-pool',
+				severity: 'info',
+				message: "farm Farm A: a small pool of 0.5 m³, imported as entered (a pool's capacity is user defined, issue #90 Q18)",
+				sheet: 'Farm spec',
+				element: 'Farm A'
+			}
+		]);
+		expect(notes.some((n) => /placeholder/i.test(n.message))).toBe(false);
+	});
+});
+
 describe('the run-of-river option (--run-of-river, issue #54 2c/2d)', () => {
 	// Farm A's dam becomes a 0.5 m³ pool on the river (flagged), and its enabled transfer to Farm B draws on it;
 	// Farm B has no dam and now takes all of the upstream inflow (flagged; 0 % past the dam in b023's terms).

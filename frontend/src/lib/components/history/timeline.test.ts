@@ -71,6 +71,16 @@ describe('what an item says', () => {
 		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Weir', outcome: 'not_considered' }))).toBe(
 			'Recorded the responsible authority’s decision on the application “Weir”: not considered (use already authorised)'
 		);
+		// 228_decision_events: what followed a decision, in the forum's words.
+		expect(eventLine(ev('scenario.appeal_recorded', { scenarioId: 's', name: 'Weir', kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-02' }))).toBe(
+			'Recorded an appeal lodged with the Water Tribunal against the decision on “Weir”'
+		);
+		expect(eventLine(ev('scenario.appeal_recorded', { scenarioId: 's', name: 'Weir', kind: 'set_aside', forum: 'court', eventDate: '2026-10-05' }))).toBe(
+			'Recorded that the court set aside the decision on “Weir”'
+		);
+		expect(eventLine(ev('scenario.appeal_recorded', { scenarioId: 's', name: 'Weir', kind: 'varied', forum: 'water_tribunal', eventDate: '2026-10-08' }))).toBe(
+			'Recorded that the Water Tribunal varied the decision on “Weir”, with new licence terms'
+		);
 		expect(eventLine(ev('scenario.shared', { scenarioId: 's', application: true, userId: 'u' }))).toBe('Shared an application with another applicant');
 		expect(eventLine(ev('scenario.unshared', { scenarioId: 's', application: true, userId: 'u', self: true }))).toBe('Stopped reading a shared application');
 		// "Ask the assessors why" (164): never the question's words.
@@ -112,6 +122,28 @@ describe('what an item says', () => {
 		expect(eventLine(ev('registration.requirement', { required: false }))).toBe('Issuing an evidence pack no longer waits for a registration check');
 		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: true }))).toBe('Marked Ben as acting for the responsible authority');
 		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: false }))).toBe('Ben no longer acts for the responsible authority');
+		// 229 (issue #523 G5): the authority confirms its own delegates; the database writes each event.
+		expect(eventLine(ev('authority.proposed', { userId: 'u', displayName: 'Ben' }))).toBe(
+			'Proposed Ben to act for the responsible authority (it grants nothing until the authority confirms it)'
+		);
+		expect(eventLine(ev('authority.confirmed', { userId: 'u', displayName: 'Ben', via: 'member' }))).toBe('Confirmed Ben as acting for the responsible authority');
+		expect(eventLine(ev('authority.confirmed', { userId: 'u', displayName: 'Ben', via: 'operator', reference: 'CMA letter 2026/14' }))).toBe(
+			'Confirmed Ben as acting for the responsible authority, on the authority’s request (CMA letter 2026/14)'
+		);
+		expect(eventLine(ev('authority.withdrawn', { userId: 'u', displayName: 'Ben', wasConfirmed: false }))).toBe('Withdrew the proposal that Ben act for the responsible authority');
+		expect(eventLine(ev('authority.declined', { userId: 'u', displayName: 'Ben', wasConfirmed: false }))).toBe(
+			'Declined, for the responsible authority, the proposal that Ben act for it'
+		);
+		expect(eventLine(ev('authority.removed', { userId: 'u', displayName: 'Ben', wasConfirmed: true }))).toBe('Ben no longer acts for the responsible authority (removed)');
+		expect(eventLine(ev('authority.lapsed', { userId: 'u', displayName: 'Ben', wasConfirmed: true }))).toBe(
+			'Ben no longer acts for the responsible authority: they are no longer an editor of the project'
+		);
+		expect(eventLine(ev('authority.lapsed', { userId: 'u', displayName: 'Ben', wasConfirmed: false }))).toBe(
+			'The proposal that Ben act for the responsible authority lapsed: they are no longer an editor of the project'
+		);
+		expect(eventLine(ev('authority.grandfathered', { userId: 'u', displayName: 'Ben', via: 'grandfathered' }))).toBe(
+			'Ben acts for the responsible authority, marked by an owner before the authority confirmed its own delegates (carried over as confirmed)'
+		);
 		expect(eventLine(ev('publication.endorsed', { publicationId: 'p', runId: 'r', note: '' }))).toBe('Endorsed a published baseline for the responsible authority');
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
@@ -273,6 +305,16 @@ describe('what an item says', () => {
 		);
 		expect(eventLine(ev('licence.outcome', { outcome: 'refused', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
 			'Recorded the licence outcome: refused on 2026-03-01; the record may be deleted from 2029-03-01'
+		);
+		// 233: the authority's words; the events above are 161's, still read as written.
+		expect(eventLine(ev('licence.outcome', { outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28' }))).toBe(
+			'Recorded the licence outcome: licence issued on 2026-03-01, expiring 2046-02-28; the record may be deleted from 2049-02-28'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: 'application_withdrawn', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
+			'Recorded the licence outcome: application withdrawn on 2026-03-01; the record may be deleted from 2029-03-01'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: 'not_considered', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
+			'Recorded the licence outcome: not considered (use already authorised) on 2026-03-01; the record may be deleted from 2029-03-01'
 		);
 		expect(eventLine(ev('licence.outcome', { outcome: null, reason: 'entered on the wrong project' }))).toBe('Cleared the licence outcome: entered on the wrong project');
 		expect(eventLine(ev('licence.confirmed', { reviewDueOn: '2031-10-01' }))).toBe('Confirmed the licence record is still needed; next review 2031-10-01');
