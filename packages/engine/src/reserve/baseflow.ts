@@ -51,7 +51,11 @@ export const BASEFLOW_REFLECT_DAYS = 30;
  * McMahon's repeated passes as a further parameter), with β fixed at 0.5 ("no
  * reason to change the β parameter from the fixed value of 0.5" for daily
  * data) and α = 0.995 (Smakhtin & Watkins 1997; up to 0.997 in some
- * catchments).
+ * catchments). One pass since the signatures came (engine 1.55.0), and a
+ * literal, not BASEFLOW_PASSES: D3 (engine 1.87.0) moved the Reserve's base
+ * flow to this pass count, so the two are one filter now (baseflow.test.ts
+ * checks both), and a change to either fails a test rather than moving the
+ * other.
  */
 export const HUGHES_FILTER: Readonly<QuickflowFilter> = Object.freeze({ kind: 'quickflow', alpha: 0.995, beta: 0.5, passes: 1 });
 /**

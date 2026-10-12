@@ -8351,8 +8351,12 @@ reflected by 30 days at each end, as there):
 | Hughes, Hannart & Watkins (2003) | q_t = α·q_t−1 + β·(1 + α)·(Q_t − Q_t−1), 0 ≤ q_t ≤ Q_t, b_t = Q_t − q_t, q_0 = 0 | α **0.995**, β **0.5**, **one forward pass** | their eq. 1; β fixed at 0.5 for daily data ("no reason to change the β parameter from the fixed value of 0.5"); α 0.995 for South African daily flows (Smakhtin & Watkins 1997; up to 0.997 in some catchments); Nathan & McMahon's repeated passes set aside as a further parameter |
 | Eckhardt (2005) | b_t = ((1 − BFImax)·a·b_t−1 + (1 − a)·BFImax·Q_t) ÷ (1 − a·BFImax), b_t ≤ Q_t, b_0 = BFImax·Q_0 | a **0.98**, BFImax **0.25** | Eckhardt 2005's BFImax 0.25 for perennial streams on hard-rock aquifers (0.80 perennial on porous aquifers, 0.50 ephemeral on porous); most South African rivers drain fractured hard-rock aquifers. a 0.98 is the usual daily recession constant; Eckhardt (2008) derives it from the record's own recessions instead |
 
-β = 0.5 is Lyne & Hollick's own filter, so the Hughes form is §2.9d's filter
-(one pass instead of three before engine 1.87.0; the same filter since, tested;
+β = 0.5 is Lyne & Hollick's own filter, so the Hughes form is §2.9d's filter.
+The signatures' index has run it once, forward, since it came (engine 1.55.0),
+as the paper does; §2.9d ran three passes until engine 1.87.0 (issue #523 D3)
+moved it to the same one pass, so the two are now one filter, tested
+(`HUGHES_FILTER` is pinned to one pass on its own, so a change to §2.9d's
+`BASEFLOW_PASSES` fails a test rather than moving the signature;
 `lyneHollickBaseflow` is the β = 0.5 case of `filterBaseflow`, bit for bit). b_0 = BFImax·Q_0 is Eckhardt's
 steady state for a constant flow, so a flat record needs no start-up.
 Eckhardt's index can't exceed BFImax much, so its absolute value says more
