@@ -16,6 +16,14 @@ describe('seriesInUse', () => {
 		expect([...used].sort()).toEqual(['a', 'c']);
 	});
 
+	it('orders names by their bytes, as the run’s COLLATE "C" does, not localeCompare (issue #523)', () => {
+		// "R" (0x52) before "a" (0x61); a non-ASCII letter after every ASCII one.
+		expect([...seriesInUse([meta('g', 'rain_catchment_mm', 'average gauge'), meta('l', 'rain_catchment_mm', 'RAIN-B logger')])]).toEqual(['l']);
+		expect([...seriesInUse([meta('a', 'rain_chirps_mm', 'Ärea'), meta('z', 'rain_chirps_mm', 'Zeta')])]).toEqual(['z']);
+		const at = (id: string, name: string): SeriesMeta => ({ ...meta(id, 'flow_logger_m3s', name), siteNodeId: 'n1' });
+		expect([...gaugeRecordsInUse([at('w', 'weir'), at('W', 'Weir')], [{ id: 'n1' }])]).toEqual(['W']);
+	});
+
 	it('ignores the logger when there is an observed-gauge series', () => {
 		expect([...seriesInUse([meta('o', 'flow_observed_m3s'), meta('l', 'flow_logger_m3s')])]).toEqual(['o']);
 		expect([...seriesInUse([meta('l', 'flow_logger_m3s')])]).toEqual(['l']);
@@ -79,6 +87,8 @@ describe('newSeriesEffect', () => {
 	it('a name that sorts after keeps runs on the one they read', () => {
 		const e = newSeriesEffect([station], 'rain_catchment_mm', 'Zz station');
 		expect(e.effect).toBe('keeps');
+		// Lower case sorts after every capital, by byte (issue #523).
+		expect(newSeriesEffect([station], 'rain_catchment_mm', 'aa station').effect).toBe('keeps');
 		expect(e.current?.id).toBe('s');
 		expect(e.didYouMean).toBeNull();
 	});

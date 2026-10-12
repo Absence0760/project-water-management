@@ -30,9 +30,9 @@ export async function assertRoomForSeries(db: Db, projectId: string): Promise<vo
 /**
  * Before an API key's merge creates a series: 409 when the project already
  * has an outlet series of that kind (100_key_series_kind.sql). A run reads
- * the first outlet series of each kind by name (runs/execute.ts
- * loadLiveInput), so a key free to add a second one could name it to sort
- * first and swap the model's input for its own days. A person adds the
+ * the first outlet series of each kind by name, in byte order (runs/execute.ts
+ * loadLiveInput, COLLATE "C"), so a key free to add a second one could name
+ * it to sort first and swap the model's input for its own days. A person adds the
  * series (an upload, even of one day) and the key may then merge into it.
  * Called after assertRoomForSeries, whose advisory lock serialises creates.
  */

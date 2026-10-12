@@ -31,6 +31,7 @@ import {
 } from '@water-management/engine';
 import { dayPrefix } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
+import { firstOutletSeries } from '$lib/series/pick';
 import type { Daily } from './coverage';
 
 export type PreviewFlag = 'missing' | 'negative' | 'outlier' | 'flatline';
@@ -143,13 +144,13 @@ export function buildPreviewColumns(list: readonly SeriesMeta[]): PreviewColumn[
 }
 
 /**
- * The first series of each kind by name — the same rule the model uses (SeriesTab's own `first`, model.md),
+ * The first series of each kind by name — the same rule a run uses (lib/series/pick.ts, byte order),
  * among the outlet's: a flow record attached to a gauge node (084_gauge_records) is that gauge's, never the outlet's.
  */
 function firstByKind(list: readonly SeriesMeta[], valuesById: Readonly<Record<string, Daily>>): Partial<Record<SeriesKind, DailySeries>> {
 	const out: Partial<Record<SeriesKind, DailySeries>> = {};
 	for (const k of SERIES_KINDS) {
-		const s = [...list].filter((x) => x.kind === k && !x.siteNodeId).sort((a, b) => a.name.localeCompare(b.name))[0];
+		const s = firstOutletSeries(list, k);
 		const d = s && valuesById[s.id];
 		if (d) out[k] = d;
 	}

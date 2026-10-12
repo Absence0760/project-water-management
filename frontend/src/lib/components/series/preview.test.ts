@@ -179,6 +179,17 @@ describe('buildPreviewRows: rain gap-fill source, via the engine’s own prepare
 	});
 });
 
+describe('buildPreviewRows: of two series of a kind, the one a run reads (issue #523)', () => {
+	it('uses the first by the name’s bytes, as the backend’s COLLATE "C", not localeCompare', () => {
+		// localeCompare puts "average gauge" first; byte order (and so every run) puts "RAIN-B logger" first.
+		const gauge = meta({ id: 'g', kind: 'rain_catchment_mm', name: 'average gauge', startDate: '2020-01-01', length: 1 });
+		const logger = meta({ id: 'l', kind: 'rain_catchment_mm', name: 'RAIN-B logger', startDate: '2020-01-01', length: 1 });
+		const valuesById: Record<string, Daily> = { g: { startDate: '2020-01-01', values: [5] }, l: { startDate: '2020-01-01', values: [8] } };
+		const rows = buildPreviewRows([gauge, logger], valuesById, defaultProjectSettings());
+		expect(rows[0]!.derived).toMatchObject({ rainSource: 'catchment', rainUsedMm: 8 });
+	});
+});
+
 describe('buildPreviewRows: CHIRPS bias correction, via the engine’s own rain.ts', () => {
 	// 100 days, one calendar month each of Jan–Apr: not enough days in any one
 	// month to fit that month's own factor, but enough pooled (>= 90 days, >=

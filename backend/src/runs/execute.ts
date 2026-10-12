@@ -56,7 +56,8 @@ export type InputSeriesIds = Partial<Record<keyof ModelInput['series'], string>>
 async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelInput; seriesIds: InputSeriesIds }> {
 	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
 	const model = await loadModel(db, projectId);
-	// First series of each kind (ordered by name) — the engine takes one per kind.
+	// First series of each kind by name — the engine takes one per kind. By the name's bytes (COLLATE "C"), not the
+	// database's collation, which differs between musl and glibc Postgres (issue #523; engine compareSeriesNames).
 	const { rows: s } = await db.query<{
 		id: string;
 		kind: SeriesKind;
@@ -74,7 +75,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		// (engine gaugeSeriesKey), which only the plausibility checks read. A land unit's own rain likewise (209).
 		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id,
 			source, source_unit, source_unit_factor
-		 FROM time_series WHERE project_id = $1 ORDER BY site_node_id NULLS FIRST, kind, name`,
+		 FROM time_series WHERE project_id = $1 ORDER BY site_node_id NULLS FIRST, kind, name COLLATE "C"`,
 		[projectId]
 	);
 	const series: ModelInput['series'] = {};

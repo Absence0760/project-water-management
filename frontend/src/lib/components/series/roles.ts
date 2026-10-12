@@ -1,6 +1,7 @@
 // What the model does with each series kind (see packages/engine run.ts /
 // flow.ts), for the Time series tab's explanation and per-series badges.
 import type { SeriesMeta } from '@water-management/engine';
+import { byKindThenName } from '$lib/series/pick';
 
 export interface KindRole {
 	/** Short badge text. */
@@ -77,8 +78,9 @@ export function rainSourceKinds(periods: readonly { series: string; fitReference
 }
 
 /**
- * Ids of the series a run actually reads: the first of each kind by name
- * (the backend's DISTINCT ON (kind) … ORDER BY kind, name), and the logger
+ * Ids of the series a run actually reads: the first of each kind by name, in
+ * byte order (the backend's DISTINCT ON (kind) … ORDER BY kind, name COLLATE
+ * "C", lib/series/pick.ts), and the logger
  * only when there is no observed-gauge series. A reference gauge is never in
  * use: the engine ignores it. The alternative catchment gauge and the
  * reanalysis are in use only when a rain-source period names them
@@ -87,7 +89,7 @@ export function rainSourceKinds(periods: readonly { series: string; fitReference
  */
 export function seriesInUse(list: SeriesMeta[], periodKinds: ReadonlySet<string> = new Set()): Set<string> {
 	const first = new Map<string, SeriesMeta>();
-	for (const s of [...list].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))) {
+	for (const s of byKindThenName(list)) {
 		if (s.siteNodeId) continue;
 		if (PERIOD_ONLY.has(s.kind) && !periodKinds.has(s.kind)) continue;
 		if (!first.has(s.kind) && !NEVER_READ.has(s.kind)) first.set(s.kind, s);
@@ -108,7 +110,7 @@ export const SITED_KINDS = new Set(['flow_observed_m3s', 'flow_logger_m3s']);
 export function gaugeRecordsInUse(list: SeriesMeta[], gauges: readonly { id: string }[]): Set<string> {
 	const ids = new Set(gauges.map((g) => g.id));
 	const first = new Map<string, SeriesMeta>();
-	for (const s of [...list].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))) {
+	for (const s of byKindThenName(list)) {
 		if (!s.siteNodeId || !ids.has(s.siteNodeId) || !SITED_KINDS.has(s.kind)) continue;
 		const k = `${s.siteNodeId}|${s.kind}`;
 		if (!first.has(k)) first.set(k, s);
@@ -133,8 +135,9 @@ export interface NewSeriesEffect {
 
 /**
  * Whether a new upload's series takes over from the one a run reads: a run
- * reads the first of each kind by name (seriesInUse), so "Aa station" beside
- * "Station 0021" replaces it in runs, and "Zz station" doesn't. Uploads go to
+ * reads the first of each kind by name in byte order (seriesInUse), so "Aa
+ * station" beside "Station 0021" replaces it in runs, and "Zz station" or
+ * "aa station" (lower case sorts after capitals) doesn't. Uploads go to
  * the outlet, so a gauge's records (siteNodeId) don't count. Rain-source
  * periods aren't known here, so a period-only kind is `unread` unless it is
  * read anyway (never, today).

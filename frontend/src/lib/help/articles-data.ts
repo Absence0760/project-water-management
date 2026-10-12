@@ -354,7 +354,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/ui.md (Data tab, upload)'
 	},
 	'series-update-mode': {
-		long: 'Uploading into a series that exists: **Append / update** adds the file’s new days and corrects the days both have, leaving the rest; **Replace** overwrites the whole series with the file. Before you upload, the form counts new, changed and unchanged days and the series’ span afterwards, and a file that changes stored days asks first, naming how many and between which dates (**Show the changes** lists each). The values it overwrites are kept: History’s **Restore the earlier values** brings them back.\n\nA new series of a kind that already has one is a second series: runs read the first by name, and the form says which one runs will read.',
+		long: 'Uploading into a series that exists: **Append / update** adds the file’s new days and corrects the days both have, leaving the rest; **Replace** overwrites the whole series with the file. Before you upload, the form counts new, changed and unchanged days and the series’ span afterwards, and a file that changes stored days asks first, naming how many and between which dates (**Show the changes** lists each). The values it overwrites are kept: History’s **Restore the earlier values** brings them back.\n\nA new series of a kind that already has one is a second series: runs read the first by name, in character order (digits and capitals before lower case, so “RAIN-B” comes before “average”), and the form says which one runs will read.',
 		aliases: ['append', 'update series', 'replace series', 'merge upload', 'overwrite'],
 		related: ['series-source', 'data-freshness'],
 		source: 'Not in the workbook; docs/ui.md (Data tab, upload)'

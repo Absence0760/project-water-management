@@ -6,9 +6,12 @@
 import type { DailySeries, SeriesMeta } from '@water-management/engine';
 import { api } from '$lib/api';
 import { cachedValues, cacheValues } from '$lib/components/series/valuesCache';
+import { firstOutletSeries } from '$lib/series/pick';
 import { proposalFrom, type FitRangeProposal } from './fitRangeProposal';
 
-const firstOf = (list: SeriesMeta[], kind: string) => list.filter((s) => s.kind === kind).sort((a, b) => a.name.localeCompare(b.name))[0] ?? null;
+// The outlet's (a unit's own rain is never the catchment's), first by name as a run picks (byte order).
+const firstOf = (list: SeriesMeta[], kind: string) => firstOutletSeries(list, kind) ?? null;
+
 
 async function valuesOf(projectId: string, s: SeriesMeta | null): Promise<DailySeries | null> {
 	if (!s) return null;
