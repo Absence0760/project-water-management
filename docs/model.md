@@ -2279,7 +2279,14 @@ not the run window, so the rule doesn't depend on the window):
    multi-day accumulations (§2.4d, `settings.accumulations`). A day those
    checks set aside as missing falls to the next link of the chain (the
    unit's own CHIRPS, levelled); a spread accumulation's days carry the
-   spread rain. Before 1.85.0 the record was read as stored.
+   spread rain. The checks compare the gauge with the unit's own CHIRPS,
+   else the catchment's. Only the modes, the fill threshold and the
+   data-quality limits carry over: the dated lists in
+   `settings.zeroRainRuns` (missing, keep dry, keep readings, add
+   accumulations) and the rain-source periods (§2.4e) name days of the
+   catchment gauge's record, so they don't apply to a unit's gauge
+   (`runoff/unitGaugeChecks.ts`). Before 1.85.0 the record was read as
+   stored.
 2. **The catchment gauge × clamp(unit MAP ÷ gauge MAP)**, when
    `gaugeMapMm` is set, the unit has a MAP and the project has catchment
    gauge rain. The gauge rain is the prepared catchment rain on the days it
@@ -2431,7 +2438,10 @@ window), for each calendar month *m*:
   and rain-source periods (§2.4e), before the CHIRPS infill. For a unit's
   own gauge it is the record after rule 1's §2.4c and §2.4d checks. A day
   the checks set aside as missing is not a reading, so it is left out of
-  the fit. `summary.unitRain.reference.gaugeChecked` is true when the fit
+  the fit. So are the accumulation windows, as in §2.4b's own fit (every
+  window but a reading kept as recorded): a spread window's days are shaped
+  from CHIRPS, and fitting gauge against CHIRPS on them would pull the
+  factor towards 1. `summary.unitRain.reference.gaugeChecked` is true when the fit
   read it. Engines 1.80.0–1.84.0 read the gauge as stored, so a stretch of
   zeros logged for a broken gauge pulled its months' factors down.
 - **Minimum sample**, §2.4b's: at least **90 shared days**
