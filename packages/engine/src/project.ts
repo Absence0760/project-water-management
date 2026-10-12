@@ -3474,8 +3474,6 @@ export interface UnitRainReferenceFit {
 	cellKey: string;
 	/** Why that cell: the one nearest the reference unit's centre ('gaugeCell', the gauge's own cell, is reserved for later). */
 	cellReason: 'referenceUnitCentre';
-	/** Whether the fit read the gauge's checked rain (§2.4c–§2.4e) rather than the rain as stored. */
-	gaugeChecked: boolean;
 	/** Whether the factors were pinned (the uncertainty ensemble's CHIRPS-only member), not fitted. */
 	pinned: boolean;
 	/** Whether the fit read the gauge's checked rain (after §2.4c zero runs, §2.4d accumulations and, for the catchment gauge, §2.4e rain-source periods; issue #500 decision 1c), not the series as stored. */
