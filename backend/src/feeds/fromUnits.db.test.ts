@@ -132,6 +132,22 @@ describe('rain for each unit (from-units)', () => {
 		expect((await s.owner.call('GET', at(s.pid))).body.units.find((x: { nodeId: string }) => x.nodeId === s.twin.id)).toMatchObject({ featureId: c1.id, action: 'create' });
 	});
 
+	it('creates a unit’s feed as rnl even when the catchment’s own CHIRPS feed reads sat, the plain feed’s default (issue #500, answer 3)', async () => {
+		const s = await setup();
+		await parcel(s.editor, s.pid, s.a.id);
+		// The catchment's feed, no product given: sat (positive control that the plain default differs).
+		const catchment = await s.owner.call('POST', `/projects/${s.pid}/feeds`, { source: 'chirps', config: { cells: [{ lat: -33.775, lon: 21.225 }] } });
+		expect(catchment.status, JSON.stringify(catchment.body)).toBe(201);
+		expect((await asOwner(`SELECT config->>'product' AS product FROM data_feed WHERE id = $1`, [catchment.body.feed.id]))[0].product ?? 'sat').toBe('sat');
+
+		// The unit proposal ignores it (not a unit feed): rnl, which reads the whole 1991–2020 MAP period k_unit needs.
+		expect((await s.owner.call('GET', at(s.pid))).body.product).toBe('rnl');
+		const r = await s.owner.call('POST', at(s.pid), {});
+		expect(r.status, JSON.stringify(r.body)).toBe(200);
+		const feedId = r.body.feeds[0].feedId as string;
+		expect((await asOwner(`SELECT config->>'product' AS product, config->>'startDate' AS start FROM data_feed WHERE id = $1`, [feedId]))[0]).toEqual({ product: 'rnl', start: '1981-01-01' });
+	});
+
 	it('updates a feed whose series is still empty when the parcel moves or the product changes, and refuses once it holds days', async () => {
 		const s = await setup();
 		const f = await parcel(s.owner, s.pid, s.a.id);

@@ -945,8 +945,12 @@ const UNIT_RAIN_FACTOR_TEXT: Record<UnitRainUnit['factorSource'], string> = {
 	chirpsMap: 'unit MAP ÷ its CHIRPS mean annual rain',
 	chirpsBias: "the catchment's monthly CHIRPS factors",
 	chirpsRaw: 'raw',
-	chirpsReference: "the reference gauge's monthly factors × unit MAP ÷ the reference unit's MAP",
+	chirpsReference: "the reference gauge's monthly factors × k_unit (unit MAP ÷ its mean annual CHIRPS × factors)",
 	catchment: 'as the catchment forcing'
+};
+
+const CELL_REASON_TEXT: Record<NonNullable<UnitRainSummary['reference']>['cellReason'], string> = {
+	referenceUnitCentre: "the cell under the reference unit's centre; rain gauges have no map location yet"
 };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -966,6 +970,7 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 		'Factor',
 		'Factor from',
 		'Clamped',
+		'Outside 0.5–2',
 		'CHIRPS mean annual (mm)',
 		'CHIRPS years',
 		'Days: own gauge',
@@ -983,7 +988,16 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 	for (const x of u.units) {
 		const map = x.chirps?.source === 'map' ? x.chirps : null;
 		const ref = x.chirps?.source === 'reference' ? x.chirps : null;
-		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : x.rule === 'unitChirps' ? (map?.clamped ?? ref?.mapClamped ?? false) : false;
+		const unusable = x.chirps?.source === 'unusable' ? x.chirps : null;
+		// k_unit on the reference factors (issue #500); a run from engine 1.80–1.83 stored the reference unit's MAP ratio instead.
+		const kUnit = ref?.kUnit ?? null;
+		const legacy = ref && ref.kUnit === undefined ? (ref as unknown as { mapRatio?: number; mapClamped?: boolean }) : null;
+		const level = map ?? kUnit;
+		const mean = level ?? unusable;
+		const chirpsOn = x.rule === 'unitChirps';
+		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : chirpsOn ? (map?.clamped ?? kUnit?.clamped ?? legacy?.mapClamped ?? false) : false;
+		const outside = x.rule === 'gaugeMap' ? !!x.gaugeMapOutsideBand : chirpsOn ? !!(map?.outsideBand ?? kUnit?.outsideBand) : false;
+		const span = mean && mean.years.length ? `${mean.years[0]}–${mean.years[mean.years.length - 1]} (${mean.years.length}` : '';
 		yield csvRow([
 			x.name,
 			x.areaKm2,
@@ -991,12 +1005,14 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 			x.mapSource ?? '',
 			UNIT_RAIN_RULE_TEXT[x.rule],
 			x.rainKey ?? '',
-			// On the reference factors the factor varies by month: the column holds the MAP ratio on top of them.
-			x.factor ?? (x.rule === 'unitChirps' && ref ? ref.mapRatio : null),
+			// On the reference factors the factor varies by month: the column holds k_unit on top of them (null: no complete year yet).
+			x.factor ?? (chirpsOn && ref ? (kUnit?.factor ?? legacy?.mapRatio ?? null) : null),
 			UNIT_RAIN_FACTOR_TEXT[x.factorSource],
 			clamped ? 'yes' : 'no',
-			map ? map.meanAnnualMm : null,
-			map ? `${map.years[0]}–${map.years[map.years.length - 1]} (${map.years.length}${map.inPeriod ? '' : ', outside the MAP period'})` : '',
+			outside ? 'yes' : 'no',
+			mean ? mean.meanAnnualMm : null,
+			// Unusable CHIRPS (issue #500 answer 7a) averages 0 mm a year: the unit skipped it.
+			span ? `${span}${unusable ? ', unusable: skipped' : level && !level.inPeriod ? ', outside the MAP period' : ''})` : '',
 			x.days.unitGauge,
 			x.days.gaugeMap,
 			x.days.unitChirps,
@@ -1015,9 +1031,12 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 	if (r) {
 		yield csvRow(['Reference gauge', r.gauge]);
 		yield csvRow(['Reference unit', r.unitName ?? r.unitId, r.mapMm === null ? 'no MAP' : `MAP ${r.mapMm} mm`]);
-		yield csvRow(['Reference CHIRPS cell', r.cellKey, r.pinned ? 'factors pinned, not fitted' : '']);
-		yield csvRow(['Month', 'Shared days', 'Gauge (mm)', 'CHIRPS (mm)', 'Own factor', 'Factor applied', 'Clamped', 'Fitted']);
-		for (const m of r.months) yield csvRow([MONTHS[m.month - 1]!, m.sharedDays, m.gaugeMm, m.chirpsMm, m.ownFactor, m.factor, m.clamped ? 'yes' : 'no', m.fitted ? 'yes' : 'no (factor 1)']);
+		yield csvRow(['Reference CHIRPS cell', r.cellKey, r.pinned ? 'factors pinned, not fitted' : '', r.cellReason ? (CELL_REASON_TEXT[r.cellReason] ?? r.cellReason) : '']);
+		// Issue #500 answer 1c; a run from before it read the gauge as stored.
+		if (r.gaugeChecked !== undefined) yield csvRow(['Fitted against', r.gaugeChecked ? 'the checked gauge rain (§2.4c–§2.4e)' : 'the gauge rain as recorded']);
+		yield csvRow(['Month', 'Shared days', 'Gauge (mm)', 'CHIRPS (mm)', 'Own factor', 'Factor applied', 'Clamped', 'Outside 0.5–2', 'Fitted']);
+		for (const m of r.months)
+			yield csvRow([MONTHS[m.month - 1]!, m.sharedDays, m.gaugeMm, m.chirpsMm, m.ownFactor, m.factor, m.clamped ? 'yes' : 'no', m.outsideBand ? 'yes' : 'no', m.fitted ? 'yes' : 'no (factor 1)']);
 	}
 }
 

@@ -22,7 +22,8 @@ Anyone holding a pack can hash the file at the engine's tag and compare.
 | [v2](./v2.md) | 2026-10-03 | 1.72.0 – 1.76.0 | §4: irrigation systems per crop and unit; the return flow a share of the water supplied (audit N1) |
 | [v3](./v3.md) | 2026-10-08 | 1.77.0 | §5: the daily EWR at the outlet may come from the DRM TAB file or percentile tables, scaled by MAR or area (issue #455) |
 | [v4](./v4.md) | 2026-10-09 | 1.78.0 – 1.79.0 | §2, §3, §8: runoff from each unit's own rain, opt-in (issue #482) |
-| [v5](./v5.md) | 2026-10-10 | ≥ 1.80.0 | §2: a reference rain gauge's monthly factors level every unit's CHIRPS, then the MAP ratio (issue #500, provisional) |
+| [v5](./v5.md) | 2026-10-10 | 1.80.0 – 1.84.0 | §2: a reference rain gauge's monthly factors level every unit's CHIRPS, then the MAP ratio (issue #500, provisional) |
+| [v6](./v6.md) | 2026-10-12 | ≥ 1.85.0 | §2: the reference factors fitted on the checked gauge rain, then each unit rescaled to its own MAP (k_unit); 10-year means, the 0.5–2 warning band, unusable all-zero CHIRPS, a unit's gauge checked, CHIRPS-GEFS levelled per unit (issue #500) |
 
 The highest version is the current one: new sign-offs and packs cite it.
 

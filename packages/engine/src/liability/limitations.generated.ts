@@ -126,8 +126,8 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"id": "U1",
 		"source": "finding",
 		"severity": "Medium (projects with runoff from each unit's own rain, settings.unitRain perUnit)",
-		"title": "Each unit's rain level rests on provisional calls the hydrologist hasn't confirmed",
-		"status": "Needs hydrologist (engine 1.78.0, issue #482)"
+		"title": "Each unit's rain level rested on provisional calls",
+		"status": "Pending the hydrologist on the MAP period, the reference cell, rain-source days in the fit, and the EWR split and land-cover threshold on flow shares; the decided rules are built in engine 1.85.0 (issue #500)"
 	},
 	{
 		"id": "L1",

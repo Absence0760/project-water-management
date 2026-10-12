@@ -3,7 +3,8 @@
 	results): a run with settings.unitRain `perUnit` ran GR4J once per land
 	unit; this lists each unit's rain rule, its factor and where it comes from,
 	its rain and runoff over the run, and what to check (units that fell back
-	to the catchment rain, held factors). The units to look at come first;
+	to the catchment rain, held factors, factors outside the 0.5–2 warning
+	band, CHIRPS skipped as unusable). The units to look at come first;
 	long lists fold. Shown only when the summary carries summary.unitRain. Its
 	own chunk. Helpers in ./unitRain.ts.
 -->
@@ -11,7 +12,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { fmtNum } from '$lib/format/number';
-	import { factorClamped, factorText, periodText, referenceFactorsText, RULE_LABEL, sortResultUnits, unitRainNotes, type UnitRainResult } from './unitRain';
+	import { factorClamped, factorOutsideBand, factorText, periodText, referenceFactorsText, referenceFitText, RULE_LABEL, sortResultUnits, unitRainNotes, type UnitRainResult } from './unitRain';
 
 	/** order: node ids in the run's farm order (summary.farms), which the rows follow within each rank. */
 	let { result, order = [] }: { result: UnitRainResult; order?: string[] } = $props();
@@ -35,9 +36,16 @@
 		GR4J ran once for each unit with land on its own rain. MAP period {periodText(result.mapPeriod)}{#if result.gaugeMapMm !== null}; rain gauge’s MAP {fmtNum(result.gaugeMapMm)} mm{result.gaugeMapSource ? ` (${result.gaugeMapSource})` : ''}{:else}; no rain gauge MAP{/if}.
 	</p>
 	{#if result.reference && refFactors}
+		{@const ref = result.reference}
+		{@const gauge = ref.gauge === 'rain_catchment_mm' ? 'the catchment rain gauge' : 'a unit’s own gauge'}
+		{@const fit = referenceFitText(ref)}
 		<p class="muted small" data-testid="run-unit-rain-reference">
-			Every unit’s CHIRPS is levelled by the reference gauge ({result.reference.gauge === 'rain_catchment_mm' ? 'the catchment rain gauge' : 'a unit’s own gauge'}, compared with the CHIRPS
-			cell of {result.reference.unitName ?? result.reference.unitId}){result.reference.pinned ? ', its factors pinned' : ''}: {refFactors}.
+			{#if fit}
+				Every unit’s CHIRPS is levelled by the reference gauge, {gauge}{ref.pinned ? ', its factors pinned' : ''}: {refFactors}. {fit} Each unit’s level is then rescaled to its own MAP
+				(k_unit).
+			{:else}
+				Every unit’s CHIRPS is levelled by the reference gauge ({gauge}, compared with the CHIRPS cell of {ref.unitName ?? ref.unitId}){ref.pinned ? ', its factors pinned' : ''}: {refFactors}.
+			{/if}
 		</p>
 	{/if}
 	{#if notes.length}
@@ -73,7 +81,7 @@
 						<th scope="row">{u.name}</th>
 						<td>
 							<span class="rule">{RULE_LABEL[u.rule] ?? u.rule}</span>
-							<span class="factor">{factorText(u)}{#if factorClamped(u)}{' '}<strong class="tag">held at the bound</strong>{/if}</span>
+							<span class="factor">{factorText(u)}{#if factorClamped(u)}{' '}<strong class="tag">held at the bound</strong>{:else if factorOutsideBand(u)}{' '}<strong class="tag">outside 0.5–2</strong>{/if}</span>
 						</td>
 						<td class="num">{u.mapMm === null ? '–' : fmtNum(u.mapMm)}</td>
 						<td class="num">{fmtNum(u.rainMm, 0)}</td>

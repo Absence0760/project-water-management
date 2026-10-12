@@ -5,7 +5,7 @@
 // e2e/tests/unit-map.spec.ts.
 import { describe, expect, it } from 'vitest';
 import type { UnitMapProposal } from '$lib/api';
-import { appliedNotice, candidateLabel, cellText, coverageLine, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
+import { appliedNotice, candidateLabel, cellText, coverageLine, coveredText, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
 
 const unit = (name: string, mapMm: number, patch: Partial<UnitMapProposal['units'][number]> = {}): UnitMapProposal['units'][number] => ({
 	nodeId: `n-${name}`,
@@ -57,6 +57,18 @@ describe('the coverage sentence and the picker', () => {
 		expect(pctText(0.5)).toBe('50 %');
 		// Floored, so a unit just short of the rule never reads as 90 %.
 		expect(pctText(0.8999)).toBe('89.9 %');
+	});
+});
+
+describe('a proposal’s coverage (issue #500 answer 8)', () => {
+	it('shows how much of the parcel has values only when it is below 100 %', () => {
+		expect(coveredText(unit('A', 712, { coveredShare: 0.93 }))).toBe('93 % covered');
+		expect(coveredText(unit('A', 712, { coveredShare: 0.9 }))).toBe('90 % covered');
+		// Floored, so a parcel just short of whole never reads as 100 %.
+		expect(coveredText(unit('A', 712, { coveredShare: 0.9996 }))).toBe('99.9 % covered');
+		expect(coveredText(unit('A', 712))).toBeNull();
+		// Float error on a parcel the grid covers whole is not a gap.
+		expect(coveredText(unit('A', 712, { coveredShare: 1 - 1e-12 }))).toBeNull();
 	});
 });
 

@@ -228,7 +228,9 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 		expect(ref.months.every((m) => m.factor === 1 && !m.fitted)).toBe(true);
 		expect((run.summary.warnings as string[]).join('\n')).toMatch(/too little in common/);
 		const mid = (run.summary.unitRain.units as UnitRainUnit[]).find((u) => u.nodeId === middle!.id)!;
-		expect(mid.chirps).toMatchObject({ source: 'reference', mapRatio: middle!.mapMm / north!.mapMm });
+		// A few months of the unit's CHIRPS hold no complete calendar year, so there is no k_unit (engine ≥ 1.85.0): the factors alone.
+		expect(mid.chirps).toMatchObject({ source: 'reference', kUnit: null });
+		expect((run.summary.warnings as string[]).join('\n')).toMatch(/no complete calendar year to compare its MAP with, so it takes the reference factors without k_unit/);
 		// The cell series is part of the run's stored input: the run reproduces from it alone.
 		expect((await call('GET', `/projects/${pid}/runs/${runId}/reproduce`)).status).toBe('identical');
 		await call('PATCH', `/projects/${pid}`, { settings: { unitRain } });

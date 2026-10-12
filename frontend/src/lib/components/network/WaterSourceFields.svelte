@@ -4,7 +4,7 @@
 	// rule (the dam side, the default), or a river abstraction of its own beside
 	// the dam, with its pump capacity (PumpCapacityField: pumps × m³/h × 24,
 	// blank = no limit) and an optional pool at the pump, capacity only (it
-	// starts full; its surface is estimated from the capacity). Used for the
+	// starts full and is storage only: no rain, no evaporation). Used for the
 	// unit's crops (SupplyFields) and for each demand object
 	// (DemandObjectFields). Every label names the demand, so a group that also
 	// holds the unit's own pump reads each field apart. The pump and pool are
@@ -81,7 +81,7 @@
 		<div class="field">
 			<label for={id('pool')}>Pool at the pump{forWhom} <span class="u">(m³)</span></label>
 			<NumberInput id={id('pool')} min={0} grouped nullable placeholder="no pool" disabled={readonly} aria-describedby="{id('pool')}-h" value={pool ?? null} onchange={(v) => onpool(v)} />
-			<span class="hint" id="{id('pool')}-h">Starts full; its surface is estimated from the capacity, for its evaporation.</span>
+			<span class="hint" id="{id('pool')}-h">Starts full and holds up to this volume; no rain or evaporation.</span>
 			{@render history?.('pool')}
 		</div>
 	{/if}

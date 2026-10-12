@@ -9,7 +9,7 @@ import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
-import { hasPumpLimit, poolLosses, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
+import { hasPumpLimit, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
 import { damHasFilled, PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
 import type { PlanOfftake } from './offtake';
 import type { PlanRemote } from './cropSupply';
@@ -386,12 +386,12 @@ export interface NodeResult {
 	/**
 	 * The unit's river abstractions (engine ≥ 1.65.0, docs/model.md §2.7j), in
 	 * `river.takes` order: what each pumped (part of `supplied`) and, with a
-	 * pool, the pool's storage at the end of the day and its evaporation (null
-	 * without one), and with a pump capacity the demand the pump left unmet
+	 * pool, the pool's storage at the end of the day (null without one; a pool
+	 * is storage only from engine 1.86.0, so it has no evaporation), and with a pump capacity the demand the pump left unmet
 	 * although the water was there (engine ≥ 1.66.0; null without a capacity).
 	 * Absent on a unit without a river-sourced demand.
 	 */
-	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; poolEvaporation: (Float64Array | null)[]; pumpLimited: (Float64Array | null)[] };
+	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; pumpLimited: (Float64Array | null)[] };
 	/** Supplied to the crops from another unit's dam (engine ≥ 1.73.0, docs/model.md §2.7k), part of `supplied`; absent on a unit without a remote share. */
 	remoteIn?: Float64Array;
 	/** Given from this unit's dam to other units' crops (engine ≥ 1.73.0), out of its storage; absent on a unit no remote share draws on. */
@@ -771,7 +771,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			r.riverTakes = {
 				got: tk.map(() => new Float64Array(days)),
 				pool: tk.map((x) => (x.pool ? new Float64Array(days) : null)),
-				poolEvaporation: tk.map((x) => (x.pool ? new Float64Array(days) : null)),
 				pumpLimited: tk.map((x) => (hasPumpLimit(x) ? new Float64Array(days) : null))
 			};
 		}
@@ -1681,7 +1680,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			if (Xpass > 0) Uriver += Xpass;
 			// River abstractions beside the dam (engine ≥ 1.65.0, ./riverSource.ts, docs/model.md §2.7j): after the dam
 			// side, from the flow passing the dam (its spill, release and returned seepage too, not the return flows),
-			// above what the unit pump must leave, by supply level; each pool first loses its evaporation, refills last.
+			// above what the unit pump must leave, by supply level; each pool refills last. A pool is storage only
+			// (engine ≥ 1.86.0, issue #523 B2): no rain, no evaporation.
 			let Griver = 0;
 			let poolChange = 0;
 			if (riv) {
@@ -1693,12 +1693,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				for (let a = 0; a < tk.length; a++) {
 					const x = tk[a]!;
 					want[a] = x.obj < 0 ? cropAskOf(node, riv.cropShare, rp ? rF![i]! : F) : rp ? rObjs![i]!.demand[x.obj]![t]! : objs!.demand[x.obj]![t]!;
-					if (x.pool) {
-						const [, Ep] = poolLosses(x.pool, q[a]!, lakeEvapMmDay ? lakeEvapMmDay[t]! : 0);
-						rt.poolEvaporation[a]![t] = Ep;
-						poolChange -= q[a]!;
-						q[a] = q[a]! - Ep;
-					}
+					if (x.pool) poolChange -= q[a]!;
 				}
 				const keep = ho ? Math.max(Zs, relTarget, hk) : Math.max(Zs, relTarget);
 				let flowPast = Rr + (S - Gr) + SpRet;
@@ -1720,7 +1715,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					}
 					if (x.pool) {
 						rt.pool[a]![t] = q[a]!;
-						poolChange += q[a]! + rt.poolEvaporation[a]![t]!;
+						poolChange += q[a]!;
 					}
 				}
 				T += back;
