@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CroplandProposals } from '$lib/api';
 import { fmtDate } from '$lib/format/number';
-import { areaChoices, confirmWords, cropRows, fmtHa, provenanceText } from './croplandProposals';
+import { areaChoices, CAUTION, confirmWords, cropRows, fmtHa, provenanceText } from './croplandProposals';
 
 const dataset = {
 	dataset: 'synthetic',
@@ -79,7 +79,12 @@ describe('cropRows and the words', () => {
 		const w = confirmWords(base, lucerne!, choices[2]!);
 		expect(w.title).toBe('Set Lucerne’s planted area on Farm A from land cover?');
 		expect(w.message).toMatch(/^Lucerne on Farm A changes from no planted area to 12\.5 ha, the cultivated area the land cover \(synthetic, synthetic 1\) shows in the parcel Top camp\. /);
-		expect(w.message).toContain('doesn’t say what grows there or whether it is irrigated');
+		// #90 Land-cover proposals: satellite cropland (dryland and fallow included), not irrigated area; used as it stands.
+		expect(w.message).toContain(CAUTION);
+		expect(CAUTION).toMatch(/satellite.*dryland and fallow.*not the irrigated area: check it before you use it/);
+		expect(w.message).toContain('doesn’t say what grows there');
+		expect(w.message).toContain('used as it stands, with no discount');
+		expect(w.confirmLabel).toBe('Use this area');
 		expect(fmtHa(12_345)).toBe('1.23 ha');
 	});
 });

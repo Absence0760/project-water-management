@@ -69,6 +69,13 @@ export function cropRows(p: CroplandProposals, choice: AreaChoice | null): CropR
 	}));
 }
 
+/**
+ * What the proposal is and isn't (#90 Land-cover proposals): satellite cropland, dryland and fallow fields
+ * included, not the irrigated area. Shown on the drawer and in the confirmation.
+ */
+export const CAUTION =
+	'This is cultivated land mapped from satellite, including dryland and fallow fields, not the irrigated area: check it before you use it.';
+
 /** The confirmation before an area is saved to the model. */
 export function confirmWords(p: CroplandProposals, crop: CropRow, choice: AreaChoice): { title: string; message: string; confirmLabel: string } {
 	const from = choice.featureId ? `the parcel ${choice.label.replace(/:[^:]*$/, '')}` : `${p.nodeName}’s parcels`;
@@ -77,8 +84,8 @@ export function confirmWords(p: CroplandProposals, crop: CropRow, choice: AreaCh
 		message:
 			`${crop.name} on ${p.nodeName} changes from ${crop.now === 'None' ? 'no planted area' : crop.now} to ${fmtHa(choice.areaM2)}, ` +
 			`the cultivated area the land cover (${p.dataset?.dataset}, ${p.dataset?.version}) shows in ${from}. ` +
-			'The land cover doesn’t say what grows there or whether it is irrigated: check that this crop is right. ' +
-			'The change is saved to the model now and recorded in History with its source; the next run uses it.',
+			`${CAUTION} It doesn’t say what grows there either: check that this crop is right. ` +
+			'The area is used as it stands, with no discount. The change is saved to the model now and recorded in History with its source; the next run uses it.',
 		confirmLabel: 'Use this area'
 	};
 }
