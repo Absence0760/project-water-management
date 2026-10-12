@@ -5256,6 +5256,29 @@ Applicant view and the Applications tab. Left:
       still counts farm holders only (decided: a user is no farmer's
       neighbour in the count).
 
+- [ ] **Redact detached questions on account erasure** (filed 2026-10-12,
+      the round 6 security review of #523; for counsel with the D3 review,
+      #92). Since 234 an "Ask the assessors why" question outlives its
+      draft, for the authority's s42 written reasons, and so it also
+      outlives the applicant's account: the row keeps `scenario_name`,
+      `problem` and `ops`, the applicant's own typed text (their node names,
+      free text), which may be personal information, after the draft and the
+      account are gone (`scenario.owner_user_id` is set null, 138, and the
+      question no longer cascades from the scenario). The account id was
+      never on the row, so security.md's retention row now says the typed
+      text stays. Reads are safe: parties read only through
+      `app_application_questions(scenario)`, which a NULL never matches;
+      the table is editors-only. Durable fix, if counsel says erasure must
+      reach it: on account deletion, redact `scenario_name` and the
+      free-text and name fields in `ops` of that applicant's detached
+      questions (keeping the rule kinds, the assessor text and the answer
+      the s42 reasons need), in the same deletion path as 048's
+      pseudonymisation, with a catalogue-style test that the account's
+      deletion leaves none of their typed text; and tell the applicant in
+      the Ask the assessors notice that the question stays even if they
+      delete the draft. Trigger: counsel's answer on #92 (D3), or the first
+      erasure request from an applicant who asked a question.
+
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +
       `portfolio.spec.ts` at `--repeat-each=40`, 12 workers, while testing
