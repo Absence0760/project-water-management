@@ -8116,6 +8116,10 @@ read it before.
   a select (`uncertainty/BandFdcChart.svelte`, log flow axis; the chart's
   title says at how many exceedance points the median falls below the EWR).
   With fewer than 30 sets kept no percentiles are shown, only the note why.
+  On a run that caps use at, or scales demand to, the registered volumes, a
+  viewer kept from them reads EWR counts and rates only, and a note says so
+  (`uncertainty-withheld`, from the ensemble's `verdictsOnlyRuns`), so its
+  "–" isn't read as a gated band (issue #523 I).
   An ensemble run on a newer engine than the run says so. **Reproduce in
   this browser** re-runs the stored ensemble from its seed and options and
   reports "Reproduced: the same … members, verdicts, outputs and coverage" or

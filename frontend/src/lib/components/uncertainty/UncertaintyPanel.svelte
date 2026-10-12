@@ -35,7 +35,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
 	import BandFdcChart from './BandFdcChart.svelte';
-	import { abandonedText, bandCells, coverageText, historyRows, pct, rejectedText, shownEnsemble, sig } from './bands';
+	import { abandonedText, bandCells, coverageText, historyRows, pct, rejectedText, shownEnsemble, sig, withheldNote } from './bands';
 	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	let {
@@ -70,6 +70,8 @@
 
 	const shown = $derived(shownEnsemble(list));
 	const summary = $derived((shown?.summary ?? null) as EnsembleSummary | null);
+	// A cap or full-allocation run, for a viewer kept from each registered volume (#523 I): its "–" is withheld, not gated.
+	const withheld = $derived(withheldNote([shown]));
 	const history = $derived(historyRows(list, shown));
 	const abandoned = $derived(abandonedText(list));
 
@@ -202,6 +204,7 @@
 		<p class="rule" data-testid="decision-rule"><strong>Decision rule.</strong> {summary.decisionRule}</p>
 		<p class="muted small">{optionLine(shown)} · {shown.runoffModel} · stored {shown.completedAt?.slice(0, 16).replace('T', ' ')} by {shown.createdBy ?? FORMER_MEMBER}</p>
 		{#if engineNote}<p class="alert alert-info small">{engineNote}</p>{/if}
+		{#if withheld}<p class="alert alert-info" role="note" data-testid="uncertainty-withheld">{withheld}</p>{/if}
 
 		<dl class="stats">
 			<div class="stat">
