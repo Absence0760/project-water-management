@@ -7,6 +7,8 @@
 //   change, says so, and leaves nothing to use; the unit's form holds the MAP
 //   and a source naming the grid and the method, and History has one entry.
 //   The panel passes axe; a cancelled Use writes nothing.
+// - A unit the grid covers in part (at least 90 %) is proposed with its
+//   coverage beside the MAP (issue #500 answer 8); a whole one shows none.
 // - A unit outside the grid is listed with why, never filled; a unit holding
 //   another grid's MAP is named and holds Use.
 // - Unsaved model edits hold Use, saying why; saved, Use works again.
@@ -22,14 +24,26 @@ import { loadSyntheticMapGrid } from '../support/mapGrid.ts';
 import { closeModal, openNodeForm, saveModelChanges } from '../support/network.ts';
 import { openSettings } from '../support/settings.ts';
 
-/** The sample model with rain for each unit on and a parcel for each unit: inside the synthetic grid (region Z), or Lower farm's outside it. */
-async function seed(request: APIRequestContext, name: string, lowerOutside = false) {
+/**
+ * Where Lower farm's parcel lies: inside the synthetic grid (region Z), outside
+ * it, or over the grid's empty south-west corner (no values west of 21.25° E
+ * and south of 33.75° S), so 93.35 % of it has values: covered, as it is at
+ * least 90 %, but not whole.
+ */
+const LOWER_PARCEL = {
+	inside: box(21.36, -33.69, 0.02),
+	outside: box(22.36, -33.69, 0.02),
+	partial: box(21.24867, -33.78, 0.02)
+} as const;
+
+/** The sample model with rain for each unit on and a parcel for each unit: Upper farm's inside the synthetic grid, Lower farm's as `lower` says. */
+async function seed(request: APIRequestContext, name: string, lower: keyof typeof LOWER_PARCEL = 'inside') {
 	const project = await seedRunnableProject(request, name);
 	await updateSettings(request, project.id, { unitRain: { mode: 'perUnit' } });
-	const [, upper, lower] = project.model.nodes as { id: string; name: string }[];
+	const [, upper, lowerNode] = project.model.nodes as { id: string; name: string }[];
 	for (const [n, geometry] of [
 		[upper!, { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.03)] }],
-		[lower!, { type: 'Polygon', coordinates: [box(lowerOutside ? 22.36 : 21.36, -33.69, 0.02)] }]
+		[lowerNode!, { type: 'Polygon', coordinates: [LOWER_PARCEL[lower]] }]
 	] as const) {
 		const res = await request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'farm_parcel', name: `${n.name} parcel`, nodeId: n.id, geometry } });
 		expect(res.status(), await res.text()).toBe(201);
@@ -88,7 +102,7 @@ test('an editor uses each unit’s MAP from the grid, written to the units with 
 test('a unit outside the grid is listed and left alone, and a unit holding another grid’s MAP holds Use', async ({ page, owner }) => {
 	void owner;
 	await loadSyntheticMapGrid();
-	const project = await seed(page.request, 'Unit MAP outside', true);
+	const project = await seed(page.request, 'Unit MAP outside', 'outside');
 	await openSettings(page, project.id);
 	const panel = page.getByTestId('unit-map-proposal');
 	await expect(panel.getByTestId('unit-map-body')).toHaveAttribute('data-ready', 'true');
@@ -107,6 +121,25 @@ test('a unit outside the grid is listed and left alone, and a unit holding anoth
 	await expect(panel.getByTestId('unit-map-body')).toHaveAttribute('data-ready', 'true');
 	await expect(panel.getByTestId('unit-map-other-grid')).toContainText('Lower farm has a MAP from another grid');
 	await expect(panel.getByRole('button', { name: 'Use for 1 unit' })).toBeDisabled();
+	await expectNoViolations(page, { include: '[data-testid="unit-map-proposal"]' });
+});
+
+test('a unit the grid covers only in part (90–100 %) shows how much beside its proposed MAP', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticMapGrid();
+	const { id } = await seed(page.request, 'Unit MAP partial', 'partial');
+	await openSettings(page, id);
+	const panel = page.getByTestId('unit-map-proposal');
+	await expect(panel.getByTestId('unit-map-body')).toHaveAttribute('data-ready', 'true');
+	// At least 90 % with values: proposed, not listed as uncovered.
+	await expect(panel.getByTestId('unit-map-coverage')).toHaveText('synthetic (0.01° cells) covers all 2 units with a parcel on the map.');
+	await expect(panel.getByTestId('unit-map-uncovered')).toHaveCount(0);
+	const rows = panel.getByTestId('unit-map-rows').locator('tbody tr');
+	await expect(rows.getByRole('rowheader')).toHaveText(['Upper farm', 'Lower farm']);
+	// Lower farm's MAP says how much of its parcel it is over (floored, so never rounded up to whole); Upper farm's, whole, says nothing.
+	await expect(rows.nth(1).locator('td').first()).toHaveText(/^\d{3}, 93\.3 % covered$/);
+	await expect(rows.first().getByTestId('unit-map-covered')).toHaveCount(0);
+	await expect(panel.getByTestId('unit-map-partial')).toContainText('its MAP is the mean over that part');
 	await expectNoViolations(page, { include: '[data-testid="unit-map-proposal"]' });
 });
 
