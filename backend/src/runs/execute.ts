@@ -396,7 +396,11 @@ export async function prepareRun(
 	if (trigger === 'forecast' && !forecastFrom) throw new NoForecastRainError();
 	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
 	const plan: RunPlan = { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds };
-	if (forecastFrom) plan.forecastRainSource = await forecastRainSource(db, seriesIds.rain_forecast_mm, forecastFrom);
+	if (forecastFrom) {
+		plan.forecastRainSource = await forecastRainSource(db, seriesIds.rain_forecast_mm, forecastFrom);
+		// The engine reads it too (engine ≥ 1.85.0): under per-unit rain a CHIRPS-GEFS forecast takes each unit's CHIRPS level.
+		plan.input = { ...plan.input, forecastRainSource: plan.forecastRainSource };
+	}
 	return plan;
 }
 
@@ -713,7 +717,7 @@ interface StoredRun {
 	created_at: Date;
 	/** The project's (058): the run's date in a message is the day there. */
 	time_zone: string | null;
-	inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries> };
+	inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries>; forecastRainSource?: ForecastRainSource };
 }
 interface StoredRef {
 	kind: string;
@@ -751,5 +755,7 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 	}
 	const extra = refs.find((x) => !(x.kind in snap));
 	if (extra) throw new RunInputError('inconsistent', `the run stored a ${extra.kind} series its snapshot doesn't list`);
-	return { settings: r.inputs.settings, model: r.inputs.model, series };
+	// A forecast run's rain source, which the engine reads (engine ≥ 1.85.0, per-unit rain on CHIRPS-GEFS days).
+	const source = r.inputs.forecastRainSource;
+	return { settings: r.inputs.settings, model: r.inputs.model, series, ...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}) };
 }

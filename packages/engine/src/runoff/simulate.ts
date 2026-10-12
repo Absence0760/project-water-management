@@ -250,7 +250,8 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 			days: ctx.days,
 			aligned: ctx.aligned,
 			chirpsCorrection: ctx.chirpsCorrection,
-			...(ctx.historyDays !== undefined ? { historyDays: ctx.historyDays } : {})
+			...(ctx.historyDays !== undefined ? { historyDays: ctx.historyDays } : {}),
+			...(input.forecastRainSource ? { forecastRainSource: input.forecastRainSource } : {})
 		},
 		warnings,
 		// A snapshot's pinned recipes, else the settings' (a seasonal outlook's re-run member).

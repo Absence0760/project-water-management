@@ -536,7 +536,7 @@ def _wave(start: dt.date, n: int, k: int, scale: float = 1.0) -> list:
 
 
 def unit_rain_rules() -> dict:
-    """Six years of rain and eight farms under per-unit rain (gauge MAP
+    """Eleven years of rain and eight farms under per-unit rain (gauge MAP
     600 mm), one per point of the forcing rule: u1 its own gauge (gaps filled
     by its CHIRPS at its MAP, then the gauge × its MAP ratio, then the
     catchment's rain × the ratio); u2 the gauge × a MAP ratio clamped to 4,
@@ -549,16 +549,18 @@ def unit_rain_rules() -> dict:
     z a farm without area with a gauge of its own (not a land unit). A
     six-day forecast tail ends the run: × the ratio on u1, u2 and u6, × 1 on
     the rest. catchmentAreaKm2 is ignored (the units' areas sum). The MAP
-    period, 2015–2019, holds five of the six complete years: u3's CHIRPS MAP
-    factor averages those five only, while u1's and u2's CHIRPS, with a gap in
-    2015, have four there and average every complete year of the record."""
-    start = dt.date(2014, 1, 1)
+    period, 2010–2019, holds ten of the eleven complete years (issue #500
+    item 4's minimum): u3's CHIRPS MAP factor averages those ten only, while
+    u1's and u2's CHIRPS, with a gap in 2015, have nine there and average
+    every complete year of the record."""
+    start = dt.date(2009, 1, 1)
+    k = (dt.date(2014, 1, 1) - start).days + 1  # the 2014 indices below from 2009, a multiple of 3 so _wave's wet days stay put
     n = (dt.date(2019, 12, 31) - start).days + 1
     catch: list = _wave(start, n, 0)
-    for j in range(400, 420):
+    for j in range(k + 400, k + 420):
         catch[j] = None
-    catch[602] = -3.0  # u2's CHIRPS rains that day
-    catch[603] = 12.0
+    catch[k + 602] = -3.0  # u2's CHIRPS rains that day
+    catch[k + 603] = 12.0
     chirps = [round(v * 0.8, 2) for v in _wave(start, n, 1)]
     series: dict = {
         "rain_catchment_mm": {"startDate": start.isoformat(), "values": catch},
@@ -566,17 +568,17 @@ def unit_rain_rules() -> dict:
         "rain_forecast_mm": {"startDate": "2020-01-01", "values": [4.0, 0.0, 9.0, 1.0, 0.0, 6.0]},
     }
     own1: list = _wave(start, n, 2, 1.3)
-    for j in list(range(100, 130)) + list(range(395, 425)):
+    for j in list(range(k + 100, k + 130)) + list(range(k + 395, k + 425)):
         own1[j] = None
-    own1[705] = -2.0  # a no-data code on a day u1's CHIRPS rains
+    own1[k + 705] = -2.0  # a no-data code on a day u1's CHIRPS rains
     ch1: list = _wave(start, n, 3, 0.9)
-    for j in range(390, 410):
+    for j in range(k + 390, k + 410):
         ch1[j] = None
     ch2: list = _wave(start, n, 4, 1.1)
-    for j in range(405, 415):
+    for j in range(k + 405, k + 415):
         ch2[j] = None
     ch5: list = _wave(start, n, 5)
-    for y in range(6):
+    for y in range(11):
         ch5[y * 365 + 100] = None
     series["rain_catchment_mm@u1"] = {"startDate": start.isoformat(), "values": own1}
     series["rain_chirps_mm@u1"] = {"startDate": start.isoformat(), "values": ch1}
@@ -604,7 +606,7 @@ def unit_rain_rules() -> dict:
     s = _settings(
         gr4j={"x1": 300, "x2": -0.5, "x3": 80, "x4": 1.8, "warmupDays": 400},
         calibration={"rainThresholdMm": 2, "catchmentAreaKm2": 50},
-        unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented", "mapPeriod": {"start": "2015-01-01", "end": "2019-12-31"}},
+        unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented", "mapPeriod": {"start": "2010-01-01", "end": "2019-12-31"}},
     )
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
@@ -624,13 +626,13 @@ def unit_rain_forecast_warmup() -> dict:
 
 def unit_rain_map_period() -> dict:
     """CHIRPS MAP factors (§2.4h rule 3) over six complete calendar years
-    and a MAP period holding two of them: fewer than 5, so units a and b
+    and a MAP period holding two of them: fewer than 10, so units a and b
     average every complete year of the record; a third unit's CHIRPS reads 0 on every day of its complete years (a mean
-    annual rain of 0) and rains in its incomplete last one: no complete year
-    with rain, so its MAP can't level it and it runs raw (the catchment has
-    no CHIRPS for §2.4b factors). Not in the docs until this probe; the
-    engine's reading, now in §2.4h. A complete year of 0 mm among rainy ones
-    still counts in the mean."""
+    annual rain of 0) and rains in its incomplete last one. Engine 1.78.0
+    ran it raw (this probe settled that); issue #500 item 7a makes such
+    CHIRPS unusable, so unit c runs on the catchment's rain (× 1, no gauge
+    MAP) on every day, its incomplete year's rainy CHIRPS days too. A
+    complete year of 0 mm among rainy ones still counts in the mean."""
     start = dt.date(2014, 1, 1)
     n = (dt.date(2019, 12, 31) - start).days + 1
     series: dict = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": _wave(start, n, 0)}}
@@ -673,8 +675,13 @@ def unit_rain_reference() -> dict:
     catchment gauge against unit r's cell, the gauge × 0.5 (factor 2) except
     January with exactly 90 shared days (fits), February with 89 (factor 1),
     March under 50 mm of CHIRPS (factor 1) and July × 0.15 (clamped to 4),
-    and a no-data code. Unit a's MAP ratio clamps (3000 ÷ 500), b has no MAP
-    (ratio 1), g's own gauge has gaps its levelled CHIRPS fills."""
+    and a no-data code. Since issue #500 item 1a each unit's CHIRPS is
+    v × f[month] × k_unit, k_unit = clamp(unit MAP ÷ its mean annual
+    (CHIRPS × f)) over every complete year (six, fewer than 10 in the MAP
+    period): a's MAP of 3000 mm gives k_unit ≈ 2.25 (inside the clamp, so
+    no longer the clamped 3000 ÷ 500 ratio), b has no MAP (the factors
+    alone), the reference unit r is levelled to its own MAP too (k ≈ 0.38,
+    no longer 1), g's own gauge has gaps its levelled CHIRPS fills."""
     start = dt.date(2014, 1, 1)
     n = (dt.date(2019, 12, 31) - start).days + 1
     gauge = _wave(start, n, 0)
@@ -713,11 +720,359 @@ def unit_rain_reference() -> dict:
 
 def unit_rain_reference_not_land() -> dict:
     """A reference unit without area (not a land unit): no cell to fit on,
-    so the units' CHIRPS is levelled as without a reference (§2.4h)."""
+    so the units' CHIRPS is levelled as without a reference (§2.4h). The
+    catchment has CHIRPS here, so b (no MAP) takes its §2.4b factors: with
+    factors of 1 the reference would equal rule 3 on every unit with a MAP
+    (k_unit is then the MAP factor), so only b tells the two apart."""
     doc = unit_rain_reference()
+    start = dt.date(2014, 1, 1)
+    n = len(doc["series"]["rain_catchment_mm"]["values"])
+    doc["series"]["rain_chirps_mm"] = {"startDate": start.isoformat(), "values": [round(v * 0.7, 2) for v in _wave(start, n, 9)]}
     doc["model"]["nodes"].append(_node("z", "farm", "o", areaKm2=0, mapMm=500, mapSource="invented"))
     doc["series"]["rain_chirps_cell_mm@z"] = doc["series"].pop("rain_chirps_cell_mm@r")
     doc["settings"]["unitRain"]["reference"] = {"gauge": "rain_catchment_mm", "unitId": "z"}
+    return doc
+
+
+# Issue #500's decisions (operator, 2026-10-09; built in engine 1.84.x+): k_unit, the
+# 10-year minimum, unusable CHIRPS, the CHIRPS-GEFS forecast, checked gauges.
+
+WET = (11, 12, 1, 2, 3, 4)
+
+
+def _season(start: dt.date, n: int, k: int, scale: float = 1.0) -> list:
+    """_wave with a wet season (November to April × 2, the rest × 0.5), so
+    §2.10a's six wettest months are November to April."""
+    return [
+        round(v * (2 if (start + dt.timedelta(days=i)).month in WET else 0.5), 1)
+        for i, v in enumerate(_wave(start, n, k, scale))
+    ]
+
+
+def _idx(start: dt.date, y: int, m: int, d: int) -> int:
+    return (dt.date(y, m, d) - start).days
+
+
+def _net(nodes: list, series: dict, **settings) -> dict:
+    return {"settings": _settings(**settings), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def unit_rain_reference_kunit() -> dict:
+    """k_unit and the 10-year minimum under a reference gauge (issue #500
+    items 1a, 4, 7a). Twelve years (2008–2019), MAP period 2010–2019 (ten
+    complete years). The cell is the catchment gauge × 0.5 (factor 2), × 0.1
+    in May (factor 10, clamped to 4) and absent in June (factor 1), so k_unit
+    has to make up the clamped and defaulted months. p: complete CHIRPS in
+    all twelve years, its 2008–2009 × 3 wetter, so k_unit averages the ten
+    MAP-period years only; q: a gap in 2012 leaves nine there, so every
+    complete year (eleven); n: a gap in every year, no complete year, so the
+    factors alone (k = 1) though it has a MAP; z: complete years of 0 mm and
+    rain in its incomplete last year: unusable, so the catchment's rain (× 1)
+    on every day; t: a MAP of 40 mm, k_unit clamped to 0.25; r: the
+    reference unit, levelled to its own MAP."""
+    start = dt.date(2008, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    gauge = _wave(start, n, 0)
+    cell: list = []
+    for i, g in enumerate(gauge):
+        m = (start + dt.timedelta(days=i)).month
+        cell.append(None if m == 6 else round(g * (0.1 if m == 5 else 0.5), 2))
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge},
+        "rain_chirps_cell_mm@r": {"startDate": start.isoformat(), "values": cell},
+    }
+    two = _idx(start, 2010, 1, 1)
+    p_ch = [round(v * (3 if i < two else 1), 2) for i, v in enumerate(_wave(start, n, 1, 0.7))]
+    q_ch = _wave(start, n, 2, 0.8)
+    q_ch[_idx(start, 2012, 7, 4)] = None
+    n_ch = _wave(start, n, 3)
+    for y in range(12):
+        n_ch[y * 365 + 40] = None
+    z_ch = [0.0] * n
+    z_ch[n - 5] = None
+    for j in range(n - 200, n - 6):
+        z_ch[j] = 6.0 if j % 4 == 0 else 0.0
+    series["rain_chirps_mm@p"] = {"startDate": start.isoformat(), "values": p_ch}
+    series["rain_chirps_mm@q"] = {"startDate": start.isoformat(), "values": q_ch}
+    series["rain_chirps_mm@n"] = {"startDate": start.isoformat(), "values": n_ch}
+    series["rain_chirps_mm@z"] = {"startDate": start.isoformat(), "values": z_ch}
+    series["rain_chirps_mm@t"] = {"startDate": start.isoformat(), "values": _wave(start, n, 4)}
+    series["rain_chirps_mm@r"] = {"startDate": start.isoformat(), "values": _wave(start, n, 5, 0.9)}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("r", "farm", "o", areaKm2=2, mapMm=650, **src),
+        _node("p", "farm", "o", areaKm2=3, mapMm=700, **src),
+        _node("q", "farm", "o", areaKm2=1, mapMm=800, **src),
+        _node("n", "farm", "o", areaKm2=1, mapMm=900, **src),
+        _node("z", "farm", "o", areaKm2=1, mapMm=500, **src),
+        _node("t", "farm", "o", areaKm2=0.5, mapMm=40, **src),
+    ]
+    ur = {"mode": "perUnit", "mapPeriod": {"start": "2010-01-01", "end": "2019-12-31"}, "reference": {"gauge": "rain_catchment_mm", "unitId": "r"}}
+    return _net(nodes, series, unitRain=ur)
+
+
+def unit_rain_unusable_chirps() -> dict:
+    """CHIRPS averaging 0 mm a year without a reference (issue #500 item
+    7a): complete years of 0 mm, rain only in an incomplete last year. c3
+    (rule 3, a MAP) and c0 (rule 3, no MAP) run on the catchment's rain on
+    every day, never their CHIRPS (engine 1.78.0: c3 raw, c0 × the §2.4b
+    factors, both 0 mm on most days); c1, its own gauge with gaps, fills
+    them from the catchment's rain, not from its CHIRPS. c0 pins that the
+    test doesn't need a MAP (the unit's CHIRPS mean is computed either
+    way); the catchment has CHIRPS, so §2.4b factors exist."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    catch: list = _wave(start, n, 0)
+    for j in range(300, 330):
+        catch[j] = None
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": catch},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": [round(v * 0.7, 2) for v in _wave(start, n, 1)]},
+    }
+    zero = [0.0] * n
+    zero[n - 5] = None
+    for j in range(n - 200, n - 6):
+        zero[j] = 5.0 if j % 4 == 0 else 0.0
+    own: list = _wave(start, n, 2, 1.1)
+    for j in list(range(500, 540)) + list(range(n - 150, n - 120)):
+        own[j] = None
+    for uid in ("c3", "c0", "c1"):
+        series[f"rain_chirps_mm@{uid}"] = {"startDate": start.isoformat(), "values": list(zero)}
+    series["rain_catchment_mm@c1"] = {"startDate": start.isoformat(), "values": own}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("c3", "farm", "o", areaKm2=2, mapMm=600, **src),
+        _node("c0", "farm", "o", areaKm2=1),
+        _node("c1", "farm", "o", areaKm2=1.5, mapMm=700, **src),
+    ]
+    return _net(nodes, series, unitRain={"mode": "perUnit"})
+
+
+def _forecast_doc(reference: bool) -> dict:
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 25) - start).days + 1
+    gauge = _wave(start, n, 0)
+    # A few gauge gaps, filled on rule-2 units from their own CHIRPS: s's at its factors × its MAP ratio.
+    for j in (40, 41, 42, 400, 401, 800, 1200, 1201, 1202, 1203):
+        gauge[j] = None
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": [round(v * 0.6, 2) for v in _wave(start, n, 1)]},
+        # Ten forecast days over the turn of the year, so two calendar months' factors.
+        "rain_forecast_mm": {"startDate": "2019-12-26", "values": [3.0, 0.0, 8.0, 1.5, 0.0, 12.0, 4.0, 0.0, 6.5, 2.0]},
+    }
+    if reference:
+        cell = [None if g is None else round(g * (0.4 if (start + dt.timedelta(days=i)).month in (12, 1) else 0.8), 2) for i, g in enumerate(gauge)]
+        series["rain_chirps_cell_mm@r"] = {"startDate": start.isoformat(), "values": cell}
+    for k, uid in enumerate(["r", "a", "e"]):
+        series[f"rain_chirps_mm@{uid}"] = {"startDate": start.isoformat(), "values": _wave(start, n, k + 2, 0.5 + 0.2 * k)}
+    zero = [0.0] * n
+    zero[n - 3] = None
+    series["rain_chirps_mm@d"] = {"startDate": start.isoformat(), "values": zero}
+    # s: a MAP (so a MAP ratio) but a CHIRPS with a gap in every year, so no complete year: no k_unit, no MAP factor.
+    gappy = _wave(start, n, 6, 0.6)
+    for y in range(6):
+        gappy[y * 365 + 100] = None
+    series["rain_chirps_mm@s"] = {"startDate": start.isoformat(), "values": gappy}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("r", "farm", "o", areaKm2=2, mapMm=650, **src),
+        _node("a", "farm", "o", areaKm2=3, mapMm=900, **src),
+        _node("b", "farm", "o", areaKm2=1, mapMm=400, **src),
+        _node("d", "farm", "o", areaKm2=1, mapMm=500, **src),
+        _node("e", "farm", "o", areaKm2=1.5),
+        _node("s", "farm", "o", areaKm2=1.2, mapMm=750, **src),
+    ]
+    ur: dict = {"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"}
+    if reference:
+        ur["reference"] = {"gauge": "rain_catchment_mm", "unitId": "r"}
+    doc = _net(nodes, series, unitRain=ur)
+    doc["forecastRainSource"] = "chirps_gefs"
+    return doc
+
+
+def unit_rain_forecast_gefs() -> dict:
+    """A CHIRPS-GEFS forecast under a reference gauge (issue #500 item 5,
+    ModelInput.forecastRainSource 'chirps_gefs'): ten forecast days over the
+    turn of the year. r and a (rule 2, CHIRPS of their own) take the
+    forecast × f[month] × k_unit, December's and January's factor each on
+    its days, not × their MAP ratio; e (rule 3, no MAP) × f[month] alone;
+    s (rule 2, a MAP but no complete CHIRPS year, so no k_unit) × f[month]
+    × its MAP ratio, the factors shaping the season and the ratio setting
+    the level its history's gauge × ratio reads at (and so on the gauge's
+    gap days, which it fills from its CHIRPS × f × the ratio); b (rule 2, no CHIRPS)
+    and d (unusable CHIRPS, item 7a) keep × the MAP ratio. The historical
+    days are unchanged by the setting."""
+    return _forecast_doc(True)
+
+
+def unit_rain_forecast_gefs_noref() -> dict:
+    """The same CHIRPS-GEFS forecast without a reference gauge: "corrected
+    like the unit's CHIRPS" read as the unit's rule-3 levelling, whatever it
+    is. r and a: × their CHIRPS MAP factor (unit MAP ÷ the mean annual
+    CHIRPS); e (no MAP): × the catchment's §2.4b factor for the day's month;
+    s (a MAP, no complete CHIRPS year): × the §2.4b factor × its MAP ratio,
+    on the forecast and on the gauge's gap days alike;
+    b and d: × the MAP ratio as before. A reading of item 5 for units
+    without a reference (the issue speaks of f × k_unit only), so a
+    disagreement here is a point for the docs to settle, not a defect."""
+    return _forecast_doc(False)
+
+
+def unit_rain_forecast_other() -> dict:
+    """The same forecast with `forecastRainSource` 'other' (an uploaded
+    forecast, which may already be at gauge level): every unit keeps × its
+    MAP ratio (× 1 on e) on the forecast days (issue #500 item 5)."""
+    doc = _forecast_doc(True)
+    doc["forecastRainSource"] = "other"
+    return doc
+
+
+def _zero_run_gauge(start: dt.date, n: int, k: int, scale: float) -> list:
+    """Seasonal rain with a 76-day run of zeros in the wet season
+    (2015-12-16 to 2016-02-29), which §2.10a flags (60+ wet-season days)."""
+    g = _season(start, n, k, scale)
+    for j in range(_idx(start, 2015, 12, 16), _idx(start, 2016, 3, 1)):
+        g[j] = 0.0
+    g[_idx(start, 2015, 12, 15)] = 4.0
+    g[_idx(start, 2016, 3, 1)] = 5.0
+    return g
+
+
+def _run_chirps(start: dt.date, n: int, k: int) -> list:
+    """CHIRPS reading 3 mm on the zero run's days (above the 2 mm fill
+    threshold, so they are filled), 1 mm on every fifth (at most the
+    threshold, so the gauge's 0 stands)."""
+    c = [round(v * 0.8, 2) for v in _season(start, n, k)]
+    for j in range(_idx(start, 2015, 12, 16), _idx(start, 2016, 3, 1)):
+        c[j] = 1.0 if j % 5 == 0 else 3.0
+    return c
+
+
+def unit_rain_gauge_checks() -> dict:
+    """A unit's own gauge gets the catchment gauge's checks with the
+    catchment's settings (issue #500 item 6), the days they remove falling to
+    the next link of rule 1 (its own CHIRPS; raw here: no MAP, bias
+    correction 'none'). u's gauge has a flagged 76-day zero run in the wet
+    season: days whose CHIRPS reads 3 mm take it, every fifth (1 mm, at most
+    the threshold) keeps the gauge's 0. In June 2018 a 60 mm reading after
+    five blank days, with CHIRPS 40 mm on four of them and 0 on the day
+    before and the reading's days, is an accumulation, spread 15 mm a day over
+    the four ('spread' mode). The catchment's CHIRPS is the same series as
+    u's, so the probe doesn't depend on which CHIRPS the checks read. The
+    catchment gauge itself is clean."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    ch = _run_chirps(start, n, 1)
+    own = _zero_run_gauge(start, n, 2, 1.2)
+    r = _idx(start, 2018, 6, 10)
+    for j in range(r - 5, r):
+        own[j] = None
+    own[r] = 60.0
+    own[r - 6] = 0.0
+    for j in range(r - 5, r - 1):
+        ch[j] = 40.0
+    for j in (r - 1, r, r + 1):
+        ch[j] = 0.0
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": _season(start, n, 0)},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": ch},
+        "rain_catchment_mm@u": {"startDate": start.isoformat(), "values": own},
+        "rain_chirps_mm@u": {"startDate": start.isoformat(), "values": list(ch)},
+    }
+    nodes = [_node("o", "gauge", None), _node("u", "farm", "o", areaKm2=2)]
+    return _net(nodes, series, unitRain={"mode": "perUnit"}, chirpsBiasCorrection="none")
+
+
+def unit_rain_gauge_catchment_settings() -> dict:
+    """What a unit gauge's checks take from the catchment (engine 1.85.0,
+    issue #500 item 6). u1 (its own gauge and CHIRPS): the catchment's
+    listed missing period, 2016-03-01 to 2016-03-31, names days of the
+    catchment gauge's record, not u1's, so u1 keeps its readings there
+    (the catchment's own rain does take CHIRPS on them). u2 has a gauge with
+    the flagged wet-season zero run and no CHIRPS of its own: the checks
+    compare with the catchment's CHIRPS, so a run day where it reads 1 mm
+    (at most the 2 mm threshold) keeps u2's 0, and the rest (3 mm) are set
+    aside and fall to the catchment's rain."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    ch = _run_chirps(start, n, 1)
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": _season(start, n, 0)},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": ch},
+        "rain_catchment_mm@u1": {"startDate": start.isoformat(), "values": _season(start, n, 2, 1.3)},
+        "rain_chirps_mm@u1": {"startDate": start.isoformat(), "values": _season(start, n, 4, 0.6)},
+        "rain_catchment_mm@u2": {"startDate": start.isoformat(), "values": _zero_run_gauge(start, n, 3, 1.1)},
+    }
+    nodes = [_node("o", "gauge", None), _node("u1", "farm", "o", areaKm2=2), _node("u2", "farm", "o", areaKm2=1)]
+    zr = {
+        "mode": "missing", "keepDry": [], "accumulationMode": "spread", "keepReadings": [], "addAccumulations": [],
+        "missing": [{"start": "2016-03-01", "end": "2016-03-31", "reason": "invented"}],
+    }
+    return _net(nodes, series, unitRain={"mode": "perUnit"}, chirpsBiasCorrection="none", zeroRainRuns=zr)
+
+
+def unit_rain_reference_checked() -> dict:
+    """The reference fit reads the checked gauge rain (issue #500 item 1c):
+    the catchment gauge has the flagged wet-season zero run, which §2.4c sets
+    aside (its CHIRPS reads 3 mm), so those days are out of the fit. The cell
+    is the gauge × 0.5 elsewhere (factor 2) and reads 3 mm on the run's days:
+    read as stored, the run's zeros against 3 mm would pull December's,
+    January's and February's factors well below 2; checked, those days are
+    out. Every fifth run day, CHIRPS at 1 mm (at most the 2 mm threshold),
+    keeps the gauge's 0 and so stays in the fit, 0 against 1 mm. In June
+    2018 a 60 mm reading after five blanks is an accumulation, spread 15 mm
+    a day over four of them against a cell of 40 mm; the fit leaves the
+    window's days out as §2.4b does (engine 1.85.0), so June stays at 2."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    gauge = _zero_run_gauge(start, n, 0, 1.0)
+    ch = _run_chirps(start, n, 1)
+    run = range(_idx(start, 2015, 12, 16), _idx(start, 2016, 3, 1))
+    # The accumulation (engine 1.85.0: its window is out of the fit, as in §2.4b).
+    r = _idx(start, 2018, 6, 10)
+    for j in range(r - 5, r):
+        gauge[j] = None
+    gauge[r] = 60.0
+    gauge[r - 6] = 0.0
+    for j in range(r - 5, r - 1):
+        ch[j] = 40.0
+    for j in (r - 1, r, r + 1):
+        ch[j] = 0.0
+    window = range(r - 5, r + 2)
+    cell = [ch[i] if (i in run or i in window) else round(g * 0.5, 2) for i, g in enumerate(gauge)]
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": ch},
+        "rain_chirps_cell_mm@r": {"startDate": start.isoformat(), "values": cell},
+        "rain_chirps_mm@r": {"startDate": start.isoformat(), "values": _season(start, n, 3, 0.7)},
+        "rain_chirps_mm@a": {"startDate": start.isoformat(), "values": _season(start, n, 4, 0.9)},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [_node("o", "gauge", None), _node("r", "farm", "o", areaKm2=2, mapMm=650, **src), _node("a", "farm", "o", areaKm2=3, mapMm=800, **src)]
+    return _net(nodes, series, unitRain={"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "r"}})
+
+
+def unit_rain_reference_unit_gauge_checked() -> dict:
+    """The same with a unit's own gauge as the reference (items 1c and 6):
+    unit g's gauge has the flagged zero run (its own CHIRPS reads 3 mm
+    there) and the June 2018 accumulation, the catchment gauge is clean. The
+    fit leaves the run's filled days and the window out, and g's own chain
+    takes its levelled CHIRPS (f × k_unit) on the filled days and the spread
+    rain on the window."""
+    doc = unit_rain_reference_checked()
+    s = doc["series"]
+    start = dt.date(2014, 1, 1)
+    n = len(s["rain_catchment_mm"]["values"])
+    s["rain_catchment_mm@g"] = s["rain_catchment_mm"]
+    s["rain_chirps_mm@g"] = {"startDate": start.isoformat(), "values": list(s["rain_chirps_mm"]["values"])}
+    s["rain_catchment_mm"] = {"startDate": start.isoformat(), "values": _season(start, n, 6)}
+    s["rain_chirps_mm"] = {"startDate": start.isoformat(), "values": [round(v * 0.8, 2) for v in _season(start, n, 7)]}
+    doc["model"]["nodes"].append(_node("g", "farm", "o", areaKm2=1.5, mapMm=700, mapSource="invented"))
+    doc["settings"]["unitRain"]["reference"] = {"gauge": "rain_catchment_mm@g", "unitId": "r"}
     return doc
 
 
@@ -750,4 +1105,14 @@ PROBES = {
     "unit-rain-no-land-unit": unit_rain_no_land_unit(),
     "unit-rain-reference": unit_rain_reference(),
     "unit-rain-reference-not-land": unit_rain_reference_not_land(),
+    # Issue #500's decisions.
+    "unit-rain-reference-kunit": unit_rain_reference_kunit(),
+    "unit-rain-unusable-chirps": unit_rain_unusable_chirps(),
+    "unit-rain-forecast-gefs": unit_rain_forecast_gefs(),
+    "unit-rain-forecast-gefs-noref": unit_rain_forecast_gefs_noref(),
+    "unit-rain-forecast-other": unit_rain_forecast_other(),
+    "unit-rain-gauge-checks": unit_rain_gauge_checks(),
+    "unit-rain-gauge-catchment-settings": unit_rain_gauge_catchment_settings(),
+    "unit-rain-reference-checked": unit_rain_reference_checked(),
+    "unit-rain-reference-unit-gauge-checked": unit_rain_reference_unit_gauge_checked(),
 }

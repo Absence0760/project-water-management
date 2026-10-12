@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Issue #500: the run's per-unit rain panel shows k_unit, the 0.5–2 band, unusable CHIRPS and the reference fit's cell; the MAP-from-grid panel shows coverage; help text updated. Measured in CI: main aa7019737 1979 KB, this branch 1983 KB."
+}

@@ -5859,7 +5859,11 @@ two.
     (`ProposalPanel`, inline): a line saying which grid covers how many of
     the units with a parcel ("synthetic (0.01° cells) covers all 2 units with
     a parcel on the map."), a table of each unit (a link to its form), its
-    proposed MAP in mm, the cells and what its form holds now; the units the
+    proposed MAP in mm (with "93.3 % covered" under it when the grid has
+    values for less than the whole parcel, floored, so never rounded up to
+    100 %; a unit needs 90 % to be proposed at all, issue #500 answer 8, and a
+    line under the table says such a MAP is the mean over the covered part),
+    the cells and what its form holds now; the units the
     grid doesn't cover with the reason, never filled from another grid; a
     warning naming the units holding another grid's MAP (Use is then
     disabled); a **Grid** picker when more than one is loaded; the synthetic
@@ -8076,17 +8080,27 @@ read it before.
   `summary.unitRain`, engine ≥ 1.78.0, issue #482): the MAP period and the
   rain gauge's MAP with its source, a warning list of what to check (the
   units that fell back to the catchment rain, by name; a factor held at the
-  0.25–4 bound; a CHIRPS mean taken outside the MAP period; CHIRPS used
-  raw; with a reference gauge, engine ≥ 1.80.0, the months whose factor is
-  1 for too little shared record and those held at the bound; the first
-  four, the rest behind **Show all N things to check**), with a reference
-  gauge a line naming it, its unit and the 12 factors (Jan–Dec), a
-  table per unit, the units that fell back and then held factors first,
+  0.25–4 bound; a factor outside the 0.5–2 warning band, with its own value
+  (issue #500: used, but worth a look); a unit whose CHIRPS averages 0 mm a
+  year, skipped as unusable, and the rule it ran on instead; a CHIRPS mean
+  or k_unit taken outside the MAP period; a reference level without k_unit
+  (no complete year yet); CHIRPS used raw; with a reference gauge, engine
+  ≥ 1.80.0, the months whose factor is 1 for too little shared record,
+  those held at the bound and those outside 0.5–2; the first four, the rest
+  behind **Show all N things to check**), with a reference gauge a line
+  naming it and the 12 factors (Jan–Dec), then how they were fitted (against
+  the checked gauge rain or the gauge rain as recorded, at the CHIRPS cell
+  under the reference unit's centre, since rain gauges have no map location
+  yet) and that each unit's level is rescaled to its own MAP (k_unit; a run
+  from engine 1.80–1.83 keeps its old line and its reference unit's MAP
+  ratio), a table per unit, the units that fell back (or skipped unusable
+  CHIRPS), then held factors, then factors outside the band first,
   each group in the run's farm order (upstream first, as the farm tables),
   eight shown and the rest behind **Show all N units** (rain from: its own
   gauge, catchment gauge × MAP ratio, its own CHIRPS, or catchment rain
-  (fallback), over its level factor and source in one column, "held at the
-  bound" in words; MAP; rain and runoff in mm; the runoff coefficient; the
+  (fallback), over its level factor and source in one column (on the
+  reference factors, "× k_unit (k_unit: unit MAP ÷ its CHIRPS × factors, N
+  mm a year)"), "held at the bound" or "outside 0.5–2" in words; MAP; rain and runoff in mm; the runoff coefficient; the
   wrap focusable so a keyboard can scroll it), **Where each unit's MAP
   comes from** and **Days by where the rain came from** (disclosures, with
   full-height targets),
