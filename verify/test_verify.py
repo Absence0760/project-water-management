@@ -179,7 +179,7 @@ MUTANTS = [
     ),
     (
         "an off-take into a capped unit sizes to its whole demand (before engine 1.70.0)",
-        "need = min(dam_dem(dst, i), sr_[0] if sr_ else math.inf)",
+        "need = min(dam_dem(dst, i), max(0.0, sr_[0] - ext_out[dst]) if sr_ else math.inf)",
         "need = dam_dem(dst, i)",
     ),
     ("the licence rate ignores its months", 'if a["months"] and m not in a["months"]:\n            continue', "if False:\n            continue"),
