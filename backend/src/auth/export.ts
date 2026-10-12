@@ -82,6 +82,10 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'api_key.created_by': { excluded: 'the project’s key; api_key.created is in auditEvents; never key material' },
 	'api_key.revoked_by': { excluded: 'the project’s key; api_key.revoked is in auditEvents' },
 	'audit_event.actor_user_id': { section: 'auditEvents' },
+	// Who acts for a project's responsible authority (233_authority_delegates): the person's own proposals and confirmations.
+	'authority_delegate.user_id': { section: 'authorityDelegations' },
+	'authority_delegate.proposed_by': { excluded: 'someone else the person proposed to act for the authority; authority.proposed is in auditEvents' },
+	'authority_delegate.confirmed_by': { excluded: 'someone else the person confirmed as acting for the authority; authority.confirmed is in auditEvents' },
 	'data_feed.acting_user_id': { excluded: 'the project’s feed configuration; feed.configured is in auditEvents' },
 	'data_feed.created_by': { excluded: 'the project’s feed configuration; feed.configured is in auditEvents' },
 	// An evidence pack (112_evidence_pack): who drafted and issued it is in the audit events (pack.drafted, pack.issued), exported with them.
@@ -243,9 +247,17 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 		);
 		if (!acct[0]) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		const { rows: projectMemberships } = await db.query(
-			`SELECT m.project_id AS "projectId", p.name AS "projectName", m.role, m.acts_for_authority AS "actsForAuthority", m.added_at AS "addedAt", m.party, m.specialist
+			`SELECT m.project_id AS "projectId", p.name AS "projectName", m.role, app_acts_for_authority(m.project_id) AS "actsForAuthority", m.added_at AS "addedAt", m.party, m.specialist
 			 FROM project_member m LEFT JOIN project p ON p.id = m.project_id
 			 WHERE m.user_id = $1 ORDER BY m.added_at, m.project_id`,
+			[userId]
+		);
+		// 233: where the person is proposed or confirmed to act for the authority (a team editor's too, with no membership row).
+		const { rows: authorityDelegations } = await db.query(
+			`SELECT d.project_id AS "projectId", p.name AS "projectName", CASE WHEN d.confirmed_at IS NULL THEN 'proposed' ELSE 'confirmed' END AS status,
+				d.proposed_at AS "proposedAt", d.confirmed_at AS "confirmedAt", d.confirmed_via AS "confirmedVia"
+			 FROM authority_delegate d LEFT JOIN project p ON p.id = d.project_id
+			 WHERE d.user_id = $1 ORDER BY d.proposed_at, d.project_id`,
 			[userId]
 		);
 		const { rows: teamMemberships } = await db.query(
@@ -338,6 +350,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			exportedAt: now.toISOString(),
 			account: acct[0],
 			projectMemberships,
+			authorityDelegations,
 			teamMemberships,
 			farms,
 			notes: rest.notes,

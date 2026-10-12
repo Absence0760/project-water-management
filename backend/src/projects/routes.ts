@@ -57,7 +57,7 @@ type ProjectRow = {
 	published_at: Date | null;
 	/** When the project's pending re-run is due, or null (042_auto_rerun). */
 	rerun_queued_for: Date | null;
-	/** The caller acts for the responsible authority (163, app_acts_for_authority): editor or above and marked by an owner. */
+	/** The caller acts for the responsible authority (163, app_acts_for_authority): a confirmed delegate holding editor or above (233). */
 	acts_for_authority: boolean;
 	/** The project's own two-step sign-in setting (204_mfa_opt_in). */
 	require_mfa: boolean;
@@ -153,6 +153,13 @@ const PatchBody = z.object({
 	reason: Reason
 });
 // 'contributor': a licence applicant (044/045, WP-3.3). Farmers are added through /farmers.
+/**
+ * A member row's authority columns (233_authority_delegates), for `m` a project_member: actsForAuthority, only for a
+ * confirmed delegate holding editor or above (app_authority_members), and authority, 'proposed' | 'confirmed' | null.
+ */
+const MEMBER_AUTHORITY_SQL = `m.user_id IN (SELECT a.user_id FROM app_authority_members(m.project_id) a) AS "actsForAuthority",
+	(SELECT CASE WHEN d.confirmed_at IS NULL THEN 'proposed' ELSE 'confirmed' END FROM authority_delegate d
+	 WHERE d.project_id = m.project_id AND d.user_id = m.user_id) AS authority`;
 const RoleEnum = z.enum(['contributor', 'viewer', 'editor', 'owner']);
 const ImportQuery = z.object({
 	teamId: z.string().uuid().optional(),
@@ -529,7 +536,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'viewer');
 			const { rows } = await db.query(
-				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist, m.acts_for_authority AS "actsForAuthority"
+				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist, ${MEMBER_AUTHORITY_SQL}
 				 FROM project_member m JOIN app_user u ON u.id = m.user_id
 				 WHERE m.project_id = $1 ORDER BY m.role DESC, u.display_name`,
 				[c.req.param('id')]
@@ -567,11 +574,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 	})
 	// A member's role, and their applying party (049: an applicant shares
 	// applications only within their own party; '' or null takes them out of
-	// every party, and a change ends the shares it no longer allows), and
-	// whether they act for the responsible authority (163: as an editor or
-	// owner they then record its decisions and endorse a baseline). Nobody
+	// every party, and a change ends the shares it no longer allows). Nobody
 	// who edits the project may be in a party (163's conflict guard: 409
-	// role_conflict).
+	// role_conflict). Who acts for the responsible authority is no longer
+	// set here: the authority confirms its own delegates
+	// (233_authority_delegates, projects/authorityDelegates.ts).
 	.patch('/:id/members/:userId', async (c) => {
 		const body = z
 			.object({
@@ -584,32 +591,28 @@ export const projectRoutes = new Hono<AuthEnv>()
 					.optional()
 					.transform((p) => (p === '' ? null : p)),
 				// The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party.
-				specialist: z.boolean().optional(),
-				actsForAuthority: z.boolean().optional()
+				specialist: z.boolean().optional()
 			})
 			.strict()
-			.refine(
-				(b) => b.role !== undefined || b.party !== undefined || b.specialist !== undefined || b.actsForAuthority !== undefined,
-				'give a role, a party, specialist, actsForAuthority or a mix'
-			)
+			.refine((b) => b.role !== undefined || b.party !== undefined || b.specialist !== undefined, 'give a role, a party, specialist or a mix')
 			.parse(await readJson(c));
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			if (body.role !== undefined && body.role !== 'owner') await assertNotLastOwner(db, id, userId);
-			const { rows: was } = await db.query<{ role: string; party: string | null; specialist: boolean; actsForAuthority: boolean }>(
-				'SELECT role, party, specialist, acts_for_authority AS "actsForAuthority" FROM project_member WHERE project_id = $1 AND user_id = $2',
+			const { rows: was } = await db.query<{ role: string; party: string | null; specialist: boolean }>(
+				'SELECT role, party, specialist FROM project_member WHERE project_id = $1 AND user_id = $2',
 				[id, userId]
 			);
 			const party = body.party !== undefined ? body.party : (was[0]?.party ?? null);
 			if (body.specialist && party === null) throw new ApiError(409, 'only a member of an applying party can be its specialist: give them a party first');
 			const { rows } = await db.query(
 				`UPDATE project_member m SET role = COALESCE($3::project_role, m.role), party = CASE WHEN $4 THEN $5 ELSE m.party END,
-					specialist = COALESCE($6::boolean, m.specialist), acts_for_authority = COALESCE($7::boolean, m.acts_for_authority) FROM app_user u
+					specialist = COALESCE($6::boolean, m.specialist) FROM app_user u
 				 WHERE m.project_id = $1 AND m.user_id = $2 AND u.id = m.user_id
-				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist, m.acts_for_authority AS "actsForAuthority"`,
-				[id, userId, body.role ?? null, body.party !== undefined, body.party ?? null, body.specialist ?? null, body.actsForAuthority ?? null]
+				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist`,
+				[id, userId, body.role ?? null, body.party !== undefined, body.party ?? null, body.specialist ?? null]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
 			if ((was[0]?.specialist ?? false) !== rows[0].specialist) {
@@ -621,10 +624,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (body.party !== undefined && (was[0]?.party ?? null) !== rows[0].party) {
 				await recordAudit(db, id, 'member.party', { userId, displayName: rows[0].displayName, from: was[0]?.party ?? null, to: rows[0].party });
 			}
-			if (body.actsForAuthority !== undefined && was[0]?.actsForAuthority !== rows[0].actsForAuthority) {
-				await recordAudit(db, id, 'member.authority', { userId, displayName: rows[0].displayName, actsForAuthority: rows[0].actsForAuthority });
-			}
-			return c.json({ member: rows[0] });
+			// A demotion below editor ends any delegation (233's lapse trigger): read the authority after the update.
+			const { rows: authority } = await db.query<{ actsForAuthority: boolean; authority: 'proposed' | 'confirmed' | null }>(
+				`SELECT ${MEMBER_AUTHORITY_SQL} FROM project_member m WHERE m.project_id = $1 AND m.user_id = $2`,
+				[id, userId]
+			);
+			return c.json({ member: { ...rows[0], ...authority[0] } });
 		});
 	})
 	.delete('/:id/members/:userId', async (c) => {

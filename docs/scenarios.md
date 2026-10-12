@@ -1481,8 +1481,8 @@ scenario is `'team'`, and behaves exactly as above).
   app **records the responsible authority's decision; it never makes one**
   (163_licensing_authority; provisional position, pre-counsel research,
   2026-10-01, D14 in [step-3-licensing.md § 11](./roadmap/step-3-licensing.md)):
-  only an assessor the project's owner marks as acting for the authority
-  (below) records it, with **Record the authority's decision** (`…/decide
+  only an assessor the authority confirmed as acting for it (233, below)
+  records it, with **Record the authority's decision** (`…/decide
   { outcome, authority?, decisionDate, reference?, reasonsReceived, note }`).
   The outcome is in the National Water Act's and GN R267's words:
   `licence_issued` (*Licence issued (see its conditions)*: every licence
@@ -1526,9 +1526,13 @@ scenario is `'team'`, and behaves exactly as above).
 - **Who decides: the responsible authority** (163, D1 in step-3 § 11). The
   project names it in `settings.responsibleAuthority { name, kind: 'dws' |
   'cma', office }` (the Project page's *Responsible authority* card; no model
-  input). The owner ticks *Acts for the responsible authority* on the
-  members who act for it (`project_member.acts_for_authority`); as editors or
-  owners they record its decisions and endorse a published baseline for it
+  input). Who acts for it is the authority's call (233_authority_delegates,
+  issue #523 G5): an owner proposes an editor or owner on the Project page's
+  *Acts for the authority* card, and a member already acting for it confirms
+  (the operator confirms a project's first, on the authority's letter); a
+  proposal grants nothing, and the owner can't remove a confirmed delegate
+  (`authority_delegate`, [security.md § Authorization](./security.md)).
+  As editors or owners, confirmed delegates record its decisions and endorse a published baseline for it
   (`POST …/publication/:pubId/endorse`, once per publication, audit event
   `publication.endorsed`), and an evidence report on a baseline nobody
   endorsed says so on page 1. This makes the host matter less: a CMA host, a

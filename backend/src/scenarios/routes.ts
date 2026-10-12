@@ -537,7 +537,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		});
 	})
 	// Record the responsible authority's decision (163_licensing_authority): an
-	// editor the owner marks as acting for the authority, who didn't make the
+	// editor the authority confirmed as acting for it (233), who didn't make the
 	// application. The app records the decision; it never makes one.
 	.post('/:id/scenarios/:sid/decide', async (c) => {
 		const { id, sid } = c.req.param();

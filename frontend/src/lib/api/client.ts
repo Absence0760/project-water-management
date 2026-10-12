@@ -84,6 +84,8 @@ import type {
 	PackVerification,
 	SignoffRequest,
 	Member,
+	AuthorityDelegate,
+	AuthorityDelegates,
 	MyInvite,
 	Nomination,
 	Reproduction,
@@ -556,11 +558,22 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Appoint a party member its specialist, who signs its applications' packs, or end it (167); owners only, 409 without a party. */
 			setSpecialist: (id: string, userId: string, specialist: boolean) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { specialist }).then((r) => r.member),
-			/** Mark or unmark a member as acting for the responsible authority (owner; 163). */
-			setActsForAuthority: (id: string, userId: string, actsForAuthority: boolean) =>
-				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { actsForAuthority }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
+		},
+		/**
+		 * Who acts for the responsible authority (233_authority_delegates): an owner proposes, only a member already
+		 * acting for the authority confirms (or the operator, on its letter), the owner withdraws a proposal, and the
+		 * authority removes anyone.
+		 */
+		authorityDelegates: {
+			list: (id: string) => request<AuthorityDelegates>('GET', `${p(id)}/authority-delegates`),
+			propose: (id: string, userId: string) =>
+				request<{ delegate: AuthorityDelegate }>('POST', `${p(id)}/authority-delegates`, { userId }).then((r) => r.delegate),
+			confirm: (id: string, userId: string) =>
+				request<{ delegate: AuthorityDelegate }>('POST', `${p(id)}/authority-delegates/${enc(userId)}/confirm`, {}).then((r) => r.delegate),
+			/** Withdraw or decline a proposal, remove a delegate, or step down yourself. */
+			remove: (id: string, userId: string) => request<void>('DELETE', `${p(id)}/authority-delegates/${enc(userId)}`)
 		},
 		/**
 		 * Farmer members and their farms (WP-2.1), and pending farmer invites
@@ -1026,8 +1039,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),
 			reopen: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/reopen`),
 			/**
-			 * Record the responsible authority's decision (163): an editor the owner marks as acting for
-			 * the authority, who didn't make the application. `authority` defaults to settings.responsibleAuthority.
+			 * Record the responsible authority's decision (163): an editor the authority confirmed as acting
+			 * for it (233), who didn't make the application. `authority` defaults to settings.responsibleAuthority.
 			 */
 			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
 			/** Record what followed the decision (232): an appeal lodged, upheld, set aside or varied. */

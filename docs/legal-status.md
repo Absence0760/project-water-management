@@ -322,7 +322,7 @@ cl. 3). The licensing ones are rows in
   assigned or delegated to; s1, s40(1), s41, s42) and whose evidence it
   accepts (s41(2)), not who hosts the model. *Built
   (163_licensing_authority):* each project names its responsible
-  authority; only members the owner marks as acting for it record its
+  authority; only members the authority confirms as acting for it (233: the owner only proposes) record its
   decision or endorse a published baseline; packs print whom they are for
   and whether the baseline was endorsed; a database conflict guard keeps
   editors out of applying parties, so a consultancy host can't also act

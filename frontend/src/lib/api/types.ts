@@ -251,7 +251,7 @@ export interface Project extends ProjectSummary {
 	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
-	/** The caller acts for the responsible authority (163): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
+	/** The caller acts for the responsible authority (163, 233): a confirmed delegate holding editor or above, so they record its decisions and endorse a baseline. */
 	actsForAuthority?: boolean;
 	/** The project's own two-step sign-in setting (204_mfa_opt_in): its owners' actions need a code. Absent from an older API. */
 	requireMfa?: boolean;
@@ -339,8 +339,48 @@ export interface Member {
 	party: string | null;
 	/** The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party. */
 	specialist: boolean;
-	/** The owner marked them as acting for the responsible authority (163). Absent from an older API. */
+	/** They act for the responsible authority: a confirmed delegate holding editor or above (233). Absent from an older API. */
 	actsForAuthority?: boolean;
+	/** Their delegation, if any (233_authority_delegates): proposed (grants nothing yet) or confirmed. Absent from an older API. */
+	authority?: AuthorityDelegateStatus | null;
+}
+
+/** A delegation's state (233_authority_delegates): a proposal grants nothing until the authority confirms it. */
+export type AuthorityDelegateStatus = 'proposed' | 'confirmed';
+
+/** Someone proposed or confirmed to act for the responsible authority (GET /projects/:id/authority-delegates, 233). */
+export interface AuthorityDelegate {
+	userId: string;
+	displayName: string;
+	status: AuthorityDelegateStatus;
+	/** Confirmed and an editor or owner now: what counts for decisions and endorsements. */
+	active: boolean;
+	proposedBy: { userId: string; displayName: string } | null;
+	proposedAt: string;
+	confirmedBy: { userId: string; displayName: string } | null;
+	confirmedAt: string | null;
+	/** member: by someone acting for the authority; operator: on the authority's letter; grandfathered: an owner's flag from before 233. */
+	confirmedVia: 'member' | 'operator' | 'grandfathered' | null;
+	/** The operator's reference (the authority's letter); '' otherwise. */
+	reference: string;
+}
+
+/** An editor or owner (directly or through the team) who may be proposed. Names only. */
+export interface AuthorityCandidate {
+	userId: string;
+	displayName: string;
+	role: Role;
+	via: 'direct' | 'team';
+}
+
+export interface AuthorityDelegates {
+	delegates: AuthorityDelegate[];
+	/** Empty unless the caller may propose. */
+	candidates: AuthorityCandidate[];
+	/** An owner, or a member acting for the authority. */
+	canPropose: boolean;
+	/** The caller acts for the authority: they confirm, decline and remove. */
+	canConfirm: boolean;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */

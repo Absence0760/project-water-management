@@ -4,7 +4,7 @@
 // authority). Every "cannot" has its positive control:
 //
 //   - who sends: an editor or owner (control), never a viewer or an applicant;
-//   - to whom: only members the owner marked as acting for the authority,
+//   - to whom: only members the authority confirmed as acting for it (233),
 //     editors and up, never the sender; an id that isn't one is one refusal;
 //   - what: only an issued pack, of this project;
 //   - the mail: the pack's page and the verify page, never a file or a
@@ -12,7 +12,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, signUp } from '../__tests__/helpers.js';
 import { outbox } from '../mail/transport.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -90,7 +90,7 @@ describe('sending an issued pack to the responsible authority', () => {
 	});
 
 	it('is an editor’s: a viewer and an applicant are refused (control: the editor below sends)', async () => {
-		for (const u of [authorityA, authorityB]) expect((await owner.call('PATCH', `${P()}/members/${u.id}`, { actsForAuthority: true })).status).toBe(200);
+		for (const u of [authorityA, authorityB]) await actForAuthority(owner, projectId, u.id);
 		expect((await send(viewer, issued)).status).toBe(403);
 		expect((await send(applicant, issued)).status).toBe(403);
 		expect(mailCount(authorityA.email)).toBe(0);

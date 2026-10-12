@@ -415,6 +415,21 @@ the live report, never the pack or its hash (`evidence/packs.db.test.ts`).
 A pack drafted before `evidence-13` has neither field; its identity block
 says nothing about the authority and it has no such flag.
 
+**Who acts for the authority is the authority's own call**
+(233_authority_delegates, issue #523 G5; the assessor's review of D1). An
+endorsement, a decision, a registration check and the pack's *Send to the
+authority* count only a **confirmed** delegate holding editor or above in
+the project (directly or through its team): an owner (the host) may
+propose someone, but a proposal grants nothing until a member already
+acting for the authority confirms it, or, for a project's first delegate,
+the operator on the authority's written request. The owner can withdraw a
+proposal but not remove a confirmed delegate; the authority removes anyone.
+So *Not endorsed by the responsible authority* stays printed until someone
+the authority confirmed endorses the baseline, whatever the host does.
+Every change is in the project's History ([security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls), [data-model.md](./data-model.md) `authority_delegate`).
+The flags owners set before 233 were carried over as confirmed, each with
+an `authority.grandfathered` event naming who set it.
+
 ### Both impact bases
 
 Report format `evidence-14` (licensing build item 8; provisional position,
@@ -505,8 +520,9 @@ so they go where s41(2) says the evidence goes, to the authority that
 decides, not through the applicant (whose printable copy withholds the
 others' figures, [§ Applicants](#applicants)). On an issued pack's page an
 editor picks **Send to the authority…** (`POST …/packs/:packId/send`): the
-members the project's owner marked as acting for the responsible authority
-(editors and owners with `acts_for_authority`, 163), all of them or those
+members the authority confirmed as acting for it (confirmed delegates
+holding editor or above, directly or through the team,
+`app_authority_members`, 233; a proposal gets nothing), all of them or those
 picked, never the sender, each get an email (`pack_sent`) naming the pack,
 its version, code and the authority, with the editor's note. The email
 holds **no file and no download link**: it links the pack's page, where
@@ -662,9 +678,9 @@ make the authority's side its author.
   `specialist`; a run's sign-off is always `specialist`. Verify and the
   sign-off lists print the kind.
 - **The registration check.** Someone at the host looks the signer up on
-  the public SACNASP or ECSA register, and an owner, or an editor an owner
-  marked as acting for the responsible authority
-  (`project_member.acts_for_authority`, 163), records what they found on the
+  the public SACNASP or ECSA register, and an owner, or an editor the
+  authority confirmed as acting for it (`app_acts_for_authority`, 163,
+  233), records what they found on the
   Project page's Registration checks panel
   (`POST /projects/:id/members/:userId/registration-checks`,
   `app_record_registration_check`; insert-only). A check is current for a

@@ -2189,6 +2189,30 @@ Every step is an ordinary app action by an owner unless it says "operator".
     that it holds its records or has a disposal authority, recorded as
     `team.records_disposal_confirmed_on` (operator agreement 3A.2). Record
     the confirmation, the date and what was deleted in the operator log.
+17. **The responsible authority confirms who acts for it** (operator;
+    233_authority_delegates, issue #523 G5; [security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Who acts for a project's responsible
+    authority is the authority's call, not the host's: in the app an owner
+    only proposes someone, and only a member already acting for the
+    authority confirms them. A project with nobody confirmed yet (a new
+    licensing project, or after the last delegate left) needs the operator
+    for the first. Act only on the authority's **written** request (a letter
+    or email from the CMA or the DWS regional office, on its letterhead or
+    from its domain, naming the project and the person), never on the
+    host's word; confirm it with the authority out of band (a number it
+    publishes, not one in the request). The person must already be an
+    editor or owner of the project, directly or through its team (the host
+    adds them). Then, as the schema owner:
+    `SELECT authority_confirm_by_operator('<project id>', (SELECT id FROM app_user WHERE email = '<address>'), '<the letter''s reference and date>');`
+    It confirms their proposal or adds them confirmed, and refuses someone
+    who isn't an editor (`23514`) or an empty reference; the project's
+    History shows `authority.confirmed` by "Operator" with the reference.
+    From then on the authority confirms (and removes) its own delegates in
+    the app. To remove someone at the authority's request when none of its
+    delegates can (as the schema owner): `DELETE FROM authority_delegate
+    WHERE project_id = '…' AND user_id = '…';` (logged as
+    `authority.removed`). Locally the same is `pnpm dev:authority:confirm
+    <project-id> <email> --reference "<letter>"`. Record the request, how
+    it was checked and the outcome in the operator log.
 
 ## Rollback
 

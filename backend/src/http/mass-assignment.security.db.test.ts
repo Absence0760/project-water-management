@@ -22,7 +22,7 @@ import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/l
 import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@water-management/engine';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, confirmAsOperator, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
@@ -460,9 +460,9 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/scenarios/:sid/submit': () => scenario([]),
 	'POST /projects/:id/scenarios/:sid/withdraw': () => scenario(['submit']),
 	'POST /projects/:id/scenarios/:sid/reopen': () => scenario(['submit', 'withdraw']),
-	// The owner acts for the responsible authority (163), as the decision needs.
+	// The owner acts for the responsible authority (163; confirmed by the operator, 233), as the decision needs.
 	'POST /projects/:id/scenarios/:sid/decide': async () => {
-		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		await confirmAsOperator(ctx.projectId, ctx.owner.id);
 		return { ...(await scenario(['submit'])), body: { outcome: 'licence_issued', authority: 'Mass CMA', decisionDate: '2026-09-30', reasonsReceived: true } };
 	},
 	// What followed a decision (232): a fresh decided scenario, so the legit call lodges its first appeal.
@@ -506,9 +506,21 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	}),
 	// A fresh publication (an endorsement is once), endorsed by the owner acting for the authority (163).
 	'POST /projects/:id/publication/:pubId/endorse': async () => {
-		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		await confirmAsOperator(ctx.projectId, ctx.owner.id);
 		const pub = await ok(ctx.owner.call('POST', `${at()}/publication`, { runId: ctx.runId }));
 		return { params: { pubId: pub.publication.id }, body: { note: 'Accepted' } };
+	},
+	// Who acts for the authority (233): the editor not yet proposed, so the owner's proposal is new.
+	'POST /projects/:id/authority-delegates': async () => {
+		await asOwner('DELETE FROM authority_delegate WHERE project_id = $1 AND user_id = $2', [ctx.projectId, ctx.editor.id]);
+		return { body: { userId: ctx.editor.id } };
+	},
+	// The owner confirmed by the operator, and the editor freshly proposed (as the schema owner), so the owner confirms them.
+	'POST /projects/:id/authority-delegates/:userId/confirm': async () => {
+		await confirmAsOperator(ctx.projectId, ctx.owner.id);
+		await asOwner('DELETE FROM authority_delegate WHERE project_id = $1 AND user_id = $2', [ctx.projectId, ctx.editor.id]);
+		await asOwner('INSERT INTO authority_delegate (project_id, user_id) VALUES ($1, $2)', [ctx.projectId, ctx.editor.id]);
+		return { params: { userId: ctx.editor.id } };
 	},
 	// The owner can't demote themselves as the last owner; change the viewer instead.
 	'PATCH /projects/:id/members/:userId': () => ({ params: { userId: ctx.viewer.id }, body: { role: 'editor' } })

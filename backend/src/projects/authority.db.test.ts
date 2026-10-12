@@ -1,11 +1,11 @@
-// The responsible authority (163_licensing_authority; provisional position,
+// The responsible authority (163_licensing_authority, 233_authority_delegates; provisional position,
 // pre-counsel research, 2026-10-01; docs/scenarios.md § Applications "Who
 // decides", docs/api.md § Members and § Publication): who acts for it, what
 // only they may do (record its decision, endorse a published baseline), and
 // the conflict guard that keeps editors out of applying parties. Every "can't"
 // has its positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, confirmAsOperator, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -58,29 +58,38 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('who acts for the responsible authority', () => {
-	it('is marked by the owner only, recorded in the change history, and shown on the member list', async () => {
-		// An editor can't mark themselves, through the route or past it.
-		expect((await marked.call('PATCH', `${P()}/members/${marked.id}`, { actsForAuthority: true })).status).toBe(403);
-		const sql = await withUser(marked.id, (db) => db.query('UPDATE project_member SET acts_for_authority = true WHERE project_id = $1 AND user_id = $2', [projectId, marked.id]));
-		expect(sql.rowCount).toBe(0);
-		// Positive control: the owner marks them.
-		const res = await owner.call('PATCH', `${P()}/members/${marked.id}`, { actsForAuthority: true });
-		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body.member).toMatchObject({ userId: marked.id, role: 'editor', actsForAuthority: true });
-		const members = (await viewer.call('GET', `${P()}/members`)).body.members as { userId: string; actsForAuthority: boolean }[];
-		expect(members.find((m) => m.userId === marked.id)?.actsForAuthority).toBe(true);
-		expect(members.find((m) => m.userId === unmarked.id)?.actsForAuthority).toBe(false);
-		const [event] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'member.authority' ORDER BY id DESC LIMIT 1`, [projectId]);
-		expect(event.subject).toMatchObject({ userId: marked.id, actsForAuthority: true });
+	it('is the authority’s to confirm: the owner proposes, the operator confirms the first, and the member list shows it (233)', async () => {
+		// The 163 flag is no longer settable: not through the route, nor past it.
+		expect((await owner.call('PATCH', `${P()}/members/${marked.id}`, { actsForAuthority: true })).status).toBe(400);
+		await expect(
+			withUser(owner.id, (db) => db.query('UPDATE project_member SET acts_for_authority = true WHERE project_id = $1 AND user_id = $2', [projectId, marked.id]))
+		).rejects.toMatchObject({ code: '42501' });
+		// An editor can't propose themselves.
+		expect((await marked.call('POST', `${P()}/authority-delegates`, { userId: marked.id })).status).toBe(403);
+		// The owner proposes: shown as proposed, granting nothing.
+		const res = await owner.call('POST', `${P()}/authority-delegates`, { userId: marked.id });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(res.body.delegate).toMatchObject({ userId: marked.id, status: 'proposed', active: false, proposedBy: { userId: owner.id } });
+		let members = (await viewer.call('GET', `${P()}/members`)).body.members as { userId: string; actsForAuthority: boolean; authority: string | null }[];
+		expect(members.find((m) => m.userId === marked.id)).toMatchObject({ actsForAuthority: false, authority: 'proposed' });
+		expect((await marked.call('GET', P())).body.project.actsForAuthority).toBe(false);
+		// Positive control: the operator confirms it on the authority's letter.
+		await confirmAsOperator(projectId, marked.id, 'CMA letter 2026/01');
+		members = (await viewer.call('GET', `${P()}/members`)).body.members;
+		expect(members.find((m) => m.userId === marked.id)).toMatchObject({ actsForAuthority: true, authority: 'confirmed' });
+		expect(members.find((m) => m.userId === unmarked.id)).toMatchObject({ actsForAuthority: false, authority: null });
+		const events = await asOwner(`SELECT kind, actor_label, subject FROM audit_event WHERE project_id = $1 AND kind LIKE 'authority.%' ORDER BY id`, [projectId]);
+		expect(events.map((e) => e.kind)).toEqual(['authority.proposed', 'authority.confirmed']);
+		expect(events[1]).toMatchObject({ actor_label: 'Operator', subject: { userId: marked.id, via: 'operator', reference: 'CMA letter 2026/01' } });
 	});
 
 	it('says on the project whether the caller acts for it', async () => {
 		expect((await marked.call('GET', P())).body.project.actsForAuthority).toBe(true);
 		expect((await unmarked.call('GET', P())).body.project.actsForAuthority).toBe(false);
-		// A marked member below editor doesn't (the right needs editor too): mark the viewer, then read.
-		expect((await owner.call('PATCH', `${P()}/members/${viewer.id}`, { actsForAuthority: true })).status).toBe(200);
+		// Only an editor or owner can be proposed (the right needs editor): the viewer is refused, in the route and past it.
+		expect((await owner.call('POST', `${P()}/authority-delegates`, { userId: viewer.id })).status).toBe(409);
+		await expect(asOwner('SELECT authority_confirm_by_operator($1, $2, $3)', [projectId, viewer.id, 'letter'])).rejects.toMatchObject({ code: '23514' });
 		expect((await viewer.call('GET', P())).body.project.actsForAuthority).toBe(false);
-		expect((await owner.call('PATCH', `${P()}/members/${viewer.id}`, { actsForAuthority: false })).status).toBe(200);
 	});
 
 	it('never comes with a new membership, whatever the insert says', async () => {

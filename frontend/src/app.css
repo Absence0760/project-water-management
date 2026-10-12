@@ -678,7 +678,7 @@ table.data tfoot th {
 	font-weight: 600;
 	background: var(--surface-2);
 }
-/* Not a box: at 100 % a checkbox in a cell (the members' "Acts for the responsible authority")
+/* Not a box: at 100 % a checkbox in a cell (the members' "Specialist for this party")
    took the cell's width, with its words pushed past the row's buttons. */
 table.data td input:where(:not([type='checkbox'], [type='radio'])),
 table.data td select {

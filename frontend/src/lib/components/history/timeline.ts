@@ -180,8 +180,27 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				? `Appointed ${who} specialist for the applying party ${str(s.party)}`
 				: `${who} is no longer the specialist for ${s.party ? `the applying party ${str(s.party)}` : 'their applying party'}`;
 		case 'member.authority':
-			// 163_licensing_authority: the owner marks who acts for the responsible authority.
+			// 163_licensing_authority: the owner marked who acts for the responsible authority (before 233).
 			return s.actsForAuthority ? `Marked ${who} as acting for the responsible authority` : `${who} no longer acts for the responsible authority`;
+		// 233_authority_delegates (issue #523 G5): the authority confirms its own delegates.
+		case 'authority.proposed':
+			return `Proposed ${who} to act for the responsible authority (it grants nothing until the authority confirms it)`;
+		case 'authority.confirmed':
+			return s.via === 'operator'
+				? `Confirmed ${who} as acting for the responsible authority, on the authority’s request${s.reference ? ` (${str(s.reference)})` : ''}`
+				: `Confirmed ${who} as acting for the responsible authority`;
+		case 'authority.withdrawn':
+			return `Withdrew the proposal that ${who} act for the responsible authority`;
+		case 'authority.declined':
+			return `Declined, for the responsible authority, the proposal that ${who} act for it`;
+		case 'authority.removed':
+			return `${who} no longer acts for the responsible authority (removed)`;
+		case 'authority.lapsed':
+			return s.wasConfirmed
+				? `${who} no longer acts for the responsible authority: they are no longer an editor of the project`
+				: `The proposal that ${who} act for the responsible authority lapsed: they are no longer an editor of the project`;
+		case 'authority.grandfathered':
+			return `${who} acts for the responsible authority, marked by an owner before the authority confirmed its own delegates (carried over as confirmed)`;
 		case 'farmer.linked':
 			return `Linked ${who} to the hydrological unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':

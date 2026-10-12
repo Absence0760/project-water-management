@@ -4,9 +4,12 @@
 // Water Act only the responsible authority decides a licence: DWS (a
 // regional office), or a catchment management agency the power is assigned
 // or delegated to (s1, s40(1), s41, s42). A licensing project names it in
-// settings.responsibleAuthority; the owner marks the members who act for it
-// (project_member.acts_for_authority), and only they record its decision on
-// an application or endorse a published baseline.
+// settings.responsibleAuthority. Who acts for it is the authority's own call
+// (233_authority_delegates, issue #523 G5; projects/authorityDelegates.ts):
+// an owner may propose someone, but only a member already acting for the
+// authority (or the operator, on its letter) confirms them, and only a
+// confirmed delegate holding editor or above records its decision on an
+// application or endorses a published baseline.
 //
 // Like settings.outcomes and settings.outlook it is **no model input**: runs
 // don't record it (runs/execute.ts), and saving it alone leaves updated_at
@@ -52,7 +55,11 @@ export async function projectAuthority(db: Db, projectId: string): Promise<Respo
 	return resolveResponsibleAuthority(rows[0]?.settings);
 }
 
-/** Whether the current user acts for the project's authority: editor or above, and marked by an owner (app_acts_for_authority, 163). */
+/**
+ * Whether the current user acts for the project's authority: a confirmed delegate holding editor or above, directly
+ * or through the team (app_acts_for_authority, 163, redefined by 233). The one test for every authority action
+ * (decisions, endorsement, registration checks, confirming delegates); a proposed delegate gets false.
+ */
 export async function actsForAuthority(db: Db, projectId: string): Promise<boolean> {
 	const { rows } = await db.query<{ ok: boolean }>('SELECT app_acts_for_authority($1) AS ok', [projectId]);
 	return rows[0]?.ok === true;
@@ -61,5 +68,5 @@ export async function actsForAuthority(db: Db, projectId: string): Promise<boole
 /** 403 unless the current user acts for the project's authority; call after requireRole(…, 'editor'). */
 export async function requireActsForAuthority(db: Db, projectId: string): Promise<void> {
 	if (!(await actsForAuthority(db, projectId)))
-		throw new ApiError(403, 'only a member the project’s owner marks as acting for the responsible authority may do this (members, actsForAuthority)');
+		throw new ApiError(403, 'only a member the responsible authority has confirmed as acting for it may do this (Project tab, Acts for the authority)');
 }

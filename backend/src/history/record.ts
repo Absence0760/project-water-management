@@ -171,8 +171,20 @@ export type AuditKind =
 	| 'member.role'
 	| 'member.party'
 	| 'member.specialist'
-	// An owner marked or unmarked a member as acting for the responsible authority (163).
+	// An owner marked or unmarked a member as acting for the responsible authority (163; before 233, kept for the old events).
 	| 'member.authority'
+	// Who acts for the responsible authority (233_authority_delegates, issue #523 G5), written by the database
+	// (authority_delegate_audit), never by recordAudit: proposed by an owner, confirmed by a member acting for it (or the
+	// operator: via 'operator', its letter in reference), a proposal withdrawn or declined, a delegate removed, lapsed
+	// (no longer an editor) or carried over from 163's flag (grandfathered, its actor the owner who ticked it).
+	// { userId, displayName, via?, reference?, wasConfirmed? }.
+	| 'authority.proposed'
+	| 'authority.confirmed'
+	| 'authority.withdrawn'
+	| 'authority.declined'
+	| 'authority.removed'
+	| 'authority.lapsed'
+	| 'authority.grandfathered'
 	| 'farmer.linked'
 	| 'farmer.unlinked'
 	| 'invite.sent'

@@ -1965,11 +1965,12 @@ it scrolls, and isn't fitted to the window.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
-  consultant or client in the same one. Others see the party as text. Each
-  editor and owner row has an **Acts for the responsible authority** tick
-  box for owners (163_licensing_authority; others see it as text when set):
-  those members record the authority's decisions and endorse a published
-  baseline. A change that would make an editor also part of an applying
+  consultant or client in the same one. Others see the party as text. A
+  member who acts for the responsible authority shows **Acts for the
+  responsible authority** under their role, and one proposed but not yet
+  confirmed *Proposed to act for the responsible authority (not confirmed)*
+  (233; managed in **Acts for the authority** below, which the list follows
+  after each change). A change that would make an editor also part of an applying
   party is refused with the server's `role_conflict` words. A member with a
   party has a **Specialist for this party** tick box for owners (167_signers;
   others see "Specialist for <party>"): the registered professional the
@@ -1977,8 +1978,28 @@ it scrolls, and isn't fitted to the window.
   applications. The roles, invitations, applying parties, specialists and
   acting for the authority are explained by the ⓘ tips (the heading's
   *roles*, the email box's *invitation*, the party box's *applying party*,
-  the authority box's *responsible authority*) and their glossary entries;
+  the authority card's *responsible authority*) and their glossary entries;
   an 8-line paragraph under **Add** repeated them until issue #521 § 13.
+- **Acts for the authority** (`project/AuthorityDelegatesPanel.svelte`,
+  233_authority_delegates, issue #523 G5; under **Responsible authority**,
+  every project reader): who acts for the responsible authority, which the
+  authority decides, not the host. **Confirmed** delegates first (name, a
+  *Confirmed* badge, who confirmed it and when: a member, *on the
+  authority's request (<reference>)* for the operator, or *marked by an
+  owner before the authority confirmed its own delegates* for a carried-over
+  flag), then **Proposed, not confirmed** (a *Proposed* badge, by whom and
+  when, and the line that a proposal grants nothing). A member acting for
+  the authority gets **Confirm** on each proposal and **Decline** / **Remove**
+  on every row; an owner gets **Withdraw** on a proposal only, never on a
+  confirmed delegate; anyone gets **Turn down** / **Step down** on their own
+  row. Each removal asks first (the confirm dialog) and then puts focus on
+  the card's heading. An owner or a member acting for the authority gets
+  **Propose someone** (or **Add someone**, confirmed at once, for the
+  authority) with a select of the editors and owners not yet listed,
+  directly or through the team (*, through the team*). With nobody confirmed
+  the card says so and, to an owner, that the authority asks the operator in
+  writing to confirm the first. A status line tells a screen reader what
+  each action did.
 - **Registration checks** (`project/RegistrationChecksPanel.svelte`, 167;
   editors and owners): the host's checks of members' registrations against
   the public SACNASP or ECSA register, newest first (member, registration
@@ -9716,7 +9737,7 @@ dark).
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it. An editor who isn't its owner and whom the
-owner marks as acting for the responsible authority gets **Record the
+responsible authority confirmed as acting for it (233) gets **Record the
 authority's decision** (163_licensing_authority; provisional position,
 pre-counsel research, 2026-10-01): the outcome in the Act's words with its
 basis beside each (*Licence issued (see its conditions)*, *Licence refused*,
@@ -10513,8 +10534,8 @@ their own application's in [their own view](#the-applicants-pack-view).
   `PackSendDialog.svelte`, a side sheet saying why the full pack goes to
   the authority and not through the applicant, the members acting for the
   responsible authority as ticked checkboxes, an optional note and
-  **Send**, then "Sent to …"; with none, it says the owner marks them in
-  Members; [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
+  **Send**, then "Sent to …"; with none, it says the authority confirms
+  them in Acts for the authority (233; a proposal alone isn't enough); [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
   and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash. When an erratum found
   since the manifest was frozen applies to either run's engine or its fit's

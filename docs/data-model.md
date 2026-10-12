@@ -799,7 +799,16 @@ the result change?", and put back any earlier version.
   `as_applied` or `changed`, and `grantedOpsSha256`), `scenario.appeal_recorded`
   (232: what followed a decision: `eventId`, `kind`, `forum`, `eventDate`, a
   variation's `opsSha256`; never its note), `member.authority` (163: an owner marked or unmarked
-  a member as acting for the responsible authority, `actsForAuthority`),
+  a member as acting for the responsible authority, `actsForAuthority`;
+  none since 233), the `authority.*` events (233, written by the database's
+  `authority_delegate_audit`, never by `recordAudit`, `{ userId,
+  displayName, via?, reference?, wasConfirmed? }`): `authority.proposed`,
+  `authority.confirmed` (`via`: `member`, or `operator` with the
+  authority's letter as `reference`, actor "Operator"), `authority.withdrawn`,
+  `authority.declined` (the authority refused a proposal),
+  `authority.removed`, `authority.lapsed` (no longer an editor) and
+  `authority.grandfathered` (a 163 flag carried over, its actor the owner
+  who ticked it),
   `publication.endorsed` (163: `publicationId`, `runId`, `note`),
   `member.specialist` (167: an owner appointed or ended a party's
   specialist, `specialist`, `party`), `registration.checked` (167: a
@@ -2190,7 +2199,7 @@ projection's read and narrows their series further:
   published run of the project (on insert and rebase); only its owner moves
   it (submit, withdraw, back to draft) or edits it; only an editor who isn't
   its owner **and acts for the responsible authority** (163,
-  `app_acts_for_authority`; also for an outcome on a team scenario, though
+  `app_acts_for_authority`: a confirmed delegate since 233; also for an outcome on a team scenario, though
   an editor may still mark a team scenario decided without one) decides it, with an
   outcome, the authority, the date and the reasons flag, and nothing else
   changed; the decision and its record are set once. The one change it lets through is the assessor's
@@ -2292,15 +2301,46 @@ projection's read and narrows their series further:
   change clears it unless the same update sets it. water_app's column
   `UPDATE` grant now includes it.
 - **`project_member.acts_for_authority`** (163_licensing_authority, boolean,
-  default false): the owner marks the members who act for the project's
-  responsible authority (`settings.responsibleAuthority`, backend
-  `projects/authoritySettings.ts`, no model input). `project_member_authority`
-  forces it false on insert and refuses a change by anyone but an owner of
-  the project; water_app's `UPDATE` grant on `project_member` is now the
-  columns `role`, `party` and `acts_for_authority`. `app_acts_for_authority(project)`
-  (`SECURITY DEFINER`, pinned `search_path`): the current user is editor or
-  above and marked. It gates the decision (`scenario_guard`) and the
-  baseline endorsement (`run_publication_endorse`).
+  default false): superseded by `authority_delegate` (233). Read by nothing;
+  water_app's column `UPDATE` grant on it is revoked (its grant is now
+  `role`, `party`, `specialist`); its pre-233 values were carried over as
+  confirmed delegates. `project_member_authority` (163) stays with it until a
+  later migration drops both (expand/contract).
+- **Who acts for the responsible authority** (`authority_delegate`,
+  233_authority_delegates, issue #523 G5): `(project_id → project CASCADE,
+  user_id → app_user CASCADE)` primary key, `proposed_by → app_user SET
+  NULL`, `proposed_at`, `confirmed_at` (NULL = proposed), `confirmed_by →
+  app_user SET NULL`, `confirmed_via` (`member` | `operator` |
+  `grandfathered`, NULL exactly while proposed), `confirmation_note`
+  (≤ 200, the operator's reference, `''` otherwise). Indexed on `user_id`,
+  `proposed_by`, `confirmed_by`. The authority's own list (the project's
+  `settings.responsibleAuthority` names it, backend
+  `projects/authoritySettings.ts`): an owner or a member acting for it
+  proposes, only a member acting for it confirms (or the operator,
+  `authority_confirm_by_operator(project, user, reference)`, invoker's
+  rights, closed to water_app: the only way to confirm a project's first),
+  the owner withdraws a proposal but can't remove a confirmed delegate, the
+  authority removes anyone, anyone steps down (`authority_delegate_guard`;
+  RLS: read by viewers and above and the person, insert by an owner or the
+  authority, update by the authority, delete by the authority, the person,
+  or an owner while proposed; water_app holds `SELECT`, `INSERT`, `DELETE`
+  and `UPDATE (confirmed_at)`). The person must hold editor or above,
+  directly or through the team, when proposed and confirmed, and lapses
+  when they no longer do (`authority_delegate_prune` from `AFTER` triggers
+  on `project_member` delete or role change, `team_member` delete or role
+  change and `project.team_id`). `app_authority_member(project, user)`: a
+  confirmed delegate holding editor or above; `app_acts_for_authority(project)`
+  (from 163): that, for the current user; `app_authority_members(project)`:
+  the list, for a viewer or above (the members list, the pack's send
+  dialog, `holdsRequiredRole`); `app_authority_candidate(s)`: who may be
+  proposed (editors and owners, direct or team, not yet listed), for an
+  owner or an authority member only. `app_acts_for_authority` gates the
+  decision (`scenario_guard`), the baseline endorsement
+  (`run_publication_endorse`) and the registration check
+  (`app_record_registration_check`). Every change writes an `authority.*`
+  event (above). An account going takes its delegations (`user_id`) and
+  clears the names on others' (`proposed_by`, `confirmed_by`); a project
+  going takes its rows and writes nothing.
 - **The conflict guard** (163, D1 (c)): `app_member_role(project, user)`
   (any user's effective role, direct or through the team; not granted to
   water_app) and `app_assert_no_role_conflict(project, user)`, called by

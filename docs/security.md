@@ -2327,18 +2327,14 @@ In short:
   - **Only a member acting for the responsible authority records its
     decision** (163_licensing_authority; provisional position, pre-counsel
     research, 2026-10-01: under the National Water Act only the responsible
-    authority decides a licence, s27, s41, s42). `project_member.acts_for_authority`
-    is set by an owner only (`project_member_authority` refuses anyone else,
-    and an insert, an invite or a new project, always starts it false;
-    water_app's `UPDATE` on `project_member` is the columns `role`, `party`
-    and `acts_for_authority` only). `scenario_guard` refuses the move to
-    `decided` unless `app_acts_for_authority` (editor or above **and**
-    marked), and the route says so first (`403`). The same right, checked
-    by `run_publication_endorse`, endorses a published baseline; an
-    endorsement is set once and never changes (`run_publication_final`),
-    except that the endorser's account going clears `endorsed_by`.
-    `projects/authority.db.test.ts` tries each through the route and past
-    it, with a marked editor as the positive control.
+    authority decides a licence, s27, s41, s42). `scenario_guard` refuses
+    the move to `decided` unless `app_acts_for_authority`, and the route says
+    so first (`403`). The same right, checked by `run_publication_endorse`,
+    endorses a published baseline; an endorsement is set once and never
+    changes (`run_publication_final`), except that the endorser's account
+    going clears `endorsed_by`. `projects/authority.db.test.ts` tries each
+    through the route and past it, with a confirmed editor as the positive
+    control.
   - **The same members record a licence's granted terms and what followed
     the decision** (231_licence_terms, 232_decision_events, issue #523 G3,
     G4). The granted terms go with the decision (`scenario_guard`: only with
@@ -2357,6 +2353,47 @@ In short:
     farm's volume, the terms' volume changes are left out as the scenario's
     are (`viewerScenario`). `scenarios/licence.db.test.ts` tries each,
     through the route and past it, with positive controls.
+  - **The authority, not the host, decides who acts for it**
+    (233_authority_delegates, issue #523 G5; the licensing assessor's review,
+    D1: "the host controls who acts for us"). `app_acts_for_authority` (and
+    `app_authority_members`, the list) count only a **confirmed** row of
+    `authority_delegate` whose person holds editor or above in the project,
+    directly or through its team (`app_member_role`); a proposal grants
+    nothing. `authority_delegate_guard` (with RLS saying the same) holds
+    water_app to:
+    - **propose**: an owner, or a member already acting for the authority
+      (whose proposal is confirmed at once: they are the authority);
+    - **confirm**: only a member already acting for the authority. With
+      none confirmed in a project, only the operator confirms the first,
+      as the schema owner, on the authority's written request
+      (`authority_confirm_by_operator`, closed to water_app; deployment.md
+      runbook; `pnpm dev:authority:confirm` locally), so the host can't
+      bootstrap the authority by itself;
+    - **withdraw** a proposal: the owner (or the authority, a *decline*, or
+      the person). **The owner can't remove a confirmed delegate**; any
+      member acting for the authority can, and anyone can step down.
+    The person must hold editor or above when proposed and when confirmed;
+    one who loses it (removed, demoted, out of the team, the project moved
+    team) lapses at once (`authority_delegate_prune`, from triggers on
+    `project_member`, `team_member` and `project`), so coming back needs the
+    authority again. Every change is in the History, written by the database
+    itself (`authority_delegate_audit`, so the operator's SQL is logged too):
+    `authority.proposed`, `.confirmed` (with `via` and the operator's
+    reference), `.withdrawn`, `.declined`, `.removed`, `.lapsed`,
+    `.grandfathered`. Confirming and removing need two-step sign-in always
+    (as deciding does); an owner's proposal or withdrawal, where the project
+    requires it. 163's `project_member.acts_for_authority` is no longer read,
+    and water_app can't set it (its column grant is revoked; dropped by a
+    later migration). **Residual:** the host still controls access: an owner
+    who removes or demotes a delegate ends their delegation (logged as
+    `authority.lapsed`); it can never make someone act for the authority.
+    **Grandfathered:** every flag set before 233 on a member who still held
+    editor or above was carried over as confirmed (`confirmed_via
+    'grandfathered'`, an `authority.grandfathered` event whose actor is the
+    owner who last ticked it), so decisions in progress didn't stop; the
+    authority can remove any of them. `projects/authority-delegates.db.test.ts`
+    tries each rule through the route and past it, with positive controls,
+    and replays the carry-over.
   - **No editor is also an applicant** (the conflict guard, D1 (c), 163).
     Someone who edits the project (editor or owner, directly or through its
     team, `app_member_role`) can't be in an applying party, own an

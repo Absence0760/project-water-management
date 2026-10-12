@@ -122,6 +122,28 @@ describe('what an item says', () => {
 		expect(eventLine(ev('registration.requirement', { required: false }))).toBe('Issuing an evidence pack no longer waits for a registration check');
 		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: true }))).toBe('Marked Ben as acting for the responsible authority');
 		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: false }))).toBe('Ben no longer acts for the responsible authority');
+		// 233 (issue #523 G5): the authority confirms its own delegates; the database writes each event.
+		expect(eventLine(ev('authority.proposed', { userId: 'u', displayName: 'Ben' }))).toBe(
+			'Proposed Ben to act for the responsible authority (it grants nothing until the authority confirms it)'
+		);
+		expect(eventLine(ev('authority.confirmed', { userId: 'u', displayName: 'Ben', via: 'member' }))).toBe('Confirmed Ben as acting for the responsible authority');
+		expect(eventLine(ev('authority.confirmed', { userId: 'u', displayName: 'Ben', via: 'operator', reference: 'CMA letter 2026/14' }))).toBe(
+			'Confirmed Ben as acting for the responsible authority, on the authority’s request (CMA letter 2026/14)'
+		);
+		expect(eventLine(ev('authority.withdrawn', { userId: 'u', displayName: 'Ben', wasConfirmed: false }))).toBe('Withdrew the proposal that Ben act for the responsible authority');
+		expect(eventLine(ev('authority.declined', { userId: 'u', displayName: 'Ben', wasConfirmed: false }))).toBe(
+			'Declined, for the responsible authority, the proposal that Ben act for it'
+		);
+		expect(eventLine(ev('authority.removed', { userId: 'u', displayName: 'Ben', wasConfirmed: true }))).toBe('Ben no longer acts for the responsible authority (removed)');
+		expect(eventLine(ev('authority.lapsed', { userId: 'u', displayName: 'Ben', wasConfirmed: true }))).toBe(
+			'Ben no longer acts for the responsible authority: they are no longer an editor of the project'
+		);
+		expect(eventLine(ev('authority.lapsed', { userId: 'u', displayName: 'Ben', wasConfirmed: false }))).toBe(
+			'The proposal that Ben act for the responsible authority lapsed: they are no longer an editor of the project'
+		);
+		expect(eventLine(ev('authority.grandfathered', { userId: 'u', displayName: 'Ben', via: 'grandfathered' }))).toBe(
+			'Ben acts for the responsible authority, marked by an owner before the authority confirmed its own delegates (carried over as confirmed)'
+		);
 		expect(eventLine(ev('publication.endorsed', { publicationId: 'p', runId: 'r', note: '' }))).toBe('Endorsed a published baseline for the responsible authority');
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');

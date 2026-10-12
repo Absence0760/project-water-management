@@ -106,7 +106,7 @@ export async function holdsRequiredRole(db: Db, userId: string): Promise<boolean
 	const { rows } = await db.query<{ required: boolean }>(
 		`SELECT EXISTS (SELECT 1 FROM project p WHERE app_project_role(p.id) = 'owner' AND app_project_requires_mfa(p.id))
 			OR EXISTS (SELECT 1 FROM team_member m JOIN team t ON t.id = m.team_id WHERE m.user_id = $1 AND m.role = 'admin' AND t.require_mfa)
-			OR EXISTS (SELECT 1 FROM project_member WHERE user_id = $1 AND acts_for_authority)
+			OR EXISTS (SELECT 1 FROM authority_delegate d WHERE d.user_id = $1 AND d.confirmed_at IS NOT NULL AND app_acts_for_authority(d.project_id))
 			OR EXISTS (
 				SELECT 1 FROM scenario s
 				WHERE s.origin = 'applicant' AND s.status IN ('submitted', 'decided')
