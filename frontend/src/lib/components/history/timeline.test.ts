@@ -71,6 +71,16 @@ describe('what an item says', () => {
 		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Weir', outcome: 'not_considered' }))).toBe(
 			'Recorded the responsible authority’s decision on the application “Weir”: not considered (use already authorised)'
 		);
+		// 232_decision_events: what followed a decision, in the forum's words.
+		expect(eventLine(ev('scenario.appeal_recorded', { scenarioId: 's', name: 'Weir', kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-02' }))).toBe(
+			'Recorded an appeal lodged with the Water Tribunal against the decision on “Weir”'
+		);
+		expect(eventLine(ev('scenario.appeal_recorded', { scenarioId: 's', name: 'Weir', kind: 'set_aside', forum: 'court', eventDate: '2026-10-05' }))).toBe(
+			'Recorded that the court set aside the decision on “Weir”'
+		);
+		expect(eventLine(ev('scenario.appeal_recorded', { scenarioId: 's', name: 'Weir', kind: 'varied', forum: 'water_tribunal', eventDate: '2026-10-08' }))).toBe(
+			'Recorded that the Water Tribunal varied the decision on “Weir”, with new licence terms'
+		);
 		expect(eventLine(ev('scenario.shared', { scenarioId: 's', application: true, userId: 'u' }))).toBe('Shared an application with another applicant');
 		expect(eventLine(ev('scenario.unshared', { scenarioId: 's', application: true, userId: 'u', self: true }))).toBe('Stopped reading a shared application');
 		// "Ask the assessors why" (164): never the question's words.

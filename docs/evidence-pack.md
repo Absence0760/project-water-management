@@ -393,9 +393,21 @@ for and whether that authority accepted the baseline:
   the responsible authority.* (a fixed row: absence is printed, never
   omitted, G6).
 - **§ 4's decided applications** carry the authority's outcome words; only
-  `licence_issued` counts among the other applications on the baseline (a
+  a licence in force counts among the other applications on the baseline (a
   pack drafted before keeps its frozen `approved` /
-  `approved_with_conditions`, which it still words).
+  `approved_with_conditions`, which it still words). Since 231/232 (issue
+  #523 G3, G4) it counts on its **granted terms**, never the changes applied
+  for: § 4 reads its newest run of those terms (an assessor's **Run the
+  licensed terms**; the run of the applied changes no longer stands for it,
+  so an issued licence with no such run isn't in the table), and page 1's
+  combined row matches an assessment that took those terms. A licence set
+  aside on appeal stops counting; one varied counts on the variation's
+  terms, read from a run of them; an appeal only lodged changes nothing.
+  The report's format is unchanged (no new field): a pack freezes which
+  applications and runs it read, so a decision or appeal recorded later
+  changes the live report, never an issued pack. The applicant reads the
+  granted terms and the appeal events on their own application (§
+  Applicants).
 
 Both are part of the report, so a pack freezes them when it is drafted: an
 authority named, or an endorsement made, after a pack is issued changes
@@ -1170,6 +1182,18 @@ link as an editor and was demoted since, and isn't a party, no longer sees
 or revokes it. The link shows the public projection above
 ([§ Sharing and comments](#sharing-and-comments)), which names no unit, the
 applicant's own included.
+
+**The decision, its terms and what followed** (231_licence_terms,
+232_decision_events, issue #523 G3, G4). On the Application panel the
+applicant reads the authority's decision, the licence's granted terms (as
+applied for, or the changes as licensed, naming only their own units; a
+neighbour's is an anonymous farm to them, as in their base) with its
+conditions, and the appeal events recorded after it (lodged, upheld, set
+aside, varied, with a variation's terms), with a line saying whether the
+licence counts in cumulative assessments now. They come with the scenario
+(`GET …/scenarios/:sid`): the events table's policy asks the scenario's own,
+so whoever reads the application reads them and nobody else does. Only a
+member acting for the responsible authority records any of them.
 
 **Why functions, not a policy.** A row policy for contributors on
 `evidence_pack` would hand them the whole manifest (RLS picks rows, not

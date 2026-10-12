@@ -124,7 +124,9 @@ const APPEND_ONLY = new Set([
 	'audit_event',
 	'signoff',
 	'outlook_publication_farm',
-	'note_revision'
+	'note_revision',
+	// What followed a recorded decision: an appeal lodged and its outcome, each a new row; the decision never changes (232_decision_events).
+	'decision_event'
 ]);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
@@ -318,6 +320,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'run_uncertainty.created_by': 'set null',
 	// The assessor who decided an application (045, WP-3.3): the decision stays with who cleared.
 	'scenario.decided_by': 'set null',
+	// What followed a decision (232_decision_events): the record stays with who recorded it cleared.
+	'decision_event.recorded_by': 'set null',
 	'scenario.owner_user_id': 'set null',
 	'scenario_member.added_by': 'set null',
 	// A sweep is derived (its base run is the evidence); it stays with who asked cleared (062_scenario_sweeps.sql).

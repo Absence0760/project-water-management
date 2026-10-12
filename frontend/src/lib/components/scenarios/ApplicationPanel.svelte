@@ -28,13 +28,23 @@
 	import { packHref, packsByScenario } from '$lib/components/packs/pack';
 	import { applicantPackHref } from '$lib/components/packs/applicantPack';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
+	import type { ModelInput, ScenarioOp } from '@water-management/engine';
+	import LicenceTermsEditor from './LicenceTermsEditor.svelte';
+	import LicenceTermsView from './LicenceTermsView.svelte';
+	import { earliestEventDate, eventHeading, licenceLine, licensedTerms, nextEvents } from './licence';
 	import {
 		api,
+		DECISION_EVENT_FORUM_LABEL,
+		DECISION_EVENT_LABEL,
 		OUTCOME_BASIS,
 		OUTCOME_LABEL,
 		scenarioProblems,
 		SCENARIO_OUTCOMES,
 		type ApplicantPackMeta,
+		type AppealRequest,
+		type DecideRequest,
+		type DecisionEventForum,
+		type DecisionEventKind,
 		type Pack,
 		type Scenario,
 		type ScenarioOutcome,
@@ -55,6 +65,9 @@
 		unverifiedRuns = 0,
 		locked = false,
 		canReadPacks = false,
+		base: baseInput = null,
+		names = new Map(),
+		onrunlicensed,
 		onchange,
 		onleft
 	}: {
@@ -91,6 +104,16 @@
 		 * issued packs from GET …/scenarios/:sid/packs.
 		 */
 		canReadPacks?: boolean;
+		/**
+		 * The base run's input, for the granted terms' changes (their "from"
+		 * values, and adding one); null for an applicant, to whom other farms are
+		 * blanks, or while it loads.
+		 */
+		base?: ModelInput | null;
+		/** Names the scenario knows (its ops' and the base's), for the terms' changes. */
+		names?: ReadonlyMap<string, string>;
+		/** Run the licence's terms in force (POST …/runs `terms: 'licensed'`): what the evidence report's other applications read. An assessor's. */
+		onrunlicensed?: () => Promise<void>;
 		onchange: (d: ScenarioWithCheck) => void;
 		/** You stopped reading it (left the share): it leaves your list. */
 		onleft: () => void;
@@ -134,18 +157,89 @@
 	let decisionDate = $state('');
 	let reference = $state('');
 	let reasonsReceived = $state<'' | 'yes' | 'no'>('');
-	function decide(e: SubmitEvent) {
-		e.preventDefault();
+	// A licence issued records its granted terms (231): as applied for, or the changes revised, and its conditions.
+	let grantedMode = $state<'as_applied' | 'changed'>('as_applied');
+	let grantedOps = $state.raw<ScenarioOp[]>([]);
+	let grantedConditions = $state('');
+	function decide() {
 		if (!outcome || !decisionDate || !reasonsReceived) return;
-		const body = {
+		const conditions = grantedConditions.trim();
+		const granted =
+			outcome !== 'licence_issued' ? undefined : grantedMode === 'changed' ? { ops: grantedOps, conditions } : conditions ? { conditions } : undefined;
+		const body: DecideRequest = {
 			outcome,
 			...(authority.trim() ? { authority: authority.trim() } : {}),
 			decisionDate,
 			reference: reference.trim(),
 			reasonsReceived: reasonsReceived === 'yes',
-			note: reasons.trim()
+			note: reasons.trim(),
+			...(granted ? { granted } : {})
 		};
 		act('Decision recorded.', () => api.scenarios.decide(projectId, s.id, body));
+	}
+
+	// --- what followed the decision (232): appeals and their outcomes -------------------
+	const events = $derived(s.decisionEvents ?? []);
+	const standing = $derived(licenceLine(s));
+	const inForce = $derived(licensedTerms(s));
+	const next = $derived(nextEvents(events));
+	let appealOpen = $state(false);
+	let appealKind = $state<DecisionEventKind | ''>('');
+	let appealForum = $state<DecisionEventForum | ''>('');
+	let appealDate = $state('');
+	let appealReference = $state('');
+	let appealNote = $state('');
+	let variedMode = $state<'as_applied' | 'changed'>('changed');
+	let variedOps = $state.raw<ScenarioOp[]>([]);
+	let variedConditions = $state('');
+	function openAppeal() {
+		appealKind = next.kinds.length === 1 ? next.kinds[0]! : '';
+		appealForum = next.forum ?? '';
+		appealDate = '';
+		appealReference = '';
+		appealNote = '';
+		// A variation starts from the terms in force, else the changes applied for.
+		variedMode = 'changed';
+		variedOps = [...(inForce?.ops ?? s.ops)];
+		variedConditions = inForce?.conditions ?? '';
+		appealOpen = true;
+	}
+	const APPEAL_HINT: Record<DecisionEventKind, string> = {
+		lodged: 'Lodging an appeal changes nothing until it is decided: the decision keeps counting as it stands.',
+		upheld: 'The decision stands as it was.',
+		set_aside: 'A licence set aside stops counting in cumulative assessments.',
+		varied: 'The new terms count in cumulative assessments from now on, in place of the ones before.'
+	};
+	function recordAppeal() {
+		if (!appealKind || !appealForum || !appealDate) return;
+		const body: AppealRequest = {
+			kind: appealKind,
+			forum: appealForum,
+			eventDate: appealDate,
+			reference: appealReference.trim(),
+			note: appealNote.trim(),
+			...(appealKind === 'varied' ? { terms: { ops: variedMode === 'changed' ? variedOps : s.ops, conditions: variedConditions.trim() } } : {})
+		};
+		act(`${DECISION_EVENT_LABEL[appealKind]}: recorded.`, async () => {
+			const d = await api.scenarios.appeal(projectId, s.id, body);
+			appealOpen = false;
+			return d;
+		});
+	}
+	let runningLicensed = $state(false);
+	async function runLicensed() {
+		if (!onrunlicensed) return;
+		runningLicensed = true;
+		error = null;
+		try {
+			await onrunlicensed();
+			note = 'Ran the licensed terms.';
+		} catch (e) {
+			const p = scenarioProblems(e);
+			error = p.length ? `${msg(e)}: ${p.join('; ')}` : msg(e);
+		} finally {
+			runningLicensed = false;
+		}
 	}
 	/** The decision's record under its outcome: the reference, the reasons answer, who recorded it and when. */
 	const decisionRecord = $derived(
@@ -322,7 +416,108 @@
 			</p>
 			<p class="small">{decisionRecord}</p>
 			{#if s.decisionNote}<p class="reasons">{s.decisionNote}</p>{/if}
+			{#if s.grantedTerms}
+				<h5>Granted terms</h5>
+				<LicenceTermsView terms={s.grantedTerms} base={baseInput} {names} label="Granted terms of {s.name}" testid="application-granted-terms" />
+			{/if}
+			{#if standing}<p class="standing" data-testid="application-licence">{standing}</p>{/if}
+			{#if inForce && canEdit && onrunlicensed}
+				<div class="actions">
+					<button type="button" class="btn btn-sm" disabled={busy || locked || runningLicensed} onclick={runLicensed} data-testid="application-run-licensed"
+						>{runningLicensed ? 'Running…' : 'Run the licensed terms'}</button
+					>
+					<span class="hint">The evidence report lists this licence among the other applications from a run of these terms.</span>
+				</div>
+			{/if}
 			<p class="small muted">Any appeal runs from the authority’s decision letter (National Water Act s148, s41(6)); this app doesn’t work out its deadline.</p>
+		</div>
+
+		<div class="appeals" data-testid="application-appeals">
+			<h4>Appeals</h4>
+			{#if events.length}
+				<ol class="events">
+					{#each events as e (e.id)}
+						<li data-testid="application-appeal-event">
+							<strong>{eventHeading(e)}</strong>
+							<span class="small">
+								{e.reference ? `Reference ${e.reference}. ` : ''}Recorded{e.recordedBy ? ` by ${e.recordedBy}` : ''} on {fmtDate(e.recordedAt, true)}.
+							</span>
+							{#if e.note}<p class="reasons">{e.note}</p>{/if}
+							{#if e.terms}
+								<LicenceTermsView terms={e.terms} base={baseInput} {names} label="Terms as varied on {fmtDay(e.eventDate)}" testid="application-varied-terms" />
+							{/if}
+						</li>
+					{/each}
+				</ol>
+			{:else}
+				<p class="muted">None recorded.</p>
+			{/if}
+			{#if canDecide}
+				{#if appealOpen}
+					<div class="decide" role="form" aria-labelledby="appeal-h" data-testid="application-appeal-form">
+						<h5 id="appeal-h">Record what followed the decision</h5>
+						<fieldset>
+							<legend>What happened</legend>
+							{#each next.kinds as k (k)}
+								<label><input type="radio" name="appeal-kind" value={k} bind:group={appealKind} /> {DECISION_EVENT_LABEL[k]}</label>
+							{/each}
+						</fieldset>
+						{#if appealKind}<p class="hint" data-testid="application-appeal-hint">{APPEAL_HINT[appealKind]}</p>{/if}
+						<div class="form-row">
+							<div class="field">
+								<label for="appeal-forum">Where</label>
+								{#if next.forum}
+									<input id="appeal-forum" type="text" readonly value={DECISION_EVENT_FORUM_LABEL[next.forum]} aria-describedby="appeal-forum-help" />
+									<p id="appeal-forum-help" class="hint">The appeal is decided where it was lodged.</p>
+								{:else}
+									<select id="appeal-forum" bind:value={appealForum}>
+										<option value="" disabled>Choose…</option>
+										<option value="water_tribunal">{DECISION_EVENT_FORUM_LABEL.water_tribunal} (National Water Act s148)</option>
+										<option value="court">{DECISION_EVENT_FORUM_LABEL.court}</option>
+									</select>
+								{/if}
+							</div>
+							<div class="field">
+								<label for="appeal-date">{appealKind === 'lodged' ? 'Date lodged' : 'Date of the order'}</label>
+								<DayInput id="appeal-date" required bind:value={appealDate} />
+								{#if earliestEventDate(s)}<p class="hint">On or after {fmtDay(earliestEventDate(s)!)}.</p>{/if}
+							</div>
+							<div class="field grow">
+								<label for="appeal-ref">Case reference <span class="muted">(optional)</span></label>
+								<input id="appeal-ref" type="text" maxlength="200" bind:value={appealReference} />
+							</div>
+						</div>
+						{#if appealKind === 'varied'}
+							<LicenceTermsEditor
+								idPrefix="appeal"
+								applied={s.ops}
+								base={baseInput}
+								{names}
+								{projectId}
+								bind:mode={variedMode}
+								bind:ops={variedOps}
+								bind:conditions={variedConditions}
+								disabled={busy}
+							/>
+						{/if}
+						<div class="field">
+							<label for="appeal-note">Note <span class="muted">(optional)</span></label>
+							<textarea id="appeal-note" rows="2" maxlength="4000" bind:value={appealNote}></textarea>
+						</div>
+						<div class="actions">
+							<button type="button" class="btn btn-primary" disabled={busy || locked || !appealKind || !appealForum || !appealDate} onclick={recordAppeal}
+								>Record it</button
+							>
+							<button type="button" class="btn" onclick={() => (appealOpen = false)}>Cancel</button>
+						</div>
+						<p class="hint">Recorded events are final: they are added after the decision, never changed, and the decision itself stays as recorded.</p>
+					</div>
+				{:else}
+					<button type="button" class="btn btn-sm" disabled={busy || locked} onclick={openAppeal} data-testid="application-appeal-open"
+						>{next.forum ? 'Record the appeal’s outcome…' : 'Record an appeal…'}</button
+					>
+				{/if}
+			{/if}
 		</div>
 	{/if}
 
@@ -400,7 +595,7 @@
 		</div>
 	{/if}
 	{#if canDecide && s.status === 'submitted'}
-		<form class="decide" onsubmit={decide} aria-labelledby="decide-h">
+		<div class="decide" role="form" aria-labelledby="decide-h">
 			<h4 id="decide-h">Record the authority’s decision</h4>
 			<p class="hint">Only the responsible authority decides a licence (National Water Act s27, s41, s42). Record its decision as its letter gives it.</p>
 			<fieldset>
@@ -424,21 +619,34 @@
 					<input id="decide-ref" type="text" maxlength="200" bind:value={reference} />
 				</div>
 			</div>
+			{#if outcome === 'licence_issued'}
+				<LicenceTermsEditor
+					idPrefix="decide"
+					applied={s.ops}
+					base={baseInput}
+					{names}
+					{projectId}
+					bind:mode={grantedMode}
+					bind:ops={grantedOps}
+					bind:conditions={grantedConditions}
+					disabled={busy}
+				/>
+			{/if}
 			<fieldset>
 				<legend>Written reasons received?</legend>
 				<label><input type="radio" name="reasons-received" value="yes" bind:group={reasonsReceived} /> Yes</label>
 				<label><input type="radio" name="reasons-received" value="no" bind:group={reasonsReceived} /> No</label>
 			</fieldset>
 			<div class="field">
-				<label for="decide-note">Note: the authority’s reasons and conditions</label>
+				<label for="decide-note">Note: the authority’s reasons</label>
 				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons} aria-describedby="decide-note-help"></textarea>
 				<p id="decide-note-help" class="hint">Shown on the application’s read-only share links, which the applicant can make too.</p>
 			</div>
-			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || !decisionDate || !reasonsReceived || unverifiedRuns > 0}
+			<button type="button" class="btn btn-primary" disabled={busy || locked || !outcome || !decisionDate || !reasonsReceived || unverifiedRuns > 0} onclick={decide}
 				>Record the authority’s decision</button
 			>
-			<p class="hint">A recorded decision is final: the application can't then be withdrawn or changed.</p>
-		</form>
+			<p class="hint">A recorded decision is final: the application can't then be withdrawn or changed. What follows it (an appeal) is recorded beside it.</p>
+		</div>
 	{:else if assessor && s.status === 'submitted'}
 		<p class="hint" data-testid="application-decide-who">
 			Only a member the project’s owner marks as acting for the responsible authority records its decision (Members).
@@ -600,6 +808,30 @@
 	.reasons {
 		white-space: pre-wrap;
 		margin-top: 0.25rem !important;
+	}
+	.decision h5 {
+		margin: 0.5rem 0 0.1rem;
+	}
+	.standing {
+		margin-top: 0.4rem !important;
+		font-weight: 500;
+	}
+	.events {
+		margin: 0 0 0.5rem;
+		padding-left: 1.2rem;
+		display: grid;
+		gap: 0.5rem;
+	}
+	.events li > span {
+		display: block;
+	}
+	.decide {
+		margin-top: 0.5rem;
+	}
+	.decide textarea {
+		width: 100%;
+		max-width: 60ch;
+		font: inherit;
 	}
 	.actions {
 		display: flex;

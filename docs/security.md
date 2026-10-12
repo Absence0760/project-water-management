@@ -2339,6 +2339,24 @@ In short:
     except that the endorser's account going clears `endorsed_by`.
     `projects/authority.db.test.ts` tries each through the route and past
     it, with a marked editor as the positive control.
+  - **The same members record a licence's granted terms and what followed
+    the decision** (231_licence_terms, 232_decision_events, issue #523 G3,
+    G4). The granted terms go with the decision (`scenario_guard`: only with
+    `licence_issued`, set once, never changed). An appeal event is a new
+    `decision_event` row: its insert policy asks `app_acts_for_authority`
+    and `decision_event_guard` (SECURITY DEFINER) asks it again, refuses an
+    application's owner, holds the sequence under a per-scenario lock and
+    stamps the author and time; `water_app` has no `UPDATE` or `DELETE` on
+    it, so the record of an appeal can't be rewritten or removed. The events
+    are read by whoever reads the scenario (the policy asks the scenario's
+    own policies): the applicant and their shared members see the events on
+    their own application, another applicant sees nothing. Granted terms are
+    checked under the applicant's mask like the application's own changes,
+    and stored with only the application's own nodes' names, so they quote
+    no hidden farm's name to the applicant; for a viewer kept from each
+    farm's volume, the terms' volume changes are left out as the scenario's
+    are (`viewerScenario`). `scenarios/licence.db.test.ts` tries each,
+    through the route and past it, with positive controls.
   - **No editor is also an applicant** (the conflict guard, D1 (c), 163).
     Someone who edits the project (editor or owner, directly or through its
     team, `app_member_role`) can't be in an applying party, own an
@@ -3468,6 +3486,7 @@ PDF someone else asked for kept the person as a recipient
 | A pseudonym of each registered user's name, frozen with each run to count holders (219, #523): `md5` of a per-project salt and the name | `run_allocation_holder`, `allocation_holder_salt` (owner-only) | With the run; reset to `gone` in every run once the name leaves the project (`allocation_holder_erased`, indexed on the normalised name: undoing a 2 500-row import in a 5 000-row project takes about 70 ms locally) | Not linked to an account | Deleted |
 | Registered users' names in issued evidence: none as a field. A run's input and the evidence report carry no holder name (§ 5 names units; Appendix A.1's model rows and A.2's diff have no holder field), so a frozen pack manifest has none either. A name can reach one only as text someone typed (a unit named after its owner, notes, the applicant statement) | `evidence_pack.manifest` (frozen, hashed) | With the pack: an issued pack is never edited (its hash is verified publicly); whether issued evidence is kept against an erasure request is a legal-hold question for counsel (#92) | Not linked to an account | Kept while the project is a licence record |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
+| What followed a decision (an appeal lodged, upheld, set aside or varied): the member who recorded it (232) | `decision_event.recorded_by` | Kept with its scenario (the record of the appeal) | Who cleared; the event stays | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
 | Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |

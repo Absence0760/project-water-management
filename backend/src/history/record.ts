@@ -266,6 +266,9 @@ export type AuditKind =
 	| 'scenario.withdrawn'
 	| 'scenario.reopened'
 	| 'scenario.decided'
+	// What followed a decision (232_decision_events, issue #523 G4): an appeal lodged, upheld, set aside or varied. The event's
+	// id, kind, forum and date, and a variation's terms' hash; never its note.
+	| 'scenario.appeal_recorded'
 	| 'scenario.shared'
 	| 'scenario.unshared'
 	// "Ask the assessors why" (164_applicant_visibility): a party asked about a check line a hidden rule broke, an editor answered.

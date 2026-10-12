@@ -9535,6 +9535,39 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   applicant never does. An assessor also reads, in an info box, each rule
   the applicant reads without the other units' figures in its own words
   (`check.assessorProblems`, 164).
+- **Granted terms** (231_licence_terms, issue #523 G3): choosing **Licence
+  issued** in **Record the authority's decision** opens **Granted terms**
+  (`LicenceTermsEditor.svelte`): **As applied for**, or **With changes**,
+  which starts from the changes applied for as a list (remove what wasn't
+  granted) with the **Add a change** form under it (add the licence's own: a
+  smaller volume, a release rule), **Start again from the changes applied
+  for**, and **Licence conditions** in words. The hint says these terms, not
+  the changes applied for, count among the other applications in later
+  cumulative assessments. The note under it is now the authority's
+  reasons only. Once decided, the decision block shows **Granted terms**
+  (`LicenceTermsView.svelte`: "As applied for", or the changes in words,
+  and the conditions), a line saying where the licence stands (counting on
+  its granted terms, or a variation's, set aside, or no licence; and, with
+  an appeal open, "nothing changes until it is decided"; `licence.ts`
+  `licenceLine`), and for an assessor while a licence is in force **Run the
+  licensed terms** (the run the evidence report's other applications read).
+- **Appeals** (232_decision_events, #523 G4), under the decision: the
+  events in order ("Appeal lodged: Water Tribunal, 2 Oct 2026", its
+  reference, who recorded it and when, its note, a variation's terms), or
+  "None recorded.". A member acting for the authority gets **Record an
+  appeal…** (or, while one is open, **Record the appeal's outcome…**),
+  which opens **Record what followed the decision**: what happened (only
+  the kinds the sequence allows: an appeal lodged, or the open appeal
+  upheld, set aside or varied), where (the Water Tribunal or a court; fixed
+  to the open appeal's forum for its outcome), the date (on or after the
+  previous event's, said under it), a case reference, the new terms for a
+  variation (the same editor as the decision's, starting from the terms in
+  force) and a note; a hint under the choice says what it does to the
+  licence ("Lodging an appeal changes nothing until it is decided …").
+  The applicant and everyone who reads the application see the events; only
+  the authority's members record them. `applications.spec.ts` decides with
+  changed terms, lodges an appeal and records it set aside, then reads it
+  all as the applicant.
 - **Written objections** (166_public_participation): the warning that a
   comment in the app is not a written objection, and the notice's
   **Address** and **Closing date** ("Not given" until set). The owner edits

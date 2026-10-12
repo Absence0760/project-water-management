@@ -6,7 +6,10 @@
 // results (their farm, nothing downstream, no catchment flows below five farm
 // holders), queues a yield of their own dam and submits it. The assessor (the
 // project's owner, marked as acting for the responsible authority) finds it
-// in the Applications tab and records the authority's decision; an
+// in the Applications tab and records the authority's decision, with the
+// licence's granted terms (a smaller dam than applied for, and its conditions;
+// 231_licence_terms), then an appeal lodged with the Water Tribunal and the
+// decision set aside (232_decision_events), which the applicant reads; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
 // warning and can't be decided. Axe on
@@ -107,17 +110,76 @@ test('an applicant submits an application on the published baseline, and the ass
 	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
 	await decide.getByLabel('Licence or file reference').fill('WU-SYN-001');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('Yes').check();
-	await decide.getByLabel('Note: the authority’s reasons and conditions').fill('Release 5 % of inflow in dry months.');
+	await decide.getByLabel('Note: the authority’s reasons').fill('Enough is left for the Reserve at a smaller dam.');
+	// The granted terms (231): less than applied for. They start from the changes applied for; the assessor replaces the dam size.
+	const terms = decide.getByTestId('decide-terms');
+	await terms.getByLabel('With changes').check();
+	const granted = terms.getByRole('list', { name: 'Granted changes' });
+	await expect(granted.getByRole('listitem')).toHaveCount(1);
+	await granted.getByRole('button', { name: /^Remove change 1/ }).click();
+	await expect(granted).toHaveCount(0);
+	const grant = terms.getByRole('form', { name: 'Add a change' });
+	await grant.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
+	await grant.getByLabel('Field').selectOption({ label: 'Dam capacity' });
+	await grant.getByLabel('Dam capacity (m³)').fill('180000');
+	await grant.getByRole('button', { name: 'Add change' }).click();
+	await expect(granted.getByRole('listitem')).toHaveCount(1);
+	await expect(granted.getByRole('listitem')).toContainText('180 000');
+	await terms.getByLabel(/^Licence conditions/).fill('Release 5 % of inflow in dry months.');
 	await record.click();
 	const decision = page.getByTestId('application-decision');
 	await expect(decision).toContainText('Licence issued (see its conditions): the decision of Synthetic catchment management agency, dated 30 Sep 2026.');
 	await expect(decision).toContainText('Reference WU-SYN-001. Written reasons received.');
-	await expect(decision).toContainText('Release 5 % of inflow in dry months.');
+	await expect(decision).toContainText('Enough is left for the Reserve at a smaller dam.');
+	const grantedTerms = decision.getByTestId('application-granted-terms');
+	await expect(grantedTerms.getByRole('list', { name: `Granted terms of ${NAME}` }).getByRole('listitem')).toContainText('180 000');
+	await expect(grantedTerms).toContainText('Conditions: Release 5 % of inflow in dry months.');
+	await expect(decision.getByTestId('application-licence')).toHaveText('The licence counts in cumulative assessments on its granted terms, not the changes applied for.');
 
-	// The applicant sees the decision.
+	// An appeal lodged (232): recorded beside the decision, and it changes nothing until it is decided.
+	const appeals = page.getByTestId('application-appeals');
+	await expect(appeals).toContainText('None recorded.');
+	await appeals.getByRole('button', { name: 'Record an appeal…' }).click();
+	const appeal = page.getByRole('form', { name: 'Record what followed the decision' });
+	await expect(appeal.getByLabel('Appeal lodged')).toBeChecked();
+	await expect(appeal.getByTestId('application-appeal-hint')).toHaveText('Lodging an appeal changes nothing until it is decided: the decision keeps counting as it stands.');
+	await appeal.getByLabel('Where').selectOption({ label: 'Water Tribunal (National Water Act s148)' });
+	await appeal.getByLabel('Date lodged').fill('2026-10-02');
+	await appeal.getByLabel(/^Case reference/).fill('WT 12/2026');
+	await appeal.getByRole('button', { name: 'Record it' }).click();
+	await expect(appeals.getByTestId('application-appeal-event')).toHaveCount(1);
+	await expect(appeals.getByTestId('application-appeal-event')).toContainText('Appeal lodged: Water Tribunal, 2 Oct 2026');
+	await expect(appeals.getByTestId('application-appeal-event')).toContainText('Reference WT 12/2026.');
+	await expect(decision.getByTestId('application-licence')).toHaveText(
+		'The licence counts in cumulative assessments on its granted terms, not the changes applied for. An appeal is lodged with the Water Tribunal: nothing changes until it is decided.'
+	);
+
+	// Its outcome, in the forum it was lodged with: set aside, so the licence stops counting; the decision itself stays.
+	await appeals.getByRole('button', { name: 'Record the appeal’s outcome…' }).click();
+	await expect(appeal.getByLabel('Where')).toHaveValue('Water Tribunal');
+	// A variation records new terms, in the same editor as the decision's (axe over the decided panel with it open).
+	await appeal.getByLabel('Decision varied').check();
+	await expect(appeal.getByTestId('appeal-terms').getByRole('list', { name: 'Granted changes' }).getByRole('listitem')).toContainText('180\u202f000');
+	await expectNoViolations(page);
+	await appeal.getByLabel('Decision set aside').check();
+	await expect(appeal.getByTestId('appeal-terms')).toHaveCount(0);
+	await expect(appeal.getByTestId('application-appeal-hint')).toHaveText('A licence set aside stops counting in cumulative assessments.');
+	await appeal.getByLabel('Date of the order').fill('2026-10-05');
+	await appeal.getByRole('button', { name: 'Record it' }).click();
+	await expect(appeals.getByTestId('application-appeal-event')).toHaveCount(2);
+	await expect(appeals.getByTestId('application-appeal-event').nth(1)).toContainText('Decision set aside: Water Tribunal, 5 Oct 2026');
+	await expect(decision.getByTestId('application-licence')).toHaveText('Set aside (Water Tribunal, 5 Oct 2026): it no longer counts in cumulative assessments.');
+	await expect(decision).toContainText('Licence issued (see its conditions)');
+
+	// The applicant sees the decision, its terms and what followed, and can't record anything.
 	await a.reload();
 	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
 	await expect(a.getByTestId('application-decision')).toContainText('Licence issued (see its conditions)');
+	await expect(a.getByTestId('application-granted-terms')).toContainText('Conditions: Release 5 % of inflow in dry months.');
+	await expect(a.getByTestId('application-appeal-event')).toHaveCount(2);
+	await expect(a.getByTestId('application-licence')).toHaveText('Set aside (Water Tribunal, 5 Oct 2026): it no longer counts in cumulative assessments.');
+	await expect(a.getByTestId('application-appeal-open')).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
 });
 
 test('an application whose run was changed behind the API shows the assessor a warning and waits for its decision', async ({ page, owner, signIn }) => {

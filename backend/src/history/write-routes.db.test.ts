@@ -630,6 +630,11 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		route: `POST ${P}/scenarios/:sid/appeals`,
+		records: ['scenario.appeal_recorded'],
+		call: (c) => c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/appeals`, { kind: 'lodged', forum: 'water_tribunal', eventDate: DECISION.decisionDate })
+	},
+	{
 		route: `POST ${P}/scenarios/:sid/members`,
 		records: ['scenario.shared'],
 		call: async (c) => {
