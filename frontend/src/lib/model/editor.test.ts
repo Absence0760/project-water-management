@@ -274,6 +274,17 @@ describe('ModelEditor', () => {
 		expect(ed.addTransfer().priority).toBe(t.priority + 1);
 	});
 
+	it('addTransfer with one hydrological unit sends its dam’s water out of the catchment (engine 1.86.0)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode(); // the outflow gauge
+		const a = ed.addNode();
+		a.damCapacityM3 = 50_000;
+		const t = ed.addTransfer();
+		expect([t.fromNodeId, t.toNodeId]).toEqual([a.id, null]);
+		expect(validateModel(ed.model).filter((i) => i.area === 'transfers')).toEqual([]);
+	});
+
 	it('transferIsBlank: only a rule as + Add transfer made it, whatever its ends and priority', () => {
 		const t = newTransfer('a', 'b');
 		expect(transferIsBlank({ ...t, priority: 4, fromNodeId: 'x' })).toBe(true);
