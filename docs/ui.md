@@ -9546,13 +9546,15 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   met, baseline beside theirs); **The catchment** (mean natural and outlet
   flow and a chart of the outlet's flow and EWR, baseline against theirs;
   below five farm holders natural flow and the EWR only, and why the outlet
-  flow isn't shown); **Your hydrological units**
+  flow isn't shown; for a run with a baseline assumption the baseline's
+  column only, theirs "Not shown", and a note why); **Your hydrological units**
   (demand, supply, share met, the dam on the last day, baseline → theirs,
   and what ran: crops with their areas and boreholes; a unit their changes
   add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:
-  supply −4 %", or "No other farm or water user lies downstream of your
-  units"). A run with a baseline assumption shows a note and the Reserve
-  only. Before a run: "Not run yet". Under it, **Yield under this
+  share of demand met −2 pp", whole percentage points as in their evidence
+  pack, or "No other farm or water user lies downstream of your units"). A
+  run with a baseline assumption shows a note, the Reserve and the
+  catchment's baseline column only. Before a run: "Not run yet". Under it, **Yield under this
   scenario** offers only their own units and the ones their changes add;
   the applicant (not the people they share it with) queues a yield and
   follows it on the job list, which shows them their own yield jobs only.

@@ -2793,21 +2793,27 @@ below work on it too, for an editor.
   outlet, a gauge's name, else the anonymous one) with `base` and
   `application` `{ months, met, rate, longestNotMetRun, deficitM3 }`.
   `catchment`: `ewrDaysNotMet` and `ewrFractionDaysNotMet` `{ base,
-  application }` always; `figures` (mean natural flow and outlet flow, base
-  and application) and `series` (`{ outflow, ewr }`, the outlet's daily
-  series, base and application) only when every op was a proposal, else
-  null with `withheld: 'baseline_assumptions'`. Within them the k rule is
+  application }` always; `figures` (`{ base, application }`, mean natural
+  flow and outlet flow) and `series` (`{ outflow, ewr }`, each a `{ base,
+  application }` pair of the outlet's daily series, or null). The base's
+  side always (the published baseline, which a contributor's RLS serves
+  anyway); the application's side only when every op was a proposal, else
+  `figures.application` and each pair's `application` null with `withheld:
+  'baseline_assumptions'` (issue #523 G9 (d)). Within them the k rule is
   split (164): natural flow and the `ewr` series at any holder count; the
   outlet flow (`meanSimulatedOutflowM3Day`), the `outflow` series and every
-  `deficitM3` only at five or more farm holders, else null with
-  `withheld: 'few_farm_holders'`. `units[]`: their own units
+  `deficitM3` only at five or more farm holders, else null (with
+  `withheld: 'few_farm_holders'` when every op was a proposal). `units[]`: their own units
   (their farm links as they read them now) and the ones the ops add
   (`added`), `{ nodeId, name, kind, base, application }` with demand,
   supply, share met, EWR charge and dam figures. `downstream[]`: every other
   farm or water user below those units, `{ nodeId, name, kind,
-  supplyChangePct }`: the anonymous name `…/base` gives it and the change in
-  its mean supply as a whole percentage (null when it had none in the
-  base). `units` and `downstream` are `[]` with `unitsWithheld:
+  supplyChangePts }`: the anonymous name `…/base` gives it and the change in
+  its share of demand supplied, application − base, in whole percentage
+  points (rounded half away from zero), the measure its evidence pack
+  prints (`changePts`); null when either run gives it no share (no demand).
+  Until issue #523 G9 (a) this was `supplyChangePct`, a relative change in
+  mean supply. `units` and `downstream` are `[]` with `unitsWithheld:
   'baseline_assumptions'` when an op was a baseline assumption. `model`:
   what ran on their units (nodes, crops, crop areas, transfers, land cover,
   boreholes, demand objects), an item an op added under a hidden item's id

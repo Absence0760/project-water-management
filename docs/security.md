@@ -1182,7 +1182,9 @@ result without signing in, until it expires or its owner revokes it.
   (`app_share_run_projection`, `app_share_pack_projection`) keep k as they
   were. An applicant reads the same split (`run_series_select_contributor`,
   `app_contributor_published_runs`; `scenarios/applicantResults.ts`
-  `naturalShown` / `impactedShown`). Five is a judgement in line with
+  `impactedShown`), of the published base always and of an application run
+  only when every op was a proposal (`appShown`, 118): the results view and
+  RLS draw the same line (issue #523 G9 (d)). Five is a judgement in line with
   statistical-disclosure practice, not a number in any statute; k alone
   doesn't protect a catchment where one holder does almost all the
   abstraction (a dominance rule is a follow-up,
@@ -2296,8 +2298,10 @@ In short:
     leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
     EWR sites, the catchment under the split k rule (the river always, the
     use at 5 or more holders), their own units, other units
-    downstream only as "Farm 3" and a whole percentage, and nothing but the
-    EWR when an op was a baseline assumption). The DB test
+    downstream only as "Farm 3" and whole percentage points of share
+    supplied (the pack's measure), and of a run with a baseline assumption
+    nothing of the application's side but the EWR, beside the published
+    base's side as RLS serves it, issue #523 G9 (d)). The DB test
     (`scenarios/results.db.test.ts`) scans the answer for every other farm's
     name and the hidden crop.
   - **Drafts are private, even from the assessors.** Who reads an

@@ -7,7 +7,7 @@
 import type { ProjectModel, RunSummary, ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { projectResultsForApplicant, type ApplicantResults, type ApplicantSeries } from './applicantResults.js';
+import { projectResultsForApplicant, type ApplicantResults, type ApplicantSeries, type ApplicantSeriesPair } from './applicantResults.js';
 import { checkScenario, loadBaseInput, type ScenarioRow } from './execute.js';
 
 /** A run of the application as its results carry it. */
@@ -65,8 +65,9 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
 	const base = await loadBaseInput(db, projectId, r.baseRunId, 'contributor');
 	const { reIds } = checkScenario(base, { ops: recorded.ops, ownedNodeIds: recorded.ownedNodeIds ?? [], origin: 'applicant' });
 
-	// The river's series at any holder count, the outflow past the k rule only (164; RLS holds the same line).
-	const series = r.allProposals ? await catchmentSeries(db, projectId, runId, r.startDate, r.baseRunId, r.baseStartDate, r.farmHoldersOk) : null;
+	// The river's series at any holder count, the outflow past the k rule only (164); the application's only when
+	// every op was a proposal (118). RLS holds the same lines; the projection applies them again.
+	const series = await catchmentSeries(db, projectId, r.allProposals ? runId : null, r.startDate, r.baseRunId, r.baseStartDate, r.farmHoldersOk);
 	const results = projectResultsForApplicant({
 		base,
 		baseSummary: r.baseSummary,
@@ -96,23 +97,25 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
 /**
  * The outflow and EWR series at the outlet of both runs, read under the
  * caller's RLS (run_series_select_contributor: of an application run only
- * when its ops were all proposals, 118; the EWR requirement at any holder
- * count, the outflow only past the k rule, 164). Each pair is null unless
- * both runs have it; the outflow is not read below k (`impacted`).
+ * when its ops were all proposals, 118; of the published base always; the
+ * EWR requirement at any holder count, the outflow only past the k rule,
+ * 164). Each pair is null unless the base has it, and its application side
+ * null unless the run has it too; `runId` null reads the base's only (a run
+ * with a baseline assumption). The outflow is not read below k (`impacted`).
  */
-async function catchmentSeries(db: Db, projectId: string, runId: string, runStart: string, baseRunId: string, baseStart: string, impacted: boolean) {
+async function catchmentSeries(db: Db, projectId: string, runId: string | null, runStart: string, baseRunId: string, baseStart: string, impacted: boolean) {
 	const { rows } = await db.query<{ runId: string; key: string; values: (number | null)[] }>(
 		`SELECT run_id AS "runId", key, "values" FROM run_series
 		 WHERE project_id = $1 AND run_id = ANY($2::uuid[]) AND node_id IS NULL AND key = ANY($3::text[])`,
-		[projectId, [runId, baseRunId], impacted ? ['simulated_outflow', 'ewr'] : ['ewr']]
+		[projectId, runId ? [runId, baseRunId] : [baseRunId], impacted ? ['simulated_outflow', 'ewr'] : ['ewr']]
 	);
-	const get = (run: string, key: string, startDate: string): ApplicantSeries | null => {
-		const row = rows.find((x) => x.runId === run && x.key === key);
+	const get = (run: string | null, key: string, startDate: string): ApplicantSeries | null => {
+		const row = run ? rows.find((x) => x.runId === run && x.key === key) : undefined;
 		return row ? { startDate, values: row.values } : null;
 	};
-	const ob = get(baseRunId, 'simulated_outflow', baseStart);
-	const oa = get(runId, 'simulated_outflow', runStart);
-	const eb = get(baseRunId, 'ewr', baseStart);
-	const ea = get(runId, 'ewr', runStart);
-	return { outflow: ob && oa ? { base: ob, application: oa } : null, ewr: eb && ea ? { base: eb, application: ea } : null };
+	const pair = (key: string): ApplicantSeriesPair | null => {
+		const base = get(baseRunId, key, baseStart);
+		return base ? { base, application: get(runId, key, runStart) } : null;
+	};
+	return { outflow: pair('simulated_outflow'), ewr: pair('ewr') };
 }
