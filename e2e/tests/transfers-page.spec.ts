@@ -265,7 +265,7 @@ test('empty states: no rules yet offers Add transfer; one unit with a dam can se
 	await openTransfers(page, one.id);
 	await expect(page.getByText('No transfer rules.', { exact: true })).toBeVisible();
 	await header(page).getByRole('button', { name: '+ Add transfer', exact: true }).click();
-	await expect(page.getByLabel('From, transfer 1', { exact: true }).locator('option:checked')).toHaveText(unit.name);
+	await expect(page.getByLabel('From, transfer 1', { exact: true }).locator('option:checked')).toHaveText(String(unit.name));
 	await expect(page.getByLabel('To, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Outside the catchment');
 	await expect(ruleCard(page, 1).locator('.rule-problems')).toHaveCount(0);
 
