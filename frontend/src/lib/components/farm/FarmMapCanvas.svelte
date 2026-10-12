@@ -110,7 +110,8 @@
 	}
 	.credits {
 		margin: 6px 0 0;
-		font-size: var(--font-sm);
+		/* The farm pages' 13 px floor (farm-view.spec.ts), not the workspace's 12 px --font-sm. */
+		font-size: 13px;
 		line-height: 1.5;
 		color: var(--text-2);
 		overflow-wrap: anywhere;
