@@ -60,9 +60,23 @@ describe('other water users (WP-1.33)', () => {
 		const problems = modelProblems(m).join(' | ');
 		expect(problems).toMatch(/transfer t involves an other water user/);
 		expect(problems).toMatch(/crop area on other water user "Town"/);
-		for (const bad of [{ userDemandM3Day: [1] }, { userDemandM3Day: new Array(12).fill(-1) }, { userReturnPct: 1.5 }, { userPriority: 'first' }]) {
+		for (const bad of [{ userDemandM3Day: [1] }, { userDemandM3Day: new Array(12).fill(-1) }, { userReturnPct: 1.5 }, { userPriority: 'first' }, { userRestrictionPct: 1.5 }, { userRestrictionPct: -0.1 }]) {
 			expect(ModelBody.safeParse({ nodes: [out, { ...town, ...bad }, farm], crops: [], cropAreas: [], transfers: [] }).success, JSON.stringify(bad)).toBe(false);
 		}
+	});
+
+	it('a fixed restriction % (engine 1.86.0, issue #523 B3): null by default; a Priority user’s only', () => {
+		const out = node('Out', null);
+		const town = node('Town', out.id, { kind: 'user', userDemandM3Day: new Array(12).fill(100), userRestrictionPct: 0.3 });
+		const farm = node('A', town.id);
+		const parsed = ModelBody.parse({ nodes: [out, town, farm], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes[1]).toMatchObject({ userRestrictionPct: 0.3 });
+		expect(parsed.nodes[2]).toMatchObject({ userRestrictionPct: null });
+		expect(modelProblems(model([out, town, farm]))).toEqual([]);
+		// A Non-priority user is curtailed for its whole charge; a unit has no %.
+		const junior = node('Mill', out.id, { kind: 'user', userDemandM3Day: new Array(12).fill(100), userPriority: 'junior', userRestrictionPct: 0.3 });
+		expect(modelProblems(model([out, junior, node('B', junior.id)])).join(' | ')).toMatch(/a fixed restriction % is for Priority users/);
+		expect(modelProblems(model([out, town, node('C', town.id, { userRestrictionPct: 0.3 })])).join(' | ')).toMatch(/only an other water user has a fixed restriction %/);
 	});
 });
 

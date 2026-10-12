@@ -255,6 +255,10 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 		// Other water users (WP-1.33), as the API checks them.
 		if (n.kind === 'user') {
 			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the share returned must be between 0% and 100%.` });
+			// A fixed restriction % (engine 1.86.0, issue #523 B3): a share, and a Priority user's only (engine modelRules).
+			const rp = n.userRestrictionPct ?? null;
+			if (rp !== null && !inRange(rp, 0, 1)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the fixed restriction must be between 0% and 100%.` });
+			else if (rp !== null && rp > 0 && n.userPriority === 'junior') issues.push({ area: 'network', itemId: n.id, message: `${label}: a fixed restriction is for Priority users; clear it or make the user Priority.` });
 			if (n.userDemandM3Day && (n.userDemandM3Day.length !== 12 || n.userDemandM3Day.some((v) => !inRange(v, 0, Infinity))))
 				issues.push({ area: 'network', itemId: n.id, message: `${label}: demand needs 12 monthly values, none negative.` });
 			if (cropAreas.some((a) => a.nodeId === n.id)) issues.push({ area: 'crops', message: `${label} is an other water user: its demand is monthly, so remove its crop areas.` });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { runModel, type CurtailmentFarm, type CurtailmentSummary, type ModelOutput } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
 import { fmtNum } from '$lib/format/number';
-import { actionOf, curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtDemandLeft, fmtSigned, fmtVol } from './curtailment';
+import { actionOf, curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtDemandLeft, fmtSigned, fmtVol, userPriorityText } from './curtailment';
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',
@@ -235,5 +235,13 @@ describe('the EWR charge reads the same in the Farms table and the curtailment t
 		}
 		// Positive control: some seeded farms were charged.
 		expect(charged).toBeGreaterThan(0);
+	});
+});
+
+describe('userPriorityText (engine 1.86.0, issue #523 B3)', () => {
+	it('names a Priority user’s fixed restriction %, with no basic-needs floor', () => {
+		expect(userPriorityText({ priority: 'junior', curtailed: true })).toBe('Non-priority (curtailed)');
+		expect(userPriorityText({ priority: 'senior', curtailed: false })).toBe('Priority (not curtailed)');
+		expect(userPriorityText({ priority: 'senior', curtailed: true, restrictionPct: 0.3 })).toBe('Priority (30 %: fixed %, no basic-needs floor)');
 	});
 });

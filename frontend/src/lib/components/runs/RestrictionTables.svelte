@@ -118,6 +118,43 @@
 			{unitsAll ? 'Show fewer hydrological units' : `Show all ${fmtNum(v.units.length)} hydrological units`}
 		</button>
 	{/if}
+	{#if v.users.length}
+		<p class="muted small">
+			Priority other water users with a fixed restriction: each gives up its fixed % of its demand while a level is in force, with no
+			basic-needs floor. Daily averages over the whole run.
+		</p>
+		<div class="table-wrap">
+			<table class="data restriction-users" data-testid="restriction-users-table">
+				<caption class="visually-hidden">Each Priority user’s demand before and after its fixed restriction</caption>
+				<thead>
+					<tr>
+						<th scope="col">Other water user</th>
+						<th scope="col" class="num">Fixed restriction<br /><span class="u">% of demand</span></th>
+						<th scope="col" class="num">Demand<br /><span class="u">m³/day, run mean</span></th>
+						<th scope="col" class="num">After the restriction<br /><span class="u">m³/day, run mean</span></th>
+						<th scope="col" class="num">Cut<br /><span class="u">m³/day, run mean</span></th>
+						<th scope="col" class="num">Cut on restricted days<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">Taken<br /><span class="u">m³/day, run mean</span></th>
+						<th scope="col" class="num">Days restricted</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each v.users as u (u.nodeId)}
+						<tr>
+							<th scope="row">{u.name}</th>
+							<td class="num">{fmtPct(u.restrictionPct)}</td>
+							<td class="num">{fmtNum(u.demand)}</td>
+							<td class="num">{fmtNum(u.restricted)}</td>
+							<td class="num">{fmtNum(u.cut)}</td>
+							<td class="num">{u.cutOnRestrictedDays === null ? '–' : fmtNum(u.cutOnRestrictedDays)}</td>
+							<td class="num">{fmtNum(u.supplied)}</td>
+							<td class="num">{u.daysRestricted}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 {/if}
 
 <style>

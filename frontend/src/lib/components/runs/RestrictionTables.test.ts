@@ -54,6 +54,15 @@ describe('the drought restriction tables (engine 1.54.0, WP-3.8)', () => {
 		expect(body).not.toContain('2014/15');
 	});
 
+	it('lists the Priority users with a fixed restriction %, and no users table without one (engine 1.86.0)', () => {
+		expect(text(render(RestrictionTables, { props: { summary: summary() } }).body)).not.toContain('Other water user');
+		const s = summary();
+		s.droughtRestriction!.users = [{ nodeId: 't', name: 'Town', restrictionPct: 0.3, avgDemandM3Day: 200, avgRestrictedDemandM3Day: 190, avgSuppliedM3Day: 180, avgCutOnRestrictedDaysM3Day: 60, daysByLevel: [300, 65] }];
+		const body = text(render(RestrictionTables, { props: { summary: s } }).body);
+		expect(body).toContain('no basic-needs floor');
+		expect(body).toContain('Town 30.0% 200 190 10 60 180 65');
+	});
+
 	it('draws nothing without the rule', () => {
 		const s = { ...summary(), droughtRestriction: undefined } as unknown as RunSummary;
 		expect(text(render(RestrictionTables, { props: { summary: s } }).body).trim()).toBe('');

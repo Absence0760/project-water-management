@@ -114,7 +114,7 @@
 						<tr>
 							<th scope="row">
 								{r.name}
-								<span class="badge" class:badge-senior={r.priority === 'senior'}>{r.priority === 'senior' ? 'priority, not curtailed' : 'non-priority, curtailed'}</span>
+								<span class="badge" class:badge-senior={r.priority === 'senior'}>{r.priorityLabel}</span>
 							</th>
 							<td class="num">{r.demand}</td>
 							<td>{@render cell(r.today)}</td>
@@ -142,7 +142,8 @@
 		<em>EWR met</em> starts from the equitable share and removes each hydrological unit's supply cut for its EWR charge; it never goes
 		below 0 % of demand, or below a hydrological unit's basic-needs floor ({DEMAND_NORMS.basicLitresPerPersonDay} litres a person a
 		day for the people its domestic and municipal demands serve; what the floor keeps of the cut is noted in its row). A hydrological unit with no demand has nothing to cut: any charge it carries is to store less or pass inflow,
-		noted in its row. A non-priority user is cut for its charge; a priority one is not, and its charge stands.
+		noted in its row. A non-priority user is cut for its charge; a priority one is not, and its charge stands, unless it has a
+		fixed restriction %: then it is cut by at most that share of its demand, with no basic-needs floor.
 	</p>
 </section>
 

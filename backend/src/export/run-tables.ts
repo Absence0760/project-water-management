@@ -3,6 +3,7 @@
 import {
 	CROPS_TAKE_KEY,
 	USER_PRIORITY_LABEL,
+	USER_RESTRICTION_NOTE,
 	demandPctNote,
 	DOUBLE_MASS_MIN_DAYS,
 	DOUBLE_MASS_MIN_YEARS,
@@ -1750,9 +1751,15 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 	yield csvRow(['Other water users: EWR charge and curtailment (reporting window)']);
 	yield csvRow(['User', 'Priority', 'Demand (m³/day)', 'Taken (m³/day)', 'Returned (m³/day)', 'EWR charge (m³/day charged)', 'Curtailed', 'Supply cut (m³/day)', 'Supply cut (l/s)', 'Charge not removed by a cut (m³/day charged)']);
 	for (const r of rows) {
-		yield csvRow([r.name, USER_PRIORITY_LABEL[r.priority], r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, charged(r.ewrChargeM3Day), r.curtailed ? 'yes' : 'no (priority)', r.supplyCutM3Day, r.supplyCutLs, charged(r.uncurtailedChargeM3Day)]);
+		yield csvRow([r.name, USER_PRIORITY_LABEL[r.priority], r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, charged(r.ewrChargeM3Day), userCurtailedCell(r), r.supplyCutM3Day, r.supplyCutLs, charged(r.uncurtailedChargeM3Day)]);
 	}
-	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A priority user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
+	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A priority user is not curtailed for the EWR, unless it has a fixed restriction % (cut by at most that share of its demand, no basic-needs floor): the rest of its charge stands, and is not moved onto the farms.']);
+}
+
+/** The Curtailed cell: "yes", "no (priority)", or a Priority user's fixed restriction % (engine 1.86.0, issue #523 B3). */
+function userCurtailedCell(r: { curtailed: boolean; priority: string; restrictionPct?: number }): string {
+	if (r.priority === 'senior' && r.restrictionPct !== undefined && r.restrictionPct > 0) return `yes (${Math.round(r.restrictionPct * 1000) / 10} % ${USER_RESTRICTION_NOTE})`;
+	return r.curtailed ? 'yes' : 'no (priority)';
 }
 
 /**
@@ -1873,6 +1880,12 @@ export function* droughtRestrictionLines(r: NonNullable<RunSummary['droughtRestr
 	yield csvRow(['Unit', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Mean cut (m³/day)', 'Mean cut on restricted days (m³/day)', 'Mean supplied (m³/day)', 'Days restricted']);
 	for (const u of r.units)
 		yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, Math.max(0, u.avgDemandM3Day - u.avgRestrictedDemandM3Day), u.avgCutOnRestrictedDaysM3Day ?? null, u.avgSuppliedM3Day, u.daysByLevel ? u.daysByLevel.slice(1).reduce((a, b) => a + b, 0) : null]);
+	// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3).
+	if (r.users?.length) {
+		yield csvRow(['Priority user (fixed restriction, no basic-needs floor)', 'Fixed restriction (%)', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Mean cut (m³/day)', 'Mean cut on restricted days (m³/day)', 'Mean taken (m³/day)', 'Days restricted']);
+		for (const u of r.users)
+			yield csvRow([u.name, u.restrictionPct * 100, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, Math.max(0, u.avgDemandM3Day - u.avgRestrictedDemandM3Day), u.avgCutOnRestrictedDaysM3Day, u.avgSuppliedM3Day, u.daysByLevel.slice(1).reduce((a, b) => a + b, 0)]);
+	}
 }
 
 /**

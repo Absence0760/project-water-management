@@ -43,6 +43,7 @@ import {
 import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
 import { runReturnFlow, type CropArea, type CurtailmentFarm, type CurtailmentSummary, type DemandObject, type IrrigationSystemDef, type NetworkNode, type Transfer } from '../project';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
+import { userRestrictionShare } from '../network/restriction';
 import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverTakeKey } from '../network/riverSource';
 import { modelFarmEfficiency, type CropEfficiencyInput, type CropSystemInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
@@ -685,7 +686,9 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 				supplied: need(run, n.id, 'supplied', days),
 				returned: need(run, n.id, 'return_flow', days),
 				ewrCharge: need(run, n.id, 'ewr_charge', days),
-				consumptivePerSupplied: consumptiveShare(n, run)
+				consumptivePerSupplied: consumptiveShare(n, run),
+				// A Priority user's fixed restriction % (engine 1.86.0), as runModel reads it.
+				...(userRestrictionShare(n) > 0 ? { restrictionPct: userRestrictionShare(n) } : {})
 			});
 		}
 	}

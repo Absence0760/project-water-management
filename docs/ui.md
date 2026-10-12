@@ -2978,13 +2978,21 @@ itself.
   *Number of pumps* × *m³/h per pump* × 24 fills it, as on a unit's Supply
   fields (only the m³/day is stored), and the note under it says what the
   value means (for a priority user, that the units upstream pass no more than
-  it for the user). The one-line summary adds "pump N m³/day" when set. A
+  it for the user). The one-line summary adds "pump N m³/day" when set.
+  **Fixed restriction** (%, engine 1.86.0, issue #523 B3, [model.md
+  §2.7c](./model.md)), beside Share returned on a Priority user only: blank
+  is uncurtailed (stored null; 0 stores null too); a % is the share of its
+  demand it gives up in a curtailment and under the drought restriction rule,
+  and the note under it says so, with no basic-needs floor. Switching the
+  user to Non-priority clears it (the API refuses it there). The one-line
+  summary adds "N % fixed restriction". A
   user's Supply group (a stale supply rule left from a farm) no longer shows
   the river pump field: the user's own is under "Other water user". The one-node form shows the same fields
   under "Other water user" instead of the farm groups. The schematic draws a
   user as an open diamond (legend "Other water user"). The client check
   mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
-  return share in 0–100 %.
+  return share in 0–100 %, a fixed restriction in 0–100 % and on a Priority
+  user only.
 - **Combined boreholes (one capacity)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
   one-node form only (`detailOnly`), on farms and other users, just above
   Individual boreholes: a line says to use it when only the total is known,
@@ -7923,8 +7931,10 @@ read it before.
   stage; the table has one row per farm (a bar, the whole %, the m³/day), an
   **All hydrological units** total row, then **Other water users (outside
   the equitable share)**: each user its own row with a *priority, not
-  curtailed* or *non-priority, curtailed* badge, and at stage 2 what it takes
-  after its supply cut (non-priority) or all it takes (priority), with an **All
+  curtailed*, *priority, fixed N %* (engine 1.86.0, a fixed restriction %)
+  or *non-priority, curtailed* badge, and at stage 2 what it takes
+  after its supply cut (non-priority, or priority with a fixed %, noted
+  "N % fixed restriction, no basic-needs floor") or all it takes (priority), with an **All
   other users** total. Each farm's equitable share volume stays in the
   per-farm table below.
   Every figure is the engine's `CurtailmentSummary`; nothing is recomputed.
@@ -7978,7 +7988,9 @@ read it before.
   **Other water users** table follows (engine ≥ 0.22.0, §2.7c): demand, taken,
   the % of demand supplied (flagged below 95 %, as the units are; issue
   #137), returned, EWR charge, the supply cut, and the charge left standing, with
-  "Non-priority (curtailed)" or "Priority (not curtailed)"; they are not in the
+  "Non-priority (curtailed)", "Priority (not curtailed)" or, for a Priority
+  user with a fixed restriction % (engine 1.86.0), "Priority (N %: fixed %, no
+  basic-needs floor)", cut by at most that share of its demand; they are not in the
   equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window (all three
@@ -8736,7 +8748,11 @@ see (WP-2.3); every place it shows says so.
   restricted (its own under *Each unit's own dam*); the rule line counts
   the reviews after a day the EWR trigger's site failed. Both lists
   fold after ten (*Show all N water years* / *hydrological units*). The
-  note says the cut shows as a shortfall.
+  note says the cut shows as a shortfall. With a Priority user's fixed
+  restriction % (engine 1.86.0) a last table lists each such user, the most
+  cut first: its %, demand, demand after the restriction, cut, mean cut on
+  restricted days, taken and days restricted, with a note that there is no
+  basic-needs floor; the summary CSV's block gains the same rows.
 - **River & reserve → Seasonal outlook → Review triggers**: under the
   trigger table, the table *As a drought restriction rule* in words
   (`outlook/triggers.ts` `triggerRuleView`, the engine's

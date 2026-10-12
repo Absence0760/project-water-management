@@ -271,6 +271,20 @@ def junior_user() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(60, 8.0)}
 
 
+def priority_user_fixed_restriction() -> dict:
+    """A Priority user's fixed restriction % (§2.7c, engine 1.86.0, issue #523
+    B3) with no drought restriction rule: it acts only in the curtailment table
+    and under the rule (§2.7i), both outside this cross-check, so every daily
+    series is the user's without it: it takes its whole demand, and the farm
+    upstream passes its whole claim."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "user", "o", userDemandM3Day=[3000] * 12, userPriority="senior", userReturnPct=0, userRestrictionPct=0.4),
+        _node("f", "farm", "s", areaKm2=2, damCapacityM3=50000, damInitialPct=0.5, pctUpstreamToDam=1, pctRunoffToDam=1),
+    ]
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(60, 8.0)}
+
+
 def offtake_keep_bands() -> dict:
     """Three river off-takes of one priority from one farm (§2.6a): two keep a
     hands-off flow of 2 000 m³/day, the third keeps nothing and may take
@@ -737,6 +751,7 @@ PROBES = {
     "full-allocation-tail-new-year": full_allocation_tail_new_year(),
     "trigger-hysteresis": trigger_hysteresis(),
     "junior-user": junior_user(),
+    "priority-user-fixed-restriction": priority_user_fixed_restriction(),
     "offtake-keep-bands": offtake_keep_bands(),
     "cap-before-licence": cap_before_licence(),
     "offtake-into-capped-unit": offtake_into_capped_unit(),

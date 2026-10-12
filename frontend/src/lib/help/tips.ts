@@ -552,6 +552,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.userReturnPct']
 	},
 	{
+		id: 'user-restriction',
+		term: 'Fixed restriction (Priority user)',
+		short: 'Share of a Priority user’s demand it gives up when restricted, in a curtailment and under the drought restriction. Blank is none.',
+		units: '%',
+		category: 'network',
+		fields: ['node.userRestrictionPct']
+	},
+	{
 		id: 'user-pump',
 		term: 'Pump capacity (other user)',
 		short: 'The most an other water user takes from the river in a day. Blank is no limit; a priority user’s claim upstream is capped to it too.',

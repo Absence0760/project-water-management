@@ -4,7 +4,7 @@
 // the equitable share. EWR charges and shortfalls are volumes, shown positive
 // (fmtCharged), as the Farms table shows them (issue #45). The equitable share is a fairness benchmark, not an
 // allocation (audit Q11), so no displayed text calls a positive value a gain.
-import { DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type EwrSiteSummary } from '@water-management/engine';
+import { DEMAND_PCT_FLOOR_M3_DAY, USER_RESTRICTION_NOTE, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser, type EwrSiteSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 
 /**
@@ -185,6 +185,18 @@ export function ewrSiteRows(c: CurtailmentSummary, names: Record<string, string>
 }
 
 /** How many farms have to cut overall. */
+/**
+ * An other water user's class in the curtailment table: "Non-priority
+ * (curtailed)", "Priority (not curtailed)", or for a Priority user with a
+ * fixed restriction % (engine 1.86.0, issue #523 B3) "Priority (30 %: fixed
+ * %, no basic-needs floor)".
+ */
+export function userPriorityText(u: Pick<CurtailmentUser, 'priority' | 'curtailed' | 'restrictionPct'>): string {
+	if (u.priority === 'junior') return 'Non-priority (curtailed)';
+	if (u.restrictionPct !== undefined && u.restrictionPct > 0) return `Priority (${fmtNum(u.restrictionPct * 100, 0)} %: ${USER_RESTRICTION_NOTE})`;
+	return 'Priority (not curtailed)';
+}
+
 export function cutCount(c: CurtailmentSummary): number {
 	return c.farms.filter((f) => f.totalChangeM3Day < 0).length;
 }

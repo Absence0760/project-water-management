@@ -471,8 +471,15 @@ runs and accumulations are real) can't be decided without the client.
       counted and applies the milder, until the dam first starts a day at the
       mildest level's share of its capacity (no published source covers first
       filling; judgement).
-- [ ] **Drought restrictions on the other water users: decide whether and
-      how** (engine 1.54.0, [model.md §2.7i](./model.md)). The rule cuts
+- [x] **Drought restrictions on the other water users: decide whether and
+      how** (engine 1.54.0, [model.md §2.7i](./model.md)). **Answered
+      2026-10-11 (issue #90, other water users): option (d), per user.**
+      Built in engine 1.86.0 (issue #523 B3, [model.md §2.7c](./model.md)):
+      each Priority user has an optional fixed restriction % (default none),
+      applied to its demand in a curtailment and by the drought restriction
+      rule, marked "fixed %, no basic-needs floor"; the rest of its EWR
+      charge stands and is never moved onto the farms. Option (b) stays the
+      durable fix, tracked below. The question as it was put: the rule cuts
       only hydrological units: an other water user's demand has no category
       and no population, so a cut on it could take a town below basic needs
       with nothing to stop it. Options, for the hydrologist and the client:
@@ -485,6 +492,15 @@ runs and accumulations are real) can't be decided without the client.
       already apply; (d) one % cut for every user with no floor, marked as
       unprotected. Trigger: a catchment where a municipal abstractor sits on
       the river as an other water user and is restricted in practice.
+- [ ] **A basic-needs floor for Priority users** (option (b) above; the
+      durable fix behind engine 1.86.0's fixed restriction %, [model.md
+      §2.7c](./model.md)). A Priority user's fixed % has no floor, since a
+      user has no population: a large % can take a town below 25 l a person
+      a day. The fix: a population (and a restriction category) on user
+      nodes, cut through the demand objects' floor (§2.7f) in a curtailment
+      and under the drought restriction rule, as the NWA reading in §2.7c
+      asks. Trigger: the client gives the population each Priority user
+      serves.
 - [ ] **A pump capacity on other water users (WP-3.8) to confirm** (engine
       1.58.0, [model.md §2.7c](./model.md); to put to the hydrologist through
       #90 / #46). Built off by default (null = no limit) on these choices;
@@ -529,7 +545,8 @@ runs and accumulations are real) can't be decided without the client.
         passed down by the farms upstream (fragmented by flow share like the
         EWR; farms divert less, then pass inflow below the dam), and it is
         **not curtailed** for the EWR (its charge stands, not moved onto
-        farms); a non-priority user takes what reaches it and is curtailed like a
+        farms; from engine 1.86.0 only by its fixed restriction %, when it has
+        one); a non-priority user takes what reaches it and is curtailed like a
         farm. Confirm both rules and which priority each user has. Known
         limit: a farm never releases stored water for a priority user, and
         development (users, their demand) can't vary within a run.

@@ -1566,7 +1566,10 @@ and `"senior"`; the engine ignores them on farms and gauges. `PUT` refuses a
 crop area or a transfer on a user node. A user's `pumpCapacityM3Day` (engine
 ≥ 1.58.0, the supply fields' column below) is its river pump: ≥ 0, or `null`
 = no limit (the default); a supply rule other than `"damFirst"` on it is
-refused.
+refused. `userRestrictionPct` (engine 1.86.0, migration 223, issue #523 B3): a
+Priority user's fixed restriction, a share 0–1, or `null` (the default) =
+none; above 0 it is refused on any node but a Priority user (`junior` or not
+a user).
 
 Land cover (engine ≥ 0.24.0, migration 013, [model.md §2.5a](./model.md)):
 `ProjectModel.landCover` is `{ id, nodeId, coverClass, areaKm2, densityPct,
@@ -2174,11 +2177,14 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   left unmet although the river had it) and `daysPumpLimited`, beside its run
   series `pump_limited` (its river take is `supplied` − `groundwater_used`;
   `river_abstraction` stays a farm's). `summary.curtailment.otherUsers` has the same users over
-  the reporting window with `curtailed` (non-priority, stored `junior`), `supplyCutM3Day` (≤ 0) and
+  the reporting window with `curtailed` (non-priority, stored `junior`, or from engine 1.86.0 a
+  priority user with a fixed restriction %, then also `restrictionPct`), `supplyCutM3Day` (≤ 0) and
   `uncurtailedChargeM3Day` (the charge a cut doesn't remove; all of it for a
-  priority user). User nodes have the run series `demand`, `supplied`,
+  priority user without a fixed %). User nodes have the run series `demand`, `supplied`,
   `deficit`, `inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
-  `ewr_shortfall` and `ewr_charge`; with a priority user every node also has
+  `ewr_shortfall` and `ewr_charge` (and `restricted_demand` on a Priority user
+  with a fixed restriction % under the drought restriction rule, engine 1.86.0,
+  beside `summary.droughtRestriction.users`); with a priority user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
 - `summary.catchment.outletEwr` (engine ≥ 1.77.0, issue #455; only when the

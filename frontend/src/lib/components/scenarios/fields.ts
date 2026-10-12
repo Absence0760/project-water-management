@@ -172,6 +172,8 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	userDemandM3Day: { label: 'Demand by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	userReturnPct: { label: 'Share returned', spec: pct() },
 	userPriority: { label: 'Priority', spec: { t: 'enum', options: plain(USER_PRIORITIES, USER_PRIORITY_LABEL) } },
+	// A Priority user's fixed restriction % (engine 1.86.0, issue #523 B3).
+	userRestrictionPct: { label: 'Fixed restriction', spec: pct(true, 'none') },
 	// Supply rule and river pump (WP-3.8, docs/model.md §2.7e): the rule's words are run comparison's (engine compare.ts).
 	supplyRule: {
 		label: 'Supply rule',

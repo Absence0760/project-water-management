@@ -144,6 +144,12 @@ export interface PlanNode {
 	 * requirement less this. Absent = no claim crosses the reach.
 	 */
 	seniorReachLoss?: Float64Array;
+	/**
+	 * seniorReachLoss on the days the drought restriction cuts the Priority
+	 * users with a fixed restriction % (engine 1.86.0, issue #523 B3): their
+	 * claims at the restricted demand. Absent = the same every day.
+	 */
+	seniorReachLossCut?: Float64Array;
 	/** Daily crop water requirement (F, net irrigation need); zeros for gauges; a user's own demand from the river (WP-1.33). */
 	demand: Float64Array;
 	/** A user's share of what it takes that returns below it the same day (WP-1.33); 0 for other kinds. */
@@ -215,6 +221,13 @@ export interface PlanNode {
 	 * the EWR's fragmentation rule. Absent = none.
 	 */
 	seniorClaim?: Float64Array;
+	/**
+	 * seniorClaim on the days the drought restriction cuts the Priority users
+	 * with a fixed restriction % (engine 1.86.0, issue #523 B3, run.ts
+	 * otherUsers): their claims at the restricted demand D × (1 − cut).
+	 * Absent = the same every day.
+	 */
+	seniorClaimCut?: Float64Array;
 	/**
 	 * Gross demand before effective rain, the effective rain used against it
 	 * (m³/day) and the soil-water store at the end of the day (mm); only
@@ -526,6 +539,12 @@ export interface NetworkResult {
 	restrictionLevel?: Uint8Array;
 	/** Under the 'own' basis, each unit's level each day (node order; null for a unit the rule doesn't cut). */
 	restrictionUnitLevel?: (Uint8Array | null)[];
+	/**
+	 * The level the Priority users with a fixed restriction % were at each day
+	 * (engine 1.86.0, issue #523 B3; one for all of them: the shared level, or
+	 * the EWR trigger's under 'own'); absent when no user has one.
+	 */
+	restrictionUserLevel?: Uint8Array;
 	/** Days a review found the EWR trigger's site failed the day before (engine ≥ 1.54.0); 1 = yes. */
 	restrictionEwrFailed?: Uint8Array;
 	/**
@@ -744,7 +763,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			r.riverAbstraction = new Float64Array(days);
 			r.pumpLimited = new Float64Array(days);
 		}
-		if (plan.restriction?.inScope[i]) r.restrictedDemand = new Float64Array(days);
+		if (plan.restriction?.inScope[i] || (plan.restriction?.userCut?.[i] ?? 0) > 0) r.restrictedDemand = new Float64Array(days);
 		if (n.reachLoss) r.reachLoss = new Float64Array(days);
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (n.river) {
@@ -844,6 +863,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const levelOut = rp ? new Uint8Array(days) : null;
 	const unitOut = rp && !rp.shared ? nodes.map((_, i) => (rp.inScope[i] ? new Uint8Array(days) : null)) : null;
 	const ewrOut = rp && rp.ewrSite >= 0 ? new Uint8Array(days) : null;
+	// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3): one level for all of them each day.
+	const userCut = rp?.userCut;
+	const firstUser = userCut ? userCut.findIndex((c) => c > 0) : -1;
+	const userOut = firstUser >= 0 ? new Uint8Array(days) : null;
+	// The levels held, under a name the node loop's own `lv` (the off-take levels) doesn't shadow.
+	const heldLevels = lv;
 	const rD = rp ? new Float64Array(nodes.length) : null;
 	const rF = rp ? new Float64Array(nodes.length) : null;
 	const rObjs = rp ? nodes.map((n) => (n.kind === 'farm' && n.objects ? { ...n.objects, demand: n.objects.demand.map(() => new Float64Array(days)), total: new Float64Array(days) } : null)) : null;
@@ -899,6 +924,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const own = rp!.ownDam[i]!;
 			lv![i] = rp!.shared ? shared : Math.max(own >= 0 ? storageLevel([own], t) : 0, ewr);
 		}
+		// A Priority user with a fixed restriction % (engine 1.86.0) is at the shared level, or under 'own' (it has no
+		// dam to read) at the EWR trigger's alone, as a unit without a dam is.
+		if (userCut) for (let i = 0; i < nodes.length; i++) if (userCut[i]! > 0) lv![i] = rp!.shared ? shared : ewr;
 	};
 	/** Unit i's demand today after the level's cuts: writes rF, rObjs and returns D = F′ / e + Σ objects′. */
 	const restrictDay = (i: number, t: number): number => {
@@ -1043,7 +1071,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				levelOut![t] = deepest;
 			}
 			for (let i = 0; i < nodes.length; i++) if (nodes[i]!.kind === 'farm') rD![i] = restrictDay(i, t);
+			if (userOut) userOut[t] = lv![firstUser]!;
 		}
+		// Whether the Priority users with a fixed restriction % are cut today (engine 1.86.0): the farms upstream then
+		// pass their claims at the restricted demand.
+		const usersCut = userOut !== null && userOut[t]! > 0;
 		// The dam-side demand of each unit with river abstractions (engine ≥ 1.65.0): its dam-sourced demands only,
 		// after the restriction's cut when the rule is on.
 		// A crop supply table's dam share (engine ≥ 1.73.0) asks the dam side for that share of the crops only.
@@ -1314,7 +1346,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					rl[t] = l;
 					sumU += q - l;
 					const zs = ur.seniorRequirement[t]!;
-					const sl = un.seniorReachLoss;
+					const sl = usersCut && un.seniorReachLossCut ? un.seniorReachLossCut : un.seniorReachLoss;
 					sumZs += sl ? zs - Math.min(zs, sl[t]!) : zs;
 				} else {
 					sumU += ur.outflow[t]!;
@@ -1345,7 +1377,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// junior one leaves the senior requirement passing it for the senior
 				// users below. What it returns (treated wastewater) joins its outflow
 				// the same day. Like a gauge it has no EWR share of its own.
-				const D = node.demand[t]!;
+				const D0 = node.demand[t]!;
+				// A Priority user with a fixed restriction % (engine 1.86.0, issue #523 B3): on a day the drought
+				// restriction cuts it, it asks the river and its boreholes for D × (1 − cut), with no basic-needs floor.
+				// Its demand and deficit stay the unrestricted demand's, as a unit's do.
+				const uc = userCut ? userCut[i]! : 0;
+				const D = uc > 0 && heldLevels![i]! > 0 ? D0 * (1 - uc) : D0;
+				if (r.restrictedDemand) r.restrictedDemand[t] = D;
 				const avail = node.senior ? sumU : Math.max(0, sumU - sumZs);
 				// Its river pump (engine ≥ 1.58.0): it takes at most its capacity from the river; no pump = no limit.
 				const pump = node.userPumpM3Day;
@@ -1370,9 +1408,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const Uriver = sumU - Gs + T;
 				const U = Uriver - deplete(node, r, t, dGw, Uriver);
 				r.groundwater[t] = Ggw;
-				r.demand[t] = D;
+				r.demand[t] = D0;
 				r.supplied[t] = G;
-				r.deficit[t] = D - G;
+				r.deficit[t] = D0 - G;
 				r.inflowUpstream[t] = sumU;
 				r.outflow[t] = U;
 				r.userReturn[t] = T;
@@ -1420,7 +1458,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// below the dam (S) before it fills the dam, as far as its inflow
 			// allows: it diverts less first, then takes less of the upstream
 			// inflow and its own runoff into the dam, pro rata. Zs = 0 changes nothing.
-			const Zs = sumZs + (node.seniorClaim ? node.seniorClaim[t]! : 0);
+			const claim = usersCut && node.seniorClaimCut ? node.seniorClaimCut : node.seniorClaim;
+			const Zs = sumZs + (claim ? claim[t]! : 0);
 			let passed = 0;
 			if (Zs > 0) {
 				let short = Math.min(Zs, H + I) - (L + N - O);
@@ -1850,6 +1889,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		...(captured ? { captured } : {}),
 		...(levelOut ? { restrictionLevel: levelOut } : {}),
 		...(unitOut ? { restrictionUnitLevel: unitOut } : {}),
+		...(userOut ? { restrictionUserLevel: userOut } : {}),
 		...(ewrOut ? { restrictionEwrFailed: ewrOut } : {}),
 		...(joined ? { restrictionJoined: joined } : {})
 	};

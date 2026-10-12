@@ -40,7 +40,7 @@ import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type P
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
 import { cropSharesOf, planRemoteSupply, REMOTE_SERIES } from './network/cropSupply';
 import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
-import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
+import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey, userRestrictionShare } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
@@ -698,7 +698,11 @@ function runNetwork(
 		// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): on any node that has them.
 		if (r.reachLoss) push(node.id, REACH_LOSS_SERIES.key, REACH_LOSS_SERIES.label, REACH_LOSS_SERIES.unit, r.reachLoss);
 		// The priority users' claims' share of them, which the node below takes off the priority requirement.
-		const srl = plan.nodes[i]!.seniorReachLoss;
+		// On the days the drought restriction cuts the Priority users with a fixed % (engine 1.86.0), their claims' share.
+		const srl0 = plan.nodes[i]!.seniorReachLoss;
+		const srlCut = plan.nodes[i]!.seniorReachLossCut;
+		const ulv = sim.restrictionUserLevel;
+		const srl = srl0 && srlCut && ulv ? Float64Array.from(srl0, (v, t) => (ulv[t]! > 0 ? srlCut[t]! : v)) : srl0;
 		if (srl) push(node.id, SENIOR_REACH_LOSS_SERIES.key, SENIOR_REACH_LOSS_SERIES.label, SENIOR_REACH_LOSS_SERIES.unit, srl);
 		if (plan.nodes[i]!.borehole) {
 			// Boreholes (WP-1.34): what they gave and what the river loses for it.
@@ -720,7 +724,8 @@ function runNetwork(
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
 		// The unit's demand after the drought restriction (engine ≥ 1.54.0): on every unit the rule cuts.
-		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
+		// A Priority user's with a fixed restriction % too (engine 1.86.0).
+		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, node.kind === 'user' ? RESTRICTION_SERIES.restrictedUserLabel : RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
 		// Under the 'own' basis (engine ≥ 1.54.0) each unit's own level, beside its restricted demand.
 		const ul = sim.restrictionUnitLevel?.[i];
 		if (ul) push(node.id, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.unitLabel, RESTRICTION_SERIES.level.unit, ul);
@@ -931,7 +936,7 @@ function runNetwork(
 		curtailment.otherUsers = otherUserCurtailment(
 			nodes.flatMap((node, i) =>
 				node.kind === 'user'
-					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!) }]
+					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!), ...(userRestrictionShare(node) > 0 ? { restrictionPct: userRestrictionShare(node) } : {}) }]
 					: []
 			),
 			window
@@ -1632,6 +1637,9 @@ export function buildNetworkPlan(
 				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too (docs/model.md §2.6b)`
 				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
 		);
+	// The Priority users' fixed restriction % (engine 1.86.0, issue #523 B3, ./network/restriction.ts): the curtailment
+	// table reads it always, the drought restriction rule when there is one.
+	const userCuts = nodes.map((n) => userRestrictionShare(n, warnings));
 	const users = otherUsers(
 		nodes,
 		topo,
@@ -1645,14 +1653,22 @@ export function buildNetworkPlan(
 			d.fill(0, 0, abstractFrom[i]!);
 			scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 		},
-		datedOf
+		datedOf,
+		settings.droughtRestriction != null ? (i) => userCuts[i]! : undefined
 	);
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	// The drought restriction rule (engine ≥ 1.54.0, ./network/restriction.ts): its review and lift days need the run start.
 	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
 	if (restrictionRule && start === undefined) throw new Error('buildNetworkPlan: settings.droughtRestriction needs the run start');
 	const restriction = restrictionRule
-		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite })), start!, days, warnings, topo.outflow)
+		? planRestriction(
+				restrictionRule,
+				nodes.map((n, i) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite, ...(userCuts[i]! > 0 ? { userCut: userCuts[i]! } : {}) })),
+				start!,
+				days,
+				warnings,
+				topo.outflow
+			)
 		: null;
 	// First filling (engine ≥ 1.70.0, §2.7i): a dam that comes into service after the first day of the record (a
 	// resumed run's capture run's) starts filling; a resumed run takes the snapshot's state instead.
@@ -1749,8 +1765,10 @@ export function buildNetworkPlan(
 				...(remotes[i] ? { remote: remotes[i] } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
+				...(restriction?.userCut && users.claimsCut?.[i] ? { seniorClaimCut: users.claimsCut[i] } : {}),
 				...(reaches[i] ? { reachLoss: reaches[i] } : {}),
 				...(users.reachClaims[i] ? { seniorReachLoss: users.reachClaims[i] } : {}),
+				...(restriction?.userCut && users.reachClaimsCut?.[i] ? { seniorReachLossCut: users.reachClaimsCut[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
 			};
 		})
@@ -1852,7 +1870,7 @@ function restrictionSummary(
 	};
 	const units = nodes
 		.map((node, i) => ({ node, r: sim.nodes[i]!, ul: sim.restrictionUnitLevel?.[i] ?? lv }))
-		.filter((x) => x.r.restrictedDemand)
+		.filter((x) => x.r.restrictedDemand && x.node.kind === 'farm')
 		.sort((a, b) => cmpStr(a.node.id, b.node.id))
 		.map(({ node, r, ul }) => {
 			// The cut on the days a level was in force only: the run means dilute it with every unrestricted day.
@@ -1875,6 +1893,35 @@ function restrictionSummary(
 				daysByLevel: byLevel
 			};
 		});
+	// The Priority users with a fixed restriction % (engine 1.86.0, issue #523 B3): at the users' level each day.
+	const ulv = sim.restrictionUserLevel;
+	const users = ulv
+		? nodes
+				.map((node, i) => ({ node, r: sim.nodes[i]!, c: rp.userCut?.[i] ?? 0 }))
+				.filter((x) => x.c > 0 && x.r.restrictedDemand)
+				.sort((a, b) => cmpStr(a.node.id, b.node.id))
+				.map(({ node, r, c }) => {
+					let cut = 0;
+					let k = 0;
+					const byLevel = new Array<number>(n).fill(0);
+					for (let t = 0; t < days; t++) {
+						byLevel[ulv[t]!]!++;
+						if (ulv[t] === 0) continue;
+						cut += r.demand[t]! - r.restrictedDemand![t]!;
+						k++;
+					}
+					return {
+						nodeId: node.id,
+						name: node.name,
+						restrictionPct: c,
+						avgDemandM3Day: mean(r.demand),
+						avgRestrictedDemandM3Day: mean(r.restrictedDemand!),
+						avgSuppliedM3Day: mean(r.supplied),
+						avgCutOnRestrictedDaysM3Day: k ? cut / k : null,
+						daysByLevel: byLevel
+					};
+				})
+		: [];
 	// First filling (engine ≥ 1.70.0, §2.7i): each dam filling at the start, and the day it joined.
 	const joined = sim.restrictionJoined;
 	const filling = joined
@@ -1887,7 +1934,8 @@ function restrictionSummary(
 	const startState = resumed
 		? {
 				start: {
-					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
+					// A Priority user with a fixed restriction % holds a level too (engine 1.86.0).
+					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] || (rp.userCut?.[i] ?? 0) > 0 ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
 					ewrFailedBefore: rp.initialEwrFailed === true,
 					...(rp.filling ? { fillingBefore: nodes.flatMap((node, i) => (rp.filling![i] ? [node.id] : [])).sort(cmpStr) } : {}),
 					damStorageBeforeM3: Object.fromEntries(nodes.flatMap((node, i) => (node.kind === 'farm' && plan.nodes[i]!.damCapacityM3 > 0 ? [[node.id, plan.nodes[i]!.initialStorageM3]] : [])))
@@ -1901,6 +1949,7 @@ function restrictionSummary(
 		reviews,
 		...(ewrReviews !== undefined ? { ewrReviews } : {}),
 		units,
+		...(users.length ? { users } : {}),
 		...startState,
 		...(filling.length ? { filling } : {})
 	};
@@ -2166,11 +2215,29 @@ function otherUsers(
 	factorFrom: number,
 	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down, and (engine ≥ 1.70.0) before its demand factor. */
 	scale?: (i: number, demand: Float64Array) => void,
-	datedOf?: DatedFactorOf
-): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[]; reachClaims: (Float64Array | undefined)[] } {
+	datedOf?: DatedFactorOf,
+	/**
+	 * Each user's fixed restriction share (engine 1.86.0, issue #523 B3,
+	 * userRestrictionShare; 0 = none): when a Priority user with claims has
+	 * one, `claimsCut` and `reachClaimsCut` are every claim again with that
+	 * user's demand × (1 − share), what the farms pass on the days the
+	 * drought restriction cuts it.
+	 */
+	cutOf?: (i: number) => number
+): {
+	byNode: Map<number, OtherUser>;
+	claims: (Float64Array | undefined)[];
+	reachClaims: (Float64Array | undefined)[];
+	claimsCut: (Float64Array | undefined)[] | null;
+	reachClaimsCut: (Float64Array | undefined)[] | null;
+} {
 	const byNode = new Map<number, OtherUser>();
 	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
 	const reachClaims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	// The claims on the days the restriction cuts the users with a fixed %, made only when one of them claims (engine 1.86.0).
+	const cutClaims = nodes.some((n, i) => n.kind === 'user' && (cutOf?.(i) ?? 0) > 0 && (n.userPriority ?? 'senior') !== 'junior');
+	const claimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
+	const reachClaimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
 	// Each node's downstream node, only when some reach has bed losses to gross the claims up for (engine ≥ 1.75.0).
 	let down: Int32Array | null = null;
 	if (reaches.some((p) => p)) {
@@ -2221,35 +2288,42 @@ function otherUsers(
 			const total = up.reduce((s, j) => s + share[j]!, 0);
 			if (total > 0) {
 				claimed = true;
-				for (const j of up) {
-					const c = (claims[j] ??= new Float64Array(days));
-					const f = share[j]! / total;
-					// The reaches with bed losses between the farm and the user, nearest the user first (engine ≥ 1.75.0).
-					const path: number[] = [];
-					if (down) for (let k = j; k !== i && k >= 0; k = down[k]!) if (reaches[k]) path.unshift(k);
-					if (path.length) {
-						const add = path.map((k) => (reachClaims[k] ??= new Float64Array(days)));
-						for (let t = 0; t < days; t++) {
-							let v = (pump === undefined ? demand[t]! : Math.min(demand[t]!, pump)) * f;
-							for (let a = 0; a < path.length; a++) {
-								const g = reachGross(reaches[path[a]!]!, v);
-								add[a]![t]! += g - v;
-								v = g;
+				// Its claims as they are, then (with a fixed restriction %, engine 1.86.0) at the restricted demand on
+				// the cut set, the others' claims added to it unchanged.
+				const uc = cutOf?.(i) ?? 0;
+				const restricted = uc > 0 ? demand.map((d) => d * (1 - uc)) : demand;
+				const sets: [(Float64Array | undefined)[], (Float64Array | undefined)[], Float64Array][] = [[claims, reachClaims, demand]];
+				if (claimsCut) sets.push([claimsCut, reachClaimsCut!, restricted]);
+				for (const [claimSet, reachSet, dem] of sets)
+					for (const j of up) {
+						const c = (claimSet[j] ??= new Float64Array(days));
+						const f = share[j]! / total;
+						// The reaches with bed losses between the farm and the user, nearest the user first (engine ≥ 1.75.0).
+						const path: number[] = [];
+						if (down) for (let k = j; k !== i && k >= 0; k = down[k]!) if (reaches[k]) path.unshift(k);
+						if (path.length) {
+							const add = path.map((k) => (reachSet[k] ??= new Float64Array(days)));
+							for (let t = 0; t < days; t++) {
+								let v = (pump === undefined ? dem[t]! : Math.min(dem[t]!, pump)) * f;
+								for (let a = 0; a < path.length; a++) {
+									const g = reachGross(reaches[path[a]!]!, v);
+									add[a]![t]! += g - v;
+									v = g;
+								}
+								c[t]! += v;
 							}
-							c[t]! += v;
 						}
+						// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
+						else if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += dem[t]! * f;
+						else for (let t = 0; t < days; t++) c[t]! += Math.min(dem[t]!, pump) * f;
 					}
-					// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
-					else if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
-					else for (let t = 0; t < days; t++) c[t]! += Math.min(demand[t]!, pump) * f;
-				}
 			} else {
 				warnings.push(`priority user "${n.name}" has no unit with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
 			}
 		}
 		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });
 	}
-	return { byNode, claims, reachClaims };
+	return { byNode, claims, reachClaims, claimsCut, reachClaimsCut };
 }
 
 /**
