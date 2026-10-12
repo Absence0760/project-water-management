@@ -45,6 +45,7 @@ export const BALANCE_COLUMNS: BalanceColumn[] = [
 	{ key: 'runoff', label: 'Unit runoff', title: 'Σ hydrological unit runoff (I), Mm³', value: (r) => r.farmRunoffM3 * MM3 },
 	{ key: 'transfers', label: 'Transfers', title: 'Net transfers across all hydrological units; 0 up to float noise (Mm³)', value: (r) => r.transfersM3 * MM3 },
 	{ key: 'groundwater', label: 'Groundwater pumped', title: 'Groundwater pumped into supply and the dams, a gain to the river network (Mm³)', value: (r) => opt(r.groundwaterM3), optional: true },
+	{ key: 'baseflowGain', label: 'Base-flow gain', title: 'Joined the hydrological units’ runoff from groundwater outside the catchment (Mm³)', value: (r) => opt(r.baseflowGainM3), optional: true },
 	{ key: 'storageSet', label: 'Storage set', title: 'Storage set into (+) or out of (−) the dams by a storage reset (Mm³)', value: (r) => opt(r.storageSetM3), optional: true },
 	{ key: 'rainOnDams', label: 'Rain on dams', title: 'Rain falling on the dams’ surface (Mm³); blank for runs before engine 0.16.0', value: (r) => (r.rainOnDamsM3 === undefined ? null : r.rainOnDamsM3 * MM3) },
 	{ key: 'consumptive', label: 'Consumptive use', title: 'Irrigation supplied − return flow (Mm³)', value: (r) => r.consumptiveUseM3 * MM3 },
@@ -55,6 +56,7 @@ export const BALANCE_COLUMNS: BalanceColumn[] = [
 	{ key: 'poolEvaporation', label: 'Pool evaporation', title: 'Evaporation from the river abstractions’ pools (Mm³); their storage is in the start and end storage', value: (r) => opt(r.poolEvaporationM3), optional: true },
 	{ key: 'conveyanceLoss', label: 'Off-take losses', title: 'River off-takes: taken − delivered, lost from the catchment on the way (Mm³)', value: (r) => opt(r.conveyanceLossM3), optional: true },
 	{ key: 'reachLoss', label: 'Bed losses', title: 'Lost into the river bed in the reaches between hydrological units, out of the catchment (Mm³)', value: (r) => opt(r.reachLossM3), optional: true },
+	{ key: 'baseflowLoss', label: 'Base-flow loss', title: 'Lost from the hydrological units’ runoff to groundwater, out of the catchment (Mm³)', value: (r) => opt(r.baseflowLossM3), optional: true },
 	{ key: 'outflow', label: 'Outflow', title: 'Simulated outflow at the outlet (Mm³)', value: (r) => r.outflowM3 * MM3 },
 	{ key: 'closing', label: 'End storage', title: 'Σ dam storage at the end (Mm³)', value: (r) => r.closingStorageM3 * MM3 },
 	{ key: 'residual', label: 'Residual (m³)', title: 'The equation’s left side − its right side (every gain − every loss − the change in storage); should be 0', value: (r) => r.residualM3 }
@@ -69,8 +71,8 @@ export function balanceEquation(cols: readonly BalanceColumn[]): string {
 	const has = (k: string) => cols.some((c) => c.key === k);
 	const plus = (k: string, w: string) => (has(k) ? ` + ${w}` : '');
 	return (
-		`Start storage + hydrological unit runoff + transfers${plus('groundwater', 'groundwater')}${plus('storageSet', 'storage set')} + rain on dams = ` +
-		`consumptive use${plus('otherUse', 'other users’ use')}${plus('streamDepletion', 'stream depletion')} + dam evaporation${plus('poolEvaporation', 'pool evaporation')}${plus('seepageLost', 'seepage lost')}${plus('conveyanceLoss', 'off-take losses')}${plus('reachLoss', 'bed losses')} + outflow + end storage`
+		`Start storage + hydrological unit runoff + transfers${plus('groundwater', 'groundwater')}${plus('baseflowGain', 'base-flow gain')}${plus('storageSet', 'storage set')} + rain on dams = ` +
+		`consumptive use${plus('otherUse', 'other users’ use')}${plus('streamDepletion', 'stream depletion')} + dam evaporation${plus('poolEvaporation', 'pool evaporation')}${plus('seepageLost', 'seepage lost')}${plus('conveyanceLoss', 'off-take losses')}${plus('reachLoss', 'bed losses')}${plus('baseflowLoss', 'base-flow loss')} + outflow + end storage`
 	);
 }
 
@@ -154,8 +156,10 @@ export function traceRows(day: RunDay): TraceRow[] {
 }
 
 export interface Closure {
-	/** H + I + J + rain on the dam (engine ≥ 0.16.0) */
+	/** H + I + J + rain on the dam (engine ≥ 0.16.0), + the unit's base-flow gain − its loss (engine 1.86.0) */
 	inflow: number;
+	/** The unit has a base-flow loss or gain (engine 1.86.0), counted in `inflow`. */
+	baseflow?: true;
 	/** G − T */
 	consumptive: number;
 	/** Evaporation from the dam (engine ≥ 0.16.0; 0 for older runs). */
@@ -183,12 +187,14 @@ export function dayClosure(day: RunDay): Closure | null {
 		const x = v.get(k);
 		return typeof x === 'number' ? x : 0;
 	};
-	const inflow = g('inflow_upstream') + g('runoff') + g('transfer') + num('rain_on_dam');
+	// A unit's base-flow gain and loss (engine 1.86.0) change the runoff that reaches its dam and the river.
+	const baseflow = v.has('baseflow_gain') || v.has('baseflow_loss');
+	const inflow = g('inflow_upstream') + g('runoff') + g('transfer') + num('rain_on_dam') + (baseflow ? num('baseflow_gain') - num('baseflow_loss') : 0);
 	const consumptive = g('supplied') - T;
 	const evaporation = num('dam_evaporation');
 	const storageChange = g('dam_storage') - day.previousStorageM3;
 	const outflow = g('outflow');
-	return { inflow, consumptive, evaporation, storageChange, outflow, residual: inflow - consumptive - evaporation - storageChange - outflow };
+	return { inflow, consumptive, evaporation, storageChange, outflow, residual: inflow - consumptive - evaporation - storageChange - outflow, ...(baseflow ? { baseflow: true as const } : {}) };
 }
 
 /** The runoff model's stores (run_series keys) with their symbols, in GR4J_COLUMNS order. */

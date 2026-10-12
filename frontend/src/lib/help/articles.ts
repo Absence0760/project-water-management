@@ -305,6 +305,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['outflow-gauge', 'ewr', 'stream-depletion'],
 		source: 'docs/model.md §2.6b; WR2012 User Manual (WRC TT 689/16) §6.2.3.1; eWater Source practice note on losses; Mvandaba et al. (2018)'
 	},
+	'base-flow-loss-gain': {
+		long: 'A hydrological unit’s own runoff can lose water to groundwater, or gain it, on its way to the river: where the river crosses a fault or dolomite that drains away to another basin, or where a spring or an aquifer from beyond the divide feeds it. Each unit can carry a base-flow loss and a base-flow gain, both in m³/day. Every day the unit loses MIN(loss, its runoff), which leaves the catchment, and the gain joins what is left; the rest of the unit (the split into its dam and the river, the dam, its pump) sees the runoff after them. Its runoff column stays the natural flow × its share; the run shows the loss and the gain as their own series.\n\nNeither is the unit’s use of water, so neither is charged to it when the EWR falls short. Both are the land’s, as bed losses are the river’s, so a Reserve rule table’s site and the WR2012 check read the natural flow net of them. The water balance and the water account show the gains as water in and the losses as water out. None of a loss comes back unless you set a gain somewhere.\n\nLeave both at 0 unless flow records or a groundwater study show the river losing or gaining water at this unit, and set them from that evidence. A losing river between two units is a bed loss (Bed losses in the reach below); a loss here is from the unit’s own runoff, before it reaches the river.',
+		aliases: ['base flow loss', 'base flow gain', 'baseflow', 'groundwater loss', 'groundwater gain', 'spring', 'losing catchment'],
+		related: ['bed-losses', 'stream-depletion', 'land-cover'],
+		source: 'docs/model.md §2.6b; engine-audit.md R4; issue #90 R4'
+	},
 	'outflow-gauge': {
 		long: 'Exactly one element has nothing downstream of it. Its flow is the catchment’s simulated outflow: the series checked against the pragmatic EWR and, when an observed record exists, used for the calibration statistics.',
 		aliases: ['outlet', 'catchment outlet'],

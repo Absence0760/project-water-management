@@ -107,6 +107,12 @@ export function sectionSummary(sec: NodeSection, n: NetworkNode, c: SummaryConte
 			return c.boreholes ? plural(c.boreholes, 'borehole') : 'None';
 		case 'cover':
 			return c.coverPatches ? plural(c.coverPatches, 'patch', 'patches') : 'None';
+		case 'baseflow': {
+			const loss = n.baseflowLossM3Day ?? 0;
+			const gain = n.baseflowGainM3Day ?? 0;
+			if (!(loss > 0) && !(gain > 0)) return 'None';
+			return [loss > 0 ? `loses ${fmtNum(loss)} m³/day` : null, gain > 0 ? `gains ${fmtNum(gain)} m³/day` : null].filter(Boolean).join(' · ');
+		}
 		case 'reach': {
 			const share = n.reachLossFrac ?? 0;
 			if (!(share > 0)) return n.downstreamNodeId === null ? 'None: the outlet has no reach below it' : 'None lost (0 %)';

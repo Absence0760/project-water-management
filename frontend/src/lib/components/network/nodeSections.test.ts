@@ -19,6 +19,7 @@ describe('nodeSections', () => {
 			'Combined boreholes (one capacity)',
 			'Individual boreholes',
 			'Land cover',
+			'Base-flow loss and gain',
 			'Bed losses in the reach below'
 		]);
 	});

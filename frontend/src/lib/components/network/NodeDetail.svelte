@@ -373,6 +373,13 @@
 							their demand in full. Leave it at 0 % unless the flow records show the river losing water here.
 						</p>
 					{/if}
+					{#if g === 'baseflow'}
+						<p class="hint section-note explain" data-testid="baseflow-note">
+							Groundwater that {node.name || 'this hydrological unit'}’s own runoff loses, or gains, every day before it reaches the river or the dam. The
+							loss leaves the catchment; the gain comes from outside it. Neither changes the natural flow the rain makes, and neither counts as the unit’s
+							use of water. Leave both at 0 unless flow records or a groundwater study show the river losing or gaining water here.
+						</p>
+					{/if}
 					{#if g === 'groundwater'}
 						<p class="hint section-note explain">
 							One daily capacity for all of {node.name || 'this hydrological unit'}’s boreholes, under one rule: use it when only the total is known. List

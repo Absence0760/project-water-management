@@ -196,6 +196,9 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): the river's, a baseline assumption.
 	reachLossFrac: { label: 'Bed losses in the reach below', spec: pct() },
 	reachLossMaxM3Day: { label: 'Bed losses at most', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): its groundwater's, a baseline assumption.
+	baseflowLossM3Day: { label: 'Base-flow loss', spec: num('m³/day') },
+	baseflowGainM3Day: { label: 'Base-flow gain', spec: num('m³/day') },
 	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
 	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };

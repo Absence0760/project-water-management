@@ -100,4 +100,10 @@ describe('sectionSummary', () => {
 		expect(plain(sectionSummary('reach', unit({ reachLossFrac: 0.05, reachLossMaxM3Day: 2000 }), ctx))).toBe('5 % lost, at most 2 000 m³/day');
 		expect(sectionSummary('reach', unit({ downstreamNodeId: null }), ctx)).toBe('None: the outlet has no reach below it');
 	});
+
+	it('says the base-flow loss and gain, or none (engine 1.86.0)', () => {
+		expect(sectionSummary('baseflow', unit(), ctx)).toBe('None');
+		expect(plain(sectionSummary('baseflow', unit({ baseflowLossM3Day: 1500 }), ctx))).toBe('loses 1 500 m³/day');
+		expect(plain(sectionSummary('baseflow', unit({ baseflowLossM3Day: 1500, baseflowGainM3Day: 20 }), ctx))).toBe('loses 1 500 m³/day · gains 20 m³/day');
+	});
 });

@@ -103,6 +103,18 @@ describe('water balance table', () => {
 			'Start storage + hydrological unit runoff + transfers + groundwater + storage set + rain on dams = consumptive use + other users’ use + stream depletion + dam evaporation + pool evaporation + seepage lost + off-take losses + bed losses + outflow + end storage'
 		);
 	});
+
+	it('shows the units’ base-flow gain as a gain and their loss as a loss, only on a run with them (engine 1.86.0)', () => {
+		const cols = balanceColumns([row(), row({ baseflowGainM3: 2e3, baseflowLossM3: 5e3 })]);
+		const keys = cols.map((c) => c.key);
+		expect(keys.indexOf('baseflowGain')).toBeLessThan(keys.indexOf('rainOnDams'));
+		expect(keys.indexOf('baseflowLoss')).toBeGreaterThan(keys.indexOf('consumptive'));
+		expect(cols.find((c) => c.key === 'baseflowLoss')!.value(row({ baseflowLossM3: 5e3 }))).toBeCloseTo(0.005, 12);
+		expect(balanceEquation(cols)).toBe(
+			'Start storage + hydrological unit runoff + transfers + base-flow gain + rain on dams = consumptive use + dam evaporation + base-flow loss + outflow + end storage'
+		);
+		expect(balanceColumns([row()]).some((c) => c.key.startsWith('baseflow'))).toBe(false);
+	});
 });
 
 describe('checkLabel', () => {
@@ -188,6 +200,9 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		// Bed losses in the reach below (engine 1.75.0): only on a node that has them.
 		reach_loss: 0,
 		senior_reach_loss: 0,
+		// A unit's base-flow loss and gain (engine 1.86.0): only on a unit that has them.
+		baseflow_loss: 0,
+		baseflow_gain: 0,
 		dam_storage_set: 0,
 		depletion_store: 0,
 		baseflow_depletion: 0,
@@ -265,6 +280,17 @@ describe('day trace', () => {
 		expect(c.consumptive).toBeCloseTo((9 * F) / 10, 9);
 		expect(c.storageChange).toBe(500);
 		expect(Math.abs(c.residual)).toBeLessThan(1e-9);
+	});
+
+	it('counts a unit’s base-flow gain in and its loss out of the runoff (engine 1.86.0)', () => {
+		const day = farmDay();
+		// The runoff I stays 750; the gain and loss change what reached the dam and the river.
+		day.columns = day.columns.filter((c) => c.key !== 'baseflow_loss' && c.key !== 'baseflow_gain');
+		expect(dayClosure(day)!.baseflow).toBeUndefined();
+		day.columns.push({ key: 'baseflow_loss', label: 'baseflow_loss', unit: 'm³/day', value: 40 }, { key: 'baseflow_gain', label: 'baseflow_gain', unit: 'm³/day', value: 10 });
+		const c = dayClosure(day)!;
+		expect(c.baseflow).toBe(true);
+		expect(c.inflow).toBeCloseTo(970, 9);
 	});
 
 	it('counts the rain on the dam in and the evaporation out (N2)', () => {
