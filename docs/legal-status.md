@@ -187,8 +187,10 @@ A and C remain owed and should be done as soon as possible; setting
   not legal advice): §9 covers § 2.1.2–2.1.3 but probably not the licence
   as a whole (own use only, the GeoJSON export, the disclaimer, the
   operator's indemnity to WWF); replacement wording is drafted there for
-  counsel (#92), not adopted. The farm map's missing JRC credit is code,
-  #523 C6.
+  counsel (#92), not adopted. The farm map's missing JRC credit was code:
+  built in #523 C6 (2026-10-12), a traced dam credited on every map and the
+  farm map's credits as a line under it ([maps.md § Credits on the
+  map](./maps.md#credits-on-the-map)).
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
   instructions, with security measures. **Template drafted** (2026-09-27):

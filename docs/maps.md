@@ -520,7 +520,8 @@ answer, with no database connection held.
   check:pins` holds it), through docker. Each tile is checked against its
   SHA-256 ([§ Checksums](#checksums)). The
   archive's attribution is "Source: EC JRC/Google", carried into each
-  traced feature's description. Then
+  traced feature's description, and so credited on every map that draws it
+  ([§ Credits on the map](#credits-on-the-map)). Then
   `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production:
   upload it as `tiles/water.pmtiles` and set `dam_trace_water = true` in the
   tfvars, which sets `WATER_URL=s3://<tiles bucket>/tiles/water.pmtiles` on
@@ -896,7 +897,12 @@ and gauges by name, the place in degrees, and that no other unit is shown),
 and is left out when the farm has nothing of its own on the map. The map
 reuses `CatchmentMap.svelte` in a chunk of its own (`farm/FarmMapCanvas.svelte`),
 passing its words in the reader's language (`words`, `farmMap.ts`
-`mapWords`), since the shared component imports no catalogue. The screen is
+`mapWords`), since the shared component imports no catalogue. Its credits
+are a line under the key, not MapLibre's control over the map (issue #523
+C6; [§ Credits on the map](#credits-on-the-map)): the basemap's when tiles
+are drawn, HydroRIVERS' and JRC's as written, the words around JRC's
+("Dam outline: traced from …, modified") in the reader's language, then
+**Data sources** (`farmMap.ts` `farmMapCredits`). The screen is
 in [ui.md § Farmer view](./ui.md#farmer-view-farm).
 
 ## Rain from the boundary
@@ -1778,7 +1784,8 @@ reads it.
   attribution control credits it ("Rivers: HydroRIVERS, HydroSHEDS v1 ©
   World Wildlife Fund, Inc. (2006-2022), used under license"), linking to
   the full Exhibit B statement on the public **Data sources and credits**
-  page (`/data-sources#hydrorivers`, `lib/components/legal/dataCredits.ts`).
+  page (`/data-sources#hydrorivers`, `lib/components/legal/dataCredits.ts`;
+  the farm map's line under it, [§ Credits on the map](#credits-on-the-map)).
 - **Any other network** loads the same way:
   `pnpm import:rivers rivers.geojson --dataset <label> --source "<product, version, attribution>" [--min-order <n>]`,
   a FeatureCollection of LineStrings or MultiLineStrings in WGS84 with the
@@ -2243,6 +2250,33 @@ fixtures only.
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+
+### Credits on the map
+
+Licensed data drawn on a map is credited while it is drawn (issue #523 C6;
+the research is [legal/map-data-licences.md](./legal/map-data-licences.md)
+§ 5.3). `mapLayers.ts` `mapCredits` lists them in a fixed order, each id
+also its section on the **Data sources and credits** page:
+
+| Credit | When | Line |
+| --- | --- | --- |
+| `hydrorivers` | the River network layer draws HydroRIVERS reaches, or a river added from one is drawn (`creditedFeature`) | "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license" |
+| `jrc-water` | an outline traced from JRC Global Surface Water is drawn (`jrcCreditedFeature`: its description carries the archive's "Source: EC JRC/Google", which tracing writes, [§ Assisted drawing](#assisted-drawing); a trace from the synthetic raster names no source and is credited nothing) | "Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified": JRC's attribution for a published map, and that the data was modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3)) |
+
+On the Map tab each is its own empty source with an invisible layer, so the
+always-expanded attribution control lists it beside the basemap's
+("© Protomaps © OpenStreetMap contributors") and the relief's, linking to
+`/data-sources#<id>` (`mapStyle.ts` `creditLink`, `CatchmentMap.svelte`
+`syncCredits`). The farm map draws no attribution control
+(`CatchmentMap`'s `attribution="outside"`): the same credits are one line
+under its key ([§ The farmer's map](#the-farmers-map)), so they never cover
+the 280 px phone map; OpenStreetMap's guidelines allow a credit adjacent to
+the map. The farm map's route sends no properties, so the server flags a
+credited feature (`credit: 'hydrorivers' | 'jrc-water'`, `farms/view.ts`,
+`geo/credits.ts` `jrcTraced`; never the description it reads). A traced dam
+split in two keeps the credit on both parts (the new part's description
+ends with the statement, `geo/routes.ts`). The GeoJSON download carries the
+same two credits ([§ Download GeoJSON](#download-geojson)).
 
 ### Checksums
 
