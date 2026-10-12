@@ -456,6 +456,18 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, reachLossFrac: 0.2 }, unit] })).join()).toMatch(/is the outlet: there is no reach below it/);
 	});
 
+	it('takes a unit’s base-flow loss and gain (engine 1.86.0, issue #523 B1): none by default, sizes ≥ 0, units only', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10) };
+		expect(ModelBody.parse(body(monthly)).nodes[1]).toMatchObject({ baseflowLossM3Day: 0, baseflowGainM3Day: 0 });
+		const set = ModelBody.parse({ ...body(monthly), nodes: [gauge, { ...unit, baseflowLossM3Day: 1500, baseflowGainM3Day: 250.5 }] });
+		expect(set.nodes[1]).toMatchObject({ baseflowLossM3Day: 1500, baseflowGainM3Day: 250.5 });
+		expect(modelProblems(set)).toEqual([]);
+		for (const bad of [{ baseflowLossM3Day: -1 }, { baseflowGainM3Day: -0.5 }, { baseflowLossM3Day: Number.POSITIVE_INFINITY }])
+			expect(ModelBody.safeParse({ ...body(monthly), nodes: [gauge, { ...unit, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
+		// Only a unit has one (a model rule); positive control above.
+		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, baseflowGainM3Day: 10 }, unit] })).join()).toMatch(/only a hydrological unit has a base-flow loss or gain/);
+	});
+
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10) };
 		it('is none by default, and fills a window’s blanks', () => {

@@ -107,6 +107,9 @@ describe('model store', () => {
 			// Bed losses in the reach below (engine 1.75.0, 203_reach_loss), awkward numbers.
 			reachLossFrac: 0.1 + 0.2,
 			reachLossMaxM3Day: 1 / 3,
+			// A base-flow loss and gain (engine 1.86.0, 222_unit_baseflow), awkward numbers.
+			baseflowLossM3Day: 0.1 + 0.2,
+			baseflowGainM3Day: 123_456.789,
 			// The unit's MAP and its source (issue #482, 209_unit_rain_series), an awkward number.
 			mapMm: 612.3 + 0.1,
 			mapSource: 'Synthetic atlas, 1991–2020'
@@ -237,6 +240,8 @@ describe('model store', () => {
 			abstractionFrom: null,
 			reachLossFrac: 0,
 			reachLossMaxM3Day: null,
+			baseflowLossM3Day: 0,
+			baseflowGainM3Day: 0,
 			mapMm: null,
 			mapSource: null,
 			...n

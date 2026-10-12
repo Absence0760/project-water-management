@@ -47,7 +47,7 @@ const base: ModelInput = {
 	model: {
 		nodes: [
 			node(G, 'Gauge', 'gauge', null, 0),
-			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000, reachLossFrac: 0.2, reachLossMaxM3Day: 300 }),
+			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000, reachLossFrac: 0.2, reachLossMaxM3Day: 300, baseflowLossM3Day: 40, baseflowGainM3Day: 15 }),
 			node(MINE, 'Rooikloof', 'farm', G, 1, { cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 }),
 			// A crop supply table (engine ≥ 1.73.0) drawing a share on the applicant's own dam.
 			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null, cropShareDam: 0.5, cropShareRiver: 0.3, cropShareRemote: 0.2, cropRemoteNodeId: MINE, cropRemoteCapM3Day: 900, mapMm: 840, mapSource: 'Study of the neighbour’s gauge' }),
@@ -139,8 +139,8 @@ describe('projectBaseForApplicant', () => {
 		expect(base.model.nodes.find((n) => n.id === N1)).toMatchObject({ mapMm: 840, mapSource: 'Study of the neighbour’s gauge' });
 	});
 
-	it('keeps the river’s bed losses below a hidden node, a property of the river, not of the farm (engine ≥ 1.75.0)', () => {
-		expect(byId.get(N2)).toMatchObject({ reachLossFrac: 0.2, reachLossMaxM3Day: 300 });
+	it('keeps the river’s bed losses below a hidden node and its base-flow loss and gain, properties of the river and the groundwater, not of the farm (engine ≥ 1.75.0, 1.86.0)', () => {
+		expect(byId.get(N2)).toMatchObject({ reachLossFrac: 0.2, reachLossMaxM3Day: 300, baseflowLossM3Day: 40, baseflowGainM3Day: 15 });
 		// Its use is still blanked beside them.
 		expect(byId.get(N2)!.damCapacityM3).toBe(0);
 	});
