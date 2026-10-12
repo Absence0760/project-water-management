@@ -586,6 +586,9 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8, $9, $10)`,
 		[runId, projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null, trigger]
 	);
+	// The inputs before the series: the database checks a series' DWS mark against the run's input of that kind
+	// (235_round6_security.sql run_series_published_mark), and strips one it can't trace to a DWS feed.
+	await storeRunInputs(db, projectId, runId, input.series, hashes, plan.seriesIds ?? {});
 	// A published DWS gauge record's series carries who published it (#523 G8, 232): the policies show it at any holder count.
 	const published = publishedRecordMeta(output.series, plan.publishedRecords);
 	// Batch the per-series inserts to keep round-trips low (~150 series per run).
@@ -601,7 +604,6 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		});
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
-	await storeRunInputs(db, projectId, runId, input.series, hashes, plan.seriesIds ?? {});
 	// Last of the run's rows: sign what was stored (077_run_stamp, runs/stamp.ts),
 	// so a run written past this path (a direct insert as water_app) is told apart.
 	await stampRun(db, runId);

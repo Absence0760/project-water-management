@@ -301,6 +301,42 @@ describe('a published DWS gauge record (232)', () => {
 		expect([await shareStatus('simulated_outflow'), await shareStatus('ewr_shortfall')]).toEqual([404, 404]);
 	});
 
+	it('is checked by the database: a mark it cannot trace to a DWS feed is stripped, a genuine one kept (235)', async () => {
+		const MARK = JSON.stringify({ publishedBy: 'DWS', station: STATION });
+		/** Write `patch` into a stored series' meta as the schema owner (no RLS; run_series_published_mark still fires), and read it back. */
+		const forge = async (runId: string, key: string, patch: string) => {
+			await asOwner(`UPDATE run_series SET meta = meta || $3::jsonb WHERE run_id = $1 AND node_id IS NULL AND key = $2`, [runId, key, patch]);
+			return meta(runId, key);
+		};
+		// Genuine: storeRun's mark passes the trigger (it stores the inputs first), and rewriting it keeps it.
+		await feedWritesAll();
+		const genuine = await publish();
+		expect((await meta(genuine, 'observed_flow'))?.publishedBy).toBe('DWS');
+		expect(await forge(genuine, 'observed_flow', MARK)).toMatchObject({ publishedBy: 'DWS', station: STATION });
+		// Not the outlet's observed flow: stripped.
+		expect(await forge(genuine, 'simulated_outflow', MARK)).toEqual({ label: 'Simulated outflow', unit: 'm³/day' });
+		// Another station than the feed's: stripped.
+		expect(await forge(genuine, 'observed_flow', JSON.stringify({ publishedBy: 'DWS', station: 'X0H999' }))).toEqual({ label: 'Observed flow', unit: 'm³/day' });
+		// A scenario run on the same DWS-fed input: stripped (never marked, 232).
+		const made = await owner.call('POST', `${P()}/scenarios`, { name: `Forge ${crypto.randomUUID().slice(0, 8)}`, baseRunId: genuine, ops: [] });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const ran = await owner.call('POST', `${P()}/scenarios/${made.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		const scenarioRun = ((await asOwner(`SELECT id FROM model_run WHERE scenario_id = $1`, [made.body.scenario.id])) as { id: string }[])[0]!.id;
+		expect((await meta(scenarioRun, 'observed_flow'))?.label).toBe('Observed flow');
+		expect((await forge(scenarioRun, 'observed_flow', MARK))?.publishedBy).toBeUndefined();
+		// A record with a day a person wrote: its run's forged mark is stripped too.
+		await asOwner(
+			`UPDATE time_series SET feed_days = feed_days - datemultirange(daterange(start_date + 10, start_date + 11))
+			 WHERE project_id = $1 AND kind = 'flow_observed_m3s' AND site_node_id IS NULL`,
+			[projectId]
+		);
+		const edited = await publish();
+		expect((await forge(edited, 'observed_flow', MARK))?.publishedBy).toBeUndefined();
+		expect(await applicantKeys(edited)).toEqual(['ewr', 'natural_flow']);
+		expect(await shareStatus('observed_flow')).toBe(404);
+	});
+
 	it('marks no record with a day a person wrote, nor a private logger', async () => {
 		// A person's edit releases the day it covers (031): the record is no longer DWS's alone.
 		await feedWritesAll();

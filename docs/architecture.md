@@ -587,8 +587,8 @@ sequenceDiagram
   A->>P: BEGIN; set app.current_user_id
   A->>P: role check (editor) again
   A->>P: INSERT model_run (inputs snapshot, summary)
-  A->>P: INSERT run_series × N (double precision[])
   A->>P: lock the project's runs; app_store_series_blob (new values only; the DB keys them), INSERT run_input_series
+  A->>P: INSERT run_series × N (double precision[]; after the inputs, which a DWS mark is checked against, 235)
   A->>P: DELETE runs beyond the newest 20 (pinned, nominated and cited runs exempt; unused blobs collected)
   A->>P: COMMIT
   A-->>B: 201 { run, removedRunIds }

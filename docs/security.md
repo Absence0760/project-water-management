@@ -1243,10 +1243,23 @@ result without signing in, until it expires or its owner revokes it.
   `run_series_select_contributor` and in the results' `gaugeRecords`; a
   share link's `observed_flow` likewise. Private loggers, the outflow and
   the EWR shortfall keep k and dominance. Runs stored before 232 carry no
-  mark. Tests: `share/small-catchments.db.test.ts` (an uploaded record
+  mark. **The database checks the mark** (235, defence in depth behind
+  storeRun): `run_series_published_mark`, a BEFORE INSERT and UPDATE OF
+  meta trigger, strips `publishedBy` and `station` unless the row is the
+  outlet's `observed_flow` / `observed_flow_other` of a run that is no
+  scenario run (`from_scenario`), and the run's input of that record's
+  kind (`run_input_series.series_id`, by the label's kind) is an outlet
+  series a DWS feed for that very river-gauge station wrote whole (the same
+  `feed_days` check as storeRun's, on the live series; storeRun stores the
+  run's inputs before its series so the trigger can see them). So a future
+  insert path, or a bug in `publishedRecordMeta`, can't mark a private
+  logger. The gap-filled exclusion stays the app's (the `_fill` sibling may
+  be stored after). Tests: `share/small-catchments.db.test.ts` (an uploaded record
   hidden below k as the control; a DWS-fed one shown to the applicant, the
   share link and the results; a day a person wrote, and a private logger,
-  never marked), `runs/publishedRecords.test.ts`.
+  never marked; a forged mark stripped by the trigger on another key,
+  another station, a scenario run and a record with a person's day, a
+  genuine one kept), `runs/publishedRecords.test.ts`.
 - **Rate limiting.** Nothing app-level: the WAF's per-IP rule on `/api/*`
   (`waf_rate_limit_per_ip`, `infra/waf.tf`) covers `/api/share/*`, and a
   256-bit token can't be enumerated. `last_used_at` moves at most once an

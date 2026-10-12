@@ -38,6 +38,21 @@
 --     IN over allocation (allocation's own policies apply inside, as before).
 --     G6's guarantee is untouched: the one rule decides, its first line is the
 --     authority's (authority-reads.db.test.ts).
+--
+--  3. The DWS mark is checked by the database (run_series_published_mark).
+--     The policies and app_share_series take run_series.meta `publishedBy:
+--     'DWS'` as given, and only storeRun writes it, from a provenance check
+--     in SQL (runs/execute.ts). Defence in depth: a BEFORE INSERT and
+--     UPDATE OF meta trigger strips `publishedBy` and `station` unless the
+--     row is the outlet's observed flow (node_id NULL, observed_flow or
+--     observed_flow_other), of a run that is no scenario run (from_scenario),
+--     and the run's input of that kind (run_input_series, by its label's
+--     kind) is an outlet series a DWS feed for that very river-gauge station
+--     wrote whole (feed_days covering every reading: runs/publishedRecords.ts'
+--     check, read from the live series). storeRun now stores the run's
+--     inputs before its series so the check can see them. The gap-filled
+--     exclusion (a `<key>_fill` sibling) stays the app's: the sibling may be
+--     in a later insert.
 
 -- ---------------------------------------------------------------------------
 -- 1. app_run_use_shown, from 232 (its latest): the users' take among the parts
@@ -93,3 +108,54 @@ CREATE POLICY allocation_holder_select ON allocation_holder FOR SELECT
 		project_id IN (SELECT p.id FROM project p WHERE app_reads_allocation_holders(p.id))
 		OR allocation_id IN (SELECT a.id FROM allocation a WHERE a.node_id IN (SELECT app_farm_nodes(a.project_id)))
 	);
+
+-- ---------------------------------------------------------------------------
+-- 3. The DWS mark, checked
+-- ---------------------------------------------------------------------------
+-- SECURITY DEFINER so the check reads the run's inputs and the feed whoever
+-- inserts (it only ever removes keys from the row being written).
+CREATE FUNCTION run_series_published_mark() RETURNS trigger
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		v_kind text;
+	BEGIN
+		IF NOT (NEW.meta ? 'publishedBy' OR NEW.meta ? 'station') THEN
+			RETURN NEW;
+		END IF;
+		-- The record a key holds, by the engine's label (OBSERVED_SERIES_LABEL).
+		v_kind := CASE NEW.meta->>'label' WHEN 'Observed flow' THEN 'flow_observed_m3s' WHEN 'Observed flow (logger)' THEN 'flow_logger_m3s' END;
+		IF NEW.node_id IS NULL
+			AND NEW.key IN ('observed_flow', 'observed_flow_other')
+			AND NEW.meta->>'publishedBy' = 'DWS'
+			-- A DWS river gauge (feeds/config.ts DWS_RIVER_GAUGE).
+			AND coalesce(NEW.meta->>'station', '') ~ '^[A-Z][0-9]H[0-9]{3}$'
+			AND v_kind IS NOT NULL
+			AND EXISTS (
+				SELECT 1
+				FROM model_run m
+				JOIN run_input_series i ON i.run_id = m.id AND i.project_id = m.project_id AND i.kind = v_kind
+				JOIN time_series t ON t.id = i.series_id AND t.project_id = m.project_id
+				JOIN data_feed f ON f.id = t.feed_id AND f.project_id = t.project_id
+				WHERE m.id = NEW.run_id AND m.project_id = NEW.project_id AND NOT m.from_scenario
+				  AND t.site_node_id IS NULL AND t.kind::text = v_kind
+				  AND f.source = 'dws' AND f.config->>'station' = NEW.meta->>'station'
+				  -- Every reading the feed's (runs/execute.ts loadLiveInput's dws_station).
+				  AND t.feed_days IS NOT NULL
+				  AND EXISTS (SELECT 1 FROM unnest(t."values") v WHERE v IS NOT NULL)
+				  AND NOT EXISTS (
+					SELECT 1 FROM unnest(t."values") WITH ORDINALITY u(v, o)
+					WHERE u.v IS NOT NULL AND NOT t.feed_days @> (t.start_date + (u.o - 1)::int)
+				  )
+			)
+		THEN
+			RETURN NEW;
+		END IF;
+		NEW.meta := NEW.meta - 'publishedBy' - 'station';
+		RETURN NEW;
+	END
+	$$;
+COMMENT ON FUNCTION run_series_published_mark() IS
+	'Strips run_series.meta publishedBy/station unless the row is the outlet''s observed flow of a run that is no scenario run, whose input of that kind is an outlet series a DWS feed for that river-gauge station wrote whole (235, #523 G8; runs/publishedRecords.ts). Defence in depth behind storeRun.';
+CREATE TRIGGER run_series_published_mark BEFORE INSERT OR UPDATE OF meta ON run_series
+	FOR EACH ROW EXECUTE FUNCTION run_series_published_mark();
