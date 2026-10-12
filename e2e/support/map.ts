@@ -18,6 +18,8 @@ const QUATERNARY_LOCK = 288_288;
 const STATIONS_LOCK = 326_153;
 /** And for the river network (issue #345). */
 const RIVERS_LOCK = 345_345;
+/** And for the gazetteer the Map's search reads (issue #523 C5). */
+const GAZETTEER_LOCK = 523_225;
 
 /** A box `d` degrees on a side, south-west corner at (x, y). Around (21.35, -33.65) it lies in the synthetic quaternary Z01B. */
 export const box = (x: number, y: number, d: number): [number, number][] => [
@@ -75,6 +77,17 @@ export async function loadSyntheticStations(): Promise<void> {
 export async function loadSyntheticRivers(): Promise<void> {
 	await withSetupLock(RIVERS_LOCK, async () => {
 		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-rivers.ts'], {
+			cwd: backendDir,
+			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
+			stdio: 'pipe'
+		});
+	});
+}
+
+/** Load the committed synthetic gazetteer into the e2e database (`pnpm import:gazetteer`; replacing it; idempotent). */
+export async function loadSyntheticGazetteer(): Promise<void> {
+	await withSetupLock(GAZETTEER_LOCK, async () => {
+		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-gazetteer.ts'], {
 			cwd: backendDir,
 			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
 			stdio: 'pipe'

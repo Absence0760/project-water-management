@@ -50,7 +50,10 @@ describe('load: a reference load’s inputs', () => {
 		assert.deepEqual(loadProblems(rivers, has), []);
 		// dPET is CC BY 4.0: its attribution travels with the data (the dataset row), no legal-text sentence first.
 		assert.deepEqual(loadProblems(evaporation, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers']);
+		// GeoNames is CC BY 4.0 too: the credit is stored on every place and shown with each search that lists one (docs/maps.md § Search).
+		const gazetteer = { ...landCover, LOAD_KIND: 'gazetteer', LOAD_KEY: 'reference/gazetteer/za-2026-10.txt.gz', LOAD_DATASET: 'GeoNames-ZA-2026-10' };
+		assert.deepEqual(loadProblems(gazetteer, lacks), []);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer']);
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {

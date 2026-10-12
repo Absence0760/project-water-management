@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT } from './dataCredits';
+import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT } from './dataCredits';
 import { TERRAIN_ATTRIBUTION } from '$lib/components/map/mapStyle';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '$lib/components/map/delineation';
 
@@ -18,6 +18,7 @@ describe('the data credits', () => {
 		expect(maps).toContain(`"${WORLDCOVER_STATEMENT}"`);
 		expect(maps).toContain(`"${JRC_WATER_STATEMENT}"`);
 		expect(maps).toContain(`"${DPET_STATEMENT}"`);
+		expect(maps).toContain(`"${GEONAMES_STATEMENT}"`);
 		expect(doc('followups.md')).toContain(`"${COPERNICUS_LIABILITY}"`);
 		// Each credit's read date is one the Sources table records, and the page's "Licences last read" is the latest.
 		for (const c of DATA_CREDITS) expect(maps, c.name).toContain(`read ${c.read}`);
@@ -52,6 +53,8 @@ describe('the data credits', () => {
 		expect(tiles).toContain(`m.attribution="${JRC_WATER_STATEMENT}"`);
 		// The backend's copy, which flags a traced dam for the farm map's credit (geo/credits.ts).
 		expect(backend('geo/credits.ts')).toContain(`JRC_WATER_STATEMENT = '${JRC_WATER_STATEMENT}'`);
+		// GeoNames' attribution, stored on every place a load takes without a source of its own (the Map's search shows it).
+		expect(backend('geo/gazetteer.ts')).toContain(`GEONAMES_SOURCE = '${GEONAMES_STATEMENT}'`);
 	});
 
 	it('say what the map’s own notices say: the relief’s attribution and a delineated polygon’s notice', () => {

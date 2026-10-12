@@ -3035,6 +3035,36 @@ export interface GaugeStationLookup {
 	datasets: { dataset: string; count: number }[];
 }
 
+/** What the Map's search found (GET …/map/search, issue #523 C5): the map's layers first, then the gazetteer's places. */
+export interface MapSearchHit {
+	kind: 'gauge' | 'dam' | 'quaternary' | 'place';
+	/** The gauge's code, the dam's register number, the quaternary's code; null for a place. */
+	code: string | null;
+	name: string;
+	/** The gauge's or dam's river ('' when not given). */
+	river: string;
+	/** A place's GeoNames feature class and code ('P.PPL', 'S.FRM'); null for the map's layers. */
+	feature: string | null;
+	/** A place's province (GeoNames' admin1 code; '' when not given); null for the map's layers. */
+	admin1: string | null;
+	lon: number;
+	lat: number;
+	/** A quaternary's box (west, south, east, north); null for a point. */
+	bbox: [number, number, number, number] | null;
+	dataset: string;
+	/** The repo's invented datasets: never a real place. */
+	synthetic: boolean;
+	/** A place's credit (GeoNames' CC BY 4.0 attribution); null for the map's layers. */
+	source: string | null;
+}
+
+export interface MapSearchAnswer {
+	q: string;
+	hits: MapSearchHit[];
+	/** Some group had more matches than it lists: type more to narrow it. */
+	truncated: boolean;
+}
+
 /** A loaded land-cover product (issue #326 B-landcover; docs/maps.md § Cultivated area from land cover). */
 export interface CroplandDataset {
 	dataset: string;
