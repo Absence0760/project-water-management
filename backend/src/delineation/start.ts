@@ -46,7 +46,7 @@ import { nearestReach } from './reach.js';
 import { panWarning, type PanReport } from './pans.js';
 import { AreaBasis, areaBasisNote, takenAreaM2 } from './areaBasis.js';
 import { delineateUnits, START_METHOD_VERSION, type DamPosition, type PlacementHints, type UnitRole } from './subcatchments.js';
-import { pointInGeometry } from '../geo/geojson.js';
+import { interiorPoint, pointInGeometry } from '../geo/geojson.js';
 
 /** Proposals one project may ask for in an hour: each routes the DEM (seconds of CPU on the API). */
 export const START_PROPOSALS_PER_HOUR = 30;
@@ -298,7 +298,7 @@ interface MapInputs {
 }
 
 /**
- * Each dam and abstraction point to the first unit whose boundary holds it (a dam polygon by its centre), else the rest of the
+ * Each dam and abstraction point to the first unit whose boundary holds it (a dam polygon by a point inside its outline, `pointOf`), else the rest of the
  * catchment, or dropped when a catchment boundary is given and it lies outside it (start-16). Pure.
  */
 export function assignMembers(
@@ -447,8 +447,15 @@ function unitArea(p: { role: UnitRole; geometry: Geometry; areaM2: number | null
 	return { areaM2: p.areaM2, totalAreaM2: null, geometry: p.geometry };
 }
 
+/**
+ * Where a feature is, as one point: a point itself; a polygon (a dam drawn as its outline) by a point inside it
+ * (`interiorPoint`), never its vertex average or centroid, which for a long or concave dam can fall outside the outline and
+ * so in another unit. The vertex average only for a degenerate ring, which has no inside.
+ */
 export function pointOf(g: Geometry): Position {
 	if (g.type === 'Point') return g.coordinates;
+	const inside = g.type === 'Polygon' || g.type === 'MultiPolygon' ? interiorPoint(g) : null;
+	if (inside) return [Math.round(inside[0] * 1e7) / 1e7, Math.round(inside[1] * 1e7) / 1e7];
 	const ring = g.type === 'Polygon' ? g.coordinates[0]! : g.type === 'MultiPolygon' ? g.coordinates[0]![0]! : [];
 	const n = Math.max(1, ring.length - 1);
 	let x = 0;
