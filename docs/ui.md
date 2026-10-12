@@ -3495,8 +3495,10 @@ map" card) stays the schematic; this is the geography.
   match moves the map at once; picking one moves it and closes the list
   (Escape closes it too, focus back in the box). A live line says how many
   matched, that more did, nothing found (with what to try), or "Showing … on
-  the map."; a list with places ends with their credit ("Place names:
-  GeoNames (geonames.org), CC BY 4.0", linking to the Data sources page).
+  the map."; whenever the answer holds places, listed or a single one
+  picked at once, their credit shows under the box ("Place names: GeoNames
+  (geonames.org), CC BY 4.0", linking to the Data sources page), and stays
+  after a pick until the next search.
   The view moves, nothing else; the map's centre is then the match, so
   Delineate or Place a point with Enter at the crosshair lands on it. The
   rules: [maps.md § Search](./maps.md#search).

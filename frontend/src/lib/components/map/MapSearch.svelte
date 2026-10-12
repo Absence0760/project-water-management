@@ -5,66 +5,36 @@
 	third-party geocoder): the map's layers first (gauge codes and names, the
 	register's dams, quaternary codes), then the gazetteer's towns, farms and
 	rivers. One match moves the view at once; several are listed, each a button
-	that moves the view to it (`onpick`) and closes the list. A list with places
-	carries their credit (GeoNames, CC BY 4.0), linking to the Data sources page.
+	that moves the view to it (`onpick`) and closes the list. Whenever the
+	answer holds places, listed or picked at once, their credit (GeoNames, CC BY
+	4.0) shows under the box, linking to the Data sources page. The state is
+	mapSearch.svelte.ts.
 	Escape closes the list. Nothing is saved, nothing is drawn: the view moves.
 -->
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { api, type MapSearchAnswer, type MapSearchHit } from '$lib/api';
-	import { hitDetail, hitName, placeCredits, resultLine } from './mapSearch';
+	import { api, type MapSearchHit } from '$lib/api';
+	import { hitDetail, hitName } from './mapSearch';
+	import { MapSearchState } from './mapSearch.svelte';
 
 	let { projectId, onpick }: { projectId: string; onpick: (hit: MapSearchHit) => void } = $props();
 
 	const uid = $props.id();
 	let q = $state('');
-	let busy = $state(false);
-	let error = $state<string | null>(null);
-	let answer = $state<MapSearchAnswer | null>(null);
-	/** The list is showing (a search with several matches, until one is picked or Escape). */
-	let open = $state(false);
-	/** The match the view moved to. */
-	let shown = $state<MapSearchHit | null>(null);
 	let input: HTMLInputElement;
-	const credits = $derived(answer ? placeCredits(answer.hits) : []);
-	/** Said to assistive technology after each search and each pick. */
-	const said = $derived(
-		error ? '' : busy ? 'Searching…' : shown ? `Showing ${hitName(shown)} on the map.` : answer ? resultLine(answer.q, answer.hits, answer.truncated) : ''
+	const s = new MapSearchState(
+		(text) => api.map.search(projectId, text),
+		(h) => onpick(h)
 	);
 
-	function pick(h: MapSearchHit) {
-		shown = h;
-		open = false;
-		onpick(h);
-	}
-
-	async function find(e: SubmitEvent) {
+	function find(e: SubmitEvent) {
 		e.preventDefault();
-		const text = q.trim();
-		error = null;
-		shown = null;
-		if (text.length < 2) {
-			error = 'Type at least 2 letters or digits.';
-			return;
-		}
-		busy = true;
-		try {
-			answer = await api.map.search(projectId, text);
-			if (answer.hits.length === 1) pick(answer.hits[0]!);
-			else open = answer.hits.length > 0;
-		} catch (err) {
-			answer = null;
-			open = false;
-			error = `The search failed: ${(err as Error).message}`;
-		} finally {
-			busy = false;
-		}
+		void s.find(q);
 	}
 
 	function key(e: KeyboardEvent) {
-		if (e.key === 'Escape' && open) {
+		if (e.key === 'Escape' && s.close()) {
 			e.preventDefault();
-			open = false;
 			input.focus();
 		}
 	}
@@ -85,27 +55,28 @@
 			aria-describedby="{uid}-said"
 			data-testid="map-search-input"
 		/>
-		<button type="submit" class="btn btn-sm" disabled={busy} data-testid="map-search-submit">Find</button>
+		<button type="submit" class="btn btn-sm" disabled={s.busy} data-testid="map-search-submit">Find</button>
 	</form>
-	<p class="said small" id="{uid}-said" role="status" data-testid="map-search-status">{said}</p>
-	{#if error}<p class="err small" role="alert" data-testid="map-search-error">{error}</p>{/if}
-	{#if open && answer}
+	<p class="said small" id="{uid}-said" role="status" data-testid="map-search-status">{s.said}</p>
+	{#if s.error}<p class="err small" role="alert" data-testid="map-search-error">{s.error}</p>{/if}
+	{#if s.open && s.answer}
 		<ul class="hits" aria-label="Matches" data-testid="map-search-results">
-			{#each answer.hits as h, i (`${h.kind}:${h.dataset}:${h.code ?? h.name}:${i}`)}
+			{#each s.answer.hits as h, i (`${h.kind}:${h.dataset}:${h.code ?? h.name}:${i}`)}
 				<li>
-					<button type="button" class="hit" onclick={() => pick(h)} data-testid="map-search-hit" data-kind={h.kind}>
+					<button type="button" class="hit" onclick={() => s.pick(h)} data-testid="map-search-hit" data-kind={h.kind}>
 						<span class="name">{hitName(h)}</span>
 						<span class="detail small">{hitDetail(h)}</span>
 					</button>
 				</li>
 			{/each}
 		</ul>
-		{#if credits.length}
-			<p class="credit small" data-testid="map-search-credit">
-				Place names: {credits.map((c) => c.source).join('; ')}{#if credits.some((c) => !c.synthetic)}
-					(<a href="{base}/data-sources#geonames">data sources</a>){/if}.
-			</p>
-		{/if}
+	{/if}
+	<!-- Not inside the list's block: a single place is picked at once and never listed, and its credit still shows (CC BY 4.0). -->
+	{#if s.credits.length}
+		<p class="credit small" data-testid="map-search-credit">
+			Place names: {s.credits.map((c) => c.source).join('; ')}{#if s.credits.some((c) => !c.synthetic)}
+				(<a href="{base}/data-sources#geonames">data sources</a>){/if}.
+		</p>
 	{/if}
 </div>
 

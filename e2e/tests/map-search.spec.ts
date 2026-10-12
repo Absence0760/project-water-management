@@ -7,7 +7,8 @@
 // from the map → Delineate with Enter at the crosshair places its point exactly
 // there, and Delineate… delineates the valley from it. A viewer searches codes: one match
 // moves the map at once, a quaternary is framed whole, Escape closes a
-// list; nothing found says what to try. Axe-scanned with the list open.
+// list; one place is picked at once with its credit shown; nothing found says
+// what to try. Axe-scanned with the list open.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject } from '../support/api.ts';
@@ -70,6 +71,8 @@ test('an editor finds the valley by name, the map moves there, and Start from th
 	await hits.nth(0).click();
 	await expect(search(page).getByTestId('map-search-results')).toHaveCount(0);
 	await expect(search(page).getByTestId('map-search-status')).toHaveText('Showing Kwartsvallei on the map.');
+	// The list closed; the credit of the places it held stays.
+	await expect(search(page).getByTestId('map-search-credit')).toContainText('Place names: SYNTHETIC test data');
 	await expectCentredOn(page, FIXTURE_OUTLET);
 
 	// Start from the map → Delineate: Enter at the crosshair (the map's centre, now the place found) asks for that point.
@@ -95,7 +98,7 @@ test('an editor finds the valley by name, the map moves there, and Start from th
 	await expect(page.getByTestId('map-notice')).toContainText('Saved Catchment above the outlet (delineated)');
 });
 
-test('a viewer finds codes: one match moves the map at once, a quaternary is framed whole, Escape closes a list', async ({ page, owner, signIn }) => {
+test('a viewer finds codes: one match moves the map at once, a quaternary is framed whole, Escape closes a list, one place keeps its credit', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await createProject(page.request, 'Search codes');
 	const viewer = await signIn('Search viewer');
@@ -110,6 +113,14 @@ test('a viewer finds codes: one match moves the map at once, a quaternary is fra
 	await expect(search(v).getByTestId('map-search-results')).toHaveCount(0);
 	await expect(search(v).getByTestId('map-search-status')).toHaveText('Showing Sandspruit @ Brandvlei on the map.');
 	await expectCentredOn(v, [21.41, -33.865]);
+	// No place in the answer, no place credit.
+	await expect(search(v).getByTestId('map-search-credit')).toHaveCount(0);
+
+	// One place: picked at once, never listed, and its credit shows all the same (CC BY 4.0 in production).
+	await find(v, 'morester');
+	await expect(search(v).getByTestId('map-search-results')).toHaveCount(0);
+	await expect(search(v).getByTestId('map-search-status')).toHaveText('Showing Môrester on the map.');
+	await expect(search(v).getByTestId('map-search-credit')).toContainText('Place names: SYNTHETIC test data');
 
 	// Three quaternaries: a list; Escape closes it, focus back in the box.
 	await find(v, 'Z01');

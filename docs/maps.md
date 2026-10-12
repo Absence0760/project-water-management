@@ -1477,9 +1477,10 @@ geocoder, so what is typed leaves the app for no one.
   map's centre is then the match, so a Delineate or a placed point from the
   keyboard (Enter at the crosshair) lands on it. Nothing is drawn or saved:
   the view moves.
-- **Credits.** A list with places ends with their credit ("Place names:
-  GeoNames (geonames.org), CC BY 4.0", linking to the Data sources page's
-  `#geonames`); the invented fixtures' matches are marked "(sample)".
+- **Credits.** Whenever the answer holds places, listed or a single one
+  picked at once, their credit shows under the box ("Place names: GeoNames
+  (geonames.org), CC BY 4.0", linking to the Data sources page's
+  `#geonames`), and stays after a pick until the next search; the invented fixtures' matches are marked "(sample)".
 - **Who can search.** A viewer's read, like the station proposals (the tables
   are global, the route a project's): a farmer gets 403, a non-member 404.
   A query is 2 to 100 characters with a letter or digit; at most six words
