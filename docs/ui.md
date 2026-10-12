@@ -3484,6 +3484,22 @@ map" card) stays the schematic; this is the geography.
   a basemap configured a small "No basemap configured (docs/maps.md)" under
   Layers (until 2026-10-02 a full-width line above the map: it is an
   operator's matter, and a deployed site has a basemap).
+- **Search** (`MapSearch.svelte`, `mapSearch.ts`; issue #523 C5; anyone who
+  sees the Map, once the map is drawn): a search box heads the Map card,
+  above the map ("Find a town, farm, river, gauge, dam or quaternary", its
+  label "Find a place on the map", a `role="search"` form with **Find**).
+  Enter or Find lists the matches under it: the map's layers first (gauging
+  stations, registered dams, quaternaries), then places from the gazetteer,
+  each a button with its name over what and where ("Gauging station Z1H002 ·
+  Wilgerivier", "Farm · Western Cape", "(sample)" for invented data). One
+  match moves the map at once; picking one moves it and closes the list
+  (Escape closes it too, focus back in the box). A live line says how many
+  matched, that more did, nothing found (with what to try), or "Showing … on
+  the map."; a list with places ends with their credit ("Place names:
+  GeoNames (geonames.org), CC BY 4.0", linking to the Data sources page).
+  The view moves, nothing else; the map's centre is then the match, so
+  Delineate or Place a point with Enter at the crosshair lands on it. The
+  rules: [maps.md § Search](./maps.md#search).
 - **What an action did** (an upload, a placed point, a saved drawing, a
   split, a download, an area into the model): a toast over the page's foot,
   centred in the content beside the sidebar and above the save bar while it

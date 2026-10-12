@@ -417,7 +417,12 @@ API: `POST /projects/:id/map/divide` and `…/map/divide/:spid/apply`
 
 ## Not built (and why)
 
-- **Place search**: decided against for now (#326 D-C3).
+- **Place search**: decided against at first (#326 D-C3), then built
+  (#523 C5, the hydrologist's answer to #90 Q23): the Map's search box,
+  [maps.md § Search](../maps.md#search). Not built yet: the
+  Surveyor-General's farm-name register (once its reuse licence is confirmed
+  in writing), and searching the project's own features (the feature list
+  holds them).
 - **Sizing the composite dam or the pump from the map** (`start-16`):
   decided against by the client's hydrologist (#90): the composite dam's
   volume and contributing area and the pump's capacity are the user's

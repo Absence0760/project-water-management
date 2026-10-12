@@ -180,7 +180,8 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`),
  * the register of dams (157_dam_register.sql, `pnpm import:dam-register`),
  * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`)
- * and the evaporation grid (180_evaporation_reference.sql, `pnpm import:evaporation`).
+ * the evaporation grid (180_evaporation_reference.sql, `pnpm import:evaporation`)
+ * and the gazetteer the Map's search reads (225_gazetteer.sql, `pnpm import:gazetteer`).
  * An applicant's "Ask the assessors why" question is filed and answered only
  * through 164_applicant_visibility's app_ask_assessors (the project and the
  * name from the application) and app_answer_assessors_question (an editor,
@@ -205,6 +206,7 @@ const READ_ONLY = new Set([
 	'evaporation_cell_reference',
 	'rain_map_dataset',
 	'rain_map_cell_reference',
+	'gazetteer_reference',
 	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
 	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
 	'registration_check',

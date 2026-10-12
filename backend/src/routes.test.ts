@@ -200,6 +200,12 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// The Map's search (issue #523 C5): our own reference tables only, behind a session like every project route.
+	it('inventories the map search route as auth-gated', () => {
+		expect(routes).toContain('GET /projects/:id/map/search');
+		expect(PUBLIC.has('GET /projects/:id/map/search')).toBe(false);
+	});
+
 	// Sign-offs (WP-3.13, 036_signoff): auth-gated like every project route.
 	it('inventories the sign-off routes as auth-gated', () => {
 		for (const r of ['GET /projects/:id/runs/:runId/signoffs', 'POST /projects/:id/runs/:runId/signoffs']) {

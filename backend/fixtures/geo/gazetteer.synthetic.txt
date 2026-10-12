@@ -1,0 +1,17 @@
+# SYNTHETIC test data, invented for this repository: every place, name, id and position here is made up (not GeoNames).
+# GeoNames' dump format (download.geonames.org/export/dump/, tab-separated, 19 columns), so `pnpm import:gazetteer` with no
+# argument reads it through the same parser as a real ZA.txt. Lines starting with # are comments (not GeoNames'). The first
+# four places sit in the synthetic DEM's valley (backend/fixtures/dem/, e2e/support/dem.ts: Kwartsvallei at its outlet), the
+# next five in the synthetic region Z (the stations, dams and quaternaries); the school and the railway are left out by the
+# loader (S.SCH, class R). docs/maps.md § Search.
+9000001	Kwartsvallei	Kwartsvallei		-33.53968	20.74287	P	PPL	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000002	Kwartsvallei 12	Kwartsvallei 12		-33.40100	20.70500	S	FRM	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000003	Kwartsvalleirivier	Kwartsvalleirivier		-33.43000	20.74287	H	STM	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000004	Bo-Kwartsberg	Bo-Kwartsberg		-33.28000	20.74000	T	MT	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000005	Sandlaagte	Sandlaagte		-33.80900	21.34000	P	PPL	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000006	Sandlaagte-Oos	Sandlaagte-Oos		-33.81500	21.36500	P	PPLL	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000007	Bloubessiefontein	Bloubessiefontein		-33.67000	21.31000	S	FRM	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000008	Môrester	Morester		-33.72000	21.40000	S	FRMT	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000009	Zeropan	Zeropan		-33.90000	21.55000	H	PAN	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000010	Kwartsvallei Skool	Kwartsvallei Skool		-33.53800	20.74500	S	SCH	ZA		11				0		100	Africa/Johannesburg	2026-10-12
+9000011	Kwartsvallei Spoorlyn	Kwartsvallei Spoorlyn		-33.53000	20.75000	R	RR	ZA		11				0		100	Africa/Johannesburg	2026-10-12

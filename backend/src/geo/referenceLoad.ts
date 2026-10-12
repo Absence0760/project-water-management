@@ -25,6 +25,8 @@ import type pg from 'pg';
 import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './croplandGrid.js';
 import { DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
+import { GEONAMES_SOURCE } from './gazetteer.js';
+import { placeRecords, replacePlaces } from './loadGazetteer.js';
 import { referenceLoadOf, type ReferenceLoadRecord } from './referenceOrigin.js';
 
 /** One kind of reference dataset, and whether production may load it. */
@@ -64,6 +66,14 @@ export const REFERENCE_KINDS = {
 		sourcesRows: ['HydroRIVERS'],
 		file: /\.(geo)?json(\.gz)?$/,
 		what: 'a GeoJSON FeatureCollection of reaches (bin/tiles-dev.sh rivers writes one)'
+	},
+	gazetteer: {
+		status: 'allowed',
+		sourcesRows: ['GeoNames'],
+		file: /\.txt(\.gz)?$/,
+		what: 'a GeoNames country dump (ZA.txt from download.geonames.org/export/dump/, gzipped or not)',
+		// South Africa's dump is about 20 MB of text; all of GeoNames' (allCountries) about 1.6 GB. Past this it is not one country's.
+		limits: { object: 64 * 1024 * 1024, text: 128 * 1024 * 1024 }
 	},
 	quaternaries: {
 		status: 'blocked',
@@ -111,7 +121,7 @@ export interface LoadRequest {
 	sha256: string;
 	/** The dataset label it loads as (a load replaces that dataset). */
 	dataset: string;
-	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. */
+	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. Gazetteer: the credit stored on every place (GeoNames' attribution when null). */
 	source: string | null;
 	/** Rivers: leave out reaches below this Strahler order. */
 	minOrder: number;
@@ -201,7 +211,7 @@ export async function readReferenceText(req: LoadRequest, read: ReadObject, limi
 export interface LoadResult {
 	kind: AllowedKind;
 	dataset: string;
-	/** Rows written (reaches, cells with cropland, or evaporation cells). */
+	/** Rows written (reaches, cells with cropland, evaporation cells, or places). */
 	written: number;
 	/** Features or cells the file had that the load couldn't take (their reasons are in CloudWatch). */
 	skipped: number;
@@ -270,6 +280,20 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		};
 		try {
 			const written = await replaceEvaporationDataset(client, meta, c, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
+	if (req.kind === 'gazetteer') {
+		// Places of the kinds the search leaves out (roads, schools, …) are dropped quietly, not counted as skipped.
+		const got = placeRecords(text, name, req.source ?? GEONAMES_SOURCE);
+		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
+		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
+		log(`left out ${got.leftOut} place(s) of the kinds the search doesn't keep`);
+		if (!got.records.length) throw new LoadError(`${req.key}: no place to load`, 'empty', 'the file has no place the load can take (a GeoNames dump: 19 tab-separated columns)');
+		try {
+			const written = await replacePlaces(client, req.dataset, got.records, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');

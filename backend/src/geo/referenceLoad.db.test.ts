@@ -12,6 +12,9 @@
 //    direct load, with its dataset row; an A-pan grid is refused;
 //  - rivers: the synthetic network loads with the source given, minOrder
 //    leaves the small reaches out;
+//  - gazetteer: the synthetic GeoNames-format places (gzipped) load with
+//    GeoNames' attribution unless a source is given, the kinds the search
+//    leaves out dropped;
 //  - a file with nothing loadable fails and leaves the dataset as it was;
 //  - each load records the file's key and SHA-256 with the dataset
 //    (reference_load, 192), returns the one it replaced, keeps it on a failed
@@ -26,6 +29,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadSyntheticEvaporation, parseEvaporationArgs, writeEvaporationJson } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover, parseLandCoverArgs, writeLandCoverJson } from '../../scripts/import-land-cover.js';
 import { SYNTHETIC_RIVERS_FILE } from '../../scripts/import-rivers.js';
+import { SYNTHETIC_GAZETTEER_FILE } from '../../scripts/import-gazetteer.js';
+import { GEONAMES_SOURCE } from './gazetteer.js';
 import { asOwner } from '../__tests__/helpers.js';
 import { replaceCroplandDataset } from './croplandGrid.js';
 import { LoadError, loadReferenceText, parseLoadRequest, readReferenceText, type ReadObject } from './referenceLoad.js';
@@ -33,6 +38,7 @@ import { LoadError, loadReferenceText, parseLoadRequest, readReferenceText, type
 const LC = 'test-reference-load-lc';
 const RV = 'test-reference-load-rv';
 const EV = 'test-reference-load-ev';
+const GZ = 'test-reference-load-gz';
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const object = (bytes: Uint8Array): ReadObject => async () => ({ contentLength: bytes.byteLength, bytes: async () => bytes });
 let dir: string;
@@ -60,7 +66,8 @@ afterAll(async () => {
 	await client.query('DELETE FROM cropland_dataset WHERE dataset = $1', [LC]);
 	await client.query('DELETE FROM river_reference WHERE dataset = $1', [RV]);
 	await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', [EV]);
-	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV]]);
+	await client.query('DELETE FROM gazetteer_reference WHERE dataset = $1', [GZ]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -193,5 +200,27 @@ describe('rivers', () => {
 		const err = await load({ kind: 'rivers', key: 'reference/rivers/none.geojson', dataset: RV, source: 'x' }, bytes).catch((e: unknown) => e);
 		expect((err as LoadError).code).toBe('empty');
 		expect(await asOwner('SELECT count(*)::int AS n FROM river_reference WHERE dataset = $1', [RV])).toEqual(before);
+	});
+});
+
+describe('gazetteer', () => {
+	const dump = readFileSync(SYNTHETIC_GAZETTEER_FILE);
+
+	it('loads the places of a GeoNames dump with GeoNames’ attribution, leaving out the kinds the search doesn’t keep', async () => {
+		const gz = gzipSync(dump);
+		const result = await load({ kind: 'gazetteer', key: 'reference/gazetteer/za.txt.gz', dataset: GZ }, gz);
+		expect(result).toEqual({ kind: 'gazetteer', dataset: GZ, written: 9, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('gazetteer', GZ)).toEqual({ key: 'reference/gazetteer/za.txt.gz', sha256: sha(gz) });
+		expect(await asOwner('SELECT DISTINCT source FROM gazetteer_reference WHERE dataset = $1', [GZ])).toEqual([{ source: GEONAMES_SOURCE }]);
+		// A source given overrides it; the load replaces the dataset and returns the file it replaced.
+		const again = await load({ kind: 'gazetteer', key: 'reference/gazetteer/za.txt', dataset: GZ, source: 'GeoNames, CC BY 4.0, 2026-10-12' }, dump);
+		expect(again.replaced).toMatchObject({ key: 'reference/gazetteer/za.txt.gz', sha256: sha(gz) });
+		expect(await asOwner('SELECT count(*)::int AS n, min(source) AS source FROM gazetteer_reference WHERE dataset = $1', [GZ])).toEqual([{ n: 9, source: 'GeoNames, CC BY 4.0, 2026-10-12' }]);
+	});
+
+	it('a file with no place to load fails and leaves the dataset as it was', async () => {
+		const err = await load({ kind: 'gazetteer', key: 'reference/gazetteer/none.txt', dataset: GZ }, Buffer.from('# nothing\n')).catch((e: unknown) => e);
+		expect((err as LoadError).code).toBe('empty');
+		expect(await asOwner('SELECT count(*)::int AS n FROM gazetteer_reference WHERE dataset = $1', [GZ])).toEqual([{ n: 9 }]);
 	});
 });

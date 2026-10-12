@@ -110,7 +110,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, evaporation, MAP grid), start Mailpit and MinIO (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, evaporation, MAP grid, gazetteer), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:all                # everything: Mailpit, MinIO + the map's basemap if cached (never fetched), then dev:full
@@ -166,6 +166,8 @@ pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 G
 pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm setup runs it);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees (licences unconfirmed: local only, production loads refused; maps.md § MAP grid)
+pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm setup runs it);
+                             # <ZA.txt[.gz]> --dataset <label> [--source "<attribution>"] loads GeoNames' South Africa dump (CC BY 4.0; maps.md § Search)
 pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
