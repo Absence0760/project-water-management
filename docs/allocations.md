@@ -523,12 +523,37 @@ reasoning is in [security.md § Allocations](./security.md#allocations-popia-min
 
 | Reader | Volumes, numbers, dates | Registered user's name | Writes |
 | --- | --- | --- | --- |
+| A member acting for the responsible authority (a confirmed delegate, 229) | all, with how each is held (licence, verified existing lawful use, unverified registration, general authorisation, Schedule 1), **always** (#523 G6) | all, **always** | yes (an editor) |
 | Owner, editor | all | all | yes |
 | Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise today's total per water source (volume and storage in force today) at 5 or more registered users in force, none holding more than 80 % of it nor two more than 90 % (provisional, #92); a run's use by water year and the evidence report's totals of other units as modelled use only, never a registered m³ nor a status per year (#523 G–O, round 6, provisional, #92), with at most one judgement for a whole run whose rows are today's total's all through it, at the run's own band; nothing by year for a cap or full-allocation run, whose use is the volume | none | no |
 | Farmer | their linked farms' allocations only (RLS); the farm view shows their own farm's totals | their own only (not shown on the farm view) | no |
 | Share links, pack links, the verify page | none (any later total at 5 or more holders, never per unit) | none | no |
 | An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-15`), at 5 or more registered users in force each water year with the dominance rule (`evidence-18`); a viewer kept from each volume reads the totals' modelled use only, and page 1's unit-years over the band for the applicant's own units only (#523 G1c), and gets no PDF that prints more; an applicant's own pack view has no § 5 | none | no |
 | Not a member | nothing | nothing | no |
+
+**The authority always reads them (#523 G6, the licensing assessor's
+review of D3).** The members acting for the responsible authority (confirmed
+delegates, [evidence-pack.md § The responsible
+authority](./evidence-pack.md#the-responsible-authority)) read every
+allocation's registered volume, storage, dates and registration number, how
+it is held (`authorisation`: licence, verified existing lawful use,
+unverified registration, general authorisation, Schedule 1), and the
+registered user's name, whatever the project's viewer settings: cumulative
+assessment under the National Water Act s27(1)(a) and s29 can't be done
+without them. Today every delegate is an editor, and editors read them
+anyway; the guarantee is that this no longer rests on that. One place decides
+who reads what, the database's `app_user_reads_allocation_units` and
+`app_user_reads_allocation_holders` (231), whose first line is the
+authority's clause; the policies (`allocation_select`,
+`allocation_holder_select`), the History's subjects, a report's
+`with_volumes`, who its link is emailed to, and every API check
+(`allocationUnitsHidden`, the Allocations route's `unitsHidden` and
+`canSeeHolders`) read those, never a role of their own. A change to who reads
+what goes there and keeps that first line; `authority-reads.db.test.ts` fails
+otherwise. The packs, share links and the verify page are unchanged: they
+name no one, whoever reads them. A report PDF queued without volumes (218)
+prints without them for every reader, the authority's included; it asks for
+its own.
 
 The switch is off by default, for viewers can be outside the organisation
 (an NGO posting public-participation comments). The Allocations tab tells

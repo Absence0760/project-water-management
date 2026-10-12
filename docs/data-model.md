@@ -1647,6 +1647,18 @@ water-use volumes per farm or water user.
   policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
   on their own farm; **viewers read no names**; writes editor. `water_app` has
   `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **One rule for who reads them (231, #523 G6).** `allocation_select` and
+  `allocation_holder_select` read `app_reads_allocation_units(project)` and
+  `app_reads_allocation_holders(project)` (`SECURITY DEFINER`, the current
+  user), which ask the internal `app_user_reads_allocation_units(project,
+  user)` and `app_user_reads_allocation_holders(project, user)` (invoker's
+  rights, closed to `water_app`, as `app_authority_member`, 230). Their first
+  line: a member acting for the responsible authority (`app_authority_member`)
+  always reads every row and name; then an editor or owner; then (rows only) a
+  viewer with the switch on. `app_audit_subject` (190), `report_enqueue`'s
+  `with_volumes` (218) and the API read the same functions;
+  `app_allocation_units_readers(project)` lists the members who read each
+  row, for a viewer or above (who a report with volumes is emailed to).
 - **Viewers' switch and totals (162).** `project.allocations_viewer_units`
   (default false) is set only through `app_set_allocations_viewer_units`
   (`SECURITY DEFINER`, owners; `allocation_viewer_units_guard` refuses

@@ -2900,6 +2900,7 @@ database:
 
   | Reader | Names | Per-unit volumes |
   | --- | --- | --- |
+  | Members acting for the responsible authority (confirmed delegates, 229) | **always** | **always**, with how each is held (#523 G6: one rule, `app_user_reads_allocation_units` / `_holders`, 231, its first line the authority's) |
   | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
   | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise only today's total per water source, at ≥ 5 registered users in force and none (or two) dominating it (provisional, #92); a run's years and § 5's totals of other units as status and modelled use, no registered m³ (#523 G–O) |
