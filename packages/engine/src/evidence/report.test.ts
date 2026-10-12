@@ -42,6 +42,8 @@ import {
 	evidenceChecks,
 	evidenceReport,
 	otherUnitsName,
+	ownUnitYears,
+	registeredUseRow,
 	firstSiteBelow,
 	NO_BAND,
 	NOT_ENDORSED,
@@ -978,6 +980,23 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(row.change).toEqual({ run: sum('countsB') - sum('countsA'), band: null, bandNote: NO_BAND.notCarried, worse: null });
 		expect(row.basis).toMatch(/more than ±10 % above its registered volume/);
 		expect(row.note).toMatch(/allocation mode: not recorded/);
+	});
+
+	it('ownUnitYears and registeredUseRow’s ownOnly: the row over the units § 5 lists one by one, for a viewer kept from each volume (#523 G1c)', () => {
+		const sum = (k: 'countsA' | 'countsB') => r.allocations.units.reduce((t, u) => t + u.sources.reduce((v, s) => v + (s[k]?.over ?? 0), 0), 0);
+		// § 5 here lists the applicant's Farm two alone (Farm one is left out): its 5 whole years a run, not 10.
+		expect(r.allocations.units.every((u) => u.aggregate === undefined)).toBe(true);
+		const own = ownUnitYears(r.allocations, true);
+		expect(own).toEqual({ overA: sum('countsA'), judgedA: 5, overB: sum('countsB'), judgedB: 5 });
+		const row = registeredUseRow({ ...r.allocations, unitYears: own }, true, { ownOnly: true });
+		expect([row.baseline, row.application, row.notAssessed]).toEqual([sum('countsA'), sum('countsB'), null]);
+		expect(row.basis).toMatch(/summed over the applicant’s own units and water sources/);
+		expect(row.note).toMatch(/of 5 unit-years judged; application \d+ of 5/);
+		// Nothing listed: withheld, not "no whole water year".
+		const none = { ...r.allocations, units: [], unitYears: ownUnitYears({ units: [] }, true) };
+		expect(registeredUseRow(none, true, { ownOnly: true })).toMatchObject({ baseline: null, application: null, change: { run: null }, notAssessed: ALLOCATIONS_NOT_ASSESSED.othersWithheld });
+		// Control: the builder's own row is unchanged (every unit, no ownOnly).
+		expect(registeredUseRow(r.allocations, true)).toEqual(r.rows.find((x) => x.id === 'registeredUse'));
 	});
 
 	it('flags the application’s use above a registered volume, naming the unit, never a holder; none when every year is within', () => {

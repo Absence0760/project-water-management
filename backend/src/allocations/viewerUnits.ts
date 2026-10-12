@@ -23,13 +23,16 @@ import {
 	type ScenarioOp,
 	allocationsOverFlag,
 	mixShares,
+	ownUnitYears,
+	registeredUseRow,
 	shownWithin,
 	takesWithin,
 	totalShown,
 	waterYearWithin,
 	type AuthorisedMix,
 	type AuthorisedMixShares,
-	type EvidenceAllocations
+	type EvidenceAllocations,
+	type EvidenceRow
 } from '@water-management/engine';
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
@@ -294,6 +297,7 @@ type ReportLike = {
 	allocations?: unknown;
 	mode?: string;
 	flags?: { id: string; text: string }[];
+	rows?: { id: string }[];
 };
 
 /** A run mode that holds use to the registered volume: its modelled use is the volume wherever supply meets demand (#523 R5-2). */
@@ -364,6 +368,38 @@ function withoutOthersOver<F extends { id: string; text: string }>(flags: F[], a
 }
 
 /**
+ * Page 1's "Registered vs modelled use" row and § 5's `unitYears` counted
+ * over the units § 5 lists one by one only (the applicant's own), not every
+ * unit (#523 G1c): each run's count of every unit's years over the band,
+ * pooled over several team scenarios at a fixed band, bounds one unit's
+ * volume, as the totals' statuses would (round 6). Rebuilt whether the other
+ * units are in a total or left out (`othersLeftOut`); with no unit of the
+ * applicant's own judged, the row says it is withheld.
+ */
+function withOwnUnitYears<R extends ReportLike>(report: R, al: EvidenceAllocations): { allocations: EvidenceAllocations; rows?: R['rows'] } {
+	const app = report.mode === 'application';
+	const ownOnly = () => ({ ...al, unitYears: ownUnitYears(al, app) });
+	const rows = report.rows?.map((r) => (r.id === 'registeredUse' ? (registeredUseRow(ownOnly(), app, { ownOnly: true }) satisfies EvidenceRow) : r));
+	// A document without `unitYears` (before evidence-15) keeps none: its row is rebuilt above all the same.
+	return { allocations: al.unitYears ? ownOnly() : al, ...(rows ? { rows: rows as R['rows'] } : {}) };
+}
+
+/**
+ * Whether a frozen report's page-1 "Registered vs modelled use" row counts
+ * units other than those § 5 lists one by one (#523 G1c): its PDF prints that
+ * count, which a viewer kept from each volume isn't given (packWithheldPart).
+ * A report without `unitYears` (before evidence-15) counts the units § 5
+ * lists, which are every unit.
+ */
+export function countsOthersYears(report: Pick<ReportLike, 'allocations' | 'mode'>): boolean {
+	const al = report.allocations as EvidenceAllocations | undefined;
+	if (!al || !Array.isArray(al.units) || !al.unitYears || al.notAssessed) return false;
+	const own = ownUnitYears(al, report.mode === 'application');
+	const uy = al.unitYears;
+	return uy.judgedA !== own.judgedA || uy.overA !== own.overA || (uy.judgedB ?? 0) !== (own.judgedB ?? 0) || (uy.overB ?? 0) !== (own.overB ?? 0);
+}
+
+/**
  * An evidence report as a viewer who can't read each registered volume gets
  * it (issue #523 G1): Appendix A.1's baseline model without its allocation
  * rows, each run summary's allocations without the per-unit part, as
@@ -375,7 +411,9 @@ function withoutOthersOver<F extends { id: string; text: string }>(flags: F[], a
  * mixShares; none for a board built before, #523 H/J). § 5 lists only the
  * applicant's own units (`evidence-15`; none of a team scenario's since
  * `evidence-17`), the rest as totals, whose registered m³ is left out
- * (withoutOthersRegistered, #523 K/L/M): their status and modelled use stay.
+ * (withoutOthersRegistered, #523 K/L/M): their modelled use stays; page 1's
+ * "Registered vs modelled use" row and `unitYears` count the listed units
+ * only (withOwnUnitYears, #523 G1c).
  * A report on a cap or full-allocation run is then its verdicts and counts
  * only (verdictsReport), and on every report the licence-impact boards give
  * their verdicts without the waterfall's use totals (boardVerdicts; the
@@ -400,7 +438,11 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 		...('licenceImpact' in report ? { licenceImpact: boardVerdicts((report as { licenceImpact?: unknown }).licenceImpact) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
-		...(report.allocations ? { allocations: withoutOthersRegistered(report.allocations as EvidenceAllocations) } : {}),
+		...(Array.isArray((report.allocations as EvidenceAllocations | undefined)?.units)
+			? withOwnUnitYears(report, withoutOthersRegistered(report.allocations as EvidenceAllocations))
+			: report.allocations
+				? { allocations: report.allocations }
+				: {}),
 		...(report.flags ? { flags: withoutOthersOver(report.flags, report.allocations as EvidenceAllocations | undefined, report.mode === 'application') } : {})
 	};
 	// A report on a cap or full-allocation run: its verdicts and counts only (#523 I).

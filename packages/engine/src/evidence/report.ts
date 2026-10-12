@@ -1401,7 +1401,10 @@ export const ALLOCATIONS_NOT_ASSESSED = {
 	none: 'Not assessed: the runs carry no registered volumes (WARMS registrations, licences), so modelled use can’t be compared with a registered volume. An editor adds them on the Allocations tab; the model then has to run again.',
 	notMatched: (n: number) =>
 		`Not assessed: none of the runs’ ${n} registered volume${n === 1 ? ' is' : 's are'} matched to a farm or water user in them. Match them on the Allocations tab and run the model again.`,
-	noWholeYear: 'Not assessed: the runs cover no whole water year, so no year’s use is judged.'
+	noWholeYear: 'Not assessed: the runs cover no whole water year, so no year’s use is judged.',
+	/** Served to a viewer kept from each registered volume when no unit of the applicant's own is judged (#523 G1c). */
+	othersWithheld:
+		'Not shown: this project shows registered volumes to its editors and owners only, so this row counts an applicant’s own units alone, and none here has a whole water year judged.'
 } as const;
 
 const SOURCES: readonly AllocationWaterSource[] = ['surface', 'groundwater'];
@@ -1707,21 +1710,40 @@ const bandsWords = (al: EvidenceAllocations, app: boolean) =>
 		: bandWords(al.toleranceA ?? al.toleranceB);
 const modeWords = (m: EvidenceAllocations['modeA']) => (m === null ? 'not recorded' : ALLOCATION_MODE_LABEL[m]);
 
-/** Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the registered volume, both runs. */
-function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
+/**
+ * The page-1 row's unit-years (`unitYears`) over the units § 5 lists one by
+ * one only (the applicant's own; never a total of other units): what a
+ * viewer kept from each registered volume is counted (#523 G1c). Every
+ * unit's count, pooled over several runs at a fixed band, bounds one unit's
+ * volume.
+ */
+export function ownUnitYears(al: Pick<EvidenceAllocations, 'units'>, app: boolean): NonNullable<EvidenceAllocations['unitYears']> {
+	const listed = { units: al.units.filter((u) => u.aggregate === undefined) };
+	const A = allocationTotals(listed, 'A');
+	const B = app ? allocationTotals(listed, 'B') : null;
+	return { overA: A.over, judgedA: A.judged, overB: B ? B.over : null, judgedB: B ? B.judged : null };
+}
+
+/**
+ * Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the
+ * registered volume, both runs. `ownOnly`: counted over the units § 5 lists
+ * one by one (`unitYears` as ownUnitYears gives it), for a viewer kept from
+ * each registered volume (#523 G1c); with none judged, said as withheld.
+ */
+export function registeredUseRow(al: EvidenceAllocations, app: boolean, opts: { ownOnly?: boolean } = {}): EvidenceRow {
 	// Per unit, before § 5's totals of other units (evidence-15).
 	const uy = al.unitYears;
 	const A = uy ? { over: uy.overA, judged: uy.judgedA } : allocationTotals(al, 'A');
 	const B = app ? (uy && uy.overB !== null && uy.judgedB !== null ? { over: uy.overB, judged: uy.judgedB } : allocationTotals(al, 'B')) : null;
 	const judged = A.judged + (B?.judged ?? 0);
-	const notAssessed = al.notAssessed ?? (judged === 0 ? ALLOCATIONS_NOT_ASSESSED.noWholeYear : null);
+	const notAssessed = al.notAssessed ?? (judged === 0 ? (opts.ownOnly ? ALLOCATIONS_NOT_ASSESSED.othersWithheld : ALLOCATIONS_NOT_ASSESSED.noWholeYear) : null);
 	const mode =
 		!app || al.modeA === al.modeB ? `allocation mode: ${modeWords(al.modeA)}` : `allocation mode: baseline ${modeWords(al.modeA)}, application ${modeWords(al.modeB)}`;
 	const capped = al.modeA === 'cap' || al.modeB === 'cap' ? '; a capped run’s use can’t go far above its volume' : '';
 	return {
 		id: 'registeredUse',
 		label: 'Registered vs modelled use',
-		basis: `Whole water years in which a unit’s modelled use is more than ${bandsWords(al, app)} above its registered volume, summed over units and water sources (modelled, not metered)`,
+		basis: `Whole water years in which a unit’s modelled use is more than ${bandsWords(al, app)} above its registered volume, summed over ${opts.ownOnly ? 'the applicant’s own units' : 'units'} and water sources (modelled, not metered)`,
 		subject: null,
 		unit: 'unit-years',
 		higherIsWorse: true,

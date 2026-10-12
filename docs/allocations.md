@@ -418,7 +418,11 @@ existing lawful use beside the application's numbers.
   own units are an editor's choice, not an applicant's farms
   (`identity.application.origin`). The page-1 row
   still counts unit-years over the band unit by unit (`unitYears`, counts
-  only), and the flag names the applicant's units or the total. The
+  only), and the flag names the applicant's units or the total. To a viewer
+  kept from each volume both count the applicant's own units only, and the
+  row reads "Not shown" when there are none, as a team scenario's and
+  baseline evidence have; a pack PDF whose row counts other units' years is
+  refused to that viewer (#523 G1c, [Who sees what](#who-sees-what)). The
   project's editors see every unit on the Allocations tab. A run's
   allocations carry no holder, so the backend hands the report each one's
   holder key as frozen when the run was stored
@@ -521,7 +525,7 @@ reasoning is in [security.md § Allocations](./security.md#allocations-popia-min
 | Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise today's total per water source (volume and storage in force today) at 5 or more registered users in force, none holding more than 80 % of it nor two more than 90 % (provisional, #92); a run's use by water year and the evidence report's totals of other units as modelled use only, never a registered m³ nor a status per year (#523 G–O, round 6, provisional, #92), with at most one judgement for a whole run whose rows are today's total's all through it, at the run's own band; nothing by year for a cap or full-allocation run, whose use is the volume | none | no |
 | Farmer | their linked farms' allocations only (RLS); the farm view shows their own farm's totals | their own only (not shown on the farm view) | no |
 | Share links, pack links, the verify page | none (any later total at 5 or more holders, never per unit) | none | no |
-| An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-15`), at 5 or more registered users in force each water year with the dominance rule (`evidence-18`); a viewer kept from each volume reads the totals' status and modelled use only, and gets no PDF that prints them; an applicant's own pack view has no § 5 | none | no |
+| An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-15`), at 5 or more registered users in force each water year with the dominance rule (`evidence-18`); a viewer kept from each volume reads the totals' modelled use only, and page 1's unit-years over the band for the applicant's own units only (#523 G1c), and gets no PDF that prints more; an applicant's own pack view has no § 5 | none | no |
 | Not a member | nothing | nothing | no |
 
 The switch is off by default, for viewers can be outside the organisation

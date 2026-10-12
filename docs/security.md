@@ -2903,7 +2903,19 @@ database:
   band, for the baseline or the application (`withoutOthersRegistered`,
   `othersRegisteredWithheld`; page 1's "above the registered volume" flag
   is rebuilt without them); their modelled use stays, and so do an
-  applicant's own units. **No status per year** (#523 round 6;
+  applicant's own units. Page 1's **"Registered vs modelled use"** row and
+  § 5's `unitYears` count that viewer only the units § 5 lists one by one,
+  an applicant's own (`ownUnitYears`, `registeredUseRow` `ownOnly`,
+  `withOwnUnitYears` in `allocations/viewerUnits.ts`; #523 G1c): counted
+  over every unit, the totals' units and those left out below 5 holders
+  included, a team scenario's run-years over the band at a fixed band
+  bounded one unit's volume as the statuses did (round 6), and a single
+  left-out unit's count was its own judgement. With no unit of the
+  applicant's own judged (a team scenario, baseline evidence) the row reads
+  "Not shown" (`ALLOCATIONS_NOT_ASSESSED.othersWithheld`). A pack whose
+  frozen row counts other units' years (`countsOthersYears`) is served with
+  the row recounted, and its PDF, which prints the frozen count, is refused
+  (`packWithheldPart` `pdf`). **No status per year** (#523 round 6;
   operator's decision 2026-10-11, **provisional**, pending the CISO and
   the D3 privacy review, #92): every year with the same rows in force has
   the same registered total, so the statuses of many run-years at a fixed

@@ -1,9 +1,9 @@
 // A viewer's registered-water totals and the run they read (162, decision D3;
 // viewerUnits.ts). The database side (who gets which rows, the 5-holder
 // refusal) is in allocations.db.test.ts.
-import { compareAllocations } from '@water-management/engine';
+import { compareAllocations, registeredUseRow, ALLOCATIONS_NOT_ASSESSED, type EvidenceAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { comparisonTotals, redactReportAllocations, redactRunAllocations, volumeTotals, withheldAllocationOps, withoutAllocationIdentifiers, withoutOthersRegistered, type VolumeRow } from './viewerUnits.js';
+import { comparisonTotals, countsOthersYears, redactReportAllocations, redactRunAllocations, volumeTotals, withheldAllocationOps, withoutAllocationIdentifiers, withoutOthersRegistered, type VolumeRow } from './viewerUnits.js';
 
 let nextHolder = 0;
 const key = () => `k${++nextHolder}`;
@@ -237,6 +237,70 @@ describe('§ 5 for a viewer kept from each volume (#523 K/L/M)', () => {
 		expect([s.meanModelledA, s.years[0]!.modelledA, s.years[0]!.statusA, s.countsA]).toEqual([9, 9, null, null]);
 		const cap = withoutOthersRegistered({ ...al, modeA: 'cap', modeB: null } as never) as unknown as typeof al;
 		expect([cap.units[0]!.sources[0]!.years[0]!.modelledA, cap.units[0]!.sources[0]!.years[0]!.modelledB]).toEqual([null, 10]);
+	});
+});
+
+describe('page 1’s "Registered vs modelled use" row for a viewer kept from each volume (#523 G1c)', () => {
+	const counts = (wholeYears: number, over: number) => ({ wholeYears, over, within: wholeYears - over, under: 0, noVolume: 0 });
+	const src = (a: number, b: number | null) => ({ waterSource: 'surface', years: [], countsA: counts(10, a), countsB: b === null ? null : counts(10, b), meanModelledA: null, meanRegisteredA: null, meanModelledB: null, meanRegisteredB: null, capA: null, capB: null });
+	const own = { nodeId: 'own', name: 'Mine', kind: 'farm', own: true, onlyIn: null, sources: [src(2, 3)] };
+	const total = { nodeId: 'others:surface', name: 'Other registered users (5 units)', aggregate: 5, kind: 'farm', own: false, onlyIn: null, sources: [src(0, 0)] };
+	/** § 5 as the engine builds it: `unitYears` counted unit by unit before the totals, here the own unit's 2 / 3 and 7 / 6 of four other units' 40 years. */
+	const section = (units: unknown[], judgedOthers: number, overOthers: [number, number]) =>
+		({
+			notAssessed: null,
+			modeA: 'none',
+			modeB: 'none',
+			toleranceA: 0.1,
+			toleranceB: 0.1,
+			units,
+			notMatchedA: 0,
+			notMatchedB: 0,
+			othersLeftOut: 0,
+			unitYears: { overA: 2 + overOthers[0], judgedA: 10 + judgedOthers, overB: 3 + overOthers[1], judgedB: 10 + judgedOthers }
+		}) as unknown as EvidenceAllocations;
+	const report = (al: EvidenceAllocations) => ({
+		mode: 'application',
+		rows: [{ id: 'reserve' }, registeredUseRow(al, true)],
+		allocations: al,
+		appendix: { baselineInputs: null },
+		summaries: { baseline: null, application: null }
+	});
+
+	it('counts the applicant’s own units only, in the row and in unitYears; the editor’s row counts every unit (control)', () => {
+		const al = section([own, total], 40, [7, 6]);
+		const r = report(al);
+		// Control: as built, the row counts the other units' years too.
+		const built = r.rows[1] as ReturnType<typeof registeredUseRow>;
+		expect([built.baseline, built.application]).toEqual([9, 9]);
+		expect(countsOthersYears(r as never)).toBe(true);
+		const out = redactReportAllocations(r as never) as unknown as typeof r;
+		const row = out.rows[1] as ReturnType<typeof registeredUseRow>;
+		expect(out.rows[0]).toEqual({ id: 'reserve' });
+		expect([row.id, row.baseline, row.application, row.change?.run, row.notAssessed]).toEqual(['registeredUse', 2, 3, 1, null]);
+		expect(row.note).toMatch(/^2 of 10 unit-years judged; application 3 of 10/);
+		expect(row.basis).toContain('summed over the applicant’s own units');
+		expect(out.allocations.unitYears).toEqual({ overA: 2, judgedA: 10, overB: 3, judgedB: 10 });
+		expect(JSON.stringify(out.rows)).not.toMatch(/\b(50|9)\b/);
+		// The input isn't changed.
+		expect(al.unitYears).toEqual({ overA: 9, judgedA: 50, overB: 9, judgedB: 50 });
+	});
+
+	it('with no unit of the applicant’s own (a team scenario, baseline evidence), the row is withheld, whether the others are in a total or left out', () => {
+		for (const al of [section([total], 40, [7, 6]), { ...section([], 40, [7, 6]), othersLeftOut: 4 }]) {
+			const out = redactReportAllocations(report(al as EvidenceAllocations) as never) as unknown as ReturnType<typeof report>;
+			const row = out.rows[1] as ReturnType<typeof registeredUseRow>;
+			expect([row.baseline, row.application, row.change?.run, row.notAssessed, row.note]).toEqual([null, null, null, ALLOCATIONS_NOT_ASSESSED.othersWithheld, null]);
+			expect(out.allocations.unitYears).toEqual({ overA: 0, judgedA: 0, overB: 0, judgedB: 0 });
+		}
+	});
+
+	it('countsOthersYears: false when the row counts the listed units alone, or there is nothing to judge', () => {
+		const mine = section([own, total], 0, [0, 0]);
+		expect(countsOthersYears(report(mine) as never)).toBe(false);
+		expect(countsOthersYears(report({ ...section([total], 40, [7, 6]), notAssessed: 'none' } as EvidenceAllocations) as never)).toBe(false);
+		// A document before evidence-15: no unitYears, every unit listed.
+		expect(countsOthersYears({ mode: 'application', allocations: { ...mine, unitYears: undefined } } as never)).toBe(false);
 	});
 });
 

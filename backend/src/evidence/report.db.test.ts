@@ -238,9 +238,14 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.units).toEqual([]);
 		expect(r.allocations.othersLeftOut).toBe(1);
 		expect(JSON.stringify(r.allocations)).not.toContain('Upper');
-		// Three years from 1 October 2018: two whole water years, and part of a third; page 1's row still counts them.
-		expect(r.allocations.unitYears?.judgedA).toBe(2);
-		expect(r.rows.find((x) => x.id === 'registeredUse')?.notAssessed).toBeNull();
+		// Page 1's row counts no unit's years for a viewer kept from each volume: the left-out unit's would say how its use
+		// compares with its volume (#523 G1c). The owner's counts them (positive control, below).
+		expect(r.allocations.unitYears).toEqual({ overA: 0, judgedA: 0, overB: null, judgedB: null });
+		expect(r.rows.find((x) => x.id === 'registeredUse')).toMatchObject({ baseline: null, notAssessed: expect.stringMatching(/^Not shown: this project shows registered volumes/) });
+		const asOwner = (await report(owner, withVolume)).body.report as EvidenceReport;
+		// Three years from 1 October 2018: two whole water years, and part of a third; the owner's row counts them.
+		expect(asOwner.allocations.unitYears?.judgedA).toBe(2);
+		expect(asOwner.rows.find((x) => x.id === 'registeredUse')?.notAssessed).toBeNull();
 		// Volumes, never the holder's name or registration number (D3), even though the viewer's project has them.
 		const text = JSON.stringify(res.body);
 		expect(text).not.toContain('Evidence Holder Person');
@@ -251,7 +256,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const tab = (await owner.call('GET', `${runPath(withVolume)}/allocations`)).body.comparison;
 		const tabYears = tab.nodes.find((n: { nodeId: string }) => n.nodeId === farmId).surface.years as { partial: boolean; status: string }[];
 		const whole = tabYears.filter((y) => !y.partial);
-		expect(r.allocations.unitYears).toMatchObject({ judgedA: whole.length, overA: whole.filter((y) => y.status === 'over').length });
+		expect(asOwner.allocations.unitYears).toMatchObject({ judgedA: whole.length, overA: whole.filter((y) => y.status === 'over').length });
 		expect((await viewer.call('GET', `${runPath(withVolume)}/allocations`)).body.comparison).toBeNull();
 		expect((await owner.call('DELETE', `/projects/${projectId}/allocations/${created.body.allocation.id}`)).status).toBe(204);
 	});

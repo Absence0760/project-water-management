@@ -707,6 +707,52 @@ describe('#523 K, L, M: no two figures a viewer reads at the same time differ by
 	});
 });
 
+describe('#523 G1c: page 1’s "Registered vs modelled use" row counts no other unit’s years for a viewer', () => {
+	// Every unit's whole years over the band, per team scenario run at a fixed band, bound one unit's volume; the
+	// viewer's row and unitYears count the applicant's own units only, and a team scenario or baseline evidence has none.
+	let pid: string;
+	let base: string;
+	let scenarioRun: string;
+	type Row = { id: string; baseline: number | null; application: number | null; notAssessed: string | null; note: string | null };
+	const useRow = (r: { rows: Row[] }) => r.rows.find((x) => x.id === 'registeredUse')!;
+
+	beforeAll(async () => {
+		const p = await volumesProject('Unit-years', ['U1', 'U2', 'U3', 'U4', 'U5'], '2016-10-01', 3 * 365);
+		pid = p.pid;
+		// Small volumes, so every whole year of every unit is over the band.
+		for (let i = 0; i < 5; i++) await p.add(p.units[i]!.id, `Unit Years Holder ${i + 1}`, 10 + i);
+		base = await p.run('unit-years');
+		const sc = await editor.call('POST', `/projects/${pid}/scenarios`, { name: 'Unit-years team', baseRunId: base, ops: [] });
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		const ran = await editor.call('POST', `/projects/${pid}/scenarios/${sc.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		scenarioRun = ran.body.run.id;
+	}, 180_000);
+
+	it('positive control: the editor’s row and unitYears count every unit’s whole years over the band', async () => {
+		for (const run of [base, scenarioRun]) {
+			const r = (await editor.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
+			expect(r.allocations.units.map((u: { nodeId: string }) => u.nodeId)).toEqual(['others:surface']);
+			expect(r.allocations.unitYears.judgedA).toBeGreaterThan(0);
+			expect(r.allocations.unitYears.overA).toBe(r.allocations.unitYears.judgedA);
+			expect(useRow(r).baseline).toBe(r.allocations.unitYears.overA);
+			expect(useRow(r).notAssessed).toBeNull();
+		}
+	});
+
+	it('the viewer’s row is withheld and unitYears counts nothing, on the team scenario and on baseline evidence', async () => {
+		for (const run of [base, scenarioRun]) {
+			const r = (await viewer.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
+			const row = useRow(r);
+			expect([row.baseline, row.application, row.note]).toEqual([null, null, null]);
+			expect(row.notAssessed).toMatch(/^Not shown: this project shows registered volumes to its editors and owners only/);
+			expect(r.allocations.unitYears).toMatchObject({ overA: 0, judgedA: 0 });
+			// The page-1 flag says nothing of the totals either (round 6).
+			expect(r.flags.map((f: { id: string }) => f.id)).not.toContain('allocationsOver');
+		}
+	});
+});
+
 describe('#523 round 5: the band, cap and full-allocation runs, run visibility, erasure', () => {
 	const V = [51_234, 52_345, 53_456, 54_567, 55_678];
 	const LATER = 123_457;
