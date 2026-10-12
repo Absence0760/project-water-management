@@ -8,6 +8,7 @@ import {
 	MAP_MM_MAX,
 	MAP_MM_MIN,
 	PE_SOURCE_MAX,
+	UNIT_MAP_MIN_YEARS,
 	unitRainError,
 	type NetworkNode,
 	type UnitRainReference,
@@ -39,9 +40,9 @@ export function withReferenceUnit(v: UnitRainSettings, unitId: string): UnitRain
 	return { ...v, reference: { gauge: ref.gauge, unitId } };
 }
 
-/** The first year a unit's CHIRPS can cover (rnl, 1981) and the fewest complete years the MAP factor wants before it warns (§2.4h). */
+/** The first year a unit's CHIRPS can cover (rnl, 1981) and the fewest complete years the MAP factor wants before it warns (§2.4h; the engine's, 10 since issue #500). */
 export const UNIT_MAP_FIRST_YEAR = 1981;
-export const UNIT_MAP_MIN_YEARS = 5;
+export { UNIT_MAP_MIN_YEARS };
 
 /**
  * Switch rain for each unit on (from `previous`, the setting the form had

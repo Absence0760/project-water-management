@@ -1,4 +1,4 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type UnitRainSummary, type UnitRainUnit, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	allocationCapLines,
@@ -133,13 +133,14 @@ describe('summary sheet', () => {
 		expect(at).toBeGreaterThan(0);
 		expect(lines[at + 1]).toBe('Gauge MAP (mm),,');
 		expect(lines[at + 3]).toMatch(/^Unit,Area \(km²\),MAP \(mm\),MAP source,Rain from,Record,Factor,/);
-		expect(lines[at + 4]).toBe("Upper unit,10,800,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.6,unit MAP ÷ its CHIRPS mean annual rain,no,500,1991–2020 (2),0,0,360,6,0,0,700,600,70,700000,0.1");
-		expect(lines[at + 5]).toMatch(/^Lower unit,10,,,the catchment rain \(no rain of its own\),,,as the catchment forcing,no,/);
+		expect(lines[at + 4]).toBe("Upper unit,10,800,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.6,unit MAP ÷ its CHIRPS mean annual rain,no,no,500,1991–2020 (2),0,0,360,6,0,0,700,600,70,700000,0.1");
+		expect(lines[at + 5]).toMatch(/^Lower unit,10,,,the catchment rain \(no rain of its own\),,,as the catchment forcing,no,no,/);
 		expect(lines.filter((l) => l === '').length).toBe(21);
 	});
 
-	it('writes the reference gauge’s monthly factors (engine ≥ 1.80.0) after the units, and a unit’s k_unit on them (engine ≥ 1.85.0)', () => {
+	it('writes the reference gauge’s monthly factors after the units, where the fit read and why, and each unit’s k_unit on them (issue #500)', () => {
 		const s = structuredClone(summary);
+		const kUnit = { factor: 1.5, ownFactor: 1.5, clamped: false, outsideBand: false, meanAnnualMm: 600, years: [1991, 2020], inPeriod: true };
 		const unit = {
 			nodeId: 'u1',
 			name: 'Upper unit',
@@ -154,11 +155,7 @@ describe('summary sheet', () => {
 			gaugeMapOwnFactor: null,
 			gaugeMapClamped: false,
 			gaugeMapOutsideBand: false,
-			chirps: {
-				source: 'reference' as const,
-				factors: Array(12).fill(2),
-				kUnit: { factor: 1.5, ownFactor: 1.5, clamped: false, outsideBand: false, meanAnnualMm: 600, years: Array.from({ length: 30 }, (_, i) => 1991 + i), inPeriod: true }
-			},
+			chirps: { source: 'reference' as const, factors: Array(12).fill(2), kUnit } as NonNullable<UnitRainUnit['chirps']>,
 			days: { unitGauge: 0, gaugeMap: 0, unitChirps: 366, catchment: 0, forecast: 0, none: 0 },
 			rainMm: 700,
 			petMm: 1500,
@@ -176,34 +173,87 @@ describe('summary sheet', () => {
 			gaugeMapMm: null,
 			gaugeMapSource: null,
 			mapPeriod: { start: '1991-01-01', end: '2020-12-31' },
-			units: [unit],
+			units: [
+				unit,
+				// k_unit outside the warning band; then one without a complete year (factors only); then unusable CHIRPS on rule 2.
+				{ ...unit, nodeId: 'u2', name: 'Wide unit', chirps: { source: 'reference', factors: Array(12).fill(2), kUnit: { ...kUnit, factor: 2.5, ownFactor: 2.5, outsideBand: true } } },
+				{ ...unit, nodeId: 'u3', name: 'New unit', chirps: { source: 'reference', factors: Array(12).fill(2), kUnit: null } },
+				{ ...unit, nodeId: 'u4', name: 'Dry unit', rule: 'gaugeMap', rainKey: 'rain_catchment_mm', factor: 1.2, factorSource: 'gaugeMap', chirps: { source: 'unusable', meanAnnualMm: 0, years: [2001, 2002, 2003] } }
+			],
 			reference: {
 				gauge: 'rain_catchment_mm',
 				unitId: 'u0',
 				unitName: 'Gauge unit',
 				mapMm: 600,
 				cellKey: 'rain_chirps_cell_mm@u0',
-				cellReason: 'referenceUnitCentre' as const,
-				gaugeChecked: false,
+				cellReason: 'referenceUnitCentre',
+				gaugeChecked: true,
 				pinned: false,
-				months: [{ ...month(1), sharedDays: 60, ownFactor: null, factor: 1, fitted: false }, ...Array.from({ length: 11 }, (_, i) => month(i + 2))]
+				months: [{ ...month(1), sharedDays: 60, ownFactor: null, factor: 1, fitted: false }, { ...month(2), ownFactor: 2.4, factor: 2.4, outsideBand: true }, ...Array.from({ length: 10 }, (_, i) => month(i + 3))]
 			}
 		};
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('Upper unit,'))).toBe(
-			"Upper unit,10,900,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.5,the reference gauge's monthly factors × k_unit (unit MAP ÷ its mean annual CHIRPS × the factors),no,600,1991–2020 (30),0,0,366,0,0,0,700,600,70,700000,0.1"
-		);
+		const k = "the reference gauge's monthly factors × k_unit (unit MAP ÷ its mean annual CHIRPS × factors)";
+		expect(lines.find((l) => l.startsWith('Upper unit,'))).toBe(`Upper unit,10,900,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.5,${k},no,no,600,1991–2020 (2),0,0,366,0,0,0,700,600,70,700000,0.1`);
+		expect(lines.find((l) => l.startsWith('Wide unit,'))).toMatch(/,2\.5,the reference gauge's monthly factors × k_unit [^,]*,no,yes,600,/);
+		expect(lines.find((l) => l.startsWith('New unit,'))).toBe(`New unit,10,900,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,,${k},no,no,,,0,0,366,0,0,0,700,600,70,700000,0.1`);
+		expect(lines.find((l) => l.startsWith('Dry unit,'))).toMatch(/,1\.2,unit MAP ÷ gauge MAP,no,no,0,"2001–2003 \(3, unusable: skipped\)",/);
 		const at = lines.indexOf('Reference gauge,rain_catchment_mm');
 		expect(at).toBeGreaterThan(0);
-		expect(lines.slice(at + 1, at + 6)).toEqual([
+		expect(lines.slice(at + 1, at + 8)).toEqual([
 			'Reference unit,Gauge unit,MAP 600 mm',
-			'Reference CHIRPS cell,rain_chirps_cell_mm@u0,',
-			'Month,Shared days,Gauge (mm),CHIRPS (mm),Own factor,Factor applied,Clamped,Fitted',
-			'Jan,60,400,200,,1,no,no (factor 1)',
-			'Feb,120,400,200,2,2,no,yes'
+			"Reference CHIRPS cell,rain_chirps_cell_mm@u0,,the cell under the reference unit's centre; rain gauges have no map location yet",
+			'Fitted against,the checked gauge rain (§2.4c–§2.4e)',
+			'Month,Shared days,Gauge (mm),CHIRPS (mm),Own factor,Factor applied,Clamped,Outside 0.5–2,Fitted',
+			'Jan,60,400,200,,1,no,no,no (factor 1)',
+			'Feb,120,400,200,2.4,2.4,no,yes,yes',
+			'Mar,120,400,200,2,2,no,no,yes'
 		]);
 		delete s.unitRain.reference;
 		expect([...summaryCsvLines(meta, s)].some((l) => l.startsWith('Reference gauge'))).toBe(false);
+	});
+
+	it('writes a run from engine 1.80–1.83 as it ran: the reference unit’s MAP ratio, no cell reason', () => {
+		const s = structuredClone(summary);
+		const legacy = { source: 'reference', factors: Array(12).fill(2), mapRatio: 1.5, mapOwnRatio: 5, mapClamped: true } as unknown as NonNullable<UnitRainUnit['chirps']>;
+		s.unitRain = {
+			mode: 'perUnit',
+			gaugeMapMm: null,
+			gaugeMapSource: null,
+			mapPeriod: { start: '1991-01-01', end: '2020-12-31' },
+			units: [
+				{
+					nodeId: 'u1',
+					name: 'Old unit',
+					areaKm2: 10,
+					mapMm: 900,
+					mapSource: null,
+					rule: 'unitChirps',
+					rainKey: 'rain_chirps_mm@u1',
+					factor: null,
+					factorSource: 'chirpsReference',
+					gaugeMapFactor: null,
+					gaugeMapOwnFactor: null,
+					gaugeMapClamped: false,
+					chirps: legacy,
+					days: { unitGauge: 0, gaugeMap: 0, unitChirps: 366, catchment: 0, forecast: 0, none: 0 },
+					rainMm: 700,
+					petMm: 1500,
+					aetMm: 600,
+					flowMm: 70,
+					exchangeMm: 0,
+					storageStartMm: 200,
+					storageEndMm: 230,
+					runoffM3: 700_000,
+					runoffCoefficient: 0.1
+				} as UnitRainUnit
+			],
+			reference: { gauge: 'rain_catchment_mm', unitId: 'u0', unitName: 'Gauge unit', mapMm: 600, cellKey: 'c', pinned: true, months: [] } as unknown as NonNullable<UnitRainSummary['reference']>
+		};
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines.find((l) => l.startsWith('Old unit,'))).toMatch(/,rain_chirps_mm@u1,1\.5,the reference gauge's monthly factors × k_unit [^,]*,yes,no,,,/);
+		expect(lines).toContain('Reference CHIRPS cell,c,"factors pinned, not fitted",');
+		expect(lines.some((l) => l.startsWith('Fitted against'))).toBe(false);
 	});
 
 	it('writes fractions as percentages without binary noise', () => {
