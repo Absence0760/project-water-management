@@ -137,7 +137,7 @@
 			The area a land-cover map shows as cropland in this unit’s parcels on the map. It shows where land is cultivated, not what grows there,
 			so you choose the crop. Nothing changes until you use a value and confirm it.
 		</p>
-		<p class="alert alert-warning slim" data-testid="cropland-caution">{CAUTION}</p>{/snippet}
+		<p class="alert alert-warning" data-testid="cropland-caution">{CAUTION}</p>{/snippet}
 
 	{#if data}
 		{#if !data.dataset}
