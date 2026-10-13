@@ -245,6 +245,23 @@ section it belongs to, with the example that taught it.
   rows scrolling in `.table-wrap`, the chart filling the rest. Ten specs
   leaned on the Data table's rows; cards would have lost the columns and
   broken them for nothing.
+- **A picked item's own panel goes in its detail, not under the list.** The
+  Dams page's "Proposed from the register and the map" is about one dam, yet
+  it was a full-width panel under every card: with nine dams the cards ran
+  to 2,446 px beside a chart that ended at 715, so the box opened under
+  1,700 px of empty column, away from the dam it was about, and with no
+  `dam=` it even showed another unit than the chart (operator, 2026-10-13).
+  It is now part of the picked dam's chart panel, under the assurance, and
+  its picker follows the page's pick and moves it (`dam=`), keeping in the
+  picker only what the pick can't name (a unit with no dam yet). A sticky
+  detail has a height budget, so what joins it folds to one line of its
+  values (`common/Fold.svelte`; the plot gives up that line's height), and a
+  sticky panel that can grow past the window (the fold opened) sticks by its
+  foot, `top: min(<stuck top>, 100vh − <its height> − 1rem)` from its
+  measured height, so every row can be read with nothing scrolling inside it
+  (`dams-page.spec.ts` "nine dams"). Moving a table into a narrower column,
+  recheck its wrapping: `overflow-wrap: anywhere` let "synthetic" break as
+  "synthet|ic" in a 680 px column; use `break-word` with column minimums.
 - **Design for N.** Assume 30 crops, 40 units, 10 dams, 20 runs and names
   three times longer than the seed's. A farmer linked to 30 farms in one
   catchment (or WUA staff previewing, who see them all) got 30 switcher

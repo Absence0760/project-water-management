@@ -15,12 +15,15 @@
 	// Before a run the cards show each dam's capacity. Under the chart, the
 	// assurance of supply of the unit the dam belongs to (issue #444,
 	// reliability/NodeAssurance): a dam has none of its own, so it is labelled
-	// as the unit's, with a link to the unit on Hydrological units.
+	// as the unit's, with a link to the unit on Hydrological units. Under that, in the same panel, what the
+	// register and the map propose for the dam (issue #326 B-dams), folded to one line of what is proposed,
+	// so the panel stays the window's height; a card's Proposals opens it (until 2026-10-13 it was a panel
+	// under every card, so with nine dams it sat 1,700 px below the chart, under an empty column).
 	// The levels come from overview/damLevels.ts, the loader the Summary's
 	// Dams today card and the Network's colour by dam level share; the series
 	// come through the Runs tab's cache.
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { beforeForecast, type DailySeries } from '@water-management/engine';
@@ -218,7 +221,18 @@
 	// Beside the cards the panel sticks, so the unit's assurance under the chart takes its height from the plot
 	// (never under 240 px) and the panel stays the height it was; stacked, the page flows and the plot keeps 260 px.
 	let assuranceH = $state(0);
-	const plotH = $derived(side ? Math.max(240, chartH - assuranceH) : chartH);
+	// The proposals' folded line gives up its height too; opened, the panel grows (and sticks by its foot, below)
+	// rather than the plot jumping, so only the closed height counts.
+	let proposalsH = $state(0);
+	let proposalsClosedH = $state(0);
+	let proposalsOpen = $state(false);
+	$effect(() => {
+		const h = proposalsH;
+		if (!proposalsOpen) proposalsClosedH = h;
+	});
+	const plotH = $derived(side ? Math.max(240, chartH - assuranceH - proposalsClosedH) : chartH);
+	// The sticky panel's height: one taller than the window (the proposals opened) sticks by its foot, so all of it can be read.
+	let panelH = $state(0);
 	// --- the proposals box (issue #326 B-dams): every hydrological unit, the dams first in the cards' order ---
 	const proposalUnits = $derived.by(() => {
 		const farms = editor.model.nodes.filter((n) => n.kind === 'farm');
@@ -226,14 +240,23 @@
 		return [...farms].sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)).map((n) => ({ id: n.id, name: n.name }));
 	});
 	const proposalStart = $derived(damParam && proposalUnits.some((u) => u.id === damParam) ? damParam : (cards[0]?.nodeId ?? null));
+	const cardIds = $derived(cards.map((c) => c.nodeId));
+	// With a run the box is the picked dam's, inside its chart panel; before a run (no chart, no pick) or with no dam, a panel of its own.
+	const proposalsInline = $derived(!!latest && cards.length > 0);
 	const PROPOSALS_ID = 'dam-proposals';
-	// A card's Proposals: pick the dam (the box follows `dam=`), then bring the box into view.
+	// Dam of picked a dam: the page picks it (a step in history, as a card click is).
+	function pickFromProposals(id: string) {
+		void goto(withParam(page.url, 'dam', id), { noScroll: true, keepFocus: true });
+	}
+	// A card's Proposals: pick the dam (the box follows the pick), open the box, then bring it into view with the keyboard on its picker.
 	function toProposals(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
-		void goto(withParam(page.url, 'dam', id), { noScroll: true, keepFocus: true }).then(() => {
+		void goto(withParam(page.url, 'dam', id), { noScroll: true, keepFocus: true }).then(async () => {
+			proposalsOpen = true;
+			await tick();
 			const box = document.getElementById(PROPOSALS_ID);
-			box?.scrollIntoView({ block: 'start' });
+			box?.scrollIntoView({ block: proposalsInline && side ? 'nearest' : 'start' });
 			box?.querySelector<HTMLElement>('select')?.focus({ preventScroll: true });
 		});
 	}
@@ -356,7 +379,7 @@
 			</section>
 
 			{#if latest}
-				<section class="panel chart-panel" bind:this={chartEl} aria-labelledby="dam-chart-h" aria-busy={runLoading || damsLoading}>
+				<section class="panel chart-panel" bind:this={chartEl} bind:offsetHeight={panelH} style:--panel-h="{panelH}px" aria-labelledby="dam-chart-h" aria-busy={runLoading || damsLoading}>
 					<div class="panel-head">
 						<h2 id="dam-chart-h">Storage{#if picked}: {picked.name}{/if}</h2>
 						<span class="seg" role="group" aria-label="Show storage as">
@@ -401,13 +424,31 @@
 						</NodeAssurance>
 						</div>
 					{/if}
+					{#if picked && proposalUnits.length}
+						<div bind:clientHeight={proposalsH}>
+							<DamProposalsBox
+								id={PROPOSALS_ID}
+								variant="inline"
+								bind:open={proposalsOpen}
+								{projectId}
+								units={proposalUnits}
+								dams={cardIds}
+								initial={picked.nodeId}
+								follow={picked.nodeId}
+								onpick={pickFromProposals}
+								{readonly}
+								dirty={editor.dirty}
+								{onModelChanged}
+							/>
+						</div>
+					{/if}
 				</section>
 			{/if}
 		</div>
 
 	{/if}
 
-	{#if proposalUnits.length}
+	{#if proposalUnits.length && !proposalsInline}
 		<DamProposalsBox id={PROPOSALS_ID} {projectId} units={proposalUnits} initial={proposalStart} follow={damParam} {readonly} dirty={editor.dirty} {onModelChanged} />
 	{/if}
 </div>
@@ -613,7 +654,9 @@
 		/* The chart stays in view beside the cards as they are read down (the window scrolls; nothing inside does). */
 		.with-chart .chart-panel {
 			position: sticky;
-			top: calc(var(--header-h, 0px) + 0.75rem);
+			/* Under the header; a panel taller than the window (its proposals opened) sticks by its foot instead,
+			   1rem above the window's (and the save bar's), so its last row can always be read. */
+			top: min(calc(var(--header-h, 0px) + 0.75rem), calc(100vh - var(--panel-h, 0px) - var(--dock-h, 0px) - 1rem));
 		}
 	}
 </style>

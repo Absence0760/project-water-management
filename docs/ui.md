@@ -1764,9 +1764,9 @@ for every workspace tab. Its own chunk.
   **On the Network** (`?tab=network&node=<id>`, the node picked on the map),
   **Show on map** (`?tab=map&node=<id>`, only for a dam's unit with a linked
   map feature), **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
-  this page) and **Proposals** (picks the dam and brings the proposals box
-  below into view, focus on its **Dam of**, so it is never ten or thirty
-  cards down out of reach). A coloured edge repeats the band (accent, amber below 30 %, red
+  this page) and **Proposals** (picks the dam, opens its proposals in the
+  chart panel and brings them into view, focus on **Dam of**; before a run,
+  brings the box under the cards into view). A coloured edge repeats the band (accent, amber below 30 %, red
   at the minimum; grey without a level).
 - **Dam settings changed since the run** (issue #444): a card's figures are the run's,
   worked out with the dam as the run's own model had it (issue #173), but its
@@ -1827,8 +1827,9 @@ for every workspace tab. Its own chunk.
 - **Layout**: the cards column sits beside the chart once the page is 56rem
   wide (a container query on the page, not the viewport), the plot a fixed
   420 px and the chart panel sticky (`top: --header-h + 0.75rem`), so it
-  stays in view while the cards are read down in the window's scroll. Narrower, the cards are two to a row on
-  a phone, then the chart (260 px).
+  stays in view while the cards are read down in the window's scroll; the
+  panel also holds the dam's proposals, folded (below). Narrower, the cards are two to a row on
+  a phone, then the chart (260 px), its assurance and its proposals.
 - **Minimum level**: the model keeps the minimum as a fraction of capacity
   (`damMinPct` 0.1 = 10 %) and only a farm's dam has one, so `damsInRun`
   turns it into a % (until 2026-09-26 it passed the fraction through, so a
@@ -1848,13 +1849,32 @@ for every workspace tab. Its own chunk.
 - **Proposed from the register and the map** (issue #326 B-dams,
   `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
   sources and rules in [maps.md § Dams from the register and the
-  map](./maps.md#dams-from-the-register-and-the-map)): a panel under the
-  cards (and under the empty state), shown whenever the model has a
-  hydrological unit. **Dam of** picks the unit (the dams first in the
-  cards' order, then the other units; it opens on `dam=`'s, else the first
-  card's, and follows `dam=` whenever a card is picked, so a click and a fresh
-  load of the same URL agree; Dam of still picks any unit until the next
-  pick). The box says which dam on the map it searched from (its name,
+  map](./maps.md#dams-from-the-register-and-the-map)), shown whenever the
+  model has a hydrological unit. **Once there is a run** it is part of the
+  picked dam's detail: inside the chart panel, under the assurance of supply
+  (an `h3`), folded (`common/Fold.svelte`) to one line naming the unit and
+  what is proposed ("Upper farm: 1 registered dam within 1 km (reference
+  only) · area when full from the map 16.5 ha, not saved", `damProposals.ts`
+  `proposalsLine`; "couldn’t be loaded: open to try again" after a failure),
+  **Show** opening the rest. It follows the picked dam (`dam=`, else the
+  first card, the dam the chart shows); **Dam of** lists the dams in the
+  cards' order and, apart, the **Hydrological units with no dam yet**:
+  picking a dam picks it for the page (its card, its chart, the URL, a step
+  Back undoes), and a unit with no dam, which `dam=` can't name, shows in the
+  box alone until the next pick. A card's **Proposals** picks its dam, opens
+  the box, brings it into view and puts the keyboard on Dam of. The plot
+  gives up the closed line's height as it does the assurance's (never under
+  240 px), so the sticky panel still fits a 1440×960 and a 1280×800 window;
+  opened, the panel grows past the window and sticks by its foot (`top:
+  min(header + 0.75rem, 100vh − its height − 1rem)`), so its last row can be
+  read beside the cards with nothing scrolling inside it. Stacked on a phone
+  it comes after the chart and the assurance. Until 2026-10-13 it was a
+  full-width panel under every card: with nine dams it sat 1,700 px below the
+  chart, under an empty column, and with no `dam=` it showed a different unit
+  from the chart's (it opened on the first card before the levels sorted
+  them). **Before a run** (no chart, no pick) and with no dam cards it stays
+  a panel under the cards (and under the empty state), Dam of picking for the
+  box alone. The box says which dam on the map it searched from (its name,
   "its polygon's centre" or "a point", the place in degrees with a hemisphere,
   "33.6800° S, 21.3200° E" as the Map writes it, `searchedFrom`, **Show on map**),
   then a table: one row per registered dam within 1 km ("Capacity:
@@ -1880,7 +1900,10 @@ for every workspace tab. Its own chunk.
   unit (with **Open the Map**), no register loaded (the loader's command),
   no registered dam within 1 km, and a "Synthetic test data" warning when a
   row comes from the committed fixture. The table scrolls in its own box on
-  a phone; the page doesn't. e2e: `dam-proposals.spec.ts`.
+  a phone; the page doesn't. Its cells wrap between words (a word breaks only
+  when it alone is wider than its column), so in the chart panel's ~680 px
+  at 1280 the table fits with Use in view. e2e: `dam-proposals.spec.ts`,
+  `dams-page.spec.ts` (the placement with nine dams).
 
 ## Project
 

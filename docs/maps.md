@@ -1187,7 +1187,8 @@ loads as the schema owner; the app never writes it.
 ## Dams from the register and the map
 
 Dams → **Proposed from the register and the map** (issue #326 Part B,
-"B-dams"; the box under the dam cards, [ui.md § Dams](./ui.md#dams))
+"B-dams"; in the picked dam's chart panel once there is a run, else a box
+under the dam cards, [ui.md § Dams](./ui.md#dams))
 proposes two values for a hydrological unit's dam, each with its source,
 from the dam on the map linked to that unit (a polygon first, else a point;
 the earliest when there are several):

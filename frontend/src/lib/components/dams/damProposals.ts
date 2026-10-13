@@ -119,3 +119,25 @@ export function confirmWords(p: DamProposals, r: Extract<DamProposalRow, { kind:
 		confirmLabel: 'Use this area'
 	};
 }
+
+/**
+ * The folded box's line (inside the picked dam's chart panel): what is proposed for the unit's dam, so a
+ * closed box still answers "is there anything to use?". "1 registered dam within 1 km (reference only) ·
+ * area when full from the map 16.5 ha, not saved". `loading` and `error` are the box's load states.
+ */
+export function proposalsLine(p: DamProposals | null, loading: boolean, error: string | null): string {
+	if (error) return 'couldn’t be loaded: open to try again';
+	if (!p || loading) return 'looking up the register and the map…';
+	if (!p.dam) return 'no dam on the map is linked to it';
+	const km = fmtNum(p.radiusM / 1000);
+	const n = p.register.length;
+	const register = !p.datasets.length
+		? 'no register of dams loaded'
+		: n
+			? `${n} registered dam${n === 1 ? '' : 's'} within ${km} km (reference only)`
+			: `no registered dam within ${km} km`;
+	const area = !p.area
+		? 'a point on the map, so no area'
+		: `area when full from the map ${fmtNum(p.area.areaM2 / 10_000, 1)} ha, ${sameValue(p.area.areaM2, p.current.damAreaFullM2) ? 'saved' : 'not saved'}`;
+	return `${register} · ${area}`;
+}

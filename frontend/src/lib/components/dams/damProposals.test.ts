@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DamProposals, RegisterDamProposal } from '$lib/api';
-import { confirmWords, damProposalRows, fmtDistance, searchedFrom } from './damProposals';
+import { confirmWords, damProposalRows, fmtDistance, proposalsLine, searchedFrom } from './damProposals';
 
 const reg = (registerNo: string, over: Partial<RegisterDamProposal> = {}): RegisterDamProposal => ({
 	registerNo,
@@ -84,5 +84,25 @@ describe('searchedFrom', () => {
 		const dam = { id: 'f', name: 'Upper dam', geometryType: 'Polygon' as const, point: [18.45, -33.72] as [number, number], areaM2: 40_000 };
 		expect(searchedFrom(dam)).toBe('Searched from “Upper dam” (its polygon’s centre, 33.7200° S, 18.4500° E)');
 		expect(searchedFrom({ ...dam, name: '', geometryType: 'Point', point: [-0.5, 51.5] })).toBe('Searched from the dam on the map (a point, 51.5000° N, 0.5000° W)');
+	});
+});
+
+describe('proposalsLine', () => {
+	it('says what is proposed, so a closed box still answers whether there is anything to use', () => {
+		expect(proposalsLine(proposals(), false, null)).toBe('2 registered dams within 1 km (reference only) · area when full from the map 3.9 ha, not saved');
+		expect(proposalsLine(proposals({ register: [reg('Z100/07')], current: { damCapacityM3: 100_000, damAreaFullM2: 39_012 } }), false, null)).toBe(
+			'1 registered dam within 1 km (reference only) · area when full from the map 3.9 ha, saved'
+		);
+	});
+	it('names what is missing: no register, no registered dam near, a point with no area, no dam on the map', () => {
+		expect(proposalsLine(proposals({ datasets: [], register: [] }), false, null)).toMatch(/^no register of dams loaded · /);
+		expect(proposalsLine(proposals({ register: [] }), false, null)).toMatch(/^no registered dam within 1 km · /);
+		expect(proposalsLine(proposals({ area: null }), false, null)).toMatch(/ · a point on the map, so no area$/);
+		expect(proposalsLine(proposals({ dam: null, area: null, register: [] }), false, null)).toBe('no dam on the map is linked to it');
+	});
+	it('while loading or after a failure', () => {
+		expect(proposalsLine(null, true, null)).toBe('looking up the register and the map…');
+		expect(proposalsLine(proposals(), true, null)).toBe('looking up the register and the map…');
+		expect(proposalsLine(null, false, 'boom')).toBe('couldn’t be loaded: open to try again');
 	});
 });

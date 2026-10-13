@@ -8,12 +8,15 @@
 	(the Use button it replaces is gone), and the body: busy while loading,
 	`data-ready` once loaded or failed, the failure with its reason and Try
 	again, else the panel's own content. Each panel keeps its data, its rows,
-	its Use and its words. Pinned by e2e/tests/proposal-panels.spec.ts and
-	each panel's own spec.
+	its Use and its words. With `fold`, everything under the heading folds to
+	one line of the panel's values (common/Fold.svelte; the Dams page's,
+	inside the picked dam's chart panel). Pinned by
+	e2e/tests/proposal-panels.spec.ts and each panel's own spec.
 -->
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 
 	let {
 		testid,
@@ -32,6 +35,8 @@
 		error,
 		onretry,
 		bodyGrid = false,
+		fold,
+		open = $bindable(),
 		children
 	}: {
 		/** The section's `data-testid`. */
@@ -61,6 +66,10 @@
 		onretry: () => void;
 		/** Lay the body out as a one-column grid with gaps (Settings' group), not as a block. */
 		bodyGrid?: boolean;
+		/** Fold everything under the heading into one line of values (the unit's name, what is proposed), with its action. */
+		fold?: { name?: string; line: string; change: string };
+		/** The fold's open state (with `fold`). */
+		open?: boolean;
 		children: Snippet;
 	} = $props();
 
@@ -74,17 +83,7 @@
 	}
 </script>
 
-<section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
-	{#if variant === 'page'}
-		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h2>{@render actions?.()}</div>
-	{:else if actions}
-		<div class="head">
-			<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
-			<div class="actions">{@render actions()}</div>
-		</div>
-	{:else}
-		<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
-	{/if}
+{#snippet inner()}
 	{@render intro()}
 
 	{@render controls?.()}
@@ -98,6 +97,26 @@
 			{@render children()}
 		{/if}
 	</div>
+{/snippet}
+
+<section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
+	{#if variant === 'page'}
+		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h2>{@render actions?.()}</div>
+	{:else if actions}
+		<div class="head">
+			<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
+			<div class="actions">{@render actions()}</div>
+		</div>
+	{:else}
+		<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
+	{/if}
+	{#if fold}
+		<Fold name={fold.name} line={fold.line} change={fold.change} problem={false} body="stack" class="proposal-fold" lineTestid="{prefix}-line" bind:open>
+			{@render inner()}
+		</Fold>
+	{:else}
+		{@render inner()}
+	{/if}
 </section>
 
 <style>
@@ -146,6 +165,12 @@
 	}
 	.body {
 		min-width: 0;
+	}
+	/* Folded, the body is the fold's: its groups keep the panel's gap. */
+	.proposals :global(.proposal-fold .fold-stack) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.6rem;
 	}
 	.body.grid {
 		display: grid;
