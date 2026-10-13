@@ -53,6 +53,7 @@ Each walks the app as one kind of person and writes `reviews/<persona>.md` (git-
 ## Commands (`commands/`)
 
 - **`issue.md`** — `/issue <n>`: one GitHub issue end to end.
+- **`draft.md`** — `/draft`: one draft PR for an ad hoc testing session; each issue the operator sends is fixed into it, and `/draft ready` marks it ready.
 - **`check.md`** — pre-commit gate: the three engineering reviewers in parallel, plus `engine-reviewer` for the model, `migration-coordinator` for SQL and `ui-designer` review for screens. Advisory.
 - **`safe-edit.md`** — coder, reviewer, fix, re-review; for access, tokens, RLS, personal data, the job queue, Lambda entry points, infra, engine behaviour.
 - **`safe-migration.md`** — any change under `backend/migrations/`, with `migration-coordinator`.
