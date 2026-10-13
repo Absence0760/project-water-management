@@ -140,7 +140,7 @@ pnpm dev:tiles:fetch        # re-download the SA extract (pmtiles CLI) into MinI
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
-pnpm check                  # typecheck all workspaces
+pnpm check                  # typecheck all workspaces; the frontend's svelte-check fails on any warning (--fail-on-warnings, a11y lint included; testing.md)
 pnpm test:changed           # the fast loop: typecheck + only the tests your change reaches (docs/testing.md)
 pnpm test                   # unit tests everywhere (no DB, no wall-clock assertions)
 pnpm test:engine | test:frontend | test:backend   # test:backend includes the route-auth inventory
@@ -377,7 +377,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
   optional parameters (sveltejs/svelte#18455). The guard is
   `frontend/src/lib/components/__fixtures__/tsSyntax.test.ts`: it compiles a
   fixture through `svelte.config.js`'s preprocess and Vite's parser (Rolldown's). Add a
-  case to its fixture when a new TS form breaks a build.
+  case to its fixture when a new TS form breaks a build. It does fail on
+  warnings: the frontend's svelte-check runs with `--fail-on-warnings`, so a
+  Svelte a11y or unused-CSS warning breaks `check` (and CI) like a type error.
 - **Postgres on 5434**, because this workstation's 5432 (Supabase) and 5433
   (native) are taken.
 - **Terraform:** `plan` is fine; never `apply` without the operator's go-ahead.

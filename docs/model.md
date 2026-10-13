@@ -1917,7 +1917,7 @@ comparison lists a change of `rainSource` among the settings and sets the
 two runs' periods side by side (`RunComparison.rainSource`, with factors,
 reference windows and product label). A fit record's `forcing.rainSource`
 stores the periods, and any change flags "Forcing changed since fit" (a fit
-recorded before 0.30.0 ran with none). Settings → Rain gaps →
+recorded before 0.30.0 ran with none). Settings → Rain gaps → Flagged rain →
 *Rain source periods* edits them ([ui.md](./ui.md)).
 
 **Sub-daily imports and the day boundary.** Manual gauges are read at 08:00
