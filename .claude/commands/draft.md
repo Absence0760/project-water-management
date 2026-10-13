@@ -55,7 +55,8 @@ For every issue the operator sends, until they say ready:
    updates tests + docs). Run only what you touched: `pnpm test:changed`
    plus the DB and e2e files for the area (CLAUDE.md rule 12).
 4. **Commit path-scoped, one commit per issue**:
-   `git commit -m "fix(<area>): <what>" -- <paths>`, then `git push`.
+   `git commit -m "fix(<area>): <what>" -- <paths>`, then
+   `git push -u origin <branch>` (name the branch; a bare `git push` is refused).
    No `Co-Authored-By` or generated-by trailer.
 5. **Update the PR body**: add one bullet under Changes naming the issue and
    the fix (`gh pr edit <pr> --body-file …`), and tick the Surface touched
