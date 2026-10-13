@@ -67,6 +67,14 @@ For every issue the operator sends, until they say ready:
      updates tests + docs). Run only what it touched: `pnpm test:changed`
      plus the DB and e2e files for the area (CLAUDE.md rule 12), never a
      full suite.
+   - **Agents share the worktree's test database and e2e slot**
+     (`water_test_w<tag>`, `water_e2e…`, testing.md § Several checkouts at
+     once), so two running DB tests or e2e at once break each other (missing
+     tables, deadlocks). Take the worktree's lock around any DB test, e2e
+     spec or `pnpm test:changed` run (it runs DB tests when Postgres is up),
+     and drop it straight after:
+     `until mkdir "$(git rev-parse --git-dir)/draft-test.lock" 2>/dev/null; do sleep 5; done; <command>; rmdir "$(git rev-parse --git-dir)/draft-test.lock"`.
+     Unit tests and typechecks don't need it.
    - **One path-scoped commit**:
      `git commit -m "fix(<area>): <what>" -- <paths>`, then
      `git push -u origin <branch>` (name the branch; a bare `git push` is
