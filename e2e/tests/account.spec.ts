@@ -218,7 +218,10 @@ test.describe('layout', () => {
 		const state = panel.getByTestId('two-step-state');
 		await expect(state).toHaveText('Off');
 		expect(Math.abs(mid((await state.boundingBox())!) - mid(h2))).toBeLessThan(8);
-		await expect(panel.locator('.intro')).toHaveText('A 6-digit code after your password. Turn on one or both.');
+		// The one line, then the guide to it (a workspace user's goes to the help guide; a farmer's, alerts.spec.ts).
+		const intro = panel.locator('.intro');
+		await expect(intro).toHaveText('A 6-digit code after your password. Turn on one or both. How two-step sign-in works');
+		await expect(intro.getByRole('link', { name: 'How two-step sign-in works', exact: true })).toHaveAttribute('href', '/help/guides/two-step-sign-in');
 		for (const [method, name, line] of [
 			['totp', 'Set up the app', 'Codes from an app on your phone.'],
 			['email', 'Turn on', `Codes sent to ${owner.email}: only as safe as your inbox.`]
