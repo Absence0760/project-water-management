@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "PR #539's entries were sized from local builds (2016 KB on the PR head); CI's build of the same tree measured 2019 KB against the resulting 2017 KB ceiling (run 38432613913). This covers the 2 KB difference so the ceiling matches CI's measure of the PR's growth (help guides, farmer words, map search labels, Dams proposals)."
+}
