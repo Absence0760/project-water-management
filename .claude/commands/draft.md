@@ -74,7 +74,10 @@ For every issue the operator sends, until they say ready:
      spec or `pnpm test:changed` run (it runs DB tests when Postgres is up),
      and drop it straight after:
      `until mkdir "$(git rev-parse --git-dir)/draft-test.lock" 2>/dev/null; do sleep 5; done; <command>; rmdir "$(git rev-parse --git-dir)/draft-test.lock"`.
-     Unit tests and typechecks don't need it.
+     Unit tests and typechecks don't need it. Commit under the same lock
+     too: the pre-commit hook stashes every unstaged change in the worktree
+     (other agents' edits included) while it runs and restores them after,
+     so a file another agent writes in that window can conflict or be lost.
    - **One path-scoped commit**:
      `git commit -m "fix(<area>): <what>" -- <paths>`, then
      `git push -u origin <branch>` (name the branch; a bare `git push` is
