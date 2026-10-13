@@ -34,7 +34,7 @@ function place(i: number): PlaceRecord {
 	const b = ['vallei', 'rivier', 'laagte', 'ster', 'bank', 'fontein', 'kop', 'spruit', 'dal', 'pan', 'hoek', 'kuil', 'berg', 'plaas', 'vlakte'][Math.floor(i / 20) % 15]!;
 	const tail = i % 3 === 0 ? `${['dam', 'farm', 'noord', 'suid', 'plot'][Math.floor(i / 300) % 5]} ${i % 997}` : `${i % 5003}`;
 	const name = `${pre ? `${pre} ` : ''}${a}${b} ${tail}`;
-	return { placeId: String(i), name, searchName: name, feature: ['P.PPL', 'S.FRM', 'H.STM', 'T.HLL'][i % 4]!, admin1: '11', lon: 18 + (i % 1000) / 100, lat: -34 + Math.floor(i / 1000) / 100, source: 'SYNTHETIC perf data' };
+	return { placeId: String(i), name, searchName: name, feature: ['P.PPL', 'S.FRM', 'H.STM', 'T.HLL'][i % 4]!, admin1: '11', country: 'ZA', lon: 18 + (i % 1000) / 100, lat: -34 + Math.floor(i / 1000) / 100, source: 'SYNTHETIC perf data' };
 }
 
 /** The SQL and parameters searchMap sends for the gazetteer, caught on the way through. */

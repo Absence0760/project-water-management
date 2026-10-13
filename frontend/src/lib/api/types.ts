@@ -3174,8 +3174,10 @@ export interface MapSearchHit {
 	river: string;
 	/** A place's GeoNames feature class and code ('P.PPL', 'S.FRM'); null for the map's layers. */
 	feature: string | null;
-	/** A place's province (GeoNames' admin1 code; '' when not given); null for the map's layers. */
+	/** A place's province (GeoNames' admin1 code; '' when not given; its own country's, so a neighbour's is no South African province); null for the map's layers. */
 	admin1: string | null;
+	/** A place's country (GeoNames' ISO 3166 code: ZA, or one of its six neighbours); null for the map's layers. */
+	country: string | null;
 	lon: number;
 	lat: number;
 	/** A quaternary's box (west, south, east, north); null for a point. */

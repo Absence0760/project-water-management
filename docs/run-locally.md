@@ -488,6 +488,8 @@ pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): 
 pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Settings → Evaporation from the map averages over the boundary
 pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
 pnpm import:gazetteer       # the synthetic place and farm names (pnpm setup runs it): what the Map's search finds after the map's own layers
+                            # or the real ones: GeoNames' dumps (ZA.txt, and BW/LS/MZ/NA/SZ/ZW.txt for the towns over the border), several files
+                            # as one dataset, e.g. pnpm import:gazetteer ZA.txt BW.txt LS.txt MZ.txt NA.txt SZ.txt ZW.txt --dataset GeoNames-2026-10 (maps.md § Gazetteer)
 pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: starts MinIO, uploads the cached tiles and fonts if MinIO
                             # lacks them (first time: downloads the SA extract, about 1 GB at maxzoom 15, needs the pmtiles CLI on PATH),
                             # and sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL in frontend/.env.development.local (PUBLIC_TERRAIN_URL

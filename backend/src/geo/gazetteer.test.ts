@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, SYNTHETIC_GAZETTEER_FILE, SYNTHETIC_GAZETTEER_SOURCE } from '../../scripts/import-gazetteer.js';
 import { codeKey, GEONAMES_SOURCE, searchKey, searchWords, SYNTHETIC_GAZETTEER } from './gazetteer.js';
-import { keepsFeature, placeRecords } from './loadGazetteer.js';
+import { GAZETTEER_COUNTRIES, keepsFeature, NEIGHBOUR_BBOX, placeRecords } from './loadGazetteer.js';
 import { SearchQuery } from './searchRoutes.js';
 
 const line = (cols: Partial<Record<number, string>>) => {
@@ -77,7 +77,7 @@ describe('the GeoNames dump parser', () => {
 			''
 		].join('\n');
 		const { records, problems, leftOut } = placeRecords(text, 'za.txt', 'src');
-		expect(records).toEqual([{ placeId: '10', name: 'Môrester', searchName: 'morester', feature: 'P.PPL', admin1: '11', lon: 20.7, lat: -33.5, source: 'src' }]);
+		expect(records).toEqual([{ placeId: '10', name: 'Môrester', searchName: 'morester', feature: 'P.PPL', admin1: '11', country: 'ZA', lon: 20.7, lat: -33.5, source: 'src' }]);
 		expect(leftOut).toBe(1);
 		expect(problems).toEqual([
 			'za.txt line 2 (11): no position in WGS84 degrees',
@@ -88,8 +88,8 @@ describe('the GeoNames dump parser', () => {
 		]);
 	});
 
-	it('leaves out a place outside South Africa, counted apart, not as a problem', () => {
-		const text = [line({ 0: '30', 1: 'Binne' }), line({ 0: '31', 1: 'Gaborone', 8: 'BW' }), line({ 0: '32', 1: 'Maseru', 8: 'LS' }), line({ 0: '33', 1: 'Nowhere', 8: '' }), line({ 0: '34', 1: 'Lower', 8: 'za' })].join('\n');
+	it('leaves out a place of a country not on the list (Kenya, none, a lower-case code), counted apart, not as a problem', () => {
+		const text = [line({ 0: '30', 1: 'Binne' }), line({ 0: '31', 1: 'Nairobi', 8: 'KE' }), line({ 0: '32', 1: 'Nowhere', 8: '' }), line({ 0: '33', 1: 'Lower', 8: 'za' }), line({ 0: '34', 1: 'Lower', 8: 'bw' })].join('\n');
 		const { records, problems, leftOut, otherCountry } = placeRecords(text, 'all.txt', 'src');
 		expect(records.map((r) => r.placeId)).toEqual(['30']);
 		expect(otherCountry).toBe(4);
@@ -100,6 +100,40 @@ describe('the GeoNames dump parser', () => {
 	it('strips control characters from a name (the table refuses them)', () => {
 		const { records } = placeRecords(line({ 0: '20', 1: 'Twee\u0007Riviere' }), 'za.txt', 'src');
 		expect(records[0]!.name).toBe('Twee Riviere');
+	});
+});
+
+describe('South Africa’s neighbours (the basemap labels Kanye, Lobatse and Gaborone over the border; ad hoc testing 2026-10-13)', () => {
+	it('allows South Africa and the six countries on its border, nothing else', () => {
+		expect([...GAZETTEER_COUNTRIES].sort()).toEqual(['BW', 'LS', 'MZ', 'NA', 'SZ', 'ZA', 'ZW']);
+		// The basemap's extent (bin/tiles-dev.sh TILES_BBOX's default): a neighbour's place past it would move the view off the map.
+		expect(NEIGHBOUR_BBOX).toEqual([16.3, -35.0, 33.0, -22.0]);
+	});
+
+	it('keeps a neighbour’s place on the basemap with its country, leaves out one past its edge (counted), and keeps South Africa whole', () => {
+		const text = [
+			line({ 0: '40', 1: 'Binne' }),
+			line({ 0: '41', 1: 'Lobatse', 4: '-25.22', 5: '25.68', 8: 'BW', 10: '09' }),
+			line({ 0: '42', 1: 'Maseru', 4: '-29.32', 5: '27.48', 8: 'LS', 10: '14' }),
+			line({ 0: '43', 1: 'Francistown', 4: '-21.17', 5: '27.51', 8: 'BW' }),
+			line({ 0: '44', 1: 'Nampula', 4: '-15.1', 5: '39.3', 8: 'MZ' }),
+			line({ 0: '45', 1: 'Grensdorp', 4: '-22.0', 5: '33.0', 8: 'ZW' }),
+			line({ 0: '46', 1: 'Eiland', 4: '-46.9', 5: '37.7' })
+		].join('\n');
+		const got = placeRecords(text, 'neighbours.txt', 'src');
+		expect(got.records.map((r) => `${r.placeId} ${r.country}`)).toEqual(['40 ZA', '41 BW', '42 LS', '45 ZW', '46 ZA']);
+		expect(got.outsideMap).toBe(2);
+		expect(got.otherCountry).toBe(0);
+		expect(got.countries).toEqual({ ZA: 2, BW: 1, LS: 1, ZW: 1 });
+		expect(got.problems).toEqual([]);
+	});
+
+	it('several files share one check for a place id seen twice', () => {
+		const seen = new Set<string>();
+		expect(placeRecords(line({ 0: '50' }), 'za.txt', 'src', seen).records).toHaveLength(1);
+		const second = placeRecords([line({ 0: '50', 8: 'BW', 4: '-25', 5: '25' }), line({ 0: '51', 8: 'BW', 4: '-25', 5: '25' })].join('\n'), 'bw.txt', 'src', seen);
+		expect(second.records.map((r) => r.placeId)).toEqual(['51']);
+		expect(second.problems).toEqual(['bw.txt line 1: 50 appears twice']);
 	});
 });
 
@@ -128,14 +162,22 @@ describe('the committed synthetic gazetteer', () => {
 
 describe('pnpm import:gazetteer arguments', () => {
 	it('with none, the committed fixture under its label', () => {
-		expect(parseArgs([])).toEqual({ file: SYNTHETIC_GAZETTEER_FILE, dataset: SYNTHETIC_GAZETTEER, source: SYNTHETIC_GAZETTEER_SOURCE });
+		expect(parseArgs([])).toEqual({ files: [SYNTHETIC_GAZETTEER_FILE], dataset: SYNTHETIC_GAZETTEER, source: SYNTHETIC_GAZETTEER_SOURCE });
 	});
 
 	it('a file needs a label; the source defaults to GeoNames’ attribution; paths resolve from where the command was typed', () => {
 		expect(parseArgs(['ZA.txt'])).toMatch(/--dataset/);
 		expect(parseArgs(['ZA.txt', '--dataset', SYNTHETIC_GAZETTEER])).toMatch(/fixture/);
-		expect(parseArgs(['a.txt', 'b.txt', '--dataset', 'x'])).toMatch(/one file/);
-		expect(parseArgs(['ZA.txt', '--dataset', 'GeoNames-ZA'], { INIT_CWD: '/data' })).toEqual({ file: '/data/ZA.txt', dataset: 'GeoNames-ZA', source: GEONAMES_SOURCE });
+		expect(parseArgs(['ZA.txt', '--dataset', 'GeoNames-ZA'], { INIT_CWD: '/data' })).toEqual({ files: ['/data/ZA.txt'], dataset: 'GeoNames-ZA', source: GEONAMES_SOURCE });
 		expect(parseArgs(['ZA.txt', '--dataset', 'G', '--source', 'Mine'], { INIT_CWD: '/data' })).toMatchObject({ source: 'Mine' });
+	});
+
+	it('several dumps load as one dataset (South Africa and its neighbours); the same file twice is refused', () => {
+		expect(parseArgs(['ZA.txt', 'BW.txt.gz', '--dataset', 'GeoNames-2026-10', 'LS.txt'], { INIT_CWD: '/data' })).toEqual({
+			files: ['/data/ZA.txt', '/data/BW.txt.gz', '/data/LS.txt'],
+			dataset: 'GeoNames-2026-10',
+			source: GEONAMES_SOURCE
+		});
+		expect(parseArgs(['BW.txt', './BW.txt', '--dataset', 'x'], { INIT_CWD: '/data' })).toMatch(/twice/);
 	});
 });

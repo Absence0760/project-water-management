@@ -17,6 +17,19 @@ export const ZA_PROVINCES: Readonly<Record<string, string>> = {
 	'11': 'Western Cape'
 };
 
+/** South Africa's neighbours the gazetteer loads, by GeoNames' country code (the backend's GAZETTEER_COUNTRIES; docs/maps.md § Gazetteer). */
+export const NEIGHBOURS: Readonly<Record<string, string>> = {
+	BW: 'Botswana',
+	LS: 'Lesotho',
+	MZ: 'Mozambique',
+	NA: 'Namibia',
+	SZ: 'Eswatini',
+	ZW: 'Zimbabwe'
+};
+
+/** A place over the border: one with a country that isn't South Africa's. */
+const abroad = (h: MapSearchHit): boolean => h.kind === 'place' && !!h.country && h.country !== 'ZA';
+
 /** What a gazetteer place is, from its GeoNames feature class and code. */
 export function placeWord(feature: string | null): string {
 	const [cls, code = ''] = (feature ?? '').split('.');
@@ -33,13 +46,14 @@ export function placeWord(feature: string | null): string {
 	return 'Area';
 }
 
-/** A match's name as listed: the place's or station's name, the dam's, or the quaternary's code. */
+/** A match's name as listed: the place's or station's name, the dam's, or the quaternary's code; a place over the border with its country ("Lobatse, Botswana"). */
 export function hitName(h: MapSearchHit): string {
 	if (h.kind === 'quaternary') return `Quaternary ${h.code}`;
-	return h.name || h.code || 'Unnamed';
+	const name = h.name || h.code || 'Unnamed';
+	return abroad(h) ? `${name}, ${NEIGHBOURS[h.country!] ?? h.country}` : name;
 }
 
-/** What and where, after the name: "Gauging station Z1H001 · Sandspruit", "Farm · Western Cape"; "(sample)" for the invented datasets. */
+/** What and where, after the name: "Gauging station Z1H001 · Sandspruit", "Farm · Western Cape" (a province for South Africa's places only: a neighbour's admin1 code is its own country's); "(sample)" for the invented datasets. */
 export function hitDetail(h: MapSearchHit): string {
 	const parts: string[] = [];
 	if (h.kind === 'gauge') parts.push(`Gauging station ${h.code}`);
@@ -47,7 +61,7 @@ export function hitDetail(h: MapSearchHit): string {
 	else if (h.kind === 'quaternary') parts.push('Quaternary catchment');
 	else parts.push(placeWord(h.feature));
 	if (h.river) parts.push(h.river);
-	if (h.kind === 'place' && h.admin1 && ZA_PROVINCES[h.admin1]) parts.push(ZA_PROVINCES[h.admin1]!);
+	if (h.kind === 'place' && !abroad(h) && h.admin1 && ZA_PROVINCES[h.admin1]) parts.push(ZA_PROVINCES[h.admin1]!);
 	return `${parts.join(' · ')}${h.synthetic ? ' (sample)' : ''}`;
 }
 

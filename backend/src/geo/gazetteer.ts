@@ -65,8 +65,10 @@ export interface SearchHit {
 	river: string;
 	/** A place's GeoNames feature class and code ('P.PPL', 'S.FRM'); null for the map's layers. */
 	feature: string | null;
-	/** A place's province (GeoNames' admin1 code, '' when not given); null for the map's layers. */
+	/** A place's province (GeoNames' admin1 code, '' when not given; its own country's, so a neighbour's is no South African province); null for the map's layers. */
 	admin1: string | null;
+	/** A place's country (GeoNames' ISO 3166 code: ZA, or a neighbour's, 236); null for the map's layers. */
+	country: string | null;
 	/** Where to move the view: the point, and for a quaternary its box (west, south, east, north). */
 	lon: number;
 	lat: number;
@@ -114,6 +116,16 @@ const closeness = (expr: string, phrase: string) => `(${expr} = ${phrase}) DESC,
  */
 const SEAT_RANK = `CASE feature WHEN 'P.PPLC' THEN 0 WHEN 'P.PPLG' THEN 0 WHEN 'P.PPLA' THEN 1 WHEN 'P.PPLA2' THEN 2 WHEN 'P.PPLA3' THEN 3 WHEN 'P.PPLA4' THEN 4 ELSE 5 END`;
 
+/**
+ * South Africa's places before a neighbour's (236): after closeness and kind,
+ * before the seat of government, so the Eastern Cape's Kanye (a hamlet) comes
+ * before Botswana's (a district seat), while a neighbour's town still comes
+ * before a South African farm of its name. The catchments are South Africa's;
+ * the neighbours' places are there for the towns the basemap labels over the
+ * border.
+ */
+const HOME_FIRST = `(country = 'ZA') DESC`;
+
 /** Search the map's layers, then the gazetteer, for `q`. */
 export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 	const words = searchWords(q);
@@ -151,12 +163,12 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 	// that index's. everyWordStarts' bool_and over the array would read every
 	// row of the gazetteer (about 150 000 in production).
 	const placeWords = words.map((_, i) => `(' ' || search_name) LIKE '% ' || $${i + 3}::text || '%'`).join(' AND ');
-	const places = await db.query<{ place_id: string; name: string; feature: string; admin1: string; lon: number; lat: number; dataset: string; source: string }>(
-		`SELECT place_id, name, feature, admin1, lon, lat, dataset, source FROM gazetteer_reference
+	const places = await db.query<{ place_id: string; name: string; feature: string; admin1: string; country: string; lon: number; lat: number; dataset: string; source: string }>(
+		`SELECT place_id, name, feature, admin1, country, lon, lat, dataset, source FROM gazetteer_reference
 		 WHERE ${placeWords}
 		 ORDER BY ${closeness('search_name', '$1')},
 			CASE split_part(feature, '.', 1) WHEN 'P' THEN 0 WHEN 'S' THEN 1 WHEN 'H' THEN 2 ELSE 3 END,
-			${SEAT_RANK}, name, dataset, place_id
+			${HOME_FIRST}, ${SEAT_RANK}, name, dataset, place_id
 		 LIMIT $2`,
 		[phrase, SEARCH_PLACE_LIMIT + 1, ...words]
 	);
@@ -166,10 +178,10 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 
 	const hits: SearchHit[] = [
 		...cap(gauges.rows, SEARCH_LAYER_LIMIT).map(
-			(r): SearchHit => ({ kind: 'gauge', code: r.code, name: r.name, river: r.river, feature: null, admin1: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
+			(r): SearchHit => ({ kind: 'gauge', code: r.code, name: r.name, river: r.river, feature: null, admin1: null, country: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
 		),
 		...cap(dams.rows, SEARCH_LAYER_LIMIT).map(
-			(r): SearchHit => ({ kind: 'dam', code: r.register_no, name: r.name, river: r.river ?? '', feature: null, admin1: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
+			(r): SearchHit => ({ kind: 'dam', code: r.register_no, name: r.name, river: r.river ?? '', feature: null, admin1: null, country: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
 		),
 		...cap(quaternaries.rows, SEARCH_LAYER_LIMIT).map(
 			(r): SearchHit => ({
@@ -179,6 +191,7 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 				river: '',
 				feature: null,
 				admin1: null,
+				country: null,
 				lon: (r.min_lon + r.max_lon) / 2,
 				lat: (r.min_lat + r.max_lat) / 2,
 				bbox: [r.min_lon, r.min_lat, r.max_lon, r.max_lat],
@@ -188,7 +201,7 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 			})
 		),
 		...cap(places.rows, SEARCH_PLACE_LIMIT).map(
-			(r): SearchHit => ({ kind: 'place', code: null, name: r.name, river: '', feature: r.feature, admin1: r.admin1, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: r.source })
+			(r): SearchHit => ({ kind: 'place', code: null, name: r.name, river: '', feature: r.feature, admin1: r.admin1, country: r.country, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: r.source })
 		)
 	];
 	return { q, hits, truncated, placesLoaded };

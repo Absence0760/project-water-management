@@ -169,7 +169,8 @@ pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees (licences unconfirmed: local only, production loads refused; maps.md § MAP grid)
 pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm setup runs it);
-                             # <ZA.txt[.gz]> --dataset <label> [--source "<attribution>"] loads GeoNames' South Africa dump (CC BY 4.0; maps.md § Search)
+                             # <ZA.txt[.gz]> [<BW.txt[.gz]> …] --dataset <label> [--source "<attribution>"] loads GeoNames' dumps of South Africa and its
+                             # neighbours (BW, LS, MZ, NA, SZ, ZW; theirs inside the basemap only), several files as one dataset (CC BY 4.0; maps.md § Gazetteer)
 pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)

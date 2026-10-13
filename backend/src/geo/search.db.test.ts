@@ -5,6 +5,9 @@
 // control); a farmer gets 403, a stranger 404, a signed-out caller 401;
 // water_app can't write the gazetteer; a load replaces its dataset and
 // records nothing of a local import in reference_load.
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importGaugeStations, parseArgs as stationArgs } from '../../scripts/import-gauge-stations.js';
@@ -169,6 +172,84 @@ describe('a town on the map is found (production searched an empty gazetteer, 20
 		} finally {
 			client.release();
 			await pool.end();
+		}
+	});
+});
+
+describe('towns over the border (the basemap labels Kanye, Lobatse and Gaborone in Botswana; ad hoc testing 2026-10-13)', () => {
+	// SYNTHETIC lines in GeoNames' dump format, one file per country as GeoNames
+	// publishes them. Kanye is a real name in both countries (a Botswana district
+	// seat, an Eastern Cape hamlet), which is the case the ranking decides; the
+	// ids, positions and the other names are made up.
+	const line = (id: string, name: string, cls: string, code: string, cc: string, admin1: string, lat: number, lon: number) =>
+		[id, name, name, '', String(lat), String(lon), cls, code, cc, '', admin1, '', '', '', '0', '', '0', 'Africa/Johannesburg', '2026-10-13'].join('\t');
+	const za = [line('9200001', 'Kanye', 'P', 'PPL', 'ZA', '05', -31.6, 28.0), line('9200002', 'Grensbult', 'P', 'PPL', 'ZA', '10', -25.8, 25.6)].join('\n');
+	const bw = [
+		line('9200101', 'Kanye', 'P', 'PPLA', 'BW', '09', -24.97, 25.33),
+		line('9200102', 'Lobatse', 'P', 'PPL', 'BW', '09', -25.22, 25.68),
+		line('9200103', 'Grensbult', 'P', 'PPLA2', 'BW', '09', -25.0, 25.5),
+		// North of the basemap: nothing to show it on, so left out.
+		line('9200104', 'Grensbult Noord', 'P', 'PPL', 'BW', '01', -21.2, 27.5)
+	].join('\n');
+	const ke = line('9200201', 'Grensbult Kenia', 'P', 'PPL', 'KE', '05', -1.3, 36.8);
+	let dir: string;
+	const file = (name: string, text: string) => {
+		const p = join(dir, name);
+		writeFileSync(p, text);
+		return p;
+	};
+	const countriesOf = (body: { hits: SearchHit[] }) => body.hits.map((h) => `${h.name} ${h.country}`);
+
+	it('South Africa’s and Botswana’s dumps load as one dataset: both found, the South African town first on a shared name, the country on every place', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const got = await importGazetteer(OWNER_URL(), { files: [file('ZA.txt', za), file('BW.txt', bw)], dataset: 'border-test', source: 'Test source' });
+			expect(got).toMatchObject({ written: 5, outsideMap: 1, otherCountry: 0, countries: { ZA: 2, BW: 3 } });
+			expect(countriesOf((await search(viewer, 'Lobatse')).body)).toEqual(['Lobatse BW']);
+			// Botswana's Kanye is a district seat (PPLA), the Eastern Cape's a hamlet (PPL): South Africa's still comes first.
+			expect(countriesOf((await search(viewer, 'Kanye')).body)).toEqual(['Kanye ZA', 'Kanye BW']);
+			expect(countriesOf((await search(viewer, 'Grensbult')).body)).toEqual(['Grensbult ZA', 'Grensbult BW']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'border-test'`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('a neighbour loaded as its own dataset sits beside South Africa’s, and reloading it leaves South Africa’s alone', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			await importGazetteer(OWNER_URL(), { files: [file('ZA.txt', za)], dataset: 'border-za', source: 'Test source' });
+			await importGazetteer(OWNER_URL(), { files: [file('BW.txt', bw)], dataset: 'border-bw', source: 'Test source' });
+			await importGazetteer(OWNER_URL(), { files: [file('BW.txt', bw)], dataset: 'border-bw', source: 'Test source' });
+			expect(countriesOf((await search(viewer, 'Kanye')).body)).toEqual(['Kanye ZA', 'Kanye BW']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset IN ('border-za', 'border-bw')`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('a country off the list (Kenya) loads nothing, beside a dump that does (positive control)', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			expect(await importGazetteer(OWNER_URL(), { files: [file('KE.txt', ke)], dataset: 'border-ke', source: 'Test source' })).toMatchObject({ written: 0, otherCountry: 1 });
+			expect(await importGazetteer(OWNER_URL(), { files: [file('KE.txt', ke), file('BW.txt', bw)], dataset: 'border-ke', source: 'Test source' })).toMatchObject({ written: 3, otherCountry: 1 });
+			expect(countriesOf((await search(viewer, 'Grensbult')).body)).toEqual(['Grensbult BW']);
+			// The table holds the same list: even the schema owner can't write another country.
+			await expect(
+				client.query(`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, country, lon, lat, source) VALUES ('border-ke', 'x', 'x', 'x', 'P.PPL', 'KE', 36.8, -1.3, 'x')`)
+			).rejects.toThrow(/gazetteer_reference_country_check/);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'border-ke'`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 });
