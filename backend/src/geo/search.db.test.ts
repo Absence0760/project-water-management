@@ -254,6 +254,40 @@ describe('towns over the border (the basemap labels Kanye, Lobatse and Gaborone 
 		}
 	});
 
+	it('a place id in two files loads once, from the first file, and the second is a problem naming its file; each country is counted across files', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		// A second South African dump repeats Grensbult's id (as an overlapping extract would) and adds one place.
+		const zaAgain = [line('9200002', 'Grensbult Herhaal', 'P', 'PPL', 'ZA', '10', -25.8, 25.6), line('9200003', 'Nuwedorp', 'P', 'PPL', 'ZA', '10', -26.0, 26.0)].join('\n');
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const got = await importGazetteer(OWNER_URL(), { files: [file('ZA.txt', za), file('BW.txt', bw), file('ZA-2.txt', zaAgain)], dataset: 'border-dup', source: 'Test source' });
+			expect(got).toMatchObject({ written: 6, countries: { ZA: 3, BW: 3 } });
+			expect(got.problems).toEqual(['ZA-2.txt line 1: 9200002 appears twice']);
+			const { rows } = await client.query<{ name: string }>(`SELECT name FROM gazetteer_reference WHERE dataset = 'border-dup' AND place_id = '9200002'`);
+			expect(rows.map((r) => r.name)).toEqual(['Grensbult']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'border-dup'`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('files with no place to keep write nothing and never open a connection (an unreachable database is not touched)', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		try {
+			const offMap = line('9200301', 'Ver Noord', 'P', 'PPL', 'BW', '01', -18.0, 25.0);
+			const got = await importGazetteer('postgres://nobody@127.0.0.1:1/nothing', {
+				files: [file('KE.txt', ke), file('BW.txt', offMap)],
+				dataset: 'border-none',
+				source: 'Test source'
+			});
+			expect(got).toMatchObject({ written: 0, otherCountry: 1, outsideMap: 1, countries: {}, problems: [] });
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	it('the table’s country check and the loader’s allow-list name the same countries', async () => {
 		// Adding a country takes both a migration and GAZETTEER_COUNTRIES (236): one without the other loads
 		// places the table refuses, or refuses places the table would take.

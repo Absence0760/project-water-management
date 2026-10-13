@@ -1,4 +1,7 @@
+import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
+import FarmFrameHost from './__fixtures__/FarmFrameHost.svelte';
+import FarmFrameProbe from './__fixtures__/FarmFrameProbe.svelte';
 import { isAccountPath, isFarmerOnly } from './frame';
 
 describe('isFarmerOnly', () => {
@@ -24,5 +27,23 @@ describe('isAccountPath', () => {
 		expect(isAccountPath('/accounts')).toBe(false);
 		expect(isAccountPath('/alerts/unsubscribe')).toBe(false);
 		expect(isAccountPath('/farm')).toBe(false);
+	});
+});
+
+describe('farmFrameReader / provideFarmFrame', () => {
+	it('outside the root layout, never the farm frame', () => {
+		let reader: (() => boolean) | undefined;
+		// The renderer runs on reading the body.
+		void render(FarmFrameProbe, { props: { onread: (r) => (reader = r) } }).body;
+		expect(reader!()).toBe(false);
+	});
+
+	it('under the root layout, what it provides, read when called so it follows a change', () => {
+		let inFrame = true;
+		let reader: (() => boolean) | undefined;
+		void render(FarmFrameHost, { props: { inFarmFrame: () => inFrame, onread: (r) => (reader = r) } }).body;
+		expect(reader!()).toBe(true);
+		inFrame = false;
+		expect(reader!()).toBe(false);
 	});
 });
