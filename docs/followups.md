@@ -5521,6 +5521,54 @@ assume, the questions for counsel); these are the actions, with triggers.
       brings it). Then decide whether the root layout's `onNavigate(() =>
       stylesheetsReady())` workaround stays (it is cheap and also guards a
       slow link) or goes, and update the upstream doc either way.
+- [ ] **Playwright 1.64 (Dependabot #529, left out of #537, 2026-10-12).**
+      #529 moved only the renderer image (`backend/renderer.Dockerfile`, both
+      FROM lines) to `v1.64.0-noble`. With the npm packages still on 1.63 the
+      pins disagree (`pnpm check:pins`), and the image lacks the Chromium build
+      playwright-core 1.63 drives (`pnpm check:renderer-image`). The npm
+      packages couldn't move with it, because Playwright 1.64.0 was published
+      2026-10-07 and `minimumReleaseAge` refuses it until 2026-10-14.
+      **Durable fix:** move all six pins in one PR, as the Dockerfile's header
+      says:
+      - the image tag and digest on both FROM lines;
+      - `playwright-core` in `backend/package.json` and
+        `backend/renderer-deps/package.json`, then `npm install
+        --package-lock-only` in `renderer-deps/`;
+      - `@playwright/test` in `e2e/package.json`, then `pnpm install`;
+      - `pnpm gen:renderer-apt` for the apt snapshot and versions;
+      - then `pnpm check:pins` and `pnpm check:renderer-image`.
+
+      **Trigger:** on or after 2026-10-14, when 1.64.0 passes
+      `minimumReleaseAge`, or when Dependabot next opens the image PR.
+- [ ] **SvelteKit 3 and adapter-static 4 (Dependabot #533, #535, left out of
+      #537, 2026-10-12).** Kit 3 no longer reads `svelte.config.js`, so
+      `svelte-kit sync` fails (#533's red). adapter-static 4 needs kit 3. The
+      [migration guide](https://svelte.dev/docs/kit/migrating-to-sveltekit-3)
+      touches most of the frontend:
+      - `$lib` becomes a `#lib` subpath import in package.json `imports`, with
+        full file extensions (~2 750 imports in ~800 files).
+      - `$app/paths`' `base` is removed, in favour of `asset()` and `resolve()`,
+        whose pathnames don't start with `/` (108 files).
+      - `goto` options are renamed: `replaceState` becomes `replace`, and
+        `keepFocus`/`noScroll` become `reset: false` (~30 files). `goto` also
+        rejects a URL that doesn't resolve to a route.
+      - The config moves into `sveltekit({...})` in `vite.config.ts`, and
+        `prerender.origin` becomes `paths.origin`. The importers of
+        `svelte.config.js` follow it: `tsSyntax.test.ts`, `cssHash.test.ts`,
+        `wafCaptcha` and `infra/scripts/check-csp.mjs`.
+      - `data-sveltekit-*="off"` becomes `false`.
+      - `version.pollInterval` now defaults to polling `version.json` hourly.
+        Decide whether the static site wants that.
+      - Clicking a link to the current page now calls `refreshAll()`.
+
+      The `cookie@<0.7.0` override in `pnpm-workspace.yaml` can go then,
+      because kit 3 depends on cookie 2.
+      **Durable fix:** run `npx sv migrate sveltekit-3`, review what it leaves,
+      and land it as its own PR with the full e2e run. Keep the static SPA with
+      its fallback, `ssr = false`, the prerendered `/welcome` pages and the
+      meta CSP behaving as they do now.
+      **Trigger:** when someone takes it. There is no deadline, since kit 2 is
+      still supported. Until then Dependabot keeps reopening #533 and #535.
 - [ ] **Two sources no one could check (from #259; moved from issue #90,
       2026-10-11).** WR2012's own lake factors (the WR2012 resource centre
       needs a login; used by #256) and Linsley, Kohler & Paulhus (1982)

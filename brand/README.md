@@ -51,5 +51,5 @@ python3 -m venv .venv-brand && .venv-brand/bin/pip install -r brand/requirements
 The body font alone (fonttools and network only, byte-for-byte reproducible):
 
 ```bash
-uv run --no-project --with fonttools==4.66.0 --with brotli==1.2.0 python brand/build.py body-font
+uv run --no-project --with fonttools==4.66.1 --with brotli==1.2.0 python brand/build.py body-font
 ```
