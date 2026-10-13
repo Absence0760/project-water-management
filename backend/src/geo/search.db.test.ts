@@ -17,7 +17,7 @@ import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { anon, asOwner, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { SEARCH_LAYER_LIMIT, searchMap } from './gazetteer.js';
-import { placeRecords, replacePlaces } from './loadGazetteer.js';
+import { GAZETTEER_COUNTRIES, placeRecords, replacePlaces } from './loadGazetteer.js';
 import type { SearchHit } from './gazetteer.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -251,6 +251,23 @@ describe('towns over the border (the basemap labels Kanye, Lobatse and Gaborone 
 			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'border-ke'`);
 			await client.end();
 			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('the table’s country check and the loader’s allow-list name the same countries', async () => {
+		// Adding a country takes both a migration and GAZETTEER_COUNTRIES (236): one without the other loads
+		// places the table refuses, or refuses places the table would take.
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const { rows } = await client.query<{ def: string }>(
+				`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'gazetteer_reference_country_check'`
+			);
+			expect(rows).toHaveLength(1);
+			const inCheck = [...rows[0]!.def.matchAll(/'([A-Z]{2})'/g)].map((m) => m[1]).sort();
+			expect(inCheck).toEqual([...GAZETTEER_COUNTRIES].sort());
+		} finally {
+			await client.end();
 		}
 	});
 });
