@@ -37,7 +37,10 @@
 				{ href: '/help/glossary', label: 'Glossary' },
 				...topics.map((c) => ({ href: topicPath(c), label: CATEGORY_TITLES[c] })),
 				// Every upload and paste box's Expected format (issue #477).
-				{ href: '/help/formats', label: 'File formats' }
+				{ href: '/help/formats', label: 'File formats' },
+				// The public reference pages (outside /help, their own frame): how the engine is checked, and the data's sources and credits.
+				{ href: '/methods', label: 'How the model is checked' },
+				{ href: '/data-sources', label: 'Data sources and credits' }
 			]
 		}
 	];

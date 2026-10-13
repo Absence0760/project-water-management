@@ -167,6 +167,8 @@ export const af: Catalogue = {
 	'3e7d8f8f': 'Kon nie hier kopieer nie. Laai hulle af, of skryf hulle neer.',
 	// A 6-digit code after your password. Turn on one or both.
 	'da7cd1d9': '’n 6-syferkode ná jou wagwoord. Skakel een of albei aan.',
+	// How two-step sign-in works
+	'5975f901': 'Hoe tweestap-intekening werk',
 	// Someone asked to remove two-step sign-in from your account, saying they can’t get a code. It will be removed at {when}, unless it’s cancelled.
 	'7842bac5': 'Iemand het gevra om tweestap-intekening van jou rekening te verwyder, en gesê hulle kan nie ’n kode kry nie. Dit word om {when} verwyder, tensy dit gekanselleer word.',
 	// If that wasn’t you, cancel it now with a code from your authenticator app or your email, then change your password.

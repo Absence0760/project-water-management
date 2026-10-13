@@ -250,6 +250,7 @@
 		<div class="bar no-print">
 			<a href={back}>← Back</a>
 			<PackBadge status={pack.status} version={pack.version} />
+			<a href="{base}/help/guides/issue-an-evidence-pack" data-testid="pack-guide">How evidence packs work</a>
 			{#if pdf?.status === 'ready'}
 				<a class="btn btn-primary" href={api.packs.pdfUrl(projectId, pack.id)} data-testid="pack-pdf-download">Download PDF</a>
 				<button type="button" class="btn" onclick={() => window.print()}>Print this page</button>

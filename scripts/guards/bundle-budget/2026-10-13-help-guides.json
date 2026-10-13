@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Ad hoc testing 2026-10-13 (#539), the help's new content: the two-step sign-in guide, the map's layers and search, per-unit rain, the page guides (project, dams, river, units, allocations), the map-search, two-step and error-message glossary entries and the help links. Measured on the merged branch after 2026-10-13-help-corrections and -farmer-words: 2013 KB against 2009 (the Dams session's uncommitted work in the tree is a fraction of a KB). The page guides moved to their own chunk (help-guides-pages), which took the largest chunk from 46 to 38 KB but adds about 1 KB of split overhead to the total, which counts lazy chunks by design."
+}

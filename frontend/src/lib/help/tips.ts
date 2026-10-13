@@ -63,6 +63,18 @@ export const TIPS: HelpTipText[] = [
 		category: 'basics'
 	},
 	{
+		id: 'two-step-sign-in',
+		term: 'Two-step sign-in',
+		short: 'A 6-digit code after your password, from an authenticator app or by email; one-use recovery codes cover a lost phone.',
+		category: 'basics'
+	},
+	{
+		id: 'error-messages',
+		term: 'Something went wrong (error messages)',
+		short: 'What the common error messages mean, such as “The server is busy; try again in a moment”, and what to do about each.',
+		category: 'basics'
+	},
+	{
 		id: 'team',
 		term: 'Team',
 		short: 'A group that owns catchments together: each member has the same role on every team project as they hold in the team.',
@@ -1762,6 +1774,12 @@ export const TIPS: HelpTipText[] = [
 		id: 'map-snap',
 		term: 'Snap to features',
 		short: 'A corner placed within 12 px of another feature’s corner or edge lands exactly on it; Follow edges also takes the corners between.',
+		category: 'data'
+	},
+	{
+		id: 'map-search',
+		term: 'Map search',
+		short: 'Finds gauging stations, registered dams, quaternaries and then place names, and moves the map there. Nothing is drawn or saved.',
 		category: 'data'
 	},
 	{

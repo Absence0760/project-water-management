@@ -10761,8 +10761,9 @@ Part of the workspace, so English, like the rest of the Applicant view
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
 (`help/HelpNav.svelte`: the overview, then six groups, *Start here*,
-*How it works*, *How to*, *Using the results*, *Pages, one by one* and *Reference*, the last the glossary's index and
-one link per topic) marks the page you're on (`aria-current`). Each group's
+*How it works*, *How to*, *Using the results*, *Pages, one by one* and *Reference*, the last the glossary's index,
+one link per topic, File formats, and the public **How the model is checked** (`/methods`) and **Data sources and
+credits** (`/data-sources`) pages, which open in their own frame) marks the page you're on (`aria-current`). Each group's
 name is a heading (`h2`, not a link) and names its list; its links are
 indented under a thin rule, so a group reads as a block (issue #162). One
 group shows its pages at a time: the heading holds a disclosure button
@@ -10782,6 +10783,16 @@ guide) doesn't scroll. They
 don't go in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)):
 a long list there made the sidebar scroll. On phones the contents fold behind a **Help contents** button
 under the search box, and close again when you pick a page.
+
+Pages outside the workspace link to the guide about them: the Account page's Two-step sign-in box and the
+Project page's Two-step sign-in panel to *Sign in with two steps* (`two-step-sign-in`; on the Account page the
+link's words go through `t()`), the Teams pages to *Set up a team and share a project*, an evidence pack's page
+to *Issue an evidence pack* and the printable report's bar to *Run the model and read the results*. Signed-out
+pages (/mfa-reset, /share, /verify) don't: `/help` needs a sign-in. `guides.test.ts` checks every
+`/help/guides/<id>` link in the app's source names a guide (and section) that exists, and every Settings path
+the help or the app names (“Settings → Rain gaps → Flagged rain”) resolves to a panel and its headings.
+The guides are `lib/help/guides.ts`, with the *Pages, one by one* guides in `lib/help/guides-pages.ts`, a chunk of
+their own (`vite.config.ts` `helpArticlesChunk`), so neither passes check:bundle's per-chunk ceiling.
 
 Each subpage (a guide, the glossary, search) heads its text the same way: a
 breadcrumb (`help/HelpCrumbs.svelte`: *Help › How to › Add a transfer*,

@@ -15,6 +15,7 @@
 	// project or team requires it, or someone who takes part in licence
 	// decisions; GET /auth/mfa `required`) is told so.
 	import { onDestroy, onMount, tick } from 'svelte';
+	import { base } from '$app/paths';
 	import { api, ApiError, type MfaMethod, type MfaStatus } from '$lib/api';
 	import { mfaStatusSeen } from '$lib/auth/mfaPrompt.svelte';
 	import { resendTimer } from '$lib/auth/resendTimer.svelte';
@@ -328,7 +329,7 @@
 			</div>
 		{/if}
 
-		<p class="muted intro">{t('A 6-digit code after your password. Turn on one or both.')}</p>
+		<p class="muted intro">{t('A 6-digit code after your password. Turn on one or both.')} <a href="{base}/help/guides/two-step-sign-in">{t('How two-step sign-in works')}</a></p>
 		{#if status.pendingReset}
 			<div class="alert alert-warning" role="alert" data-pending-reset>
 				<p>

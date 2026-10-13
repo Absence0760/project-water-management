@@ -339,6 +339,7 @@
 					</p>
 				</div>
 				<div class="head-actions">
+					<a class="btn" href="{base}/help/guides/share-with-a-team">How teams work</a>
 					<a class="btn" href="{base}/?owner=team:{team.id}&sort=status">Project list</a>
 					<a class="btn" href={settingsHref} data-sveltekit-noscroll bind:this={settingsLink}>Team settings</a>
 					{#if isAdmin}<button type="button" class="btn" onclick={focusAddMember}>Add member</button>{/if}

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
@@ -401,5 +401,66 @@ describe('searchGuides', () => {
 		// “Save changes” is written **Save changes** in the network guide.
 		expect(searchGuides('save changes').map((g) => g.id)).toContain('build-the-network');
 		expect(searchGuides('KLEMEŠ').map((g) => g.id)).toContain('how-calibration-works');
+	});
+});
+
+describe('links into help from the app', () => {
+	const read = (f: string) => readFileSync(f, 'utf8');
+	const sources = [...walk(SRC), ...walk(ROUTES)].filter((f) => !f.includes('/lib/help/'));
+
+	it('name guides (and guide sections) that exist', () => {
+		const broken: string[] = [];
+		let seen = 0;
+		for (const f of sources) {
+			for (const m of read(f).matchAll(/\/help\/guides\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:#([a-z0-9-]+))?/g)) {
+				seen++;
+				const g = guideFor(m[1]!);
+				if (!g) broken.push(`${f.slice(SRC.length)}: no guide ${m[1]}`);
+				else if (m[2] && !g.sections.some((s) => sectionId(s.heading) === m[2])) broken.push(`${f.slice(SRC.length)}: ${m[1]} has no section #${m[2]}`);
+			}
+		}
+		expect(seen).toBeGreaterThan(5);
+		expect(broken).toEqual([]);
+	});
+
+	it('reach the two-step guide from the Account page and the Project page’s panel, and the page guides from their pages', () => {
+		const links: [string, string][] = [
+			['../components/account/TwoStepSignIn.svelte', 'two-step-sign-in'],
+			['../components/project/TwoStepPanel.svelte', 'two-step-sign-in'],
+			['../../routes/teams/+page.svelte', 'share-with-a-team'],
+			['../../routes/teams/[id]/+page.svelte', 'share-with-a-team'],
+			['../../routes/projects/[id]/packs/[packId]/+page.svelte', 'issue-an-evidence-pack'],
+			['../../routes/projects/[id]/report/+page.svelte', 'run-and-read-results']
+		];
+		for (const [file, id] of links) {
+			expect(guideFor(id), id).toBeDefined();
+			expect(read(fileURLToPath(new URL(file, import.meta.url))), file).toContain(`/help/guides/${id}`);
+		}
+	});
+
+	it('give the help contents only links that resolve: a help page, a glossary topic or a route', () => {
+		const nav = read(fileURLToPath(new URL('../components/help/HelpNav.svelte', import.meta.url)));
+		const hrefs = [...nav.matchAll(/href: '([^']+)'/g)].map((m) => m[1]!);
+		expect(hrefs).toEqual(expect.arrayContaining(['/help/glossary', '/help/formats', '/methods', '/data-sources']));
+		for (const h of hrefs) {
+			const route = `${ROUTES}${h}/+page.svelte`;
+			expect(() => statSync(route), h).not.toThrow();
+		}
+	});
+
+	it('list the guides added for two-step sign-in, the map’s layers and search, and error messages', () => {
+		// Under Using the results, beside sharing with a team: a ninth How-to guide overflowed the contents at 1280×800 (help.spec.ts).
+		expect(guideFor('two-step-sign-in')?.kind).toBe('use');
+		expect(guideFor('map-page')!.sections.map((s) => s.heading)).toContain('Layers and search');
+		expect(guideFor('dams-page')!.sections.map((s) => s.heading)).toContain('Proposals and assurance');
+		expect(guideFor('river-page')!.sections.map((s) => s.heading)).toContain('How sure, and what if');
+		for (const id of ['two-step-sign-in', 'map-search', 'error-messages']) expect(helpFor(id), id).toBeDefined();
+		expect(helpFor('error-messages')!.long).toContain('The server is busy; try again in a moment');
+		// Every fallback message the API client shows (client.ts statusText) is explained, word for word.
+		const client = readFileSync(fileURLToPath(new URL('../api/client.ts', import.meta.url)), 'utf8');
+		const body = client.slice(client.indexOf('function statusText'), client.indexOf('function describeDetails'));
+		const said = [...body.matchAll(/return '([^']+)'/g)].map((m) => m[1]!);
+		expect(said.length).toBeGreaterThan(6);
+		for (const m of said) expect(helpFor('error-messages')!.long, m).toContain(m);
 	});
 });
