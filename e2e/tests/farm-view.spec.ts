@@ -685,6 +685,15 @@ test('a farmer sees their own registered water, not an entitlement, and no one e
 	await expectNoViolations(fp);
 	await fp.setViewportSize(DESKTOP);
 	await expectNoViolations(fp);
+	// The volume switch and the registered card each link to their word on /farm/words.
+	const supply = fp.getByRole('region', { name: 'Water you received this season' });
+	await supply.getByRole('link', { name: 'What do %, m³ and ML mean?' }).click();
+	await expect(fp).toHaveURL(/\/farm\/words\?from=[^#]+#farm-pct-volume$/);
+	await expect(fp.locator('#farm-pct-volume')).toContainText('1 ML is 1 000 m³');
+	await fp.goBack();
+	await card.getByRole('link', { name: 'What is registered water?' }).click();
+	await expect(fp).toHaveURL(/\/farm\/words\?from=[^#]+#farm-registered$/);
+	await expect(fp.locator('#farm-registered')).toContainText('A registered volume is not an entitlement');
 });
 
 // Round 2 of the farm pages' polish (ui.md § Farmer view).

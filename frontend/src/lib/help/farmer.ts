@@ -103,7 +103,47 @@ export const FARMER_HELP: HelpEntry[] = [
 		long: 'Before the season, the model runs the whole season from where the catchment’s dams stood on its first day, once with each past year’s rain and river flows. Your WUA looks at what several irrigation levels would give, decides on one and publishes it; the app never picks a level.\n\nThe card gives what that level gave your own hydrological unit across those past years: about how much of the water you needed you got, the range in most of the years, and how full your dam ended the season. It never shows a neighbour’s figures.\n\nThe weather this season will be its own, so your share can fall outside that range. Your WUA reviews the level on the date the card gives. Only a notice from your WUA or from DWS is a restriction.',
 		category: 'farmer',
 		aliases: ['seisoensvooruitsig', 'hierdie seisoen', 'this season', 'outlook'],
-		related: ['farm-wua', 'farm-modelled', 'farm-needed'],
+		related: ['farm-wua', 'farm-modelled', 'farm-needed', 'farm-forecast'],
 		source: 'docs/design/planning-outputs.md §3.5; docs/model.md §2.15'
+	},
+	{
+		id: 'farm-forecast',
+		term: 'Forecast (Next 14 days)',
+		short: 'What the model expects for your dam and your water in the next days, on the rain forecast. Not the season outlook, and not a promise.',
+		long: 'When your WUA publishes a forecast, the model runs the coming days on the rain forecast, starting from your hydrological unit’s latest figures. The card gives the lowest level it expects your dam to reach, and around which day, and on how many of those days you may be short of water.\n\nIt is not the season outlook. The season outlook looks at the whole season in past years’ weather; the forecast looks only at the next few days, on the rain forecast for them.\n\nRain forecasts change from day to day, so look at the date the card says the forecast was made: when it is more than a few days old, the card says so first. Only a notice from your WUA or from DWS is a restriction.',
+		category: 'farmer',
+		aliases: ['voorspelling', 'next 14 days'],
+		related: ['farm-season-outlook', 'farm-modelled', 'farm-stop-level'],
+		source: 'docs/design/farmer-view.md §3 Q1 (E2); WP-2.12'
+	},
+	{
+		id: 'farm-registered',
+		term: 'Your registered water',
+		short: 'The water use and dam storage registered for your hydrological unit with DWS. Not a right to that water, and not proof a use is lawful.',
+		long: 'Water users register their water use with the Department of Water and Sanitation (DWS). The card shows what is registered for your hydrological unit today: the surface water and groundwater a year, and the dam storage. It shows only your own totals, never a neighbour’s, and no names or registration numbers.\n\nBeside them it puts what the model supplied this season and what your dam holds in the model when full, so you can compare. The model works out your water from rain, river flow and your crops, not from what is registered, so the two can differ.\n\nA registered volume is not an entitlement: it doesn’t give you that water, and it doesn’t say whether a use is lawful. If the registered figures look wrong, ask your WUA.',
+		category: 'farmer',
+		aliases: ['geregistreerde water', 'registration', 'WARMS'],
+		related: ['farm-modelled', 'farm-wua', 'farm-pct-volume'],
+		source: 'docs/allocations.md § Who sees what; issue #72'
+	},
+	{
+		id: 'farm-pct-volume',
+		term: 'Percent, m³ and ML',
+		short: 'A percent compares two amounts, such as the water you received with what you needed. m³ and ML are amounts of water: 1 ML is 1 000 m³.',
+		long: '"83 % of what you needed" means you received 83 parts for every 100 parts of water your hydrological unit needed this season. "40 % full" means your dam holds 40 parts for every 100 it holds when full.\n\nA cubic metre (m³) is 1 000 litres. A megalitre (ML) is a million litres, which is 1 000 m³. The ML and m³ buttons under "Water you received this season" switch the volumes on your hydrological unit’s pages between the two: the water is the same, only the unit changes. Your choice is saved to your account and kept on this phone; you can also change it on your account page, under Language and units.',
+		category: 'farmer',
+		aliases: ['persentasie', 'cubic metre', 'megalitre', 'volume unit'],
+		related: ['farm-needed', 'farm-stop-level'],
+		source: 'docs/ui.md § Language (volume unit); app_user.volume_unit'
+	},
+	{
+		id: 'farm-alerts',
+		term: 'Alert emails',
+		short: 'Emails that tell you when the model puts your dam below the level your WUA set, or when your WUA publishes a restriction notice.',
+		long: 'Your WUA decides which alerts are switched on in the catchment, and for a dam alert the level it warns at. On the Alert emails page in your account you choose, for each one, whether you get it right away, in a summary once a day at 06:00, or not at all. On a day with many alerts, only the first few come right away; the rest wait for the next morning’s summary.\n\nA dam alert is the model’s estimate, from the latest figures or from the rain forecast. It is not a restriction: only a notice from your WUA or from DWS is one.\n\nEvery alert email has a link to stop that kind of email, and one to say whether it was useful. If emails to your address bounce back, alert emails are paused; the Alert emails page says so and lets you turn them back on.',
+		category: 'farmer',
+		aliases: ['waarskuwings-e-posse', 'alerts'],
+		related: ['farm-stop-level', 'farm-forecast', 'farm-wua'],
+		source: 'docs/ui.md § Alerts (WP-2.13)'
 	}
 ];

@@ -5,11 +5,14 @@
 	// /auth/me, WP-2.5) and is also kept on the phone (savedCopy.writeUnit),
 	// for the saved copy and a signed-out moment.
 	import type { FarmProjection } from '@water-management/engine';
+	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import Rich from '$lib/i18n/Rich.svelte';
 	import { littleNeed, supplyCard } from './cards';
+	import { wordsHref } from './load';
 	import type { VolumeUnit } from './format';
 	import { writeUnit } from './savedCopy';
 
@@ -58,6 +61,7 @@
 		<button type="button" aria-pressed={unit === 'm3'} onclick={() => choose('m3')}>m³</button>
 	</div>
 	{#if failed}<p class="fine" role="status">{t('Couldn’t save your choice to your account. It applies on this phone.')}</p>{/if}
+	<a class="link" href={wordsHref(base, page.url, 'farm-pct-volume')}>{t('What do %, m³ and ML mean?')}</a>
 </section>
 
 <style>

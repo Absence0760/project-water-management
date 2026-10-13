@@ -19,6 +19,8 @@
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
+	import { wordsHref } from '$lib/components/farm/load';
+	import { page } from '$app/state';
 
 	let projects = $state<ProjectAlerts[] | null>(null);
 	let loadError = $state<string | null>(null);
@@ -119,7 +121,11 @@
 			<a class="btn" href="{base}/account">{t('Back to your account')}</a>
 		{/snippet}
 		{#snippet notices()}
-			<p class="notice">{t('At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00).', { cap: DAILY_CAP })}</p>
+			<!-- Then the farmer word for these emails (lib/help/farmer.ts farm-alerts): inline, so the slim line stays one row. -->
+			<p class="notice">
+				{t('At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00).', { cap: DAILY_CAP })}
+				<a href={wordsHref(base, page.url, 'farm-alerts')}>{t('What are alert emails?')}</a>
+			</p>
 			{#if session.user?.mailSuppressed}
 				<div class="alert alert-warning suppressed" data-mail-suppressed={session.user.mailSuppressed.reason}>
 					<p>{suppressedText(session.user.mailSuppressed, session.user.email)}</p>

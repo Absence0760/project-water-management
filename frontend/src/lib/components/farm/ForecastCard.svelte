@@ -3,8 +3,11 @@
 	// "Next 14 days" (design §3 Q1, E2; WP-2.12): only when the published run is
 	// a forecast run (the page checks forecastCard() first). Marked apart from
 	// the cards about what happened: a dashed edge and "Forecast" in words.
+	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { t } from '$lib/i18n/locale.svelte';
 	import type { ForecastVm } from './forecastCard';
+	import { wordsHref } from './load';
 
 	let { vm }: { vm: ForecastVm } = $props();
 </script>
@@ -16,6 +19,7 @@
 	{#if vm.dam}<p>{vm.dam}</p>{/if}
 	<p>{vm.short}</p>
 	<p class="fine">{vm.fine}</p>
+	<a class="link" href={wordsHref(base, page.url, 'farm-forecast')}>{t('What is the forecast?')}</a>
 </section>
 
 <style>

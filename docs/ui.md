@@ -10995,8 +10995,11 @@ published.
   83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
   entries in the `farmer` category ("What do these words mean?"; since
   issue #47 one of them is *WUA (Water User Association)*, which says some
-  areas still have an irrigation board). Every link to it from a farm page
-  (the Menu, the main page's foot, Why?'s, the dam page's and the outlook's
+  areas still have an irrigation board; the cards' own words, the season
+  outlook, the forecast, registered water, %, m³ and ML, and alert emails,
+  each linked from its card or page; `lib/help/farmer.test.ts` checks each
+  link's entry exists in English and Afrikaans). Every link to it from a farm page
+  (the Menu, the main page's foot, Why?'s, the dam page's and the cards'
   entry links) carries that page as `?from=` (`farm/load.ts` `wordsHref`),
   and its back link, **My hydrological unit**, returns there, so a farmer
   with several farms comes back to the one they were reading. `from` is
@@ -11089,7 +11092,8 @@ published.
   (the engine's `pickNotice`, through `farm/notice.ts`, shared with
   `/share` and the alert emails); water received this season with the ML/m³
   switch (saved to the account, `app_user.volume_unit`, and kept on the
-  phone for the saved copy); the dam
+  phone for the saved copy) and "What do %, m³ and ML mean?" under it, a
+  link to the `farm-pct-volume` entry; the dam
   (hidden without one) with the days-left line, or the no-stop-level
   wording; **Your registered water** (issue #72, `farm/RegisteredCard.svelte`,
   wording in `cards.ts` `registeredCard`, section `farm.registered`), only
@@ -11098,7 +11102,8 @@ published.
   name or registration number), the season's modelled supply beside the
   year's registered volume, the modelled dam beside the registered storage,
   and "A registered volume is not an entitlement, and it doesn't say whether
-  a use is lawful"; "Looking back", the model's card (dashed, neutral "Model: …"
+  a use is lawful", then "What is registered water?", a link to the
+  `farm-registered` entry; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
   notice and when the river asked for no cut, since its % would only repeat
   the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months ("Last 12 months, in ML" or "…, in m³":
@@ -11156,8 +11161,10 @@ published.
   on 3 of the 14 days" (or that the model doesn't expect a short day), and
   the forecast's own dates with "Forecasts change, and this is worked out
   by the model, not a promise. Only a notice from your WUA or from DWS is a
-  restriction." A forecast made more than 3 days ago says how old it is
-  first. The dam page shows the same card under its chart. **This season**
+  restriction.", then "What is the forecast?", a link to the
+  `farm-forecast` entry, which tells it apart from the season outlook. A
+  forecast made more than 3 days ago says how old it is first. The dam page
+  shows the same card under its chart. **This season**
   (issue #53 R5, E3, `farm/OutlookCard.svelte`, wording in
   `farm/outlookCard.ts`, section `farm.outlook`) comes next, only while the
   WUA has a seasonal outlook published and its season hasn't ended: a
@@ -11638,7 +11645,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   (`workspace/SectionHeader`, issue #17) is the page's one title, **Alert
   emails**, with what the page is for as its context line, **Back to your
   account** on the right, and under it one slim line with the daily cap (5
-  right away, the rest in the next morning's summary) and, when mail is
+  right away, the rest in the next morning's summary) ending in **What are
+  alert emails?**, an inline link to the `farm-alerts` entry on
+  `/farm/words` (inline so the line stays one row; no `?from=`, so its back
+  link is **Your hydrological units**), and, when mail is
   paused, the banner below. Then a card per catchment you can open, as many
   across as fit the page's own width (at least 34rem each: two at 1440 and
   1280, stacked on a phone; `auto-fit`, so a lone catchment takes the whole

@@ -106,6 +106,11 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	await section.getByRole('button', { name: 'Turn alert emails back on' }).click();
 	await expect(section.getByText('All alert emails for this catchment are off.')).toHaveCount(0);
 	await expect(section.getByRole('heading', { level: 2, name: 'Alerting catchment' })).toBeFocused();
+
+	// What alert emails are, on the farmer words page.
+	await p.getByRole('link', { name: 'What are alert emails?' }).click();
+	await expect(p).toHaveURL(/\/farm\/words#farm-alerts$/);
+	await expect(p.locator('#farm-alerts')).toContainText('only a notice from your WUA or from DWS is one');
 });
 
 // A farmer-only user has no workspace: their account pages sit in the farmer

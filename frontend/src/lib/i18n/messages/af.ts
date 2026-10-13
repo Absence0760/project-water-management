@@ -437,6 +437,8 @@ export const af: Catalogue = {
 	'3cf9b306': 'Jou hidrologiese eenhede in hierdie opvanggebied',
 	// Forecast
 	'5f3a8bf0': 'Voorspelling',
+	// What is the forecast?
+	'6b9e0138': 'Wat is die voorspelling?',
 	// Last 12 months, in ML
 	'99e77075': 'Afgelope 12 maande, in ML',
 	// Last 12 months, in m³
@@ -453,6 +455,8 @@ export const af: Catalogue = {
 	'd82c623d': 'Wat is die seisoensvooruitsig?',
 	// Your registered water
 	'97df4b2d': 'Jou geregistreerde water',
+	// What is registered water?
+	'38530e29': 'Wat is geregistreerde water?',
 	// Your hydrological unit on the river
 	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season
@@ -465,6 +469,8 @@ export const af: Catalogue = {
 	'e557592b': 'Wys in',
 	// Couldn’t save your choice to your account. It applies on this phone.
 	'0515b26b': 'Kon nie jou keuse in jou rekening stoor nie. Dit geld op hierdie foon.',
+	// What do %, m³ and ML mean?
+	'0ea1710d': 'Wat beteken %, m³ en ML?',
 	// Published by the WUA on {published}. Data up to {until} ({age}). Ask your WUA if newer figures are coming.
 	'25e88ab0': 'Deur die WGV gepubliseer op {published}. Data tot {until} ({age}). Vra jou WGV of nuwer syfers op pad is.',
 	// Published by the WUA on {published}. Data up to {until}.
@@ -1809,6 +1815,8 @@ export const af: Catalogue = {
 	'eb3bc0dd': 'Terug na jou rekening',
 	// At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00).
 	'6e6c53b1': 'Hoogstens {cap} waarskuwings-e-posse per dag kom dadelik. Die res wag vir die volgende oggend se opsomming (06:00).',
+	// What are alert emails?
+	'ae5d5695': 'Wat is waarskuwings-e-posse?',
 	// Loading…
 	'2e7e4ae3': 'Laai tans…',
 	// None of your catchments can send you alerts yet.
