@@ -854,7 +854,7 @@ export function rainSourceIntensityWarning(p: RainSourcePeriodInfo): string | nu
 	if (!i.differs) return null;
 	return (
 		`${head}. The heavy-day shares are more than ${Math.round(i.band * 100)} points apart: a monthly factor keeps the gauge's own wet-day distribution, and GR4J turns ` +
-		'heavier days into more flow. Consider quantile-mapping its wet days onto the primary series (Settings → Rain source), or carry the runoff effect in the calibration band. ' +
+		'heavier days into more flow. Consider quantile-mapping its wet days onto the primary series (Settings → Rain gaps → Flagged rain → Rain source periods), or carry the runoff effect in the calibration band. ' +
 		'The map keeps each month’s total and its wet days, so it corrects the spread of the falls, not how often it rains: a gap that comes from fewer wet days stays.'
 	);
 }
@@ -885,7 +885,7 @@ function periodWarning(p: RainSourcePeriodInfo): string {
 		(through.length ? `; its gaps: ${through.join(', ')}` : '') +
 		`. Factors (${rainSourceFactorOrigin(p)}): ${rainSourceFactorText(p.factors)}.` +
 		(missingMonths.length ? ` ${missingMonths.join(', ')} ha${missingMonths.length === 1 ? 's' : 've'} no factor, so their days fall through to ${rainSourceFallbackText(p.fallback)}.` : '') +
-		' The primary catchment series is not used in the period and stays out of every factor fit. Settings → Rain source.'
+		' The primary catchment series is not used in the period and stays out of every factor fit. Settings → Rain gaps → Flagged rain → Rain source periods.'
 	);
 }
 

@@ -178,6 +178,7 @@ const dirOf = (rel: string) => fileURLToPath(new URL(rel, import.meta.url)).repl
 const COMPONENTS = dirOf('../components');
 const SRC = dirOf('..');
 const ROUTES = dirOf('../../routes');
+const ENGINE = dirOf('../../../../packages/engine/src');
 
 function walk(dir: string, out: string[] = []): string[] {
 	for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -260,7 +261,8 @@ function settingsPaths(text: string): string[][] {
 		const steps: string[] = [];
 		for (;;) {
 			const arrow = rest.indexOf(' → ');
-			const stop = rest.search(/[.,;:()’'"?!]|$/);
+			// A backtick ends a template literal in source: the path's text stops there.
+			const stop = rest.search(/[.,;:()’'"`?!]|$/);
 			if (arrow >= 0 && arrow < stop) {
 				steps.push(rest.slice(0, arrow).trim());
 				rest = rest.slice(arrow + 3);
@@ -294,10 +296,11 @@ describe('Settings paths named in help and in the app', () => {
 		...TOUR.flatMap((st) => stopTexts(st).map((t) => [`tour ${st.spot}`, t] as [string, string]))
 	];
 	// The app's own words: source with its comments taken out (a comment may describe an old layout).
-	const appTexts: [string, string][] = [...walk(SRC), ...walk(ROUTES)]
+	// The engine's too: its warnings and run problems are shown to the user as written.
+	const appTexts: [string, string][] = [...walk(SRC), ...walk(ROUTES), ...walk(ENGINE)]
 		.filter((f) => !f.includes('/lib/help/'))
 		.map((f) => [
-			f.slice(SRC.length),
+			f.startsWith(ENGINE) ? `engine${f.slice(ENGINE.length)}` : f.slice(SRC.length),
 			readFileSync(f, 'utf8')
 				.replace(/<!--[\s\S]*?-->/g, '')
 				.replace(/\/\*[\s\S]*?\*\//g, '')
@@ -308,9 +311,15 @@ describe('Settings paths named in help and in the app', () => {
 		expect(settingsPaths('Open **Settings & calibration → Flow calibration → Rain into GR4J**, then save.')).toEqual([['Flow calibration', 'Rain into GR4J']]);
 		expect(settingsPaths('switched on in **Fit the parameters → Fit automatically**, makes')).toEqual([['Fit the parameters', 'Fit automatically']]);
 		expect(settingsPaths('Settings → Calibration record → Flow gaps can fill them')).toEqual([['Calibration record', 'Flow gaps can fill them']]);
+		expect(settingsPaths('`pick a gauge in Settings → Calibration record`')).toEqual([['Calibration record']]);
 		expect(pathProblem(['Flow generation', 'Rain for each unit'])).toMatch(/no Settings panel/);
 		expect(pathProblem(['Flow calibration', 'Rain into GR4J', 'Rain for each unit is on'])).toBeNull();
 		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);
+	});
+
+	it('reads the engine’s source too', () => {
+		expect(appTexts.some(([where]) => where === 'engine/run.ts')).toBe(true);
+		expect(appTexts.some(([where]) => /^engine\/.*\.test\.ts$/.test(where))).toBe(false);
 	});
 
 	it('name a real panel, and headings that panel shows', () => {

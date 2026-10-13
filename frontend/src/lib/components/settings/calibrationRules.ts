@@ -1,4 +1,4 @@
-// Settings → Fit automatically → Calibration rules (issue #153): the pure part
+// Settings → Fit the parameters → Calibration rules (issue #153): the pure part
 // of the rules editor (CalibrationRulesFields.svelte). The engine's
 // calibrationRulesError is the one check, shared with the server.
 import { calibrationRulesError, type CalibrationRules } from '@water-management/engine';

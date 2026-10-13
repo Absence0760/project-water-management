@@ -92,7 +92,7 @@ test('the Time series tab flags zero-rain runs and water years far below CHIRPS'
 });
 
 // CR-20: a run treats the flagged zero run as missing where CHIRPS saw rain (CHIRPS fills it). The
-// Data tab shades those days; Settings → Zero-rain runs keeps a run dry or
+// Data tab shades those days; Settings → Rain gaps → Flagged rain keeps a run dry or
 // switches the rule off, and the shading follows the saved settings.
 test('flagged zero-rain runs are shaded as missing until Settings keeps them dry', async ({ page, owner }) => {
 	void owner;

@@ -129,7 +129,7 @@ describe('CHIRPS gap map: fit', () => {
 		const r = prepareRun(input({ ...MAP, chirpsBiasCorrection: 'none' }));
 		expect(r.chirpsCorrection!.quantileMap).toBeUndefined();
 		expect(r.settings.chirpsQuantileMap).toBeNull();
-		expect(r.warnings).toContain('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → CHIRPS bias correction)');
+		expect(r.warnings).toContain('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → Rain gaps → CHIRPS gap filling → CHIRPS bias correction)');
 	});
 
 	it('an unusable setting is off, with the reason', () => {
@@ -236,7 +236,7 @@ describe('CHIRPS gap map: what it keeps', () => {
 		expect(chirpsQuantileMapText(q)).toMatch(
 			/^wet days \(≥ 1 mm\) quantile-mapped onto the catchment rain's wet days over the fit period, CHIRPS' wet-day threshold raised to match the catchment's wet-day rate in Oct \(\d+\.\d mm\), Nov .*, Sep \(\d+\.\d mm\), days below the threshold dry and each calendar month's corrected total kept; by month: Oct, Nov, Dec, Jan, Feb, Mar, Apr, May; by season: Sep; not mapped \(fewer than 30 wet days even over the season\): Jun, Jul, Aug$/
 		);
-		expect(chirpsCorrectionWarning(corr)).toContain(`Quantile map (Settings → CHIRPS quantile map): ${chirpsQuantileMapText(q)}. ${q.mappedDays} gap days changed (`);
+		expect(chirpsCorrectionWarning(corr)).toContain(`Quantile map (Settings → Rain gaps → CHIRPS gap filling → CHIRPS quantile map): ${chirpsQuantileMapText(q)}. ${q.mappedDays} gap days changed (`);
 		const fb = chirpsQuantileMapFallbackWarning(corr)!;
 		expect(fb).toBe(
 			`CHIRPS quantile map falls back to the monthly factor alone on ${winter} gap days (Jun, Jul, Aug): those months have fewer than 30 wet days (≥ 1 mm) on the catchment or the CHIRPS side over the fit period, even pooled over their 3-month season. Their gap days keep CHIRPS’ own wet-day distribution, at the catchment’s level.`

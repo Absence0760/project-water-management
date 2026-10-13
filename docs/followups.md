@@ -1044,8 +1044,8 @@ runs and accumulations are real) can't be decided without the client.
       summary CSV, run comparison and fit provenance
       (`forcing.chirpsFitPeriod`, `forcing.chirpsFactors`; a change flags
       "Forcing changed since fit"); the double-mass run warning names the
-      range whose factors filled each gap; Settings → Rain gaps and CHIRPS →
-      *CHIRPS fit period*
+      range whose factors filled each gap; Settings → Rain gaps → CHIRPS gap
+      filling → *Fit ranges*
       ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
       Never applied silently: the default stays `'all'`. CHIRPS version
       provenance was issue #40 (c); the per-period rain source and 08:00

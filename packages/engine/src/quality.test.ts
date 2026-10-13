@@ -410,7 +410,7 @@ describe('zeroRainRuns (issue #2)', () => {
 		});
 		expect(c!.text).toMatch(/^Rainfall \(catchment\): 1 run of zero rain covering 60\+ days of the wet season \(Apr, May, Jun, Jul, Aug, Sep: this series' six wettest months\)/);
 		expect(c!.text).toMatch(/2012-06-01 to 2012-08-15 \(76 days, 76 in the wet season, which usually brings about \d+ mm\)/);
-		expect(c!.text).toMatch(/on its own it blocks the fallback to CHIRPS \(then forecast\) rain that a blank day gets\. A run treats these runs as missing, so CHIRPS fills them, unless Settings → Zero-rain runs keeps them as recorded/);
+		expect(c!.text).toMatch(/on its own it blocks the fallback to CHIRPS \(then forecast\) rain that a blank day gets\. A run treats these runs as missing, so CHIRPS fills them, unless Settings → Rain gaps → Flagged rain keeps them as recorded/);
 		// CHIRPS and forecast zeros block nothing that matters here: not checked.
 		expect(checkSeries('rain_chirps_mm', { startDate: S, values: v })).toEqual([]);
 		// Negative control: the same series without the gap.

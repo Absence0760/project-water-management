@@ -3049,7 +3049,7 @@ const USER_LABELS: Record<string, string> = {
 /** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */
 export const DEFAULT_GAUGE_PICK_WARNING =
 	'calibrated against the observed gauge flow by default: the project also has a logger flow record and no calibration record is chosen. ' +
-	'The two may not measure the same river; choose the record in Settings → calibration flow series.';
+	'The two may not measure the same river; choose the record in Settings → Calibration record → Compare with.';
 
 /**
  * The flow record calibration compares against ([Flow data] rUseFlow): the

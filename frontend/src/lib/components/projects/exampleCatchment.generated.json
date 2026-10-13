@@ -41,7 +41,7 @@
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.86.0",
+			"engineVersion": "1.89.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",
@@ -131,8 +131,8 @@
 					"zeroRunDays": 55
 				},
 				"notes": [
-					"No highest gauging is recorded for the gauge record (Settings → Calibration record → Rating), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.",
-					"Of the scored days, 55 days fall in zero-rain runs set aside as missing (Settings → Zero-rain runs); their rain is filled."
+					"No highest gauging is recorded for the gauge record (Settings → Calibration record → Quality flags for Fit automatically, the Highest gauging column), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.",
+					"Of the scored days, 55 days fall in zero-rain runs set aside as missing (Settings → Rain gaps → Flagged rain); their rain is filled."
 				]
 			},
 			"fitAllDays": null,

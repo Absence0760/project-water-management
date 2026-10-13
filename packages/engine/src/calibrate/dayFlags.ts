@@ -438,7 +438,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 	const rec = RECORD[x.flowKind];
 	if (!rating?.gaugedMaxM3s) {
 		notes.push(
-			`No highest gauging is recorded for the ${rec} (Settings → Calibration record → Rating), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.`
+			`No highest gauging is recorded for the ${rec} (Settings → Calibration record → Quality flags for Fit automatically, the Highest gauging column), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.`
 		);
 	}
 	if (flow.aboveRating && rating?.gaugedMaxM3s) {
@@ -498,7 +498,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 		);
 	}
 	if (rain?.zeroRunDays) {
-		notes.push(`Of the scored days, ${days(rain.zeroRunDays)} ${rain.zeroRunDays === 1 ? 'falls' : 'fall'} in zero-rain runs set aside as missing (Settings → Zero-rain runs); their rain is filled.`);
+		notes.push(`Of the scored days, ${days(rain.zeroRunDays)} ${rain.zeroRunDays === 1 ? 'falls' : 'fall'} in zero-rain runs set aside as missing (Settings → Rain gaps → Flagged rain); their rain is filled.`);
 	}
 	return {
 		flowKind: x.flowKind,

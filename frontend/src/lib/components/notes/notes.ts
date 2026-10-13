@@ -73,7 +73,7 @@ export const hasAudiences = (t: NoteTarget): t is Extract<NoteTarget, { kind: 's
 export const SETTING_NOTE_GROUPS = {
 	demand: 'Demand',
 	flow: 'Flow calibration',
-	rain: 'Rain gaps and CHIRPS',
+	rain: 'Rain gaps',
 	record: 'Calibration record',
 	share: 'Flow share',
 	ewr: 'EWR',

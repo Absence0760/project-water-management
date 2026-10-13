@@ -179,7 +179,7 @@ describe('resolveFlowGapFill', () => {
 	it('ignores the retired useFilledDays switch, saying where the one control is', () => {
 		const w: string[] = [];
 		expect(resolveFlowGapFill({ useFilledDays: true }, w)).toEqual(defaultFlowGapFill());
-		expect(w).toEqual([expect.stringMatching(/useFilledDays is retired and ignored: .*Quality flags, infilled days/)]);
+		expect(w).toEqual([expect.stringMatching(/useFilledDays is retired and ignored: .*Quality flags for Fit automatically → Infilled days/)]);
 		// Off, it says nothing.
 		const quiet: string[] = [];
 		resolveFlowGapFill({ useFilledDays: false }, quiet);
