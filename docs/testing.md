@@ -10,7 +10,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | Command | What | Wall time |
 | --- | --- | --- |
 | `pnpm test:changed` | typecheck the touched workspaces + `vitest --changed` for only the tests the change reaches (db tests too when :5434 is up) | seconds for a leaf change; the full suites when a shared helper changed |
-| `pnpm check` | typecheck everything | ~20 s |
+| `pnpm check` | typecheck everything; the frontend's svelte-check fails on any warning (Svelte's a11y lint included: a scrollable region that must take focus says so with `svelte-ignore` and a reason) | ~20 s |
 | `pnpm test:engine` | engine unit | ~35 s |
 | `pnpm test:frontend` | frontend unit (most of it is the local-only workbook parity test) | ~40 s |
 | `pnpm test:backend` | backend unit | ~15 s |
