@@ -63,7 +63,7 @@ export type ImportResult = { written: number } & Omit<PlaceRecords, 'records'>;
 /** Load `args` into the database at `url`, every file as one dataset; returns the rows written, the lines skipped, and the places left out on purpose (by kind, country, or a neighbour's off the basemap). */
 export async function importGazetteer(url: string, args: Args): Promise<ImportResult> {
 	const seen = new Set<string>();
-	const all: PlaceRecords = { records: [], problems: [], leftOut: 0, otherCountry: 0, outsideMap: 0, countries: {} };
+	const all: PlaceRecords = { records: [], problems: [], leftOut: 0, otherCountry: 0, outsideMap: 0, countries: {}, alternates: 0, alternatesLeftOut: 0 };
 	for (const file of args.files) {
 		const bytes = readFileSync(file);
 		const text = (file.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8');
@@ -73,6 +73,8 @@ export async function importGazetteer(url: string, args: Args): Promise<ImportRe
 		all.leftOut += got.leftOut;
 		all.otherCountry += got.otherCountry;
 		all.outsideMap += got.outsideMap;
+		all.alternates += got.alternates;
+		all.alternatesLeftOut += got.alternatesLeftOut;
 		for (const [cc, n] of Object.entries(got.countries)) all.countries[cc] = (all.countries[cc] ?? 0) + n;
 	}
 	const { records, ...rest } = all;

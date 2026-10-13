@@ -8,8 +8,21 @@
 //   geonameid, name, asciiname, alternatenames, latitude, longitude,
 //   feature class, feature code, country code, cc2, admin1 code, admin2,
 //   admin3, admin4, population, elevation, dem, timezone, modification date.
-// Only the first, second, fifth to ninth and eleventh are read. A blank line
-// or one starting with # is skipped (the committed fixture's comments).
+// Only the first, second, fourth to ninth, eleventh and fifteenth are read. A
+// blank line or one starting with # is skipped (the committed fixture's
+// comments).
+//
+// Alternate names (fourth column, comma-separated; 237): the search finds a
+// place by them too ("Tsabong", the basemap's spelling, finds GeoNames'
+// Tshabong; "Pietersburg" Polokwane). GeoNames lists every language's, so only
+// those a user here can type are kept (alternateNames): Latin script only, no
+// airport or other codes (TBY, FAMY, RSA), no links, and none that folds to
+// the main name or to one already kept. On the 2026-10-13 dumps of South
+// Africa and its neighbours that keeps 23 267 of 53 836 on the places loaded
+// (27 232 fold to a name already there, 2 956 are in another script, 126 are
+// codes, 7 links), on 14 615 places. Population (fifteenth column) ranks a
+// larger place first; GeoNames gives it for under one place in ten (0 for the
+// rest), but for every capital and nearly every seat and large town.
 //
 // Which places are kept: the feature classes a catchment is found by, A
 // (administrative areas), H (rivers, dams, pans), L (areas, localities), P
@@ -43,6 +56,11 @@ export interface PlaceRecord {
 	admin1: string;
 	/** GeoNames' ISO 3166 country code, one of GAZETTEER_COUNTRIES. */
 	country: string;
+	/** The other names the search finds it by, as published (alternateNames), and each folded, in the same order. */
+	altNames: string[];
+	altSearch: string[];
+	/** GeoNames' population; 0 where it gives none. */
+	population: number;
 	lon: number;
 	lat: number;
 	source: string;
@@ -65,6 +83,48 @@ export const NEIGHBOUR_BBOX: readonly [number, number, number, number] = [16.3, 
 /** The feature classes kept whole, and the S (spot) codes kept: farms. */
 const KEEP_CLASSES = new Set(['A', 'H', 'L', 'P', 'T']);
 const KEEP_SPOTS = new Set(['FRM', 'FRMS', 'FRMT']);
+/** The most alternate names kept for one place (migration 237's CHECK; the most on the 2026-10-13 dumps is 150). */
+export const MAX_ALTERNATES = 200;
+/** Every letter is a Latin one (accents allowed: Môrester, Čabong). */
+const LATIN_ONLY = /^[^\p{L}]*(?:\p{Script=Latin}[^\p{L}]*)+$/u;
+/** A code, not a name: an airport's (TBY, FAMY), a country's (RSA): upper case and digits, 2 to 5, no space. */
+const CODE = /^[A-Z0-9]{2,5}$/;
+/** A link or a path, not a name. */
+const LINK = /https?:|www\.|\//i;
+
+/**
+ * The alternate names the search keeps from a dump line's alternatenames
+ * column (comma-separated): Latin script only, no codes or links, each one
+ * folding to a name not yet kept (the main name's `mainKey` counts as kept).
+ * `names` as published, `keys` folded (searchKey), in the same order;
+ * `dropped` counts the ones left out for their script, as a code or a link
+ * (not those folding to a name already kept).
+ */
+export function alternateNames(raw: string, mainKey: string): { names: string[]; keys: string[]; dropped: number } {
+	const names: string[] = [];
+	const keys: string[] = [];
+	const seen = new Set([mainKey]);
+	let dropped = 0;
+	for (const part of raw.split(',')) {
+		const name = part.replace(CONTROL, ' ').replace(/\s+/g, ' ').trim();
+		if (!name) continue;
+		if (name.length > 200 || LINK.test(name) || CODE.test(name) || !LATIN_ONLY.test(name)) {
+			dropped++;
+			continue;
+		}
+		const key = searchKey(name);
+		if (!key || seen.has(key)) continue;
+		seen.add(key);
+		if (names.length >= MAX_ALTERNATES) {
+			dropped++;
+			continue;
+		}
+		names.push(name);
+		keys.push(key);
+	}
+	return { names, keys, dropped };
+}
+
 /** Rows written per INSERT. */
 const BATCH = 2000;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g;
@@ -86,6 +146,9 @@ export interface PlaceRecords {
 	outsideMap: number;
 	/** The places kept, by country. */
 	countries: Record<string, number>;
+	/** Alternate names kept on the places kept, and left out (another script, a code, a link). */
+	alternates: number;
+	alternatesLeftOut: number;
 }
 
 /**
@@ -103,6 +166,8 @@ export function placeRecords(text: string, file: string, source: string, seen = 
 	let leftOut = 0;
 	let otherCountry = 0;
 	let outsideMap = 0;
+	let alternates = 0;
+	let alternatesLeftOut = 0;
 	const [west, south, east, north] = NEIGHBOUR_BBOX;
 	const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
 	lines.forEach((line, i) => {
@@ -139,22 +204,46 @@ export function placeRecords(text: string, file: string, source: string, seen = 
 		if (seen.has(placeId)) return problems.push(`${where}: ${placeId} appears twice`);
 		seen.add(placeId);
 		const admin1 = (c[10] ?? '').trim();
+		const pop = (c[14] ?? '').trim();
+		const alt = alternateNames(c[3] ?? '', key);
+		alternates += alt.names.length;
+		alternatesLeftOut += alt.dropped;
 		countries[country] = (countries[country] ?? 0) + 1;
-		records.push({ placeId, name, searchName: key, feature: `${cls}.${code}`, admin1: /^[0-9A-Za-z]{1,20}$/.test(admin1) ? admin1 : '', country, lon, lat, source });
+		records.push({
+			placeId,
+			name,
+			searchName: key,
+			feature: `${cls}.${code}`,
+			admin1: /^[0-9A-Za-z]{1,20}$/.test(admin1) ? admin1 : '',
+			country,
+			altNames: alt.names,
+			altSearch: alt.keys,
+			population: /^\d{1,12}$/.test(pop) ? Number(pop) : 0,
+			lon,
+			lat,
+			source
+		});
 	});
-	return { records, problems, leftOut, otherCountry, outsideMap, countries };
+	return { records, problems, leftOut, otherCountry, outsideMap, countries, alternates, alternatesLeftOut };
 }
 
 /** One line on what a load kept and left out on purpose, for the operator (the CLI's output, CloudWatch). */
-export function placesSummary(got: Pick<PlaceRecords, 'countries' | 'leftOut' | 'otherCountry' | 'outsideMap'>): string {
+export function placesSummary(got: Pick<PlaceRecords, 'countries' | 'leftOut' | 'otherCountry' | 'outsideMap' | 'alternates' | 'alternatesLeftOut'>): string {
 	const by = Object.entries(got.countries)
 		.map(([cc, n]) => `${cc} ${n}`)
 		.join(', ');
-	const parts = [`kept by country: ${by || 'none'}`, `${got.leftOut} of the kinds the search leaves out`];
+	const parts = [
+		`kept by country: ${by || 'none'}`,
+		`${got.alternates} alternate names (${got.alternatesLeftOut} left out: another script, a code or a link)`,
+		`${got.leftOut} of the kinds the search leaves out`
+	];
 	if (got.outsideMap) parts.push(`${got.outsideMap} of a neighbour's outside the basemap (${NEIGHBOUR_BBOX.join(',')})`);
 	if (got.otherCountry) parts.push(`${got.otherCountry} of a country off the list (${GAZETTEER_COUNTRIES.join(', ')}): is this a GeoNames dump of South Africa or a neighbour?`);
 	return parts.join('; ');
 }
+
+/** Joins one place's alternate names for the INSERT: a unit separator, which CONTROL strips from every name. */
+const ALT_SEP = '\u001f';
 
 /** Replace every row of `dataset` with `records`, in one transaction, as the schema owner; `origin` is the bucket file a production load read. Returns how many rows it wrote. */
 export async function replacePlaces(client: pg.ClientBase, dataset: string, records: readonly PlaceRecord[], origin: ReferenceOrigin | null = null): Promise<number> {
@@ -165,8 +254,10 @@ export async function replacePlaces(client: pg.ClientBase, dataset: string, reco
 			const batch = records.slice(i, i + BATCH);
 			const col = <T>(f: (r: PlaceRecord) => T) => batch.map(f);
 			await client.query(
-				`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, admin1, country, lon, lat, source)
-				 SELECT $1, * FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::float8[], $9::float8[], $10::text[])`,
+				`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, admin1, country, lon, lat, source, population, alt_names, alt_search)
+				 SELECT $1, p, n, sn, f, a1, cc, x, y, src, pop, string_to_array(alts, chr(31)), keys
+				 FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::float8[], $9::float8[], $10::text[], $11::int8[], $12::text[], $13::text[])
+				   AS t(p, n, sn, f, a1, cc, x, y, src, pop, alts, keys)`,
 				[
 					dataset,
 					col((r) => r.placeId),
@@ -177,7 +268,10 @@ export async function replacePlaces(client: pg.ClientBase, dataset: string, reco
 					col((r) => r.country),
 					col((r) => r.lon),
 					col((r) => r.lat),
-					col((r) => r.source)
+					col((r) => r.source),
+					col((r) => r.population),
+					col((r) => r.altNames.join(ALT_SEP)),
+					col((r) => r.altSearch.join(' | '))
 				]
 			);
 		}

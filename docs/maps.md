@@ -1467,17 +1467,51 @@ geocoder, so what is typed leaves the app for no one.
   order (case, accents and punctuation ignored: "morester" finds Môrester,
   "sandlaagte oos" Sandlaagte-Oos, "klein vaal" Klein Vaalbank Dam; "aalbank"
   finds nothing). A code matches from its start, spaces ignored ("z1h 00"
-  finds Z1H001…, "A21" the quaternaries A21A…). Within each group the whole
-  name comes first, then names that start with what was typed, then the rest
-  by name; among places, towns before farms before rivers and water, then
-  South Africa's places before a neighbour's (236), then among towns of one
-  name the seat of government first (GeoNames' PPLC, PPLA … PPLA4 before
-  PPL: Kuruman, the Northern Cape town, before the Free State hamlet). So
-  "Kanye" lists the Eastern Cape hamlet before Botswana's district seat, and
-  "Windhoek" the South African places of that name before Namibia's capital, while
-  a neighbour's town still comes before a South African farm or river of its
-  name. A group with more matches than it lists says so ("type more to
-  narrow it").
+  finds Z1H001…, "A21" the quaternaries A21A…). A place also matches by any
+  one of its alternate names (237, § Gazetteer): another spelling or an old
+  name, each compared on its own, so "Tsabong" (the basemap's spelling)
+  finds GeoNames' Tshabong, "Pietersburg" Polokwane, "Nelspruit" Mbombela and
+  "Port Elizabeth" Gqeberha; the words must all start words of one name, not
+  some of one alternate and some of another. Within each group the whole name
+  comes first, then names that start with what was typed, then the rest; a
+  place counts the closer of its name and its alternate names. A group with
+  more matches than it lists says so ("type more to narrow it").
+- **Which place comes first** (`PLACE_ORDER` in `geo/gazetteer.ts`, 237).
+  The question is which place the user means, and that is the one the
+  basemap labels, which is the larger one. Among places of the same
+  closeness:
+  1. towns before farms before rivers and water before the rest;
+  2. a national capital (GeoNames' PPLC, PPLG), then a first-order seat
+     (PPLA: a South African province's capital, a Botswana district's);
+  3. the larger population (GeoNames'; 0, unknown, last);
+  4. a lower seat of government (PPLA2, PPLA3, PPLA4) before a plain place;
+  5. South Africa's before a neighbour's, only as a tiebreak;
+  6. a match by the name before one by an alternate name; then by name.
+
+  Until 237 South Africa's came first right after the kind, then the seat.
+  On GeoNames' dumps of 2026-10-13, 1 587 town names are shared by two or
+  more places, and in 102 of them that order listed first a hamlet with no
+  recorded population. The cases, on the real data:
+  - **Windhoek**: Namibia's capital (PPLC, 386 219) was listed after a
+    Limpopo hamlet and a Western Cape section of a town of its name (no
+    population); now first. Lesotho's capital Maseru (359 753) was the same.
+  - **Kanye**: Botswana's Kanye is a district seat (PPLA) of 48 028, the
+    town the basemap labels; the Eastern Cape's is a hamlet with no recorded
+    population, which the old order put first. Now Botswana's comes first and
+    the hamlet second: both are listed, each with where it is.
+  - **Kuruman**: the Northern Cape seat (PPLA2, 9 093) before the Free State
+    hamlet (PPL, none), as before, now on population and seat alike; the
+    Kuruman River and the Kuruman Hills follow, found by their "Kuruman"
+    alternate name.
+  - **Malmesbury**: the Western Cape town (PPLA3, 43 009) before the four
+    Limpopo farms of its name, by kind, as before.
+  - Inside South Africa the old order had the same fault: Wellington (55 543)
+    and Stilfontein (93 110) came after a hamlet of their name.
+
+  GeoNames gives a population for under one place in ten, but for every
+  capital and first-order seat (38 of 38) and 179 of the 209 lower seats; the
+  seat tiers settle the rest, and South Africa's still wins a true tie (two
+  hamlets, neither with a population).
 - **No place names loaded.** The answer's `placesLoaded` is false while
   `gazetteer_reference` is empty, and an empty answer then says so ("No town,
   farm or river names are loaded on this site yet…") instead of suggesting a
@@ -1494,15 +1528,16 @@ geocoder, so what is typed leaves the app for no one.
   about 96 000 places kept), under CC BY 4.0, and its neighbours' dumps the
   towns it labels over the border (checked on the dumps of 2026-10-13:
   Kanye, Lobatse, Tshabong and Gaborone in Botswana, Maseru, Mbabane, Maputo,
-  Keetmanshoop and Zimbabwe's Beitbridge; § Gazetteer). A spelling the
-  basemap uses and GeoNames keeps only among a place's alternate names isn't
-  found: OSM's "Tsabong" is GeoNames' Tshabong, and the search reads
-  GeoNames' main name only.
+  Keetmanshoop and Zimbabwe's Beitbridge; § Gazetteer). Where the basemap's
+  spelling is only among GeoNames' alternate names (OSM's "Tsabong",
+  GeoNames' Tshabong), the alternate names find it (237).
 - **Moving the view.** One match moves the map to it at once; several are
   listed, each a button with what and where ("Gauging station Z1H002 ·
   Wilgerivier", "Farm · Western Cape"; a place over the border is named with
   its country, "Lobatse, Botswana", and no province, since its admin1 code is
-  its own country's), and picking one moves the map and
+  its own country's; a place found by an alternate name is listed by its
+  name with the one matched, "Tshabong (also Tsabong), Botswana",
+  "Polokwane (also Pietersburg)", `mapSearch.ts` `hitName`), and picking one moves the map and
   closes the list (Escape closes it too). A quaternary is framed whole; a
   point is centred, at zoom 14 for a gauge or dam and 13 for a place. The
   map's centre is then the match, so a Delineate or a placed point from the
@@ -1572,6 +1607,25 @@ The search's places come from `gazetteer_reference` (225), which the
   hundreds of kilometres past the basemap (northern Mozambique alone 41 000);
   the basemap's extent keeps 15 405, every border town the basemap labels.
   With all seven loaded, a search takes 5–8 ms (local, `water_test`).
+- **Alternate names** (237; `alternateNames` in `geo/loadGazetteer.ts`).
+  GeoNames lists a place's other names in the dump's `alternatenames`
+  column, comma-separated, in every language: Tshabong's include Tsabong,
+  Chabong, the airport code TBY, and its name in Arabic, Amharic and
+  Persian. A load keeps those a user here can type: Latin script only
+  (accents allowed), no codes (2 to 5 capitals or digits with no space: TBY,
+  FAMY, RSA), no links or paths, and each folding (`searchKey`) to a name not
+  kept yet, the main name counting as kept; at most 200 a place. A name with
+  a number stays ("Zwartkrans Nommer 1"). Measured on the dumps of
+  2026-10-13 over the 111 246 places kept: 53 836 alternate names, of which
+  23 472 are kept on 14 739 places (18 190 for South Africa, 5 282 for the
+  neighbours), 3 089 left out for their script, as a code or a link, and the
+  rest fold to a name already there; the most on one place is 150 (a
+  province's name in many languages). Some kept ones are romanisations of
+  other languages' spellings ("ku lu man"), which match little and cost
+  little. They sit on the place's row (`alt_names`, and folded, `alt_search`)
+  with their own trigram index, so a search is still one table and two
+  indexes (§ Search's budget below). The population (the dump's fifteenth
+  column) is stored too, for the order.
 - **Each line.** A line
   without a place id, a feature class or a WGS84 position is skipped and
   listed. The name is stored as published and
@@ -1579,7 +1633,9 @@ The search's places come from `gazetteer_reference` (225), which the
   dropped), with a trigram index (`pg_trgm`) the word-start match goes
   through, so a search reads only the rows the index offers, not the whole
   table (about 111 000 rows for South Africa and its neighbours;
-  `geo/search.db.perf.test.ts` holds a budget on 150 000). A load
+  `geo/search.db.perf.test.ts` holds a budget of 40 ms on 150 000, two
+  alternate names on every fifth: 6 to 17 ms a search, 2026-10-13; on the
+  real seven dumps 2 to 7 ms). A load
   replaces every row of its dataset in one transaction; other datasets stay.
 - **Production loading** goes through the reference-dataset path
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),
@@ -1592,7 +1648,10 @@ The search's places come from `gazetteer_reference` (225), which the
   gzip > neighbours-<date>.txt.gz`, 10 MB of text, 2.4 MB gzipped) as
   `GeoNames-neighbours-<yyyy-mm>`, beside `GeoNames-ZA-<yyyy-mm>`; well under
   the caps, so they stay. Nothing loads it for you: a fresh deployment's
-  search finds no place until this load runs.
+  search finds no place until this load runs. A dataset loaded before
+  migration 237's release has no alternate names or population: reload it
+  under the same label after that release (deployment.md § Reference
+  datasets).
 - **Later:** the Surveyor-General's farm-name register (farm names and
   numbers, as the title deeds give them), once its reuse licence is confirmed
   in writing (§ Sources).

@@ -3178,6 +3178,8 @@ export interface MapSearchHit {
 	admin1: string | null;
 	/** A place's country (GeoNames' ISO 3166 code: ZA, or one of its six neighbours); null for the map's layers. */
 	country: string | null;
+	/** The place's alternate name the search matched (GeoNames': another spelling, an old name), when it matched that rather than the name: "Tsabong" for Tshabong; null otherwise and for the map's layers. */
+	alias: string | null;
 	lon: number;
 	lat: number;
 	/** A quaternary's box (west, south, east, north); null for a point. */

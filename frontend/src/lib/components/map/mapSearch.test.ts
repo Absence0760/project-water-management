@@ -12,6 +12,7 @@ const hit = (h: Partial<MapSearchHit>): MapSearchHit => ({
 	feature: 'P.PPL',
 	admin1: '11',
 	country: 'ZA',
+	alias: null,
 	lon: 20.74,
 	lat: -33.54,
 	bbox: null,
@@ -43,6 +44,14 @@ describe('a match in words', () => {
 		expect([hitName(hit({})), hitDetail(hit({}))]).toEqual(['Kwartsvallei', 'Town or settlement · Western Cape']);
 		// A code the app has no name for still says it's elsewhere.
 		expect(hitName(hit({ name: 'Y', country: 'KE' }))).toBe('Y, KE');
+	});
+
+	it('a place found by another of its names lists its name with the one matched (the basemap’s "Tsabong" is GeoNames’ Tshabong, 237)', () => {
+		expect(hitName(hit({ name: 'Tshabong', alias: 'Tsabong', country: 'BW', admin1: '04' }))).toBe('Tshabong (also Tsabong), Botswana');
+		const polokwane = hit({ name: 'Polokwane', alias: 'Pietersburg', admin1: '09' });
+		expect([hitName(polokwane), hitDetail(polokwane)]).toEqual(['Polokwane (also Pietersburg)', 'Town or settlement · Limpopo']);
+		// Found by its name: no "also".
+		expect(hitName(hit({ name: 'Tshabong', alias: null, country: 'BW' }))).toBe('Tshabong, Botswana');
 	});
 
 	it('words the GeoNames feature classes a catchment is found by', () => {

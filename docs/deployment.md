@@ -1806,9 +1806,15 @@ is the default. Until it runs, the Map's search finds no town, farm or river
 the basemap labels over the border: Kanye, Lobatse, Gaborone, Maseru,
 Mbabane, Maputo, …) are a second run and a second dataset, so neither load
 replaces the other. Both need the first backend release that carries
-migration 236 (the `country` column) deployed first: the loader that reads
-the neighbours runs in the migrate Lambda that release ships. The steps,
-from an empty folder outside the repo:
+migrations 236 (the `country` column) and 237 (alternate names and
+population) deployed first: the loader that reads the neighbours, the
+alternate names and the population runs in the migrate Lambda that release
+ships. A dataset loaded by an earlier release has no alternate names and no
+population (the search then misses "Tsabong" and ranks a hamlet beside a
+capital), so after that release reload every gazetteer dataset already
+loaded: the same two runs below, same keys and the same dataset labels (a
+load replaces its own dataset in one transaction, so the search keeps
+working throughout). The steps, from an empty folder outside the repo:
 
 ```bash
 for c in ZA BW LS MZ NA SZ ZW; do mkdir -p $c && curl -fsSL -o $c/$c.zip https://download.geonames.org/export/dump/$c.zip && unzip -o -q $c/$c.zip -d $c; done
@@ -1822,11 +1828,15 @@ gh workflow run load-reference.yml -f kind=gazetteer -f key=reference/gazetteer/
 gh workflow run load-reference.yml -f kind=gazetteer -f key=reference/gazetteer/neighbours-2026-10-13.txt.gz -f sha256=<neighbours hex> -f dataset=GeoNames-neighbours-2026-10
 ```
 
-The CloudWatch log of each load says what it kept by country and what it
-left out. On the dumps of 2026-10-13 the first keeps 95 841 places, the
-second 15 405 (BW 2 542, LS 1 022, MZ 4 518, NA 5 560, SZ 1 662, ZW 101;
-68 547 of the neighbours' places lie outside the basemap and are left out).
-Check one in the Map's search: "Lobatse" lists "Lobatse, Botswana". A later
+The CloudWatch log of each load says what it kept by country, how many
+alternate names it kept and left out, and what else it left out. On the
+dumps of 2026-10-13 the first keeps 95 841 places and 18 190 alternate
+names (1 561 left out: another script, a code or a link), the second 15 405
+places (BW 2 542, LS 1 022, MZ 4 518, NA 5 560, SZ 1 662, ZW 101; 68 547 of
+the neighbours' places lie outside the basemap and are left out) and 5 282
+alternate names (1 528 left out). Check in the Map's search: "Lobatse" lists
+"Lobatse, Botswana", "Tsabong" lists "Tshabong (also Tsabong), Botswana",
+and "Windhoek" lists Namibia's capital first. A later
 refresh reloads each file under its own label (or a new label, then
 removes the old one). Never load a country in both datasets: its places
 would be listed twice. A dump of any other country is refused (`empty`, no

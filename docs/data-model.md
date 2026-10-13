@@ -1851,7 +1851,16 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   province code, `''` when not given; a neighbour's is its own country's),
   `country` (236: GeoNames' ISO 3166 code, `ZA` or one of the six neighbours
   `BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`, a CHECK holding it to the loader's
-  list; default `ZA`, which every place loaded before 236 is), `lon`, `lat`, `dataset` (`synthetic`
+  list; default `ZA`, which every place loaded before 236 is), `alt_names`
+  (237: `text[]`, the place's alternate names as GeoNames publishes them,
+  only those the loader keeps: Latin script, no codes or links, at most
+  200; default `{}`), `alt_search` (237: the same names folded by
+  `searchKey`, in the same order, joined by `' | '`, which no folded name
+  contains; a CHECK holds the two to the same count; a second trigram GIN
+  index on `' ' || alt_search` serves the alternate names' word-start test,
+  the two indexes a BitmapOr on this one table; default `''`), `population`
+  (237: GeoNames' population, `bigint`, ≥ 0, 0 where it gives none; ranks a
+  larger place first), `lon`, `lat`, `dataset` (`synthetic`
   for the committed fixture), `source` (1–500, the credit shown with every
   match), `loaded_at`. Global: loaded by the operator as the schema owner
   (`pnpm import:gazetteer`, or a production load of kind `gazetteer`),

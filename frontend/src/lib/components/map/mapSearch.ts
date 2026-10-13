@@ -46,10 +46,17 @@ export function placeWord(feature: string | null): string {
 	return 'Area';
 }
 
-/** A match's name as listed: the place's or station's name, the dam's, or the quaternary's code; a place over the border with its country ("Lobatse, Botswana"). */
+/**
+ * A match's name as listed: the place's or station's name, the dam's, or the
+ * quaternary's code; a place found by another of its names with the one typed
+ * ("Tshabong (also Tsabong)", "Polokwane (also Pietersburg)"), so the list
+ * says why the name differs; a place over the border with its country
+ * ("Lobatse, Botswana").
+ */
 export function hitName(h: MapSearchHit): string {
 	if (h.kind === 'quaternary') return `Quaternary ${h.code}`;
-	const name = h.name || h.code || 'Unnamed';
+	const named = h.name || h.code || 'Unnamed';
+	const name = h.kind === 'place' && h.alias ? `${named} (also ${h.alias})` : named;
 	return abroad(h) ? `${name}, ${NEIGHBOURS[h.country!] ?? h.country}` : name;
 }
 

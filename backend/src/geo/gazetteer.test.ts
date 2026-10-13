@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, SYNTHETIC_GAZETTEER_FILE, SYNTHETIC_GAZETTEER_SOURCE } from '../../scripts/import-gazetteer.js';
 import { codeKey, GEONAMES_SOURCE, searchKey, searchWords, SYNTHETIC_GAZETTEER } from './gazetteer.js';
-import { GAZETTEER_COUNTRIES, keepsFeature, NEIGHBOUR_BBOX, placeRecords } from './loadGazetteer.js';
+import { alternateNames, GAZETTEER_COUNTRIES, keepsFeature, MAX_ALTERNATES, NEIGHBOUR_BBOX, placeRecords, placesSummary } from './loadGazetteer.js';
 import { SearchQuery } from './searchRoutes.js';
 
 const line = (cols: Partial<Record<number, string>>) => {
@@ -77,7 +77,7 @@ describe('the GeoNames dump parser', () => {
 			''
 		].join('\n');
 		const { records, problems, leftOut } = placeRecords(text, 'za.txt', 'src');
-		expect(records).toEqual([{ placeId: '10', name: 'Môrester', searchName: 'morester', feature: 'P.PPL', admin1: '11', country: 'ZA', lon: 20.7, lat: -33.5, source: 'src' }]);
+		expect(records).toEqual([{ placeId: '10', name: 'Môrester', searchName: 'morester', feature: 'P.PPL', admin1: '11', country: 'ZA', altNames: [], altSearch: [], population: 0, lon: 20.7, lat: -33.5, source: 'src' }]);
 		expect(leftOut).toBe(1);
 		expect(problems).toEqual([
 			'za.txt line 2 (11): no position in WGS84 degrees',
@@ -134,6 +134,42 @@ describe('South Africa’s neighbours (the basemap labels Kanye, Lobatse and Gab
 		const second = placeRecords([line({ 0: '50', 8: 'BW', 4: '-25', 5: '25' }), line({ 0: '51', 8: 'BW', 4: '-25', 5: '25' })].join('\n'), 'bw.txt', 'src', seen);
 		expect(second.records.map((r) => r.placeId)).toEqual(['51']);
 		expect(second.problems).toEqual(['bw.txt line 1: 50 appears twice']);
+	});
+});
+
+describe('alternate names (the basemap’s "Tsabong" is GeoNames’ Tshabong, found only among its alternate names; ad hoc testing 2026-10-13)', () => {
+	it('keeps the Latin-script spellings a user here can type, each once, and never the main name again', () => {
+		// The shape of GeoNames' Tshabong line: codes, other scripts, spellings that fold to one another.
+		const raw = "Cabongas,Chabong,TBY,Tsabong,Tsampon'nk,Tshabong,cha bang,chabong,chabwnګ,tasabonga,tsabaniግ,Čabong";
+		const got = alternateNames(raw, 'tshabong');
+		expect(got.names).toEqual(['Cabongas', 'Chabong', 'Tsabong', "Tsampon'nk", 'cha bang', 'tasabonga', 'Čabong']);
+		expect(got.keys).toEqual(['cabongas', 'chabong', 'tsabong', 'tsampon nk', 'cha bang', 'tasabonga', 'cabong']);
+		// TBY (a code), chabwnګ and tsabaniግ (other scripts); Tshabong (the main name) and chabong fold to a name already kept, so aren't counted.
+		expect(got.dropped).toBe(3);
+	});
+
+	it('drops codes (airports, countries), links and paths, other scripts and empty parts; keeps a name with a number', () => {
+		const got = alternateNames('FAMY,RSA,ZA,https://example.org/x,www.example.org,Pretoria/Pole,Куруман,庫魯曼,,  ,Zwartkrans Nommer 1,Kuruman River', 'kuruman');
+		expect(got.names).toEqual(['Zwartkrans Nommer 1', 'Kuruman River']);
+		expect(got.dropped).toBe(8);
+	});
+
+	it('cleans control characters and spaces, and keeps at most MAX_ALTERNATES (migration 237’s CHECK)', () => {
+		expect(alternateNames(' Twee\u0007Riviere ,Ou   Dorp', 'x').names).toEqual(['Twee Riviere', 'Ou Dorp']);
+		const many = Array.from({ length: MAX_ALTERNATES + 5 }, (_, i) => `Naam ${i}`).join(',');
+		const got = alternateNames(many, 'x');
+		expect(got.names).toHaveLength(MAX_ALTERNATES);
+		expect(got.dropped).toBe(5);
+	});
+
+	it('the parser stores them with the place, with its population, and counts them in the summary', () => {
+		const got = placeRecords(line({ 0: '60', 1: 'Tshabong', 3: 'TBY,Tsabong,Tshabong', 4: '-26.05', 5: '22.45', 8: 'BW', 14: '11651' }), 'bw.txt', 'src');
+		expect(got.records[0]).toMatchObject({ name: 'Tshabong', altNames: ['Tsabong'], altSearch: ['tsabong'], population: 11651 });
+		expect(got).toMatchObject({ alternates: 1, alternatesLeftOut: 1 });
+		expect(placesSummary(got)).toMatch(/1 alternate names \(1 left out/);
+		// A population that isn't a whole number is unknown (0).
+		expect(placeRecords(line({ 14: '-5' }), 'za.txt', 'src').records[0]!.population).toBe(0);
+		expect(placeRecords(line({ 14: '' }), 'za.txt', 'src').records[0]!.population).toBe(0);
 	});
 });
 

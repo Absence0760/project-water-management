@@ -8,8 +8,10 @@
 // The match rule, the same for every table: every word typed starts some word
 // of the name (case, accents and punctuation ignored, searchKey), or, for a
 // code, the code starts with what was typed (spaces ignored: "z1h 00" finds
-// Z1H001). Within a group the closest come first: the whole name, then a name
-// that starts with the words, then the rest by name.
+// Z1H001). A place matches by its main name or by one of its alternate names
+// (237: another spelling, an old name), each compared on its own. Within a
+// group the closest come first: the whole name, then a name that starts with
+// the words, then the rest; places then by kind and size (PLACE_ORDER).
 import type { Db } from '../db/tx.js';
 
 /**
@@ -69,6 +71,8 @@ export interface SearchHit {
 	admin1: string | null;
 	/** A place's country (GeoNames' ISO 3166 code: ZA, or a neighbour's, 236); null for the map's layers. */
 	country: string | null;
+	/** The place's alternate name the search matched, as GeoNames publishes it ("Tsabong" for Tshabong, 237), when it matched that more closely than the name; null otherwise and for the map's layers. */
+	alias: string | null;
 	/** Where to move the view: the point, and for a quaternary its box (west, south, east, north). */
 	lon: number;
 	lat: number;
@@ -108,23 +112,39 @@ const sqlKey = (col: string) => `btrim(regexp_replace(translate(lower(${col}), '
 const closeness = (expr: string, phrase: string) => `(${expr} = ${phrase}) DESC, (${expr} LIKE ${phrase} || '%') DESC`;
 
 /**
- * Among towns of the same name, the seat of government first: the capital,
- * then a province's, a district's, a local municipality's seat, then the rest
- * (GeoNames' PPLC, PPLG, PPLA…PPLA4). Kuruman is a Northern Cape PPLA2 and a
- * Free State PPL; the one on the map's label is the seat. GeoNames' population
- * would rank them too, but the dump leaves it 0 for most places.
+ * How closely a folded name matches: 0 the whole name, 1 a name starting with
+ * the words, 2 the words elsewhere in it; 3 when `matches` is false.
  */
-const SEAT_RANK = `CASE feature WHEN 'P.PPLC' THEN 0 WHEN 'P.PPLG' THEN 0 WHEN 'P.PPLA' THEN 1 WHEN 'P.PPLA2' THEN 2 WHEN 'P.PPLA3' THEN 3 WHEN 'P.PPLA4' THEN 4 ELSE 5 END`;
+const closenessRank = (expr: string, phrase: string, matches = 'true') => `CASE WHEN NOT (${matches}) THEN 3 WHEN ${expr} = ${phrase} THEN 0 WHEN ${expr} LIKE ${phrase} || '%' THEN 1 ELSE 2 END`;
 
 /**
- * South Africa's places before a neighbour's (236): after closeness and kind,
- * before the seat of government, so the Eastern Cape's Kanye (a hamlet) comes
- * before Botswana's (a district seat), while a neighbour's town still comes
- * before a South African farm of its name. The catchments are South Africa's;
- * the neighbours' places are there for the towns the basemap labels over the
- * border.
+ * The order of the places (docs/maps.md § Search, "Which comes first"), after
+ * how closely the name or alternate name matches:
+ *  1. kind: towns, then farms, then rivers and water, then the rest;
+ *  2. a national capital (PPLC, PPLG) first, then a first-order seat (PPLA:
+ *     a South African province's capital, a Botswana district's);
+ *  3. the larger population (GeoNames'; 0, unknown, last);
+ *  4. the lower seat of government (PPLA2 … PPLA4) before a plain place;
+ *  5. South Africa's before a neighbour's (236), only now as a tiebreak;
+ *  6. a match by the main name before one by an alternate name; then by name.
+ * The question each answers is which place the user means: the one on the
+ * basemap's label. On GeoNames' 2026-10-13 dumps 1 587 town names are shared,
+ * and in 102 of them the old order (South Africa first, then the seat) listed
+ * a hamlet of no recorded population first: Namibia's capital Windhoek (386 219)
+ * after a Limpopo hamlet, Lesotho's capital Maseru (359 753), Botswana's Kanye
+ * (a district seat, 48 028) after an Eastern Cape hamlet, and inside South
+ * Africa Wellington (55 543) or Stilfontein (93 110) after a hamlet of the
+ * name. Kuruman (the Northern Cape seat, 9 093) still comes before the Free
+ * State hamlet, and Malmesbury's town (43 009) before its farms, by kind.
+ * GeoNames gives a population for under one place in ten, but for every
+ * capital and first-order seat (38 of 38) and for 179 of 209 lower seats, so
+ * the seat tiers settle the places it leaves at 0.
  */
+const CAPITAL_TIER = `CASE WHEN feature IN ('P.PPLC', 'P.PPLG') THEN 0 WHEN feature = 'P.PPLA' THEN 1 ELSE 2 END`;
+const SEAT_RANK = `CASE feature WHEN 'P.PPLA2' THEN 2 WHEN 'P.PPLA3' THEN 3 WHEN 'P.PPLA4' THEN 4 ELSE 5 END`;
+const KIND_RANK = `CASE split_part(feature, '.', 1) WHEN 'P' THEN 0 WHEN 'S' THEN 1 WHEN 'H' THEN 2 ELSE 3 END`;
 const HOME_FIRST = `(country = 'ZA') DESC`;
+const PLACE_ORDER = `least(main_close, alt_close), ${KIND_RANK}, ${CAPITAL_TIER}, population DESC, ${SEAT_RANK}, ${HOME_FIRST}, (alt_close < main_close), name, dataset, place_id`;
 
 /** Search the map's layers, then the gazetteer, for `q`. */
 export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
@@ -159,17 +179,41 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 			)
 		: { rows: [] };
 	// One word-start test per word, each on its own, so every one goes through
-	// the trigram index on ' ' || search_name (225): the expression must be
-	// that index's. everyWordStarts' bool_and over the array would read every
-	// row of the gazetteer (about 150 000 in production).
-	const placeWords = words.map((_, i) => `(' ' || search_name) LIKE '% ' || $${i + 3}::text || '%'`).join(' AND ');
-	const places = await db.query<{ place_id: string; name: string; feature: string; admin1: string; country: string; lon: number; lat: number; dataset: string; source: string }>(
-		`SELECT place_id, name, feature, admin1, country, lon, lat, dataset, source FROM gazetteer_reference
-		 WHERE ${placeWords}
-		 ORDER BY ${closeness('search_name', '$1')},
-			CASE split_part(feature, '.', 1) WHEN 'P' THEN 0 WHEN 'S' THEN 1 WHEN 'H' THEN 2 ELSE 3 END,
-			${HOME_FIRST}, ${SEAT_RANK}, name, dataset, place_id
-		 LIMIT $2`,
+	// a trigram index: the main name's on ' ' || search_name (225), the
+	// alternate names' on ' ' || alt_search (237); the expressions must be the
+	// indexes'. The two arms make a BitmapOr on the one table, no join.
+	// everyWordStarts' bool_and over the array would read every row of the
+	// gazetteer (about 111 000 in production). alt_search joins every
+	// alternate name, so its arm only offers rows: each alternate is checked
+	// on its own (every word starts a word of that one), only on a row that
+	// has alternates, and a row neither name matches is dropped. Which
+	// alternate matched is looked up for the rows listed only. OFFSET 0 keeps
+	// the planner from folding m into the outer query, which would work each
+	// closeness out again for the filter and the sort.
+	const wordsIn = (expr: string) => words.map((_, i) => `(' ' || ${expr}) LIKE '% ' || $${i + 3}::text || '%'`).join(' AND ');
+	const places = await db.query<{ place_id: string; name: string; feature: string; admin1: string; country: string; lon: number; lat: number; dataset: string; source: string; alias: string | null }>(
+		`SELECT place_id, name, feature, admin1, country, lon, lat, dataset, source,
+			CASE WHEN alt_close < main_close THEN (
+				SELECT a.n FROM unnest(alt_names, string_to_array(alt_search, ' | ')) AS a(n, k)
+				WHERE ${wordsIn('a.k')} ORDER BY ${closenessRank('a.k', '$1')}, a.n LIMIT 1
+			) END AS alias
+		 FROM (
+			SELECT place_id, name, feature, admin1, country, lon, lat, dataset, source, population, alt_names, alt_search, main_close, alt_close
+			FROM (
+				SELECT g.*,
+					${closenessRank('search_name', '$1', wordsIn('search_name'))} AS main_close,
+					CASE WHEN alt_search = '' THEN 3 ELSE coalesce((
+						SELECT min(${closenessRank('k', '$1')}) FROM unnest(string_to_array(alt_search, ' | ')) AS k WHERE ${wordsIn('k')}
+					), 3) END AS alt_close
+				FROM gazetteer_reference g
+				WHERE (${wordsIn('search_name')}) OR (${wordsIn('alt_search')})
+				OFFSET 0
+			) m
+			WHERE main_close < 3 OR alt_close < 3
+			ORDER BY ${PLACE_ORDER}
+			LIMIT $2
+		 ) listed
+		 ORDER BY ${PLACE_ORDER}`,
 		[phrase, SEARCH_PLACE_LIMIT + 1, ...words]
 	);
 
@@ -178,10 +222,10 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 
 	const hits: SearchHit[] = [
 		...cap(gauges.rows, SEARCH_LAYER_LIMIT).map(
-			(r): SearchHit => ({ kind: 'gauge', code: r.code, name: r.name, river: r.river, feature: null, admin1: null, country: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
+			(r): SearchHit => ({ kind: 'gauge', code: r.code, name: r.name, river: r.river, feature: null, admin1: null, country: null, alias: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
 		),
 		...cap(dams.rows, SEARCH_LAYER_LIMIT).map(
-			(r): SearchHit => ({ kind: 'dam', code: r.register_no, name: r.name, river: r.river ?? '', feature: null, admin1: null, country: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
+			(r): SearchHit => ({ kind: 'dam', code: r.register_no, name: r.name, river: r.river ?? '', feature: null, admin1: null, country: null, alias: null, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: null })
 		),
 		...cap(quaternaries.rows, SEARCH_LAYER_LIMIT).map(
 			(r): SearchHit => ({
@@ -192,6 +236,7 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 				feature: null,
 				admin1: null,
 				country: null,
+				alias: null,
 				lon: (r.min_lon + r.max_lon) / 2,
 				lat: (r.min_lat + r.max_lat) / 2,
 				bbox: [r.min_lon, r.min_lat, r.max_lon, r.max_lat],
@@ -201,7 +246,7 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 			})
 		),
 		...cap(places.rows, SEARCH_PLACE_LIMIT).map(
-			(r): SearchHit => ({ kind: 'place', code: null, name: r.name, river: '', feature: r.feature, admin1: r.admin1, country: r.country, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: r.source })
+			(r): SearchHit => ({ kind: 'place', code: null, name: r.name, river: '', feature: r.feature, admin1: r.admin1, country: r.country, alias: r.alias, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: r.source })
 		)
 	];
 	return { q, hits, truncated, placesLoaded };
