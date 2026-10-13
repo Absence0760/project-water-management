@@ -9,7 +9,7 @@
 //   is left to change. An editor opens it from the head's Rain from the map
 //   and sees the proposal with no button. The panel passes axe.
 // - A unit's form takes its MAP and asks for its source before Save.
-// - Settings → Flow generation → Rain for each unit switches it on with the
+// - Settings → Flow calibration → Rain into GR4J → Rain for each unit switches it on with the
 //   gauge's MAP and its source, and keeps it after a reload; its link opens
 //   the Data feeds panel (?rain=units). A viewer reads it, read-only.
 // - Runs & results shows a run's Rain for each unit (a planted

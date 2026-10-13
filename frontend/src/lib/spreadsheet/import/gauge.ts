@@ -81,7 +81,7 @@ export function gaugeAsReference(
 			'WARNING: [Flow data] rUseFlow calibrates against the gauge column, which --gauge-as-reference says is ' +
 				'another river. calibrationFlowKind is left unset' +
 				(hasLogger
-					? ', so runs use the logger record. Check that choice in Settings -> calibration flow series'
+					? ', so runs use the logger record. Check that choice in Settings -> Calibration record -> Compare with'
 					: ' and the project has no observed flow record to calibrate against'),
 			{ sheet: 'Flow data' }
 		);

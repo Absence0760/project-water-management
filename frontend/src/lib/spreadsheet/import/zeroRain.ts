@@ -17,6 +17,6 @@ export function zeroRainNote(series: readonly Pick<ImportedSeries, 'kind' | 'sta
 	return (
 		`[Flow data] catchment rain has ${runs.length} run(s) of zero rain covering ${rule}: ${spans}. ` +
 		"Runs treat them as missing (engine >= 0.15.0, settings.zeroRainRuns, default mode 'missing'), so " +
-		'bias-corrected CHIRPS fills them; if they are real dry spells, keep them dry in Settings -> Zero-rain runs'
+		'bias-corrected CHIRPS fills them; if they are real dry spells, keep them dry in Settings -> Rain gaps -> Flagged rain'
 	);
 }

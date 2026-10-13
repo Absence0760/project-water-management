@@ -911,7 +911,7 @@
 		</div>
 	</section>
 
-	<!-- Flow generation ------------------------------------------------------------>
+	<!-- Flow calibration ----------------------------------------------------------->
 	<section class="panel" id="set-flow" aria-labelledby="cal-h">
 		<div class="panel-head">
 			<h2 id="cal-h">Flow calibration</h2>

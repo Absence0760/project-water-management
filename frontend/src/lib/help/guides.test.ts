@@ -202,8 +202,6 @@ function headingsIn(src: string): string[] {
 	for (const m of src.matchAll(/\b(legend|title|name|label)="([^"{]+)"/g)) out.push(clean(m[2]!));
 	// Words a tag shows through an expression ({mapOnly ? 'Rain from the map' : 'Attach a feed'}).
 	for (const m of src.matchAll(/'([A-Z][^'\n]{2,60})'/g)) out.push(clean(m[1]!));
-	// Words a tag shows through an expression ({mapOnly ? 'Rain from the map' : 'Attach a feed'}).
-	for (const m of src.matchAll(/'([A-Z][^'\n]{2,60})'/g)) out.push(clean(m[1]!));
 	return out.filter((s) => s.length > 1);
 }
 
@@ -242,14 +240,15 @@ const PANELS = new Map<string, string>([
 const panelCache = new Map<string, string[]>();
 const headingsOf = (id: string) => panelCache.get(id) ?? (panelCache.set(id, panelHeadings(id)), panelCache.get(id)!);
 
-/** Each "Settings → A → B" (or "A → B" where A is a panel) in a text, as its steps, markup removed. */
+/** Each "Settings → A → B" (or "A → B" where A is a panel) in a text, as its steps, markup removed. An ASCII "->" (the importer's plain-text notes) reads as "→". */
 function settingsPaths(text: string): string[][] {
 	const plain = text
 		.replace(/<\/?[A-Za-z][^<>]*>/g, '')
 		.replace(/&amp;/g, '&')
 		.replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1')
 		.replace(/\*\*?/g, '')
-		.replace(/\s+/g, ' ');
+		.replace(/\s+/g, ' ')
+		.replace(/ -> /g, ' → ');
 	const labels = [...PANELS.keys()].map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 	const starts = [
 		...[...plain.matchAll(/\bSettings(?: & calibration)? → /g)].map((m) => m.index + m[0].length),
@@ -312,6 +311,7 @@ describe('Settings paths named in help and in the app', () => {
 		expect(settingsPaths('switched on in **Fit the parameters → Fit automatically**, makes')).toEqual([['Fit the parameters', 'Fit automatically']]);
 		expect(settingsPaths('Settings → Calibration record → Flow gaps can fill them')).toEqual([['Calibration record', 'Flow gaps can fill them']]);
 		expect(settingsPaths('`pick a gauge in Settings → Calibration record`')).toEqual([['Calibration record']]);
+		expect(settingsPaths('keep them dry in Settings -> Rain gaps -> Flagged rain')).toEqual([['Rain gaps', 'Flagged rain']]);
 		expect(pathProblem(['Flow generation', 'Rain for each unit'])).toMatch(/no Settings panel/);
 		expect(pathProblem(['Flow calibration', 'Rain into GR4J', 'Rain for each unit is on'])).toBeNull();
 		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);

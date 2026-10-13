@@ -29,12 +29,12 @@ export const KIND_ROLES: Record<string, KindRole> = {
 	},
 	rain_catchment_alt_mm: {
 		role: 'Rain-source period',
-		help: 'A second catchment gauge (mm), e.g. an in-catchment automatic station. Read only inside a rain-source period (Settings → Rain gaps → Rain source periods), where it replaces the catchment rainfall × monthly factors.',
+		help: 'A second catchment gauge (mm), e.g. an in-catchment automatic station. Read only inside a rain-source period (Settings → Rain gaps → Flagged rain → Rain source periods), where it replaces the catchment rainfall × monthly factors.',
 		driver: true
 	},
 	rain_reanalysis_mm: {
 		role: 'Rain reference',
-		help: 'A gauge-free reanalysis such as ERA5 (mm). Read only by a rain-source period (Settings → Rain gaps → Rain source periods): the reference its factors are fitted against, or the series its gaps fall through to.',
+		help: 'A gauge-free reanalysis such as ERA5 (mm). Read only by a rain-source period (Settings → Rain gaps → Flagged rain → Rain source periods): the reference its factors are fitted against, or the series its gaps fall through to.',
 		driver: true
 	},
 	evap_apan_mm: {

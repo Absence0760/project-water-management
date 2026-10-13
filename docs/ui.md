@@ -5344,7 +5344,7 @@ with the table the data needs).
   *What the model uses* follow below. The gauge-vs-logger table flows too: the
   flagged water years and the latest five, the rest behind **Show all N water
   years** (`series/agreementFold.ts`; on Runs & results it keeps its 320 px
-  box, a focusable named region); its *choose the calibration flow series*
+  box, a focusable named region); its *Calibration record → Compare with*
   link lands on Settings → Calibration record (`#set-record`). *What the model uses* spans the page;
   its kinds (at least 22rem each, one column on a phone) are behind **Show
   what each kind of series is for** (a `<details>`, closed by default, issue
