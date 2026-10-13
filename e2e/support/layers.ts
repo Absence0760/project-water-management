@@ -6,8 +6,11 @@
 // overlap"). Thirty dams made thirty layers, each rasterised on its own, and a
 // card scrolled into view showed its sparkline and links blank until its
 // layer caught up. `isolation: isolate` on the card keeps them in the card's
-// stacking context (ui-playbook.md § 4, "A card with a stretched link beside
-// a sticky panel isolates itself"). Pinned by dams-page.spec.ts and
+// stacking context, and the sticky columns that come before the cards in the
+// tree (the app sidebar, a page's "On this page" rail) carry `z-index: 1` so
+// they paint after them: without that, Linux Chromium (CI) still layered every
+// part though macOS didn't (ui-playbook.md § 4, "A card with a stretched link
+// beside a sticky panel isolates itself"). Pinned by dams-page.spec.ts and
 // supply-page.spec.ts.
 import type { Page } from '@playwright/test';
 
