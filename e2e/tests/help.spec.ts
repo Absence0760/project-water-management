@@ -234,9 +234,17 @@ for (const viewport of [
 		await page.setViewportSize(viewport);
 		const side = page.getByRole('complementary', { name: 'Help contents' });
 		const nav = side.getByRole('navigation', { name: 'Help' });
+		// With room to spare: a label one pixel short of the column's width on macOS wraps on CI's Linux, a line
+		// taller, so a column that only just fitted here scrolled there (the Reference group, 2026-10-13).
+		const ROOM = 24;
 		const fits = async (where: string) => {
-			const m = await side.evaluate((el) => ({ over: el.scrollHeight - el.clientHeight, bottom: el.getBoundingClientRect().bottom }));
+			const m = await side.evaluate((el) => ({
+				over: el.scrollHeight - el.clientHeight,
+				room: parseFloat(getComputedStyle(el).maxHeight) - el.scrollHeight,
+				bottom: el.getBoundingClientRect().bottom
+			}));
 			expect(m.over, where).toBeLessThanOrEqual(0);
+			expect(m.room, where).toBeGreaterThanOrEqual(ROOM);
 			expect(m.bottom, where).toBeLessThanOrEqual(viewport.height);
 		};
 
