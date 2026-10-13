@@ -69,7 +69,7 @@ const hand = (o: ModelOutput) => {
 };
 
 describe('a single gauge and nothing else', () => {
-	// With no unit the catchment's area has to come from Settings → calibration (else the run refuses, below).
+	// With no unit the catchment's area has to come from Settings → Flow calibration (else the run refuses, below).
 	const i = input([gauge()], { calibration: { catchmentAreaKm2: 5 } });
 	const o = runModelChecked(i);
 

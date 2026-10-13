@@ -140,7 +140,7 @@
 			grid-column: 2;
 		}
 		/* In view while reading. It fits the window: the contents show one
-		   group's pages at a time (HelpNav), ~620 px at most, so it only
+		   group's pages at a time (HelpNav), ~715 px at most, so it only
 		   scrolls on its own in a window shorter than that, where the
 		   alternative would be clipping links. It starts and sticks at the
 		   page's top gutter and ends as far from the bottom, so at the top of a

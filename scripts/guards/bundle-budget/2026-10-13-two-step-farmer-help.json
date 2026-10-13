@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Ad hoc testing 2026-10-13 (#539), the farmer-facing two-step help: the farm-two-step and farm-invitation farmer words in English and Afrikaans (farmer.ts, content.af.ts), their links from the Account page (by frame) and the Invitations page, the farm-frame context, /mfa-reset joining the translated routes (TRANSLATED_PATHS) and its inline what-happens-next line. Measured on the merged branch by building with only these 11 files at HEAD and with them changed: +2542 bytes gzipped (2.5 KB, rounded up). With the other sessions' uncommitted work in the tree the total was 2016 KB against 2013."
+}

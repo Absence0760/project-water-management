@@ -160,7 +160,7 @@ test('the help contents: groups under headings, the glossary one link per topic 
 	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
 	const names = (await topics.allTextContents()).map((t) => t.trim());
 	expect(names.length).toBeGreaterThan(5);
-	await expect(reference.getByRole('link')).toHaveText(['Glossary', ...names, 'File formats']);
+	await expect(reference.getByRole('link')).toHaveText(['Glossary', ...names, 'File formats', 'How the model is checked', 'Data sources and credits']);
 	await expect(reference.getByRole('link', { name: 'Glossary', exact: true })).toHaveAttribute('aria-current', 'page');
 
 	// The search heads the page, above the text (not in the contents column, issue #17).
@@ -234,9 +234,17 @@ for (const viewport of [
 		await page.setViewportSize(viewport);
 		const side = page.getByRole('complementary', { name: 'Help contents' });
 		const nav = side.getByRole('navigation', { name: 'Help' });
+		// With room to spare: a label one pixel short of the column's width on macOS wraps on CI's Linux, a line
+		// taller, so a column that only just fitted here scrolled there (the Reference group, 2026-10-13).
+		const ROOM = 24;
 		const fits = async (where: string) => {
-			const m = await side.evaluate((el) => ({ over: el.scrollHeight - el.clientHeight, bottom: el.getBoundingClientRect().bottom }));
+			const m = await side.evaluate((el) => ({
+				over: el.scrollHeight - el.clientHeight,
+				room: parseFloat(getComputedStyle(el).maxHeight) - el.scrollHeight,
+				bottom: el.getBoundingClientRect().bottom
+			}));
 			expect(m.over, where).toBeLessThanOrEqual(0);
+			expect(m.room, where).toBeGreaterThanOrEqual(ROOM);
 			expect(m.bottom, where).toBeLessThanOrEqual(viewport.height);
 		};
 

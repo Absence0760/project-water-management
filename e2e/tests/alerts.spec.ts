@@ -106,6 +106,11 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	await section.getByRole('button', { name: 'Turn alert emails back on' }).click();
 	await expect(section.getByText('All alert emails for this catchment are off.')).toHaveCount(0);
 	await expect(section.getByRole('heading', { level: 2, name: 'Alerting catchment' })).toBeFocused();
+
+	// What alert emails are, on the farmer words page.
+	await p.getByRole('link', { name: 'What are alert emails?' }).click();
+	await expect(p).toHaveURL(/\/farm\/words#farm-alerts$/);
+	await expect(p.locator('#farm-alerts')).toContainText('only a notice from your WUA or from DWS is one');
 });
 
 // A farmer-only user has no workspace: their account pages sit in the farmer
@@ -119,9 +124,16 @@ test('a farmer-only user’s account pages sit in the farm frame, in their langu
 	const farmer = await signIn('Frame farmer');
 	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farm.id] } });
 	expect(add.status(), await add.text()).toBe(201);
+
+	// A farmer's invitation waiting: what accepting means, in the farmer words (no workspace guide fits).
+	const p = farmer.page;
+	await p.goto('/account/invitations');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	await p.getByRole('link', { name: 'What does accepting mean?' }).click();
+	await expect(p).toHaveURL(/\/farm\/words#farm-invitation$/);
+	await expect(p.locator('#farm-invitation')).toContainText('Other farmers in the catchment never see your name');
 	await acceptInvites(farmer.user.email, project.id);
 
-	const p = farmer.page;
 	for (const viewport of [PHONE, { width: 1440, height: 960 }]) {
 		await p.setViewportSize(viewport);
 		await p.goto('/account/alerts');
@@ -164,13 +176,22 @@ test('a farmer-only user’s account pages sit in the farm frame, in their langu
 	await expect(p.getByRole('heading', { level: 1, name: af('Account') })).toBeVisible();
 	await p.getByRole('group', { name: af('Language') }).getByRole('button', { name: 'English' }).click();
 
-	// A member of a catchment as well: the workspace frame.
+	// How two-step sign-in works: the farmer words, in the farm frame, not the workspace's guide.
+	const howTwoStep = p.getByRole('region', { name: 'Two-step sign-in' }).getByRole('link', { name: 'How two-step sign-in works' });
+	await expect(howTwoStep).toHaveAttribute('href', '/farm/words#farm-two-step');
+	await howTwoStep.click();
+	await expect(p).toHaveURL(/\/farm\/words#farm-two-step$/);
+	await expect(p.locator('#farm-two-step')).toContainText('nothing else about your account changes');
+	await p.goto('/account');
+
+	// A member of a catchment as well: the workspace frame, and the workspace's guide.
 	const other = await createProject(page.request, 'Frame viewer catchment');
 	await addMember(page.request, other.id, farmer.user.email, 'viewer');
 	await p.reload();
 	await expect(p.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();
 	await expect(p.locator('.farm-header')).toHaveCount(0);
 	await expect(p.getByRole('button', { name: 'Account menu for Frame farmer' })).toBeVisible();
+	await expect(howTwoStep).toHaveAttribute('href', '/help/guides/two-step-sign-in');
 });
 
 // Screen use (issue #17): the section header is the page's one title; one
@@ -238,9 +259,16 @@ test('thirty farms’ dam alerts read as two columns of rows in one wide card', 
 	const farms = model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id);
 	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: farms } });
 	expect(add.status(), await add.text()).toBe(201);
+
+	// A farmer's invitation waiting: what accepting means, in the farmer words (no workspace guide fits).
+	const p = farmer.page;
+	await p.goto('/account/invitations');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	await p.getByRole('link', { name: 'What does accepting mean?' }).click();
+	await expect(p).toHaveURL(/\/farm\/words#farm-invitation$/);
+	await expect(p.locator('#farm-invitation')).toContainText('Other farmers in the catchment never see your name');
 	await acceptInvites(farmer.user.email, project.id);
 
-	const p = farmer.page;
 	await p.setViewportSize({ width: 1440, height: 960 });
 	await p.goto('/account/alerts');
 	await expect(p.locator('main[data-ready="true"]')).toBeVisible();

@@ -38,9 +38,13 @@ const KEY_POLICIES = new Map<string, string>([
 ]);
 
 // Tables a key of the project may see rows of, and which rows. `language`
-// (080) is reference data readable by every session, the same for everyone
-// and holding nothing of any project or person.
-const KEY_VISIBLE = new Set(['time_series', 'series_key_days', 'language']);
+// (080) and `gazetteer_reference` (225, GeoNames' public place names: its read
+// policy is USING (true) so the search's word tests can run on its index) are
+// reference data readable by every session, the same for everyone and holding
+// nothing of any project or person. The gazetteer is empty unless a test loaded
+// it (search.db.test.ts keeps the synthetic set), so without it here this sweep
+// passed or failed by file order.
+const KEY_VISIBLE = new Set(['time_series', 'series_key_days', 'language', 'gazetteer_reference']);
 
 const rain = (startDate: string, values: (number | null)[], name: string) => ({ kind: 'rain_catchment_mm', name, unit: 'mm', startDate, values });
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest();

@@ -219,7 +219,7 @@ rows and columns don't break it.
   data; `docs/model.md` §2.10a). The values are imported unchanged: from
   engine 0.15.0 a run treats a flagged run as missing by default
   (`settings.zeroRainRuns`, `docs/model.md` §2.4c), so bias-corrected CHIRPS
-  fills it; Settings → Zero-rain runs keeps a real dry spell as recorded, so
+  fills it; Settings → Rain gaps → Flagged rain keeps a real dry spell as recorded, so
   there is no need to re-export the zeros as blanks. The low-vs-CHIRPS year check is
   engine-only (it shows in every run and on the Time series tab).
 - **The daily EWR's source** (engine ≥ 1.77.0, issue #455, `docs/model.md`
@@ -281,7 +281,7 @@ flow for the modelled river, so import it as a reference gauge instead:
   thousandths of m³/s (DWS publishes three decimals; a scaled value has many).
 - If `rUseFlow` picks the gauge (2), `calibrationFlowKind` is left unset and a
   `WARNING:` goes to stderr. Runs then calibrate on the logger if there is one.
-  Check the choice in Settings → calibration flow series.
+  Check the choice in Settings → Calibration record → Compare with.
 - `expected.json` is unchanged: it is the workbook's own results.
 
 `pnpm seed:demo` uses this for each client workbook, extracting into

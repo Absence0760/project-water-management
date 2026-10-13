@@ -1187,7 +1187,8 @@ loads as the schema owner; the app never writes it.
 ## Dams from the register and the map
 
 Dams → **Proposed from the register and the map** (issue #326 Part B,
-"B-dams"; the box under the dam cards, [ui.md § Dams](./ui.md#dams))
+"B-dams"; in the picked dam's chart panel once there is a run, else a box
+under the dam cards, [ui.md § Dams](./ui.md#dams))
 proposes two values for a hydrological unit's dam, each with its source,
 from the dam on the map linked to that unit (a polygon first, else a point;
 the earliest when there are several):
@@ -1466,13 +1467,77 @@ geocoder, so what is typed leaves the app for no one.
   order (case, accents and punctuation ignored: "morester" finds Môrester,
   "sandlaagte oos" Sandlaagte-Oos, "klein vaal" Klein Vaalbank Dam; "aalbank"
   finds nothing). A code matches from its start, spaces ignored ("z1h 00"
-  finds Z1H001…, "A21" the quaternaries A21A…). Within each group the whole
-  name comes first, then names that start with what was typed, then the rest
-  by name; among places, towns before farms before rivers and water. A group
-  with more matches than it lists says so ("type more to narrow it").
+  finds Z1H001…, "A21" the quaternaries A21A…). A place also matches by any
+  one of its alternate names (237, § Gazetteer): another spelling or an old
+  name, each compared on its own, so "Tsabong" (the basemap's spelling)
+  finds GeoNames' Tshabong, "Pietersburg" Polokwane, "Nelspruit" Mbombela and
+  "Port Elizabeth" Gqeberha; the words must all start words of one name, not
+  some of one alternate and some of another. Within each group the whole name
+  comes first, then names that start with what was typed, then the rest; a
+  place counts the closer of its name and its alternate names. A group with
+  more matches than it lists says so ("type more to narrow it").
+- **Which place comes first** (`PLACE_ORDER` in `geo/gazetteer.ts`, 237).
+  The question is which place the user means, and that is the one the
+  basemap labels, which is the larger one. Among places of the same
+  closeness:
+  1. towns before farms before rivers and water before the rest;
+  2. a national capital (GeoNames' PPLC, PPLG), then a first-order seat
+     (PPLA: a South African province's capital, a Botswana district's);
+  3. the larger population (GeoNames'; 0, unknown, last);
+  4. a lower seat of government (PPLA2, PPLA3, PPLA4) before a plain place;
+  5. South Africa's before a neighbour's, only as a tiebreak;
+  6. a match by the name before one by an alternate name; then by name.
+
+  Until 237 South Africa's came first right after the kind, then the seat.
+  On GeoNames' dumps of 2026-10-13, 1 587 town names are shared by two or
+  more places, and in 102 of them that order listed first a hamlet with no
+  recorded population. The cases, on the real data:
+  - **Windhoek**: Namibia's capital (PPLC, 386 219) was listed after a
+    Limpopo hamlet and a Western Cape section of a town of its name (no
+    population); now first. Lesotho's capital Maseru (359 753) was the same.
+  - **Kanye**: Botswana's Kanye is a district seat (PPLA) of 48 028, the
+    town the basemap labels; the Eastern Cape's is a hamlet with no recorded
+    population, which the old order put first. Now Botswana's comes first and
+    the hamlet second: both are listed, each with where it is.
+  - **Kuruman**: the Northern Cape seat (PPLA2, 9 093) before the Free State
+    hamlet (PPL, none), as before, now on population and seat alike; the
+    Kuruman River and the Kuruman Hills follow, found by their "Kuruman"
+    alternate name.
+  - **Malmesbury**: the Western Cape town (PPLA3, 43 009) before the four
+    Limpopo farms of its name, by kind, as before.
+  - Inside South Africa the old order had the same fault: Wellington (55 543)
+    and Stilfontein (93 110) came after a hamlet of their name.
+
+  GeoNames gives a population for under one place in ten, but for every
+  capital and first-order seat (38 of 38) and 179 of the 209 lower seats; the
+  seat tiers settle the rest, and South Africa's still wins a true tie (two
+  hamlets, neither with a population).
+- **No place names loaded.** The answer's `placesLoaded` is false while
+  `gazetteer_reference` is empty, and an empty answer then says so ("No town,
+  farm or river names are loaded on this site yet…") instead of suggesting a
+  town. Production's gazetteer is empty until the operator loads GeoNames
+  (§ Gazetteer, Production loading); until then no town is found
+  (Malmesbury, Kuruman: ad hoc testing, 2026-10-13).
+- **Not the basemap's labels.** The towns the basemap draws come from
+  OpenStreetMap, inside the PMTiles. The search doesn't read them: a server
+  search would decode vector tiles across the country per query (or extract
+  their names into a table once, which is a derived database under the ODbL,
+  share-alike, § Sources), and a browser search over the tiles in view finds
+  only what is already on screen. GeoNames' ZA dump holds the towns the
+  basemap labels in South Africa (checked: Malmesbury, Kuruman, Vryburg;
+  about 96 000 places kept), under CC BY 4.0, and its neighbours' dumps the
+  towns it labels over the border (checked on the dumps of 2026-10-13:
+  Kanye, Lobatse, Tshabong and Gaborone in Botswana, Maseru, Mbabane, Maputo,
+  Keetmanshoop and Zimbabwe's Beitbridge; § Gazetteer). Where the basemap's
+  spelling is only among GeoNames' alternate names (OSM's "Tsabong",
+  GeoNames' Tshabong), the alternate names find it (237).
 - **Moving the view.** One match moves the map to it at once; several are
   listed, each a button with what and where ("Gauging station Z1H002 ·
-  Wilgerivier", "Farm · Western Cape"), and picking one moves the map and
+  Wilgerivier", "Farm · Western Cape"; a place over the border is named with
+  its country, "Lobatse, Botswana", and no province, since its admin1 code is
+  its own country's; a place found by an alternate name is listed by its
+  name with the one matched, "Tshabong (also Tsabong), Botswana",
+  "Polokwane (also Pietersburg)", `mapSearch.ts` `hitName`), and picking one moves the map and
   closes the list (Escape closes it too). A quaternary is framed whole; a
   point is centred, at zoom 14 for a gauge or dam and 13 for a place. The
   map's centre is then the match, so a Delineate or a placed point from the
@@ -1499,30 +1564,94 @@ The search's places come from `gazetteer_reference` (225), which the
   region Z's stations and dams, and a school and a railway the loader leaves
   out. `pnpm import:gazetteer` with no argument loads it (`pnpm setup` does)
   as dataset `synthetic`, each place's source "SYNTHETIC test data…".
-- **Real data: GeoNames' South Africa dump** (CC BY 4.0, § Sources):
-  `ZA.zip` from <https://download.geonames.org/export/dump/>, unzipped, loads
-  with `pnpm import:gazetteer ZA.txt --dataset GeoNames-ZA-2026-10` (the
-  source defaults to "GeoNames (geonames.org), CC BY 4.0"; `--source`
-  overrides it). Never commit the file.
+- **Real data: GeoNames' dumps of South Africa and its six neighbours**
+  (CC BY 4.0, § Sources): `ZA.zip`, and `BW.zip` (Botswana), `LS.zip`
+  (Lesotho), `MZ.zip` (Mozambique), `NA.zip` (Namibia), `SZ.zip` (Eswatini)
+  and `ZW.zip` (Zimbabwe) from <https://download.geonames.org/export/dump/>,
+  unzipped, load with
+  `pnpm import:gazetteer ZA.txt BW.txt LS.txt MZ.txt NA.txt SZ.txt ZW.txt --dataset GeoNames-2026-10`
+  (several files load as one dataset; `--dataset GeoNames-ZA-2026-10` with
+  `ZA.txt` alone and another label for the neighbours works as well, two
+  datasets side by side; the source defaults to "GeoNames (geonames.org),
+  CC BY 4.0", `--source` overrides it). Load a country in one dataset only,
+  or its places are listed twice. Never commit the files.
 - **What a load keeps** (`backend/src/geo/loadGazetteer.ts`): GeoNames'
   feature classes A (administrative areas), H (rivers, dams, pans), L (areas),
   P (towns, settlements) and T (peaks, hills), and of S (spots, buildings)
   only farms (`FRM`, `FRMS`, `FRMT`); roads, railways, schools and the rest
-  are left out and counted. A place whose country code isn't `ZA` is left
-  out and counted apart, with a warning (a file holding other countries,
-  `allCountries.txt` or a neighbour's dump, is the wrong file). A line
+  are left out and counted.
+- **Which countries.** South Africa (`ZA`) and the six on its border: `BW`,
+  `LS`, `MZ`, `NA`, `SZ`, `ZW` (`GAZETTEER_COUNTRIES`; migration 236 holds
+  `gazetteer_reference.country` to the same list, so even the schema owner
+  can't write another). A place of any other country, or none, is left out
+  and counted apart, with a warning (`allCountries.txt` or a far country's
+  dump is the wrong file; a Kenyan dump alone loads nothing, and production
+  refuses it as empty). South Africa's places are kept wherever they are; a
+  neighbour's only inside the basemap's extent, `16.3,-35,33,-22`
+  (`NEIGHBOUR_BBOX`, `bin/tiles-dev.sh`'s default `TILES_BBOX`): past it there
+  is no map to move to. Measured on GeoNames' dumps of 2026-10-13:
+
+  | Dump | Text | Lines | Kept | Left out: kind | Left out: off the basemap |
+  | --- | --- | --- | --- | --- | --- |
+  | `ZA.txt` | 12.0 MB | 103 212 | 95 841 | 7 370 | (kept whole; 1 line skipped) |
+  | `BW.txt` | 0.4 MB | 3 993 | 2 542 | 250 | 1 201 |
+  | `LS.txt` | 0.2 MB | 1 450 | 1 022 | 428 | 0 |
+  | `MZ.txt` | 5.1 MB | 49 134 | 4 518 | 3 585 | 41 031 |
+  | `NA.txt` | 1.4 MB | 12 804 | 5 560 | 692 | 6 552 |
+  | `SZ.txt` | 0.2 MB | 1 970 | 1 662 | 308 | 0 |
+  | `ZW.txt` | 2.7 MB | 25 019 | 101 | 5 155 | 19 763 |
+  | all seven | 22.0 MB (5.1 MB gzipped) | 197 582 | 111 246 | | |
+
+  The whole of the six countries would add 83 952 places (179 793 in all,
+  more than the 150 000 the search's budget is measured on), most of them
+  hundreds of kilometres past the basemap (northern Mozambique alone 41 000);
+  the basemap's extent keeps 15 405, every border town the basemap labels.
+  With all seven loaded, a search takes 5–8 ms (local, `water_test`).
+- **Alternate names** (237; `alternateNames` in `geo/loadGazetteer.ts`).
+  GeoNames lists a place's other names in the dump's `alternatenames`
+  column, comma-separated, in every language: Tshabong's include Tsabong,
+  Chabong, the airport code TBY, and its name in Arabic, Amharic and
+  Persian. A load keeps those a user here can type: Latin script only
+  (accents allowed), no codes (2 to 5 capitals or digits with no space: TBY,
+  FAMY, RSA), no links or paths, and each folding (`searchKey`) to a name not
+  kept yet, the main name counting as kept; at most 200 a place. A name with
+  a number stays ("Zwartkrans Nommer 1"). Measured on the dumps of
+  2026-10-13 over the 111 246 places kept: 53 836 alternate names, of which
+  23 472 are kept on 14 739 places (18 190 for South Africa, 5 282 for the
+  neighbours), 3 089 left out for their script, as a code or a link, and the
+  rest fold to a name already there; the most on one place is 150 (a
+  province's name in many languages). Some kept ones are romanisations of
+  other languages' spellings ("ku lu man"), which match little and cost
+  little. They sit on the place's row (`alt_names`, and folded, `alt_search`)
+  with their own trigram index, so a search is still one table and two
+  indexes (§ Search's budget below). The population (the dump's fifteenth
+  column) is stored too, for the order.
+- **Each line.** A line
   without a place id, a feature class or a WGS84 position is skipped and
   listed. The name is stored as published and
   folded for the search (`search_name`: lower case, accents and punctuation
   dropped), with a trigram index (`pg_trgm`) the word-start match goes
   through, so a search reads only the rows the index offers, not the whole
-  table (about 150 000 rows for South Africa; `geo/search.db.perf.test.ts`
-  holds a budget on that many). A load
-  replaces every row of its dataset in one transaction.
+  table (about 111 000 rows for South Africa and its neighbours;
+  `geo/search.db.perf.test.ts` holds a budget of 40 ms on 150 000, two
+  alternate names on every fifth: 6 to 17 ms a search, 2026-10-13; on the
+  real seven dumps 2 to 7 ms). A load
+  replaces every row of its dataset in one transaction; other datasets stay.
 - **Production loading** goes through the reference-dataset path
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),
   kind `gazetteer`: the dump gzipped (`gzip -k ZA.txt`) under
-  `reference/gazetteer/`, at most 64 MB (128 MB unzipped).
+  `reference/gazetteer/`, at most 64 MB (128 MB unzipped). The October 2026
+  dump is 12 MB of text (2.7 MB zipped, 103 000 lines); the loader keeps about
+  96 000 places and skips one line without a feature class. A run loads one
+  file, so the neighbours go as a second file and dataset: their six dumps
+  concatenated and gzipped (`cat BW.txt LS.txt MZ.txt NA.txt SZ.txt ZW.txt |
+  gzip > neighbours-<date>.txt.gz`, 10 MB of text, 2.4 MB gzipped) as
+  `GeoNames-neighbours-<yyyy-mm>`, beside `GeoNames-ZA-<yyyy-mm>`; well under
+  the caps, so they stay. Nothing loads it for you: a fresh deployment's
+  search finds no place until this load runs. A dataset loaded before
+  migration 237's release has no alternate names or population: reload it
+  under the same label after that release (deployment.md § Reference
+  datasets).
 - **Later:** the Surveyor-General's farm-name register (farm names and
   numbers, as the title deeds give them), once its reuse licence is confirmed
   in writing (§ Sources).
@@ -2409,7 +2538,7 @@ fixtures only.
 | ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
-| GeoNames gazetteer, South Africa (`ZA.txt`: place and farm names, feature class, province, position): the Map's search ([§ Search](#search)) | GeoNames ([geonames.org](https://www.geonames.org), [download.geonames.org/export/dump](https://download.geonames.org/export/dump/)) | **CC BY 4.0**: "This work is licensed under a Creative Commons Attribution 4.0 License" (the dump's `readme.txt`, read 2026-10-12); commercial use allowed with attribution | "GeoNames (geonames.org), CC BY 4.0", stored on every place and shown under every search that lists one, and on the Data sources and credits page (`/data-sources#geonames`) | the operator's download date (`--dataset GeoNames-ZA-<date>`) | daily dumps; refreshed when the operator re-loads | **Allowed.** The operator's own download, never committed; built and tested against the synthetic gazetteer |
+| GeoNames gazetteer, South Africa and its six neighbours (`ZA.txt`, and `BW.txt`, `LS.txt`, `MZ.txt`, `NA.txt`, `SZ.txt`, `ZW.txt` inside the basemap's extent: place and farm names, feature class, province, country, position): the Map's search ([§ Search](#search)) | GeoNames ([geonames.org](https://www.geonames.org), [download.geonames.org/export/dump](https://download.geonames.org/export/dump/)) | **CC BY 4.0**: "This work is licensed under a Creative Commons Attribution 4.0 License" (the dump's `readme.txt`, read 2026-10-13; the seven countries' dumps carry the same `readme.txt`); commercial use allowed with attribution | "GeoNames (geonames.org), CC BY 4.0", stored on every place and shown under every search that lists one, and on the Data sources and credits page (`/data-sources#geonames`) | the operator's download date (`--dataset GeoNames-ZA-<date>`, `GeoNames-neighbours-<date>`) | daily dumps; refreshed when the operator re-loads | **Allowed.** The operator's own download, never committed; built and tested against the synthetic gazetteer |
 | Surveyor-General's farm names (registered farm names and numbers), considered for the search | Chief Surveyor-General, Department of Agriculture, Land Reform and Rural Development | **Unconfirmed**: no reuse terms for a commercial service found in writing | – | – | – | **Blocked: licence unconfirmed.** Not loaded; a later dataset once its reuse licence is confirmed in writing, recorded here with the date |
 | Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |

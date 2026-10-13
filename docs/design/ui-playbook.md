@@ -245,6 +245,23 @@ section it belongs to, with the example that taught it.
   rows scrolling in `.table-wrap`, the chart filling the rest. Ten specs
   leaned on the Data table's rows; cards would have lost the columns and
   broken them for nothing.
+- **A picked item's own panel goes in its detail, not under the list.** The
+  Dams page's "Proposed from the register and the map" is about one dam, yet
+  it was a full-width panel under every card: with nine dams the cards ran
+  to 2,446 px beside a chart that ended at 715, so the box opened under
+  1,700 px of empty column, away from the dam it was about, and with no
+  `dam=` it even showed another unit than the chart (operator, 2026-10-13).
+  It is now part of the picked dam's chart panel, under the assurance, and
+  its picker follows the page's pick and moves it (`dam=`), keeping in the
+  picker only what the pick can't name (a unit with no dam yet). A sticky
+  detail has a height budget, so what joins it folds to one line of its
+  values (`common/Fold.svelte`; the plot gives up that line's height), and a
+  sticky panel that can grow past the window (the fold opened) sticks by its
+  foot, `top: min(<stuck top>, 100vh − <its height> − 1rem)` from its
+  measured height, so every row can be read with nothing scrolling inside it
+  (`dams-page.spec.ts` "nine dams"). Moving a table into a narrower column,
+  recheck its wrapping: `overflow-wrap: anywhere` let "synthetic" break as
+  "synthet|ic" in a 680 px column; use `break-word` with column minimums.
 - **Design for N.** Assume 30 crops, 40 units, 10 dams, 20 runs and names
   three times longer than the seed's. A farmer linked to 30 farms in one
   catchment (or WUA staff previewing, who see them all) got 30 switcher
@@ -320,6 +337,19 @@ section it belongs to, with the example that taught it.
   the group header row is gone ("Dam capacity", not "Capacity"). Let the
   cards scroll with the modal: `.table-wrap`'s 70vh cap made the node cards
   a scroll box inside a scroll box, with Add node out of reach below it.
+  A read-only table does the same: the Dams page's "Proposed from the
+  register and the map" (Value, Saved now, Proposed, Source, Use) needs
+  549 px as columns, so at 390 it scrolled sideways inside its 323 px box
+  while the page passed `expectNoSidewaysScroll` (which skips a box that
+  holds its own overflow; check the box's `scrollWidth` too). Below its
+  width (a container query on a wrapper, `40rem`) each row is a block: the
+  row header on top, Saved now and Proposed side by side, then Source and
+  Use across, each value under its `data-label` (YearTable's pattern), the
+  Use a 44 px target. Reset the cells with `table.data td`, not a bare
+  `td`: app.css's `table.data td` padding and rule outrank a scoped `td`
+  (`dam-proposals.spec.ts`). Land cover's tables fit as columns; the
+  evaporation table's twelve months keep their sideways scroll with the
+  sticky row label (a variant that can never fit).
 - **In a narrow column, a row's actions get their own line.** The team
   page's Members panel (a 20–24rem side column) had Name · Role · actions,
   and the third column clipped "Reset two-step" to "Reset two-" and
@@ -1386,6 +1416,30 @@ Interaction details that bit:
   the fragment is a same-page jump, not a load: the River menu's first
   "loaded link" test passed on such a jump without loading anything, and the
   Data one failed on it (no mount, so no focus). Go to another tab first.
+- **A card with a stretched link beside a sticky panel isolates itself,
+  and a sticky column paints after the page.** The Dams and Hydrological
+  units cards stretch the name's link over the card (`a.name::after`,
+  `inset: 0`) and lift their links and sparkline above it with
+  `position: relative; z-index: 1`. A positive z-index paints after every
+  `z-index: auto` box, the sticky chart beside the cards included, and
+  Chromium can't know a sticky box won't overlap them, so each card's
+  lifted part got a compositing layer of its own: thirty dams, thirty
+  layers, each rasterised apart, and a card scrolling into view showed its
+  text with the sparkline and links blank for a moment. Give the card
+  `isolation: isolate`: the z-index then orders only inside the card. That
+  was enough on macOS but not on Linux, where the cards still painted after
+  two sticky columns that come first in the tree, the app sidebar and a
+  page's "On this page" rail, and Chromium layered every sparkline, fact
+  list and link row again. So both sticky columns carry `z-index: 1`
+  (`AppShell.svelte`, `SectionNav.svelte`): they paint after the page's own
+  content, nothing in the page paints after them, and no layer is made.
+  Menus and bars that should cover them sit at 20 and up.
+  `e2e/support/layers.ts` `layersInside` lists the layers inside a list
+  (the DevTools protocol's layer tree), and `dams-page.spec.ts` and
+  `supply-page.spec.ts` hold it empty. Layering differs by platform, so
+  check a change to it in CI's Linux Chromium, not only on a Mac (e2e
+  against the `mcr.microsoft.com/playwright` image's `run-server`, through
+  `PW_TEST_CONNECT_WS_ENDPOINT` and `PW_TEST_CONNECT_EXPOSE_NETWORK='<loopback>'`).
 - **A sticky element sticks only inside its parent.** Settings' "On this
   page" menu sat inside the form, so it scrolled away at Data feeds, the
   first panel after the form; the Data page's `.data-page` wrapper ends

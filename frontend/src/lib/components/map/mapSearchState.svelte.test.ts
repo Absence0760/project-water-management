@@ -15,6 +15,8 @@ const place = (name: string, source = GEONAMES, synthetic = false): MapSearchHit
 	river: '',
 	feature: 'P.PPL',
 	admin1: '11',
+	country: 'ZA',
+	alias: null,
 	lon: 20.7,
 	lat: -33.5,
 	bbox: null,
@@ -22,8 +24,8 @@ const place = (name: string, source = GEONAMES, synthetic = false): MapSearchHit
 	synthetic,
 	source
 });
-const gauge: MapSearchHit = { kind: 'gauge', code: 'Z1H003', name: 'Sandspruit @ Brandvlei', river: 'Sandspruit', feature: null, admin1: null, lon: 21.41, lat: -33.865, bbox: null, dataset: 'synthetic', synthetic: true, source: null };
-const answering = (hits: MapSearchHit[]) => vi.fn(async (q: string): Promise<MapSearchAnswer> => ({ q, hits, truncated: false }));
+const gauge: MapSearchHit = { kind: 'gauge', code: 'Z1H003', name: 'Sandspruit @ Brandvlei', river: 'Sandspruit', feature: null, admin1: null, country: null, alias: null, lon: 21.41, lat: -33.865, bbox: null, dataset: 'synthetic', synthetic: true, source: null };
+const answering = (hits: MapSearchHit[]) => vi.fn(async (q: string): Promise<MapSearchAnswer> => ({ q, hits, truncated: false, placesLoaded: true }));
 
 describe('MapSearchState', () => {
 	it('one place: the view moves at once, no list, and its credit still shows', async () => {

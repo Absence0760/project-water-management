@@ -338,6 +338,7 @@
 			{:else}
 				<p>{t('We can remove two-step sign-in from your account, so you can sign in with your password and set it up again.')}</p>
 				<p>{t('To keep your account safe, this takes 3 days. We email you a link to confirm. Once you open it, two-step sign-in is removed 3 days later, and we email you every day until then, so you can cancel it if it wasn’t you.')}</p>
+				<p>{t('Nothing else changes: your password and everything in your account stay as they are.')}</p>
 				<p class="muted">{t('If you’re in a team, a team admin can remove it for you straight away.')}</p>
 				<button type="button" class="btn btn-primary" onclick={askReset} disabled={busy}>{busy ? t('Sending…') : t('Email me a link')}</button>
 			{/if}

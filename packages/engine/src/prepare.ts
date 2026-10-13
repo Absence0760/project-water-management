@@ -289,7 +289,7 @@ export function defaultWindowWarning(series: ModelInput['series'], settings: Pic
 	const which = before.length && after.length ? 'start and end' : before.length ? 'start' : 'end';
 	return (
 		`the run covers the rain record, ${fromEpochDay(start)} to ${fromEpochDay(end)}, and leaves out ${left.join(', and ')} ` +
-		`(no rain there): set Settings → simulation ${which} to include them`
+		`(no rain there): set the simulation ${which} (Settings → Simulation period) to include them`
 	);
 }
 
@@ -744,7 +744,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23): maps the factor-corrected CHIRPS, so it needs the monthly correction.
 	s.chirpsQuantileMap = resolveChirpsQuantileMap(raw?.chirpsQuantileMap, warnings);
 	if (s.chirpsQuantileMap && s.chirpsBiasCorrection !== 'monthly') {
-		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → CHIRPS bias correction)');
+		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → Rain gaps → CHIRPS gap filling → CHIRPS bias correction)');
 		s.chirpsQuantileMap = null;
 	}
 	if (s.assuranceAnnualThreshold !== undefined && !(typeof s.assuranceAnnualThreshold === 'number' && s.assuranceAnnualThreshold > 0 && s.assuranceAnnualThreshold <= 1)) {

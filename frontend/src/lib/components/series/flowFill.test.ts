@@ -15,13 +15,13 @@ describe('flowFillShading', () => {
 		const s = flowFillShading('flow_observed_m3s', rec([4, null, 1, 1, null, null, null, 1]), fill, null)!;
 		expect(s.ranges).toEqual([{ start: '2020-01-02', end: '2020-01-02' }]);
 		expect(s.filled.values.map((v) => (Number.isNaN(v) ? null : v))).toEqual([null, 2, null, null, null, null, null, null]);
-		expect(s.caption).toBe('Shaded: 1 day interpolated across gaps of up to 2 days, in a run only (Settings → Flow gaps); the stored record is unchanged. 1 gap (3 days) stay open.');
+		expect(s.caption).toBe('Shaded: 1 day interpolated across gaps of up to 2 days, in a run only (Settings → Calibration record → Flow gaps); the stored record is unchanged. 1 gap (3 days) stay open.');
 	});
 
 	it('names a refused donor', () => {
 		const fill = { ...defaultFlowGapFill(), flow_observed_m3s: { ...DEFAULT_FLOW_GAP_SPEC, interpolateMaxDays: 0, donor: 'flow_logger_m3s' as const } };
 		const s = flowFillShading('flow_observed_m3s', rec([1, null, 1]), fill, rec([1, 1, 1]))!;
 		expect(s.ranges).toEqual([]);
-		expect(s.caption).toMatch(/^No gap is filled \(Settings → Flow gaps\)\. Nothing from the logger flow: the two records share 2 days/);
+		expect(s.caption).toMatch(/^No gap is filled \(Settings → Calibration record → Flow gaps\)\. Nothing from the logger flow: the two records share 2 days/);
 	});
 });

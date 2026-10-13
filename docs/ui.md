@@ -109,7 +109,12 @@ walk the text and check every control against its card, issue #521).
 #282, codes by email 206, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
 `GET /auth/mfa`). The heading row carries the state as a badge in words:
 **On (app)**, **On (email)**, **On (both)** or **Off**. One line under it
-("A 6-digit code after your password. Turn on one or both."), then the two
+("A 6-digit code after your password. Turn on one or both.", then **How
+two-step sign-in works**: in the farm frame, a farmer-only user's, the
+`farm-two-step` entry on `/farm/words`, translated; for anyone with the
+workspace, the workspace's guide, `/help/guides/two-step-sign-in`; the root
+layout tells the panel which frame it is in, `lib/auth/frame.ts`
+`provideFarmFrame` / `farmFrameReader`), then the two
 ways as rows, each with one head row (its name, a word on its strength, an
 **On** / **Off** badge and its action at the row's right end; on a card
 narrower than 22rem the action takes a full row under the head) and one
@@ -697,7 +702,9 @@ under a dead-invitation warning).
   pages of the sign-in family (`routes/mfa-reset/`, translated, open signed
   in or out, the token dropped from the address bar and `referrer` off, as
   the password reset page): **Remove two-step sign-in** (`/mfa-reset`)
-  explains the wait and starts it only on **Start the 3-day wait**, so a
+  explains the wait (what happens until it ends, how to cancel it, and
+  "Nothing else changes: your password and everything in your account stay
+  as they are.", which the code step's panel says too) and starts it only on **Start the 3-day wait**, so a
   mail scanner opening the link starts nothing; **Keep two-step sign-in**
   (`/mfa-reset/cancel`) cancels it on **Cancel the removal**, then says to
   change both passwords if it wasn't them. A dead link says so.
@@ -1764,9 +1771,9 @@ for every workspace tab. Its own chunk.
   **On the Network** (`?tab=network&node=<id>`, the node picked on the map),
   **Show on map** (`?tab=map&node=<id>`, only for a dam's unit with a linked
   map feature), **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
-  this page) and **Proposals** (picks the dam and brings the proposals box
-  below into view, focus on its **Dam of**, so it is never ten or thirty
-  cards down out of reach). A coloured edge repeats the band (accent, amber below 30 %, red
+  this page) and **Proposals** (picks the dam, opens its proposals in the
+  chart panel and brings them into view, focus on **Dam of**; before a run,
+  brings the box under the cards into view). A coloured edge repeats the band (accent, amber below 30 %, red
   at the minimum; grey without a level).
 - **Dam settings changed since the run** (issue #444): a card's figures are the run's,
   worked out with the dam as the run's own model had it (issue #173), but its
@@ -1827,8 +1834,9 @@ for every workspace tab. Its own chunk.
 - **Layout**: the cards column sits beside the chart once the page is 56rem
   wide (a container query on the page, not the viewport), the plot a fixed
   420 px and the chart panel sticky (`top: --header-h + 0.75rem`), so it
-  stays in view while the cards are read down in the window's scroll. Narrower, the cards are two to a row on
-  a phone, then the chart (260 px).
+  stays in view while the cards are read down in the window's scroll; the
+  panel also holds the dam's proposals, folded (below). Narrower, the cards are two to a row on
+  a phone, then the chart (260 px), its assurance and its proposals.
 - **Minimum level**: the model keeps the minimum as a fraction of capacity
   (`damMinPct` 0.1 = 10 %) and only a farm's dam has one, so `damsInRun`
   turns it into a % (until 2026-09-26 it passed the fraction through, so a
@@ -1848,13 +1856,32 @@ for every workspace tab. Its own chunk.
 - **Proposed from the register and the map** (issue #326 B-dams,
   `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
   sources and rules in [maps.md § Dams from the register and the
-  map](./maps.md#dams-from-the-register-and-the-map)): a panel under the
-  cards (and under the empty state), shown whenever the model has a
-  hydrological unit. **Dam of** picks the unit (the dams first in the
-  cards' order, then the other units; it opens on `dam=`'s, else the first
-  card's, and follows `dam=` whenever a card is picked, so a click and a fresh
-  load of the same URL agree; Dam of still picks any unit until the next
-  pick). The box says which dam on the map it searched from (its name,
+  map](./maps.md#dams-from-the-register-and-the-map)), shown whenever the
+  model has a hydrological unit. **Once there is a run** it is part of the
+  picked dam's detail: inside the chart panel, under the assurance of supply
+  (an `h3`), folded (`common/Fold.svelte`) to one line naming the unit and
+  what is proposed ("Upper farm: 1 registered dam within 1 km (reference
+  only) · area when full from the map 16.5 ha, not saved", `damProposals.ts`
+  `proposalsLine`; "couldn’t be loaded: open to try again" after a failure),
+  **Show** opening the rest. It follows the picked dam (`dam=`, else the
+  first card, the dam the chart shows); **Dam of** lists the dams in the
+  cards' order and, apart, the **Hydrological units with no dam yet**:
+  picking a dam picks it for the page (its card, its chart, the URL, a step
+  Back undoes), and a unit with no dam, which `dam=` can't name, shows in the
+  box alone until the next pick. A card's **Proposals** picks its dam, opens
+  the box, brings it into view and puts the keyboard on Dam of. The plot
+  gives up the closed line's height as it does the assurance's (never under
+  240 px), so the sticky panel still fits a 1440×960 and a 1280×800 window;
+  opened, the panel grows past the window and sticks by its foot (`top:
+  min(header + 0.75rem, 100vh − its height − 1rem)`), so its last row can be
+  read beside the cards with nothing scrolling inside it. Stacked on a phone
+  it comes after the chart and the assurance. Until 2026-10-13 it was a
+  full-width panel under every card: with nine dams it sat 1,700 px below the
+  chart, under an empty column, and with no `dam=` it showed a different unit
+  from the chart's (it opened on the first card before the levels sorted
+  them). **Before a run** (no chart, no pick) and with no dam cards it stays
+  a panel under the cards (and under the empty state), Dam of picking for the
+  box alone. The box says which dam on the map it searched from (its name,
   "its polygon's centre" or "a point", the place in degrees with a hemisphere,
   "33.6800° S, 21.3200° E" as the Map writes it, `searchedFrom`, **Show on map**),
   then a table: one row per registered dam within 1 km ("Capacity:
@@ -1879,8 +1906,14 @@ for every workspace tab. Its own chunk.
   editor can use a value."). Other states: no dam on the map linked to the
   unit (with **Open the Map**), no register loaded (the loader's command),
   no registered dam within 1 km, and a "Synthetic test data" warning when a
-  row comes from the committed fixture. The table scrolls in its own box on
-  a phone; the page doesn't. e2e: `dam-proposals.spec.ts`.
+  row comes from the committed fixture. Under 560 px wide (a phone) each row
+  stacks as a labelled block: the value's name, then Saved now and Proposed
+  side by side, then Source and a full-width Use (44 px), so nothing scrolls
+  sideways, in the box or the page (ui-playbook.md § 2, as `YearTable`). Its cells wrap between words (a word breaks only
+  when it alone is wider than its column), so in the chart panel's ~680 px
+  at 1280 the table fits with Use in view. e2e: `dam-proposals.spec.ts`
+  (incl. the stacked rows at 390), `dams-page.spec.ts` (the placement with
+  nine dams).
 
 ## Project
 
@@ -5311,7 +5344,7 @@ with the table the data needs).
   *What the model uses* follow below. The gauge-vs-logger table flows too: the
   flagged water years and the latest five, the rest behind **Show all N water
   years** (`series/agreementFold.ts`; on Runs & results it keeps its 320 px
-  box, a focusable named region); its *choose the calibration flow series*
+  box, a focusable named region); its *Calibration record → Compare with*
   link lands on Settings → Calibration record (`#set-record`). *What the model uses* spans the page;
   its kinds (at least 22rem each, one column on a phone) are behind **Show
   what each kind of series is for** (a `<details>`, closed by default, issue
@@ -6109,7 +6142,7 @@ two.
   per month, the default, or raw CHIRPS; it applies to the runoff model and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
   A run that corrected CHIRPS lists the monthly factors and the number of
-  days in its warnings. Below it, **CHIRPS fit period** (always shown; with raw CHIRPS it says it is unused but kept, and an invalid list still blocks Save where it can be fixed)
+  days in its warnings. Below it, the CHIRPS fit period, **Fit ranges** (always shown; with raw CHIRPS it says it is unused but kept, and an invalid list still blocks Save where it can be fixed)
   (`settings/ChirpsFitPeriodSection.svelte`, `settings.chirpsFitPeriod`,
   engine ≥ 0.29.0): "Whole record (default)" or "Listed water years", the
   latter with rows of from / to water year and a required reason
@@ -10738,8 +10771,9 @@ Part of the workspace, so English, like the rest of the Applicant view
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
 (`help/HelpNav.svelte`: the overview, then six groups, *Start here*,
-*How it works*, *How to*, *Using the results*, *Pages, one by one* and *Reference*, the last the glossary's index and
-one link per topic) marks the page you're on (`aria-current`). Each group's
+*How it works*, *How to*, *Using the results*, *Pages, one by one* and *Reference*, the last the glossary's index,
+one link per topic, File formats, and the public **How the model is checked** (`/methods`) and **Data sources and
+credits** (`/data-sources`) pages, which open in their own frame) marks the page you're on (`aria-current`). Each group's
 name is a heading (`h2`, not a link) and names its list; its links are
 indented under a thin rule, so a group reads as a block (issue #162). One
 group shows its pages at a time: the heading holds a disclosure button
@@ -10747,11 +10781,12 @@ group shows its pages at a time: the heading holds a disclosure button
 itself as you move between pages, and opening another closes it (on the
 overview and search the last one opened stays open). With all four open the
 list was ~1180 px tall, so the sticky column scrolled inside itself at
-1440×960 and 1280×800; with one open it is ~570 px at most and fits both
-(`help.spec.ts` checks each group, opened from the keyboard, and that together
+1440×960 and 1280×800; with one open it is ~715 px at most (Reference) and fits both, with 24 px to
+spare at 1280×800, since a label that just fits on macOS wraps a line taller on Linux; the links are 24 px rows
+for that, not 28 (`help.spec.ts` checks each group, opened from the keyboard, the room left, and that together
 they reach every link). The contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
 against the app sidebar, beside the text, sticky while you read, scrolling on their own only in a
-window shorter than the overview plus the longest group (~620 px), where the alternative is
+window shorter than the overview plus the longest group (~715 px), where the alternative is
 clipping links. The column fits the window exactly
 (the page's top gutter above it and below it), and the reading space at the end of a long page belongs
 to the text column, so a page that fits the window (search with nothing typed, no matches, an unknown
@@ -10759,6 +10794,22 @@ guide) doesn't scroll. They
 don't go in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)):
 a long list there made the sidebar scroll. On phones the contents fold behind a **Help contents** button
 under the search box, and close again when you pick a page.
+
+Pages outside the workspace link to the guide about them: the Account page's Two-step sign-in box (for anyone
+with the workspace; a farmer-only user's goes to the farmer words' `farm-two-step` instead, [§ Account](#account))
+and the Project page's Two-step sign-in panel to *Sign in with two steps* (`two-step-sign-in`; on the Account page
+the link's words go through `t()`), the Teams pages to *Set up a team and share a project*, an evidence pack's page
+to *Issue an evidence pack* and the printable report's bar to *Run the model and read the results*. The farmer-facing
+help is the translated farmer words (`/farm/words`, below): the Account page in the farm frame, the alert emails
+page and, while a farmer's invitation waits, the Invitations page link there. Signed-out pages (/mfa-reset, the sign-in
+code step, /share, /verify) link to neither, since both need a sign-in: they say what happens next on the page
+itself, translated (the reset's wait, how to cancel it, that nothing else about the account changes). Making
+`/farm/words` public was the other choice; it was not taken because its frame (FarmShell's Menu: your units,
+Account, Sign out) is a signed-in frame, and the two pages already carried most of the words. `guides.test.ts` checks every
+`/help/guides/<id>` link in the app's source names a guide (and section) that exists, and every Settings path
+the help or the app names (“Settings → Rain gaps → Flagged rain”) resolves to a panel and its headings.
+The guides are `lib/help/guides.ts`, with the *Pages, one by one* guides in `lib/help/guides-pages.ts`, a chunk of
+their own (`vite.config.ts` `helpArticlesChunk`), so neither passes check:bundle's per-chunk ceiling.
 
 Each subpage (a guide, the glossary, search) heads its text the same way: a
 breadcrumb (`help/HelpCrumbs.svelte`: *Help › How to › Add a transfer*,
@@ -10972,8 +11023,14 @@ published.
   83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
   entries in the `farmer` category ("What do these words mean?"; since
   issue #47 one of them is *WUA (Water User Association)*, which says some
-  areas still have an irrigation board). Every link to it from a farm page
-  (the Menu, the main page's foot, Why?'s, the dam page's and the outlook's
+  areas still have an irrigation board; the cards' own words, the season
+  outlook, the forecast, registered water, %, m³ and ML, and alert emails,
+  each linked from its card or page; two-step sign-in (`farm-two-step`,
+  from the Account page in the farm frame) and an invitation to a catchment
+  (`farm-invitation`, from the Invitations page while a farmer's invitation
+  waits: what accepting means, who sees what); `lib/help/farmer.test.ts` checks each
+  link's entry exists in English and Afrikaans). Every link to it from a farm page
+  (the Menu, the main page's foot, Why?'s, the dam page's and the cards'
   entry links) carries that page as `?from=` (`farm/load.ts` `wordsHref`),
   and its back link, **My hydrological unit**, returns there, so a farmer
   with several farms comes back to the one they were reading. `from` is
@@ -11066,7 +11123,8 @@ published.
   (the engine's `pickNotice`, through `farm/notice.ts`, shared with
   `/share` and the alert emails); water received this season with the ML/m³
   switch (saved to the account, `app_user.volume_unit`, and kept on the
-  phone for the saved copy); the dam
+  phone for the saved copy) and "What do %, m³ and ML mean?" under it, a
+  link to the `farm-pct-volume` entry; the dam
   (hidden without one) with the days-left line, or the no-stop-level
   wording; **Your registered water** (issue #72, `farm/RegisteredCard.svelte`,
   wording in `cards.ts` `registeredCard`, section `farm.registered`), only
@@ -11075,7 +11133,8 @@ published.
   name or registration number), the season's modelled supply beside the
   year's registered volume, the modelled dam beside the registered storage,
   and "A registered volume is not an entitlement, and it doesn't say whether
-  a use is lawful"; "Looking back", the model's card (dashed, neutral "Model: …"
+  a use is lawful", then "What is registered water?", a link to the
+  `farm-registered` entry; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
   notice and when the river asked for no cut, since its % would only repeat
   the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months ("Last 12 months, in ML" or "…, in m³":
@@ -11133,8 +11192,10 @@ published.
   on 3 of the 14 days" (or that the model doesn't expect a short day), and
   the forecast's own dates with "Forecasts change, and this is worked out
   by the model, not a promise. Only a notice from your WUA or from DWS is a
-  restriction." A forecast made more than 3 days ago says how old it is
-  first. The dam page shows the same card under its chart. **This season**
+  restriction.", then "What is the forecast?", a link to the
+  `farm-forecast` entry, which tells it apart from the season outlook. A
+  forecast made more than 3 days ago says how old it is first. The dam page
+  shows the same card under its chart. **This season**
   (issue #53 R5, E3, `farm/OutlookCard.svelte`, wording in
   `farm/outlookCard.ts`, section `farm.outlook`) comes next, only while the
   WUA has a seasonal outlook published and its season hasn't ended: a
@@ -11236,7 +11297,8 @@ published.
 
 English and Afrikaans for everything a farmer touches (WP-2.5): the farm
 view (`/farm/**`), the sign-in pages (`/login`, `/register`,
-`/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
+`/forgot-password`, `/reset-password`, `/verify-email`, and a lost second
+factor's `/mfa-reset` and `/mfa-reset/cancel`), the "confirm your
 email" banner, the account page and its alert emails page
 (`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), the
 "Was this useful?" page (`/alerts/feedback`), the
@@ -11318,7 +11380,10 @@ saved unit with the error above them). There it is `segmented`:
   of stale ids), while dev and the tests use the list: under vitest a
   message that isn't on the sheet throws (a table without `msg()`, say), in
   the dev server it warns.
-- **Loading.** Only the translated routes load the catalogue: they import
+- **Loading.** Only the translated routes load the catalogue
+  (`lib/auth/session.svelte.ts` `TRANSLATED_PATHS`; `redirect.test.ts`
+  fails on a page that imports the catalogue outside them, as `/mfa-reset`
+  once did, showing English to everyone who opened it from its email): they import
   it themselves, and the root layout imports `lib/i18n/locale.svelte` with a
   dynamic `import()` on the first translated route, then renders the route
   once the language is set (a readiness flag, with Try again if the chunk
@@ -11507,7 +11572,9 @@ then.
   **Accept** / **Decline**. Accepting says "You joined …" with a link to it
   (a farmer's to their farm), declining "You declined the invitation to …";
   one that went meanwhile (revoked, expired) reloads the list with the error.
-  Empty state: "You have no invitations waiting." Its words are translated
+  Empty state: "You have no invitations waiting." While an invitation as a
+  farmer waits, the header's line ends in **What does accepting mean?**, a
+  link to the `farm-invitation` entry on `/farm/words`. Its words are translated
   (section `invitations`). Linked from the account page's **Your
   invitations**, the invite email, and the banner.
 - **The invitations banner** (`auth-extras/InvitesBanner.svelte`, in
@@ -11615,7 +11682,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   (`workspace/SectionHeader`, issue #17) is the page's one title, **Alert
   emails**, with what the page is for as its context line, **Back to your
   account** on the right, and under it one slim line with the daily cap (5
-  right away, the rest in the next morning's summary) and, when mail is
+  right away, the rest in the next morning's summary) ending in **What are
+  alert emails?**, an inline link to the `farm-alerts` entry on
+  `/farm/words` (inline so the line stays one row; no `?from=`, so its back
+  link is **Your hydrological units**), and, when mail is
   paused, the banner below. Then a card per catchment you can open, as many
   across as fit the page's own width (at least 34rem each: two at 1440 and
   1280, stacked on a phone; `auto-fit`, so a lone catchment takes the whole

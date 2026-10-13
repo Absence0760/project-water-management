@@ -506,7 +506,7 @@
 			>
 			<span class="hint muted"
 				>Each timestamp is taken as the end of its interval, so a reading at 08:00 closes the day before. The series records the choice, and a rain-source
-				period (Settings → Rain source) compares like with like.</span
+				period (Settings → Rain gaps → Flagged rain → Rain source periods) compares like with like.</span
 			>
 		</fieldset>
 	{/if}

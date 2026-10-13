@@ -360,7 +360,9 @@
 					{#if record.farms.length}
 						<details class="as-table">
 							<summary>Figures per hydrological unit ({record.farms.length})</summary>
-							<!-- Focusable: on a phone the columns can scroll sideways, and a keyboard has to reach it. -->
+							<!-- Focusable: on a phone the columns can scroll sideways, and a keyboard has to reach it
+							     (WCAG 2.1.1, a scrollable region; the lint can't see that it scrolls). -->
+							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 							<div class="table-wrap" tabindex="0" role="region" aria-label="Figures per hydrological unit">
 								<table class="data compact">
 									<caption class="visually-hidden">Each hydrological unit’s season figures in this publication, least supplied first</caption>

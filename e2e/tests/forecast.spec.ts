@@ -110,6 +110,11 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	// The kicker is at the farm pages' 13 px floor (it was 0.8125rem of the 14 px root, 11.4 px).
 	expect(await card.getByText('Forecast', { exact: true }).evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(13);
 	await expectNoViolations(farmer.page, { include: '[data-testid="farm-forecast"]' });
+	// Its word, apart from the season outlook's, with the way back to this farm page.
+	const farmUrl = new URL(farmer.page.url());
+	await card.getByRole('link', { name: 'What is the forecast?' }).click();
+	await expect(farmer.page).toHaveURL(`${farmUrl.origin}/farm/words?from=${encodeURIComponent(farmUrl.pathname + farmUrl.search)}#farm-forecast`);
+	await expect(farmer.page.locator('#farm-forecast')).toContainText('It is not the season outlook.');
 });
 
 test('a forecast run whose forecast days a CHIRPS-GEFS feed wrote credits CHIRPS-GEFS on its report', async ({ page, owner }) => {

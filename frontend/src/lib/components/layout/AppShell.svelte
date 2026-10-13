@@ -143,8 +143,17 @@
 	   Spaced to fit a 960 px-high window with a project open (every section an
 	   owner sees, plus room for one more); on a shorter window the page's slot
 	   scrolls on its own, so the account at the foot never leaves the screen. */
+	/* z-index 1: the sticky sidebar paints after the page's own content, not
+	   before it. Painted first (z-index auto, first in the tree), everything
+	   positioned after it in the page was assumed to overlap it as the window
+	   scrolls, and Chromium on Linux gave each such part a compositing layer
+	   of its own: every dam card's sparkline, every unit card's facts and
+	   links, each rasterised apart and blank for a moment as its card
+	   scrolled in (ui-playbook.md § 4, e2e/support/layers.ts). The page's
+	   menus and bars that should cover it sit at 20 and up. */
 	.app-sidebar {
 		position: sticky;
+		z-index: 1;
 		top: 0;
 		height: 100vh;
 		display: flex;

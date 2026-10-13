@@ -30,7 +30,7 @@ export class MapSearchState {
 				: this.shown
 					? `Showing ${hitName(this.shown)} on the map.`
 					: this.answer
-						? resultLine(this.answer.q, this.answer.hits, this.answer.truncated)
+						? resultLine(this.answer.q, this.answer.hits, this.answer.truncated, this.answer.placesLoaded)
 						: ''
 	);
 

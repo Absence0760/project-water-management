@@ -137,7 +137,7 @@
 	<div class="page-head">
 		<div>
 			<h1>Teams</h1>
-			<p class="muted sub">Catchments you model together, with how each is doing in its latest run.</p>
+			<p class="muted sub">Catchments you model together, with how each is doing in its latest run. <a href="{base}/help/guides/share-with-a-team">How teams work</a></p>
 		</div>
 		<button type="button" class="btn btn-primary" onclick={openCreate}>New team</button>
 	</div>

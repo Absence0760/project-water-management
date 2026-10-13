@@ -1785,7 +1785,7 @@ Lambda's list against the Sources table):
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
 | `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
-| `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt` (gzip it); the kinds the search doesn't keep (roads, schools, …) are left out at load | download `ZA.zip` from download.geonames.org/export/dump/, unzip, `gzip -k ZA.txt` (maps.md § Gazetteer) |
+| `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt`, and its six neighbours' (`BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`) concatenated into a second file (gzip each); the kinds the search doesn't keep (roads, schools, …), a neighbour's places outside the basemap, and any other country's are left out at load | download the seven zips from download.geonames.org/export/dump/, unzip each in its own folder, `gzip -k ZA.txt`, and `cat` the six neighbours into one file, gzipped (steps below; maps.md § Gazetteer) |
 | `quaternaries`, `dam-register`, `gauge-stations`, `map-grid` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
 ```bash
@@ -1801,7 +1801,46 @@ attribution (`-f source=…` overrides the source). For rivers add `-f source="<
 streams, `-f min_order=<n>`. The gazetteer is `kind=gazetteer` with a key under
 `reference/gazetteer/` (e.g. `za-2026-10-12.txt.gz`) and a dataset such as
 `GeoNames-ZA-2026-10`; `-f source=…` overrides GeoNames' attribution, which
-is the default. Approve the run in the `production`
+is the default. Until it runs, the Map's search finds no town, farm or river
+(it says no place names are loaded). South Africa's neighbours (the towns
+the basemap labels over the border: Kanye, Lobatse, Gaborone, Maseru,
+Mbabane, Maputo, …) are a second run and a second dataset, so neither load
+replaces the other. Both need the first backend release that carries
+migrations 236 (the `country` column) and 237 (alternate names and
+population) deployed first: the loader that reads the neighbours, the
+alternate names and the population runs in the migrate Lambda that release
+ships. A dataset loaded by an earlier release has no alternate names and no
+population (the search then misses "Tsabong" and ranks a hamlet beside a
+capital), so after that release reload every gazetteer dataset already
+loaded: the same two runs below, same keys and the same dataset labels (a
+load replaces its own dataset in one transaction, so the search keeps
+working throughout). The steps, from an empty folder outside the repo:
+
+```bash
+for c in ZA BW LS MZ NA SZ ZW; do mkdir -p $c && curl -fsSL -o $c/$c.zip https://download.geonames.org/export/dump/$c.zip && unzip -o -q $c/$c.zip -d $c; done
+gzip -c ZA/ZA.txt > za-2026-10-13.txt.gz
+cat BW/BW.txt LS/LS.txt MZ/MZ.txt NA/NA.txt SZ/SZ.txt ZW/ZW.txt | gzip > neighbours-2026-10-13.txt.gz
+sha256sum za-2026-10-13.txt.gz neighbours-2026-10-13.txt.gz
+aws s3 cp za-2026-10-13.txt.gz s3://<reference_bucket>/reference/gazetteer/za-2026-10-13.txt.gz --profile water-management
+aws s3 cp neighbours-2026-10-13.txt.gz s3://<reference_bucket>/reference/gazetteer/neighbours-2026-10-13.txt.gz --profile water-management
+gh workflow run load-reference.yml -f kind=gazetteer -f key=reference/gazetteer/za-2026-10-13.txt.gz -f sha256=<za hex> -f dataset=GeoNames-ZA-2026-10
+# approve it in the production environment, wait for it to finish (one load at a time), then:
+gh workflow run load-reference.yml -f kind=gazetteer -f key=reference/gazetteer/neighbours-2026-10-13.txt.gz -f sha256=<neighbours hex> -f dataset=GeoNames-neighbours-2026-10
+```
+
+The CloudWatch log of each load says what it kept by country, how many
+alternate names it kept and left out, and what else it left out. On the
+dumps of 2026-10-13 the first keeps 95 841 places and 18 190 alternate
+names (1 561 left out: another script, a code or a link), the second 15 405
+places (BW 2 542, LS 1 022, MZ 4 518, NA 5 560, SZ 1 662, ZW 101; 68 547 of
+the neighbours' places lie outside the basemap and are left out) and 5 282
+alternate names (1 528 left out). Check in the Map's search: "Lobatse" lists
+"Lobatse, Botswana", "Tsabong" lists "Tshabong (also Tsabong), Botswana",
+and "Windhoek" lists Namibia's capital first. A later
+refresh reloads each file under its own label (or a new label, then
+removes the old one). Never load a country in both datasets: its places
+would be listed twice. A dump of any other country is refused (`empty`, no
+place the load can take). Approve each run in the `production`
 environment. Never load the synthetic fixtures into production (the label
 `synthetic` is refused).
 
@@ -1817,7 +1856,8 @@ HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
 Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
 Africa about 50 MB, so anything bigger is the wrong file. So has the
 gazetteer, 64 MiB uploaded and 128 MiB unzipped: South Africa's dump is
-about 20 MB of text, all of GeoNames' about 1.6 GB. A load costs cents (3 GB × a few
+12 MB of text and its six neighbours' 10 MB together (2.7 MB and 2.4 MB
+gzipped, 2026-10-13), all of GeoNames' about 1.6 GB. A load costs cents (3 GB × a few
 minutes of Lambda) and runs one at a time (reserved concurrency 1, the
 workflow's concurrency group). Migrations use the same memory and timeout,
 billed only while they run. Don't run a load while a backend deploy is

@@ -17,6 +17,19 @@ export const ZA_PROVINCES: Readonly<Record<string, string>> = {
 	'11': 'Western Cape'
 };
 
+/** South Africa's neighbours the gazetteer loads, by GeoNames' country code (the backend's GAZETTEER_COUNTRIES; docs/maps.md § Gazetteer). */
+export const NEIGHBOURS: Readonly<Record<string, string>> = {
+	BW: 'Botswana',
+	LS: 'Lesotho',
+	MZ: 'Mozambique',
+	NA: 'Namibia',
+	SZ: 'Eswatini',
+	ZW: 'Zimbabwe'
+};
+
+/** A place over the border: one with a country that isn't South Africa's. */
+const abroad = (h: MapSearchHit): boolean => h.kind === 'place' && !!h.country && h.country !== 'ZA';
+
 /** What a gazetteer place is, from its GeoNames feature class and code. */
 export function placeWord(feature: string | null): string {
 	const [cls, code = ''] = (feature ?? '').split('.');
@@ -33,13 +46,21 @@ export function placeWord(feature: string | null): string {
 	return 'Area';
 }
 
-/** A match's name as listed: the place's or station's name, the dam's, or the quaternary's code. */
+/**
+ * A match's name as listed: the place's or station's name, the dam's, or the
+ * quaternary's code; a place found by another of its names with the one typed
+ * ("Tshabong (also Tsabong)", "Polokwane (also Pietersburg)"), so the list
+ * says why the name differs; a place over the border with its country
+ * ("Lobatse, Botswana").
+ */
 export function hitName(h: MapSearchHit): string {
 	if (h.kind === 'quaternary') return `Quaternary ${h.code}`;
-	return h.name || h.code || 'Unnamed';
+	const named = h.name || h.code || 'Unnamed';
+	const name = h.kind === 'place' && h.alias ? `${named} (also ${h.alias})` : named;
+	return abroad(h) ? `${name}, ${NEIGHBOURS[h.country!] ?? h.country}` : name;
 }
 
-/** What and where, after the name: "Gauging station Z1H001 · Sandspruit", "Farm · Western Cape"; "(sample)" for the invented datasets. */
+/** What and where, after the name: "Gauging station Z1H001 · Sandspruit", "Farm · Western Cape" (a province for South Africa's places only: a neighbour's admin1 code is its own country's); "(sample)" for the invented datasets. */
 export function hitDetail(h: MapSearchHit): string {
 	const parts: string[] = [];
 	if (h.kind === 'gauge') parts.push(`Gauging station ${h.code}`);
@@ -47,7 +68,7 @@ export function hitDetail(h: MapSearchHit): string {
 	else if (h.kind === 'quaternary') parts.push('Quaternary catchment');
 	else parts.push(placeWord(h.feature));
 	if (h.river) parts.push(h.river);
-	if (h.kind === 'place' && h.admin1 && ZA_PROVINCES[h.admin1]) parts.push(ZA_PROVINCES[h.admin1]!);
+	if (h.kind === 'place' && !abroad(h) && h.admin1 && ZA_PROVINCES[h.admin1]) parts.push(ZA_PROVINCES[h.admin1]!);
 	return `${parts.join(' · ')}${h.synthetic ? ' (sample)' : ''}`;
 }
 
@@ -64,8 +85,10 @@ export function placeCredits(hits: readonly MapSearchHit[]): { source: string; s
 	return [...seen].map(([source, synthetic]) => ({ source, synthetic }));
 }
 
-/** The live line after a search: how many matched, or that nothing did. */
-export function resultLine(q: string, hits: readonly MapSearchHit[], truncated: boolean): string {
+/** The live line after a search: how many matched, or that nothing did (and, with no place names loaded, that a town can't be found yet). */
+export function resultLine(q: string, hits: readonly MapSearchHit[], truncated: boolean, placesLoaded: boolean): string {
+	if (!hits.length && !placesLoaded)
+		return `Nothing found for “${q}”. No town, farm or river names are loaded on this site yet, so only gauge codes, dams’ names and quaternaries can be found.`;
 	if (!hits.length) return `Nothing found for “${q}”. Try a town, farm or river name, a gauge code (A2H012), a dam’s name or a quaternary (A21A).`;
 	const n = `${hits.length} match${hits.length === 1 ? '' : 'es'} for “${q}”`;
 	return truncated ? `${n}; more match, so type more to narrow it.` : `${n}.`;

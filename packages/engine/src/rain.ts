@@ -959,7 +959,7 @@ export function keepDryDoubtWarnings(c: ChirpsCorrection | null): string[] {
 			`${Math.round(d.chirpsMm)} mm over its ${plural(d.days, 'kept-dry day')}, above the ${Math.round(d.limitMm)} mm limit ` +
 			`(the larger of ${KEEP_DRY_DOUBT_MIN_MM} mm and ${Math.round(KEEP_DRY_DOUBT_ANNUAL_SHARE * 100)} % of the catchment's usual annual rain). ` +
 			`Those days still run dry, but water year${d.waterYears.length === 1 ? '' : 's'} ${d.waterYears.map(waterYearLabel).join(', ')} ` +
-			'stay out of the CHIRPS factor fit. Check the keep-dry in Settings → Zero-rain runs.'
+			'stay out of the CHIRPS factor fit. Check the Keep dry list in Settings → Rain gaps → Flagged rain.'
 	);
 }
 
@@ -992,13 +992,13 @@ export function chirpsCorrectionWarning(c: ChirpsCorrection | null): string | nu
 		`A month with fewer than ${c.minDays} shared days, or less than ${c.minMm} mm of CHIRPS on them, uses the pooled factor` +
 		(segs.length ? ' of its range, then the factor over all the listed ranges' : '') +
 		`; factors are clamped to ${c.clampMin}–${c.clampMax}.`;
-	const tail = `${excluded}${chirpsQuantileMapSentence(c)} Catchment and forecast rain are not changed. Settings → CHIRPS bias correction turns this off.`;
+	const tail = `${excluded}${chirpsQuantileMapSentence(c)} Catchment and forecast rain are not changed. Settings → Rain gaps → CHIRPS gap filling → CHIRPS bias correction turns this off.`;
 	if (segs.length) {
 		// Engine ≥ 0.29.0: one set per listed range, each named with the years it was fitted on and the years it fills.
 		const parts = segs.map(
 			(s) => `${fitSegmentName(s)}, fitted on ${fitWindowText(s.fitWindow)}, filling ${fitSegmentFillText(s)} (${plural(s.correctedDays, 'day')}): ${factors(s.months)}`
 		);
-		return head + `factor = catchment / CHIRPS rain per month, fitted per listed water-year range (Settings → CHIRPS fit period): ${parts.join('; ')}. ` + rules + tail;
+		return head + `factor = catchment / CHIRPS rain per month, fitted per listed water-year range (Settings → Rain gaps → CHIRPS gap filling → Fit ranges): ${parts.join('; ')}. ` + rules + tail;
 	}
 	return head + `factor = catchment / CHIRPS rain per month, ${factors(c.months)}. ` + rules + tail;
 }
@@ -1018,7 +1018,7 @@ function chirpsQuantileMapSentence(c: ChirpsCorrection): string {
 	const q = c.quantileMap;
 	if (!q) return '';
 	return (
-		` Quantile map (Settings → CHIRPS quantile map): ${chirpsQuantileMapText(q)}. ` +
+		` Quantile map (Settings → Rain gaps → CHIRPS gap filling → CHIRPS quantile map): ${chirpsQuantileMapText(q)}. ` +
 		`${plural(q.mappedDays, 'gap day')} changed (${Math.round(q.factorOnlyMm)} mm by the factor alone → ${Math.round(q.mappedMm)} mm on the same days).`
 	);
 }
@@ -1297,12 +1297,12 @@ export function zeroRainWarnings(z: ZeroRainInfill | null): string[] {
 				(z.recordedMm > 0 ? ` in place of ${mm(z.recordedMm)} recorded` : '') +
 				'.' +
 				(z.unfilledDays > 0 ? ` ${z.unfilledDays} of those days have no CHIRPS or forecast value either and run as 0 mm.` : '') +
-				' The stored series is unchanged. Settings → Zero-rain runs keeps a flagged run as recorded.'
+				' The stored series is unchanged. Settings → Rain gaps → Flagged rain keeps a flagged run as recorded.'
 		);
 	}
 	if (z.keptDry.length) {
 		out.push(
-			`Flagged zero runs kept as recorded (dry) on ${z.keptDry.reduce((a, k) => a + k.days, 0)} days, as Settings → Zero-rain runs says: ` +
+			`Flagged zero runs kept as recorded (dry) on ${z.keptDry.reduce((a, k) => a + k.days, 0)} days, as Settings → Rain gaps → Flagged rain says: ` +
 				z.keptDry.map((k) => `${k.start} to ${k.end} (${k.days} days: ${k.reason})`).join('; ') +
 				'.'
 		);
@@ -1310,12 +1310,12 @@ export function zeroRainWarnings(z: ZeroRainInfill | null): string[] {
 	if (z.chirpsDryDays) {
 		out.push(
 			`Flagged zero runs kept as recorded (dry) on ${z.chirpsDryDays} day${z.chirpsDryDays === 1 ? '' : 's'} where CHIRPS reads ${z.fillAboveChirpsMm} mm or less: ` +
-				'only days CHIRPS reads more on are treated as missing (Settings → Zero-rain runs).'
+				'only days CHIRPS reads more on are treated as missing (Settings → Rain gaps → Flagged rain).'
 		);
 	}
 	if (z.asRecordedDays > 0) {
 		out.push(
-			`Flagged zero runs run as recorded (dry) on ${z.asRecordedDays} days: Settings → Zero-rain runs is "as recorded", so CHIRPS doesn't fill them.`
+			`Flagged zero runs run as recorded (dry) on ${z.asRecordedDays} days: Settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)", so CHIRPS doesn't fill them.`
 		);
 	}
 	return out;

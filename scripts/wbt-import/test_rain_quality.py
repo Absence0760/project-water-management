@@ -80,7 +80,7 @@ class ZeroRainRuns(unittest.TestCase):
         # Engine >= 0.15.0 treats a flagged run as missing by default (CR-20);
         # the note must not tell the user to re-export it as blank any more.
         self.assertIn("Runs treat them as missing", note)
-        self.assertIn("Zero-rain runs", note)
+        self.assertIn("Settings -> Rain gaps -> Flagged rain", note)
         self.assertNotIn("re-export", note)
         # Negative controls: no gap, or only CHIRPS has the gap.
         self.assertIsNone(zero_rain_note([{"kind": "rain_catchment_mm", "startDate": START, "values": seasonal(WINTER)}]))

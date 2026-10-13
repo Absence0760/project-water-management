@@ -7,6 +7,8 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { loadSyntheticDamRegister } from '../support/damRegister.ts';
+import { layersInside } from '../support/layers.ts';
 
 const cards = (page: Page) => page.getByRole('list', { name: 'Dams' }).getByRole('listitem');
 const card = (page: Page, name: string) => cards(page).filter({ has: page.getByText(name, { exact: true }) });
@@ -266,6 +268,14 @@ test('many dams: every card shows, emptiest first, with no “Show all” fold; 
 	// The chart stays in view beside them as the window scrolls.
 	await cards(page).nth(12).scrollIntoViewIfNeeded();
 	await expect(chart(page)).toBeInViewport();
+	// A card scrolled into view is whole at once: its sparkline at full size, its links there. The cards paint in the
+	// page's own layer: their sparklines and links (z-index 1, above the card's stretched link) each had a compositing
+	// layer of their own beside the sticky chart, rasterised late, so a card scrolling in showed them blank (2026-10-13).
+	const scrolledIn = cards(page).nth(12);
+	await expect(scrolledIn.getByTestId('sparkline')).toBeInViewport();
+	expect((await scrolledIn.locator('.spark-box').boundingBox())!.height).toBeGreaterThan(50);
+	await expect(scrolledIn.getByTestId('dam-edit-link')).toBeInViewport();
+	expect(await layersInside(page, 'ul.cards')).toEqual([]);
 
 	// Pick one far down: its card is highlighted and the chart shows it; a shared link to it opens the same way.
 	const far = (await cards(page).nth(12).locator('a.name').innerText()).trim();
@@ -288,6 +298,63 @@ test('many dams: every card shows, emptiest first, with no “Show all” fold; 
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 	await cards(page).last().locator('a.name').click();
 	await expect(chart(page)).toBeInViewport();
+	await expectNoViolations(page);
+});
+
+test('nine dams: the proposals sit in the picked dam’s chart panel, folded, beside the cards, not under them; a card’s Proposals opens them in view', async ({ page, owner }) => {
+	void owner;
+	// The folded line reads the register of dams: load it here, not by luck of another spec's order.
+	await loadSyntheticDamRegister();
+	// The operator's report (2026-10-13): with nine dams the box was a full-width panel under every card, 1,700 px
+	// below the chart, with an empty column beside the cards.
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedManyDams(page, 'Dams proposals placement', 7);
+	await createRun(page.request, project.id, 'Baseline');
+	await openDams(page, project.id);
+	await chartReady(page);
+	await expect(cards(page)).toHaveCount(9);
+	const proposals = page.getByTestId('dam-proposals');
+	await expect(proposals.getByTestId('dam-proposals-body')).toHaveAttribute('data-ready', 'true');
+	// One box, inside the chart panel, about the charted dam, folded to its line.
+	await expect(proposals).toHaveCount(1);
+	await expect(chart(page).getByTestId('dam-proposals')).toHaveCount(1);
+	const first = (await chart(page).getByRole('heading', { level: 2 }).textContent())!.replace('Storage: ', '');
+	await expect(proposals.locator('details.fold > summary')).toContainText(`${first}:`);
+	await expect(proposals.locator('details.fold')).not.toHaveAttribute('open');
+	const list = (await page.getByRole('list', { name: 'Dams' }).boundingBox())!;
+	const box = (await proposals.boundingBox())!;
+	const panel = (await chart(page).boundingBox())!;
+	expect(box.x).toBeGreaterThan(list.x + list.width);
+	// The whole panel, its proposals' line included, on the first screen; nothing of it below the cards.
+	expect(panel.y + panel.height).toBeLessThanOrEqual(960);
+	expect(box.y + box.height).toBeLessThan(list.y + list.height);
+	// Read down to the last card: the chart's heading and the proposals' line are still beside it.
+	await cards(page).last().scrollIntoViewIfNeeded();
+	await expect(chart(page).getByRole('heading', { level: 2 })).toBeInViewport();
+	await expect(proposals.locator('details.fold > summary')).toBeInViewport();
+	expect(await innerScrollers(page)).toEqual([]);
+
+	// A far card's Proposals: picks it, opens the box with the keyboard on Dam of, and the opened panel, taller than
+	// the window, sticks by its foot, so its last line is in view without scrolling inside anything.
+	const far = cards(page).nth(7);
+	const farName = (await far.locator('a.name').innerText()).trim();
+	await far.getByRole('link', { name: `${farName}: proposed from the register and the map` }).click();
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${farName}`);
+	await expect(proposals.locator('details.fold')).toHaveAttribute('open', '');
+	await expect(proposals.getByLabel('Dam of')).toBeFocused();
+	await expect(proposals.getByLabel('Dam of')).toBeInViewport();
+	await expect(proposals.getByTestId('dam-proposals-no-dam')).toBeInViewport();
+	await expect(far).toBeInViewport();
+	expect(await innerScrollers(page)).toEqual([]);
+
+	// On a phone, stacked: the cards, then the chart, its assurance, then the proposals; nothing sideways.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`/projects/${project.id}?tab=dams`);
+	await chartReady(page);
+	const assurance = (await chart(page).getByTestId('node-assurance').boundingBox())!;
+	const stacked = (await page.getByTestId('dam-proposals').boundingBox())!;
+	expect(stacked.y).toBeGreaterThanOrEqual(assurance.y + assurance.height);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 	await expectNoViolations(page);
 });
 
@@ -338,8 +405,10 @@ test('a card’s Edit dam opens its node sheet, Back returns to Dams with the pi
 	await chartReady(page);
 	await expect(page.getByRole('heading', { level: 2, name: /^Storage: Lower farm/ })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Each dam' })).toBeAttached();
-	// The one h3 is a part of the chart's panel: the picked dam's unit's assurance of supply (issue #444).
-	await expect(page.locator('.dams-page h3')).toHaveText(['Assurance of supply: Lower farm']);
+	// The h3s are parts of the chart's panel: the picked dam's unit's assurance of supply (issue #444), then what the
+	// register and the map propose for the dam (moved into the panel 2026-10-13).
+	await expect(page.locator('.dams-page h3')).toHaveText(['Assurance of supply: Lower farm', /^Proposed from the register and the map/]);
+	await expect(page.locator('.chart-panel h3')).toHaveCount(2);
 
 	await card(page, 'Lower farm').getByRole('link', { name: 'Edit dam: Lower farm' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=network&edit=${lowerId}&section=dam$`));

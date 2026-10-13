@@ -111,6 +111,10 @@ test('an editor uses the parcels’ cultivated area as a crop’s planted area; 
 	await expect(panel(v).getByRole('button', { name: /^Use / })).toHaveCount(0);
 	await expect(panel(v)).toContainText('Only an editor can use a value.');
 	await expectNoSidewaysScroll(v);
+	// Nor inside their own boxes: the parcels and crops tables fit the drawer as columns (the Dams one stacks its rows).
+	const wraps = await panel(v).locator('.table-wrap').evaluateAll((ws) => ws.map((w) => [w.scrollWidth, w.clientWidth]));
+	expect(wraps.length).toBeGreaterThan(0);
+	for (const [scroll, client] of wraps) expect(scroll).toBeLessThanOrEqual(client!);
 	await expectNoViolations(v, { include: '[data-testid="cropland-proposals"]' });
 });
 

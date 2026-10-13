@@ -140,7 +140,7 @@ pnpm dev:tiles:fetch        # re-download the SA extract (pmtiles CLI) into MinI
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
-pnpm check                  # typecheck all workspaces
+pnpm check                  # typecheck all workspaces; the frontend's svelte-check fails on any warning (--fail-on-warnings, a11y lint included; testing.md)
 pnpm test:changed           # the fast loop: typecheck + only the tests your change reaches (docs/testing.md)
 pnpm test                   # unit tests everywhere (no DB, no wall-clock assertions)
 pnpm test:engine | test:frontend | test:backend   # test:backend includes the route-auth inventory
@@ -169,7 +169,8 @@ pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees (licences unconfirmed: local only, production loads refused; maps.md § MAP grid)
 pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm setup runs it);
-                             # <ZA.txt[.gz]> --dataset <label> [--source "<attribution>"] loads GeoNames' South Africa dump (CC BY 4.0; maps.md § Search)
+                             # <ZA.txt[.gz]> [<BW.txt[.gz]> …] --dataset <label> [--source "<attribution>"] loads GeoNames' dumps of South Africa and its
+                             # neighbours (BW, LS, MZ, NA, SZ, ZW; theirs inside the basemap only), several files as one dataset (CC BY 4.0; maps.md § Gazetteer)
 pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
@@ -376,7 +377,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
   optional parameters (sveltejs/svelte#18455). The guard is
   `frontend/src/lib/components/__fixtures__/tsSyntax.test.ts`: it compiles a
   fixture through `svelte.config.js`'s preprocess and Vite's parser (Rolldown's). Add a
-  case to its fixture when a new TS form breaks a build.
+  case to its fixture when a new TS form breaks a build. It does fail on
+  warnings: the frontend's svelte-check runs with `--fail-on-warnings`, so a
+  Svelte a11y or unused-CSS warning breaks `check` (and CI) like a type error.
 - **Postgres on 5434**, because this workstation's 5432 (Supabase) and 5433
   (native) are taken.
 - **Terraform:** `plan` is fine; never `apply` without the operator's go-ahead.

@@ -78,7 +78,7 @@ describe('zero-rain runs (the Python importer cases)', () => {
 		expect(note).toContain('months 4,5,6,7,8,9');
 		// Engine ≥ 0.15.0 treats a flagged run as missing by default (CR-20); no re-export advice.
 		expect(note).toContain('Runs treat them as missing');
-		expect(note).toContain('Zero-rain runs');
+		expect(note).toContain('Settings -> Rain gaps -> Flagged rain');
 		expect(note).not.toContain('re-export');
 		// Negative controls: no gap, or only CHIRPS has the gap.
 		expect(zeroRainNote([{ kind: 'rain_catchment_mm', startDate: START, values: seasonal(WINTER) }])).toBeNull();

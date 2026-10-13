@@ -3174,8 +3174,12 @@ export interface MapSearchHit {
 	river: string;
 	/** A place's GeoNames feature class and code ('P.PPL', 'S.FRM'); null for the map's layers. */
 	feature: string | null;
-	/** A place's province (GeoNames' admin1 code; '' when not given); null for the map's layers. */
+	/** A place's province (GeoNames' admin1 code; '' when not given; its own country's, so a neighbour's is no South African province); null for the map's layers. */
 	admin1: string | null;
+	/** A place's country (GeoNames' ISO 3166 code: ZA, or one of its six neighbours); null for the map's layers. */
+	country: string | null;
+	/** The place's alternate name the search matched (GeoNames': another spelling, an old name), when it matched that rather than the name: "Tsabong" for Tshabong; null otherwise and for the map's layers. */
+	alias: string | null;
 	lon: number;
 	lat: number;
 	/** A quaternary's box (west, south, east, north); null for a point. */
@@ -3192,6 +3196,8 @@ export interface MapSearchAnswer {
 	hits: MapSearchHit[];
 	/** Some group had more matches than it lists: type more to narrow it. */
 	truncated: boolean;
+	/** The gazetteer holds places; false until the operator loads one, when no town, farm or river can be found. */
+	placesLoaded: boolean;
 }
 
 /** A loaded land-cover product (issue #326 B-landcover; docs/maps.md § Cultivated area from land cover). */

@@ -1,4 +1,4 @@
-// Settings → Flow generation → Rain for each unit (UnitRainFields.svelte,
+// Settings → Flow calibration → Rain into GR4J → Rain for each unit (UnitRainFields.svelte,
 // issue #482), rendered with Svelte's server renderer: off shows the switch
 // alone; on shows the coverage, the gauge MAP, its source once set, and the
 // MAP period; a problem sits under its field, named by aria-describedby. The

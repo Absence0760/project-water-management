@@ -8,6 +8,12 @@
 // use it under RLS) a search read every row: a median of about 150 ms here.
 // Through it, 5 to 11 ms.
 //
+// Alternate names (237) go through a second trigram index on ' ' ||
+// alt_search, the two arms a BitmapOr on the one table. GeoNames' 2026-10-13
+// dumps give 23 472 alternate names on 14 739 of 111 246 places (one in
+// eight); the fixture gives two to every fifth place, 60 000 on 30 000, more
+// than the real share, and a query that matches by alternate names only.
+//
 // Its own vitest project (`perf-db`, vitest.config.ts): a timing budget,
 // so out of `pnpm test` and CI, and against Postgres, so with the db
 // project's global setup. Run it alone: `pnpm test:backend:perf:db`.
@@ -22,7 +28,8 @@ const PLACES = 150_000;
 const DATASET = 'perf-gazetteer';
 const BUDGET_MS = 40;
 /** A long word, a common word that matches thousands, two one-letter words, a word and a number. */
-const QUERIES = ['kwartsv klein', 'fontein', 'k d', 'groot more', 'kloof 42'];
+/** A long word, a common word that matches thousands (of names and alternates), two one-letter words, a word and a number, words only alternate names hold. */
+const QUERIES = ['kwartsv klein', 'fontein', 'k d', 'groot more', 'kloof 42', 'nieu vallei'];
 
 const OWNER_URL = () => process.env.TEST_MIGRATION_DATABASE_URL!;
 let userId: string;
@@ -34,7 +41,19 @@ function place(i: number): PlaceRecord {
 	const b = ['vallei', 'rivier', 'laagte', 'ster', 'bank', 'fontein', 'kop', 'spruit', 'dal', 'pan', 'hoek', 'kuil', 'berg', 'plaas', 'vlakte'][Math.floor(i / 20) % 15]!;
 	const tail = i % 3 === 0 ? `${['dam', 'farm', 'noord', 'suid', 'plot'][Math.floor(i / 300) % 5]} ${i % 997}` : `${i % 5003}`;
 	const name = `${pre ? `${pre} ` : ''}${a}${b} ${tail}`;
-	return { placeId: String(i), name, searchName: name, feature: ['P.PPL', 'S.FRM', 'H.STM', 'T.HLL'][i % 4]!, admin1: '11', lon: 18 + (i % 1000) / 100, lat: -34 + Math.floor(i / 1000) / 100, source: 'SYNTHETIC perf data' };
+	// Every fifth place has two alternate names: an older spelling and an old name ("nieu" starts no main name).
+	const alts = i % 5 === 0 ? [`${a}${b}e ${i % 997}`, `nieu ${b}${a}`] : [];
+	return {
+		placeId: String(i),
+		name,
+		searchName: name,
+		feature: ['P.PPL', 'S.FRM', 'H.STM', 'T.HLL'][i % 4]!,
+		admin1: '11',
+		country: 'ZA',
+		altNames: alts,
+		altSearch: alts,
+		population: i % 11 === 0 ? i % 50_000 : 0,
+		lon: 18 + (i % 1000) / 100, lat: -34 + Math.floor(i / 1000) / 100, source: 'SYNTHETIC perf data' };
 }
 
 /** The SQL and parameters searchMap sends for the gazetteer, caught on the way through. */
@@ -92,6 +111,7 @@ describe('map search over a country-sized gazetteer', () => {
 		const plan = await withUser(userId, (db) => db.query<{ 'QUERY PLAN': [{ Plan: Record<string, unknown> }] }>(`EXPLAIN (FORMAT JSON) ${sql}`, params));
 		const nodes = planNodes(plan.rows[0]!['QUERY PLAN'][0].Plan);
 		expect(nodes.some((n) => n.index === 'gazetteer_reference_search_trgm_idx'), JSON.stringify(nodes)).toBe(true);
+		expect(nodes.some((n) => n.index === 'gazetteer_reference_alt_search_trgm_idx'), JSON.stringify(nodes)).toBe(true);
 		expect(nodes.some((n) => n.type === 'Seq Scan'), JSON.stringify(nodes)).toBe(false);
 	});
 

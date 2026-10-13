@@ -248,6 +248,8 @@ export function helpArticlesChunk(id: string): string | undefined {
 	// "Run results" and "Goodness of fit" (2026-10-08): the help for every screen's choices.
 	if (/\/src\/lib\/help\/articles-results\.ts$/.test(id)) return 'help-articles-results';
 	if (/\/src\/lib\/help\/articles-fit\.ts$/.test(id)) return 'help-articles-fit';
+	// The "Pages, one by one" guides (2026-10-13): guides.ts passed the per-chunk ceiling with the help's new guides.
+	if (/\/src\/lib\/help\/guides-pages\.ts$/.test(id)) return 'help-guides-pages';
 	return undefined;
 }
 

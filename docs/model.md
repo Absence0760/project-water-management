@@ -1540,7 +1540,7 @@ judged on its own; the "B4:" test (§2.4d) runs both defaults.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `'missing'` as the default. Which flagged runs are real dry spells needs the station's records (keep-dry periods take the answer).
 
-**Decided rule, 2026-10-10 (issue #507 item 3, the client's hydrologist):** inside a flagged zero run, a day CHIRPS reads more than 2 mm on is missing and filled; at 2 mm or less the gauge's zero is kept as dry. The threshold is the project setting `fillAboveChirpsMm` (Settings → *Zero-rain runs*), default 2 mm. Built in engine 1.81.0. To check on the client catchment after a rerun: the CHIRPS factors don't move (above), and CR-13's recession segments (§2.10d) may gain segments from the days now kept dry.
+**Decided rule, 2026-10-10 (issue #507 item 3, the client's hydrologist):** inside a flagged zero run, a day CHIRPS reads more than 2 mm on is missing and filled; at 2 mm or less the gauge's zero is kept as dry. The threshold is the project setting `fillAboveChirpsMm` (Settings → *Rain gaps* → *Flagged rain*), default 2 mm. Built in engine 1.81.0. To check on the client catchment after a rerun: the CHIRPS factors don't move (above), and CR-13's recession segments (§2.10d) may gain segments from the days now kept dry.
 
 ### 2.4d Multi-day rainfall accumulations
 
@@ -1917,7 +1917,7 @@ comparison lists a change of `rainSource` among the settings and sets the
 two runs' periods side by side (`RunComparison.rainSource`, with factors,
 reference windows and product label). A fit record's `forcing.rainSource`
 stores the periods, and any change flags "Forcing changed since fit" (a fit
-recorded before 0.30.0 ran with none). Settings → Rain gaps and CHIRPS →
+recorded before 0.30.0 ran with none). Settings → Rain gaps → Flagged rain →
 *Rain source periods* edits them ([ui.md](./ui.md)).
 
 **Sub-daily imports and the day boundary.** Manual gauges are read at 08:00
@@ -7530,7 +7530,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   It reads only the rain and the scored days, so it never changes a fit or a
   score. Fit automatically shows it as **How representative is the record**
   ([ui.md](./ui.md)).
-- **In the app:** Settings → Flow calibration → Fit automatically runs it in a
+- **In the app:** Settings → Fit the parameters → Fit automatically runs it in a
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
   stores a `FitRecord` with the parameters: when (`fittedAt`), the engine
@@ -7591,7 +7591,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   `CHIRPS_FACTOR_TOLERANCE` (2 %) of the fit's (`chirpsFactorsDrifted`). A
   change of bias-correction mode, fit period or product is said by its own
   flag instead. The caveat names the cause and the durable fix: refit, or fit
-  the factors on fixed water years (Settings → CHIRPS fit period ranges),
+  the factors on fixed water years (Settings → Rain gaps → CHIRPS gap filling → Fit ranges),
   which a fed project should do so its factors stop moving with each merge.
   Run comparison's "Forcing changed since fit" says *yes (the CHIRPS factors
   drifted)*. Not a run output, so `ENGINE_VERSION` doesn't move.
@@ -8210,8 +8210,12 @@ The warning writes each Q90 to 2 decimals from 1 m³/s and 3 below, but a
 smaller non-zero flow to two significant figures (0.0003 m³/s, never 0.000;
 `plausibility/format.ts`, issue #45), and the naturalised-flow warning its
 volumes the same way. That changed only the warnings' wording, not a number
-the run computes or stores, so `ENGINE_VERSION` stayed where it was (as for
-earlier wording fixes): a run saved before it keeps its old text.
+the run computes, and `ENGINE_VERSION` stayed where it was then. It would be
+bumped now: since the evidence pack's results digest (issue #71) a run's
+warnings are in its summary and so in the digest, and Check reproduction
+compares them word for word, so rewording a run warning is a wording-only
+bump (as in 1.74.0, and 1.89.0, which named the Settings panels' current
+headings in the warnings). A run saved before it keeps its old text.
 
 Checks 1, 3 and the Q90 comparison use the calibration record only, by
 design: the other record may be a different river (§2.10a).
@@ -9206,7 +9210,7 @@ score overfits and is easy to game. `settings.calibrationRules`
 advance, and the server applies them end to end (`planAutoCalibration`,
 `runAutoCase` and `finishAutoCalibration` in `calibrate/auto.ts`, run by
 `backend/src/calibration/`), so no one steers the result. An assessor then
-challenges the rules, not the fit. Settings → Fit automatically →
+challenges the rules, not the fit. Settings → Fit the parameters →
 *Calibration rules* and *Automated calibration*.
 
 The rule set:

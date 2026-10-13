@@ -914,7 +914,7 @@ def gauge_as_reference(
             "WARNING: [Flow data] rUseFlow calibrates against the gauge column, which --gauge-as-reference says is "
             "another river. calibrationFlowKind is left unset"
             + (
-                ", so runs use the logger record. Check that choice in Settings -> calibration flow series"
+                ", so runs use the logger record. Check that choice in Settings -> Calibration record -> Compare with"
                 if has_logger
                 else " and the project has no observed flow record to calibrate against"
             )
@@ -1010,7 +1010,7 @@ def zero_rain_note(series: list[dict[str, Any]]) -> str | None:
     return (
         f"[Flow data] catchment rain has {len(runs)} run(s) of zero rain covering {rule}: {spans}. "
         "Runs treat them as missing (engine >= 0.15.0, settings.zeroRainRuns, default mode 'missing'), so "
-        "bias-corrected CHIRPS fills them; if they are real dry spells, keep them dry in Settings -> Zero-rain runs"
+        "bias-corrected CHIRPS fills them; if they are real dry spells, keep them dry in Settings -> Rain gaps -> Flagged rain"
     )
 
 

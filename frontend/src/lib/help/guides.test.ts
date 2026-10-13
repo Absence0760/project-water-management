@@ -1,10 +1,11 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { HELP, helpFor } from './content';
 import { SHOTS } from './pictures';
 import { TOUR } from './tour';
+import { SETTINGS_SECTIONS } from '$lib/components/settings/sections';
 import { ALL_TABS, TAB_GUIDE } from '$lib/workspace/tabs';
 import {
 	DIAGRAM_IDS,
@@ -50,6 +51,11 @@ const renderedText = [
 	),
 	...TOUR.flatMap(stopTexts)
 ];
+
+it('stripAll removes what a single pass would leave behind', () => {
+	expect(stripAll('a <scr<b>ipt>b', /<\/?[A-Za-z][^<>]*>/g)).toBe('a b');
+	expect(stripAll('x <!-<!-- y -->- z --> w', /<!--[\s\S]*?-->/g)).toBe('x  w');
+});
 
 describe('guides', () => {
 	it('have unique, url-safe ids and known kinds and tabs', () => {
@@ -164,6 +170,177 @@ describe('guides', () => {
 	});
 });
 
+// ---------------------------------------------------------------------------
+// "Settings → X → Y" paths. Help and the app's own words name where a setting
+// is; when a panel is renamed or moved (Flow generation became Flow
+// calibration → Rain into GR4J) the old path kept being printed. Every path
+// that starts at Settings, or at a Settings panel's name, must name a real
+// panel (components/settings/sections.ts) and, after it, headings that panel
+// really shows (its slice of the page and the components rendered in it).
+// ---------------------------------------------------------------------------
+
+const dirOf = (rel: string) => fileURLToPath(new URL(rel, import.meta.url)).replace(/\/$/, '');
+const COMPONENTS = dirOf('../components');
+const SRC = dirOf('..');
+const ROUTES = dirOf('../../routes');
+const ENGINE = dirOf('../../../../packages/engine/src');
+
+function walk(dir: string, out: string[] = []): string[] {
+	for (const e of readdirSync(dir, { withFileTypes: true })) {
+		const p = `${dir}/${e.name}`;
+		if (e.isDirectory()) walk(p, out);
+		else if (/\.(svelte|ts)$/.test(e.name) && !/\.test\.ts$|\.d\.ts$/.test(e.name)) out.push(p);
+	}
+	return out;
+}
+const svelteByName = new Map<string, string[]>();
+for (const f of walk(COMPONENTS).filter((f) => f.endsWith('.svelte'))) {
+	const n = f.slice(f.lastIndexOf('/') + 1, -'.svelte'.length);
+	svelteByName.set(n, [...(svelteByName.get(n) ?? []), f]);
+}
+
+/** Visible headings, legends, panel titles, button and label words in a Svelte source. */
+function headingsIn(src: string): string[] {
+	const out: string[] = [];
+	const clean = (s: string) => s.replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+	for (const m of src.matchAll(/<(h[2-5]|legend|summary|button|label)\b[^>]*>([^<{]+)/g)) out.push(clean(m[2]!));
+	for (const m of src.matchAll(/\b(legend|title|name|label)="([^"{]+)"/g)) out.push(clean(m[2]!));
+	// Words a tag shows through an expression ({mapOnly ? 'Rain from the map' : 'Attach a feed'}).
+	for (const m of src.matchAll(/'([A-Z][^'\n]{2,60})'/g)) out.push(clean(m[1]!));
+	return out.filter((s) => s.length > 1);
+}
+
+/** The headings a Settings panel shows: its slice of the file that holds its id, and every component used in it, recursively. */
+function panelHeadings(id: string): string[] {
+	const host = walk(COMPONENTS).filter((f) => f.endsWith('.svelte')).find((f) => readFileSync(f, 'utf8').includes(`id="${id}"`));
+	if (!host) throw new Error(`no component holds id="${id}"`);
+	const src = readFileSync(host, 'utf8');
+	const from = src.indexOf(`id="${id}"`);
+	const next = src.slice(from + 1).search(/id="set-/);
+	const slice = next < 0 ? src.slice(from) : src.slice(from, from + 1 + next);
+	const seen = new Set<string>();
+	const heads = headingsIn(slice);
+	const visit = (code: string) => {
+		for (const m of code.matchAll(/<(?:[A-Za-z]+\.)?([A-Z][A-Za-z0-9]+)\b/g)) {
+			for (const f of svelteByName.get(m[1]!) ?? []) {
+				if (seen.has(f)) continue;
+				seen.add(f);
+				const s = readFileSync(f, 'utf8');
+				heads.push(...headingsIn(s));
+				visit(s);
+			}
+		}
+	};
+	visit(slice);
+	return heads;
+}
+
+// Every panel the page has, by its heading: the menu's, plus the ones above and after it.
+const PANELS = new Map<string, string>([
+	...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]),
+	['Judge results by', 'set-judge'],
+	['API keys', 'set-api-keys'],
+	['Scheduled reports', 'set-report-schedules']
+]);
+const panelCache = new Map<string, string[]>();
+const headingsOf = (id: string) => panelCache.get(id) ?? (panelCache.set(id, panelHeadings(id)), panelCache.get(id)!);
+
+/** Each "Settings → A → B" (or "A → B" where A is a panel) in a text, as its steps, markup removed. An ASCII "->" (the importer's plain-text notes) reads as "→". */
+/** Removes every match of `re`, again until none is left: one pass can join the pieces around a match into a new one (`<scr<b>ipt>`). */
+function stripAll(text: string, re: RegExp): string {
+	for (let prev = ''; prev !== text; ) [prev, text] = [text, text.replace(re, '')];
+	return text;
+}
+
+function settingsPaths(text: string): string[][] {
+	const plain = stripAll(text, /<\/?[A-Za-z][^<>]*>/g)
+		.replace(/&amp;/g, '&')
+		.replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1')
+		.replace(/\*\*?/g, '')
+		.replace(/\s+/g, ' ')
+		.replace(/ -> /g, ' → ');
+	const labels = [...PANELS.keys()].map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+	const starts = [
+		...[...plain.matchAll(/\bSettings(?: & calibration)? → /g)].map((m) => m.index + m[0].length),
+		// A panel's own name starting a path, unless a "→" before it already did.
+		...[...plain.matchAll(new RegExp(`(?<![\\w-])(?:${labels}) → `, 'g'))].filter((m) => !/→ $/.test(plain.slice(0, m.index))).map((m) => m.index)
+	];
+	return starts.map((at) => {
+		let rest = plain.slice(at);
+		const steps: string[] = [];
+		for (;;) {
+			const arrow = rest.indexOf(' → ');
+			// A backtick ends a template literal in source: the path's text stops there.
+			const stop = rest.search(/[.,;:()’'"`?!]|$/);
+			if (arrow >= 0 && arrow < stop) {
+				steps.push(rest.slice(0, arrow).trim());
+				rest = rest.slice(arrow + 3);
+			} else {
+				steps.push(rest.slice(0, stop).trim());
+				return steps;
+			}
+		}
+	});
+}
+
+/** Why a path doesn't resolve, or null. The last step may run on into the sentence, so it only has to start with a name. */
+function pathProblem(steps: string[]): string | null {
+	const names = (i: number) => (i === steps.length - 1 ? (n: string) => steps[i] === n || steps[i]!.startsWith(`${n} `) : (n: string) => steps[i] === n);
+	const panel = [...PANELS.keys()].sort((a, b) => b.length - a.length).find(names(0));
+	if (!panel) return `“${steps[0]}” is no Settings panel`;
+	const heads = headingsOf(PANELS.get(panel)!);
+	for (let i = 1; i < steps.length; i++) {
+		const own = steps[i]!;
+		// A step written in lower case continues the sentence ("Settings → the daily EWR at the outlet"): not a name.
+		if (i === steps.length - 1 && /^[a-z]/.test(own)) break;
+		if (!heads.some(names(i))) return `“${own}” isn’t shown under ${panel}`;
+	}
+	return null;
+}
+
+describe('Settings paths named in help and in the app', () => {
+	const helpTexts: [string, string][] = [
+		...HELP.flatMap((e) => [[`glossary ${e.id}`, e.short], [`glossary ${e.id}`, e.long]] as [string, string][]),
+		...GUIDES.flatMap((g) => [g.summary, ...g.sections.flatMap((s) => s.blocks.flatMap(texts))].map((t) => [`guide ${g.id}`, t] as [string, string])),
+		...TOUR.flatMap((st) => stopTexts(st).map((t) => [`tour ${st.spot}`, t] as [string, string]))
+	];
+	// The app's own words: source with its comments taken out (a comment may describe an old layout).
+	// The engine's too: its warnings and run problems are shown to the user as written.
+	const appTexts: [string, string][] = [...walk(SRC), ...walk(ROUTES), ...walk(ENGINE)]
+		.filter((f) => !f.includes('/lib/help/'))
+		.map((f) => [
+			f.startsWith(ENGINE) ? `engine${f.slice(ENGINE.length)}` : f.slice(SRC.length),
+			stripAll(stripAll(readFileSync(f, 'utf8'), /<!--[\s\S]*?-->/g), /\/\*[\s\S]*?\*\//g)
+				.replace(/(^|[^:'"`\w])\/\/.*$/gm, '$1')
+		]);
+
+	it('finds the paths it checks', () => {
+		expect(settingsPaths('Open **Settings & calibration → Flow calibration → Rain into GR4J**, then save.')).toEqual([['Flow calibration', 'Rain into GR4J']]);
+		expect(settingsPaths('switched on in **Fit the parameters → Fit automatically**, makes')).toEqual([['Fit the parameters', 'Fit automatically']]);
+		expect(settingsPaths('Settings → Calibration record → Flow gaps can fill them')).toEqual([['Calibration record', 'Flow gaps can fill them']]);
+		expect(settingsPaths('`pick a gauge in Settings → Calibration record`')).toEqual([['Calibration record']]);
+		expect(settingsPaths('keep them dry in Settings -> Rain gaps -> Flagged rain')).toEqual([['Rain gaps', 'Flagged rain']]);
+		expect(pathProblem(['Flow generation', 'Rain for each unit'])).toMatch(/no Settings panel/);
+		expect(pathProblem(['Flow calibration', 'Rain into GR4J', 'Rain for each unit is on'])).toBeNull();
+		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);
+	});
+
+	it('reads the engine’s source too', () => {
+		expect(appTexts.some(([where]) => where === 'engine/run.ts')).toBe(true);
+		expect(appTexts.some(([where]) => /^engine\/.*\.test\.ts$/.test(where))).toBe(false);
+	});
+
+	it('name a real panel, and headings that panel shows', () => {
+		const broken = [...helpTexts, ...appTexts].flatMap(([where, text]) =>
+			settingsPaths(text).flatMap((steps) => {
+				const p = pathProblem(steps);
+				return p ? [`${where}: Settings → ${steps.join(' → ')} (${p})`] : [];
+			})
+		);
+		expect(broken).toEqual([]);
+	});
+});
+
 describe('inline', () => {
 	it('splits bold labels, glossary links and guide links', () => {
 		expect(inline('Press **Save**, see [[ewr]] or [[nse|the NSE]] and [[guide:add-data|uploads]].')).toEqual([
@@ -241,5 +418,66 @@ describe('searchGuides', () => {
 		// “Save changes” is written **Save changes** in the network guide.
 		expect(searchGuides('save changes').map((g) => g.id)).toContain('build-the-network');
 		expect(searchGuides('KLEMEŠ').map((g) => g.id)).toContain('how-calibration-works');
+	});
+});
+
+describe('links into help from the app', () => {
+	const read = (f: string) => readFileSync(f, 'utf8');
+	const sources = [...walk(SRC), ...walk(ROUTES)].filter((f) => !f.includes('/lib/help/'));
+
+	it('name guides (and guide sections) that exist', () => {
+		const broken: string[] = [];
+		let seen = 0;
+		for (const f of sources) {
+			for (const m of read(f).matchAll(/\/help\/guides\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:#([a-z0-9-]+))?/g)) {
+				seen++;
+				const g = guideFor(m[1]!);
+				if (!g) broken.push(`${f.slice(SRC.length)}: no guide ${m[1]}`);
+				else if (m[2] && !g.sections.some((s) => sectionId(s.heading) === m[2])) broken.push(`${f.slice(SRC.length)}: ${m[1]} has no section #${m[2]}`);
+			}
+		}
+		expect(seen).toBeGreaterThan(5);
+		expect(broken).toEqual([]);
+	});
+
+	it('reach the two-step guide from the Account page and the Project page’s panel, and the page guides from their pages', () => {
+		const links: [string, string][] = [
+			['../components/account/TwoStepSignIn.svelte', 'two-step-sign-in'],
+			['../components/project/TwoStepPanel.svelte', 'two-step-sign-in'],
+			['../../routes/teams/+page.svelte', 'share-with-a-team'],
+			['../../routes/teams/[id]/+page.svelte', 'share-with-a-team'],
+			['../../routes/projects/[id]/packs/[packId]/+page.svelte', 'issue-an-evidence-pack'],
+			['../../routes/projects/[id]/report/+page.svelte', 'run-and-read-results']
+		];
+		for (const [file, id] of links) {
+			expect(guideFor(id), id).toBeDefined();
+			expect(read(fileURLToPath(new URL(file, import.meta.url))), file).toContain(`/help/guides/${id}`);
+		}
+	});
+
+	it('give the help contents only links that resolve: a help page, a glossary topic or a route', () => {
+		const nav = read(fileURLToPath(new URL('../components/help/HelpNav.svelte', import.meta.url)));
+		const hrefs = [...nav.matchAll(/href: '([^']+)'/g)].map((m) => m[1]!);
+		expect(hrefs).toEqual(expect.arrayContaining(['/help/glossary', '/help/formats', '/methods', '/data-sources']));
+		for (const h of hrefs) {
+			const route = `${ROUTES}${h}/+page.svelte`;
+			expect(() => statSync(route), h).not.toThrow();
+		}
+	});
+
+	it('list the guides added for two-step sign-in, the map’s layers and search, and error messages', () => {
+		// Under Using the results, beside sharing with a team: a ninth How-to guide overflowed the contents at 1280×800 (help.spec.ts).
+		expect(guideFor('two-step-sign-in')?.kind).toBe('use');
+		expect(guideFor('map-page')!.sections.map((s) => s.heading)).toContain('Layers and search');
+		expect(guideFor('dams-page')!.sections.map((s) => s.heading)).toContain('Proposals and assurance');
+		expect(guideFor('river-page')!.sections.map((s) => s.heading)).toContain('How sure, and what if');
+		for (const id of ['two-step-sign-in', 'map-search', 'error-messages']) expect(helpFor(id), id).toBeDefined();
+		expect(helpFor('error-messages')!.long).toContain('The server is busy; try again in a moment');
+		// Every fallback message the API client shows (client.ts statusText) is explained, word for word.
+		const client = readFileSync(fileURLToPath(new URL('../api/client.ts', import.meta.url)), 'utf8');
+		const body = client.slice(client.indexOf('function statusText'), client.indexOf('function describeDetails'));
+		const said = [...body.matchAll(/return '([^']+)'/g)].map((m) => m[1]!);
+		expect(said.length).toBeGreaterThan(6);
+		for (const m of said) expect(helpFor('error-messages')!.long, m).toContain(m);
 	});
 });

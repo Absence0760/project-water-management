@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Ad hoc testing 2026-10-13 (#539), the help corrections and their guards' article additions: +1.2 KB gzip measured on the changed text modules (guides.ts 0.68, articles 0.39, tour 0.08, app words 0.06). The help modules are already lazy chunks (vite.config.ts help-articles-*), and lazy chunks count in totalCodeKb by design, so splitting can't lower it. Build measured 2005 of 2003 with other sessions' uncommitted work in the tree."
+}

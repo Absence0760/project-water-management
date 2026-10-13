@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Four farmer words on /farm/words (farm-forecast, farm-registered, farm-pct-volume, farm-alerts) and their Afrikaans (content.af.ts, af.ts), plus the links from their cards: all already lazy (the words route, the glossary and the af catalogues are their own chunks), but the total counts lazy chunks. Measured locally in a clean worktree: 2001 KB at 8aa54ec34, 2004 KB at 7e91f5d37 (+3238 B gzipped, rounded up)."
+}

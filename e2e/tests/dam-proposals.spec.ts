@@ -5,11 +5,13 @@
 // dam is its composite dam, its volume the user's: #523 C1), and proposes its
 // full-supply area from its polygon, each row with its source; Use asks first
 // and saves that one value, and History names the source. A viewer reads the
-// proposals but can't use them. The table is read, never the map's pixels.
+// proposals but can't use them. With a run the box sits in the picked dam's
+// chart panel, folded to one line, and follows (and moves) the page's pick.
+// The table is read, never the map's pixels.
 // Invented data only.
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { loadSyntheticDamRegister } from '../support/damRegister.ts';
 import { API_URL } from '../support/env.ts';
@@ -25,6 +27,10 @@ const rowOf = (page: Page, key: string) => panel(page).locator(`tr[data-key="${k
 async function openProposals(page: Page, projectId: string, unit: string) {
 	await page.goto(`/projects/${projectId}?tab=dams`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
+	await expect(panel(page).getByTestId('dam-proposals-body')).toHaveAttribute('data-ready', 'true');
+	// With a run the box is folded inside the picked dam's chart panel: open it first.
+	const fold = panel(page).locator('details.fold');
+	if ((await fold.count()) && (await fold.getAttribute('open')) === null) await fold.locator('> summary').click();
 	await panel(page).getByLabel('Dam of').selectOption({ label: unit });
 	await expect(panel(page).getByTestId('dam-proposals-body')).toHaveAttribute('data-ready', 'true');
 	await expect(panel(page).locator('caption')).toHaveText(`Values proposed for ${unit}’s dam, beside the saved model’s`);
@@ -37,6 +43,9 @@ test.beforeAll(async () => {
 test('the seeded Sandspruit: a dam’s registered capacity and its polygon’s area are proposed, each with its source, to its viewer without Use', async ({ page }) => {
 	test.setTimeout(120_000);
 	await seedExamplesOnce(page.request);
+	// seedExamplesOnce probes the demo login with this page's request context, so once the examples exist (another
+	// spec, or --repeat-each) the page is already signed in and /login skips the form: sign in through it from scratch.
+	await page.context().clearCookies();
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(DEMO.email);
 	await page.getByLabel('Password').fill(DEMO.password);
@@ -105,6 +114,8 @@ test('an editor uses the map’s area; the register’s capacity is a reference 
 	await expect(cap.getByTestId('dam-proposal-reference')).toHaveText('Reference only');
 	await expect(cap.getByRole('button')).toHaveCount(0);
 	await expect(panel(page)).toContainText('its volume is yours to enter');
+	// On a wide page it stays a table, its columns named in its head row.
+	await expect(panel(page).locator('thead')).toBeVisible();
 	expect((await model()).damCapacityM3).toBe(150_000);
 	await expectNoViolations(page, { include: '[data-testid="dam-proposals"]' });
 
@@ -123,37 +134,102 @@ test('an editor uses the map’s area; the register’s capacity is a reference 
 	await expect(panel(v).getByRole('button', { name: /^Use / })).toHaveCount(0);
 	await expect(panel(v)).toContainText('Only an editor can use a value.');
 	await expectNoSidewaysScroll(v);
+	// Nor inside its own box: the table (549 px as columns) stacks each row as a block, its values under their labels.
+	const wrap = panel(v).locator('.table-wrap');
+	const fit = await wrap.evaluate((w) => ({ scroll: w.scrollWidth, client: w.clientWidth }));
+	expect(fit.scroll, `the proposals table scrolls sideways: ${fit.scroll} px in ${fit.client}`).toBeLessThanOrEqual(fit.client);
+	await expect(panel(v).locator('thead')).toBeHidden();
+	const label = (cell: Locator) => cell.evaluate((c) => getComputedStyle(c, '::before').content);
+	await expect.poll(() => label(rowOf(v, 'Z100/07').getByRole('cell').nth(0))).toBe('"Saved now"');
+	await expect.poll(() => label(rowOf(v, 'Z100/07').getByRole('cell').nth(1))).toBe('"Proposed"');
+	await expect.poll(() => label(rowOf(v, 'Z100/07').getByTestId('dam-proposal-source'))).toBe('"Source"');
+	await expectNoViolations(v, { include: '[data-testid="dam-proposals"]' });
 });
 
-test('the box follows the picked dam: a card click or its Proposals link shows that dam’s proposals, as a fresh load of the URL does', async ({ page, owner }) => {
+test('with a run the box is the picked dam’s, folded in its chart panel; Dam of moves the pick, keeps units with no dam, and a card’s Proposals opens it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Dam proposals follow');
+	// A unit with no dam: no card, so the page can't pick it, but Dam of can still show its proposals.
+	const model = project.model;
+	model.nodes.push({ ...model.nodes[2]!, id: crypto.randomUUID(), name: 'Dry unit', sortOrder: 9, damCapacityM3: 0 });
+	await putModel(page.request, project.id, model);
 	await createRun(page.request, project.id, 'Baseline');
-	const lowerId = project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string;
+	const idOf = (name: string) => model.nodes.find((n) => n.name === name)!.id as string;
 	await page.goto(`/projects/${project.id}?tab=dams`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
 	const card = (name: string) => page.getByRole('list', { name: 'Dams' }).getByRole('listitem').filter({ has: page.getByText(name, { exact: true }) });
+	const chart = page.getByRole('region', { name: /^Storage/ });
+	const storage = chart.getByRole('heading', { level: 2 });
+	const summary = panel(page).locator('details.fold > summary');
 	const unit = panel(page).getByLabel('Dam of');
 
-	// Picking a card moves the box to that dam.
-	await card('Lower farm').locator('a.name').click();
-	await expect(page).toHaveURL(new RegExp(`[?&]dam=${lowerId}$`));
-	await expect(unit).toHaveValue(lowerId);
-	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('No dam on the map is linked to Lower farm.');
+	// Inside the chart panel, one line, about the dam the chart shows (the first card) before anything is picked.
+	await expect(chart.getByTestId('dam-proposals')).toHaveCount(1);
+	await expect(page.getByTestId('dam-proposals')).toHaveCount(1);
+	await expect(storage).toHaveText(/^Storage: /);
+	const first = (await storage.textContent())!.replace('Storage: ', '');
+	await expect(summary).toContainText(`${first}:`);
+	await expect(panel(page).getByTestId('dam-proposals-line')).toHaveText('no dam on the map is linked to it');
+	await expect(unit).toBeHidden();
 
-	// Dam of still picks any unit; the next pick moves it again.
+	// A card's pick moves the box with the chart.
+	await card('Lower farm').locator('a.name').click();
+	await expect(page).toHaveURL(new RegExp(`[?&]dam=${idOf('Lower farm')}$`));
+	await expect(summary).toContainText('Lower farm:');
+	await expect(unit).toHaveValue(idOf('Lower farm'));
+
+	// Opened, Dam of picks a dam for the whole page: the chart, the card and the URL, a step Back undoes.
+	await summary.click();
 	await unit.selectOption({ label: 'Upper farm' });
-	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('linked to Upper farm');
-	await card('Upper farm').locator('a.name').click();
-	await card('Lower farm').getByRole('link', { name: 'Lower farm: proposed from the register and the map' }).click();
-	await expect(unit).toHaveValue(lowerId);
-	// The link brings the box into view, the keyboard on its picker, without scrolling past every card by hand.
-	await expect(panel(page).getByRole('heading', { name: 'Proposed from the register and the map' })).toBeInViewport();
+	await expect(page).toHaveURL(new RegExp(`[?&]dam=${idOf('Upper farm')}$`));
+	await expect(storage).toHaveText('Storage: Upper farm');
+	await expect(card('Upper farm').locator('a.name')).toHaveAttribute('aria-current', 'true');
+	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('No dam on the map is linked to Upper farm.');
+	await page.goBack();
+	await expect(storage).toHaveText('Storage: Lower farm');
+	await expect(unit).toHaveValue(idOf('Lower farm'));
+
+	// A unit with no dam is listed apart and shown in the box alone; the page's pick stays.
+	await expect(unit.locator('optgroup[label="Hydrological units with no dam yet"] option')).toHaveText(['Dry unit']);
+	await expect(unit.locator('optgroup[label="Dams"] option')).toHaveCount(2);
+	await unit.selectOption({ label: 'Dry unit' });
+	await expect(summary).toContainText('Dry unit:');
+	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('No dam on the map is linked to Dry unit.');
+	await expect(page).toHaveURL(new RegExp(`[?&]dam=${idOf('Lower farm')}$`));
+	await expect(storage).toHaveText('Storage: Lower farm');
+
+	// Closed again, a card's Proposals picks its dam, opens the box and gives its picker the keyboard, in view.
+	await summary.click();
+	await expect(unit).toBeHidden();
+	await card('Upper farm').getByRole('link', { name: 'Upper farm: proposed from the register and the map' }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]dam=${idOf('Upper farm')}$`));
+	await expect(unit).toHaveValue(idOf('Upper farm'));
 	await expect(unit).toBeFocused();
+	await expect(panel(page).getByRole('heading', { name: 'Proposed from the register and the map' })).toBeInViewport();
+	await expect(storage).toHaveText('Storage: Upper farm');
 
 	// A fresh load of the same URL agrees.
 	await page.reload();
-	await expect(unit).toHaveValue(lowerId);
+	await expect(storage).toHaveText('Storage: Upper farm');
+	await expect(summary).toContainText('Upper farm:');
+	await expectNoViolations(page, { include: '[data-testid="dam-proposals"]' });
+});
+
+test('folded, a failed load says so on its line, and opening it offers Try again', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dam proposals fail folded');
+	await createRun(page.request, project.id, 'Baseline');
+	let failed = false;
+	await page.route(/\/dam-proposals(\?|$)/, async (route) => {
+		if (failed || route.request().method() !== 'GET') return route.continue();
+		failed = true;
+		await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Test outage' }) });
+	});
+	await page.goto(`/projects/${project.id}?tab=dams`);
+	await expect(panel(page).getByTestId('dam-proposals-line')).toHaveText('couldn’t be loaded: open to try again');
+	await panel(page).locator('details.fold > summary').click();
+	await panel(page).getByRole('button', { name: 'Try again' }).click();
+	await expect(panel(page).getByTestId('dam-proposals-line')).toHaveText('no dam on the map is linked to it');
 });
 
 test('the dam’s place is written in degrees with a hemisphere', async ({ page, owner }) => {

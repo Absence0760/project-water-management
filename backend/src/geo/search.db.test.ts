@@ -5,16 +5,19 @@
 // control); a farmer gets 403, a stranger 404, a signed-out caller 401;
 // water_app can't write the gazetteer; a load replaces its dataset and
 // records nothing of a local import in reference_load.
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import pg from 'pg';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { importGaugeStations, parseArgs as stationArgs } from '../../scripts/import-gauge-stations.js';
 import { importGazetteer, parseArgs as gazetteerArgs } from '../../scripts/import-gazetteer.js';
 import { importQuaternaries, parseArgs as quaternaryArgs } from '../../scripts/import-quaternaries.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { anon, asOwner, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
-import { SEARCH_LAYER_LIMIT } from './gazetteer.js';
-import { placeRecords, replacePlaces } from './loadGazetteer.js';
+import { SEARCH_LAYER_LIMIT, searchMap } from './gazetteer.js';
+import { GAZETTEER_COUNTRIES, placeRecords, replacePlaces } from './loadGazetteer.js';
 import type { SearchHit } from './gazetteer.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -118,6 +121,273 @@ describe('what a search finds', () => {
 		expect((await search(viewer, 'kwartsvallei skool')).body.hits).toEqual([]);
 		// "sand": the gauges on the Sandspruit first, then the places.
 		expect(hitsOf((await search(viewer, 'sand')).body)).toEqual(['gauge:Z1H001', 'gauge:Z1H003', 'place:Sandlaagte', 'place:Sandlaagte-Oos']);
+	});
+});
+
+describe('a town on the map is found (production searched an empty gazetteer, 2026-10-13)', () => {
+	// SYNTHETIC lines in GeoNames' dump format, named after real towns the
+	// basemap labels: the feature codes and provinces follow GeoNames' ZA dump
+	// (Malmesbury a PPLA3 in the Western Cape with farms of the same name in
+	// Limpopo; Kuruman a PPLA2 in the Northern Cape and a small PPL in the Free
+	// State), but the ids and positions are made up.
+	const line = (id: string, name: string, cls: string, code: string, admin1: string, lat: number, lon: number, pop = 0) =>
+		[id, name, name, '', String(lat), String(lon), cls, code, 'ZA', '', admin1, '', '', '', String(pop), '', '0', 'Africa/Johannesburg', '2026-10-13'].join('\t');
+	const dump = [
+		line('9100001', 'Malmesbury', 'S', 'FRM', '09', -24.9, 28.5),
+		line('9100002', 'Malmesbury', 'S', 'FRM', '09', -23.9, 27.2),
+		line('9100003', 'Malmesbury', 'P', 'PPLA3', '11', -33.5, 18.7, 43009),
+		line('9100004', 'Kuruman', 'P', 'PPL', '03', -29.9, 27.0),
+		line('9100005', 'Kuruman', 'P', 'PPLA2', '08', -27.5, 23.4, 9093),
+		line('9100006', 'Kuruman', 'S', 'AIRF', '08', -27.4, 23.5)
+	].join('\n');
+
+	it('a loaded dump finds the town first: a town before farms of its name, a seat of local government before a hamlet', async () => {
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const got = placeRecords(dump, 'za.txt', 'Test source');
+			expect(got.leftOut).toBe(1); // the airfield
+			await replacePlaces(client, 'town-test', got.records);
+			const malmesbury = (await search(viewer, 'Malmesbury')).body;
+			expect(malmesbury.hits.map((h: SearchHit) => `${h.feature} ${h.admin1}`)).toEqual(['P.PPLA3 11', 'S.FRM 09', 'S.FRM 09']);
+			expect(malmesbury.placesLoaded).toBe(true);
+			const kuruman = (await search(viewer, 'kuruman')).body;
+			expect(kuruman.hits.map((h: SearchHit) => `${h.feature} ${h.admin1}`)).toEqual(['P.PPLA2 08', 'P.PPL 03']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'town-test'`);
+			await client.end();
+		}
+	});
+
+	it('says when no gazetteer is loaded, so an empty answer is not read as "no such town"', async () => {
+		const pool = new pg.Pool({ connectionString: OWNER_URL(), max: 1 });
+		const client = await pool.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query('DELETE FROM gazetteer_reference');
+			expect(await searchMap(client, 'Malmesbury')).toEqual({ q: 'Malmesbury', hits: [], truncated: false, placesLoaded: false });
+			await client.query('ROLLBACK');
+			// Positive control: with the synthetic places back, the flag is set even when nothing matches.
+			expect((await search(viewer, 'zzqx')).body).toMatchObject({ hits: [], placesLoaded: true });
+		} finally {
+			client.release();
+			await pool.end();
+		}
+	});
+});
+
+describe('towns over the border (the basemap labels Kanye, Lobatse and Gaborone in Botswana; ad hoc testing 2026-10-13)', () => {
+	// SYNTHETIC lines in GeoNames' dump format, one file per country as GeoNames
+	// publishes them. Kanye is a real name in both countries (a Botswana district
+	// seat, an Eastern Cape hamlet), which is the case the ranking decides; the
+	// ids, positions and the other names are made up.
+	const line = (id: string, name: string, cls: string, code: string, cc: string, admin1: string, lat: number, lon: number, pop = 0) =>
+		[id, name, name, '', String(lat), String(lon), cls, code, cc, '', admin1, '', '', '', String(pop), '', '0', 'Africa/Johannesburg', '2026-10-13'].join('\t');
+	const za = [line('9200001', 'Kanye', 'P', 'PPL', 'ZA', '05', -31.6, 28.0), line('9200002', 'Grensbult', 'P', 'PPL', 'ZA', '10', -25.8, 25.6)].join('\n');
+	const bw = [
+		line('9200101', 'Kanye', 'P', 'PPLA', 'BW', '09', -24.97, 25.33, 48028),
+		line('9200102', 'Lobatse', 'P', 'PPL', 'BW', '09', -25.22, 25.68),
+		// Grensbult: a town of the name on each side, neither a seat, no population: the true tie South Africa's wins.
+		line('9200103', 'Grensbult', 'P', 'PPL', 'BW', '09', -25.0, 25.5),
+		// North of the basemap: nothing to show it on, so left out.
+		line('9200104', 'Grensbult Noord', 'P', 'PPL', 'BW', '01', -21.2, 27.5)
+	].join('\n');
+	const ke = line('9200201', 'Grensbult Kenia', 'P', 'PPL', 'KE', '05', -1.3, 36.8);
+	let dir: string;
+	const file = (name: string, text: string) => {
+		const p = join(dir, name);
+		writeFileSync(p, text);
+		return p;
+	};
+	const countriesOf = (body: { hits: SearchHit[] }) => body.hits.map((h) => `${h.name} ${h.country}`);
+
+	it('South Africa’s and Botswana’s dumps load as one dataset: both found, the larger town first on a shared name, South Africa’s on a tie, the country on every place', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const got = await importGazetteer(OWNER_URL(), { files: [file('ZA.txt', za), file('BW.txt', bw)], dataset: 'border-test', source: 'Test source' });
+			expect(got).toMatchObject({ written: 5, outsideMap: 1, otherCountry: 0, countries: { ZA: 2, BW: 3 } });
+			expect(countriesOf((await search(viewer, 'Lobatse')).body)).toEqual(['Lobatse BW']);
+			// Botswana's Kanye is a district seat (PPLA) of 48 028, the Eastern Cape's a hamlet of no recorded population (PPL): Botswana's, on the basemap's label, first (237). Grensbult ties: South Africa's first.
+			expect(countriesOf((await search(viewer, 'Kanye')).body)).toEqual(['Kanye BW', 'Kanye ZA']);
+			expect(countriesOf((await search(viewer, 'Grensbult')).body)).toEqual(['Grensbult ZA', 'Grensbult BW']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'border-test'`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('a neighbour loaded as its own dataset sits beside South Africa’s, and reloading it leaves South Africa’s alone', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			await importGazetteer(OWNER_URL(), { files: [file('ZA.txt', za)], dataset: 'border-za', source: 'Test source' });
+			await importGazetteer(OWNER_URL(), { files: [file('BW.txt', bw)], dataset: 'border-bw', source: 'Test source' });
+			await importGazetteer(OWNER_URL(), { files: [file('BW.txt', bw)], dataset: 'border-bw', source: 'Test source' });
+			expect(countriesOf((await search(viewer, 'Kanye')).body)).toEqual(['Kanye BW', 'Kanye ZA']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset IN ('border-za', 'border-bw')`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('a country off the list (Kenya) loads nothing, beside a dump that does (positive control)', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			expect(await importGazetteer(OWNER_URL(), { files: [file('KE.txt', ke)], dataset: 'border-ke', source: 'Test source' })).toMatchObject({ written: 0, otherCountry: 1 });
+			expect(await importGazetteer(OWNER_URL(), { files: [file('KE.txt', ke), file('BW.txt', bw)], dataset: 'border-ke', source: 'Test source' })).toMatchObject({ written: 3, otherCountry: 1 });
+			expect(countriesOf((await search(viewer, 'Grensbult')).body)).toEqual(['Grensbult BW']);
+			// The table holds the same list: even the schema owner can't write another country.
+			await expect(
+				client.query(`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, country, lon, lat, source) VALUES ('border-ke', 'x', 'x', 'x', 'P.PPL', 'KE', 36.8, -1.3, 'x')`)
+			).rejects.toThrow(/gazetteer_reference_country_check/);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'border-ke'`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('a place id in two files loads once, from the first file, and the second is a problem naming its file; each country is counted across files', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		// A second South African dump repeats Grensbult's id (as an overlapping extract would) and adds one place.
+		const zaAgain = [line('9200002', 'Grensbult Herhaal', 'P', 'PPL', 'ZA', '10', -25.8, 25.6), line('9200003', 'Nuwedorp', 'P', 'PPL', 'ZA', '10', -26.0, 26.0)].join('\n');
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const got = await importGazetteer(OWNER_URL(), { files: [file('ZA.txt', za), file('BW.txt', bw), file('ZA-2.txt', zaAgain)], dataset: 'border-dup', source: 'Test source' });
+			expect(got).toMatchObject({ written: 6, countries: { ZA: 3, BW: 3 } });
+			expect(got.problems).toEqual(['ZA-2.txt line 1: 9200002 appears twice']);
+			const { rows } = await client.query<{ name: string }>(`SELECT name FROM gazetteer_reference WHERE dataset = 'border-dup' AND place_id = '9200002'`);
+			expect(rows.map((r) => r.name)).toEqual(['Grensbult']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'border-dup'`);
+			await client.end();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('files with no place to keep write nothing and never open a connection (an unreachable database is not touched)', async () => {
+		dir = mkdtempSync(join(tmpdir(), 'gazetteer-border-'));
+		try {
+			const offMap = line('9200301', 'Ver Noord', 'P', 'PPL', 'BW', '01', -18.0, 25.0);
+			const got = await importGazetteer('postgres://nobody@127.0.0.1:1/nothing', {
+				files: [file('KE.txt', ke), file('BW.txt', offMap)],
+				dataset: 'border-none',
+				source: 'Test source'
+			});
+			expect(got).toMatchObject({ written: 0, otherCountry: 1, outsideMap: 1, countries: {}, problems: [] });
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('the table’s country check and the loader’s allow-list name the same countries', async () => {
+		// Adding a country takes both a migration and GAZETTEER_COUNTRIES (236): one without the other loads
+		// places the table refuses, or refuses places the table would take.
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const { rows } = await client.query<{ def: string }>(
+				`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'gazetteer_reference_country_check'`
+			);
+			expect(rows).toHaveLength(1);
+			const inCheck = [...rows[0]!.def.matchAll(/'([A-Z]{2})'/g)].map((m) => m[1]).sort();
+			expect(inCheck).toEqual([...GAZETTEER_COUNTRIES].sort());
+		} finally {
+			await client.end();
+		}
+	});
+});
+
+describe('alternate names and the larger place first (the basemap’s "Tsabong" is GeoNames’ Tshabong; "Windhoek" listed hamlets before Namibia’s capital; ad hoc testing 2026-10-13, 237)', () => {
+	// SYNTHETIC lines in GeoNames' dump format that mirror the real cases: the
+	// feature codes, populations and alternate names follow GeoNames'
+	// 2026-10-13 dumps; the ids and positions are made up, and the farms, the
+	// hill's alternate and the "…test" places are invented.
+	const line = (id: string, name: string, cls: string, code: string, cc: string, pop: number, alts: string, lat = -25.5, lon = 25.5) =>
+		[id, name, name, alts, String(lat), String(lon), cls, code, cc, '', '01', '', '', '', String(pop), '', '0', 'Africa/Johannesburg', '2026-10-13'].join('\t');
+	const dump = [
+		line('9300001', 'Tshabong', 'P', 'PPLA', 'BW', 11651, 'TBY,Tsabong,Tshabong,Chabong,chabwnګ', -26.05, 22.45),
+		// Namibia's capital and South African places of its name, none with a population: a hamlet, a section of a town, a farm, and a hill named so only by an alternate.
+		line('9300101', 'Windhoek', 'P', 'PPLC', 'NA', 386219, 'WDH,Windhuk,Vindhuk', -22.56, 17.08),
+		line('9300102', 'Windhoek', 'P', 'PPL', 'ZA', 0, '', -24.4, 30.0),
+		line('9300103', 'Windhoek', 'P', 'PPLX', 'ZA', 0, '', -33.5, 21.7),
+		line('9300104', 'Windhoek', 'S', 'FRM', 'ZA', 0, '', -27.2, 27.3),
+		line('9300105', 'Windhoek se Berg', 'T', 'HLL', 'ZA', 0, 'Windhoek,Windhoek se Berg', -29.3, 18.7),
+		// An old name (Polokwane's Pietersburg, renamed): the town by its alternate before a farm of that main name, kind first.
+		line('9300201', 'Polokwanetest', 'P', 'PPLA', 'ZA', 272461, 'Pietersburgtest,Ou Klipdorp,Vaal Plaas', -23.9, 29.45),
+		line('9300202', 'Pietersburgtest', 'S', 'FRM', 'ZA', 0, '', -26.0, 28.0)
+	].join('\n');
+	let client: pg.Client;
+	const listed = (body: { hits: SearchHit[] }) => body.hits.map((h) => `${h.name} ${h.feature} ${h.country}${h.alias ? ` (also ${h.alias})` : ''}`);
+
+	beforeAll(async () => {
+		client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		await replacePlaces(client, 'alt-test', placeRecords(dump, 'alt.txt', 'Test source').records);
+	});
+	afterAll(async () => {
+		await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'alt-test'`);
+		await client.end();
+	});
+
+	it('an alternate name finds the place, listed by its main name with the spelling it matched', async () => {
+		const res = (await search(viewer, 'Tsabong')).body;
+		expect(listed(res)).toEqual(['Tshabong P.PPLA BW (also Tsabong)']);
+		expect(res.hits[0]).toMatchObject({ kind: 'place', name: 'Tshabong', alias: 'Tsabong', country: 'BW' });
+		// The main name typed: no alias. The start of an alternate finds it too.
+		expect(listed((await search(viewer, 'tshabong')).body)).toEqual(['Tshabong P.PPLA BW']);
+		expect(listed((await search(viewer, 'tsabo')).body)).toEqual(['Tshabong P.PPLA BW (also Tsabong)']);
+		// What the loader left out isn't searched: the airport code.
+		expect((await search(viewer, 'TBY')).body.hits).toEqual([]);
+	});
+
+	it('Windhoek: Namibia’s capital first, then the South African places of the name by kind, the hill named so by an alternate last', async () => {
+		expect(listed((await search(viewer, 'Windhoek')).body)).toEqual([
+			'Windhoek P.PPLC NA',
+			'Windhoek P.PPL ZA',
+			'Windhoek P.PPLX ZA',
+			'Windhoek S.FRM ZA',
+			'Windhoek se Berg T.HLL ZA (also Windhoek)'
+		]);
+		// "windhu" starts only the capital's alternate Windhuk.
+		expect(listed((await search(viewer, 'windhu')).body)).toEqual(['Windhoek P.PPLC NA (also Windhuk)']);
+	});
+
+	it('an old name finds the town before a farm of that name; words from two different alternates make no match', async () => {
+		expect(listed((await search(viewer, 'Pietersburgtest')).body)).toEqual(['Polokwanetest P.PPLA ZA (also Pietersburgtest)', 'Pietersburgtest S.FRM ZA']);
+		expect(listed((await search(viewer, 'klipdorp ou')).body)).toEqual(['Polokwanetest P.PPLA ZA (also Ou Klipdorp)']);
+		// "klip" starts a word of Ou Klipdorp and "plaas" one of Vaal Plaas: no one name has both.
+		expect((await search(viewer, 'klip plaas')).body.hits).toEqual([]);
+		// Positive control: both words in one alternate.
+		expect(listed((await search(viewer, 'vaal plaas')).body)).toEqual(['Polokwanetest P.PPLA ZA (also Vaal Plaas)']);
+	});
+
+	it('stores the alternate names, folded beside them, and the population; the table refuses lists of different lengths and a negative population', async () => {
+		const row = await client.query(`SELECT alt_names, alt_search, population FROM gazetteer_reference WHERE dataset = 'alt-test' AND place_id = '9300001'`);
+		expect(row.rows).toEqual([{ alt_names: ['Tsabong', 'Chabong'], alt_search: 'tsabong | chabong', population: '11651' }]);
+		await expect(
+			client.query(`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, lon, lat, source, alt_names, alt_search) VALUES ('alt-test', 'bad', 'x', 'x', 'P.PPL', 25, -25, 'x', '{A,B}', 'a')`)
+		).rejects.toThrow(/gazetteer_reference_alt_names_check/);
+		await expect(
+			client.query(`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, lon, lat, source, population) VALUES ('alt-test', 'bad', 'x', 'x', 'P.PPL', 25, -25, 'x', -1)`)
+		).rejects.toThrow(/gazetteer_reference_population_check/);
+		// More than 200 alternate names (the loader's MAX_ALTERNATES) is refused.
+		const many = Array.from({ length: 201 }, (_, i) => `n${i}`);
+		await expect(
+			client.query(`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, lon, lat, source, alt_names, alt_search) VALUES ('alt-test', 'bad', 'x', 'x', 'P.PPL', 25, -25, 'x', $1, $2)`, [many, many.join(' | ')])
+		).rejects.toThrow(/gazetteer_reference_alt_names_check/);
+		// Positive control: a place written as a loader of the previous release writes it (no alternates, no population) passes, with the defaults: an empty alt_search is no alternate names.
+		await client.query(`INSERT INTO gazetteer_reference (dataset, place_id, name, search_name, feature, lon, lat, source) VALUES ('alt-test', 'old', 'Oudorp', 'oudorp', 'P.PPL', 25, -25, 'x')`);
+		expect((await client.query(`SELECT alt_names, alt_search, population FROM gazetteer_reference WHERE dataset = 'alt-test' AND place_id = 'old'`)).rows).toEqual([{ alt_names: [], alt_search: '', population: '0' }]);
+		expect(listed((await search(viewer, 'oudorp')).body)).toEqual(['Oudorp P.PPL ZA']);
 	});
 });
 

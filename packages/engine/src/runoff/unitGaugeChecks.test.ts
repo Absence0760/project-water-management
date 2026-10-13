@@ -121,7 +121,7 @@ describe('a unit’s own gauge gets the catchment’s §2.4c and §2.4d checks (
 		for (let t = ZR_FROM; t <= ZR_TO; t++) expect(a.source[t]).toBe(UNIT_RAIN_SOURCE.unitGauge);
 		// The flagged run takes in the zeros either side of the stretch too, so it is at least 120 days.
 		const note = f.warnings.find((w) => w.startsWith('unit rain: "Unit A"’s own gauge has flagged zero runs on '));
-		expect(note).toMatch(/on (\d+) days run as recorded \(dry\): Settings → Zero-rain runs is "as recorded"\.$/);
+		expect(note).toMatch(/on (\d+) days run as recorded \(dry\): Settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded \(dry\)"\.$/);
 		expect(Number(note!.match(/on (\d+) days/)![1])).toBeGreaterThanOrEqual(120);
 		expect(f.warnings.some((w) => w.includes('"Unit A"’s own gauge is treated as missing'))).toBe(false);
 	});

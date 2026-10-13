@@ -39,6 +39,7 @@ const LC = 'test-reference-load-lc';
 const RV = 'test-reference-load-rv';
 const EV = 'test-reference-load-ev';
 const GZ = 'test-reference-load-gz';
+const GZN = 'test-reference-load-gz-neighbours';
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const object = (bytes: Uint8Array): ReadObject => async () => ({ contentLength: bytes.byteLength, bytes: async () => bytes });
 let dir: string;
@@ -66,8 +67,8 @@ afterAll(async () => {
 	await client.query('DELETE FROM cropland_dataset WHERE dataset = $1', [LC]);
 	await client.query('DELETE FROM river_reference WHERE dataset = $1', [RV]);
 	await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', [EV]);
-	await client.query('DELETE FROM gazetteer_reference WHERE dataset = $1', [GZ]);
-	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ]]);
+	await client.query('DELETE FROM gazetteer_reference WHERE dataset = ANY($1::text[])', [[GZ, GZN]]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -222,5 +223,24 @@ describe('gazetteer', () => {
 		const err = await load({ kind: 'gazetteer', key: 'reference/gazetteer/none.txt', dataset: GZ }, Buffer.from('# nothing\n')).catch((e: unknown) => e);
 		expect((err as LoadError).code).toBe('empty');
 		expect(await asOwner('SELECT count(*)::int AS n FROM gazetteer_reference WHERE dataset = $1', [GZ])).toEqual([{ n: 9 }]);
+	});
+
+	it('South Africa’s neighbours load as a dataset of their own beside South Africa’s; a dump of another country (Kenya) is refused', async () => {
+		// SYNTHETIC lines in GeoNames' format: Lesotho and Botswana dumps gzipped as one file, as deployment.md § Reference datasets has the operator upload them.
+		const line = (id: string, name: string, cc: string, lat: number, lon: number) =>
+			[id, name, name, '', String(lat), String(lon), 'P', 'PPL', cc, '', '01', '', '', '', '0', '', '0', 'Africa/Maseru', '2026-10-13'].join('\t');
+		const neighbours = gzipSync([line('9300001', 'Grenshoek', 'LS', -29.3, 27.5), line('9300002', 'Grenspos', 'BW', -25.2, 25.7), line('9300003', 'Verweg', 'BW', -19.0, 24.0)].join('\n'));
+		const result = await load({ kind: 'gazetteer', key: 'reference/gazetteer/neighbours-2026-10-13.txt.gz', dataset: GZN }, neighbours);
+		expect(result).toEqual({ kind: 'gazetteer', dataset: GZN, written: 2, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await asOwner('SELECT country, count(*)::int AS n FROM gazetteer_reference WHERE dataset = $1 GROUP BY country ORDER BY country', [GZN])).toEqual([
+			{ country: 'BW', n: 1 },
+			{ country: 'LS', n: 1 }
+		]);
+		// South Africa's dataset is untouched.
+		expect(await asOwner('SELECT count(*)::int AS n FROM gazetteer_reference WHERE dataset = $1', [GZ])).toEqual([{ n: 9 }]);
+		const err = await load({ kind: 'gazetteer', key: 'reference/gazetteer/ke.txt', dataset: GZN }, Buffer.from(line('9300009', 'Elders', 'KE', -1.3, 36.8))).catch((e: unknown) => e);
+		expect((err as LoadError).code).toBe('empty');
+		expect((err as LoadError).publicReason).toMatch(/South Africa and its neighbours/);
+		expect(await asOwner('SELECT count(*)::int AS n FROM gazetteer_reference WHERE dataset = $1', [GZN])).toEqual([{ n: 2 }]);
 	});
 });

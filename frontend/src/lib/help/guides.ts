@@ -13,6 +13,7 @@
 
 import { TAB_LABELS, type TabId as WorkspaceTabId } from '$lib/workspace/tabs';
 import { helpFor } from './content';
+import { PAGE_GUIDES } from './guides-pages';
 import type { ShotId } from './pictures';
 
 export type GuideKind = 'start' | 'howto' | 'use' | 'concept' | 'page';
@@ -159,7 +160,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Dams** has a card for each hydrological unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). The emptiest dams come first, every card shown. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Under the chart is the assurance of supply of the hydrological unit the dam serves (a dam has none of its own): how often and how fully its demand was met, and its stress by month, with a link to the unit on Hydrological units. A card’s figures are the latest run’s; its capacity is the model’s now, and a dam whose own settings (or how its hydrological unit draws on it) were edited since the run says **Dam settings changed since the run** and what changed, until the model is run again (the Network’s map marks it the same way); edits upstream of it aren’t checked, so re-run after those too. A dam with a minimum operating level also shows how many days of its last year it sat at that minimum. Each card also opens the dam’s hydrological unit on the Network (**On the Network**) and the hydrological unit’s **Planted areas**. Before the first run the cards show each dam’s capacity only.'
+						text: '**Dams** has a card for each hydrological unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). The emptiest dams come first, every card shown. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Under the chart is the assurance of supply of the hydrological unit the dam serves (a dam has none of its own): how often and how fully its demand was met, and its stress by month, with a link to the unit on Hydrological units. Under that, **Proposed from the register and the map** is one line of what the register of dams (for reference only) and the dam’s polygon on the map propose for that dam; open it, or follow a card’s **Proposals**, for the values and their sources. Its **Dam of** picks another dam (the chart follows) or a hydrological unit with no dam yet. A card’s figures are the latest run’s; its capacity is the model’s now, and a dam whose own settings (or how its hydrological unit draws on it) were edited since the run says **Dam settings changed since the run** and what changed, until the model is run again (the Network’s map marks it the same way); edits upstream of it aren’t checked, so re-run after those too. A dam with a minimum operating level also shows how many days of its last year it sat at that minimum. Each card also opens the dam’s hydrological unit on the Network (**On the Network**) and the hydrological unit’s **Planted areas**. Before the first run the cards show each dam’s capacity only.'
 					},
 					{
 						type: 'p',
@@ -171,7 +172,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each page adds its own actions to the header. The Network has **Map** (the geographic map: boundary, parcels, dams and gauges), **Tables**, **+ Add hydrological unit** and, once there is an outlet, **+ Add other user**; the Map **Upload GeoJSON**, **Start from the map** while the model is empty (the boundary, then the dams, abstraction points and gauges, and the units, their areas and their order are proposed, each value ticked to take it), **Divide the model** once it has hydrological units (with an elevation model: each point on the map stands for its hydrological unit, and its own area and order are proposed beside its values now, each ticked to take it; each proposed piece carries its number on the map and on its card), and a **Getting started** pill while the boundary or the rain feed reading it is still to do. The Map’s tools sit on the map’s left edge: **Measure**, **Draw**, **Point** (place a point), **Delineate** (when the server has an elevation model: the elevation model’s own channels are drawn as solid **terrain channels**, named in the bar and the Key beside the river network’s dashed lines, which are for reference only; click a terrain channel and the catchment above it, following the terrain, is proposed over the dimmed channels, to accept or reject, or pick **Sub-catchments, one per click** and each click gets the land that drains to it before any other click, to save as areas; each point goes on the nearest terrain channel, and one beside a much larger channel is offered that channel first, since a click can land on a hillside stream beside the river meant) and **Trace** (a dam, when the server has water occurrence data: click inside a dam and its outline is proposed as a drawing to adjust and save); a strip over the map names the tool that’s on, and Escape leaves it. **Layers** turns on the quaternaries, the river network and the relief; **Key** says what the colours mean and what the areas are coloured by. Beside the map, one panel at a time: **Details** of the picked feature, **Features** (with **Download GeoJSON** and **Every feature**, the table), **Checks**, **Layers** and **Key**; the map’s own **Layers** button (under the zoom buttons) and **Key** button (bottom left, beside **Show everything**) open those tabs, or on a phone a panel over the map. While drawing, **Snap to features** puts a corner on a neighbour’s corner or edge (hold Alt to place one exactly), and a polygon’s card has **Split along a line**; Crops & demand **Tables**, **Load crop factors…**, **Import plantings…** and **+ Add crop**; Transfers **Show on the Network** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
+						text: 'Each page adds its own actions to the header. The Network has **Map** (the geographic map: boundary, parcels, dams and gauges), **Tables**, **+ Add hydrological unit** and, once there is an outlet, **+ Add other user**; the Map **Upload GeoJSON**, **Start from the map** while the model is empty (the boundary, then the dams, abstraction points and gauges, and the units, their areas and their order are proposed, each value ticked to take it), **Divide the model** once it has hydrological units (with an elevation model: each point on the map stands for its hydrological unit, and its own area and order are proposed beside its values now, each ticked to take it; each proposed piece carries its number on the map and on its card), and a **Getting started** pill while the boundary or the rain feed reading it is still to do. The Map’s tools sit on the map’s left edge: **Measure**, **Draw**, **Point** (place a point), **Delineate** (when the server has an elevation model: the elevation model’s own channels are drawn as solid **terrain channels**, named in the bar and the Key beside the river network’s dashed lines, which are for reference only; click a terrain channel and the catchment above it, following the terrain, is proposed over the dimmed channels, to accept or reject, or pick **Sub-catchments, one per click** and each click gets the land that drains to it before any other click, to save as areas; each point goes on the nearest terrain channel, and one beside a much larger channel is offered that channel first, since a click can land on a hillside stream beside the river meant) and **Trace** (a dam, when the server has water occurrence data: click inside a dam and its outline is proposed as a drawing to adjust and save); a strip over the map names the tool that’s on, and Escape leaves it. **Layers** turns on the optional layers (quaternary catchments, the river network, the hydrological units, the MAP, CHIRPS and DEM grids, and the relief) and sets the **Area fill**, and the search box over the map’s top edge finds a gauge, a registered dam, a quaternary or a place ([[map-search]]); **Key** says what the colours mean and what the areas are coloured by. Beside the map, one panel at a time: **Details** of the picked feature, **Features** (with **Download GeoJSON** and **Every feature**, the table), **Checks**, **Layers** and **Key**; the map’s own **Layers** button (under the zoom buttons) and **Key** button (bottom left, beside **Show everything**) open those tabs, or on a phone a panel over the map. While drawing, **Snap to features** puts a corner on a neighbour’s corner or edge (hold Alt to place one exactly), and a polygon’s card has **Split along a line**; Crops & demand **Tables**, **Load crop factors…**, **Import plantings…** and **+ Add crop**; Transfers **Show on the Network** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
 					},
 					{
 						type: 'p',
@@ -221,13 +222,13 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Open **Projects** in the sidebar (on a phone, under **Menu**) and press **New project**.',
-							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it, and press **Create**.',
+							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it, and press **Create project**.',
 							'The project opens on its **Summary** tab. Work through the setup checklist from the top.'
 						]
 					},
 					{
 						type: 'p',
-						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A Water Balance Tool workbook becomes one project; an administrator can import one with the workbook importer.'
+						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A Water Balance Tool workbook becomes one project: anyone can bring one in with **Import workbook** on the Projects page (and a project downloaded from the app with **Import project file (.json)**).'
 					}
 				]
 			},
@@ -309,7 +310,8 @@ export const GUIDES: Guide[] = [
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
 							'Give every hydrological unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
 							'For a hydrological unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A hydrological unit’s full form (**Edit** on its row under **All hydrological units**, or double-click it in the drawing) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
-							'Set the share of the water supplied that returns to the river as [[return-flow|return flow]] (10 % for a new unit) and any [[diversion|diversion back to the dam]]. The hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] comes from its crops’ [[irrigation-system|irrigation systems]] (Crops & demand). Under **Supply**, set where its irrigation comes from (the [[supply-rule|supply rule]]); **Split the crops’ water between sources** gives it a [[crop-supply-table|crop supply table]]: fixed shares from its own dam, the river at the unit and another unit’s dam.',
+							'Set the share of the water supplied that returns to the river as [[return-flow|return flow]] (10 % for a new unit) and any [[diversion|diversion back to the dam]]. The hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] comes from its crops’ [[irrigation-system|irrigation systems]] (Crops & demand). Under **Supply**, set where its irrigation comes from (the [[supply-rule|supply rule]]); **Split the crops’ water between sources** gives it a [[crop-supply-table|crop supply table]]: fixed shares from its own dam, the river at the unit and another unit’s dam. Where the crops or a demand take from the river at a pump of their own ([[water-source]]), give the pump’s capacity and, if it draws from a pool, the **Pool at the pump** (m³): it starts full, the pump draws it once the river’s share is used, and it refills from what the river has left.',
+								'Only with evidence (a gauge below that the model keeps over- or under-simulating at low flows), set the unit’s **Base-flow loss and gain** (m³/day): water its own runoff loses to groundwater, out of the catchment, or gains from a spring or aquifer beyond the divide, before it reaches the river or the dam ([[base-flow-loss-gain]]). A river losing water between two units is a bed loss instead (**Bed losses in the reach below**).',
 							'Press **Save changes** on the save bar (or in the hydrological unit’s sheet).'
 						]
 					},
@@ -387,7 +389,7 @@ export const GUIDES: Guide[] = [
 							'On **Crops & demand**, press **+ Add crop**: its sheet opens over the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a row in the **Crops** list, largest planted area first, with its colour, area, the month it needs most water and a small chart of its factors (Oct to Sep, the highest marked with its value; point at it to read a month); **Edit** on the row opens the sheet again. A warning icon on a row means a factor above 1.0 (hover or focus it; it opens the sheet). With more than nine crops, the smallest share one grey colour as **Other**, named in their own row.',
 							'Under **Planted area by hydrological unit**, press **Edit areas** and enter the hectares of each crop on each hydrological unit in the grid. Leave a crop blank on hydrological units that don’t grow it. Each hydrological unit then gets a bar split by crop in the list’s colours, largest hydrological unit first (hover a segment for its crop and hectares); a note under the bars names any hydrological unit with nothing planted, whose demand is zero.',
 							'Check **Irrigation demand by month**: what the catchment abstracts for its crops per month (the gross demand ÷ each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]], so an efficiency below 100 % raises it), stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per hydrological unit and for the catchment. It comes before effective rain, which a run takes off day by day. It uses the monthly A-pan means: with a daily [[apan|A-pan]] series on the **Data** tab, runs use that on the days it has a value, so their demand differs, and a line under the heading says so.',
-							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or use them from the map, when an A-pan grid is loaded), the [[effective-rainfall|effective-rain fraction]], the [[soil-water-store|soil-water store]] and the [[rain-threshold]].',
+							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or, when an A-pan grid is loaded on the server, take them from **Settings & calibration → Flow calibration → Evaporation from the map**, whose **Use** saves them at once), the [[effective-rainfall|effective-rain fraction]], the [[soil-water-store|soil-water store]] and the [[rain-threshold]].',
 							'To bring in a list kept in a spreadsheet (a scheme’s register, a farm survey; hundreds of rows at once), press **Import plantings…** and load a CSV file or paste the rows: a heading row, then one row per farm and crop with its area in hectares (Farm, Crop, Area (ha), and optionally Irrigation system; **Download the template** under **Expected format** has the layout). Farms and crops are matched by name, whatever the capitals and spacing. A crop the project doesn’t have is added with crop factors of 0 and marked **needs crop factors** until you fill them in; a farm it doesn’t have is listed, and with **Add them as new hydrological units** ticked it becomes a new unit draining into the outlet, marked **Needs placing** on the Network until you set its area and where it drains. The preview counts what changes and lists every row it can’t read by its line; nothing changes until **Apply**, and then you save as after any edit.',
 							'Give each crop its [[irrigation-system|irrigation system]] in its sheet (a unit can override it per crop in **Edit areas**); the systems and their efficiencies are under **Tables** › **Irrigation systems**. Each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] is its crops’ systems combined.',
 							'Press **Save changes** on the save bar.'
@@ -447,7 +449,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS. By default a run treats the flagged zero runs as missing, so CHIRPS fills them; **Settings & calibration → Rain gaps** ([[zero-rain-runs|zero-rain runs]]) keeps a confirmed dry spell dry.'
+						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS. By default a run treats a flagged run’s days as missing where CHIRPS reads more than 2 mm, so CHIRPS fills them, and keeps the 0 on drier days; **Settings & calibration → Rain gaps** ([[zero-rain-runs|zero-rain runs]]) sets that threshold and keeps a confirmed dry spell dry.'
 					}
 				]
 			},
@@ -515,8 +517,8 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Give each hydrological unit its parcel on the **Map** (delineate, draw or upload it, and link it to the unit).',
 							'Open **Settings & calibration → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
-							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create**. Units without a parcel are listed, with a link to the map.',
-							'Give each unit its MAP and source on its form, then switch on **Settings → Flow generation → Rain for each unit**, and refit.'
+							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create the feed** (**Create 4 feeds** for four units; **Update** where a unit has one already). Units without a parcel are listed, with a link to the map.',
+							'Give each unit its MAP and source on its form, then switch on **Settings & calibration → Flow calibration → Rain into GR4J → Rain for each unit**, and refit.'
 						]
 					},
 					{
@@ -660,7 +662,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The same volume leaves the source dam and enters the destination, so a transfer never creates or loses water. Transfers with the same priority share a source dam, or a destination’s room, in proportion to their own limits, so the order of the list never changes a result.'
+						text: 'Between two hydrological units, what leaves the source enters the destination: a dam transfer creates and loses no water, and a river [[transfer-offtake|off-take]] loses only its **Losses on the way**. A rule whose **To** is **Outside the catchment** ([[transfer-outside]]) is different: its water leaves the model, and counts as the source unit’s use. Transfers with the same priority share a source dam, or a destination’s room, in proportion to their own limits, so the order of the list never changes a result.'
 					}
 				]
 			}
@@ -684,12 +686,12 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Take the monthly Reserve flows for the river’s [[ecological-category]], usually from the [[desktop-reserve-model]] tables without high flows.',
 							'Pick one value per month (often a percentile) and convert it to m³/day.',
-							'On **Settings & calibration → EWR**, enter the 12 values, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
+							'On **Settings & calibration → EWR**, the first choice is **Daily EWR from**: keep *The pragmatic EWR* and enter the 12 values in the **Pragmatic EWR** row under it, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
 							'Or take the daily EWR straight from the Desktop Reserve Model: set **Daily EWR from** to *The DRM TAB file* or *The DRM percentile tables* ([[ewr-daily-source|the daily EWR at the outlet]]), load the DRM’s .tab or .rul file or paste the values (**Fill from:** beside **Daily EWR from**; a .tab’s flows are shown in m³/s before you use them, a paste’s values in a preview before **Apply**), and choose how the tables are scaled to the catchment, by MAR or by area, with the table’s MAR or area. Every run then says which EWR it was judged by and the scale factor.',
-							'Optionally, on **Settings & calibration → Reporting**, set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
-							'To assess the EWR above the outlet too, add a gauge on the **Network** tab at each EWR site of the Reserve determination.',
+							'Optionally, on **Settings & calibration → Reporting** (under *Demand & supply*, above the EWR), set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
+							'To assess the EWR above the outlet too, add a gauge on the **Network** tab at each EWR site of the Reserve determination (a gauge is an **EWR site** until unticked; untick one that only records flow).',
 							'Save and run.',
-							'With a Reserve rule table too, choose which one the results are judged by in **Judge results by**, the first thing on **Settings & calibration**: automatic (the outlet’s rule table, else the first site’s, else the pragmatic EWR), the pragmatic EWR, or one site’s rule table. It changes no result, so no re-run is needed; River & reserve says at the top which one is in use.'
+							'With a Reserve rule table too (**Settings & calibration → Reserve rule tables**, after the EWR), choose which one the results are judged by in **Judge results by**, the first thing on **Settings & calibration**, above the menu’s panels: automatic (the outlet’s rule table, else the first site’s, else the pragmatic EWR), the pragmatic EWR, or one site’s rule table. It changes no result, so no re-run is needed; River & reserve says at the top which one is in use.'
 						]
 					}
 				]
@@ -702,12 +704,12 @@ export const GUIDES: Guide[] = [
 						shot: 'river',
 						caption: 'A reach of the river. The EWR is the flow that must stay in it, every day, for the ecosystem to hold its target condition.',
 						stops: [
-							{ spot: 'river', title: 'The river channel', text: 'Checked every day at the outlet against the [[pragmatic-ewr]], and at every gauge against the EWR of everything upstream of it.' }
+							{ spot: 'river', title: 'The river channel', text: 'Checked every day at the outlet against the [[pragmatic-ewr]], and at every gauge ticked as an **EWR site** against the EWR of everything upstream of it.' }
 						]
 					},
 					{
 						type: 'p',
-						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge, against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the hydrological units upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which hydrological unit causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
+						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge ticked as an **EWR site** (each gauge is, until unticked on its form), against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the hydrological units upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which hydrological unit causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
 					}
 				]
 			}
@@ -1022,7 +1024,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To test a demand restriction, use [[scale-demand|Scale demand]] (one change for the whole catchment, or for chosen units and months) rather than editing crop areas: it scales what each unit would take and leaves the crops as they are. To test a wetter or drier climate, [[scale-series|scale every rain series]] the project has, one change each.'
+						text: 'To test a demand restriction, use [[scale-demand|Scale demand]] (one change for the whole catchment, or for chosen units and months) rather than editing crop areas: it scales what each unit would take and leaves the crops as they are. Its **From** and **To** dates (both included) limit it to a stretch of the record, so a dry-year stress is one change per drought year, with the other years as the base. To test a wetter or drier climate, [[scale-series|scale every rain series]] the project has, one change each.'
 					},
 					{
 						type: 'note',
@@ -1235,6 +1237,83 @@ export const GUIDES: Guide[] = [
 		related: ['add-data']
 	},
 	{
+		id: 'two-step-sign-in',
+		title: 'Sign in with two steps',
+		summary: 'Add a code from an authenticator app or by email to your password, keep your recovery codes, and get back in after losing your phone.',
+		kind: 'use',
+		sections: [
+			{
+				heading: 'What it is',
+				blocks: [
+					{
+						type: 'p',
+						text: '[[two-step-sign-in|Two-step sign-in]] asks for a 6-digit code after your password, so someone who learns the password still can’t get in. There are two ways to get the code, and you can turn on both: an **Authenticator app** on your phone (such as Google Authenticator, Microsoft Authenticator or Aegis; the stronger, since only your phone makes the codes) and a **Code by email** (the easier, each code working for 10 minutes, but only as safe as your inbox).'
+					}
+				]
+			},
+			{
+				heading: 'Turn it on',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Open your **Account** page (the foot of the sidebar; on a phone, under **Menu**) and find **Two-step sign-in**.',
+							'For the app, press **Set up the app**, enter your current password, scan the QR code with the app (or type the key it shows), and enter the app’s first code. For email, press **Turn on** beside **Code by email**, enter your password and the code we email you.',
+							'The first way you turn on brings ten **recovery codes**, shown once: press **Download the codes** or **Copy the codes**, keep them away from your phone and your email (a password manager, or on paper), then press **I’ve saved them**.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'From then on, each sign-in asks for a code after the password. **Email me a code instead** or **Use a code from the app instead** switches between the two, and the recovery-code link takes one of those. Some actions ask for a fresh code even while you are signed in, such as signing or issuing an evidence pack. A browser that signed in before you set it up must sign out and in again before such an action.'
+					}
+				]
+			},
+			{
+				heading: 'Recovery codes',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Each recovery code works once, in place of a code from the app or the email. The Account page says how many are left and warns at two or fewer; **Make new recovery codes** (with a code) replaces the whole set, and the old ones stop working.'
+					}
+				]
+			},
+			{
+				heading: 'A lost phone or inbox',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'With a recovery code: sign in with it, then on the Account page **Remove** the app (or **Turn off** the email codes) and set it up again on the new phone.',
+							'Without one: sign in with your password, and on the code step choose **Lost your phone and your recovery codes?** (or **Can’t get the email and lost your recovery codes?**). We email you a link that works for an hour.',
+							'The link opens **Remove two-step sign-in**: press **Start the 3-day wait**. Until it ends your codes keep working, and we email you every day with a link to cancel; signing in with a code cancels it too.',
+							'When the wait ends, two-step sign-in is removed and every device is signed out. Sign in with your password alone and set two-step sign-in up again on your Account page.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'If you get a removal email you didn’t ask for, someone knows your password: cancel it with a code and choose a new password.'
+					}
+				]
+			},
+			{
+				heading: 'When a project requires it',
+				blocks: [
+					{
+						type: 'p',
+						text: 'An owner can require it: the **Two-step sign-in** panel on the **Project** page (owners only; a team’s admins have the same switch in the team’s settings, which covers every team project) has **Require two-step sign-in**, off by default. While it is on, the project’s owners give a code before they manage members, invitations, share links, API keys or data feeds, or delete the project, and so does anyone who signs a run. To turn it on you must yourself be signed in with a code, so it can’t lock everyone out.'
+					},
+					{
+						type: 'p',
+						text: 'Some actions always need it, whatever the switch says, because they reach farmers, the public or a licence decision: publishing to farmers, deciding applications, endorsing a baseline, and signing or issuing an evidence pack. Your Account page says so when your roles need it.'
+					}
+				]
+			}
+		],
+		terms: ['two-step-sign-in', 'roles', 'pack-signoff'],
+		related: ['share-with-a-team', 'issue-an-evidence-pack']
+	},
+	{
 		id: 'issue-an-evidence-pack',
 		title: 'Issue an evidence pack',
 		summary: 'Turn a run’s evidence report into a signed, hashed pack with a short code that anyone can check on the public verify page.',
@@ -1248,7 +1327,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'The baseline must be the project’s [[evidence-run|nominated evidence run]]. For an [[application]], run the application on that baseline.',
-							'Declare the [[evidence-uncertainty-rule|uncertainty rule]] under Settings, Evidence, and run an ensemble to it, so the report has bands to cite.',
+							'Declare the [[evidence-uncertainty-rule|uncertainty rule]] under **Settings & calibration → Evidence**, and run an ensemble to it, so the report has bands to cite.',
 							'The signer needs two-step sign-in, and, while the project requires it, a current [[pack-signoff|registration check]] recorded on the **Project** page.'
 						]
 					}
@@ -1301,11 +1380,11 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
-							'**Natural flow.** The [[runoff-model]] (GR4J) turns rain and evaporation into the flow the catchment would produce with no hydrological units.',
-							'**Shares.** Natural flow and the EWR are split between the hydrological units by fixed [[flow-share|flow shares]].',
+							'**Natural flow.** The [[runoff-model]] (GR4J) turns rain and evaporation into the flow the catchment would produce with no hydrological units. With [[unit-rain|Rain for each unit]] on, it runs once for each unit with land instead, each on its own rain: the unit’s own gauge; else the catchment gauge × unit MAP ÷ gauge MAP; else the unit’s own CHIRPS, levelled to its MAP; else the catchment rain. The outlet’s natural flow is then their routed sum.',
+							'**Shares.** Natural flow and the EWR are split between the hydrological units by fixed [[flow-share|flow shares]] (with Rain for each unit on, each unit’s runoff is its own, and the shares still split the EWR).',
 							'**Demand.** Crops, A-pan and effective rain give each hydrological unit’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the hydrological unit takes from its dam and the river.',
 							'**Hydrological unit balance.** Upstream first, each hydrological unit fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one hydrological unit]].',
-							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the hydrological units upstream of it ([[ewr-charge]]).'
+							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge ticked as an **EWR site** (the default) is checked too, and a shortfall at any EWR site is charged to the hydrological units upstream of it ([[ewr-charge]]); a gauge unticked only measures.'
 						]
 					}
 				]
@@ -1371,10 +1450,10 @@ export const GUIDES: Guide[] = [
 							'Hydrological unit runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
 							'The [[diversion]] takes up to its daily capacity from the water passing below, back into the dam.',
 							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any hydrological unit irrigates.',
-							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; seepage reaches the river below the wall.',
+							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; the share of the seepage set by **Seepage returning** (all of it by default) reaches the river below the wall, and the rest leaves the catchment.',
 							'Irrigation takes the smaller of the [[irrigation-demand|demand]] and what the dam holds above its [[dam-min|minimum level]] (yesterday’s storage plus today’s inflows and the rain on it, less evaporation and seepage).',
 							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is the share of the irrigation water supplied that returns to the river the same day (never more than the losses).',
-							'Outflow = spill + water passing below the dam not diverted + seepage + return flow. It is the next element’s upstream inflow.'
+							'Outflow = spill + water passing below the dam not diverted + returning seepage + return flow. It is the next element’s upstream inflow.'
 						]
 					}
 				]
@@ -1384,11 +1463,11 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'formula',
-						text: 'upstream inflow + runoff + transfer + rain on the dam − (irrigation − return flow) − dam evaporation − Δ storage = outflow'
+						text: 'upstream inflow + runoff + transfer + rain on the dam − (irrigation − return flow) − dam evaporation − seepage lost − Δ storage = outflow'
 					},
 					{
 						type: 'p',
-						text: 'It closes to the cubic metre every day ([[balance-check|the balance check]]). Seepage is part of the outflow, so it stays in the catchment.'
+						text: 'It closes to the cubic metre every day ([[balance-check|the balance check]]). The seepage that returns is part of the outflow; the seepage lost (what **Seepage returning** doesn’t return) and the dam’s evaporation leave the catchment.'
 					}
 				]
 			}
@@ -1508,11 +1587,11 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**KGE′** (default): correlation, bias and variability in one score, less peak-dominated than NSE.',
+							'**KGE′ (Kling–Gupta, 2012)** (default): correlation, bias and variability in one score, less peak-dominated than NSE.',
 							'**Year-balanced KGE′**: each water year counts once, so a few wet years can’t dominate a drought-heavy record.',
 							'**Non-parametric KGE**: rank correlation, the flow-duration curve’s shape and the bias, so less sensitive to rating error at the extremes.',
 							'**NSE on √Q** (medium flows) and **NSE on log Q** (low flows).',
-							'**Mean of KGE′(Q) and KGE′(1/Q)**: half the score on the flows, half on their inverses, so recessions and low flows count as much as the peaks. Suggested when the fit feeds an EWR (low-flow) decision.'
+							'**Mean of KGE′(Q) and KGE′(1/Q)** (the scores table calls it **Low/high-flow KGE′ (Q and 1/Q)**): half the score on the flows, half on their inverses, so recessions and low flows count as much as the peaks. Suggested when the fit feeds an EWR (low-flow) decision.'
 						]
 					},
 					{
@@ -1571,7 +1650,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'A 0 is a reading, so it blocks the fallback. Long wet-season runs of zeros that the **Data checks** flag are the exception: by default a run treats them as blank, so CHIRPS fills them ([[zero-rain-runs|zero-rain runs]]). On **Settings & calibration → Rain gaps** you can keep a confirmed dry spell dry, run every flagged run as recorded, or list other bad periods to treat as missing. The uploaded series is never changed.'
+						text: 'A 0 is a reading, so it blocks the fallback. Long wet-season runs of zeros that the **Data checks** flag are the exception: by default a run treats their days as blank where CHIRPS reads more than 2 mm, so CHIRPS fills those, and a day CHIRPS reads 2 mm or less keeps its 0, since CHIRPS reports too many light-rain days ([[zero-rain-runs|zero-rain runs]]). On **Settings & calibration → Rain gaps** you can change the 2 mm, keep a confirmed dry spell dry, run every flagged run as recorded, or list other bad periods to treat as missing. The uploaded series is never changed.'
 					},
 					{
 						type: 'p',
@@ -1579,7 +1658,11 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The result is the [[rain-final|final catchment rainfall]], which both runoff models and the effective-rain part of demand use. The daily CSV export puts it beside CHIRPS as uploaded and bias-corrected CHIRPS, so filled days can be checked.'
+						text: 'The result is the [[rain-final|final catchment rainfall]], which the runoff model (GR4J) and the effective-rain part of demand use. The daily CSV export puts it beside CHIRPS as uploaded and bias-corrected CHIRPS, so filled days can be checked.'
+					},
+					{
+						type: 'p',
+						text: 'With [[unit-rain|Rain for each unit]] on (**Settings & calibration → Flow calibration → Rain into GR4J**), each unit with land also gets a rain series of its own, in this order: its **own gauge**, with the same zero-run and accumulation checks, its gaps and set-aside days taking its CHIRPS levelled to its MAP; else the **catchment gauge × unit MAP ÷ gauge MAP**, when the gauge’s MAP is set and the unit has one; else its **own CHIRPS**, levelled by its MAP ÷ the CHIRPS mean over the MAP period; else the catchment rain, with a warning. Demand, rain on the dams and the WR2012 check keep the catchment rain. A seasonal outlook, the uncertainty ensemble’s CHIRPS-only member and a run resumed from a saved state keep each unit’s rule and factors **pinned** as the base run had them, rather than refitting them on a shorter record; the run’s Rain for each unit panel then says its factors are pinned.'
 					}
 				]
 			},
@@ -1642,387 +1725,8 @@ export const GUIDES: Guide[] = [
 		terms: ['irrigation-demand', 'irrigation-supplied', 'pragmatic-ewr', 'equitable-share', 'ewr-charge', 'ewr-charge-split', 'demand-left', 'basic-needs-floor'],
 		related: ['set-the-ewr', 'run-and-read-results']
 	},
-	// ---- Pages, one by one ----------------------------------------------------
-	// What each workspace page is for and how to work it; the page's section
-	// header links here ("How this page works", TAB_GUIDE in lib/workspace/tabs.ts).
-	{
-		id: 'scenarios-page',
-		title: 'Scenarios: try a change without copying the project',
-		summary: 'Make a named list of changes on a run (a bigger dam, a new crop, less rain), run it, and read it against the run it started from.',
-		kind: 'page',
-		tab: 'scenarios',
-		sections: [
-			{
-				heading: 'What a scenario is',
-				blocks: [
-					{
-						type: 'p',
-						text: 'A [[scenario]] is a named list of changes on a **base run**: raise a dam by 20 %, replace a crop, remove a hydrological unit, add a transfer, scale the rain by −10 %. It runs and compares against its base without copying the project, and the model itself never changes: the base run stays as it was, and is kept while the scenario exists.'
-					},
-					{
-						type: 'p',
-						text: 'Use one to answer “what if”. Copying the project ([[guide:create-a-project]]) is the other way, for a change too large to describe as a list of edits.'
-					}
-				]
-			},
-			{
-				heading: 'Steps',
-				blocks: [
-					{
-						type: 'steps',
-						items: [
-							'Run the model at least once: a scenario needs a run to start from.',
-							'On **Scenarios**, press **+ New scenario**, name it and pick its base run (the [[published-baseline|published run]] by default, else the latest).',
-							'Under **Add a change**, add each change in turn. Each reads in words against the value it meets (“dam capacity 120 000 → 144 000 m³”), so a second change to the same value shows the first one’s result as “was”. Tick **Explain each setting under its field** (beside Undo; the same switch as in Settings, remembered by your browser) to see how each kind of change works under its fields.',
-							'Read the label on each change: a **Proposal** is the change being assessed; a **Baseline assumption** changes what the river is like today (rain, a setting, a Reserve rule) and puts a red **Baseline assumptions changed** callout above the list.',
-							'Press **Run scenario**. The run joins Runs & results tagged **Scenario**, and **Scenario against its base** shows the headline water balance and each hydrological unit against the base run.',
-							'To bring an older scenario up to date, open **Based on … Rebase…** under **Application details**: **Check** lists any change that no longer applies, then **Rebase onto this run**.'
-						]
-					},
-					{
-						type: 'note',
-						tone: 'caution',
-						text: 'A change that doesn’t apply to its base (a hydrological unit removed since, say) says why, and **Run scenario** stays off until it is fixed or removed.'
-					}
-				]
-			},
-			{
-				heading: 'Scenarios and licence applications',
-				blocks: [
-					{
-						type: 'p',
-						text: 'A licence [[application]] is a scenario too: one an applicant builds on the published baseline. It shows on the Scenarios list with its status, and its changes are frozen once submitted. [[guide:applications-page]] covers the rest.'
-					}
-				]
-			}
-		],
-		terms: ['scenario', 'run', 'published-baseline', 'application'],
-		related: ['compare-runs', 'applications-page']
-	},
-	{
-		id: 'applications-page',
-		title: 'Applications: licence applications, applied for and assessed',
-		summary: 'How a water-use licence applicant models their change on the published baseline, and how the project’s assessors read and decide it.',
-		kind: 'page',
-		tab: 'applications',
-		sections: [
-			{
-				heading: 'What an application is',
-				blocks: [
-					{
-						type: 'p',
-						text: 'Someone applying for a water-use licence (to build or raise a dam, to abstract more, to irrigate more land) needs to show what their change does to the river and to the users around them. In this app their proposed change is a licence [[application]]: a [[scenario]] on the [[published-baseline|published baseline]], run by the same model as everything else.'
-					},
-					{
-						type: 'p',
-						text: 'Two sides use it. The **applicant** (the developer, the farmer or their consultant) builds and submits it. The **assessors** are the project’s owners and editors, who read it and record a decision.'
-					}
-				]
-			},
-			{
-				heading: 'Before anyone can apply',
-				blocks: [
-					{
-						type: 'steps',
-						items: [
-							'Publish a run as the baseline: in **Runs & results**, **Publish this run**. Applications start from it; with nothing published an applicant can’t start one.',
-							'On the **Project** page, add the applicant as a member with the **Applicant** role, and link them to their own hydrological units if they already farm in the catchment.'
-						]
-					},
-					{
-						type: 'p',
-						text: 'An applicant never sees the model. Their view is a page of their own applications, other farms show only by an anonymous name (“Farm 1”), and nothing unpublished reaches them.'
-					}
-				]
-			},
-			{
-				heading: 'What the applicant does',
-				blocks: [
-					{
-						type: 'steps',
-						items: [
-							'Start a **New application** (a name; it starts on the published baseline).',
-							'Add the proposed change with the scenario editor: a new hydrological unit with its dam, a bigger dam, a river pump, more hectares of a crop.',
-							'Press **Run scenario**, then read **Your results against the baseline**: the Ecological Reserve, the catchment’s flow, their own hydrological units, and the farms downstream of them.',
-							'Fill in the notice’s **Address** and **Closing date** for written objections while it is a draft.',
-							'Press **Submit to the assessors**. Its changes are frozen; it can still be withdrawn, or reopened as a draft.'
-						]
-					},
-					{
-						type: 'p',
-						text: 'While it is a draft only the applicant and the people they share it with can see it.'
-					}
-				]
-			},
-			{
-				heading: 'What the assessors do',
-				blocks: [
-					{
-						type: 'p',
-						text: 'The **Applications** tab lists every submitted, withdrawn or decided application (never a draft), with its applicant, status, when it was submitted, its changes, runs and [[evidence-pack|evidence packs]]. It is hidden from the sidebar until you turn it on in **Choose sections**, and viewers never see it.'
-					},
-					{
-						type: 'list',
-						items: [
-							'**Decide the longest waiting** opens the application that has waited longest for a decision.',
-							'Open one to read its changes and runs in Scenarios, answer the applicant’s questions about rules they can’t see, and record the decision with its reasons.',
-							'**Assess together** runs several applications on one baseline, each on its own and all together, for their combined effect on the river.',
-							'Draft an evidence pack from a run’s evidence report, then sign and issue it: a frozen, versioned copy anyone can check with its short code.'
-						]
-					}
-				]
-			}
-		],
-		terms: ['application', 'published-baseline', 'scenario', 'evidence-pack', 'roles'],
-		related: ['scenarios-page', 'project-page']
-	},
-	{
-		id: 'allocations-page',
-		title: 'Allocations: registered volumes against modelled use',
-		summary: 'Import the volumes each user is registered or licensed for, and see where a run’s modelled use is above or below them.',
-		kind: 'page',
-		tab: 'allocations',
-		sections: [
-			{
-				heading: 'What the page is for',
-				blocks: [
-					{
-						type: 'p',
-						text: 'Each water user in the catchment is registered (WARMS) or licensed for a volume a year. This page sets those volumes beside what a run modelled each hydrological unit using, per water year, so you can see where modelled use runs above or below the registration.'
-					},
-					{
-						type: 'note',
-						tone: 'caution',
-						text: 'Modelled use is modelled, not metered: a difference is something to look into, not a finding. A registration is not an entitlement.'
-					}
-				]
-			},
-			{
-				heading: 'Steps',
-				blocks: [
-					{
-						type: 'steps',
-						items: [
-							'Turn the page on in **Choose sections** if it is hidden.',
-							'Press **Import** and upload a WARMS extract or a CSV (**Download the CSV template** shows the columns). A WARMS extract asks how you obtained it; the preview says how many rows matched a hydrological unit.',
-							'Or press **+ Add volume** for one at a time: a take from the river or a borehole, or a dam’s storage.',
-							'Match any volume the header counts as “not matched” to its hydrological unit.',
-							'Pick the run to compare with in the header’s run menu, and read each unit’s modelled use against its registered volume.'
-						]
-					},
-					{
-						type: 'p',
-						text: 'The baseline only compares. A scenario’s [[allocation-mode]] can make its run cap each unit’s use at its registered volume, or take every registered volume in full (licence data never drives the baseline); this page then says what the run did.'
-					}
-				]
-			},
-			{
-				heading: 'Who sees names',
-				blocks: [
-					{
-						type: 'p',
-						text: 'Owners and editors see every volume. Viewers see only catchment totals per water source held by five or more users, until an owner ticks **Viewers see each farm’s registered volumes** under **What viewers see**.'
-					}
-				]
-			},
-			{
-				heading: 'Reading the comparison',
-				blocks: [
-					{
-						type: 'list',
-						items: [
-							'The list puts first the units to look into: each unit and water source with its status over a mean water year. Pick one to see its water years, the [[allocation-band|band]] and its registered volumes.',
-							'Each water year reads above registered, within band, below registered, or no registered volume ([[registered-vs-modelled]]). A part year is compared with the volume prorated to its days and isn’t counted with the whole years.',
-							'The [[allocation-band|comparison band]] is set at the foot of the page, in the **Comparison band** card beside **What viewers see**: editors change it and press that card’s **Save**. It changes how the comparison reads, never a run’s water.',
-							'A dam’s registered storage (a [[s21-water-use|s21(b) row]]) is set against the dam’s modelled capacity, never against the year’s use ([[registered-storage]]).',
-							'After a cap run, the picked unit says on how many days the cap held use back, and why ([[cap-held-back]]).'
-						]
-					}
-				]
-			}
-		],
-		terms: ['registered-volume', 'authorisation-type', 'registered-vs-modelled', 'licence-conditions', 'warms-import', 'allocation-mode', 'allocation-band', 'allocation-viewer-access', 'water-year'],
-		related: ['run-and-read-results', 'units-page']
-	},
-	{
-		id: 'map-page',
-		title: 'The Map: the catchment’s geography',
-		summary: 'Draw or upload the boundary, parcels, dams, gauges and rivers, and let the map propose areas and the catchment above a point.',
-		kind: 'page',
-		tab: 'map',
-		sections: [
-			{
-				heading: 'What the page is for',
-				blocks: [
-					{
-						type: 'p',
-						text: 'The Network is the model’s schematic: what drains into what. The [[catchment-map|map]] is the geography: the catchment boundary, each unit’s area, the farm parcels, dams, gauges and rivers. A model builds and runs without it; with it, areas come from the drawing instead of being typed, and results can be read on the map.'
-					}
-				]
-			},
-			{
-				heading: 'Steps',
-				blocks: [
-					{
-						type: 'steps',
-						items: [
-							'Draw the boundary with **Draw a shape**, or **Upload GeoJSON** (WGS84). The header counts the features and gives the boundary’s area.',
-							'Add dams, abstraction points and gauges with **Place a point**, and parcels with **Draw a shape**. **Snap to features** puts a corner on a neighbour’s corner or edge.',
-							'With an elevation model on the server, **Delineate** draws the terrain channels (solid lines): click one at the catchment’s outlet and the catchment above it is proposed, following the terrain, to accept or reject. The river network’s dashed lines are for reference only and can sit off the terrain channels.',
-							'A catchment over about 100 km across is worked out in the background (or tick **work it out in the background**); the map shows the proposal when it is ready. Where pans drain part of it, **Which area** lets you take the gross area (the default, as WR2012’s quaternaries are) or the effective one without them.',
-							'On a dam’s card, say whether it stands **On the river** or **Off-channel** (filled by a pump or a furrow): Start and Divide place an off-channel dam’s unit where its own outflow meets the river, and propose its inflow and runoff shares from that.',
-							'An accepted boundary is on the map only, not in the model yet. Its card, and the message after accepting, offer the next step: **Divide the model** gives each unit its boundary’s area and order (**Start from the map** while the model is empty makes a unit of each boundary), each value ticked to take it.',
-							'While the model is empty, **Start from the map** proposes the units, their areas and their order from the boundary and the points; each value is ticked to take it.',
-							'With water occurrence data on the server, **Trace a dam** proposes a dam’s outline from a click inside it.',
-							'**Measure** and **Download GeoJSON** are there for everyone, viewers too.'
-						]
-					}
-				]
-			}
-		],
-		terms: ['catchment-map', 'delineation', 'map-area', 'area-basis', 'map-checks', 'map-results', 'quaternary', 'farm-area'],
-		related: ['start-from-the-map', 'build-the-network']
-	},
-	{
-		id: 'dams-page',
-		title: 'Dams: every dam’s level in one run',
-		summary: 'How full each dam ran, how long it sat at its minimum, and how storage moved over the record.',
-		kind: 'page',
-		tab: 'dams',
-		sections: [
-			{
-				heading: 'What the page shows',
-				blocks: [
-					{
-						type: 'p',
-						text: 'Every hydrological unit with a [[dam-capacity|dam capacity]] of at least 1 m³, with its [[dam-storage|storage]] from the latest run: how full it is as a share of that day’s capacity, a sparkline of the record, and how many days it sat at its [[dam-min|minimum level]]. Pick a dam for its chart.'
-					},
-					{
-						type: 'p',
-						text: 'Levels are shares of the capacity on the day, so a dam losing capacity to [[dam-sediment|sediment]], or coming into service part way through the record, reads correctly. **Open in Runs & results** goes to the run the page shows.'
-					}
-				]
-			}
-		],
-		terms: ['dam-storage', 'dam-capacity', 'dam-min', 'dam-evaporation', 'spill'],
-		related: ['run-and-read-results', 'a-day-on-a-farm']
-	},
-	{
-		id: 'river-page',
-		title: 'River & reserve: is enough left in the river?',
-		summary: 'One run’s river against its Ecological Reserve: the days the EWR was not met, the water account and how this run differs from the one before.',
-		kind: 'page',
-		tab: 'river',
-		sections: [
-			{
-				heading: 'What the page shows',
-				blocks: [
-					{
-						type: 'p',
-						text: 'One run’s river against its [[ewr]]: tiles for the share of days the EWR was not met at the outflow gauge ([[ewr-days-not-met]]), each with its change from the run before; the flow chart against the EWR; [[reserve-compliance|Reserve compliance]] at each EWR site; and the [[water-account]] of where the catchment’s water went.'
-					},
-					{
-						type: 'p',
-						text: 'The page shows the newest run; pick another with the **Run** menu in the header (Back returns to the one before). **Open in Runs & results** opens the same run there.'
-					}
-				]
-			}
-		],
-		terms: ['ewr', 'ewr-days-not-met', 'reserve-compliance', 'water-account', 'pragmatic-ewr'],
-		related: ['set-the-ewr', 'run-and-read-results']
-	},
-	{
-		id: 'units-page',
-		title: 'Hydrological units: how much demand each run supplied',
-		summary: 'Each unit’s irrigation demand against what a run supplied, who is short this week, and the curtailment and assurance of supply panels.',
-		kind: 'page',
-		tab: 'supply',
-		sections: [
-			{
-				heading: 'What the page shows',
-				blocks: [
-					{
-						type: 'p',
-						text: 'One card per hydrological unit with the share of its [[irrigation-demand]] the run supplied, beside the picked unit’s chart. The header counts the units and how many were short this week. Tiles give the catchment’s [[irrigation-supplied]] and how many units fell below 95 %.'
-					},
-					{
-						type: 'p',
-						text: 'Below the cards: the curtailment panel with its reporting window and share-the-pain board ([[guide:curtailment-targets]]), and [[assurance-of-supply]]. Pick another run with **Run shown** in the header.'
-					}
-				]
-			}
-		],
-		terms: ['irrigation-demand', 'irrigation-supplied', 'irrigation-deficit', 'assurance-of-supply'],
-		related: ['curtailment-targets', 'run-and-read-results']
-	},
-	{
-		id: 'project-page',
-		title: 'Project: members, publishing and sharing',
-		summary: 'What the project holds, who can open it and with which role, and how a run reaches the people outside the model.',
-		kind: 'page',
-		tab: 'project',
-		sections: [
-			{
-				heading: 'What the page holds',
-				blocks: [
-					{
-						type: 'list',
-						items: [
-							'**The model**: headline facts (units, gauges, catchment area, dams, irrigated area, transfers, series, runs), each linking to where it is edited.',
-							'**Download** in the header: the whole project as one JSON file (model, settings and input series), for every member.',
-							'**Members**: who can open the project and with which [[roles|role]]. Owners add people and change roles.',
-							'**Farmers**: which hydrological units each farmer is linked to; a farmer reads only their own.',
-							'**Share links**: read-only links for people outside the project, to the published baseline.'
-						]
-					}
-				]
-			},
-			{
-				heading: 'Roles',
-				blocks: [
-					{
-						type: 'p',
-						text: 'A **viewer** reads everything; an **editor** also changes the model, uploads data and runs it; an **owner** also manages members. A **farmer** reads only the units linked to them. An **applicant** builds licence applications on the published baseline and never sees the model ([[guide:applications-page]]).'
-					}
-				]
-			},
-			{
-				heading: 'Publishing a run',
-				blocks: [
-					{
-						type: 'p',
-						text: 'Nobody outside the model sees a run until an editor publishes it: in **Runs & results**, **Publish this run**, with the catchment’s restriction notice. That run is the [[published-baseline]]: farmers read their figures from it, share links show it, and applications start from it.'
-					}
-				]
-			}
-		],
-		terms: ['roles', 'published-baseline', 'project'],
-		related: ['create-a-project', 'applications-page']
-	},
-	{
-		id: 'history-page',
-		title: 'History: every change, who made it and when',
-		summary: 'The model’s change log: read any earlier version, see how it differs from now, and restore it as a new change.',
-		kind: 'page',
-		tab: 'history',
-		sections: [
-			{
-				heading: 'What the page shows',
-				blocks: [
-					{
-						type: 'p',
-						text: 'Every saved change to the model and settings, every upload, run, publication and membership change, newest first and grouped by day, each with who made it, when, and the reason they gave. Filter by **Hydrological unit**, **Kind of change** or **Parameter**; a field’s own history line links here with those filters set.'
-					},
-					{
-						type: 'p',
-						text: 'Pick a saved version to see **Differences from now**. An editor can restore it; restoring saves it as a new change, so nothing is ever erased. It is hidden from the sidebar until you turn it on in **Choose sections**.'
-					}
-				]
-			}
-		],
-		terms: ['run', 'roles'],
-		related: ['project-page']
-	}
+	// ---- Pages, one by one (./guides-pages.ts) --------------------------------
+	...PAGE_GUIDES
 ];
 
 /** The setup path on the /help landing page: one step per workspace tab. */

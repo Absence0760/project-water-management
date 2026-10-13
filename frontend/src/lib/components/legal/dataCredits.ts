@@ -152,12 +152,13 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 	},
 	{
 		id: 'geonames',
-		name: 'GeoNames gazetteer (South Africa)',
-		usedFor: 'The Map’s search: the place and farm names it finds, after the map’s own layers.',
+		name: 'GeoNames gazetteer (South Africa and its neighbours)',
+		usedFor:
+			'The Map’s search: the place and farm names it finds, after the map’s own layers, in South Africa and, where the map reaches over the border, in Botswana, Lesotho, Mozambique, Namibia, Eswatini and Zimbabwe.',
 		publisher: 'GeoNames (geonames.org)',
 		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
 		licenceUrl: 'https://download.geonames.org/export/dump/readme.txt',
-		read: '2026-10-12',
+		read: '2026-10-13',
 		statements: [GEONAMES_STATEMENT]
 	},
 	{

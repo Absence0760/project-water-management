@@ -89,6 +89,10 @@ describe('labels', () => {
 			expect(ids, key).toContain(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: key })!.split('#')[1]);
 		}
 	});
+	it('names each settings group as its panel’s heading', () => {
+		const label = new Map<string, string>(SETTINGS_SECTIONS.map((x) => [x.id, x.label]));
+		for (const [key, name] of Object.entries(SETTING_NOTE_GROUPS)) expect(name, key).toBe(label.get(`set-${key}`));
+	});
 });
 
 describe('bodyProblem', () => {

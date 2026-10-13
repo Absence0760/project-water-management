@@ -167,6 +167,8 @@ export const af: Catalogue = {
 	'3e7d8f8f': 'Kon nie hier kopieer nie. Laai hulle af, of skryf hulle neer.',
 	// A 6-digit code after your password. Turn on one or both.
 	'da7cd1d9': '’n 6-syferkode ná jou wagwoord. Skakel een of albei aan.',
+	// How two-step sign-in works
+	'5975f901': 'Hoe tweestap-intekening werk',
 	// Someone asked to remove two-step sign-in from your account, saying they can’t get a code. It will be removed at {when}, unless it’s cancelled.
 	'7842bac5': 'Iemand het gevra om tweestap-intekening van jou rekening te verwyder, en gesê hulle kan nie ’n kode kry nie. Dit word om {when} verwyder, tensy dit gekanselleer word.',
 	// If that wasn’t you, cancel it now with a code from your authenticator app or your email, then change your password.
@@ -437,6 +439,8 @@ export const af: Catalogue = {
 	'3cf9b306': 'Jou hidrologiese eenhede in hierdie opvanggebied',
 	// Forecast
 	'5f3a8bf0': 'Voorspelling',
+	// What is the forecast?
+	'6b9e0138': 'Wat is die voorspelling?',
 	// Last 12 months, in ML
 	'99e77075': 'Afgelope 12 maande, in ML',
 	// Last 12 months, in m³
@@ -453,6 +457,8 @@ export const af: Catalogue = {
 	'd82c623d': 'Wat is die seisoensvooruitsig?',
 	// Your registered water
 	'97df4b2d': 'Jou geregistreerde water',
+	// What is registered water?
+	'38530e29': 'Wat is geregistreerde water?',
 	// Your hydrological unit on the river
 	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season
@@ -465,6 +471,8 @@ export const af: Catalogue = {
 	'e557592b': 'Wys in',
 	// Couldn’t save your choice to your account. It applies on this phone.
 	'0515b26b': 'Kon nie jou keuse in jou rekening stoor nie. Dit geld op hierdie foon.',
+	// What do %, m³ and ML mean?
+	'0ea1710d': 'Wat beteken %, m³ en ML?',
 	// Published by the WUA on {published}. Data up to {until} ({age}). Ask your WUA if newer figures are coming.
 	'25e88ab0': 'Deur die WGV gepubliseer op {published}. Data tot {until} ({age}). Vra jou WGV of nuwer syfers op pad is.',
 	// Published by the WUA on {published}. Data up to {until}.
@@ -1809,6 +1817,8 @@ export const af: Catalogue = {
 	'eb3bc0dd': 'Terug na jou rekening',
 	// At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00).
 	'6e6c53b1': 'Hoogstens {cap} waarskuwings-e-posse per dag kom dadelik. Die res wag vir die volgende oggend se opsomming (06:00).',
+	// What are alert emails?
+	'ae5d5695': 'Wat is waarskuwings-e-posse?',
 	// Loading…
 	'2e7e4ae3': 'Laai tans…',
 	// None of your catchments can send you alerts yet.
@@ -1839,6 +1849,8 @@ export const af: Catalogue = {
 	'691bf45c': 'Uitnodigings',
 	// Nobody joins a catchment or team for you: you join when you accept, and whoever invited you sees only that the invitation was declined.
 	'a535b7ea': 'Niemand sluit namens jou by ’n opvanggebied of span aan nie: jy sluit aan wanneer jy aanvaar, en wie jou ook al uitgenooi het, sien net dat die uitnodiging afgewys is.',
+	// What does accepting mean?
+	'bd6e2772': 'Wat beteken dit om te aanvaar?',
 	// You have no invitations waiting.
 	'e22459b8': 'Jy het geen uitnodigings wat wag nie.',
 	// {inviter} invited you to the team as {role}.
@@ -1999,6 +2011,8 @@ export const af: Catalogue = {
 	'8ff22513': 'Ons kan tweestap-intekening van jou rekening verwyder, sodat jy met jou wagwoord kan inteken en dit weer kan opstel.',
 	// To keep your account safe, this takes 3 days. We email you a link to confirm. Once you open it, two-step sign-in is removed 3 days later, and we email you every day until then, so you can cancel it if it wasn’t you.
 	'98ea5d5f': 'Om jou rekening veilig te hou, neem dit 3 dae. Ons e-pos vir jou ’n skakel om te bevestig. Sodra jy dit oopmaak, word tweestap-intekening 3 dae later verwyder, en ons e-pos jou elke dag tot dan, sodat jy dit kan kanselleer as dit nie jy was nie.',
+	// Nothing else changes: your password and everything in your account stay as they are.
+	'30b49a6a': 'Niks anders verander nie: jou wagwoord en alles in jou rekening bly soos dit is.',
 	// If you’re in a team, a team admin can remove it for you straight away.
 	'6317a642': 'As jy in ’n span is, kan ’n spanadministrateur dit dadelik vir jou verwyder.',
 	// Email me a link

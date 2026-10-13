@@ -955,17 +955,17 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.chirpsFactorsChanged) {
 		out.push(
-			`The monthly CHIRPS factors this run applies differ by more than ${CHIRPS_FACTOR_TOLERANCE * 100} % in some month from those the fit ran on: new days shared by the catchment rain and CHIRPS, or preliminary CHIRPS turned final, moved them, and with them the rain on every day CHIRPS fills. Refit, or fit the factors on fixed water years (Settings → CHIRPS fit period).`
+			`The monthly CHIRPS factors this run applies differ by more than ${CHIRPS_FACTOR_TOLERANCE * 100} % in some month from those the fit ran on: new days shared by the catchment rain and CHIRPS, or preliminary CHIRPS turned final, moved them, and with them the rain on every day CHIRPS fills. Refit, or fit the factors on fixed water years (Settings → Rain gaps → CHIRPS gap filling → Fit ranges).`
 		);
 	}
 	if (status.observedOriginChanged) {
 		out.push('The calibration record now comes from another source, or was given in another unit, than the one the fit ran on. Check the record, then refit before relying on the parameters.');
 	}
 	if (status.flowFillChanged) {
-		out.push('The gap filling of the calibration record has changed since the fit, so the filled days the fit read are not the ones a run reads now (Settings → Flow gaps). Refit before relying on the parameters.');
+		out.push('The gap filling of the calibration record has changed since the fit, so the filled days the fit read are not the ones a run reads now (Settings → Calibration record → Flow gaps). Refit before relying on the parameters.');
 	}
 	if (status.draftRules) {
-		out.push('Automated calibration picked this fit under draft rules, not yet signed off by the hydrologist, so it is not evidence until they are (Settings → Calibration rules).');
+		out.push('Automated calibration picked this fit under draft rules, not yet signed off by the hydrologist, so it is not evidence until they are (Settings → Fit the parameters → Calibration rules).');
 	}
 	if (status.rulesChanged) out.push('The calibration rules have changed since automated calibration picked this fit: run it again under the current rules.');
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged) {

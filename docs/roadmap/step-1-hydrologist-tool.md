@@ -1011,7 +1011,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > **Engine done (issue #4 phase 4):** `packages/engine/src/calibrate/` (DDS,
 > objectives, split-sample and differential split-sample validation, exclusions,
 > GR4J, the year-balanced KGE below); [model.md §2.10b](../model.md).
-> **UI done (phase 5):** Settings → Flow calibration → Fit automatically, in a
+> **UI done (phase 5):** Settings → Fit the parameters, in a
 > Web Worker (`frontend/src/lib/calibration/`), on `GET /projects/:id/model-input`;
 > Cancel terminates the worker at once. [ui.md § Settings](../ui.md).
 > **Done (phase 8, optional WR2012 check):** the user enters the quaternary's
@@ -1040,7 +1040,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     `runModel`, so no `ENGINE_VERSION` bump.
   - **frontend:**
     - `lib/calibration/autocal.worker.ts`;
-    - "Fit automatically" in Settings → Flow calibration: pick the
+    - "Fit automatically" (now Settings → Fit the parameters): pick the
       parameters and bounds, the objective, a max-evaluations budget (default
       400; roughly 10–30 s);
     - live progress and Cancel;

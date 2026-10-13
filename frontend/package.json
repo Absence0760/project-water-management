@@ -7,7 +7,7 @@
 		"dev": "vite dev --port 7777",
 		"build": "vite build",
 		"preview": "vite preview --port 8888",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",

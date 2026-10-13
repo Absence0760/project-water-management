@@ -13,9 +13,14 @@
 	// lost factor that is waiting (205_mfa_recovery) is shown, and a code
 	// cancels it. Someone whose roles need it (an owner or admin where a
 	// project or team requires it, or someone who takes part in licence
-	// decisions; GET /auth/mfa `required`) is told so.
+	// decisions; GET /auth/mfa `required`) is told so. "How two-step sign-in
+	// works" goes to the farmer words (farm-two-step, translated) in the farm
+	// frame, else to the workspace's guide.
 	import { onDestroy, onMount, tick } from 'svelte';
+	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { api, ApiError, type MfaMethod, type MfaStatus } from '$lib/api';
+	import { farmFrameReader } from '$lib/auth/frame';
 	import { mfaStatusSeen } from '$lib/auth/mfaPrompt.svelte';
 	import { resendTimer } from '$lib/auth/resendTimer.svelte';
 	import { session } from '$lib/auth/session.svelte';
@@ -25,12 +30,14 @@
 	import { t, tn, plural } from '$lib/i18n/locale.svelte';
 	import { fewRecoveryCodes, RECOVERY_CODES_FILE, recoveryCodesText } from '$lib/auth/mfaReset';
 	import { fmtStampTime } from '$lib/components/farm/format';
+	import { wordsHref } from '$lib/components/farm/load';
 	import type { QrDrawing } from './qr';
 
 	// i18n-section: account.two-step.counts
 	const CODES_LEFT = plural({ one: '{n} recovery code left.', other: '{n} recovery codes left.' });
 	// i18n-section: account.two-step
 
+	const inFarmFrame = farmFrameReader();
 	let status = $state<MfaStatus | null>(null);
 	let loadError = $state<string | null>(null);
 	const on = (m: MfaMethod) => status?.methods.includes(m) ?? false;
@@ -328,7 +335,7 @@
 			</div>
 		{/if}
 
-		<p class="muted intro">{t('A 6-digit code after your password. Turn on one or both.')}</p>
+		<p class="muted intro">{t('A 6-digit code after your password. Turn on one or both.')} {#if inFarmFrame()}<a href={wordsHref(base, page.url, 'farm-two-step')}>{t('How two-step sign-in works')}</a>{:else}<a href="{base}/help/guides/two-step-sign-in">{t('How two-step sign-in works')}</a>{/if}</p>
 		{#if status.pendingReset}
 			<div class="alert alert-warning" role="alert" data-pending-reset>
 				<p>

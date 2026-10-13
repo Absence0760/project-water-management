@@ -321,6 +321,7 @@
 			{:else}
 				<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
 			{/if}
+			<a href="{base}/help/guides/run-and-read-results#read-top-to-bottom">About this report</a>
 			<button type="button" class="btn btn-primary" disabled={!ready} onclick={() => window.print()}>Download PDF</button>
 			<!-- An impact report whose baseline can't be read has no server PDF: the API would refuse it (the section says why). -->
 			{#if run && (!againstParam || impact)}

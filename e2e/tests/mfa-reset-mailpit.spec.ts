@@ -20,6 +20,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { viaMfaApi } from '../support/mfaApi.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { emailIds, linkIn, mailpitUp, waitForEmail } from '../support/mailpit.ts';
+import { words } from '../support/lang.ts';
 import { sessionToken } from '../support/session.ts';
 
 test.beforeAll(async () => {
@@ -334,5 +335,30 @@ test('dead links: the confirmation and cancel pages say so, and pass an a11y sca
 	await expectNoViolations(page);
 	await page.getByRole('button', { name: 'Cancel the removal' }).click();
 	await expect(page.getByRole('alert')).toContainText('This link no longer works');
+	await stranger.close();
+});
+
+// The confirmation page is opened signed out, often in a fresh tab from the
+// email: it shows the reader's language (it once stayed English: the layout
+// didn't count it as translated), and says itself what happens next, since
+// the help (/help, /farm/words) needs a sign-in its reader can't give.
+test('the confirmation page, signed out in a fresh tab, is in Afrikaans and says what happens next', async ({ browser }) => {
+	const af = await words('af');
+	const stranger = await browser.newContext();
+	const page = await stranger.newPage();
+	await page.addInitScript(() => localStorage.setItem('wm.locale', 'af'));
+	await page.goto('/mfa-reset?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+	await expect(page.getByRole('heading', { name: af('Remove two-step sign-in') })).toBeVisible();
+	for (const line of [
+		'Confirm to start a 3-day wait. When it ends, two-step sign-in is removed from your account and every device is signed out.',
+		'Until then your codes keep working, and we email you every day with a link to cancel. Signing in with a code also cancels it.',
+		'Nothing else changes: your password and everything in your account stay as they are.'
+	]) {
+		await expect(page.getByText(af(line))).toBeVisible();
+	}
+	// Still the sign-in family's page, not a redirect to a sign-in it can't finish.
+	await expect(page).toHaveURL(/\/mfa-reset$/);
+	await expect(page.getByRole('button', { name: af('Start the 3-day wait') })).toBeVisible();
+	await expectNoViolations(page);
 	await stranger.close();
 });

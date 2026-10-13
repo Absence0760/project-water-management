@@ -23,7 +23,7 @@ describe('zeroRainShading', () => {
 		expect(r.ranges).toHaveLength(1);
 		expect(r.ranges[0]!.start <= '2003-05-01' && r.ranges[0]!.end >= '2003-07-31').toBe(true);
 		expect(r.days).toBeGreaterThanOrEqual(92);
-		expect(r.caption).toBe(`Shaded: 1 period, ${r.days} days, that a run treats as missing, so CHIRPS fills them (Settings → Zero-rain runs).`);
+		expect(r.caption).toBe(`Shaded: 1 period, ${r.days} days, that a run treats as missing, so CHIRPS fills them (Settings → Rain gaps → Flagged rain).`);
 	});
 
 	it('shades nothing when the run is kept dry or the mode is as recorded, or with no flagged run (positive control above)', () => {

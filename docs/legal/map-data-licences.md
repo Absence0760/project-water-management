@@ -88,6 +88,14 @@ OSMF Attribution Guidelines (secondary-official guidance):
 - Attribution "may be placed adjacent to the map".
 - It may collapse "automatically on map interaction such as panning, clicking, or zooming" or after five seconds, if the licence stays findable.
 
+### 3.3a GeoNames: the Map search's place names (added 2026-10-13)
+
+Not part of the question above, recorded here so this page covers every licensor whose data the map serves.
+
+- **What is used.** GeoNames' country dumps for South Africa (`ZA`) and, since 2026-10-13, its six neighbours (`BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`), a neighbour's places only inside the basemap's extent. Names, feature codes, province codes, country codes and positions, stored in `gazetteer_reference` and searched by the Map tab (`docs/maps.md` § Search, § Gazetteer).
+- **The licence.** Each of the seven dumps carries the same `readme.txt`: "This work is licensed under a Creative Commons Attribution 4.0 License" and "The Data is provided "as is" without warranty or any representation of accuracy, timeliness or completeness" (read 2026-10-13). CC BY 4.0 allows commercial use and adaptation with attribution, so adding the neighbours changes no term. No share-alike, no field-of-use limit, no country carve-out.
+- **The credit.** "GeoNames (geonames.org), CC BY 4.0" is stored on every place and shown under every search that lists one, linking to `/data-sources#geonames`, whose entry names the countries and links the licence. CC BY 4.0 §3(a)(1) asks for the licensor's identification, a licence link and an indication of changes, "in any reasonable manner based on the medium": the load keeps a subset (some kinds of place, a neighbour's places near the border) without changing a record; the data-sources entry says which countries, and `docs/maps.md` § Gazetteer what is kept. **Assessment: met** (medium-high confidence; it is the same licence and credit as the South Africa load, which § 2's reviewer didn't examine but which needs no Terms change, since CC BY imposes no end-user restriction to pass on).
+
 ### 3.4 South African law (enforceability of the end-user terms)
 
 - The licence needs a "written license agreement" with End Users. Click-wrap acceptance at sign-up or invitation is a contract concluded by data message. ECTA (Act 25 of 2002) s22(1) gives such agreements force, and s12 treats a data message as satisfying "writing". These are cited from memory and weren't re-read this session.
@@ -192,6 +200,7 @@ A written yes is the licensor's own "prior written consent" (§2.1.3). It makes 
 - Google Earth Engine catalogue, JRC GSW v1.4 terms: https://developers.google.com/earth-engine/datasets/catalog/JRC_GSW1_4_GlobalSurfaceWater
 - Commission Delegated Regulation (EU) 1159/2013, Arts 3, 4, 8 (legislation.gov.uk copy; EUR-Lex was unreadable): https://www.legislation.gov.uk/eur/2013/1159/article/8 ; EU version: https://eur-lex.europa.eu/eli/reg_del/2013/1159/oj/eng
 - Copernicus Land data policy (secondary, currency of 1159/2013): https://land.copernicus.eu/en/data-policy
+- GeoNames dump licence (`readme.txt`, identical in the ZA, BW, LS, MZ, NA, SZ and ZW dumps; read 2026-10-13): https://download.geonames.org/export/dump/readme.txt
 - OSMF Licence/Attribution Guidelines: https://osmfoundation.org/wiki/Licence/Attribution_Guidelines
 - ECTA, Act 25 of 2002 (s12, s22; cited from memory, not re-read): https://www.gov.za/documents/electronic-communications-and-transactions-act
 - Repo: `frontend/src/routes/terms/+page.svelte`; `docs/legal-status.md`; `docs/maps.md`; `backend/src/farms/view.ts`; `frontend/src/lib/components/{map/CatchmentMap.svelte,map/mapLayers.ts,map/mapExport.ts,farm/FarmMapCanvas.svelte,farm/farmMap.ts,legal/dataCredits.ts}`; PR #369 body.

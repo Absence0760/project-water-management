@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The Map search lists a place found by an alternate name as 'Tshabong (also Tsabong)' (mapSearch.ts hitName, migration 237): well under 1 KB gzipped; the total measured 2016 of 2016 KB after it, so this keeps the rounding from tipping the next change over"
+}

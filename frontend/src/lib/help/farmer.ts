@@ -103,7 +103,71 @@ export const FARMER_HELP: HelpEntry[] = [
 		long: 'Before the season, the model runs the whole season from where the catchment’s dams stood on its first day, once with each past year’s rain and river flows. Your WUA looks at what several irrigation levels would give, decides on one and publishes it; the app never picks a level.\n\nThe card gives what that level gave your own hydrological unit across those past years: about how much of the water you needed you got, the range in most of the years, and how full your dam ended the season. It never shows a neighbour’s figures.\n\nThe weather this season will be its own, so your share can fall outside that range. Your WUA reviews the level on the date the card gives. Only a notice from your WUA or from DWS is a restriction.',
 		category: 'farmer',
 		aliases: ['seisoensvooruitsig', 'hierdie seisoen', 'this season', 'outlook'],
-		related: ['farm-wua', 'farm-modelled', 'farm-needed'],
+		related: ['farm-wua', 'farm-modelled', 'farm-needed', 'farm-forecast'],
 		source: 'docs/design/planning-outputs.md §3.5; docs/model.md §2.15'
+	},
+	{
+		id: 'farm-forecast',
+		term: 'Forecast (Next 14 days)',
+		short: 'What the model expects for your dam and your water in the next days, on the rain forecast. Not the season outlook, and not a promise.',
+		long: 'When your WUA publishes a forecast, the model runs the coming days on the rain forecast, starting from your hydrological unit’s latest figures. The card gives the lowest level it expects your dam to reach, and around which day, and on how many of those days you may be short of water.\n\nIt is not the season outlook. The season outlook looks at the whole season in past years’ weather; the forecast looks only at the next few days, on the rain forecast for them.\n\nRain forecasts change from day to day, so look at the date the card says the forecast was made: when it is more than a few days old, the card says so first. Only a notice from your WUA or from DWS is a restriction.',
+		category: 'farmer',
+		aliases: ['voorspelling', 'next 14 days'],
+		related: ['farm-season-outlook', 'farm-modelled', 'farm-stop-level'],
+		source: 'docs/design/farmer-view.md §3 Q1 (E2); WP-2.12'
+	},
+	{
+		id: 'farm-registered',
+		term: 'Your registered water',
+		short: 'The water use and dam storage registered for your hydrological unit with DWS. Not a right to that water, and not proof a use is lawful.',
+		long: 'Water users register their water use with the Department of Water and Sanitation (DWS). The card shows what is registered for your hydrological unit today: the surface water and groundwater a year, and the dam storage. It shows only your own totals, never a neighbour’s, and no names or registration numbers.\n\nBeside them it puts what the model supplied this season and what your dam holds in the model when full, so you can compare. The model works out your water from rain, river flow and your crops, not from what is registered, so the two can differ.\n\nA registered volume is not an entitlement: it doesn’t give you that water, and it doesn’t say whether a use is lawful. If the registered figures look wrong, ask your WUA.',
+		category: 'farmer',
+		aliases: ['geregistreerde water', 'registration', 'WARMS'],
+		related: ['farm-modelled', 'farm-wua', 'farm-pct-volume'],
+		source: 'docs/allocations.md § Who sees what; issue #72'
+	},
+	{
+		id: 'farm-pct-volume',
+		term: 'Percent, m³ and ML',
+		short: 'A percent compares two amounts, such as the water you received with what you needed. m³ and ML are amounts of water: 1 ML is 1 000 m³.',
+		long: '"83 % of what you needed" means you received 83 parts for every 100 parts of water your hydrological unit needed this season. "40 % full" means your dam holds 40 parts for every 100 it holds when full.\n\nA cubic metre (m³) is 1 000 litres. A megalitre (ML) is a million litres, which is 1 000 m³. The ML and m³ buttons under "Water you received this season" switch the volumes on your hydrological unit’s pages between the two: the water is the same, only the unit changes. Your choice is saved to your account and kept on this phone; you can also change it on your account page, under Language and units.',
+		category: 'farmer',
+		aliases: ['persentasie', 'cubic metre', 'megalitre', 'volume unit'],
+		related: ['farm-needed', 'farm-stop-level'],
+		source: 'docs/ui.md § Language (volume unit); app_user.volume_unit'
+	},
+	{
+		id: 'farm-alerts',
+		term: 'Alert emails',
+		short: 'Emails that tell you when the model puts your dam below the level your WUA set, or when your WUA publishes a restriction notice.',
+		long: 'Your WUA decides which alerts are switched on in the catchment, and for a dam alert the level it warns at. On the Alert emails page in your account you choose, for each one, whether you get it right away, in a summary once a day at 06:00, or not at all. On a day with many alerts, only the first few come right away; the rest wait for the next morning’s summary.\n\nA dam alert is the model’s estimate, from the latest figures or from the rain forecast. It is not a restriction: only a notice from your WUA or from DWS is one.\n\nEvery alert email has a link to stop that kind of email, and one to say whether it was useful. If emails to your address bounce back, alert emails are paused; the Alert emails page says so and lets you turn them back on.',
+		category: 'farmer',
+		aliases: ['waarskuwings-e-posse', 'alerts'],
+		related: ['farm-stop-level', 'farm-forecast', 'farm-wua'],
+		source: 'docs/ui.md § Alerts (WP-2.13)'
+	},
+	// ---- Words on your account pages --------------------------------------------
+	// The Account page's Two-step sign-in box and the Invitations page link here
+	// for a farmer; the signed-out pages (/mfa-reset, the sign-in code step) say
+	// what happens next on the page itself, since this page needs a sign-in.
+	{
+		id: 'farm-two-step',
+		term: 'Two-step sign-in',
+		short: 'After your password, a 6-digit code from an app on your phone or from an email, so someone who learns your password still can’t get in.',
+		long: 'It is your choice: your hydrological unit’s pages don’t need it. Turn it on under Two-step sign-in on your Account page, in one way or both. An authenticator app on your phone makes a new code every 30 seconds. A code by email is sent each time you sign in and works for 10 minutes. The app is the safer of the two, since anyone who can read your email can also use a code sent there.\n\nThe first time you turn it on, you get ten recovery codes, shown only once. Download or copy them, and keep them somewhere safe, away from your phone. Each one works once, in place of a code. Your Account page says how many are left, and makes a new set when you need one.\n\nIf you lose your phone, sign in with a recovery code. If you have lost your recovery codes too, choose to use a recovery code on the step that asks for the code, then the link for lost recovery codes, and we email you a link. Once you open it, two-step sign-in is removed after 3 days, and you are signed out on every device; nothing else about your account changes. The wait keeps your account safe from someone who knows your password: we email you every day until then with a link to cancel, and signing in with a code cancels it too.',
+		category: 'farmer',
+		aliases: ['tweestap-intekening', '2FA', 'authenticator', 'recovery codes', 'lost phone', 'code by email'],
+		related: ['farm-invitation'],
+		source: 'docs/security.md § Two-step sign-in; docs/ui.md § Sign-in pages, § Account'
+	},
+	{
+		id: 'farm-invitation',
+		term: 'An invitation to a catchment',
+		short: 'An email asking you to join a catchment, usually from your WUA. Nothing changes until you accept, and you can decline.',
+		long: 'Your WUA, or whoever models the catchment for it, invites you by your email address. The invitation names the catchment, who sent it, what you join as, the hydrological units it links you to, and the date it is open until. After that date, ask whoever sent it for a new one.\n\nWhen you accept as a farmer, you see the pages of those hydrological units: the figures your WUA published for them, your dam and your water. You never see another hydrological unit’s name or figures. When you decline, whoever sent it sees only that you declined. Nobody can make you join.\n\nThe people who run the catchment’s model see your name, your email address and which hydrological units you are linked to. Other farmers in the catchment never see your name, your email address or your figures. If the hydrological units named aren’t yours, decline and tell your WUA.',
+		category: 'farmer',
+		aliases: ['uitnodiging', 'invite', 'accept', 'decline'],
+		related: ['farm-wua', 'farm-two-step'],
+		source: 'docs/ui.md § Invitations; docs/security.md § Authorization (farm scope)'
 	}
 ];

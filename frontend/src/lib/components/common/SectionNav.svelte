@@ -796,8 +796,12 @@
 	.nav-body {
 		min-width: 0;
 	}
+	/* z-index 1: the sticky rail paints after the page beside it, as the app sidebar does (AppShell.svelte): painted
+	   first, every card part positioned after it (Hydrological units' facts and links) got a compositing layer of its
+	   own on Linux, blank for a moment as its card scrolled in (ui-playbook.md § 4, e2e/support/layers.ts). */
 	.rail-nav {
 		position: sticky;
+		z-index: 1;
 		top: calc(var(--header-h) + 0.75rem);
 		max-height: calc(100vh - var(--header-h) - var(--dock-h, 0px) - 1.5rem);
 		/* Only for a window shorter than the rail's tallest state (playbook § 2): never the usual case. */

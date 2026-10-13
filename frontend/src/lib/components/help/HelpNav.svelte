@@ -6,7 +6,8 @@
 	// (issue #162). One group shows its pages at a time: the heading is a
 	// disclosure button, and the group holding the page you're on opens by
 	// itself. All four open were ~1180 px tall, so the sticky column scrolled
-	// on its own at 1440×960 and 1280×800; one open fits both (help.spec.ts).
+	// on its own at 1440×960 and 1280×800; one open fits both, the longest
+	// (Reference) at ~715 px (help.spec.ts).
 	// The glossary is one page per topic; its terms are found by search, not
 	// listed here.
 	import { base } from '$app/paths';
@@ -37,7 +38,10 @@
 				{ href: '/help/glossary', label: 'Glossary' },
 				...topics.map((c) => ({ href: topicPath(c), label: CATEGORY_TITLES[c] })),
 				// Every upload and paste box's Expected format (issue #477).
-				{ href: '/help/formats', label: 'File formats' }
+				{ href: '/help/formats', label: 'File formats' },
+				// The public reference pages (outside /help, their own frame): how the engine is checked, and the data's sources and credits.
+				{ href: '/methods', label: 'How the model is checked' },
+				{ href: '/data-sources', label: 'Data sources and credits' }
 			]
 		}
 	];
@@ -147,10 +151,15 @@
 		margin-left: 0.2rem;
 		border-left: 1px solid var(--border);
 	}
+	/* 24 px rows (the target size), not 28: the longest groups (How to, and
+	   Reference with the glossary's topics and the /methods and /data-sources
+	   links) reached the 760 px a 1280×800 window leaves the column, and a
+	   label that wraps on Linux but not on macOS tipped it into scrolling
+	   (help.spec.ts holds 24 px of room for that). */
 	a {
 		display: flex;
 		align-items: center;
-		min-height: 28px;
+		min-height: 24px;
 		padding: 0.2rem 0.6rem;
 		border-left: 2px solid transparent;
 		border-radius: 0 var(--radius) var(--radius) 0;

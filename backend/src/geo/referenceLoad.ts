@@ -26,7 +26,7 @@ import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './cro
 import { DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
-import { placeRecords, replacePlaces } from './loadGazetteer.js';
+import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
 import { referenceLoadOf, type ReferenceLoadRecord } from './referenceOrigin.js';
 
 /** One kind of reference dataset, and whether production may load it. */
@@ -71,8 +71,9 @@ export const REFERENCE_KINDS = {
 		status: 'allowed',
 		sourcesRows: ['GeoNames'],
 		file: /\.txt(\.gz)?$/,
-		what: 'a GeoNames country dump (ZA.txt from download.geonames.org/export/dump/, gzipped or not)',
-		// South Africa's dump is about 20 MB of text; all of GeoNames' (allCountries) about 1.6 GB. Past this it is not one country's.
+		what: 'a GeoNames country dump of South Africa or its neighbours (ZA.txt, BW.txt, … from download.geonames.org/export/dump/, or several concatenated; gzipped or not)',
+		// South Africa's dump is 12 MB of text, its six neighbours' 10 MB together (2026-10-13; 22 MB, 5 MB gzipped, for all seven);
+		// all of GeoNames' (allCountries) about 1.6 GB. Past this it is not the region's.
 		limits: { object: 64 * 1024 * 1024, text: 128 * 1024 * 1024 }
 	},
 	quaternaries: {
@@ -290,9 +291,9 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		const got = placeRecords(text, name, req.source ?? GEONAMES_SOURCE);
 		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
 		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
-		log(`left out ${got.leftOut} place(s) of the kinds the search doesn't keep`);
-		if (got.otherCountry) log(`left out ${got.otherCountry} place(s) outside South Africa (country code not ZA): is this GeoNames' ZA dump?`);
-		if (!got.records.length) throw new LoadError(`${req.key}: no place to load`, 'empty', 'the file has no place the load can take (a GeoNames dump: 19 tab-separated columns)');
+		log(placesSummary(got));
+		if (!got.records.length)
+			throw new LoadError(`${req.key}: no place to load`, 'empty', 'the file has no place the load can take (a GeoNames dump of South Africa and its neighbours: 19 tab-separated columns)');
 		try {
 			const written = await replacePlaces(client, req.dataset, got.records, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
