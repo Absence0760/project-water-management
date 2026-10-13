@@ -52,6 +52,11 @@ const renderedText = [
 	...TOUR.flatMap(stopTexts)
 ];
 
+it('stripAll removes what a single pass would leave behind', () => {
+	expect(stripAll('a <scr<b>ipt>b', /<\/?[A-Za-z][^<>]*>/g)).toBe('a b');
+	expect(stripAll('x <!-<!-- y -->- z --> w', /<!--[\s\S]*?-->/g)).toBe('x  w');
+});
+
 describe('guides', () => {
 	it('have unique, url-safe ids and known kinds and tabs', () => {
 		const ids = GUIDES.map((g) => g.id);
@@ -241,9 +246,14 @@ const panelCache = new Map<string, string[]>();
 const headingsOf = (id: string) => panelCache.get(id) ?? (panelCache.set(id, panelHeadings(id)), panelCache.get(id)!);
 
 /** Each "Settings → A → B" (or "A → B" where A is a panel) in a text, as its steps, markup removed. An ASCII "->" (the importer's plain-text notes) reads as "→". */
+/** Removes every match of `re`, again until none is left: one pass can join the pieces around a match into a new one (`<scr<b>ipt>`). */
+function stripAll(text: string, re: RegExp): string {
+	for (let prev = ''; prev !== text; ) [prev, text] = [text, text.replace(re, '')];
+	return text;
+}
+
 function settingsPaths(text: string): string[][] {
-	const plain = text
-		.replace(/<\/?[A-Za-z][^<>]*>/g, '')
+	const plain = stripAll(text, /<\/?[A-Za-z][^<>]*>/g)
 		.replace(/&amp;/g, '&')
 		.replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1')
 		.replace(/\*\*?/g, '')
@@ -300,9 +310,7 @@ describe('Settings paths named in help and in the app', () => {
 		.filter((f) => !f.includes('/lib/help/'))
 		.map((f) => [
 			f.startsWith(ENGINE) ? `engine${f.slice(ENGINE.length)}` : f.slice(SRC.length),
-			readFileSync(f, 'utf8')
-				.replace(/<!--[\s\S]*?-->/g, '')
-				.replace(/\/\*[\s\S]*?\*\//g, '')
+			stripAll(stripAll(readFileSync(f, 'utf8'), /<!--[\s\S]*?-->/g), /\/\*[\s\S]*?\*\//g)
 				.replace(/(^|[^:'"`\w])\/\/.*$/gm, '$1')
 		]);
 
