@@ -303,7 +303,13 @@ path" }` on any route for a path with an escaped unreserved character
 already a member, last owner/admin); `413` = request body over 4 MB (5 MB
 for `POST /projects/import`), a series over 60 000 days, or an export over its cap (50 MB for a CSV, 5 MB for `export.json`); `429` = an email was sent to this
 address moments ago, or sign-in is locked for this address (with
-`Retry-After`). Database errors are mapped to fixed messages and anything
+`Retry-After`). In production a `429` **without** `{ error }` is not the
+API's: Lambda refused the request at the API's reserved concurrency
+(`lambda_reserved_concurrency`, 10) before it ran, which a screen that loads
+several panels at once can meet on a cold start. Nothing ran, so the client
+(`frontend/src/lib/api/client.ts` `isLambdaThrottle`) sends it again, up to
+three times about 0.3, 0.6 and 1.2 s apart, whatever the method, and only
+then shows "The server is busy". Database errors are mapped to fixed messages and anything
 unexpected is `500 { error: "Internal server error" }`; raw database error
 text never reaches the client.
 

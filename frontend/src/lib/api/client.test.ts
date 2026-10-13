@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, assessmentCheckOf, createApi, scenarioProblems } from './client';
+import { ApiError, assessmentCheckOf, createApi, isLambdaThrottle, scenarioProblems, THROTTLE_RETRIES, throttleDelayMs } from './client';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 
 function mockFetch(status: number, body?: unknown, raw?: string) {
@@ -82,6 +82,53 @@ describe('createApi', () => {
 	});
 
 	// A sign-off, issuing or withdrawing a pack need a code from the last 10 minutes (licensing positions item 9).
+	// Lambda's throttle at the API's reserved concurrency: a 429 the API never wrote, so nothing ran.
+	describe('a request Lambda throttled', () => {
+		const throttled = () => new Response(JSON.stringify({ Message: 'Rate Exceeded.' }), { status: 429 });
+		const ok = () => new Response(JSON.stringify({ checks: [], required: true }), { status: 200 });
+
+		it('is resent after a wait, and answers once it gets through', async () => {
+			const f = vi.fn().mockResolvedValueOnce(throttled()).mockResolvedValueOnce(throttled()).mockResolvedValueOnce(ok());
+			const sleep = vi.fn(async () => {});
+			await expect(createApi('http://x', f, sleep).registrationChecks.list('p1')).resolves.toEqual({ checks: [], required: true });
+			expect(f).toHaveBeenCalledTimes(3);
+			expect(sleep).toHaveBeenCalledTimes(2);
+		});
+
+		it('resends a write the same way, body and all (it never ran)', async () => {
+			const f = vi.fn().mockResolvedValueOnce(throttled()).mockResolvedValueOnce(new Response(JSON.stringify({ required: false }), { status: 200 }));
+			await createApi('http://x', f, async () => {}).registrationChecks.setRequired('p1', false);
+			const [a, b] = f.mock.calls as unknown as [string, RequestInit][];
+			expect([b[0], b[1].method, b[1].body]).toEqual([a[0], a[1].method, a[1].body]);
+		});
+
+		it('gives up after THROTTLE_RETRIES resends with a plain-language error', async () => {
+			const f = vi.fn(async () => throttled());
+			const err = await createApi('http://x', f, async () => {}).registrationChecks.list('p1').catch((e) => e);
+			expect(f).toHaveBeenCalledTimes(THROTTLE_RETRIES + 1);
+			expect(err).toBeInstanceOf(ApiError);
+			expect([err.status, err.message]).toEqual([429, 'The server is busy; try again in a moment']);
+		});
+
+		it("never resends the API's own 429 (a lockout or a throttle has { error })", async () => {
+			const f = mockFetch(429, { error: 'too many sign-in attempts', code: 'signin_locked', params: { seconds: 60 } });
+			const sleep = vi.fn(async () => {});
+			await expect(createApi('http://x', f, sleep).auth.login('a@b.c', 'pw')).rejects.toMatchObject({ status: 429, code: 'signin_locked' });
+			expect(f).toHaveBeenCalledTimes(1);
+			expect(sleep).not.toHaveBeenCalled();
+		});
+
+		it('tells the two apart, and backs off with jitter', () => {
+			expect(isLambdaThrottle(429, { Message: 'Rate Exceeded.' })).toBe(true);
+			expect(isLambdaThrottle(429, undefined)).toBe(true);
+			expect(isLambdaThrottle(429, { error: 'x' })).toBe(false);
+			expect(isLambdaThrottle(503, undefined)).toBe(false);
+			expect([0, 1, 2].map((a) => throttleDelayMs(a, () => 0.5))).toEqual([300, 600, 1200]);
+			expect(throttleDelayMs(0, () => 0)).toBe(225);
+			expect(throttleDelayMs(0, () => 1)).toBe(375);
+		});
+	});
+
 	describe('401 mfa_fresh_code', () => {
 		const fresh = () => new Response(JSON.stringify({ error: 'needs a code', code: 'mfa_fresh_code' }), { status: 401 });
 		const ok = () => new Response(JSON.stringify({ done: true }), { status: 200 });

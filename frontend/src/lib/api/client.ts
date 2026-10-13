@@ -216,6 +216,24 @@ export class ApiError extends Error {
 
 type FetchFn = typeof fetch;
 
+/**
+ * A 429 the API never wrote: Lambda throttled the request at the API's
+ * reserved concurrency (infra lambda_reserved_concurrency) before it ran,
+ * which a screen that loads several panels at once can meet on a cold start.
+ * The API's own 429s (a lockout, a throttle) always carry `{ error }`.
+ * Nothing ran, so resending is safe whatever the method.
+ */
+export function isLambdaThrottle(status: number, data: unknown): boolean {
+	if (status !== 429) return false;
+	return !(data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string');
+}
+
+/** How many times a throttled request is resent (isLambdaThrottle), and the wait before each: about 0.3, 0.6, 1.2 s, jittered. */
+export const THROTTLE_RETRIES = 3;
+export function throttleDelayMs(attempt: number, random: () => number = Math.random): number {
+	return 300 * 2 ** attempt * (0.75 + random() / 2);
+}
+
 /** The 401's code when an action needs a code from the authenticator from the last 10 minutes (backend auth/stepUp.ts requireFreshCode). */
 export const FRESH_CODE = 'mfa_fresh_code';
 
@@ -246,6 +264,8 @@ function statusText(status: number): string {
 			return 'That conflicts with existing data';
 		case 413:
 			return 'That is too large to send';
+		case 429:
+			return 'The server is busy; try again in a moment';
 		default:
 			return status >= 500 ? 'The server had a problem' : `Request failed (${status})`;
 	}
@@ -268,7 +288,7 @@ function describeDetails(details: unknown): string {
 	return parts.length ? ` (${parts.slice(0, 3).join('; ')}${parts.length > 3 ? '; …' : ''})` : '';
 }
 
-export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(...a)) {
+export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(...a), sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))) {
 	const base = baseUrl.replace(/\/+$/, '');
 	/** Told of every error answer before it is thrown (onError below). */
 	const errorListeners = new Set<(err: ApiError) => void>();
@@ -304,30 +324,35 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 
 	async function send<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
 		let res: Response;
+		let data: unknown;
 		const headers = { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders };
-		try {
-			res = await fetchFn(`${base}${path}`, {
-				method,
-				credentials: 'include',
-				headers: Object.keys(headers).length ? headers : undefined,
-				body: body === undefined ? undefined : JSON.stringify(body)
-			});
-		} catch (e) {
-			throw new ApiError(0, statusText(0), e);
-		}
-		if (res.status === 204) return undefined as T;
-		// The WAF's sign-in CAPTCHA (infra/waf.tf SignInCaptchaPerIP): a request
-		// without a valid token gets 405 with this header, from CloudFront,
-		// never from the API. Only the header makes a 405 one.
-		if (isWafCaptcha(res)) throw new ApiError(405, 'solve the puzzle to continue', undefined, CAPTCHA_REQUIRED);
-		const text = await res.text();
-		let data: unknown = undefined;
-		if (text) {
+		for (let attempt = 0; ; attempt++) {
 			try {
-				data = JSON.parse(text);
-			} catch {
-				data = undefined;
+				res = await fetchFn(`${base}${path}`, {
+					method,
+					credentials: 'include',
+					headers: Object.keys(headers).length ? headers : undefined,
+					body: body === undefined ? undefined : JSON.stringify(body)
+				});
+			} catch (e) {
+				throw new ApiError(0, statusText(0), e);
 			}
+			if (res.status === 204) return undefined as T;
+			// The WAF's sign-in CAPTCHA (infra/waf.tf SignInCaptchaPerIP): a request
+			// without a valid token gets 405 with this header, from CloudFront,
+			// never from the API. Only the header makes a 405 one.
+			if (isWafCaptcha(res)) throw new ApiError(405, 'solve the puzzle to continue', undefined, CAPTCHA_REQUIRED);
+			const text = await res.text();
+			data = undefined;
+			if (text) {
+				try {
+					data = JSON.parse(text);
+				} catch {
+					data = undefined;
+				}
+			}
+			if (!isLambdaThrottle(res.status, data) || attempt >= THROTTLE_RETRIES) break;
+			await sleep(throttleDelayMs(attempt));
 		}
 		if (!res.ok) {
 			const obj = (data && typeof data === 'object' ? data : {}) as { error?: unknown; details?: unknown; code?: unknown; params?: unknown };
