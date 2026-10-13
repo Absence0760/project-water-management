@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { waitForMapFit } from '../support/diagrams.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -198,6 +199,7 @@ test('colour farms by dam level (end of the latest run), with its own words', as
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network colours');
 	await createRun(page.request, project.id, 'Baseline');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "ran today" on the run's own day (support/clock.ts)
 	await page.goto(`/projects/${project.id}?tab=network`);
 	const colourBy = page.getByLabel('Colour hydrological units by');
 	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });

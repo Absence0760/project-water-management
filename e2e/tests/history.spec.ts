@@ -3,6 +3,7 @@
 // earlier value back. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
+import { pinClockToLatestChange } from '../support/clock.ts';
 import { addMember, createProject, createRun, putModel, putSeries, seedRunnableProject, showAllSections } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -37,6 +38,8 @@ test('edit a dam capacity with a reason, see it in History, restore the earlier 
 	await expect(saveBar(page)).toBeHidden();
 	await closeModal(page);
 
+	// The Today heading on the save's own day (support/clock.ts).
+	await pinClockToLatestChange(page, project.id);
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'History' }).click();
 	await expect(page).toHaveURL(/tab=history/);
 	const newest = entries(page).first();

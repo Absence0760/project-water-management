@@ -473,7 +473,7 @@ test('an editor sets a staleness level for a series an API key sends, starting f
 	await expect(panel).toHaveAttribute('data-ready', 'true');
 	await panel.getByRole('button', { name: 'Set up alert emails' }).click();
 	const group = panel.getByRole('group', { name: 'API data behind' });
-	await expect(group.getByText('Each series an API key sends has its own level: the whole days with no new reading before it alerts (today doesn’t count).')).toBeVisible();
+	await expect(group.getByText('Each series an API key sends has its own level: the whole days with no new reading before it alerts (today doesn’t count).')).toBeVisible(); // clock-free: the panel's fixed wording.
 	const on = group.getByRole('checkbox', { name: 'Weir' });
 	const level = group.getByRole('spinbutton', { name: 'Alert after (days with no new reading)' });
 	await expect(on).not.toBeChecked();

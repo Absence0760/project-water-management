@@ -1,5 +1,6 @@
 import { createRun, putModel, putSeries, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { pinClockToProject, pinClockToRunNotes } from '../support/clock.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
 test('running the model shows the run with a farm summary and a chart', async ({ page, owner }) => {
@@ -15,12 +16,15 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	const list = page.getByRole('region', { name: 'Runs', exact: true });
 	const picked = list.getByRole('button', { name: /^Baseline/ });
 	await expect(picked).toHaveAttribute('aria-current', 'true');
-	// A compact row: when it ran (day first, "today 14:05") and the years; the full period is in the results header.
-	await expect(picked).toContainText(/(today|yesterday) \d{2}:\d{2} · 2021–2022/);
 	await expect(picked).toContainText('latest');
-	// The period in the app's day-first dates, as the Summary gives it.
-	await expect(page.locator('#res-h').locator('..')).toContainText(/1 Oct 2021 – 28 Jan 2022 \(120 days\) · ran (today|yesterday) \d\d:\d\d by /);
 	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}/);
+	// When it ran, on the run's own day (support/clock.ts): pinned, then drawn again.
+	await pinClockToProject(page, project.id, 'lastRunAt');
+	await page.reload();
+	// A compact row: when it ran (day first, "today 14:05") and the years; the full period is in the results header.
+	await expect(picked).toContainText(/today \d{2}:\d{2} · 2021–2022/);
+	// The period in the app's day-first dates, as the Summary gives it.
+	await expect(page.locator('#res-h').locator('..')).toContainText(/1 Oct 2021 – 28 Jan 2022 \(120 days\) · ran today \d\d:\d\d by /);
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
 
 	const summary = page.getByRole('region', { name: 'Run summary' });
@@ -398,7 +402,7 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 test('an editor writes a run note that is still there after a reload, with who changed it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Run notes');
-	await createRun(page.request, project.id, 'Baseline');
+	const runId = await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 
 	const notes = page.getByRole('region', { name: 'Run notes' });
@@ -410,9 +414,11 @@ test('an editor writes a run note that is still there after a reload, with who c
 	await expect(notes.getByRole('status')).toHaveText('Saved.');
 	await expect(save).toBeDisabled();
 
+	// "Last changed today" on the save's own day (support/clock.ts).
+	await pinClockToRunNotes(page, project.id, runId);
 	await page.reload();
 	await expect(box).toHaveValue('The quaternary includes an irrigated tributary outside the model.');
-	await expect(notes).toContainText(/Last changed (today|yesterday) \d\d:\d\d by Owner/);
+	await expect(notes).toContainText(/Last changed today \d\d:\d\d by Owner/);
 });
 
 test('flow shares over 100 % stop the Run button and say why, until they fit', async ({ page, owner }) => {

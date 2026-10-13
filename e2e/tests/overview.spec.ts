@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test';
 import { createProject, createRun, putModel, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { seedSupplyProject } from '../support/supply.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const setup = (page: Page) => page.getByRole('region', { name: /^Set(up| up this catchment)/ });
@@ -134,6 +135,7 @@ test('the latest run: its headline figures, the change from the run before, and 
 	const project = await seedRunnableProject(page.request, 'Overview latest run');
 	await createRun(page.request, project.id, 'Baseline');
 	const second = await createRun(page.request, project.id, 'Second');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "ran today" on the run's own day (support/clock.ts)
 	await page.goto(`/projects/${project.id}`);
 
 	// Which run it is: the section header's context line (issue #17), under the Summary title.
