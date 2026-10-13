@@ -109,7 +109,12 @@ walk the text and check every control against its card, issue #521).
 #282, codes by email 206, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
 `GET /auth/mfa`). The heading row carries the state as a badge in words:
 **On (app)**, **On (email)**, **On (both)** or **Off**. One line under it
-("A 6-digit code after your password. Turn on one or both."), then the two
+("A 6-digit code after your password. Turn on one or both.", then **How
+two-step sign-in works**: in the farm frame, a farmer-only user's, the
+`farm-two-step` entry on `/farm/words`, translated; for anyone with the
+workspace, the workspace's guide, `/help/guides/two-step-sign-in`; the root
+layout tells the panel which frame it is in, `lib/auth/frame.ts`
+`provideFarmFrame` / `farmFrameReader`), then the two
 ways as rows, each with one head row (its name, a word on its strength, an
 **On** / **Off** badge and its action at the row's right end; on a card
 narrower than 22rem the action takes a full row under the head) and one
@@ -697,7 +702,9 @@ under a dead-invitation warning).
   pages of the sign-in family (`routes/mfa-reset/`, translated, open signed
   in or out, the token dropped from the address bar and `referrer` off, as
   the password reset page): **Remove two-step sign-in** (`/mfa-reset`)
-  explains the wait and starts it only on **Start the 3-day wait**, so a
+  explains the wait (what happens until it ends, how to cancel it, and
+  "Nothing else changes: your password and everything in your account stay
+  as they are.", which the code step's panel says too) and starts it only on **Start the 3-day wait**, so a
   mail scanner opening the link starts nothing; **Keep two-step sign-in**
   (`/mfa-reset/cancel`) cancels it on **Cancel the removal**, then says to
   change both passwords if it wasn't them. A dead link says so.
@@ -6135,7 +6142,7 @@ two.
   per month, the default, or raw CHIRPS; it applies to the runoff model and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
   A run that corrected CHIRPS lists the monthly factors and the number of
-  days in its warnings. Below it, **CHIRPS fit period** (always shown; with raw CHIRPS it says it is unused but kept, and an invalid list still blocks Save where it can be fixed)
+  days in its warnings. Below it, the CHIRPS fit period, **Fit ranges** (always shown; with raw CHIRPS it says it is unused but kept, and an invalid list still blocks Save where it can be fixed)
   (`settings/ChirpsFitPeriodSection.svelte`, `settings.chirpsFitPeriod`,
   engine ≥ 0.29.0): "Whole record (default)" or "Listed water years", the
   latter with rows of from / to water year and a required reason
@@ -10787,11 +10794,17 @@ don't go in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu))
 a long list there made the sidebar scroll. On phones the contents fold behind a **Help contents** button
 under the search box, and close again when you pick a page.
 
-Pages outside the workspace link to the guide about them: the Account page's Two-step sign-in box and the
-Project page's Two-step sign-in panel to *Sign in with two steps* (`two-step-sign-in`; on the Account page the
-link's words go through `t()`), the Teams pages to *Set up a team and share a project*, an evidence pack's page
-to *Issue an evidence pack* and the printable report's bar to *Run the model and read the results*. Signed-out
-pages (/mfa-reset, /share, /verify) don't: `/help` needs a sign-in. `guides.test.ts` checks every
+Pages outside the workspace link to the guide about them: the Account page's Two-step sign-in box (for anyone
+with the workspace; a farmer-only user's goes to the farmer words' `farm-two-step` instead, [§ Account](#account))
+and the Project page's Two-step sign-in panel to *Sign in with two steps* (`two-step-sign-in`; on the Account page
+the link's words go through `t()`), the Teams pages to *Set up a team and share a project*, an evidence pack's page
+to *Issue an evidence pack* and the printable report's bar to *Run the model and read the results*. The farmer-facing
+help is the translated farmer words (`/farm/words`, below): the Account page in the farm frame, the alert emails
+page and, while a farmer's invitation waits, the Invitations page link there. Signed-out pages (/mfa-reset, the sign-in
+code step, /share, /verify) link to neither, since both need a sign-in: they say what happens next on the page
+itself, translated (the reset's wait, how to cancel it, that nothing else about the account changes). Making
+`/farm/words` public was the other choice; it was not taken because its frame (FarmShell's Menu: your units,
+Account, Sign out) is a signed-in frame, and the two pages already carried most of the words. `guides.test.ts` checks every
 `/help/guides/<id>` link in the app's source names a guide (and section) that exists, and every Settings path
 the help or the app names (“Settings → Rain gaps → Flagged rain”) resolves to a panel and its headings.
 The guides are `lib/help/guides.ts`, with the *Pages, one by one* guides in `lib/help/guides-pages.ts`, a chunk of
@@ -11011,7 +11024,10 @@ published.
   issue #47 one of them is *WUA (Water User Association)*, which says some
   areas still have an irrigation board; the cards' own words, the season
   outlook, the forecast, registered water, %, m³ and ML, and alert emails,
-  each linked from its card or page; `lib/help/farmer.test.ts` checks each
+  each linked from its card or page; two-step sign-in (`farm-two-step`,
+  from the Account page in the farm frame) and an invitation to a catchment
+  (`farm-invitation`, from the Invitations page while a farmer's invitation
+  waits: what accepting means, who sees what); `lib/help/farmer.test.ts` checks each
   link's entry exists in English and Afrikaans). Every link to it from a farm page
   (the Menu, the main page's foot, Why?'s, the dam page's and the cards'
   entry links) carries that page as `?from=` (`farm/load.ts` `wordsHref`),
@@ -11280,7 +11296,8 @@ published.
 
 English and Afrikaans for everything a farmer touches (WP-2.5): the farm
 view (`/farm/**`), the sign-in pages (`/login`, `/register`,
-`/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
+`/forgot-password`, `/reset-password`, `/verify-email`, and a lost second
+factor's `/mfa-reset` and `/mfa-reset/cancel`), the "confirm your
 email" banner, the account page and its alert emails page
 (`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), the
 "Was this useful?" page (`/alerts/feedback`), the
@@ -11362,7 +11379,10 @@ saved unit with the error above them). There it is `segmented`:
   of stale ids), while dev and the tests use the list: under vitest a
   message that isn't on the sheet throws (a table without `msg()`, say), in
   the dev server it warns.
-- **Loading.** Only the translated routes load the catalogue: they import
+- **Loading.** Only the translated routes load the catalogue
+  (`lib/auth/session.svelte.ts` `TRANSLATED_PATHS`; `redirect.test.ts`
+  fails on a page that imports the catalogue outside them, as `/mfa-reset`
+  once did, showing English to everyone who opened it from its email): they import
   it themselves, and the root layout imports `lib/i18n/locale.svelte` with a
   dynamic `import()` on the first translated route, then renders the route
   once the language is set (a readiness flag, with Try again if the chunk
@@ -11551,7 +11571,9 @@ then.
   **Accept** / **Decline**. Accepting says "You joined …" with a link to it
   (a farmer's to their farm), declining "You declined the invitation to …";
   one that went meanwhile (revoked, expired) reloads the list with the error.
-  Empty state: "You have no invitations waiting." Its words are translated
+  Empty state: "You have no invitations waiting." While an invitation as a
+  farmer waits, the header's line ends in **What does accepting mean?**, a
+  link to the `farm-invitation` entry on `/farm/words`. Its words are translated
   (section `invitations`). Linked from the account page's **Your
   invitations**, the invite email, and the banner.
 - **The invitations banner** (`auth-extras/InvitesBanner.svelte`, in

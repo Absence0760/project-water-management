@@ -4,7 +4,9 @@
 	// removed from an account whose phone and recovery codes were lost
 	// (205_mfa_recovery; docs/ui.md § Sign-in, docs/security.md § Two-step
 	// sign-in → Recovery). A button, not on load: a mail scanner that opens
-	// the link must not start the wait.
+	// the link must not start the wait. What happens next is said here, not
+	// linked: the help (/help, /farm/words) needs a sign-in, and whoever opens
+	// this can't sign in.
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -64,6 +66,7 @@
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<p>{t('Confirm to start a 3-day wait. When it ends, two-step sign-in is removed from your account and every device is signed out.')}</p>
 		<p>{t('Until then your codes keep working, and we email you every day with a link to cancel. Signing in with a code also cancels it.')}</p>
+		<p>{t('Nothing else changes: your password and everything in your account stay as they are.')}</p>
 		<button type="button" class="btn btn-primary" onclick={startWait} disabled={busy}>{busy ? t('Checking…') : t('Start the 3-day wait')}</button>
 		<p class="muted">{t('If you didn’t ask for this, close this page: someone knows your password, so choose a new one.')}</p>
 	{/if}

@@ -113,7 +113,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	accountHref: { why: 'WaterBalanceTable: riverHref(run id, "res-water-account"), which RunsTab passes', in: ['lib/components/runs/WaterBalanceTable.svelte'] },
 	wordsHref: {
 		why: 'BUILDER: "{base}/farm/words", its ?from= only a path farmReturn accepts (one farm page\'s own /farm/<id>…), URL-encoded, and a literal anchor',
-		in: ['lib/components/farm/FarmShell.svelte', 'lib/components/farm/ForecastCard.svelte', 'lib/components/farm/OutlookCard.svelte', 'lib/components/farm/RegisteredCard.svelte', 'lib/components/farm/SupplyCard.svelte', 'routes/account/alerts/+page.svelte', 'routes/farm/[projectId]/+page.svelte', 'routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte']
+		in: ['lib/components/account/TwoStepSignIn.svelte', 'lib/components/farm/FarmShell.svelte', 'lib/components/farm/ForecastCard.svelte', 'lib/components/farm/OutlookCard.svelte', 'lib/components/farm/RegisteredCard.svelte', 'lib/components/farm/SupplyCard.svelte', 'routes/account/alerts/+page.svelte', 'routes/account/invitations/+page.svelte', 'routes/farm/[projectId]/+page.svelte', 'routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte']
 	},
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	issueHref: { why: 'BUILDER: "?tab=<area>" with the item id encodeURIComponent-ed (model/validate.ts issueHref)', in: ['lib/components/model/IssueList.svelte'] },

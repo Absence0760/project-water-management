@@ -145,5 +145,29 @@ export const FARMER_HELP: HelpEntry[] = [
 		aliases: ['waarskuwings-e-posse', 'alerts'],
 		related: ['farm-stop-level', 'farm-forecast', 'farm-wua'],
 		source: 'docs/ui.md § Alerts (WP-2.13)'
+	},
+	// ---- Words on your account pages --------------------------------------------
+	// The Account page's Two-step sign-in box and the Invitations page link here
+	// for a farmer; the signed-out pages (/mfa-reset, the sign-in code step) say
+	// what happens next on the page itself, since this page needs a sign-in.
+	{
+		id: 'farm-two-step',
+		term: 'Two-step sign-in',
+		short: 'After your password, a 6-digit code from an app on your phone or from an email, so someone who learns your password still can’t get in.',
+		long: 'It is your choice: your hydrological unit’s pages don’t need it. Turn it on under Two-step sign-in on your Account page, in one way or both. An authenticator app on your phone makes a new code every 30 seconds. A code by email is sent each time you sign in and works for 10 minutes. The app is the safer of the two, since anyone who can read your email can also use a code sent there.\n\nThe first time you turn it on, you get ten recovery codes, shown only once. Download or copy them, and keep them somewhere safe, away from your phone. Each one works once, in place of a code. Your Account page says how many are left, and makes a new set when you need one.\n\nIf you lose your phone, sign in with a recovery code. If you have lost your recovery codes too, choose to use a recovery code on the step that asks for the code, then the link for lost recovery codes, and we email you a link. Once you open it, two-step sign-in is removed after 3 days, and you are signed out on every device; nothing else about your account changes. The wait keeps your account safe from someone who knows your password: we email you every day until then with a link to cancel, and signing in with a code cancels it too.',
+		category: 'farmer',
+		aliases: ['tweestap-intekening', '2FA', 'authenticator', 'recovery codes', 'lost phone', 'code by email'],
+		related: ['farm-invitation'],
+		source: 'docs/security.md § Two-step sign-in; docs/ui.md § Sign-in pages, § Account'
+	},
+	{
+		id: 'farm-invitation',
+		term: 'An invitation to a catchment',
+		short: 'An email asking you to join a catchment, usually from your WUA. Nothing changes until you accept, and you can decline.',
+		long: 'Your WUA, or whoever models the catchment for it, invites you by your email address. The invitation names the catchment, who sent it, what you join as, the hydrological units it links you to, and the date it is open until. After that date, ask whoever sent it for a new one.\n\nWhen you accept as a farmer, you see the pages of those hydrological units: the figures your WUA published for them, your dam and your water. You never see another hydrological unit’s name or figures. When you decline, whoever sent it sees only that you declined. Nobody can make you join.\n\nThe people who run the catchment’s model see your name, your email address and which hydrological units you are linked to. Other farmers in the catchment never see your name, your email address or your figures. If the hydrological units named aren’t yours, decline and tell your WUA.',
+		category: 'farmer',
+		aliases: ['uitnodiging', 'invite', 'accept', 'decline'],
+		related: ['farm-wua', 'farm-two-step'],
+		source: 'docs/ui.md § Invitations; docs/security.md § Authorization (farm scope)'
 	}
 ];

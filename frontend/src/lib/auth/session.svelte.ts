@@ -67,6 +67,21 @@ export function isLandingRoot(pathname: string, base: string, signedIn: boolean)
 	return !signedIn && strip(pathname, base) === '/';
 }
 
+/**
+ * The translated surfaces (WP-2.5, docs/ui.md § Language): the sign-in pages
+ * and their emailed links (/mfa-reset too, opened signed out from an email,
+ * often in a fresh tab), the farm view, the account and alert pages, the
+ * public /share page and the landing page. The root layout loads the message
+ * catalogue and sets the language only on these; the workspace and the other
+ * public pages are English. A page whose words go through t() must be here,
+ * or it shows English to everyone (redirect.test.ts checks every route).
+ */
+export const TRANSLATED_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/mfa-reset', '/farm', '/account', '/alerts', '/share', LANDING_PATH];
+
+export function isTranslatedPath(pathname: string, base = ''): boolean {
+	return matches(TRANSLATED_PATHS, strip(pathname, base));
+}
+
 export function isGuestPath(pathname: string, base = ''): boolean {
 	return matches(GUEST_PATHS, strip(pathname, base));
 }

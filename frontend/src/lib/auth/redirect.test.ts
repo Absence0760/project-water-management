@@ -1,6 +1,8 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { safeNext } from './redirect';
-import { isLandingRoot, isPublicPath, LANDING_ROUTE, landingPath, routeAccess, STATIC_ROUTES, termsGateApplies } from './session.svelte';
+import { isLandingRoot, isPublicPath, isTranslatedPath, LANDING_ROUTE, landingPath, routeAccess, STATIC_ROUTES, termsGateApplies } from './session.svelte';
 
 describe('safeNext', () => {
 	it('allows app-relative paths only', () => {
@@ -140,5 +142,33 @@ describe('termsGateApplies', () => {
 
 	it('never for the report renderer’s session: it renders the report (positive control above: the same account’s own session is gated)', () => {
 		expect(termsGateApplies({ termsCurrent: false, renderSession: true }, report)).toBe(false);
+	});
+});
+
+// The root layout sets the language only on the translated paths: a page whose
+// words go through t() anywhere else shows English to everyone (/mfa-reset did,
+// opened from its email in a fresh tab).
+describe('isTranslatedPath', () => {
+	const routes = fileURLToPath(new URL('../../routes/', import.meta.url));
+	const pages = (readdirSync(routes, { recursive: true }) as string[])
+		.filter((f) => /(^|\/)\+page\.(svelte|ts)$/.test(f))
+		.filter((f) => readFileSync(routes + f, 'utf8').includes('$lib/i18n/locale.svelte'))
+		.map((f) => {
+			const path = ('/' + f.replace(/(^|\/)\+page\.(svelte|ts)$/, '')).replace(/\/\[\[[^\]]+\]\]/g, '').replace(/\[([^\]=]+)[^\]]*\]/g, '$1');
+			return path === '/' ? path : path.replace(/\/$/, '');
+		});
+
+	it('covers every page that imports the message catalogue', () => {
+		expect(pages).toContain('/mfa-reset');
+		expect(pages).toContain('/mfa-reset/cancel');
+		expect(pages.length).toBeGreaterThan(15);
+		for (const p of pages) expect(isTranslatedPath(p), p).toBe(true);
+	});
+
+	it('leaves the workspace and the English public pages out, under a base path too', () => {
+		expect(isTranslatedPath('/app/mfa-reset', '/app')).toBe(true);
+		for (const p of ['/projects/1', '/help', '/help/guides/two-step-sign-in', '/teams', '/verify/abcd', '/privacy', '/methods', '/mfa-resets', '/farmers']) {
+			expect(isTranslatedPath(p), p).toBe(false);
+		}
 	});
 });

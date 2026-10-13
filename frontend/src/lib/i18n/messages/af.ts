@@ -1849,6 +1849,8 @@ export const af: Catalogue = {
 	'691bf45c': 'Uitnodigings',
 	// Nobody joins a catchment or team for you: you join when you accept, and whoever invited you sees only that the invitation was declined.
 	'a535b7ea': 'Niemand sluit namens jou by ’n opvanggebied of span aan nie: jy sluit aan wanneer jy aanvaar, en wie jou ook al uitgenooi het, sien net dat die uitnodiging afgewys is.',
+	// What does accepting mean?
+	'bd6e2772': 'Wat beteken dit om te aanvaar?',
 	// You have no invitations waiting.
 	'e22459b8': 'Jy het geen uitnodigings wat wag nie.',
 	// {inviter} invited you to the team as {role}.
@@ -2009,6 +2011,8 @@ export const af: Catalogue = {
 	'8ff22513': 'Ons kan tweestap-intekening van jou rekening verwyder, sodat jy met jou wagwoord kan inteken en dit weer kan opstel.',
 	// To keep your account safe, this takes 3 days. We email you a link to confirm. Once you open it, two-step sign-in is removed 3 days later, and we email you every day until then, so you can cancel it if it wasn’t you.
 	'98ea5d5f': 'Om jou rekening veilig te hou, neem dit 3 dae. Ons e-pos vir jou ’n skakel om te bevestig. Sodra jy dit oopmaak, word tweestap-intekening 3 dae later verwyder, en ons e-pos jou elke dag tot dan, sodat jy dit kan kanselleer as dit nie jy was nie.',
+	// Nothing else changes: your password and everything in your account stay as they are.
+	'30b49a6a': 'Niks anders verander nie: jou wagwoord en alles in jou rekening bly soos dit is.',
 	// If you’re in a team, a team admin can remove it for you straight away.
 	'6317a642': 'As jy in ’n span is, kan ’n spanadministrateur dit dadelik vir jou verwyder.',
 	// Email me a link

@@ -6,11 +6,16 @@
 	// never happens unasked, and the adder never learns whether the address has
 	// an account. Linked from the invite email and the banner every page shows
 	// while an invitation waits (InvitesBanner). Farmers meet it, so its words
-	// come from $lib/i18n; it sits in the account pages' frame.
+	// come from $lib/i18n; it sits in the account pages' frame. While a
+	// farmer's invitation waits, "What does accepting mean?" links to the
+	// farmer words (farm-invitation): no workspace guide fits someone joining
+	// as a farmer.
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { api, type MyInvite } from '$lib/api';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
+	import { wordsHref } from '$lib/components/farm/load';
 	import { invitesChanged } from '$lib/components/auth-extras/inviteCount.svelte';
 	import { fmtDay } from '$lib/format/number';
 	import { msg, type Msg } from '$lib/i18n/msg';
@@ -30,6 +35,7 @@
 	const roleWords = (role: string) => (ROLE[role] ? t(ROLE[role]) : role);
 
 	let invites = $state<MyInvite[] | null>(null);
+	const farmerInvite = $derived(invites?.some((inv) => inv.role === 'farmer') ?? false);
 	let loadError = $state<string | null>(null);
 	let busy = $state<string | null>(null);
 	/** The last thing that happened, for the status line; a failure goes in `error`. */
@@ -95,7 +101,10 @@
 <main class="page invitations-page" data-ready={invites !== null || loadError !== null ? 'true' : undefined}>
 	<SectionHeader title={t('Invitations')}>
 		{#snippet context()}
-			<span>{t('Nobody joins a catchment or team for you: you join when you accept, and whoever invited you sees only that the invitation was declined.')}</span>
+			<span
+				>{t('Nobody joins a catchment or team for you: you join when you accept, and whoever invited you sees only that the invitation was declined.')}
+				{#if farmerInvite}<a href={wordsHref(base, page.url, 'farm-invitation')}>{t('What does accepting mean?')}</a>{/if}</span
+			>
 		{/snippet}
 		{#snippet actions()}
 			<a class="btn" href="{base}/account">{t('Back to your account')}</a>

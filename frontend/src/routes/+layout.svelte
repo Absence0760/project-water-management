@@ -7,10 +7,10 @@
 	import { safeNext } from '$lib/auth/redirect';
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
-	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
+	import { isAccountPath, isFarmerOnly, provideFarmFrame } from '$lib/auth/frame';
 	import { loadMfaPrompt, mfaPrompt, noteMfaRefusal, promptKind, resetMfaPrompt } from '$lib/auth/mfaPrompt.svelte';
 	import { askForCode, freshCode } from '$lib/auth/freshCode.svelte';
-	import { isLandingRoot, isPublicPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '$lib/auth/session.svelte';
+	import { isLandingRoot, isPublicPath, isTranslatedPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import ConfirmHost from '$lib/components/common/ConfirmHost.svelte';
@@ -121,9 +121,12 @@
 	});
 	const frameKnown = $derived(!accountScreen || !session.user || farmFrame?.user === session.user.id);
 	const farmShell = $derived(accountScreen && session.user && farmFrame?.user === session.user.id ? farmFrame.shell : null);
+	// Whether this page sits in the farm frame, for the account pages' help links: a farmer-only user's go to the
+	// translated farmer words (/farm/words), anyone with the workspace's to the workspace's /help guides.
+	provideFarmFrame(() => !!farmShell);
 
 	// Language (WP-2.5, docs/ui.md § Language), on the translated surfaces
-	// only (sign-in pages, the farm view, the account and alert pages, the
+	// only (isTranslatedPath: sign-in pages and their emailed links, the farm view, the account and alert pages, the
 	// public /share page, the landing page): the modeller workspace is English and never loads
 	// the message catalogue. So are the other public pages: the legal and methods pages, and an
 	// evidence pack's verify page (/verify, WP-3.14), which licensing assessors read.
@@ -133,7 +136,7 @@
 	// switch updates session.user). The route renders once that language is
 	// set (i18nReady), so it never shows one language and then another.
 	const translated = $derived(
-		landingRoot || termsGate || /^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts|share|welcome)(\/|$)/.test(page.url.pathname.slice(base.length))
+		landingRoot || termsGate || isTranslatedPath(page.url.pathname, base)
 	);
 	type I18n = typeof import('$lib/i18n/locale.svelte');
 	let i18nModule = $state.raw<I18n | null>(null);

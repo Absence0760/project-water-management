@@ -14,7 +14,9 @@ const LINKS: [string, string][] = [
 	['../components/farm/ForecastCard.svelte', 'farm-forecast'],
 	['../components/farm/RegisteredCard.svelte', 'farm-registered'],
 	['../components/farm/SupplyCard.svelte', 'farm-pct-volume'],
-	['../../routes/account/alerts/+page.svelte', 'farm-alerts']
+	['../../routes/account/alerts/+page.svelte', 'farm-alerts'],
+	['../components/account/TwoStepSignIn.svelte', 'farm-two-step'],
+	['../../routes/account/invitations/+page.svelte', 'farm-invitation']
 ];
 
 describe('the farmer words the cards link to', () => {
@@ -33,5 +35,18 @@ describe('the farmer words the cards link to', () => {
 		expect(forecast.related).toContain('farm-season-outlook');
 		expect(forecast.long).toContain('It is not the season outlook.');
 		expect(FARMER_HELP.find((e) => e.id === 'farm-season-outlook')!.related).toContain('farm-forecast');
+	});
+
+	it('sends a farmer to farm-two-step, and anyone with the workspace to its guide', () => {
+		const box = src('../components/account/TwoStepSignIn.svelte');
+		expect(box).toMatch(/\{#if inFarmFrame\(\)\}<a href=\{wordsHref\(base, page\.url, 'farm-two-step'\)\}>[^{]*\{t\('How two-step sign-in works'\)\}<\/a>\{:else\}<a href="\{base\}\/help\/guides\/two-step-sign-in">/);
+	});
+
+	it('says on the signed-out reset pages what happens next, since the words need a sign-in', () => {
+		const line = "t('Nothing else changes: your password and everything in your account stay as they are.')";
+		expect(src('../../routes/mfa-reset/+page.svelte')).toContain(line);
+		expect(src('../../routes/login/+page.svelte')).toContain(line);
+		// The farmer word says the same.
+		expect(FARMER_HELP.find((e) => e.id === 'farm-two-step')!.long).toContain('nothing else about your account changes');
 	});
 });
