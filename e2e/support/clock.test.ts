@@ -16,7 +16,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 /** The word, not a name or a class that holds it (`todayPct`, `.bar.today`, `stage-today`). */
 const DAY_WORD = /(?<![-.\w])(today|yesterday)(?![-\w])/i;
 /** String, template and regex literals: what an assertion compares the page with. */
-const LITERAL = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\/(?:\\.|[^/\n])+\//g;
+const LITERAL = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\/(?:\\.|[^/\n\\])+\//g;
 const saysDayWord = (line: string) => (line.match(LITERAL) ?? []).some((l) => DAY_WORD.test(l));
 const ASSERTION = /\bexpect(\.soft)?\(/;
 const PIN = /\bpinClock\w*\(/;
