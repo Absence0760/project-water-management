@@ -90,7 +90,7 @@ test('the what-if answers from the precomputed runs, in words and figures', asyn
 	await page.goto('/');
 	const card = page.getByRole('region', { name: 'Try a what-if' });
 	await card.scrollIntoViewIfNeeded();
-	await expect(card.getByText('This is the hydrological unit as it is today. Move a slider to change it.')).toBeVisible();
+	await expect(card.getByText('This is the hydrological unit as it is today. Move a slider to change it.')).toBeVisible(); // clock-free: fixed wording.
 
 	// The most apples, today's dam.
 	const apples = card.getByRole('slider', { name: /More apples/ });
@@ -350,8 +350,8 @@ test('the what-if names each bar, draws today in a muted grey and the plan’s s
 	const card = page.getByRole('region', { name: 'Try a what-if' });
 	await card.scrollIntoViewIfNeeded();
 	const supply = card.locator('.figure').first();
-	await expect(supply.locator('.bar-label')).toHaveText(['Today', 'This plan']);
-	await expect(card.locator('.figure').nth(1).locator('.bar-label')).toHaveText(['Today', 'This plan']);
+	await expect(supply.locator('.bar-label')).toHaveText(['Today', 'This plan']); // clock-free: the bars' fixed labels.
+	await expect(card.locator('.figure').nth(1).locator('.bar-label')).toHaveText(['Today', 'This plan']); // clock-free: the bars' fixed labels.
 	const muted = await page.evaluate(() => {
 		const probe = document.createElement('span');
 		probe.style.color = 'var(--text-muted)';

@@ -7,7 +7,7 @@ import { importButton, openRowMenu, outcomesReady, row } from '../support/projec
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { runsList } from '../support/runs.ts';
-import { projectDay } from '../support/dates.ts';
+import { pinClock, pinClockToProject } from '../support/clock.ts';
 
 /** A real mouse click at the middle of `target` (whatever element is on top there gets it). */
 async function clickAt(page: Page, target: ReturnType<Page['locator']>) {
@@ -274,6 +274,8 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 	await updateSettings(page.request, stale.id, { apanMm: Array(12).fill(150) }); // GR4J refuses to run without it
 	await createRun(page.request, stale.id, 'baseline');
 
+	// The Last run column's "today" is the run's own day (support/clock.ts).
+	await pinClockToProject(page, stale.id, 'lastRunAt');
 	await page.goto('/');
 	const emptyRow = row(page, 'Freshness — empty');
 	await expect(emptyRow).toContainText('No rain yet');
@@ -324,14 +326,18 @@ test.describe('data age under a skewed time zone', () => {
 	// Overrides the suite's pinned UTC on purpose (project rule 7). The viewer is in UTC−11 and the project
 	// in UTC+14: 25 hours apart, so their calendar days always differ, and a badge counting to the viewer's
 	// day would be off by a day or two. Everything counts to the project's day (issue #137). The server's
-	// clock can't be faked, so the data ends ten of the project's days before its real today.
+	// clock can't be faked, so the data ends ten of the project's days before its real today: the day the
+	// server answers with, not one the spec works out, and the ages expected are counted to the day the list
+	// answered with. The header counts to the browser's clock, pinned to that same day, so neither can be a
+	// day out when the project's midnight (10:00 UTC) falls in the middle of the test.
 	test.use({ timezoneId: 'Pacific/Pago_Pago' });
 
 	test('the project list and the workspace header count the same days, to the project\'s calendar', async ({ page, owner }) => {
 		void owner;
 		const p = await createProject(page.request, 'Skewed clock');
-		expect((await page.request.patch(`${API_URL}/projects/${p.id}`, { data: { timeZone: 'Pacific/Kiritimati' } })).status()).toBe(200);
-		const today = projectDay('Pacific/Kiritimati');
+		const patched = await page.request.patch(`${API_URL}/projects/${p.id}`, { data: { timeZone: 'Pacific/Kiritimati' } });
+		expect(patched.status()).toBe(200);
+		const { today } = ((await patched.json()) as { project: { today: string } }).project;
 		const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86_400_000);
 		const end = day(-10);
 		const start = day(-129);
@@ -340,14 +346,20 @@ test.describe('data age under a skewed time zone', () => {
 		const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 		const shown = `${end.getUTCDate()} ${MONTHS[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
 
+		const listed = page.waitForResponse((r) => r.request().method() === 'GET' && /\/projects(\?|$)/.test(r.url()));
 		await page.goto('/');
+		const listedToday = ((await (await listed).json()) as { projects: { id: string; today: string }[] }).projects.find((x) => x.id === p.id)!.today;
+		// 10, or 11 when the project's day turned between the save and the list.
+		const ago = `${(Date.parse(listedToday) - end.getTime()) / 86_400_000} days ago`;
 		// The row carries the badge twice (wide and narrow layouts); one is shown.
 		const badge = row(page, 'Skewed clock').getByTitle(`Recorded rain (catchment or CHIRPS) runs to ${shown}`).filter({ visible: true });
-		await expect(badge).toHaveText(`Rain to ${shown} (10 days ago)`);
+		await expect(badge).toHaveText(`Rain to ${shown} (${ago})`);
 
+		// Midday of that day where the project is (support/clock.ts).
+		await pinClock(page, `${listedToday}T12:00:00+14:00`);
 		await page.goto(`/projects/${p.id}`);
 		// Stale (> 7 days), so a hidden ", older than 7 days" follows.
-		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText(`Rain up to ${shown} (10 days ago), older than 7 days`);
+		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText(`Rain up to ${shown} (${ago}), older than 7 days`);
 	});
 });
 
@@ -387,6 +399,8 @@ test('each row says how its catchment is doing, from the portfolio’s figures, 
 	const pubFig = figures.find((f) => f.id === pub.id)!;
 	expect(pubFig.ewr.status).not.toBe('unknown');
 
+	// "published today" on the publication's own day (support/clock.ts).
+	await pinClockToProject(page, pub.id, 'publishedAt');
 	await page.goto('/');
 	await outcomesReady(page);
 	// The figures end on 28 Jan 2022, long past: dates, not "last 30 days" or "this week" (issue #162).

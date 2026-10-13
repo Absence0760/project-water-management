@@ -6,6 +6,7 @@
 // only: the seeded catchment plus two units whose orchards outgrow their water.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { addMember, createProject, createRun, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openSupply, seedSupplyProject, supplyTile, supplyTiles, unitCards, unitChart } from '../support/supply.ts';
@@ -26,6 +27,7 @@ test('three tiles, a card per hydrological unit worst supplied first in the Summ
 	const project = await seedSupplyProject(page.request, 'Supply cards');
 	await createRun(page.request, project.id, 'Earlier');
 	const run = await createRun(page.request, project.id, 'Baseline');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "ran today" on the run's own day (support/clock.ts)
 	await openSupply(page, project.id);
 
 	await expect(strip(page).getByRole('link', { name: 'Hydrological units', exact: true })).toHaveAttribute('aria-current', 'page');
@@ -112,7 +114,7 @@ test('many hydrological units: every unit below the target or short this week sh
 	await createRun(page.request, project.id, 'Baseline');
 	await openSupply(page, project.id);
 	await expect(page.getByTestId('supply-summary')).toContainText('32 hydrological units');
-	await expect(page.getByTestId('supply-summary')).toContainText(/short (this week|in the week)/);
+	await expect(page.getByTestId('supply-summary')).toContainText('short in the week to 28 Jan 2022');
 
 	// Open first, to read every card: its band, and whether it was short in the run's last 7 days.
 	const more = page.getByRole('button', { name: 'Show all 32 hydrological units' });

@@ -195,7 +195,7 @@ test('asking for a reset: the panel passes an a11y scan; past the daily cap it s
 	await toLostPanel(page);
 	await expectNoViolations(page);
 	await page.getByRole('button', { name: 'Email me a link' }).click();
-	await expect(page.getByRole('alert')).toHaveText('You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.');
+	await expect(page.getByRole('alert')).toHaveText('You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.'); // clock-free: fixed wording.
 	await expect(page.locator('[data-mfa-lost]')).toBeVisible();
 
 	// The sign-in's challenge gone (its 5 minutes over): asking takes the page back to the password.

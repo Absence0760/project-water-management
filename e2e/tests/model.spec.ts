@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { addCrop, openCropGrid, openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeForm, openNodeTable, saveModelChanges } from '../support/network.ts';
@@ -375,6 +376,7 @@ test('the schematic can colour farms by the latest run’s supply, and says whic
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Supply colours');
 	await createRun(page.request, project.id, 'Baseline');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "ran today" on the run's own day (support/clock.ts)
 	await page.goto(`/projects/${project.id}?tab=network`);
 
 	const colourBy = page.getByLabel('Colour hydrological units by');

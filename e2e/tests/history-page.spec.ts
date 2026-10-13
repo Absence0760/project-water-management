@@ -7,6 +7,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject } from '../support/api.ts';
+import { pinClockToLatestChange } from '../support/clock.ts';
 import { spreadHistoryOverDays } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { historyCard, historyContext, historyDetail, historyEntries, LONG_REASON, openHistory, seedLongHistory } from '../support/history.ts';
@@ -20,6 +21,8 @@ test('forty changes over ten days: the header names the latest, the card fills t
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const p = await seedLongHistory(page.request, 'History page big', 40);
 	await spreadHistoryOverDays(p.id, 4);
+	// "today" and the Today / Yesterday headings on the newest change's own day (support/clock.ts).
+	await pinClockToLatestChange(page, p.id);
 	await openHistory(page, p.id);
 
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);

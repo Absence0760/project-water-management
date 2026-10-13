@@ -236,6 +236,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `support/a11y.ts` | The shared axe scan every spec uses (`expectNoViolations(page, { tags?, rules?, include? })`, WCAG 2.0–2.2 A/AA tags by default; don't call `AxeBuilder` directly). It runs `axe.run()` in the page (legacy mode) and keeps node details for violations only: the default `runPartial` mode opens a blank page per scan and ships every passing node across the protocol, 2–3× slower (the glossary 5.5 s → 2.3 s). Legacy mode skips cross-origin frames, and the app has none, so the scan refuses a page with a frame |
 | `support/referenceData.ts` | Which panels' test ids need which reference-data loader, and the check (`referenceData.test.ts`, `pnpm test`) that every test reading one calls it itself (§ Rules for writing specs) |
 | `support/dates.ts` | `projectDay(timeZone?, at?)`: a calendar day as the server dates it, on the project's calendar (`Africa/Johannesburg` by default), never UTC's; a spec comparing with a date the app writes uses it, since South Africa is a day ahead of UTC from 22:00 to 24:00 UTC |
+| `support/clock.ts` | `pinClock(page, iso)` and `pinClockToProject` / `pinClockToLatestChange` / `pinClockToRunNotes`: fix the page's clock (`page.clock.setFixedTime`) at a record's own server timestamp, so a relative day word it draws ("ran today") is exact at any hour; `clock.test.ts` (`pnpm test`) holds every spec asserting one to a pin (§ Rules for writing specs) |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`), `signIn(name)` (another user in their own browser context) and `fetchRoute(page, url, handler)`: the one way to route through a handler that awaits `route.fetch()` (to change the real answer or hold it). It waits for every call still in the handler before the test's contexts close, and its `unroute()` does the same mid-test; a bare `page.route` + `route.fetch()` fails a passing test when a call is in the handler at the end ("Target page, context or browser has been closed", "Fetch response has been disposed") or at `page.unroute` ("Route is already handled", Playwright 1.63) |
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path, with a two-year daily A-pan (`apan-2y.csv`) beside it; `farmers.csv`, a synthetic bulk farmer invite (`email,farm,language`) with a two-farm address, an unknown farm and a bad address |
 | `tests/golden-path.spec.ts` | The new-user journey, in four tests ([The golden path](#the-golden-path)): register, create "Catchment D", build the network, upload two years of rain, flow and daily A-pan, run the model and read the results, all through the UI; then, on that catchment arranged through the API, crops and a transfer into a run and each unit's results; monthly A-pan and EWR into the run's summary, and a reload; two more catchments beside one with a run |
@@ -321,6 +322,22 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   can't be changing, say why in a `// settled:` comment on the line or the
   one above; `support/snapshotChecks.test.ts` (`pnpm test`) fails on a use
   without one.
+- **Pin the clock before asserting a relative day word.** "ran today",
+  "published today", "Last changed today", the history's Today / Yesterday
+  headings are the browser's clock against a record's server timestamp, so a
+  record made at 23:59:58 UTC and drawn at 00:00:02 reads "yesterday" (CI,
+  2026-10-13T00:00:05Z). Pin the page's clock to the record's own stamp
+  (`support/clock.ts`: `pinClockToProject(page, id, 'lastRunAt' |
+  'publishedAt')`, `pinClockToLatestChange`, `pinClockToRunNotes`, or
+  `pinClock(page, iso)`) before the page draws it; a record made through the
+  UI is pinned and then drawn again (a reload, or opening its section). The
+  word is then exact: never hedge with `(today|yesterday)`. A date the server
+  writes from its own clock can't be pinned: work out the days it can have
+  used from the two ends of the step that wrote it (`fetchOnce` and
+  `datedIn` in `tests/data-feeds.spec.ts`). `support/clock.test.ts` (`pnpm
+  test`) fails on a day-word assertion with no pin earlier in its test;
+  wording that only happens to contain "today" says so in a `// clock-free:`
+  comment on the line or the one above.
 - **Measure layout (page height, box positions) only after the page's
   readiness attribute** (the Summary's `data-ready`, a section's
   `data-notes-ready`, a chart's `data-ready`): a region that is visible while

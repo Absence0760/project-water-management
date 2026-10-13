@@ -10,6 +10,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, syntheticRain } from '../support/api.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
@@ -87,6 +88,8 @@ test.describe('desktop', () => {
 		await expect(page).toHaveURL(/[?&]tab=runs&run=[\w-]+$/);
 		await expect(page.getByRole('heading', { level: 2, name: 'Untitled run' })).toBeVisible();
 
+		// The Summary draws "ran today" from here on, on the run's own day (support/clock.ts).
+		await pinClockToProject(page, project.id, 'lastRunAt');
 		await nav(page).getByRole('link', { name: 'Summary' }).click();
 		const context = header(page).getByTestId('section-context');
 		await expect(context).toContainText('Untitled run');

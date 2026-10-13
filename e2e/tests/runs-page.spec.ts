@@ -5,6 +5,7 @@
 // and phone. runs.spec.ts covers the results themselves.
 import { addMember, createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { seedRiverProject } from '../support/river.ts';
@@ -36,8 +37,12 @@ test('the run form sits in the section header, last, with its status one slim li
 	await run.click();
 	await expect(runsList(page).getByRole('button', { name: /^From the header/ })).toHaveAttribute('aria-current', 'true');
 	await expect(page.getByRole('heading', { level: 2, name: 'From the header' })).toBeVisible();
-	await expect(h.getByTestId('section-context')).toHaveText('1 run · newest ran today');
+	await expect(h.getByTestId('section-context')).toContainText('1 run · newest ran ');
 	await expect(h.getByLabel(/^Run label/)).toHaveValue('');
+	// Its day word on the run's own day (support/clock.ts): pinned, then drawn again.
+	await pinClockToProject(page, project.id, 'lastRunAt');
+	await page.reload();
+	await expect(h.getByTestId('section-context')).toHaveText('1 run · newest ran today');
 });
 
 test('the run header links to the river and hydrological unit pages for its run, and the old link rows go there, Back skipping them', async ({ page, owner }) => {
@@ -211,6 +216,7 @@ test('a viewer sees the runs and the header line, no run form, and the page pass
 	await createRun(page.request, project.id, 'Shared');
 	const viewer = await signIn('Runs viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await pinClockToProject(viewer.page, project.id, 'lastRunAt'); // "ran today" on the run's own day (support/clock.ts)
 	await openRuns(viewer.page, project.id);
 	const h = header(viewer.page);
 	await expect(h.getByTestId('section-context')).toHaveText('1 run · newest ran today');
@@ -286,6 +292,7 @@ test('the run summary writes figures as they are read: a true minus, proportiona
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs figures');
 	await createRun(page.request, project.id, 'Baseline');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "today" on the run's own day (support/clock.ts)
 	await openRuns(page, project.id);
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	// Inter's tabular figures set a hyphen a digit wide: "- 2.26", "under - estimates". The tiles use proportional
@@ -293,8 +300,8 @@ test('the run summary writes figures as they are read: a true minus, proportiona
 	for (const v of await summary.locator('.stat dd').evaluateAll((dds) => dds.map((d) => getComputedStyle(d).fontVariantNumeric))) expect(v).toBe('normal');
 	expect(await summary.innerText()).not.toMatch(/(^|[\s(])-\d/);
 	// The header gives the period as the Summary does, and when it ran in the app's day-first words.
-	await expect(page.locator('#res-h').locator('..')).toContainText(/1 Oct 2021 – 28 Jan 2022 \(120 days\) · ran (today|yesterday) \d\d:\d\d by /);
-	await expect(runsList(page).getByRole('button', { name: /^Baseline/ })).toContainText(/(today|yesterday) \d\d:\d\d · 2021–2022/);
+	await expect(page.locator('#res-h').locator('..')).toContainText(/1 Oct 2021 – 28 Jan 2022 \(120 days\) · ran today \d\d:\d\d by /);
+	await expect(runsList(page).getByRole('button', { name: /^Baseline/ })).toContainText(/today \d\d:\d\d · 2021–2022/);
 });
 
 test('the water balance fits its column at 1440 and 1280: headings wrap, two pairs share a column, the year on one line', async ({ page, owner }) => {

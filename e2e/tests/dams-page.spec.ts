@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const cards = (page: Page) => page.getByRole('list', { name: 'Dams' }).getByRole('listitem');
@@ -35,6 +36,7 @@ test('a card per dam, emptiest first, with % full, its change, a sparkline and i
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedThreeDams(page, 'Dams cards');
 	await createRun(page.request, project.id, 'Baseline');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "ran today" on the run's own day (support/clock.ts)
 	await openDams(page, project.id);
 
 	await expect(strip(page).getByRole('link', { name: 'Dams', exact: true })).toHaveAttribute('aria-current', 'page');
@@ -386,7 +388,7 @@ test('a dam resized since the run: the Network’s drawing shows today’s capac
 	// The unchanged dam isn't marked.
 	await expect(node('Lower farm').locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
 	await expect(node('Lower farm')).not.toHaveAttribute('data-changed');
-	await expect(page.getByTestId('changed-since-run')).toHaveText('Marked: a dam whose own settings were edited since that run. The colour and % are the run\'s; “now” is the capacity in the model today. Run the model again to update them.');
+	await expect(page.getByTestId('changed-since-run')).toHaveText('Marked: a dam whose own settings were edited since that run. The colour and % are the run\'s; “now” is the capacity in the model today. Run the model again to update them.'); // clock-free: fixed wording.
 	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText('. Dam settings changed since the run: capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
 	// Coloured by dam level (the % of the run's capacity), the same.
 	await colourBy.selectOption({ label: 'Dam level, end of latest run' });
@@ -397,6 +399,7 @@ test('a dam resized since the run: the Network’s drawing shows today’s capac
 	await expect(page.locator('svg.schematic g.node[data-changed]')).toHaveCount(0);
 
 	// The Dams page: the card's head is today's capacity, its figures the run's, and it says the dam changed.
+	await pinClockToProject(page, project.id, 'lastRunAt');
 	await openDams(page, project.id);
 	await expect(page.getByTestId('dams-summary')).toHaveText('2 dams · 290\u202f000 m³ capacity · latest run “Baseline”, ran today');
 	await expect(card(page, 'Upper farm').locator('.card-head .cap')).toHaveText('200\u202f000 m³');

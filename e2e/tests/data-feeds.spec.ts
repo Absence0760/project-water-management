@@ -25,21 +25,37 @@ import { projectDay } from '../support/dates.ts';
 test.describe.configure({ mode: 'default' });
 
 const MONTHS =['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** A UTC calendar day n days from now, as the panel writes it ("10 Oct 2026"). */
-const day = (n: number) => {
-	const d = new Date(Date.now() + n * 86_400_000);
+/** The UTC calendar day n days from `at` (ms), as the panel writes it ("10 Oct 2026"). */
+const day = (n: number, at: number) => {
+	const d = new Date(at + n * 86_400_000);
 	return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 /**
- * Today where the catchment is, as the panel writes it. The health sentence
- * dates when a feed was checked in the project's time zone (health.ts;
- * project.time_zone defaults to Africa/Johannesburg, 058), which is a day
- * ahead of UTC from 22:00 to 24:00 UTC.
+ * The day where the catchment is at `at`, as the panel writes it. The health
+ * sentence dates when a feed was checked in the project's time zone
+ * (health.ts; project.time_zone defaults to Africa/Johannesburg, 058), which
+ * is a day ahead of UTC from 22:00 to 24:00 UTC.
  */
-const projectToday = () => {
-	const [y, m, d] = projectDay().split('-').map(Number) as [number, number, number];
+const projectToday = (at: number) => {
+	const [y, m, d] = projectDay(undefined, new Date(at)).split('-').map(Number) as [number, number, number];
 	return `${d} ${MONTHS[m - 1]} ${y}`;
 };
+
+/**
+ * Run this project's jobs once (the fetch), and the two ends of it. The server
+ * dates what the fetch writes by its own clock (the fixtures' days count from
+ * the fetch's UTC day, the check from its day in the project's zone), which
+ * the spec can't fake, so the days it can have used are those at either end.
+ */
+async function fetchOnce(projectId: string): Promise<[number, number]> {
+	const from = Date.now();
+	await runJobsTick({ projects: [projectId] });
+	return [from, Date.now()];
+}
+
+/** `text` exactly, as dated at either end of `span`: one text unless a midnight fell inside the fetch. */
+const datedIn = (span: [number, number], text: (at: number) => string) =>
+	new RegExp([...new Set(span.map(text))].map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'));
 
 /** Attach a CHIRPS feed straight through the API (as whoever `request` is signed in as). */
 async function attachFeed(request: APIRequestContext, projectId: string): Promise<string> {
@@ -81,14 +97,14 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 
 	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick({ projects: [project.id] });
+	const fetched = await fetchOnce(project.id);
 
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
 	await expect(feed.getByText('OK', { exact: true })).toBeVisible();
-	await expect(feed).toContainText(`Last data ${day(15)} · checked `);
+	await expect(feed).toContainText(datedIn(fetched, (at) => `Last data ${day(15, at)} · checked `));
 	// The health sentence, written by the panel from the server's reason code, its days formatted the same way (never raw ISO).
-	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${projectToday()}.`);
+	await expect(feed).toContainText(datedIn(fetched, (at) => `OK; newest data ${day(15, at)}, checked ${projectToday(at)}.`));
 	await expect(panel.getByTestId('feeds-attention')).toHaveCount(0);
 
 	// The forecast landed in the project's series.
@@ -129,12 +145,12 @@ test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area�
 	await expect(feed).toContainText('box -20.20, 25.10 to -20.10, 25.20 · CHIRPS sat v3.0 · daily');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick({ projects: [project.id] });
+	const fetched = await fetchOnce(project.id);
 
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
 	// Preliminary days reach three days back on the fixtures (chirps-sample.json prelimLagDays).
-	await expect(feed).toContainText(`OK; newest data ${day(-3)}, checked ${projectToday()}.`);
+	await expect(feed).toContainText(datedIn(fetched, (at) => `OK; newest data ${day(-3, at)}, checked ${projectToday(at)}.`));
 });
 
 test('a coastal box leaves out its sea cells when asked, and fetches the land’s rainfall', async ({ page, owner }) => {
@@ -157,10 +173,10 @@ test('a coastal box leaves out its sea cells when asked, and fetches the land’
 	await expect(feed).toContainText('box -20.30, 25.30 to -20.20, 25.40, sea cells left out · daily');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick({ projects: [project.id] });
+	const fetched = await fetchOnce(project.id);
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
-	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${projectToday()}.`);
+	await expect(feed).toContainText(datedIn(fetched, (at) => `OK; newest data ${day(15, at)}, checked ${projectToday(at)}.`));
 	// Three of its four cells are land (the ingest refuses a later fetch whose count changes).
 	await expect(feed).toContainText('· 3 of 4 cells with data');
 });
