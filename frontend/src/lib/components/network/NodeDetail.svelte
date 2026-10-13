@@ -424,7 +424,7 @@
 									value={node.mapMm ?? null}
 									onchange={(v) => withUnitMap(node, v)}
 								/>
-								<span class="hint explain" id="{id('mapMm')}-h">The unit’s own mean annual rain. Used only while Settings → Rain for each unit is on, where it sets the level of the unit’s rain. Empty: none.</span>
+								<span class="hint explain" id="{id('mapMm')}-h">The unit’s own mean annual rain. Used only while Settings → Flow calibration → Rain into GR4J → Rain for each unit is on, where it sets the level of the unit’s rain. Empty: none.</span>
 								{#if mapProblem && !mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
 								<FieldHistoryLine field="node:{node.id}:mapMm" {unit} />
 							</div>

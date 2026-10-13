@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { HELP, helpFor } from './content';
 import { SHOTS } from './pictures';
 import { TOUR } from './tour';
+import { SETTINGS_SECTIONS } from '$lib/components/settings/sections';
 import { ALL_TABS, TAB_GUIDE } from '$lib/workspace/tabs';
 import {
 	DIAGRAM_IDS,
@@ -161,6 +162,165 @@ describe('guides', () => {
 		// Marker ids are document-global: two diagrams on one page must not share one.
 		const markers = files.flatMap((f) => [...readFileSync(`${dir}/${f}`, 'utf8').matchAll(/<marker id="([^"]+)"/g)].map((m) => m[1]));
 		expect(new Set(markers).size).toBe(markers.length);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// "Settings → X → Y" paths. Help and the app's own words name where a setting
+// is; when a panel is renamed or moved (Flow generation became Flow
+// calibration → Rain into GR4J) the old path kept being printed. Every path
+// that starts at Settings, or at a Settings panel's name, must name a real
+// panel (components/settings/sections.ts) and, after it, headings that panel
+// really shows (its slice of the page and the components rendered in it).
+// ---------------------------------------------------------------------------
+
+const dirOf = (rel: string) => fileURLToPath(new URL(rel, import.meta.url)).replace(/\/$/, '');
+const COMPONENTS = dirOf('../components');
+const SRC = dirOf('..');
+const ROUTES = dirOf('../../routes');
+
+function walk(dir: string, out: string[] = []): string[] {
+	for (const e of readdirSync(dir, { withFileTypes: true })) {
+		const p = `${dir}/${e.name}`;
+		if (e.isDirectory()) walk(p, out);
+		else if (/\.(svelte|ts)$/.test(e.name) && !/\.test\.ts$|\.d\.ts$/.test(e.name)) out.push(p);
+	}
+	return out;
+}
+const svelteByName = new Map<string, string[]>();
+for (const f of walk(COMPONENTS).filter((f) => f.endsWith('.svelte'))) {
+	const n = f.slice(f.lastIndexOf('/') + 1, -'.svelte'.length);
+	svelteByName.set(n, [...(svelteByName.get(n) ?? []), f]);
+}
+
+/** Visible headings, legends, panel titles, button and label words in a Svelte source. */
+function headingsIn(src: string): string[] {
+	const out: string[] = [];
+	const clean = (s: string) => s.replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+	for (const m of src.matchAll(/<(h[2-5]|legend|summary|button|label)\b[^>]*>([^<{]+)/g)) out.push(clean(m[2]!));
+	for (const m of src.matchAll(/\b(legend|title|name|label)="([^"{]+)"/g)) out.push(clean(m[2]!));
+	// Words a tag shows through an expression ({mapOnly ? 'Rain from the map' : 'Attach a feed'}).
+	for (const m of src.matchAll(/'([A-Z][^'\n]{2,60})'/g)) out.push(clean(m[1]!));
+	// Words a tag shows through an expression ({mapOnly ? 'Rain from the map' : 'Attach a feed'}).
+	for (const m of src.matchAll(/'([A-Z][^'\n]{2,60})'/g)) out.push(clean(m[1]!));
+	return out.filter((s) => s.length > 1);
+}
+
+/** The headings a Settings panel shows: its slice of the file that holds its id, and every component used in it, recursively. */
+function panelHeadings(id: string): string[] {
+	const host = walk(COMPONENTS).filter((f) => f.endsWith('.svelte')).find((f) => readFileSync(f, 'utf8').includes(`id="${id}"`));
+	if (!host) throw new Error(`no component holds id="${id}"`);
+	const src = readFileSync(host, 'utf8');
+	const from = src.indexOf(`id="${id}"`);
+	const next = src.slice(from + 1).search(/id="set-/);
+	const slice = next < 0 ? src.slice(from) : src.slice(from, from + 1 + next);
+	const seen = new Set<string>();
+	const heads = headingsIn(slice);
+	const visit = (code: string) => {
+		for (const m of code.matchAll(/<(?:[A-Za-z]+\.)?([A-Z][A-Za-z0-9]+)\b/g)) {
+			for (const f of svelteByName.get(m[1]!) ?? []) {
+				if (seen.has(f)) continue;
+				seen.add(f);
+				const s = readFileSync(f, 'utf8');
+				heads.push(...headingsIn(s));
+				visit(s);
+			}
+		}
+	};
+	visit(slice);
+	return heads;
+}
+
+// Every panel the page has, by its heading: the menu's, plus the ones above and after it.
+const PANELS = new Map<string, string>([
+	...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]),
+	['Judge results by', 'set-judge'],
+	['API keys', 'set-api-keys'],
+	['Scheduled reports', 'set-report-schedules']
+]);
+const panelCache = new Map<string, string[]>();
+const headingsOf = (id: string) => panelCache.get(id) ?? (panelCache.set(id, panelHeadings(id)), panelCache.get(id)!);
+
+/** Each "Settings → A → B" (or "A → B" where A is a panel) in a text, as its steps, markup removed. */
+function settingsPaths(text: string): string[][] {
+	const plain = text
+		.replace(/<\/?[A-Za-z][^<>]*>/g, '')
+		.replace(/&amp;/g, '&')
+		.replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1')
+		.replace(/\*\*?/g, '')
+		.replace(/\s+/g, ' ');
+	const labels = [...PANELS.keys()].map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+	const starts = [
+		...[...plain.matchAll(/\bSettings(?: & calibration)? → /g)].map((m) => m.index + m[0].length),
+		// A panel's own name starting a path, unless a "→" before it already did.
+		...[...plain.matchAll(new RegExp(`(?<![\\w-])(?:${labels}) → `, 'g'))].filter((m) => !/→ $/.test(plain.slice(0, m.index))).map((m) => m.index)
+	];
+	return starts.map((at) => {
+		let rest = plain.slice(at);
+		const steps: string[] = [];
+		for (;;) {
+			const arrow = rest.indexOf(' → ');
+			const stop = rest.search(/[.,;:()’'"?!]|$/);
+			if (arrow >= 0 && arrow < stop) {
+				steps.push(rest.slice(0, arrow).trim());
+				rest = rest.slice(arrow + 3);
+			} else {
+				steps.push(rest.slice(0, stop).trim());
+				return steps;
+			}
+		}
+	});
+}
+
+/** Why a path doesn't resolve, or null. The last step may run on into the sentence, so it only has to start with a name. */
+function pathProblem(steps: string[]): string | null {
+	const names = (i: number) => (i === steps.length - 1 ? (n: string) => steps[i] === n || steps[i]!.startsWith(`${n} `) : (n: string) => steps[i] === n);
+	const panel = [...PANELS.keys()].sort((a, b) => b.length - a.length).find(names(0));
+	if (!panel) return `“${steps[0]}” is no Settings panel`;
+	const heads = headingsOf(PANELS.get(panel)!);
+	for (let i = 1; i < steps.length; i++) {
+		const own = steps[i]!;
+		// A step written in lower case continues the sentence ("Settings → the daily EWR at the outlet"): not a name.
+		if (i === steps.length - 1 && /^[a-z]/.test(own)) break;
+		if (!heads.some(names(i))) return `“${own}” isn’t shown under ${panel}`;
+	}
+	return null;
+}
+
+describe('Settings paths named in help and in the app', () => {
+	const helpTexts: [string, string][] = [
+		...HELP.flatMap((e) => [[`glossary ${e.id}`, e.short], [`glossary ${e.id}`, e.long]] as [string, string][]),
+		...GUIDES.flatMap((g) => [g.summary, ...g.sections.flatMap((s) => s.blocks.flatMap(texts))].map((t) => [`guide ${g.id}`, t] as [string, string])),
+		...TOUR.flatMap((st) => stopTexts(st).map((t) => [`tour ${st.spot}`, t] as [string, string]))
+	];
+	// The app's own words: source with its comments taken out (a comment may describe an old layout).
+	const appTexts: [string, string][] = [...walk(SRC), ...walk(ROUTES)]
+		.filter((f) => !f.includes('/lib/help/'))
+		.map((f) => [
+			f.slice(SRC.length),
+			readFileSync(f, 'utf8')
+				.replace(/<!--[\s\S]*?-->/g, '')
+				.replace(/\/\*[\s\S]*?\*\//g, '')
+				.replace(/(^|[^:'"`\w])\/\/.*$/gm, '$1')
+		]);
+
+	it('finds the paths it checks', () => {
+		expect(settingsPaths('Open **Settings & calibration → Flow calibration → Rain into GR4J**, then save.')).toEqual([['Flow calibration', 'Rain into GR4J']]);
+		expect(settingsPaths('switched on in **Fit the parameters → Fit automatically**, makes')).toEqual([['Fit the parameters', 'Fit automatically']]);
+		expect(settingsPaths('Settings → Calibration record → Flow gaps can fill them')).toEqual([['Calibration record', 'Flow gaps can fill them']]);
+		expect(pathProblem(['Flow generation', 'Rain for each unit'])).toMatch(/no Settings panel/);
+		expect(pathProblem(['Flow calibration', 'Rain into GR4J', 'Rain for each unit is on'])).toBeNull();
+		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);
+	});
+
+	it('name a real panel, and headings that panel shows', () => {
+		const broken = [...helpTexts, ...appTexts].flatMap(([where, text]) =>
+			settingsPaths(text).flatMap((steps) => {
+				const p = pathProblem(steps);
+				return p ? [`${where}: Settings → ${steps.join(' → ')} (${p})`] : [];
+			})
+		);
+		expect(broken).toEqual([]);
 	});
 });
 

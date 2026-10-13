@@ -102,7 +102,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	// Engine ≥ 1.81.0 (issue #507 item 3): only the run's days CHIRPS reads more than 2 mm on (4 mm every third day) are
 	// set aside and shaded, one day each; the other 50 keep the gauge's 0.
 	const shaded = page.getByText(
-		'Shaded: 1 period, 26 days, that a run treats as missing, so CHIRPS fills them (50 other days of flagged runs stay dry: CHIRPS reads 2 mm or less) (Settings → Zero-rain runs).'
+		'Shaded: 1 period, 26 days, that a run treats as missing, so CHIRPS fills them (50 other days of flagged runs stay dry: CHIRPS reads 2 mm or less) (Settings → Rain gaps → Flagged rain).'
 	);
 
 	await page.goto(`/projects/${projectId}?tab=series`);

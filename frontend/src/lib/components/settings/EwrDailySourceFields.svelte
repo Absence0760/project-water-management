@@ -202,7 +202,7 @@
 		<div class="field source">
 			<label for="{uid}-method">Daily EWR from</label>
 			<select id="{uid}-method" disabled={readonly} value={method} onchange={(e) => edit({ method: e.currentTarget.value as EwrDailySource['method'] })} aria-describedby="{uid}-method-h">
-				<option value="pragmatic">The pragmatic EWR (above)</option>
+				<option value="pragmatic">The pragmatic EWR (the monthly row)</option>
 				<option value="tab">The DRM TAB file (monthly total flows)</option>
 				<option value="percentile">The DRM percentile tables (read at each day’s natural flow)</option>
 			</select>

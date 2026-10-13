@@ -1585,7 +1585,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'zero-rain-runs',
 		term: 'Zero-rain runs treated as missing',
-		short: 'Long wet-season runs of zero catchment rain count as missing, so bias-corrected CHIRPS fills them instead of running them dry.',
+		short: 'In long wet-season runs of zero catchment rain, days CHIRPS reads more than 2 mm on count as missing, and bias-corrected CHIRPS fills them.',
 		category: 'data',
 		fields: ['settings.zeroRainRuns', 'run.rain_catchment_missing']
 	},
@@ -1605,7 +1605,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'rain-accumulations',
 		term: 'Multi-day rain accumulations',
-		short: 'Several days of rain read on one day after days entered as 0: the total is spread back over those days in proportion to CHIRPS.',
+		short: 'Several days of rain read on one day after blank days: the total is spread back over those blank days in proportion to CHIRPS.',
 		category: 'data',
 		fields: ['run.rain_catchment_spread']
 	},

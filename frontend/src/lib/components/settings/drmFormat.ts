@@ -15,7 +15,7 @@ export function drmFormat(target: DrmTarget): FileFormat {
 	return {
 		id: table ? 'reserve-rule-table' : 'daily-ewr-outlet',
 		title: table ? 'A Reserve rule table (DRM .rul, .tab or CSV)' : 'The daily EWR at the outlet (DRM .tab or .rul)',
-		where: table ? 'Settings & calibration → Reserve rule tables' : 'Settings & calibration → EWR → Daily EWR at the outlet',
+		where: table ? 'Settings & calibration → Reserve rule tables' : 'Settings & calibration → EWR → The daily EWR at the outlet',
 		accepts: table
 			? 'A Desktop Reserve Model rule-curve file (.rul) or summary (.tab), plain text; or a CSV (.csv, .tsv, .txt) of the 12 month rows, which opens the paste dialog to pick the grid it fills.'
 			: 'A Desktop Reserve Model summary (.tab) or rule-curve file (.rul), plain text. A CSV isn’t loaded here: paste its rows into the box below the tables.',

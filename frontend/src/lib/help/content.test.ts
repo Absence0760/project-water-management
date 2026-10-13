@@ -259,6 +259,50 @@ describe('help content', () => {
 // repo: where an idea comes from (`source`: docs/model.md §…, an audit
 // finding, an issue) is for maintainers, kept in the data and not shown
 // (issue #162). The text a reader sees mustn't point there either.
+// A tip and its article are written apart (tips.ts, articles*.ts), so one can
+// change and the other not: the zero-rain tip kept "count as missing" after
+// engine 1.81 filled only days CHIRPS reads more than 2 mm on, and the
+// accumulation tip kept "after days entered as 0" after engine 1.84 counted
+// only blank days. Meaning can't be compared, so two cheap checks: every
+// quantity a tip states is in its article (a tip says less, never other
+// numbers), and for entries whose rule turns on one word or threshold, the
+// tip and article both state it (KEY_FACTS).
+const QUANTITY = /\d+(?:[.,]\d+)?\s?(?:mm|%|km²|m³|days?|years?|°|s\b)|engine \d+\.\d+(?:\.\d+)?/g;
+/** Entries whose rule the tip must state as its article does: id → the words both must hold. */
+const KEY_FACTS: Record<string, string[]> = {
+	'zero-rain-runs': ['2 mm'],
+	'rain-accumulations': ['blank'],
+	'transfer-outside': ['minimum storage'],
+	'user-restriction': ['drought restriction'],
+	'unit-rain': ['MAP']
+};
+
+describe('a glossary tip and its article', () => {
+	it('state no quantity in the tip whose number the article doesn’t give', () => {
+		const norm = (s: string) => s.replace(/\u202f|\u00a0/g, ' ').replace(/(\d) (?=\d{3}\b)/g, '$1');
+		const numberIn = (text: string, n: string) => new RegExp(`(?<![\\d.,])${n.replace('.', '\\.')}(?![,.]?\\d)`).test(text);
+		const off = HELP.flatMap((e) =>
+			[...norm(e.short).matchAll(QUANTITY)]
+				.map((m) => m[0])
+				.filter((q) => !numberIn(norm(e.long), q.match(/\d+(?:[.,]\d+)*/)![0]))
+				.map((q) => `${e.id}: the tip says “${q}”, the article never gives that number`)
+		);
+		expect(off).toEqual([]);
+	});
+
+	it('agree on the rule an entry turns on', () => {
+		const off = Object.entries(KEY_FACTS).flatMap(([id, words]) => {
+			const e = helpFor(id);
+			if (!e) return [`${id}: no such entry`];
+			return words.flatMap((w) => [
+				...(e.short.includes(w) ? [] : [`${id}: the tip doesn’t say “${w}”`]),
+				...(e.long.includes(w) ? [] : [`${id}: the article doesn’t say “${w}”`])
+			]);
+		});
+		expect(off).toEqual([]);
+	});
+});
+
 describe('the glossary’s reader-facing text', () => {
 	it('names no developer document, audit finding or issue', () => {
 		for (const e of HELP) {

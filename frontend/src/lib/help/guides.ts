@@ -221,13 +221,13 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Open **Projects** in the sidebar (on a phone, under **Menu**) and press **New project**.',
-							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it, and press **Create**.',
+							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it, and press **Create project**.',
 							'The project opens on its **Summary** tab. Work through the setup checklist from the top.'
 						]
 					},
 					{
 						type: 'p',
-						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A Water Balance Tool workbook becomes one project; an administrator can import one with the workbook importer.'
+						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A Water Balance Tool workbook becomes one project: anyone can bring one in with **Import workbook** on the Projects page (and a project downloaded from the app with **Import project file (.json)**).'
 					}
 				]
 			},
@@ -387,7 +387,7 @@ export const GUIDES: Guide[] = [
 							'On **Crops & demand**, press **+ Add crop**: its sheet opens over the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a row in the **Crops** list, largest planted area first, with its colour, area, the month it needs most water and a small chart of its factors (Oct to Sep, the highest marked with its value; point at it to read a month); **Edit** on the row opens the sheet again. A warning icon on a row means a factor above 1.0 (hover or focus it; it opens the sheet). With more than nine crops, the smallest share one grey colour as **Other**, named in their own row.',
 							'Under **Planted area by hydrological unit**, press **Edit areas** and enter the hectares of each crop on each hydrological unit in the grid. Leave a crop blank on hydrological units that don’t grow it. Each hydrological unit then gets a bar split by crop in the list’s colours, largest hydrological unit first (hover a segment for its crop and hectares); a note under the bars names any hydrological unit with nothing planted, whose demand is zero.',
 							'Check **Irrigation demand by month**: what the catchment abstracts for its crops per month (the gross demand ÷ each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]], so an efficiency below 100 % raises it), stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per hydrological unit and for the catchment. It comes before effective rain, which a run takes off day by day. It uses the monthly A-pan means: with a daily [[apan|A-pan]] series on the **Data** tab, runs use that on the days it has a value, so their demand differs, and a line under the heading says so.',
-							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or use them from the map, when an A-pan grid is loaded), the [[effective-rainfall|effective-rain fraction]], the [[soil-water-store|soil-water store]] and the [[rain-threshold]].',
+							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or, when an A-pan grid is loaded on the server, take them from **Settings & calibration → Flow calibration → Evaporation from the map**, whose **Use** saves them at once), the [[effective-rainfall|effective-rain fraction]], the [[soil-water-store|soil-water store]] and the [[rain-threshold]].',
 							'To bring in a list kept in a spreadsheet (a scheme’s register, a farm survey; hundreds of rows at once), press **Import plantings…** and load a CSV file or paste the rows: a heading row, then one row per farm and crop with its area in hectares (Farm, Crop, Area (ha), and optionally Irrigation system; **Download the template** under **Expected format** has the layout). Farms and crops are matched by name, whatever the capitals and spacing. A crop the project doesn’t have is added with crop factors of 0 and marked **needs crop factors** until you fill them in; a farm it doesn’t have is listed, and with **Add them as new hydrological units** ticked it becomes a new unit draining into the outlet, marked **Needs placing** on the Network until you set its area and where it drains. The preview counts what changes and lists every row it can’t read by its line; nothing changes until **Apply**, and then you save as after any edit.',
 							'Give each crop its [[irrigation-system|irrigation system]] in its sheet (a unit can override it per crop in **Edit areas**); the systems and their efficiencies are under **Tables** › **Irrigation systems**. Each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] is its crops’ systems combined.',
 							'Press **Save changes** on the save bar.'
@@ -447,7 +447,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS. By default a run treats the flagged zero runs as missing, so CHIRPS fills them; **Settings & calibration → Rain gaps** ([[zero-rain-runs|zero-rain runs]]) keeps a confirmed dry spell dry.'
+						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS. By default a run treats a flagged run’s days as missing where CHIRPS reads more than 2 mm, so CHIRPS fills them, and keeps the 0 on drier days; **Settings & calibration → Rain gaps** ([[zero-rain-runs|zero-rain runs]]) sets that threshold and keeps a confirmed dry spell dry.'
 					}
 				]
 			},
@@ -515,8 +515,8 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Give each hydrological unit its parcel on the **Map** (delineate, draw or upload it, and link it to the unit).',
 							'Open **Settings & calibration → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
-							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create**. Units without a parcel are listed, with a link to the map.',
-							'Give each unit its MAP and source on its form, then switch on **Settings → Flow generation → Rain for each unit**, and refit.'
+							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create the feed** (**Create 4 feeds** for four units; **Update** where a unit has one already). Units without a parcel are listed, with a link to the map.',
+							'Give each unit its MAP and source on its form, then switch on **Settings & calibration → Flow calibration → Rain into GR4J → Rain for each unit**, and refit.'
 						]
 					},
 					{
@@ -660,7 +660,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The same volume leaves the source dam and enters the destination, so a transfer never creates or loses water. Transfers with the same priority share a source dam, or a destination’s room, in proportion to their own limits, so the order of the list never changes a result.'
+						text: 'Between two hydrological units, what leaves the source enters the destination: a dam transfer creates and loses no water, and a river [[transfer-offtake|off-take]] loses only its **Losses on the way**. A rule whose **To** is **Outside the catchment** ([[transfer-outside]]) is different: its water leaves the model, and counts as the source unit’s use. Transfers with the same priority share a source dam, or a destination’s room, in proportion to their own limits, so the order of the list never changes a result.'
 					}
 				]
 			}
@@ -684,12 +684,12 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Take the monthly Reserve flows for the river’s [[ecological-category]], usually from the [[desktop-reserve-model]] tables without high flows.',
 							'Pick one value per month (often a percentile) and convert it to m³/day.',
-							'On **Settings & calibration → EWR**, enter the 12 values, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
+							'On **Settings & calibration → EWR**, the first choice is **Daily EWR from**: keep *The pragmatic EWR* and enter the 12 values in the **Pragmatic EWR** row under it, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
 							'Or take the daily EWR straight from the Desktop Reserve Model: set **Daily EWR from** to *The DRM TAB file* or *The DRM percentile tables* ([[ewr-daily-source|the daily EWR at the outlet]]), load the DRM’s .tab or .rul file or paste the values (**Fill from:** beside **Daily EWR from**; a .tab’s flows are shown in m³/s before you use them, a paste’s values in a preview before **Apply**), and choose how the tables are scaled to the catchment, by MAR or by area, with the table’s MAR or area. Every run then says which EWR it was judged by and the scale factor.',
-							'Optionally, on **Settings & calibration → Reporting**, set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
-							'To assess the EWR above the outlet too, add a gauge on the **Network** tab at each EWR site of the Reserve determination.',
+							'Optionally, on **Settings & calibration → Reporting** (under *Demand & supply*, above the EWR), set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
+							'To assess the EWR above the outlet too, add a gauge on the **Network** tab at each EWR site of the Reserve determination (a gauge is an **EWR site** until unticked; untick one that only records flow).',
 							'Save and run.',
-							'With a Reserve rule table too, choose which one the results are judged by in **Judge results by**, the first thing on **Settings & calibration**: automatic (the outlet’s rule table, else the first site’s, else the pragmatic EWR), the pragmatic EWR, or one site’s rule table. It changes no result, so no re-run is needed; River & reserve says at the top which one is in use.'
+							'With a Reserve rule table too (**Settings & calibration → Reserve rule tables**, after the EWR), choose which one the results are judged by in **Judge results by**, the first thing on **Settings & calibration**, above the menu’s panels: automatic (the outlet’s rule table, else the first site’s, else the pragmatic EWR), the pragmatic EWR, or one site’s rule table. It changes no result, so no re-run is needed; River & reserve says at the top which one is in use.'
 						]
 					}
 				]
@@ -702,12 +702,12 @@ export const GUIDES: Guide[] = [
 						shot: 'river',
 						caption: 'A reach of the river. The EWR is the flow that must stay in it, every day, for the ecosystem to hold its target condition.',
 						stops: [
-							{ spot: 'river', title: 'The river channel', text: 'Checked every day at the outlet against the [[pragmatic-ewr]], and at every gauge against the EWR of everything upstream of it.' }
+							{ spot: 'river', title: 'The river channel', text: 'Checked every day at the outlet against the [[pragmatic-ewr]], and at every gauge ticked as an **EWR site** against the EWR of everything upstream of it.' }
 						]
 					},
 					{
 						type: 'p',
-						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge, against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the hydrological units upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which hydrological unit causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
+						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge ticked as an **EWR site** (each gauge is, until unticked on its form), against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the hydrological units upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which hydrological unit causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
 					}
 				]
 			}
@@ -1248,7 +1248,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'The baseline must be the project’s [[evidence-run|nominated evidence run]]. For an [[application]], run the application on that baseline.',
-							'Declare the [[evidence-uncertainty-rule|uncertainty rule]] under Settings, Evidence, and run an ensemble to it, so the report has bands to cite.',
+							'Declare the [[evidence-uncertainty-rule|uncertainty rule]] under **Settings & calibration → Evidence**, and run an ensemble to it, so the report has bands to cite.',
 							'The signer needs two-step sign-in, and, while the project requires it, a current [[pack-signoff|registration check]] recorded on the **Project** page.'
 						]
 					}
@@ -1305,7 +1305,7 @@ export const GUIDES: Guide[] = [
 							'**Shares.** Natural flow and the EWR are split between the hydrological units by fixed [[flow-share|flow shares]].',
 							'**Demand.** Crops, A-pan and effective rain give each hydrological unit’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the hydrological unit takes from its dam and the river.',
 							'**Hydrological unit balance.** Upstream first, each hydrological unit fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one hydrological unit]].',
-							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the hydrological units upstream of it ([[ewr-charge]]).'
+							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge ticked as an **EWR site** (the default) is checked too, and a shortfall at any EWR site is charged to the hydrological units upstream of it ([[ewr-charge]]); a gauge unticked only measures.'
 						]
 					}
 				]
@@ -1371,10 +1371,10 @@ export const GUIDES: Guide[] = [
 							'Hydrological unit runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
 							'The [[diversion]] takes up to its daily capacity from the water passing below, back into the dam.',
 							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any hydrological unit irrigates.',
-							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; seepage reaches the river below the wall.',
+							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; the share of the seepage set by **Seepage returning** (all of it by default) reaches the river below the wall, and the rest leaves the catchment.',
 							'Irrigation takes the smaller of the [[irrigation-demand|demand]] and what the dam holds above its [[dam-min|minimum level]] (yesterday’s storage plus today’s inflows and the rain on it, less evaporation and seepage).',
 							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is the share of the irrigation water supplied that returns to the river the same day (never more than the losses).',
-							'Outflow = spill + water passing below the dam not diverted + seepage + return flow. It is the next element’s upstream inflow.'
+							'Outflow = spill + water passing below the dam not diverted + returning seepage + return flow. It is the next element’s upstream inflow.'
 						]
 					}
 				]
@@ -1384,11 +1384,11 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'formula',
-						text: 'upstream inflow + runoff + transfer + rain on the dam − (irrigation − return flow) − dam evaporation − Δ storage = outflow'
+						text: 'upstream inflow + runoff + transfer + rain on the dam − (irrigation − return flow) − dam evaporation − seepage lost − Δ storage = outflow'
 					},
 					{
 						type: 'p',
-						text: 'It closes to the cubic metre every day ([[balance-check|the balance check]]). Seepage is part of the outflow, so it stays in the catchment.'
+						text: 'It closes to the cubic metre every day ([[balance-check|the balance check]]). The seepage that returns is part of the outflow; the seepage lost (what **Seepage returning** doesn’t return) and the dam’s evaporation leave the catchment.'
 					}
 				]
 			}
@@ -1508,11 +1508,11 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**KGE′** (default): correlation, bias and variability in one score, less peak-dominated than NSE.',
+							'**KGE′ (Kling–Gupta, 2012)** (default): correlation, bias and variability in one score, less peak-dominated than NSE.',
 							'**Year-balanced KGE′**: each water year counts once, so a few wet years can’t dominate a drought-heavy record.',
 							'**Non-parametric KGE**: rank correlation, the flow-duration curve’s shape and the bias, so less sensitive to rating error at the extremes.',
 							'**NSE on √Q** (medium flows) and **NSE on log Q** (low flows).',
-							'**Mean of KGE′(Q) and KGE′(1/Q)**: half the score on the flows, half on their inverses, so recessions and low flows count as much as the peaks. Suggested when the fit feeds an EWR (low-flow) decision.'
+							'**Mean of KGE′(Q) and KGE′(1/Q)** (the scores table calls it **Low/high-flow KGE′ (Q and 1/Q)**): half the score on the flows, half on their inverses, so recessions and low flows count as much as the peaks. Suggested when the fit feeds an EWR (low-flow) decision.'
 						]
 					},
 					{
@@ -1571,7 +1571,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'A 0 is a reading, so it blocks the fallback. Long wet-season runs of zeros that the **Data checks** flag are the exception: by default a run treats them as blank, so CHIRPS fills them ([[zero-rain-runs|zero-rain runs]]). On **Settings & calibration → Rain gaps** you can keep a confirmed dry spell dry, run every flagged run as recorded, or list other bad periods to treat as missing. The uploaded series is never changed.'
+						text: 'A 0 is a reading, so it blocks the fallback. Long wet-season runs of zeros that the **Data checks** flag are the exception: by default a run treats their days as blank where CHIRPS reads more than 2 mm, so CHIRPS fills those, and a day CHIRPS reads 2 mm or less keeps its 0, since CHIRPS reports too many light-rain days ([[zero-rain-runs|zero-rain runs]]). On **Settings & calibration → Rain gaps** you can change the 2 mm, keep a confirmed dry spell dry, run every flagged run as recorded, or list other bad periods to treat as missing. The uploaded series is never changed.'
 					},
 					{
 						type: 'p',
@@ -1579,7 +1579,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The result is the [[rain-final|final catchment rainfall]], which both runoff models and the effective-rain part of demand use. The daily CSV export puts it beside CHIRPS as uploaded and bias-corrected CHIRPS, so filled days can be checked.'
+						text: 'The result is the [[rain-final|final catchment rainfall]], which the runoff model (GR4J) and the effective-rain part of demand use. The daily CSV export puts it beside CHIRPS as uploaded and bias-corrected CHIRPS, so filled days can be checked.'
 					}
 				]
 			},
@@ -1715,7 +1715,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Two sides use it. The **applicant** (the developer, the farmer or their consultant) builds and submits it. The **assessors** are the project’s owners and editors, who read it and record a decision.'
+						text: 'Two sides use it. The **applicant** (the developer, the farmer or their consultant) builds and submits it. The **assessors** are the project’s editors and owners (other than the applicant), who read it. Only an assessor the responsible authority has confirmed as acting for it (**Acts for the authority** on the Project page) records the authority’s decision; the app records that decision, it never makes one.'
 					}
 				]
 			},
@@ -1765,7 +1765,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'**Decide the longest waiting** opens the application that has waited longest for a decision.',
-							'Open one to read its changes and runs in Scenarios, answer the applicant’s questions about rules they can’t see, and record the decision with its reasons.',
+							'Open one to read its changes and runs in Scenarios and answer the applicant’s questions about rules they can’t see. Once the authority has decided, an assessor confirmed as acting for it presses **Record the authority’s decision** and records it with its reasons; anyone else reads it but has no such button.',
 							'**Assess together** runs several applications on one baseline, each on its own and all together, for their combined effect on the river.',
 							'Draft an evidence pack from a run’s evidence report, then sign and issue it: a frozen, versioned copy anyone can check with its short code.'
 						]

@@ -84,7 +84,7 @@ export function zeroRainShading(
 	const parts: string[] = [];
 	if (periods.length) {
 		const dry = chirpsDry ? ` (${plural(chirpsDry, 'other day')} of flagged runs ${chirpsDry === 1 ? 'stays' : 'stay'} dry: CHIRPS reads ${m!.infill.fillAboveChirpsMm} mm or less)` : '';
-		parts.push(`${plural(periods.length, 'period')}, ${plural(days, 'day')}, that a run treats as missing, so CHIRPS fills them${dry} (Settings → Zero-rain runs)`);
+		parts.push(`${plural(periods.length, 'period')}, ${plural(days, 'day')}, that a run treats as missing, so CHIRPS fills them${dry} (Settings → Rain gaps → Flagged rain)`);
 	}
 	if (windows.length) {
 		parts.push(

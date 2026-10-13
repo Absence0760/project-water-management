@@ -16,7 +16,7 @@ export const TOUR: PictureStop[] = [
 			points: [
 				'Each day takes the first series with a value: catchment rain, then CHIRPS, then forecast rain.',
 				'CHIRPS is scaled per calendar month by catchment ÷ CHIRPS rain, fitted on the days both have a reading.',
-				'A missing day should be blank, not 0: a 0 reads as a dry day and stops CHIRPS filling the gap. Long wet-season runs of zeros are the exception: by default a run treats them as missing.',
+				'A missing day should be blank, not 0: a 0 reads as a dry day and stops CHIRPS filling the gap. Long wet-season runs of zeros are the exception: by default a run treats their days as missing where CHIRPS reads more than 2 mm.',
 				'A large reading after a few blank days that CHIRPS says were wet looks like several days read at once: by default a run spreads its total over those days. After days recorded as 0 it is real rain and stays on its day.'
 			],
 			diagram: 'rain-sources'
@@ -39,7 +39,7 @@ export const TOUR: PictureStop[] = [
 	{
 		spot: 'runoff',
 		title: 'The land turns rain into flow',
-		text: 'The [[runoff-model]] (GR4J by default) holds rain in the soil and releases it over days. What comes out is the [[natural-flow]]: the river as it would be with no hydrological units, dams or abstraction.',
+		text: 'The [[runoff-model]] (GR4J) holds rain in the soil and releases it over days. What comes out is the [[natural-flow]]: the river as it would be with no hydrological units, dams or abstraction.',
 		guide: 'how-gr4j-works',
 		more: {
 			points: [
@@ -90,7 +90,7 @@ export const TOUR: PictureStop[] = [
 		more: {
 			points: [
 				'Each day: the smallest of what the source dam held above its minimum yesterday, the room at the destination (free space plus that day’s demand), the rate × 86 400 s, and the daily cap.',
-				'The same volume leaves one dam and enters the other, so a transfer never makes or loses water.',
+				'Between two dams the same volume leaves one and enters the other, so no water is made or lost; a transfer to **Outside the catchment** sends its water out of the model, as the source unit’s use.',
 				'Transfers move before any hydrological unit irrigates, lowest [[transfer-priority|priority]] first.'
 			],
 			shot: 'transfer'
@@ -103,7 +103,7 @@ export const TOUR: PictureStop[] = [
 		guide: 'set-the-ewr',
 		more: {
 			points: [
-				'The [[pragmatic-ewr]] is one flow per month, checked every day at the outlet and at every gauge.',
+				'The [[pragmatic-ewr]] is one flow per month, checked every day at the outlet and at every gauge ticked as an EWR site.',
 				'A shortfall is charged to the hydrological units upstream in proportion to what each took that day ([[ewr-charge]]); what they didn’t take is natural.',
 				'The curtailment report works out how much each hydrological unit would reduce for irrigation to balance and the EWR to be met.'
 			],

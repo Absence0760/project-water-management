@@ -151,7 +151,7 @@
 	<h4 id="{uid}-h" tabindex="-1" bind:this={heading}>Rain for each unit <HelpTip key="unit-rain-feeds" /></h4>
 	<p class="hint explain">
 		One CHIRPS feed for each hydrological unit with land, averaging the 0.05° cells its parcel on the map covers, each weighted by the share of it
-		inside. Runs use these series when Settings → Flow generation → Rain for each unit is on. Source: CHIRPS v3 daily, Climate Hazards Center, UC
+		inside. Runs use these series when Settings → Flow calibration → Rain into GR4J → Rain for each unit is on. Source: CHIRPS v3 daily, Climate Hazards Center, UC
 		Santa Barbara.
 	</p>
 	{#if loading}

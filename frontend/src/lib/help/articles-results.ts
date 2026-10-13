@@ -26,7 +26,7 @@ export const RESULTS_ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/allocations.md § The comparison'
 	},
 	'stress-class': {
-		long: 'The classes and thresholds come from an experimental node-based workbook, which reported them per hydrological unit and per month. The app grids them per hydrological unit, per other water user and for all of them together, water year by month, over the whole run. A month without demand has no class.',
+		long: 'The classes and thresholds come from an experimental node-based workbook, which reported them per hydrological unit and per month. A month is Low with at least 95 % of its demand supplied, Moderate with 85 %, High with 70 %, Severe with 50 %, and Critical below that. The app grids them per hydrological unit, per other water user and for all of them together, water year by month, over the whole run. A month without demand has no class.',
 		aliases: ['stress', 'supply ratio', 'Low', 'Moderate', 'High', 'Severe', 'Critical'],
 		related: ['assurance-of-supply'],
 		source: 'docs/model.md §4 and §2.11a'
