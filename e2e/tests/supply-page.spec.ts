@@ -9,6 +9,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { pinClockToProject } from '../support/clock.ts';
 import { addMember, createProject, createRun, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { layersInside } from '../support/layers.ts';
 import { openSupply, seedSupplyProject, supplyTile, supplyTiles, unitCards, unitChart } from '../support/supply.ts';
 
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
@@ -151,6 +152,10 @@ test('many hydrological units: every unit below the target or short this week sh
 	// Open again: the chart sticks beside the long list…
 	await more.click();
 	await unitCards(page).nth(28).scrollIntoViewIfNeeded();
+	// No card's links get a compositing layer of their own beside the sticky chart (each was rasterised apart and showed
+	// blank as its card scrolled in; dams-page.spec.ts). The cards themselves share one layer, painted after the
+	// sticky "On this page" menu, named for the first card.
+	expect((await layersInside(page, '#unit-cards')).filter((l) => !/^li\.card\b/.test(l))).toEqual([]);
 	// Its head is the unit picker (issue #467; the heading is for screen readers then).
 	await expect(unitChart(page).getByRole('combobox', { name: 'Hydrological unit shown' })).toBeInViewport();
 	// …beside the "On this page" index, not behind it (at 1440 the menu is a column on the left, issue #462).

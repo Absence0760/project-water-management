@@ -1416,6 +1416,22 @@ Interaction details that bit:
   the fragment is a same-page jump, not a load: the River menu's first
   "loaded link" test passed on such a jump without loading anything, and the
   Data one failed on it (no mount, so no focus). Go to another tab first.
+- **A card with a stretched link beside a sticky panel isolates itself.**
+  The Dams and Hydrological units cards stretch the name's link over the
+  card (`a.name::after`, `inset: 0`) and lift their links and sparkline
+  above it with `position: relative; z-index: 1`. A positive z-index paints
+  after every `z-index: auto` box, the sticky chart beside the cards
+  included, and Chromium can't know a sticky box won't overlap them, so
+  each card's lifted part got a compositing layer of its own: thirty dams,
+  thirty layers, each rasterised apart, and a card scrolling into view
+  showed its text with the sparkline and links blank for a moment. Give the
+  card `isolation: isolate`: the z-index then orders only inside the card,
+  which paints in tree order before the sticky panel, and no layer is made.
+  `e2e/support/layers.ts` `layersInside` lists the layers inside a list
+  (the DevTools protocol's layer tree), and `dams-page.spec.ts` and
+  `supply-page.spec.ts` hold it empty (Hydrological units' cards share one
+  layer, after its sticky "On this page" menu, which is fine: one layer
+  rasterises like the page).
 - **A sticky element sticks only inside its parent.** Settings' "On this
   page" menu sat inside the form, so it scrolled away at Data feeds, the
   first panel after the form; the Data page's `.data-page` wrapper ends

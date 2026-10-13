@@ -495,8 +495,12 @@
 		gap: 0.6rem;
 		align-content: start;
 	}
+	/* isolation: the parts above the stretched link (z-index 1) stack inside the card, so the list paints in the
+	   page's layer; without it each card's part painted after the sticky chart and got a compositing layer of its own,
+	   rasterised late, so a card scrolling into view showed it blank (ui-playbook.md § 4, e2e/support/layers.ts). */
 	.card {
 		position: relative;
+		isolation: isolate;
 		display: flex;
 		flex-direction: column;
 		gap: 0.15rem;

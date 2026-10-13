@@ -7,6 +7,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { layersInside } from '../support/layers.ts';
 
 const cards = (page: Page) => page.getByRole('list', { name: 'Dams' }).getByRole('listitem');
 const card = (page: Page, name: string) => cards(page).filter({ has: page.getByText(name, { exact: true }) });
@@ -266,6 +267,14 @@ test('many dams: every card shows, emptiest first, with no “Show all” fold; 
 	// The chart stays in view beside them as the window scrolls.
 	await cards(page).nth(12).scrollIntoViewIfNeeded();
 	await expect(chart(page)).toBeInViewport();
+	// A card scrolled into view is whole at once: its sparkline at full size, its links there. The cards paint in the
+	// page's own layer: their sparklines and links (z-index 1, above the card's stretched link) each had a compositing
+	// layer of their own beside the sticky chart, rasterised late, so a card scrolling in showed them blank (2026-10-13).
+	const scrolledIn = cards(page).nth(12);
+	await expect(scrolledIn.getByTestId('sparkline')).toBeInViewport();
+	expect((await scrolledIn.locator('.spark-box').boundingBox())!.height).toBeGreaterThan(50);
+	await expect(scrolledIn.getByTestId('dam-edit-link')).toBeInViewport();
+	expect(await layersInside(page, 'ul.cards')).toEqual([]);
 
 	// Pick one far down: its card is highlighted and the chart shows it; a shared link to it opens the same way.
 	const far = (await cards(page).nth(12).locator('a.name').innerText()).trim();
