@@ -13,7 +13,7 @@ import { importQuaternaries, parseArgs as quaternaryArgs } from '../../scripts/i
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { anon, asOwner, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
-import { SEARCH_LAYER_LIMIT } from './gazetteer.js';
+import { SEARCH_LAYER_LIMIT, searchMap } from './gazetteer.js';
 import { placeRecords, replacePlaces } from './loadGazetteer.js';
 import type { SearchHit } from './gazetteer.js';
 
@@ -118,6 +118,58 @@ describe('what a search finds', () => {
 		expect((await search(viewer, 'kwartsvallei skool')).body.hits).toEqual([]);
 		// "sand": the gauges on the Sandspruit first, then the places.
 		expect(hitsOf((await search(viewer, 'sand')).body)).toEqual(['gauge:Z1H001', 'gauge:Z1H003', 'place:Sandlaagte', 'place:Sandlaagte-Oos']);
+	});
+});
+
+describe('a town on the map is found (production searched an empty gazetteer, 2026-10-13)', () => {
+	// SYNTHETIC lines in GeoNames' dump format, named after real towns the
+	// basemap labels: the feature codes and provinces follow GeoNames' ZA dump
+	// (Malmesbury a PPLA3 in the Western Cape with farms of the same name in
+	// Limpopo; Kuruman a PPLA2 in the Northern Cape and a small PPL in the Free
+	// State), but the ids and positions are made up.
+	const line = (id: string, name: string, cls: string, code: string, admin1: string, lat: number, lon: number) =>
+		[id, name, name, '', String(lat), String(lon), cls, code, 'ZA', '', admin1, '', '', '', '0', '', '0', 'Africa/Johannesburg', '2026-10-13'].join('\t');
+	const dump = [
+		line('9100001', 'Malmesbury', 'S', 'FRM', '09', -24.9, 28.5),
+		line('9100002', 'Malmesbury', 'S', 'FRM', '09', -23.9, 27.2),
+		line('9100003', 'Malmesbury', 'P', 'PPLA3', '11', -33.5, 18.7),
+		line('9100004', 'Kuruman', 'P', 'PPL', '03', -29.9, 27.0),
+		line('9100005', 'Kuruman', 'P', 'PPLA2', '08', -27.5, 23.4),
+		line('9100006', 'Kuruman', 'S', 'AIRF', '08', -27.4, 23.5)
+	].join('\n');
+
+	it('a loaded dump finds the town first: a town before farms of its name, a seat of local government before a hamlet', async () => {
+		const client = new pg.Client({ connectionString: OWNER_URL() });
+		await client.connect();
+		try {
+			const got = placeRecords(dump, 'za.txt', 'Test source');
+			expect(got.leftOut).toBe(1); // the airfield
+			await replacePlaces(client, 'town-test', got.records);
+			const malmesbury = (await search(viewer, 'Malmesbury')).body;
+			expect(malmesbury.hits.map((h: SearchHit) => `${h.feature} ${h.admin1}`)).toEqual(['P.PPLA3 11', 'S.FRM 09', 'S.FRM 09']);
+			expect(malmesbury.placesLoaded).toBe(true);
+			const kuruman = (await search(viewer, 'kuruman')).body;
+			expect(kuruman.hits.map((h: SearchHit) => `${h.feature} ${h.admin1}`)).toEqual(['P.PPLA2 08', 'P.PPL 03']);
+		} finally {
+			await client.query(`DELETE FROM gazetteer_reference WHERE dataset = 'town-test'`);
+			await client.end();
+		}
+	});
+
+	it('says when no gazetteer is loaded, so an empty answer is not read as "no such town"', async () => {
+		const pool = new pg.Pool({ connectionString: OWNER_URL(), max: 1 });
+		const client = await pool.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query('DELETE FROM gazetteer_reference');
+			expect(await searchMap(client, 'Malmesbury')).toEqual({ q: 'Malmesbury', hits: [], truncated: false, placesLoaded: false });
+			await client.query('ROLLBACK');
+			// Positive control: with the synthetic places back, the flag is set even when nothing matches.
+			expect((await search(viewer, 'zzqx')).body).toMatchObject({ hits: [], placesLoaded: true });
+		} finally {
+			client.release();
+			await pool.end();
+		}
 	});
 });
 

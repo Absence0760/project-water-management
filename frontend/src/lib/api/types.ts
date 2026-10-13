@@ -3192,6 +3192,8 @@ export interface MapSearchAnswer {
 	hits: MapSearchHit[];
 	/** Some group had more matches than it lists: type more to narrow it. */
 	truncated: boolean;
+	/** The gazetteer holds places; false until the operator loads one, when no town, farm or river can be found. */
+	placesLoaded: boolean;
 }
 
 /** A loaded land-cover product (issue #326 B-landcover; docs/maps.md § Cultivated area from land cover). */

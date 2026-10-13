@@ -1468,8 +1468,27 @@ geocoder, so what is typed leaves the app for no one.
   finds nothing). A code matches from its start, spaces ignored ("z1h 00"
   finds Z1H001…, "A21" the quaternaries A21A…). Within each group the whole
   name comes first, then names that start with what was typed, then the rest
-  by name; among places, towns before farms before rivers and water. A group
-  with more matches than it lists says so ("type more to narrow it").
+  by name; among places, towns before farms before rivers and water, and
+  among towns of one name the seat of government first (GeoNames' PPLC,
+  PPLA … PPLA4 before PPL: Kuruman, the Northern Cape town, before the Free
+  State hamlet). A group with more matches than it lists says so ("type more
+  to narrow it").
+- **No place names loaded.** The answer's `placesLoaded` is false while
+  `gazetteer_reference` is empty, and an empty answer then says so ("No town,
+  farm or river names are loaded on this site yet…") instead of suggesting a
+  town. Production's gazetteer is empty until the operator loads GeoNames
+  (§ Gazetteer, Production loading); until then no town is found
+  (Malmesbury, Kuruman: ad hoc testing, 2026-10-13).
+- **Not the basemap's labels.** The towns the basemap draws come from
+  OpenStreetMap, inside the PMTiles. The search doesn't read them: a server
+  search would decode vector tiles across the country per query (or extract
+  their names into a table once, which is a derived database under the ODbL,
+  share-alike, § Sources), and a browser search over the tiles in view finds
+  only what is already on screen. GeoNames' ZA dump holds the towns the
+  basemap labels in South Africa (checked: Malmesbury, Kuruman, Vryburg;
+  about 96 000 places kept), under CC BY 4.0.
+  It holds South Africa only, so a town over the border the basemap labels
+  (Kanye, Lobatse, Tsabong in Botswana) isn't found.
 - **Moving the view.** One match moves the map to it at once; several are
   listed, each a button with what and where ("Gauging station Z1H002 ·
   Wilgerivier", "Farm · Western Cape"), and picking one moves the map and
@@ -1522,7 +1541,10 @@ The search's places come from `gazetteer_reference` (225), which the
 - **Production loading** goes through the reference-dataset path
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),
   kind `gazetteer`: the dump gzipped (`gzip -k ZA.txt`) under
-  `reference/gazetteer/`, at most 64 MB (128 MB unzipped).
+  `reference/gazetteer/`, at most 64 MB (128 MB unzipped). The October 2026
+  dump is 12 MB of text (2.7 MB zipped, 103 000 lines); the loader keeps about
+  96 000 places and skips one line without a feature class. Nothing loads it
+  for you: a fresh deployment's search finds no place until this load runs.
 - **Later:** the Surveyor-General's farm-name register (farm names and
   numbers, as the title deeds give them), once its reuse licence is confirmed
   in writing (§ Sources).

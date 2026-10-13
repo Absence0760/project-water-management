@@ -1801,7 +1801,8 @@ attribution (`-f source=…` overrides the source). For rivers add `-f source="<
 streams, `-f min_order=<n>`. The gazetteer is `kind=gazetteer` with a key under
 `reference/gazetteer/` (e.g. `za-2026-10-12.txt.gz`) and a dataset such as
 `GeoNames-ZA-2026-10`; `-f source=…` overrides GeoNames' attribution, which
-is the default. Approve the run in the `production`
+is the default. Until it runs, the Map's search finds no town, farm or river
+(it says no place names are loaded). Approve the run in the `production`
 environment. Never load the synthetic fixtures into production (the label
 `synthetic` is refused).
 

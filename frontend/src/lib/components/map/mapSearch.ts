@@ -64,8 +64,10 @@ export function placeCredits(hits: readonly MapSearchHit[]): { source: string; s
 	return [...seen].map(([source, synthetic]) => ({ source, synthetic }));
 }
 
-/** The live line after a search: how many matched, or that nothing did. */
-export function resultLine(q: string, hits: readonly MapSearchHit[], truncated: boolean): string {
+/** The live line after a search: how many matched, or that nothing did (and, with no place names loaded, that a town can't be found yet). */
+export function resultLine(q: string, hits: readonly MapSearchHit[], truncated: boolean, placesLoaded: boolean): string {
+	if (!hits.length && !placesLoaded)
+		return `Nothing found for “${q}”. No town, farm or river names are loaded on this site yet, so only gauge codes, dams’ names and quaternaries can be found.`;
 	if (!hits.length) return `Nothing found for “${q}”. Try a town, farm or river name, a gauge code (A2H012), a dam’s name or a quaternary (A21A).`;
 	const n = `${hits.length} match${hits.length === 1 ? '' : 'es'} for “${q}”`;
 	return truncated ? `${n}; more match, so type more to narrow it.` : `${n}.`;

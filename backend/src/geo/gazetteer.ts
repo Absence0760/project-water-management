@@ -83,6 +83,12 @@ export interface SearchAnswer {
 	hits: SearchHit[];
 	/** Some group had more matches than it lists: type more to narrow it. */
 	truncated: boolean;
+	/**
+	 * The gazetteer holds places (any dataset). False until the operator loads
+	 * one (production: load-reference.yml, kind gazetteer), when no town, farm
+	 * or river can be found, so an empty answer must not read as "no such place".
+	 */
+	placesLoaded: boolean;
 }
 
 /**
@@ -99,6 +105,15 @@ const sqlKey = (col: string) => `btrim(regexp_replace(translate(lower(${col}), '
 /** Closest first: the whole name, then a name starting with the words typed, then by name. */
 const closeness = (expr: string, phrase: string) => `(${expr} = ${phrase}) DESC, (${expr} LIKE ${phrase} || '%') DESC`;
 
+/**
+ * Among towns of the same name, the seat of government first: the capital,
+ * then a province's, a district's, a local municipality's seat, then the rest
+ * (GeoNames' PPLC, PPLG, PPLA…PPLA4). Kuruman is a Northern Cape PPLA2 and a
+ * Free State PPL; the one on the map's label is the seat. GeoNames' population
+ * would rank them too, but the dump leaves it 0 for most places.
+ */
+const SEAT_RANK = `CASE feature WHEN 'P.PPLC' THEN 0 WHEN 'P.PPLG' THEN 0 WHEN 'P.PPLA' THEN 1 WHEN 'P.PPLA2' THEN 2 WHEN 'P.PPLA3' THEN 3 WHEN 'P.PPLA4' THEN 4 ELSE 5 END`;
+
 /** Search the map's layers, then the gazetteer, for `q`. */
 export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 	const words = searchWords(q);
@@ -109,7 +124,7 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 		if (rows.length > limit) truncated = true;
 		return rows.slice(0, limit);
 	};
-	if (!words.length) return { q, hits: [], truncated: false };
+	if (!words.length) return { q, hits: [], truncated: false, placesLoaded: true };
 
 	const gauges = await db.query<{ code: string; name: string; river: string; lon: number; lat: number; dataset: string }>(
 		`SELECT code, name, river, lon, lat, dataset FROM gauge_station_reference
@@ -140,10 +155,14 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 		`SELECT place_id, name, feature, admin1, lon, lat, dataset, source FROM gazetteer_reference
 		 WHERE ${placeWords}
 		 ORDER BY ${closeness('search_name', '$1')},
-			CASE split_part(feature, '.', 1) WHEN 'P' THEN 0 WHEN 'S' THEN 1 WHEN 'H' THEN 2 ELSE 3 END, name, dataset, place_id
+			CASE split_part(feature, '.', 1) WHEN 'P' THEN 0 WHEN 'S' THEN 1 WHEN 'H' THEN 2 ELSE 3 END,
+			${SEAT_RANK}, name, dataset, place_id
 		 LIMIT $2`,
 		[phrase, SEARCH_PLACE_LIMIT + 1, ...words]
 	);
+
+	// Only asked when no place matched: with none loaded the answer says so.
+	const placesLoaded = places.rows.length > 0 || (await db.query<{ loaded: boolean }>(`SELECT EXISTS (SELECT 1 FROM gazetteer_reference) AS loaded`)).rows[0]!.loaded;
 
 	const hits: SearchHit[] = [
 		...cap(gauges.rows, SEARCH_LAYER_LIMIT).map(
@@ -172,5 +191,5 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 			(r): SearchHit => ({ kind: 'place', code: null, name: r.name, river: '', feature: r.feature, admin1: r.admin1, lon: r.lon, lat: r.lat, bbox: null, dataset: r.dataset, synthetic: r.dataset === SYNTHETIC_GAZETTEER, source: r.source })
 		)
 	];
-	return { q, hits, truncated };
+	return { q, hits, truncated, placesLoaded };
 }

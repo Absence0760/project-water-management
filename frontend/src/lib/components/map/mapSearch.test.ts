@@ -63,8 +63,14 @@ describe('the credits and the live line', () => {
 	});
 
 	it('says how many matched, that more did, or what to try', () => {
-		expect(resultLine('kw', [hit({}), hit({})], false)).toBe('2 matches for “kw”.');
-		expect(resultLine('kw', [hit({})], true)).toBe('1 match for “kw”; more match, so type more to narrow it.');
-		expect(resultLine('zz', [], false)).toMatch(/^Nothing found for “zz”\. Try/);
+		expect(resultLine('kw', [hit({}), hit({})], false, true)).toBe('2 matches for “kw”.');
+		expect(resultLine('kw', [hit({})], true, true)).toBe('1 match for “kw”; more match, so type more to narrow it.');
+		expect(resultLine('zz', [], false, true)).toMatch(/^Nothing found for “zz”\. Try/);
+	});
+
+	it('with no place names loaded, says so rather than suggest a town (production before its gazetteer load)', () => {
+		expect(resultLine('Malmesbury', [], false, false)).toBe(
+			'Nothing found for “Malmesbury”. No town, farm or river names are loaded on this site yet, so only gauge codes, dams’ names and quaternaries can be found.'
+		);
 	});
 });
