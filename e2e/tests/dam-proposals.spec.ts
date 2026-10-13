@@ -9,7 +9,7 @@
 // chart panel, folded to one line, and follows (and moves) the page's pick.
 // The table is read, never the map's pixels.
 // Invented data only.
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
@@ -114,6 +114,8 @@ test('an editor uses the map’s area; the register’s capacity is a reference 
 	await expect(cap.getByTestId('dam-proposal-reference')).toHaveText('Reference only');
 	await expect(cap.getByRole('button')).toHaveCount(0);
 	await expect(panel(page)).toContainText('its volume is yours to enter');
+	// On a wide page it stays a table, its columns named in its head row.
+	await expect(panel(page).locator('thead')).toBeVisible();
 	expect((await model()).damCapacityM3).toBe(150_000);
 	await expectNoViolations(page, { include: '[data-testid="dam-proposals"]' });
 
@@ -132,6 +134,16 @@ test('an editor uses the map’s area; the register’s capacity is a reference 
 	await expect(panel(v).getByRole('button', { name: /^Use / })).toHaveCount(0);
 	await expect(panel(v)).toContainText('Only an editor can use a value.');
 	await expectNoSidewaysScroll(v);
+	// Nor inside its own box: the table (549 px as columns) stacks each row as a block, its values under their labels.
+	const wrap = panel(v).locator('.table-wrap');
+	const fit = await wrap.evaluate((w) => ({ scroll: w.scrollWidth, client: w.clientWidth }));
+	expect(fit.scroll, `the proposals table scrolls sideways: ${fit.scroll} px in ${fit.client}`).toBeLessThanOrEqual(fit.client);
+	await expect(panel(v).locator('thead')).toBeHidden();
+	const label = (cell: Locator) => cell.evaluate((c) => getComputedStyle(c, '::before').content);
+	await expect.poll(() => label(rowOf(v, 'Z100/07').getByRole('cell').nth(0))).toBe('"Saved now"');
+	await expect.poll(() => label(rowOf(v, 'Z100/07').getByRole('cell').nth(1))).toBe('"Proposed"');
+	await expect.poll(() => label(rowOf(v, 'Z100/07').getByTestId('dam-proposal-source'))).toBe('"Source"');
+	await expectNoViolations(v, { include: '[data-testid="dam-proposals"]' });
 });
 
 test('with a run the box is the picked dam’s, folded in its chart panel; Dam of moves the pick, keeps units with no dam, and a card’s Proposals opens it', async ({ page, owner }) => {

@@ -337,6 +337,19 @@ section it belongs to, with the example that taught it.
   the group header row is gone ("Dam capacity", not "Capacity"). Let the
   cards scroll with the modal: `.table-wrap`'s 70vh cap made the node cards
   a scroll box inside a scroll box, with Add node out of reach below it.
+  A read-only table does the same: the Dams page's "Proposed from the
+  register and the map" (Value, Saved now, Proposed, Source, Use) needs
+  549 px as columns, so at 390 it scrolled sideways inside its 323 px box
+  while the page passed `expectNoSidewaysScroll` (which skips a box that
+  holds its own overflow; check the box's `scrollWidth` too). Below its
+  width (a container query on a wrapper, `40rem`) each row is a block: the
+  row header on top, Saved now and Proposed side by side, then Source and
+  Use across, each value under its `data-label` (YearTable's pattern), the
+  Use a 44 px target. Reset the cells with `table.data td`, not a bare
+  `td`: app.css's `table.data td` padding and rule outrank a scoped `td`
+  (`dam-proposals.spec.ts`). Land cover's tables fit as columns; the
+  evaporation table's twelve months keep their sideways scroll with the
+  sticky row label (a variant that can never fit).
 - **In a narrow column, a row's actions get their own line.** The team
   page's Members panel (a 20–24rem side column) had Name · Role · actions,
   and the third column clipped "Reset two-step" to "Reset two-" and

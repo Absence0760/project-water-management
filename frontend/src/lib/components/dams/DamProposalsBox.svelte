@@ -198,6 +198,7 @@
 					<ProposalSynthetic testid="dam-proposals-synthetic" subject="The register" notWhat="the DWS list" forWhat="dam" />
 				{/if}
 				{#if rows.length}
+					<div class="rows-box">
 					<div class="table-wrap">
 						<table class="data compact" data-testid="dam-proposals-rows">
 							<caption class="visually-hidden">Values proposed for {data.nodeName}’s dam, beside the saved model’s</caption>
@@ -214,10 +215,10 @@
 								{#each rows as r (r.key)}
 									<tr data-key={r.key}>
 										<th scope="row">{r.label}<span class="detail muted">{r.detail}</span></th>
-										<td class="num">{r.now}</td>
-										<td class="num">{r.proposed}</td>
-										<td class="src small" data-testid="dam-proposal-source">{r.source}</td>
-										<td>
+										<td class="num" data-label="Saved now">{r.now}</td>
+										<td class="num" data-label="Proposed">{r.proposed}</td>
+										<td class="src small" data-label="Source" data-testid="dam-proposal-source">{r.source}</td>
+										<td class="use">
 											{#if r.kind === 'capacity'}
 												<span class="muted small" data-testid="dam-proposal-reference">Reference only</span>
 											{:else if r.missing}
@@ -240,6 +241,7 @@
 								{/each}
 							</tbody>
 						</table>
+					</div>
 					</div>
 				{/if}
 				{#if !readonly && dirty}
@@ -301,5 +303,63 @@
 	}
 	.table-wrap {
 		width: 100%;
+	}
+	/* Narrower than the table's 549 px (a phone; a 1280 px column is 680): each row is a block, its value's name on
+	   top, Saved now and Proposed side by side under their labels, then the source and the Use, so nothing scrolls
+	   sideways (ui-playbook.md § 2 "Fit a wide table by stacking"; the same markup, restyled, as YearTable).
+	   40rem = 560 px at the 14 px root. */
+	.rows-box {
+		container: dam-proposal-rows / inline-size;
+	}
+	@container dam-proposal-rows (max-width: 40rem) {
+		.table-wrap {
+			max-height: none;
+		}
+		table,
+		tbody {
+			display: block;
+		}
+		thead {
+			display: none;
+		}
+		tr {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.4rem 0.75rem;
+			padding: 0.6rem 0.75rem;
+		}
+		tr + tr {
+			border-top: 1px solid var(--border);
+		}
+		/* table.data: app.css's cell padding and rule (table.data td) outrank a scoped td. */
+		table.data th,
+		table.data td {
+			display: block;
+			padding: 0;
+			border-bottom: none;
+			text-align: left;
+			min-width: 0;
+			max-width: none;
+		}
+		th[scope='row'],
+		.src,
+		.use {
+			grid-column: 1 / -1;
+		}
+		td[data-label]::before {
+			content: attr(data-label);
+			display: block;
+			font-size: var(--font-xs);
+			font-weight: 400;
+			color: var(--text-2);
+		}
+		/* An empty Use cell (a viewer's area row) takes no line. */
+		.use:empty {
+			display: none;
+		}
+		.use .btn {
+			min-height: 44px;
+			min-width: 44px;
+		}
 	}
 </style>
