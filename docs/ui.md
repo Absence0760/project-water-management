@@ -1899,11 +1899,14 @@ for every workspace tab. Its own chunk.
   editor can use a value."). Other states: no dam on the map linked to the
   unit (with **Open the Map**), no register loaded (the loader's command),
   no registered dam within 1 km, and a "Synthetic test data" warning when a
-  row comes from the committed fixture. The table scrolls in its own box on
-  a phone; the page doesn't. Its cells wrap between words (a word breaks only
+  row comes from the committed fixture. Under 560 px wide (a phone) each row
+  stacks as a labelled block: the value's name, then Saved now and Proposed
+  side by side, then Source and a full-width Use (44 px), so nothing scrolls
+  sideways, in the box or the page (ui-playbook.md § 2, as `YearTable`). Its cells wrap between words (a word breaks only
   when it alone is wider than its column), so in the chart panel's ~680 px
-  at 1280 the table fits with Use in view. e2e: `dam-proposals.spec.ts`,
-  `dams-page.spec.ts` (the placement with nine dams).
+  at 1280 the table fits with Use in view. e2e: `dam-proposals.spec.ts`
+  (incl. the stacked rows at 390), `dams-page.spec.ts` (the placement with
+  nine dams).
 
 ## Project
 
