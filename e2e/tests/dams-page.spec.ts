@@ -7,6 +7,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { loadSyntheticDamRegister } from '../support/damRegister.ts';
 import { layersInside } from '../support/layers.ts';
 
 const cards = (page: Page) => page.getByRole('list', { name: 'Dams' }).getByRole('listitem');
@@ -302,6 +303,8 @@ test('many dams: every card shows, emptiest first, with no “Show all” fold; 
 
 test('nine dams: the proposals sit in the picked dam’s chart panel, folded, beside the cards, not under them; a card’s Proposals opens them in view', async ({ page, owner }) => {
 	void owner;
+	// The folded line reads the register of dams: load it here, not by luck of another spec's order.
+	await loadSyntheticDamRegister();
 	// The operator's report (2026-10-13): with nine dams the box was a full-width panel under every card, 1,700 px
 	// below the chart, with an empty column beside the cards.
 	await page.setViewportSize({ width: 1440, height: 960 });
