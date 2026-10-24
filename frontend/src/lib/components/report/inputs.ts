@@ -3,13 +3,13 @@
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
 import { arealRainText, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, describeEwrDailySource, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
-import { findSystem, systemLabel } from '$lib/model/systems';
-import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
-import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
-import { fmtNum, fmtPct } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
-import { peText } from '$lib/components/settings/peInput';
-import { dataEnd } from '$lib/components/series/freshness';
+import { findSystem, systemLabel } from '#lib/model/systems.js';
+import { describeWindow, FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
+import { describeMonths, WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { peText } from '#lib/components/settings/peInput.js';
+import { dataEnd } from '#lib/components/series/freshness.js';
 
 type RawSettings = Partial<Omit<ProjectSettings, 'runoffModel'>> & { runoffModel?: StoredRunoffModelId } & Record<string, unknown>;
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLocale } from '$lib/i18n/locale.svelte';
-import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
+import { setLocale } from '#lib/i18n/locale.svelte.js';
+import { markedCatalogue } from '#lib/i18n/fixtureCatalogue.js';
 import {
 	agoWords,
 	farmToday,

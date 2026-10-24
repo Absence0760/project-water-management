@@ -2,8 +2,8 @@
 // measure in the URL, the run caption, the legend's rows, the fills for areas
 // with no figure, and a feature's figure for the card and the table.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, RunMeta } from '$lib/api/types';
-import { fmtDate } from '$lib/format/number';
+import type { MapFeature, RunMeta } from '#lib/api/types.js';
+import { fmtDate } from '#lib/format/number.js';
 import type { MapStatus } from './mapStatus';
 import { ewrLine, featureResult, legendRows, noRunLine, resultFills, runCaption, runOption, unlinkedAreas, VIEW_OPTIONS, viewFromParam, viewParam } from './mapResults';
 

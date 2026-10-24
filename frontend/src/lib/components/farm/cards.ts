@@ -11,9 +11,9 @@
 // they follow a language switch. Fixed sentences are functions, not
 // constants, for the same reason.
 import { DEMAND_PCT_FLOOR_M3_DAY, IRRIGATION_SYSTEMS, type FarmProjection, type IrrigationSystemId, type FarmView, type ModelBand, type RestrictionLevel } from '@water-management/engine';
-import { STALE_DAYS } from '$lib/components/series/freshness';
-import { i18n, msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
-import type { Rich } from '$lib/i18n/rich';
+import { STALE_DAYS } from '#lib/components/series/freshness.js';
+import { i18n, msg, t, tRich, type Msg } from '#lib/i18n/locale.svelte.js';
+import type { Rich } from '#lib/i18n/rich.js';
 import { languageName, LEVEL_WORDS, pickNotice, splitNotice, WRITTEN_ONLY_IN, type NoticeVm } from './notice';
 import { agoWords, count, DAYS, daysBetween, FARMS, fmtDay, fmtDayMonth, fmtMonthShort, fmtPct, fmtStampDay, fmtStampTime, fmtVolume, joinAnd, POINTS, type VolumeUnit, WEEKS } from './format';
 

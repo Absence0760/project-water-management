@@ -1,16 +1,17 @@
 <script lang="ts">
-	import { hashId } from '$lib/help/anchor';
+	import { hashId } from '#lib/help/anchor.js';
 	// The glossary's index: one page per topic (glossary/[topic], issue #162),
 	// each listed here with its terms, so a reader can scan for a word; search
 	// (the box at the head of every help page) is the other way to find one.
 	// The glossary used to be this one page: an old /help/glossary#<term> link
 	// goes on to the term's topic page.
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
-	import { CATEGORY_TITLES, HELP, helpFor, type HelpCategory } from '$lib/help/content';
-	import { glossaryPath, topicPath } from '$lib/help/glossaryLinks';
+	import HelpCrumbs from '#lib/components/help/HelpCrumbs.svelte';
+	import { CATEGORY_TITLES, HELP, helpFor, type HelpCategory } from '#lib/help/content.js';
+	import { glossaryPath, topicPath } from '#lib/help/glossaryLinks.js';
 
 	const topics = (Object.keys(CATEGORY_TITLES) as HelpCategory[])
 		.map((category) => ({ category, entries: HELP.filter((e) => e.category === category) }))
@@ -18,13 +19,13 @@
 
 	$effect(() => {
 		const e = helpFor(hashId(page.url.hash));
-		if (e) goto(`${base}${glossaryPath(e)}`, { replaceState: true });
+		if (e) goto(`${basePath()}${glossaryPath(e)}`, { replace: true });
 	});
 </script>
 
 <svelte:head><title>Glossary · Help · Water Management</title></svelte:head>
 
-<HelpCrumbs trail={[{ label: 'Help', href: `${base}/help` }, { label: 'Reference' }, { label: 'Glossary' }]} />
+<HelpCrumbs trail={[{ label: 'Help', href: resolve('help') }, { label: 'Reference' }, { label: 'Glossary' }]} />
 <header class="head">
 	<h1>Glossary</h1>
 	<p class="lede">
@@ -36,11 +37,11 @@
 <ul class="topics">
 	{#each topics as t (t.category)}
 		<li>
-			<h2 class="topic"><a href="{base}{topicPath(t.category)}">{CATEGORY_TITLES[t.category]}</a></h2>
+			<h2 class="topic"><a href="{basePath()}{topicPath(t.category)}">{CATEGORY_TITLES[t.category]}</a></h2>
 			<p class="count">{t.entries.length} {t.entries.length === 1 ? 'term' : 'terms'}</p>
 			<ul class="terms" aria-label="Terms in {CATEGORY_TITLES[t.category]}">
 				{#each t.entries as e (e.id)}
-					<li><a href="{base}{glossaryPath(e)}">{e.term}</a></li>
+					<li><a href="{basePath()}{glossaryPath(e)}">{e.term}</a></li>
 				{/each}
 			</ul>
 		</li>

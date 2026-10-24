@@ -8,14 +8,15 @@
 	// loaded on first use) when it has one, else the English, marked with its
 	// own `lang` (WP-2.5).
 	import { tick } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import FarmShell from '$lib/components/farm/FarmShell.svelte';
-	import { farmReturn } from '$lib/components/farm/load';
-	import { hashId, holdAnchor } from '$lib/help/anchor';
-	import { FARMER_HELP } from '$lib/help/farmer';
-	import { helpTranslations, type HelpTranslation } from '$lib/help/translations';
-	import { DEFAULT_LOCALE, i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
+	import FarmShell from '#lib/components/farm/FarmShell.svelte';
+	import { farmReturn } from '#lib/components/farm/load.js';
+	import { hashId, holdAnchor } from '#lib/help/anchor.js';
+	import { FARMER_HELP } from '#lib/help/farmer.js';
+	import { helpTranslations, type HelpTranslation } from '#lib/help/translations.js';
+	import { DEFAULT_LOCALE, i18n, t, wordsLang } from '#lib/i18n/locale.svelte.js';
 
 	/**
 	 * The chosen language's glossary, once loaded ({} for English). If its
@@ -52,7 +53,7 @@
 	// Back to the farm page the words were opened from (?from=, only ever a farm page's own address:
 	// load.ts farmReturn), so a farmer with several farms doesn't land on the list; else the farms.
 	const from = $derived(farmReturn(page.url.searchParams.get('from')));
-	const back = $derived(from ? { href: `${base}${from}`, label: t('My hydrological unit') } : { href: `${base}/farm`, label: t('Your hydrological units') });
+	const back = $derived(from ? { href: `${basePath()}${from}`, label: t('My hydrological unit') } : { href: resolve('farm'), label: t('Your hydrological units') });
 
 	// The SPA renders after navigation, so jump to #id once the list exists,
 	// and hold the entry there while the page settles (lib/help/anchor.ts).

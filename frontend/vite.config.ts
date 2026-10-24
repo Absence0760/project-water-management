@@ -1,8 +1,10 @@
+import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { realpathSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
+import { compilerOptions, preprocess, wafCaptchaOrigins } from './svelte-options.js';
 
 /** The Web Workers built as entries of the page build: source, the virtual module serving its URL, its output name under workers/. */
 const WORKERS = [
@@ -59,12 +61,26 @@ export function workerChunks(): Plugin {
 			return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
 		},
 		// Rolldown names an emitted chunk by chunkFileNames, which SvelteKit sets
-		// to a bare hash; name each worker's entry so it lands under workers/.
+		// to a bare hash under chunks/ (SvelteKit 3: a function, which also gives
+		// its route manifest a fixed name); name each worker's entry so it lands
+		// under workers/ instead. The SSR pass's 'chunks/[name].js' has no '/chunks/'.
 		outputOptions(output) {
 			const chunkFileNames = output.chunkFileNames;
-			if (typeof chunkFileNames !== 'string' || !chunkFileNames.includes('/chunks/')) return undefined;
-			const names = new Map(WORKERS.map((w) => [w.file as string, chunkFileNames.replace(/\/chunks\/.*$/, `/workers/${w.name}-[hash].js`)]));
-			return { ...output, chunkFileNames: (chunk) => (chunk.facadeModuleId && names.get(chunk.facadeModuleId)) || chunkFileNames };
+			const names = new Map<string, string>(WORKERS.map((w) => [w.file, w.name]));
+			const inWorkers = (pattern: string, name: string) => pattern.replace(/\/chunks\/.*$/, `/workers/${name}-[hash].js`);
+			if (typeof chunkFileNames === 'string') {
+				if (!chunkFileNames.includes('/chunks/')) return undefined;
+				return { ...output, chunkFileNames: (chunk) => (chunk.facadeModuleId && names.has(chunk.facadeModuleId) ? inWorkers(chunkFileNames, names.get(chunk.facadeModuleId)!) : chunkFileNames) };
+			}
+			if (typeof chunkFileNames !== 'function') return undefined;
+			return {
+				...output,
+				chunkFileNames: (chunk) => {
+					const pattern = chunkFileNames(chunk);
+					const name = chunk.facadeModuleId ? names.get(chunk.facadeModuleId) : undefined;
+					return name && pattern.includes('/chunks/') ? inWorkers(pattern, name) : pattern;
+				}
+			};
 		}
 	};
 }
@@ -133,7 +149,10 @@ const preload = preloadDedupe();
  * has no hashes, and the spreadsheet workers are builds of their own.
  */
 export function shortFileNames(): Plugin {
-	const pattern = (n: unknown) => (typeof n === 'string' ? n.replace(/\[hash\]/g, '[hash:7]') : n);
+	const short = (n: string) => n.replace(/\[hash\]/g, '[hash:7]');
+	// SvelteKit 3 gives the client's chunkFileNames as a function (its route manifest gets a fixed name): shorten what it returns.
+	const pattern = (n: unknown) =>
+		typeof n === 'string' ? short(n) : typeof n === 'function' ? (info: unknown) => { const r = (n as (i: unknown) => unknown)(info); return typeof r === 'string' ? short(r) : r; } : n;
 	return {
 		name: 'water:short-file-names',
 		outputOptions(output) {
@@ -255,7 +274,45 @@ export function helpArticlesChunk(id: string): string | undefined {
 }
 
 export default defineConfig({
-	plugins: [shortFileNames(), workerChunks(), preload.plugin, chunkModuleMap(), sveltekit()],
+	plugins: [
+		shortFileNames(),
+		workerChunks(),
+		preload.plugin,
+		chunkModuleMap(),
+		// SvelteKit 3 reads its configuration here (svelte.config.js is no longer read); the Svelte options and
+		// the CAPTCHA origins live in svelte-options.js, which the tests import too.
+		sveltekit({
+			preprocess,
+			compilerOptions,
+			// SPA mode: routes like /projects/[id] can't be prerendered, so every
+			// unknown path is served index.html and the client router takes over.
+			// CloudFront serves /index.html for unknown paths (infra/s3_cloudfront.tf).
+			// The e2e build (e2e/playwright.config.ts) bakes in the e2e API URL, so
+			// it writes elsewhere (BUILD_DIR, SVELTE_KIT_DIR) and never touches the
+			// production output in build/ or the .svelte-kit/ a running dev server uses.
+			adapter: adapter({ pages: process.env.BUILD_DIR || 'build', fallback: 'index.html' }),
+			outDir: process.env.SVELTE_KIT_DIR || '.svelte-kit',
+			paths: {
+				// Kit rejects a base without a leading '/' at startup; the cast only tells the type checker.
+				base: (process.env.BASE_PATH || '') as '' | `/${string}`,
+				// The one prerendered page, the landing page at /welcome (issue #57),
+				// writes absolute URLs into its link-preview tags (og:url, og:image,
+				// the canonical link) from the site's origin: the deploy's
+				// PUBLIC_SITE_URL (deploy-frontend.yml), else the local dev site.
+				origin: process.env.SITE_ORIGIN || 'http://localhost:7777'
+			},
+			// Emit a <meta> CSP pinning scripts to 'self' plus the hash of the one
+			// inline bootstrap script. It narrows CloudFront's header policy
+			// (infra/security_headers.tf); the deploy refuses a build without it
+			// (infra/scripts/check-csp.mjs).
+			// The sign-in CAPTCHA's two script origins join it when the deploy
+			// sets PUBLIC_WAF_CAPTCHA_SCRIPT_URL (svelte-options.js wafCaptchaOrigins).
+			csp: { mode: 'hash', directives: { 'script-src': ['self', ...wafCaptchaOrigins(process.env.PUBLIC_WAF_CAPTCHA_SCRIPT_URL)] } },
+			// Kit 3 polls _app/version.json hourly by default; Kit 2 never polled, and nothing here reads
+			// `updated`. It still checks on tab focus and visibility, which Kit 3 can't turn off.
+			version: { pollInterval: 0 }
+		})
+	],
 	// The engine build record (WP-3.13): the web release workflow runs the
 	// engine suite and a soak and puts the record in ENGINE_BUILD
 	// (scripts/release/engine-build.mjs); the report's validation statement

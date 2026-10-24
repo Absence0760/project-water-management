@@ -618,7 +618,7 @@ try again." instead of showing it.
 (`deploy-frontend.yml`): the prerendered landing page (`/welcome` and
 `/welcome/af`, issues #57 and #137) writes its canonical link, `hreflang`
 alternates, `og:url` and `og:image` as absolute URLs from it
-(`kit.prerender.origin`, `frontend/svelte.config.js`). CloudFront serves
+(`paths.origin` in `frontend/vite.config.ts`'s `sveltekit({…})`). CloudFront serves
 `/welcome` from `welcome.html` and `/welcome/af` from `welcome/af.html`
 (`spa_rewrite`).
 
@@ -806,8 +806,9 @@ the real plan stays an operator step
 - **Frontend deploy** checks the build before uploading
   (`infra/scripts/check-csp.mjs`): every inline script must be hashed in
   SvelteKit's `<meta>` CSP, or the deploy stops. This needs
-  `kit.csp = { mode: 'hash', directives: { 'script-src': ['self'] } }` in
-  `frontend/svelte.config.js`. It then uploads `_app/immutable/` with a
+  `csp: { mode: 'hash', directives: { 'script-src': ['self', …] } }` in
+  `frontend/vite.config.ts`'s `sveltekit({…})` (SvelteKit 3 reads its config
+  there). It then uploads `_app/immutable/` with a
   one-year immutable cache and everything else (HTML, favicons, manifest,
   fonts) with a 60 s cache, and invalidates CloudFront.
 - **Migrations** run in the backend deploy *before* the new Lambda code is

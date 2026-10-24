@@ -3,8 +3,9 @@
 	// The farm pages' non-figure states (design §6.5, boards 6 and 7): no
 	// publication yet, access removed, and the error with Try again (the
 	// contact line after a second failure). No raw error text (CLAUDE.md rule 6).
-	import { base } from '$app/paths';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { contactText, stateText, stillFailing } from './cards';
 	import { farmHref } from './load';
 
@@ -46,7 +47,7 @@
 {:else if kind === 'removed'}
 	<h1>{farmName ?? t('Your hydrological unit')}</h1>
 	<p role="alert">{contactText('removed', wuaName)}</p>
-	<a class="link" href="{base}/farm">{t('Your hydrological units')}</a>
+	<a class="link" href={resolve('farm')}>{t('Your hydrological units')}</a>
 {:else if kind === 'not-yours'}
 	<!-- A link to a unit that isn't theirs, in a catchment they still see: say so without "no longer", and offer their own units here. -->
 	<h1>{t('Your hydrological unit')}</h1>
@@ -54,10 +55,10 @@
 	{#if projectId && farms.length}
 		<nav class="mine" aria-labelledby="mine-h">
 			<h2 id="mine-h">{t('Your hydrological units in this catchment')}</h2>
-			{#each farms as f (f.nodeId)}<a class="link" href={farmHref(base, projectId, f.nodeId, true)}>{f.name}</a>{/each}
+			{#each farms as f (f.nodeId)}<a class="link" href={farmHref(basePath(), projectId, f.nodeId, true)}>{f.name}</a>{/each}
 		</nav>
 	{/if}
-	<a class="link" href="{base}/farm">{t('Your hydrological units')}</a>
+	<a class="link" href={resolve('farm')}>{t('Your hydrological units')}</a>
 {:else}
 	<div>
 		<h1>{farmName ?? t('Your hydrological unit')}</h1>

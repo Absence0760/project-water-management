@@ -7,7 +7,7 @@
 // api.map.mapGrid), so the module never imports the app-wide API client and
 // its SvelteKit $env, and the tests can drive it.
 import { untrack } from 'svelte';
-import type { MapGridLayer as Answer } from '$lib/api/types';
+import type { MapGridLayer as Answer } from '#lib/api/types.js';
 import { mapGridViewBbox } from './mapLayers';
 
 export interface MapGridLayerDeps {

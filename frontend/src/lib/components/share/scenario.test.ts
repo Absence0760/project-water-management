@@ -3,7 +3,7 @@
 // one; volumes only when the API sends them; the link's kind from the fragment.
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode, ScenarioOp } from '@water-management/engine';
-import type { SharedRun, ShareScenario } from '$lib/api/types';
+import type { SharedRun, ShareScenario } from '#lib/api/types.js';
 import { changeRows, daysLine, ewrRows, readShareKind, resultsNote, statusLine, volumeRows } from './scenario';
 
 const sp = (s: string | null | undefined) => s?.replace(/[\u00a0\u202f]/g, ' ');

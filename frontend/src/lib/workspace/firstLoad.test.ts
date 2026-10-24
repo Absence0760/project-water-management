@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('$lib/api', () => ({ api: {} }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
 
 import { dropProjectPage, projectPageId, startProjectPage, takeProjectPage, type ProjectPageData } from './firstLoad';
 

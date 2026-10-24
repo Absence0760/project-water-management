@@ -5,9 +5,9 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import GridPasteDialog from './GridPasteDialog.svelte';
-import type { PastePlan } from '$lib/spreadsheet/paste/grid';
+import type { PastePlan } from '#lib/spreadsheet/paste/grid.js';
 
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const base = {
 	open: true,

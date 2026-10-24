@@ -9,12 +9,12 @@
 	through the windows looked at.
 -->
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, type Run, type RunSeriesRef } from '$lib/api';
-	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
+	import { api, type Run, type RunSeriesRef } from '#lib/api/index.js';
+	import CurtailmentTable from '#lib/components/curtailment/CurtailmentTable.svelte';
 	import {
 		describePeriod,
 		forecastDaysIn,
@@ -145,12 +145,12 @@
 	const forecastDays = $derived(target && shownPicked ? forecastDaysIn(target, run.summary.forecastRain) : 0);
 
 	function pick(next: WindowChoice) {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		const v = windowParam(next);
 		if (v) url.searchParams.set(WINDOW_PARAM, v);
 		else url.searchParams.delete(WINDOW_PARAM);
 		if (url.search === page.url.search) return;
-		goto(url, { noScroll: true, keepFocus: true });
+		goto(url, { reset: false });
 	}
 	function pickPreset(p: WindowPreset) {
 		if (p !== 'custom') return pick({ preset: p });

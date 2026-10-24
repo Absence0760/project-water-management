@@ -9,10 +9,10 @@
 -->
 <script lang="ts">
 	import { FAO56_REDUCTION_GUIDANCE, FAO56_RH_LABELS, FAO56_SITING_LABELS, FAO56_TABLE5_SOURCE, FAO56_WIND_LABELS } from '@water-management/engine';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { applied, FETCH_OPTIONS, newHelperState, suggest } from './panCoefficientHelper';
 
 	let {

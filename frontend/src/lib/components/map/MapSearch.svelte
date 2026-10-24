@@ -13,8 +13,8 @@
 	Escape closes the list. Nothing is saved, nothing is drawn: the view moves.
 -->
 <script lang="ts">
-	import { base } from '$app/paths';
-	import { api, type MapSearchHit } from '$lib/api';
+	import { resolve } from '$app/paths';
+	import { api, type MapSearchHit } from '#lib/api/index.js';
 	import { hitDetail, hitName } from './mapSearch';
 	import { MapSearchState } from './mapSearchState.svelte';
 
@@ -90,7 +90,7 @@
 	{#if s.credits.length}
 		<p class="credit small" data-testid="map-search-credit">
 			Place names: {s.credits.map((c) => c.source).join('; ')}{#if s.credits.some((c) => !c.synthetic)}
-				(<a href="{base}/data-sources#geonames">data sources</a>){/if}.
+				(<a href={resolve('data-sources#geonames')}>data sources</a>){/if}.
 		</p>
 	{/if}
 </div>

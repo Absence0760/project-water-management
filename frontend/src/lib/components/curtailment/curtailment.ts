@@ -5,7 +5,7 @@
 // (fmtCharged), as the Farms table shows them (issue #45). The equitable share is a fairness benchmark, not an
 // allocation (audit Q11), so no displayed text calls a positive value a gain.
 import { DEMAND_PCT_FLOOR_M3_DAY, USER_RESTRICTION_NOTE, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser, type EwrSiteSummary } from '@water-management/engine';
-import { fmtNum, fmtPct } from '$lib/format/number';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
 
 /**
  * What a farm has to do overall: cut supply, sit below its equitable share

@@ -2,10 +2,11 @@
 // § Auth, § Members, § Teams). Kept beside client.ts rather than inside it so
 // it can land without touching the shared client; it goes through the same
 // `request`, so errors are the usual ApiError.
-import { nameProblemKind } from '$lib/format/visibleName';
-import { msg, type Msg } from '$lib/i18n/msg';
+import { nameProblemKind } from '#lib/format/visibleName.js';
+import { msg, type Msg } from '#lib/i18n/msg.js';
 import type { Api } from './client';
 import type { AddMemberResult, Invite, InviteInfo, Member, Role, TeamMember, TeamRole } from './types';
+import type { ReadonlyURL } from '$app/state';
 
 export type { AddMemberResult, Invite, InviteInfo } from './types';
 
@@ -54,7 +55,7 @@ export type EmailAuthApi = ReturnType<typeof emailAuthApi>;
  * sign-up page). Returns null for anything that can't be one of ours, so a
  * mangled link shows a clear message instead of a server round trip.
  */
-export function linkToken(url: URL, param: 'token' | 'invite' = 'token'): string | null {
+export function linkToken(url: ReadonlyURL, param: 'token' | 'invite' = 'token'): string | null {
 	const t = url.searchParams.get(param)?.trim() ?? '';
 	return /^[A-Za-z0-9_-]{43}$/.test(t) ? t : null;
 }

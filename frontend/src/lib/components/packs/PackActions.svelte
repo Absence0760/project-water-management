@@ -8,12 +8,13 @@
 	// where the statement is. The server holds every rule; this offers only
 	// what it would accept, and shows its refusal when something moved.
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { api, ApiError, type Pack, type PackIssueChecks } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import { api, ApiError, type Pack, type PackIssueChecks } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtDate } from '#lib/format/number.js';
 	import { issueChecklist, packHref } from './pack';
 
 	let {
@@ -40,7 +41,7 @@
 	const checklist = $derived(issue ? issueChecklist(issue) : []);
 	const canIssue = $derived(pack.status === 'draft' && manifestMatches && !!issue && checklist.every((c) => c.ok));
 	const sourceRun = $derived(pack.scenarioRunId ?? pack.baselineRunId);
-	const reportHref = $derived(`${base}/projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(sourceRun)}&evidence`);
+	const reportHref = $derived(resolve(`projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(sourceRun)}&evidence`));
 
 	/** The server's words, with the failing checks it names (409 details.checks). */
 	function why(e: unknown): string {
@@ -83,7 +84,7 @@
 		error = null;
 		try {
 			const next = await api.packs.create(projectId, sourceRun, pack.id);
-			await goto(packHref(base, projectId, next.id));
+			await goto(packHref(basePath(), projectId, next.id));
 		} catch (e) {
 			error = why(e);
 		} finally {
@@ -137,7 +138,7 @@
 	{:else if pack.status === 'superseded'}
 		<p class="banner banner-amber" role="note" data-testid="pack-banner">
 			<strong>Superseded.</strong> A newer version replaces this one.
-			{#if pack.supersededById}<a href={packHref(base, projectId, pack.supersededById)}>Open the newer version</a>.{/if}
+			{#if pack.supersededById}<a href={packHref(basePath(), projectId, pack.supersededById)}>Open the newer version</a>.{/if}
 			<HelpTip key="pack-lifecycle" label="About an evidence pack’s lifecycle" />
 		</p>
 	{:else}

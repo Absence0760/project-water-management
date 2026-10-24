@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { afterResetAskFailed, FEW_RECOVERY_CODES, fewRecoveryCodes, RECOVERY_CODES_FILE, recoveryCodesText, resetAsked } from './mfaReset';
 
 describe('fewRecoveryCodes', () => {

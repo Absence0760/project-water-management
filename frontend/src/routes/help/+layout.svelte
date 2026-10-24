@@ -8,14 +8,14 @@
 	// contents" button.
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { MediaQuery } from 'svelte/reactivity';
-	import HelpNav from '$lib/components/help/HelpNav.svelte';
+	import HelpNav from '#lib/components/help/HelpNav.svelte';
 
 	let { children }: { children: Snippet } = $props();
 
-	const onSearch = $derived(page.url.pathname.replace(/\/$/, '') === `${base}/help/search`);
+	const onSearch = $derived(page.url.pathname.replace(/\/$/, '') === resolve('help/search'));
 	let q = $state(page.url.searchParams.get('q') ?? '');
 	// Follow the URL (back/forward, a link to a search).
 	$effect(() => {
@@ -26,10 +26,9 @@
 	function search() {
 		const v = q.trim();
 		if (!v && !onSearch) return;
-		goto(v ? `${base}/help/search?q=${encodeURIComponent(v)}` : `${base}/help`, {
-			replaceState: onSearch,
-			keepFocus: true,
-			noScroll: true
+		goto(v ? resolve(`help/search?q=${encodeURIComponent(v)}`) : resolve('help'), {
+			replace: onSearch,
+			reset: false
 		});
 	}
 

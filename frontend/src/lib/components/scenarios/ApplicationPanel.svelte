@@ -18,16 +18,17 @@
 	// for the applicant and the assessors the public-participation record
 	// (166_public_participation, the reg 19 report's material). The drafts the
 	// caller may sign as the application's appointed specialist (167_signers).
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import { base } from '$app/paths';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import { scenarioAudiences } from '$lib/components/notes/notes';
-	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { packHref, packsByScenario } from '$lib/components/packs/pack';
-	import { applicantPackHref } from '$lib/components/packs/applicantPack';
-	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { scenarioAudiences } from '#lib/components/notes/notes.js';
+	import PackBadge from '#lib/components/packs/PackBadge.svelte';
+	import { packHref, packsByScenario } from '#lib/components/packs/pack.js';
+	import { applicantPackHref } from '#lib/components/packs/applicantPack.js';
+	import ShareLinksPanel from '#lib/components/project/ShareLinksPanel.svelte';
 	import type { ModelInput, ScenarioOp } from '@water-management/engine';
 	import LicenceTermsEditor from './LicenceTermsEditor.svelte';
 	import LicenceTermsView from './LicenceTermsView.svelte';
@@ -51,9 +52,9 @@
 		type PackSignoffList,
 		type ScenarioWithCheck,
 		type SpecialistDraft
-	} from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	} from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
 
 	let {
 		projectId,
@@ -559,7 +560,7 @@
 
 	{#if (isOwner || canDecide) && s.status !== 'draft'}
 		<p class="participation">
-			<a href="{base}/projects/{encodeURIComponent(projectId)}/scenarios/{encodeURIComponent(s.id)}/participation" data-testid="application-participation"
+			<a href={resolve(`projects/${encodeURIComponent(projectId)}/scenarios/${encodeURIComponent(s.id)}/participation`)} data-testid="application-participation"
 				>Public participation record</a
 			>
 			<span class="hint">The comments made in the app, for the report to the authority (GN R267 reg 19).</span>
@@ -665,7 +666,7 @@
 					{#each packs as p (p.id)}
 						<li>
 							<PackBadge status={p.status} version={p.version} />
-							<a href={packHref(base, projectId, p.id)}>Version {p.version}, code {p.shortCode}</a>
+							<a href={packHref(basePath(), projectId, p.id)}>Version {p.version}, code {p.shortCode}</a>
 							<span class="muted">{p.issuedAt ? `issued ${fmtDate(p.issuedAt)}` : `drafted ${fmtDate(p.createdAt)}`}</span>
 						</li>
 					{/each}
@@ -686,7 +687,7 @@
 					{#each myPacks as p (p.id)}
 						<li>
 							<PackBadge status={p.status} version={p.version} />
-							<a href={applicantPackHref(base, projectId, s.id, p.id)}>Version {p.version}, code {p.shortCode}</a>
+							<a href={applicantPackHref(basePath(), projectId, s.id, p.id)}>Version {p.version}, code {p.shortCode}</a>
 							<span class="muted">issued {fmtDate(p.issuedAt)}</span>
 						</li>
 					{/each}
@@ -760,7 +761,7 @@
 		{:else if !signList}
 			<p class="muted" role="status">Loading the statement…</p>
 		{:else}
-			{#await import('$lib/components/liability/SignoffSection.svelte') then m}
+			{#await import('#lib/components/liability/SignoffSection.svelte') then m}
 				<m.default {projectId} target={{ kind: 'pack', id: d.id }} list={signList} onchange={() => openSigning(d)} />
 			{/await}
 		{/if}

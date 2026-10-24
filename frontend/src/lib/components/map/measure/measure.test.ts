@@ -3,7 +3,7 @@
 // backend/src/geo/area.test.ts), great-circle distances, and the sentences
 // the measure bar shows.
 import { describe, expect, it } from 'vitest';
-import type { MapPosition } from '$lib/api/types';
+import type { MapPosition } from '#lib/api/types.js';
 import { distanceText, measuredAreaText, measureText, pathLengthM, perimeterM, shapeAreaM2 } from './measure';
 
 const A = 6_378_137;

@@ -1,8 +1,8 @@
 // The alert pages' words and parsing (WP-2.13): the workspace's (./alerts.ts) and the translated pages' (./words.ts).
 import { describe, expect, it } from 'vitest';
-import type { AlertEvent, AlertRule } from '$lib/api/types';
+import type { AlertEvent, AlertRule } from '#lib/api/types.js';
 import { eventKindName, eventText, feedbackKindName, feedbackRows, feedbackShare, feedRuleLabel, groupRules, outOfDateText, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { choiceLabel, farmAlertText, feedbackThanks, fragmentAnswer, fragmentToken, modeLabel, resumeProblem, suppressedText, thresholdLine, unsubscribedText } from './words';
 
 // A token's shape (43 base64url characters); low entropy, so no secret scanner mistakes it for a key.

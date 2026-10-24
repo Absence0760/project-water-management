@@ -15,7 +15,7 @@
 	// (the app's scroll-region watcher, $lib/a11y/scrollRegions), so the arrow
 	// keys scroll it; a fade at its foot says there is more below, and a
 	// "Read the full terms" link sits beside the heading, always in view.
-	import { i18n, t } from '$lib/i18n/locale.svelte';
+	import { i18n, t } from '#lib/i18n/locale.svelte.js';
 	import { SUMMARY_LANGUAGE_NOTE, SUMMARY_POINTS, SUMMARY_TITLE } from './termsSummary';
 
 	let {

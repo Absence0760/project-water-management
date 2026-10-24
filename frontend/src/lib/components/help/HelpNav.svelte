@@ -10,15 +10,16 @@
 	// (Reference) at ~715 px (help.spec.ts).
 	// The glossary is one page per topic; its terms are found by search, not
 	// listed here.
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { CATEGORY_TITLES, HELP, type HelpCategory } from '$lib/help/content';
-	import { topicPath } from '$lib/help/glossaryLinks';
-	import { GUIDE_KIND_TITLES, GUIDES, type GuideKind } from '$lib/help/guides';
+	import { CATEGORY_TITLES, HELP, type HelpCategory } from '#lib/help/content.js';
+	import { topicPath } from '#lib/help/glossaryLinks.js';
+	import { GUIDE_KIND_TITLES, GUIDES, type GuideKind } from '#lib/help/guides.js';
 
 	let navEl: HTMLElement | undefined = $state();
 
-	const path = $derived(page.url.pathname.slice(base.length).replace(/\/$/, '') || '/');
+	const path = $derived(page.url.pathname.slice(basePath().length).replace(/\/$/, '') || '/');
 	const here = (href: string) => (path === href ? 'page' : undefined);
 
 	const kinds: GuideKind[] = ['start', 'concept', 'howto', 'use', 'page'];
@@ -75,7 +76,7 @@
 
 <nav class="help-nav" aria-label="Help" bind:this={navEl}>
 	<ul class="top">
-		<li><a href="{base}/help" aria-current={here('/help')}>Overview</a></li>
+		<li><a href={resolve('help')} aria-current={here('/help')}>Overview</a></li>
 	</ul>
 	{#each groups as g (g.id)}
 		<h2 class="group">
@@ -90,7 +91,7 @@
 		</h2>
 		<ul class="links" id="help-nav-{g.id}-links" aria-labelledby="help-nav-{g.id}" hidden={open !== g.id}>
 			{#each g.links as l (l.href)}
-				<li><a href="{base}{l.href}" aria-current={here(l.href)}>{l.label}</a></li>
+				<li><a href="{basePath()}{l.href}" aria-current={here(l.href)}>{l.label}</a></li>
 			{/each}
 		</ul>
 	{/each}

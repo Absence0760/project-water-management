@@ -6,7 +6,7 @@
 	// answer decides: turning it on needs this session's own second factor,
 	// so a refusal (403 mfa_required / mfa_step_up) also brings up the
 	// workspace's two-step prompt (layout/MfaBanner), and the switch goes back.
-	import { mfaPrompt } from '$lib/auth/mfaPrompt.svelte';
+	import { mfaPrompt } from '#lib/auth/mfaPrompt.svelte.js';
 	import { ALWAYS_TEXT, inheritedText, requirementText, turnOnHint, type TwoStepScope } from './requireTwoStep';
 
 	let {

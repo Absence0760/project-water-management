@@ -4,9 +4,9 @@
 	// by colour. On the Data page (`fold`) the table flows with the page: the
 	// flagged years and the latest few, the rest behind "Show all N water
 	// years". Elsewhere (Runs) it scrolls in a box, a focusable named region.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { OBSERVED_FLOW_LABEL, waterYearLabel, type ObservedAgreement } from '@water-management/engine';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum } from '#lib/format/number.js';
 	import { agreementFold } from './agreementFold';
 
 	let { agreement, headingLevel = 3, fold = false }: { agreement: ObservedAgreement; headingLevel?: 2 | 3; fold?: boolean } = $props();

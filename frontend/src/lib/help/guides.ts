@@ -11,7 +11,7 @@
 //   [[guide:add-data|label]] link to another guide
 // Every reference must resolve (guarded by guides.test.ts).
 
-import { TAB_LABELS, type TabId as WorkspaceTabId } from '$lib/workspace/tabs';
+import { TAB_LABELS, type TabId as WorkspaceTabId } from '#lib/workspace/tabs.js';
 import { helpFor } from './content';
 import { PAGE_GUIDES } from './guides-pages';
 import type { ShotId } from './pictures';

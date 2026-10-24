@@ -5,12 +5,12 @@
 	// `part="abstraction"`: the day a farm or water user starts to abstract.
 	// Empty is null: the field is off, as on a model from before 1.30.0. The
 	// model check's message (engine developmentProblem) shows under the fields.
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import type { NetworkNode } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { developmentIssue } from '$lib/model/validate';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import { developmentIssue } from '#lib/model/validate.js';
 	import { developmentProblemFields, type DevelopmentField } from './problemFields';
 
 	let { node, readonly, part }: { node: NetworkNode; readonly: boolean; part: 'dam' | 'abstraction' } = $props();

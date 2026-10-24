@@ -2,7 +2,7 @@
 // docs/model.md §2.10a): the cumulative curve with the whole-record line and
 // the fitted segments, and the residual from the whole-record line by year.
 import { waterYearLabel, type DoubleMass } from '@water-management/engine';
-import type { ChartSeries } from '$lib/components/charts/series';
+import type { ChartSeries } from '#lib/components/charts/series.js';
 
 export interface DoubleMassChart {
 	curve: { series: ChartSeries[]; xy: { x: number[]; ys: (number | null)[][] } };

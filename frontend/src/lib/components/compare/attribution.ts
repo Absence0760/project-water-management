@@ -2,9 +2,9 @@
 // `attribution`): the revision behind each "Inputs that differ" line, and a line
 // naming who changed things between the runs. Pure, no DOM.
 import type { InputChange } from '@water-management/engine';
-import type { CompareAttribution, HistoryRevision } from '$lib/api/types';
-import { FORMER_MEMBER } from '$lib/format/maker';
-import { fmtStamp } from '$lib/format/number';
+import type { CompareAttribution, HistoryRevision } from '#lib/api/types.js';
+import { FORMER_MEMBER } from '#lib/format/maker.js';
+import { fmtStamp } from '#lib/format/number.js';
 
 /** The project's History tab, from the compare page (standalone or in the workspace). */
 export const historyHref = (projectId: string) => `/projects/${encodeURIComponent(projectId)}?tab=history`;

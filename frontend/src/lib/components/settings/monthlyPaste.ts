@@ -4,8 +4,8 @@
 // or both: a row per setting, its name first, under a heading row of months.
 // The block is mapped by $lib/spreadsheet/paste/monthlyRows.ts, as the
 // transfers' rates are.
-import type { GridFormat, PasteAnchor, PastePlan } from '$lib/spreadsheet/paste/grid';
-import { monthlyRowsCsv, planMonthlyPaste, type MonthlyRow } from '$lib/spreadsheet/paste/monthlyRows';
+import type { GridFormat, PasteAnchor, PastePlan } from '#lib/spreadsheet/paste/grid.js';
+import { monthlyRowsCsv, planMonthlyPaste, type MonthlyRow } from '#lib/spreadsheet/paste/monthlyRows.js';
 import { PE_MONTH_MAX_MM } from './peInput';
 
 /** Headings the first column goes by. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DelineationProposal, DelineationRequest } from '$lib/api/types';
+import type { DelineationProposal, DelineationRequest } from '#lib/api/types.js';
 import { afterPollError, COPERNICUS_NOTICE, datasetNotice, failedText, POLL_GIVE_UP, isWaiting, openProposal, panFacts, proposalFacts, provenanceFacts, waitingText } from './delineation';
 
 const proposal = (over: Partial<DelineationProposal> = {}): DelineationProposal => ({

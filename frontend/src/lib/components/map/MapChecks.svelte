@@ -4,8 +4,8 @@
 	// only: nothing here blocks a save or a run. Each warning names the
 	// features it is about as buttons that pick them on the map and in the
 	// list (`onpick`); without `onpick` the names are plain text.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { MapFeature, MapNodeArea } from '$lib/api/types';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { MapFeature, MapNodeArea } from '#lib/api/types.js';
 	import { KIND_LABEL } from './mapData';
 	import { mapChecks } from './mapChecks';
 

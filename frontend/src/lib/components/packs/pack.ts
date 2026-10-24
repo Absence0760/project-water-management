@@ -4,8 +4,8 @@
 // public verify page. Pure, so each is unit-tested (pack.test.ts); the hash
 // itself is WebCrypto's (sha256Hex).
 import { packManifestText, type PackManifest } from '@water-management/engine';
-import { fmtDate } from '$lib/format/number';
-import type { Pack, PackBundleCheck, PackIssueChecks, PackReproductionState, PackStatus, PackVerification } from '$lib/api';
+import { fmtDate } from '#lib/format/number.js';
+import type { Pack, PackBundleCheck, PackIssueChecks, PackReproductionState, PackStatus, PackVerification } from '#lib/api/index.js';
 
 /** A pack's status in a word, as its badges say it. */
 export const PACK_STATUS_LABEL: Record<PackStatus, string> = {

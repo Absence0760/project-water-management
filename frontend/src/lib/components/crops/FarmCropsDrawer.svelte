@@ -9,17 +9,17 @@
 	// the map (issue #326 B-landcover, CroplandProposalsBox.svelte).
 	import { untrack } from 'svelte';
 	import type { ProjectSettings } from '@water-management/engine';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import ModelSaveRow from '#lib/components/model/ModelSaveRow.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import CroplandProposalsBox from './CroplandProposalsBox.svelte';
 	import { farmDemands } from './demand';
 	import { farmPlanting, inOrder, plantedFirst } from './farmDrawer';
-	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
+	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 
 	let {
 		open = $bindable(false),

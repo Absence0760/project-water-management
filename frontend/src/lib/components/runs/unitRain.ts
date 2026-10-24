@@ -5,7 +5,7 @@
 // from before it has none, and the panel shows only when the summary carries
 // the field.
 import { AREAL_RAIN_FACTOR_MAX, AREAL_RAIN_FACTOR_MIN, AREAL_RAIN_FACTOR_WARN_MAX, AREAL_RAIN_FACTOR_WARN_MIN, type UnitRainSummary, type UnitRainUnit } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** The hard clamp and the soft warning band on a level factor, in words ("0.25–4", "0.5–2"; issue #500 answer 2). */
 const CLAMP = `${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}`;

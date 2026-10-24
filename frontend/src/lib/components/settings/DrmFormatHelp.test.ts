@@ -13,8 +13,8 @@ import { drmExampleFiles, exampleRulFile, exampleTabFile, parseDrmFile } from '.
 import { parseGrid } from './ewrRules';
 
 // The daily EWR's fields read the last run through the API only once the MAR ratio is in use in a browser; nothing here runs effects.
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const decoded = (href: string) => decodeURIComponent(href.slice(href.indexOf(',') + 1));
 /** Each example link's download name and data URL, in page order. */

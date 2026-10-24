@@ -5,12 +5,12 @@
 	// the outcome or confirm a review (the API answers anyone else 403, and
 	// ProjectTab renders it for editors and owners only). Provisional position
 	// (pre-counsel research, 2026-10-01).
-	import { localIsoDate } from '$lib/format/number';
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import { localIsoDate } from '#lib/format/number.js';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { onMount } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { api, type LicenceRecord } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { api, type LicenceRecord } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { formOf, formProblem, OUTCOME_LABEL, outcomeBody, recordStatus, type OutcomeForm } from './licenceRecord';
 
 	let { projectId, isOwner }: { projectId: string; isOwner: boolean } = $props();

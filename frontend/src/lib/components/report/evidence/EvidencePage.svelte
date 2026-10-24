@@ -12,16 +12,17 @@
 	// issued pack, when there is one).
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { REPORT_FOOTER, type EvidenceReport } from '@water-management/engine';
-	import { api, ApiError, hasRole, type Pack, type Project, type SignoffList } from '$lib/api';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { issuedOf, packHref, packsOfRun } from '$lib/components/packs/pack';
-	import { fmtDate } from '$lib/format/number';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { loadOnce } from '$lib/components/common/lazy';
+	import { api, ApiError, hasRole, type Pack, type Project, type SignoffList } from '#lib/api/index.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import PackBadge from '#lib/components/packs/PackBadge.svelte';
+	import { issuedOf, packHref, packsOfRun } from '#lib/components/packs/pack.js';
+	import { fmtDate } from '#lib/format/number.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { loadOnce } from '#lib/components/common/lazy.js';
 	import { boardChecks, DRAFT_STAMP, refusedChecks } from './sections';
 
 	let { projectId, runId }: { projectId: string; runId: string | null } = $props();
@@ -90,7 +91,7 @@
 	const title = $derived(report?.identity.title ?? '');
 	const footer = $derived(project && report ? `${DRAFT_STAMP} · ${REPORT_FOOTER(project.name, title, 'Appendix B.3')}` : undefined);
 	const back = $derived(
-		report?.identity.application ? `${base}/projects/${projectId}?tab=scenarios&scenario=${encodeURIComponent(report.identity.application.scenarioId)}` : `${base}/projects/${projectId}?tab=runs${runId ? `&run=${encodeURIComponent(runId)}` : ''}`
+		report?.identity.application ? resolve(`projects/${projectId}?tab=scenarios&scenario=${encodeURIComponent(report.identity.application.scenarioId)}`) : resolve(`projects/${projectId}?tab=runs${runId ? `&run=${encodeURIComponent(runId)}` : ''}`)
 	);
 	const failed = $derived(report ? refusedChecks(report) : []);
 
@@ -125,7 +126,7 @@
 		createError = null;
 		try {
 			const pack = await api.packs.create(projectId, runId, current?.id);
-			await goto(packHref(base, projectId, pack.id));
+			await goto(packHref(basePath(), projectId, pack.id));
 		} catch (e) {
 			createError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -138,11 +139,11 @@
 
 <main class="page report ev-page" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={status === 'loading'}>
 	{#if status === 'not-found'}
-		<div class="alert alert-error" role="alert">This project or run doesn't exist, or you don't have access to it. <a href="{base}/">Back to projects</a></div>
+		<div class="alert alert-error" role="alert">This project or run doesn't exist, or you don't have access to it. <a href={resolve('')}>Back to projects</a></div>
 	{:else if status === 'forbidden'}
 		<div class="alert alert-error" role="alert">An evidence report needs the viewer role or above on this project.</div>
 	{:else if status === 'no-run'}
-		<div class="alert alert-info" role="status">Choose a run for the evidence report. <a href="{base}/projects/{projectId}?tab=runs">Go to Runs &amp; results</a></div>
+		<div class="alert alert-info" role="status">Choose a run for the evidence report. <a href={resolve(`projects/${projectId}?tab=runs`)}>Go to Runs &amp; results</a></div>
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The evidence report could not be loaded: {error}
@@ -156,7 +157,7 @@
 		<div class="bar no-print">
 			<a href={back}>← Back</a>
 			<button type="button" class="btn btn-primary" disabled={!ready || !!report?.refused} onclick={() => window.print()}>Download draft PDF</button>
-			<a class="btn" href="{base}/projects/{projectId}/report?run={runId}">Catchment report</a>
+			<a class="btn" href={resolve(`projects/${projectId}/report?run=${runId}`)}>Catchment report</a>
 			<HelpTip key="evidence-report" label="About the evidence report" />
 			<p class="muted small" role="status">
 				{#if !ready}Preparing the evidence report…{:else}A draft: every page says “{DRAFT_STAMP}”. To issue it, with a hash, a short code and a public verify link, make it an evidence pack (below the checks).{/if}
@@ -174,7 +175,7 @@
 						<li><strong>{c.label}.</strong> {c.detail}{#if c.fix}<span class="fix"> Way out: {c.fix}</span>{/if}</li>
 					{/each}
 				</ul>
-				<p><a href="{base}/projects/{projectId}/report?run={runId}">Open the ordinary catchment report of this run</a>: it isn’t evidence, and says so.</p>
+				<p><a href={resolve(`projects/${projectId}/report?run=${runId}`)}>Open the ordinary catchment report of this run</a>: it isn’t evidence, and says so.</p>
 			</section>
 		{:else}
 			<details class="board no-print" data-testid="evidence-checks" open>
@@ -209,7 +210,7 @@
 						{#each runPacks as p (p.id)}
 							<li>
 								<PackBadge status={p.status} version={p.version} />
-								<a href={packHref(base, projectId, p.id)}>Version {p.version}, code {p.shortCode}</a>
+								<a href={packHref(basePath(), projectId, p.id)}>Version {p.version}, code {p.shortCode}</a>
 								<span class="muted small">{p.issuedAt ? `issued ${fmtDate(p.issuedAt)}` : `drafted ${fmtDate(p.createdAt)}`}</span>
 							</li>
 						{/each}

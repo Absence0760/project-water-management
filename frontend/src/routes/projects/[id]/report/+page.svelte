@@ -27,59 +27,59 @@
 	// sends them to their farm page; any other role below viewer (an applicant)
 	// is told the report isn't part of their role.
 	import { untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { fdcPercentileTable, REPORT_FOOTER, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
-	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
-	import { loadImpactSeries, type ImpactSeries } from '$lib/components/report/impactSeries';
-	import { parseRef } from '$lib/components/compare/picker';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '$lib/series/provenance';
-	import { api, ApiError, type Project, type Run, type RunCompareResponse, type RunPublication, type SignoffList } from '$lib/api';
-	import ChangesList from '$lib/components/compare/ChangesList.svelte';
-	import { attributionSummary, lineAuthors } from '$lib/components/compare/attribution';
-	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
-	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { loadOnce } from '$lib/components/common/lazy';
-	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
-	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
-	import { heatmapHeadlineNote, reportJudgedBy } from '$lib/components/ewr/headline';
-	import { dailyEwrName } from '$lib/components/ewr/notMet';
-	import { forecastBand } from '$lib/components/forecast/forecast';
-	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
-	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
-	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
-	import NetworkSchematic from '$lib/components/network/NetworkSchematic.svelte';
-	import { ranAgo } from '$lib/components/network/supplyColour';
-	import { supplyColouring } from '$lib/components/network/farmColour';
-	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '$lib/components/report/inputs';
-	import { reportPageRule } from '$lib/components/report/printPage';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
-	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
-	import { noticeLanguages, restrictionSummary } from '$lib/components/runs/publication';
-	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '$lib/components/report/sections';
-	import { cachedSeries } from '$lib/components/runs/cache';
-	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
-	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartCaption, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
-	import { toDisplayUnit } from '$lib/components/runs/results';
-	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
-	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
-	import { hasHumanImpacts, loadHumanImpacts } from '$lib/components/runs/humanImpacts';
-	import { loadRestrictionTables } from '$lib/components/runs/restrictions';
-	import { resolveHeadline } from '$lib/components/runs/ewrAssurance';
-	import { runSentence } from '$lib/components/runs/runSentence';
-	import SelfChecksPanel from '$lib/components/runs/SelfChecksPanel.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtDate, fmtNum } from '$lib/format/number';
+	import { fdcReportDays, fdcReportRows } from '#lib/components/report/fdc.js';
+	import { loadImpactSeries, type ImpactSeries } from '#lib/components/report/impactSeries.js';
+	import { parseRef } from '#lib/components/compare/picker.js';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '#lib/series/provenance.js';
+	import { api, ApiError, type Project, type Run, type RunCompareResponse, type RunPublication, type SignoffList } from '#lib/api/index.js';
+	import ChangesList from '#lib/components/compare/ChangesList.svelte';
+	import { attributionSummary, lineAuthors } from '#lib/components/compare/attribution.js';
+	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
+	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { loadOnce } from '#lib/components/common/lazy.js';
+	import CurtailmentTable from '#lib/components/curtailment/CurtailmentTable.svelte';
+	import EwrHeatmap from '#lib/components/ewr/EwrHeatmap.svelte';
+	import { heatmapHeadlineNote, reportJudgedBy } from '#lib/components/ewr/headline.js';
+	import { dailyEwrName } from '#lib/components/ewr/notMet.js';
+	import { forecastBand } from '#lib/components/forecast/forecast.js';
+	import Disclaimer from '#lib/components/liability/Disclaimer.svelte';
+	import SignoffSection from '#lib/components/liability/SignoffSection.svelte';
+	import ValidationStatement from '#lib/components/liability/ValidationStatement.svelte';
+	import NetworkSchematic from '#lib/components/network/NetworkSchematic.svelte';
+	import { ranAgo } from '#lib/components/network/supplyColour.js';
+	import { supplyColouring } from '#lib/components/network/farmColour.js';
+	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '#lib/components/report/inputs.js';
+	import { reportPageRule } from '#lib/components/report/printPage.js';
+	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
+	import AssurancePanel from '#lib/components/reliability/AssurancePanel.svelte';
+	import { noticeLanguages, restrictionSummary } from '#lib/components/runs/publication.js';
+	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '#lib/components/report/sections.js';
+	import { cachedSeries } from '#lib/components/runs/cache.js';
+	import EwrAssurancePanel from '#lib/components/runs/EwrAssurancePanel.svelte';
+	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartCaption, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '#lib/components/runs/flowSeries.js';
+	import { toDisplayUnit } from '#lib/components/runs/results.js';
+	import RunSummaryView from '#lib/components/runs/RunSummaryView.svelte';
+	import UnitResultsTable from '#lib/components/supply/UnitResultsTable.svelte';
+	import { hasHumanImpacts, loadHumanImpacts } from '#lib/components/runs/humanImpacts.js';
+	import { loadRestrictionTables } from '#lib/components/runs/restrictions.js';
+	import { resolveHeadline } from '#lib/components/runs/ewrAssurance.js';
+	import { runSentence } from '#lib/components/runs/runSentence.js';
+	import SelfChecksPanel from '#lib/components/runs/SelfChecksPanel.svelte';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtDate, fmtNum } from '#lib/format/number.js';
 
 	// The server-side PDF (Generate / Email me). In the report's chunk: the bar renders it for every
 	// report of a run, so as a chunk of its own it only added split overhead (issue #9).
-	import ServerPdf from '$lib/components/report/ServerPdf.svelte';
+	import ServerPdf from '#lib/components/report/ServerPdf.svelte';
 	// Evidence mode's shell is small; its report is a chunk of its own (EvidencePage loads it).
-	import EvidencePage from '$lib/components/report/evidence/EvidencePage.svelte';
+	import EvidencePage from '#lib/components/report/evidence/EvidencePage.svelte';
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
@@ -88,7 +88,7 @@
 	/** The baseline of an impact report ("<projectId>:<runId>", as Compare runs' refs); null for the plain report. */
 	const againstParam = $derived(page.url.searchParams.get('against') || null);
 	// The impact section: its own chunk, loaded (before "ready") only for an impact report.
-	const loadImpact = () => import('$lib/components/report/ImpactSection.svelte');
+	const loadImpact = () => import('#lib/components/report/ImpactSection.svelte');
 	let impact = $state.raw<RunCompareResponse | null>(null);
 	let impactSeries = $state.raw<ImpactSeries | null>(null);
 	let impactError = $state<string | null>(null);
@@ -187,7 +187,7 @@
 			// A member below viewer: a farmer's view of the project is their farm page (the workspace sends them there too).
 			else if (e instanceof ApiError && e.status === 403) {
 				const role = (await api.projects.list().catch(() => [])).find((p) => p.id === id)?.role;
-				if (role === 'farmer') await goto(`${base}/farm/${encodeURIComponent(id)}`, { replaceState: true });
+				if (role === 'farmer') await goto(resolve(`farm/${encodeURIComponent(id)}`), { replace: true });
 				else status = 'forbidden';
 			} else {
 				error = e instanceof Error ? e.message : String(e);
@@ -294,7 +294,7 @@
 <main class="page report" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={!ready && status === 'loading'}>
 	{#if status === 'not-found'}
 		<div class="alert alert-error" role="alert">
-			This project doesn't exist or you don't have access to it. <a href="{base}/">Back to projects</a>
+			This project doesn't exist or you don't have access to it. <a href={resolve('')}>Back to projects</a>
 		</div>
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
@@ -303,25 +303,25 @@
 		</div>
 	{:else if status === 'forbidden'}
 		<div class="alert alert-info" role="status">
-			The catchment report isn’t part of your role in this project. <a href="{base}/">Back to projects</a>
+			The catchment report isn’t part of your role in this project. <a href={resolve('')}>Back to projects</a>
 		</div>
 	{:else if status === 'chunk-failed'}
 		<ChunkFailed what="The report" />
 	{:else if status === 'no-runs' || status === 'no-run'}
 		<div class="alert alert-info" role="status">
 			{status === 'no-runs' ? 'This project has no runs yet, so there is nothing to report.' : 'This run doesn’t exist any more.'}
-			<a href="{base}/projects/{projectId}?tab=runs">Go to Runs &amp; results</a>
+			<a href={resolve(`projects/${projectId}?tab=runs`)}>Go to Runs &amp; results</a>
 		</div>
 	{/if}
 
 	{#if status === 'loading' || status === 'loaded'}
 		<div class="bar no-print">
 			{#if againstParam && run}
-				<a href="{base}/projects/{projectId}?tab=compare&{new URLSearchParams({ a: againstParam, b: `${projectId}:${run.id}` })}">← Back to the comparison</a>
+				<a href={resolve(`projects/${projectId}?tab=compare&${new URLSearchParams({ a: againstParam, b: `${projectId}:${run.id}` })}`)}>← Back to the comparison</a>
 			{:else}
-				<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
+				<a href={resolve(`projects/${projectId}?tab=runs${run ? `&run=${run.id}` : ''}`)}>← Back to the run</a>
 			{/if}
-			<a href="{base}/help/guides/run-and-read-results#read-top-to-bottom">About this report</a>
+			<a href={resolve('help/guides/run-and-read-results#read-top-to-bottom')}>About this report</a>
 			<button type="button" class="btn btn-primary" disabled={!ready} onclick={() => window.print()}>Download PDF</button>
 			<!-- An impact report whose baseline can't be read has no server PDF: the API would refuse it (the section says why). -->
 			{#if run && (!againstParam || impact)}

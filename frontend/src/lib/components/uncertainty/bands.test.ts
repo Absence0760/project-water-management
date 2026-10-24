@@ -1,6 +1,6 @@
 import { band, type Band, type ResolvedEnsembleOptions } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { Ensemble } from '$lib/api';
+import type { Ensemble } from '#lib/api/index.js';
 import { abandonedText, bandCells, coverageText, fdcChart, historyRows, isPaired, pct, pointsBelowEwr, rangeText, rejectedText, shownEnsemble, sig, withheldNote } from './bands';
 
 const gated: Band = { n: 5, p5: null, p50: null, p95: null, min: 1, max: 9 };

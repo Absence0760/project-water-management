@@ -4,8 +4,8 @@
 // document in full and answers with every problem, so this never duplicates
 // its rules. A workbook source (WP-1.31) adds its own branch to
 // `readImportFile` and returns the same `ParsedImport`, with its notes.
-import { cleanName } from '$lib/format/visibleName';
-import type { ImportReport, ProjectFile } from '$lib/api';
+import { cleanName } from '#lib/format/visibleName.js';
+import type { ImportReport, ProjectFile } from '#lib/api/index.js';
 
 /** File types the picker offers. */
 export const IMPORT_ACCEPT = '.json,application/json';

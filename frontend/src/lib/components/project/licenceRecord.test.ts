@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LicenceRecord } from '$lib/api';
+import type { LicenceRecord } from '#lib/api/index.js';
 import { formOf, formProblem, outcomeBody, recordStatus } from './licenceRecord';
 
 const empty: LicenceRecord = { outcome: null, outcomeOn: null, expiresOn: null, reason: '', closesOn: null, reviewDueOn: null };

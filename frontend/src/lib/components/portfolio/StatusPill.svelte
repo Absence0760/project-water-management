@@ -4,7 +4,7 @@
 	// supply ("Amber: 88.0% supplied, …", the project list since issue #558).
 	// The words carry the meaning; the colour repeats it, and an unknown gets
 	// a dashed outline.
-	import type { PortfolioProject } from '$lib/api/types';
+	import type { PortfolioProject } from '#lib/api/types.js';
 	import { ewrText, irrigationText } from './portfolio';
 
 	let { p, kind = 'ewr' }: { p: Pick<PortfolioProject, 'ewr' | 'irrigation'>; kind?: 'ewr' | 'irrigation' } = $props();

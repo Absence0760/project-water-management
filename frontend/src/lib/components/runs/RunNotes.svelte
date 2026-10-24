@@ -12,8 +12,8 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
 	import type { Wr2012FlagLevel } from '@water-management/engine';
-	import { api, RUN_NOTES_MAX, type RunMeta } from '$lib/api';
-	import { fmtWhen } from '$lib/format/number';
+	import { api, RUN_NOTES_MAX, type RunMeta } from '#lib/api/index.js';
+	import { fmtWhen } from '#lib/format/number.js';
 	import { explanationPrompt, normaliseNotes, notesDirty } from './notes';
 
 	let {

@@ -4,11 +4,11 @@
 // registeredUse.test.ts. The words describe arithmetic against a registered
 // volume, never a finding on lawfulness, and name the unit, never a holder.
 import type { EvidenceAllocationCounts, EvidenceAllocations, EvidenceAllocationSource, EvidenceAllocationUnit, EvidenceAllocationYear } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
-import { SOURCE_LABEL } from '$lib/components/allocations/allocations';
-import { useAxis, type UseMark, type UseRow } from '$lib/components/allocations/usePlot';
+import { fmtNum } from '#lib/format/number.js';
+import { SOURCE_LABEL } from '#lib/components/allocations/allocations.js';
+import { useAxis, type UseMark, type UseRow } from '#lib/components/allocations/usePlot.js';
 
-export { USE_AXIS_MAX, USE_AXIS_MIN, type UseMark, type UseRow } from '$lib/components/allocations/usePlot';
+export { USE_AXIS_MAX, USE_AXIS_MIN, type UseMark, type UseRow } from '#lib/components/allocations/usePlot.js';
 
 /** A unit–source's row label. */
 export const unitSourceLabel = (u: Pick<EvidenceAllocationUnit, 'name' | 'own'>, s: Pick<EvidenceAllocationSource, 'waterSource'>) =>

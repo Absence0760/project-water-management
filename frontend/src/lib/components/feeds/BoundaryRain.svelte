@@ -14,11 +14,11 @@
 	card (`onclose`). Helpers in ./feeds.ts.
 -->
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, tick } from 'svelte';
-	import { api } from '$lib/api';
-	import { fmtDay, fmtNum } from '$lib/format/number';
+	import { api } from '#lib/api/index.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import {
 		applyWords,
 		boundaryApplyBody,

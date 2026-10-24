@@ -1,8 +1,8 @@
 <!-- i18n-section: landing.hero -->
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import Diorama from './Diorama.svelte';
 	import { DATA } from './data.generated';
 	import { fmt } from './format';
@@ -17,7 +17,7 @@
 		const start = (document as Document & { startViewTransition?: (update: () => Promise<void>) => unknown }).startViewTransition;
 		if (!start || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 		e.preventDefault();
-		start.call(document, () => goto(`${base}/login`));
+		start.call(document, () => goto(resolve('login')));
 	}
 
 	// The diorama loops for as long as it is on screen, so the visitor can stop
@@ -36,8 +36,8 @@
 			{t('Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.')}
 		</p>
 		<div class="actions">
-			<a class="btn btn-primary btn-lg" href="{base}/login" onclick={signIn}>{t('Sign in')}</a>
-			<a class="btn btn-lg" href="{base}/register">{t('Create an account')}</a>
+			<a class="btn btn-primary btn-lg" href={resolve('login')} onclick={signIn}>{t('Sign in')}</a>
+			<a class="btn btn-lg" href={resolve('register')}>{t('Create an account')}</a>
 		</div>
 	</div>
 	<div class="art">

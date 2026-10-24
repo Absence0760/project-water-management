@@ -7,11 +7,11 @@
 	// "Who can see my farm" loads the people by name when first opened
 	// (GET …/access, §10.2); if that fails it falls back to who, by role.
 	import type { FarmView } from '@water-management/engine';
-	import { api, type FarmAccessPerson } from '$lib/api';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { api, type FarmAccessPerson } from '#lib/api/index.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { accessLine, outletLine, positionLine, privacy, staleUntil, whoCanSee } from './cards';
 	import { farmToday } from './numbers';
-	import Rich from '$lib/i18n/Rich.svelte';
+	import Rich from '#lib/i18n/Rich.svelte';
 
 	let { view }: { view: FarmView } = $props();
 	let open = $state(false);

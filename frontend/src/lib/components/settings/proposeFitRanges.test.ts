@@ -3,7 +3,7 @@
 import type { SeriesMeta } from '@water-management/engine';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('$lib/api', () => ({ api: {} }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
 const { fitRangeSeries } = await import('./proposeFitRanges');
 
 const s = (id: string, kind: string, name: string, siteNodeId: string | null = null) => ({ id, kind, name, siteNodeId }) as unknown as SeriesMeta;

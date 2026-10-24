@@ -1,7 +1,7 @@
 // The review triggers' view model (issue #53 R6): an outlook's stored table
 // in words, from a table the engine drew on its invented test catchment.
 import { describe, expect, it } from 'vitest';
-import type { OutlookTriggerTable, OutlookTriggers } from '$lib/api/types';
+import type { OutlookTriggerTable, OutlookTriggers } from '#lib/api/types.js';
 import { buildTriggersView, triggerRuleView } from './triggers';
 
 const lvl = (levelId: string, yearsMet: number, meets: boolean) => ({ levelId, label: `${levelId} %`, yearsMet, nYears: 12, meets, seasonEndStorageM3: null, demandMet: null });

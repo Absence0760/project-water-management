@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, FarmSummary, RunSummary } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { LOW_PCT } from './damLevels';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import {
 	curtailedHeadline,
 	damsEnd,

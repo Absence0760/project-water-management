@@ -8,7 +8,8 @@
 	// view and the sign-in pages have their own frames and don't use this.
 	import type { Snippet } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
 	import AccountMenu from './AccountMenu.svelte';
 	import BrandMark from './BrandMark.svelte';
@@ -21,7 +22,7 @@
 
 	// Section the current URL belongs to, for aria-current on the main sections.
 	const section = $derived.by(() => {
-		const p = page.url.pathname.slice(base.length) || '/';
+		const p = page.url.pathname.slice(basePath().length) || '/';
 		// /compare shows runs of your projects (the workspace's Compare runs, standalone).
 		if (p === '/' || p.startsWith('/projects') || p.startsWith('/compare')) return 'projects';
 		if (p.startsWith('/teams')) return 'teams';
@@ -59,7 +60,7 @@
 </script>
 
 {#snippet brand(mark = true)}
-	<a class="brand" class:mark-only={!mark} href="{base}/" aria-label="Water Management — projects">
+	<a class="brand" class:mark-only={!mark} href={resolve('')} aria-label="Water Management — projects">
 		<BrandMark size={28} />
 		{#if mark}<span class="wordmark" aria-hidden="true">Water Management</span>{/if}
 	</a>
@@ -67,9 +68,9 @@
 
 {#snippet mainNav()}
 	<nav class="main-nav" aria-label="Main">
-		<a href="{base}/" aria-current={section === 'projects' ? 'page' : undefined}>Projects</a>
-		<a href="{base}/teams" aria-current={section === 'teams' ? 'page' : undefined}>Teams</a>
-		<a href="{base}/help" aria-current={section === 'help' ? 'page' : undefined}>Help</a>
+		<a href={resolve('')} aria-current={section === 'projects' ? 'page' : undefined}>Projects</a>
+		<a href={resolve('teams')} aria-current={section === 'teams' ? 'page' : undefined}>Teams</a>
+		<a href={resolve('help')} aria-current={section === 'help' ? 'page' : undefined}>Help</a>
 	</nav>
 {/snippet}
 

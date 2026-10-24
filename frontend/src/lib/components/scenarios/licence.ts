@@ -4,8 +4,8 @@
 // appeal changes (nothing, until it is decided), and which event can be
 // recorded next. The server holds every rule (app_scenario_licence and the
 // decision_event guard); this only says them.
-import { DECISION_EVENT_FORUM_LABEL, DECISION_EVENT_LABEL, type DecisionEvent, type DecisionEventForum, type DecisionEventKind, type LicenceTerms, type Scenario } from '$lib/api/types';
-import { fmtDay } from '$lib/format/number';
+import { DECISION_EVENT_FORUM_LABEL, DECISION_EVENT_LABEL, type DecisionEvent, type DecisionEventForum, type DecisionEventKind, type LicenceTerms, type Scenario } from '#lib/api/types.js';
+import { fmtDay } from '#lib/format/number.js';
 
 /** "Water Tribunal, 5 Oct 2026": where and when an event happened. */
 export const eventWhere = (e: Pick<DecisionEvent, 'forum' | 'eventDate'>) => `${DECISION_EVENT_FORUM_LABEL[e.forum]}, ${fmtDay(e.eventDate)}`;

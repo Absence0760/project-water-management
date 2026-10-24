@@ -7,14 +7,15 @@
 	// From the farm pages' menu, which carries the farm (?node=) for the back
 	// link. Without a contact it says to ask the WUA, and links the privacy
 	// notice either way.
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api, type ProjectPrivacyContact } from '$lib/api';
-	import FarmShell from '$lib/components/farm/FarmShell.svelte';
-	import FarmSkeleton from '$lib/components/farm/FarmSkeleton.svelte';
-	import FarmStatus from '$lib/components/farm/FarmStatus.svelte';
-	import { classify, farmHref } from '$lib/components/farm/load';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { api, type ProjectPrivacyContact } from '#lib/api/index.js';
+	import FarmShell from '#lib/components/farm/FarmShell.svelte';
+	import FarmSkeleton from '#lib/components/farm/FarmSkeleton.svelte';
+	import FarmStatus from '#lib/components/farm/FarmStatus.svelte';
+	import { classify, farmHref } from '#lib/components/farm/load.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 
 	const projectId = $derived(page.params.projectId ?? '');
 	const node = $derived(page.url.searchParams.get('node'));
@@ -55,7 +56,7 @@
 
 <svelte:head><title>{t('{page} · My hydrological unit', { page: title })}</title></svelte:head>
 
-<FarmShell {projectId} back={{ href: farmHref(base, projectId, node, !!node), label: t('My hydrological unit') }} busy={!info && !failed}>
+<FarmShell {projectId} back={{ href: farmHref(basePath(), projectId, node, !!node), label: t('My hydrological unit') }} busy={!info && !failed}>
 	{#if failed?.kind === 'removed'}
 		<FarmStatus kind="removed" />
 	{:else if failed}
@@ -79,7 +80,7 @@
 					<h2 id="wd-h">{info.wuaName ?? t('Your WUA')}</h2>
 					<p>{t('The organisation that runs this catchment decides what is done with your hydrological unit’s information. It hasn’t added a contact here yet: ask the person who invited you, or your WUA.')}</p>
 				{/if}
-				<p>{t('We run the app for them. How we handle your information, and how to ask us:')} <a href="{base}/privacy#roles">{t('Privacy notice')}</a></p>
+				<p>{t('We run the app for them. How we handle your information, and how to ask us:')} <a href={resolve('privacy#roles')}>{t('Privacy notice')}</a></p>
 			</section>
 		{/if}
 	{/if}

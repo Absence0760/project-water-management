@@ -4,9 +4,9 @@
 -->
 <script lang="ts">
 	import type { CalibrationReport, MarPenaltyResult } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { objectiveName } from '$lib/calibration/fit';
-	import { fmtNum } from '$lib/format/number';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { objectiveName } from '#lib/calibration/fit.js';
+	import { fmtNum } from '#lib/format/number.js';
 
 	let { report, penalty, paramLabel }: { report: CalibrationReport; penalty: MarPenaltyResult; paramLabel: (k: string) => string } = $props();
 

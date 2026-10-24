@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 import {
 	CROP_PALETTE,
 	cropAreaTotals,

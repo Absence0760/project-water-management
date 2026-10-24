@@ -1,5 +1,5 @@
 import { scaleValues, seriesUnit } from '@water-management/engine';
-import type { SeriesWriteResult } from '$lib/api/types';
+import type { SeriesWriteResult } from '#lib/api/types.js';
 
 /** What UploadForm reports after a successful upload. */
 export interface UploadResult {

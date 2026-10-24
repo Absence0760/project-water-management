@@ -1,4 +1,4 @@
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 
 /** The fields of a run that say whether a scenario made it. */
 export type ScenarioRunFields = Partial<Pick<RunMeta, 'fromScenario' | 'scenarioId' | 'scenarioName'>>;

@@ -32,9 +32,9 @@ import {
 	stateText
 } from './cards';
 import { vaalbankFixture } from './fixture';
-import { plainText, type Rich } from '$lib/i18n/rich';
-import { setLocale } from '$lib/i18n/locale.svelte';
-import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
+import { plainText, type Rich } from '#lib/i18n/rich.js';
+import { setLocale } from '#lib/i18n/locale.svelte.js';
+import { markedCatalogue } from '#lib/i18n/fixtureCatalogue.js';
 
 const sp = (s: string | null | undefined) => s?.replace(/[\u00a0\u202f]/g, ' ');
 const txt = (r: Rich | null | undefined) => (r ? sp(plainText(r)) : r);

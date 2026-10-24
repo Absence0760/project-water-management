@@ -6,7 +6,7 @@
 	// is bindable, so the run header's known-bug badge (issue #103) can open it
 	// on the errata it names.
 	import type { RunSummary } from '@water-management/engine';
-	import Lazy from '$lib/components/common/Lazy.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
 
 	const loadStatement = () => import('./ValidationStatement.svelte');
 

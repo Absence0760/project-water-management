@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { HistoryEvent, HistoryRevision } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { HistoryEvent, HistoryRevision } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import {
 	entryHeading,
 	entrySummary,

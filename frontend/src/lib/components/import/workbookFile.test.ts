@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ImportResult } from '$lib/spreadsheet/import/extract';
-import type { ProjectFile } from '$lib/api';
+import type { ImportResult } from '#lib/spreadsheet/import/extract.js';
+import type { ProjectFile } from '#lib/api/index.js';
 import { DEFAULT_CHIRPS_KEY, describeFailure, fromResult, gaugeOptions, isWorkbookFile, location, progressText, withChirpsProvenance, workbookOptions } from './workbookFile';
 
 describe('the CHIRPS column’s product and version (issue #40c)', () => {

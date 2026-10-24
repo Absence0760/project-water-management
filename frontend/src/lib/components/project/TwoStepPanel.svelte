@@ -3,9 +3,9 @@
 	// The Project page): owners only, beside the members and share links it
 	// protects. The switch is auth-extras/RequireTwoStep.svelte, shared with
 	// the team settings.
-	import { base } from '$app/paths';
-	import { api, type Project } from '$lib/api';
-	import RequireTwoStep from '$lib/components/auth-extras/RequireTwoStep.svelte';
+	import { resolve } from '$app/paths';
+	import { api, type Project } from '#lib/api/index.js';
+	import RequireTwoStep from '#lib/components/auth-extras/RequireTwoStep.svelte';
 
 	let { project, onProjectChange }: { project: Project; onProjectChange: (p: Project) => void } = $props();
 
@@ -24,5 +24,5 @@
 		canChange
 		{save}
 	/>
-	<p class="small"><a href="{base}/help/guides/two-step-sign-in">How two-step sign-in works</a>: the app, codes by email, recovery codes and a lost phone.</p>
+	<p class="small"><a href={resolve('help/guides/two-step-sign-in')}>How two-step sign-in works</a>: the app, codes by email, recovery codes and a lost phone.</p>
 </section>

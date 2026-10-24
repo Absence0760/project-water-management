@@ -7,8 +7,8 @@
 // gives the same values; this file turns the result into the dialog's preview
 // (every value it changes, Now and Pasted) and the grid into a CSV to fill in.
 import { EWR_PERCENTILE_POINTS, type EwrDailySource, type EwrRuleTable } from '@water-management/engine';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { sameValue, toCsv, type PastePlan } from '$lib/spreadsheet/paste/grid';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { sameValue, toCsv, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 import { parseMonthlyRow } from './ewrDailySource';
 import { applyPaste, parseGrid, type GridKey, type ParsedGrid } from './ewrRules';
 

@@ -9,7 +9,7 @@
 // the preview's annual demand rather than a run's use, so it is a flag to look
 // at before running, not a finding.
 import { allocationStatus, isStorageOnly, type AllocationStatus } from '@water-management/engine';
-import type { Allocation } from '$lib/api';
+import type { Allocation } from '#lib/api/index.js';
 import type { DemandRow } from './demands';
 
 export interface RegisteredCell {

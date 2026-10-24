@@ -249,7 +249,7 @@ nothing loads later or in a different order. −2.3 KB gzip across the bundle;
 `src/lib/preloadDedupe.test.ts` pins the rule.
 
 Svelte scopes each component's styles with a class on its elements. The
-default is `svelte-<hash>`; `frontend/svelte.config.js` sets `cssHash` to
+default is `svelte-<hash>`; `frontend/svelte-options.js` sets `cssHash` to
 `s<hash>` (the same hash of the file name), which appears thousands of times
 in the compiled templates and CSS: −2.6 KB gzip across the bundle and a little
 off every first load. `src/lib/cssHash.test.ts` computes every component's
@@ -470,7 +470,7 @@ must not inherit the last page's language. CloudFront's `spa_rewrite` function s
 `guardrails.tftest.hcl`, and `infra/scripts/cloudfront-functions.test.mjs`
 checks `PRERENDERED` against the routes and the language table, so a new
 language can't 404 in production only; the e2e static server mirrors it). The absolute URLs in
-its tags come from `kit.prerender.origin`: the build's `SITE_ORIGIN` (the
+its tags come from `paths.origin` (SvelteKit's config in `frontend/vite.config.ts`): the build's `SITE_ORIGIN` (the
 deploy passes `PUBLIC_SITE_URL`), else `http://localhost:7777`.
 
 A signed-out `/` shows the same component client-side: the root layout renders

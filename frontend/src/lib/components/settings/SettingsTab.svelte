@@ -9,7 +9,7 @@
 	const loadFlowGapFill = () => loadSections().then((m) => ({ default: m.FlowGapFillFields }));
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
-	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
+	const loadAutoFit = () => import('#lib/components/calibration/AutoFitPanel.svelte');
 	// Settings → Evidence, the declared uncertainty rule (issue #71): out of the tab's chunk, for the same reason.
 	const loadEvidenceRule = () => loadSections().then((m) => ({ default: m.EvidenceRuleFields }));
 	// Settings → Drought restrictions (engine ≥ 1.54.0, WP-3.8): its own chunk, for the same reason.
@@ -17,9 +17,9 @@
 	// The daily EWR at the outlet (engine ≥ 1.77.0, issue #455): its own chunk, for the same reason.
 	const loadEwrDailySource = () => import('./EwrDailySourceFields.svelte');
 	// API keys render for owners only, so the rest of the team never downloads them.
-	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
+	const loadApiKeys = () => import('#lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
-	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
+	const loadDataFeeds = () => import('#lib/components/feeds/DataFeedsPanel.svelte');
 	// Scheduled reports: out of the tab's chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
 	const loadReportSchedules = () => loadSections().then((m) => ({ default: m.ReportSchedulesPanel }));
 	// Evaporation from the map (issue #326 B-evap): out of the tab's chunk, for the same reason as the panels above; it loads its proposal on mount.
@@ -38,13 +38,13 @@
 </script>
 
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { withParam } from '$lib/workspace/overlays';
-	import { holdAnchor } from '$lib/help/anchor';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import { settingTarget } from '$lib/components/notes/notes';
+	import { withParam } from '#lib/workspace/overlays.js';
+	import { holdAnchor } from '#lib/help/anchor.js';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '#lib/components/notes/notes.js';
 	import {
 		CALIBRATION_FLOW_KINDS,
 		calibrationSeriesKey,
@@ -79,47 +79,47 @@
 		defaultProjectSettings,
 		resolveCatchmentAreaKm2
 	} from '@water-management/engine';
-	import { apanDailyOfValues } from '$lib/series/provenance';
-	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
-	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
-	import LowFlowPeriods from '$lib/components/calibration/LowFlowPeriods.svelte';
+	import { apanDailyOfValues } from '#lib/series/provenance.js';
+	import { applyReport, marPenaltyOn } from '#lib/calibration/fit.js';
+	import CalibrationExclusions from '#lib/components/calibration/CalibrationExclusions.svelte';
+	import LowFlowPeriods from '#lib/components/calibration/LowFlowPeriods.svelte';
 	import { qualityFlagsAtDefaults, qualityFlagsSummary } from './qualityFlagsLine';
 	import MarPenaltyFields from './MarPenaltyFields.svelte';
-	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
-	import type { FitSession } from '$lib/calibration/fitSession.svelte';
-	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import { fitRecordLine } from '$lib/components/calibration/provenance';
-	import { api, type Project } from '$lib/api';
-	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { annualMm3 } from '$lib/components/crops/demand';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import FitPanel from '#lib/components/calibration/FitPanel.svelte';
+	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
+	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
+	import { fitRecordLine } from '#lib/components/calibration/provenance.js';
+	import { api, type Project } from '#lib/api/index.js';
+	import CalibrationWindowFields from '#lib/components/calibration/CalibrationWindowFields.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import { annualMm3 } from '#lib/components/crops/demand.js';
+	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { fitSummary, GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { dataQualityError } from './dataQuality';
 	import DataQualitySection from './DataQualitySection.svelte';
-	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError } from '$lib/components/autorun/autoRun';
-	import { outcomesError } from '$lib/components/outcomes/outcomeSettings';
-	import { outlookError } from '$lib/components/outlook/settings';
+	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError } from '#lib/components/autorun/autoRun.js';
+	import { outcomesError } from '#lib/components/outcomes/outcomeSettings.js';
+	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
 	import { saveBlockers, SETTINGS_ELSEWHERE, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-	import { applyMonthlyPaste } from '$lib/spreadsheet/paste/monthlyRows';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
+	import { applyMonthlyPaste } from '#lib/spreadsheet/paste/monthlyRows.js';
 	import { MONTHLY_SETTINGS_FORMAT, monthlySettingRows, monthlySettingsCsv, planSettingsPaste, type MonthlySettingId } from './monthlyPaste';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import EwrHeadlineField from './EwrHeadlineField.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
-	import { explainSwitch } from '$lib/components/common/explain.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import ExplainSwitch from '#lib/components/common/ExplainSwitch.svelte';
+	import { explainSwitch } from '#lib/components/common/explain.svelte.js';
+	import Fold from '#lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
 	import { arealRainFormError, storedArealRain, withArealRain, type EditableArealRain } from './arealRain';
@@ -130,8 +130,8 @@
 	// reports save through their own APIs, never through the save bar (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
-	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
-	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
+	import OutcomeSettingsSection from '#lib/components/outcomes/OutcomeSettingsSection.svelte';
+	import OutlookSettingsSection from '#lib/components/outlook/OutlookSettingsSection.svelte';
 	import type { SettingsDraft } from './settingsDraft.svelte';
 
 	let {

@@ -3,7 +3,7 @@
 	// per farm and other water user, run B's value and the change from run A.
 	// The Runs tab's Assurance panel has the definitions and the stress grids.
 	import type { SupplyAssurance } from '@water-management/engine';
-	import { fmtPct } from '$lib/format/number';
+	import { fmtPct } from '#lib/format/number.js';
 	import Delta from './Delta.svelte';
 	import { compareAssurance } from './assurance';
 	import type { MetricSpec } from './delta';

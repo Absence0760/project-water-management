@@ -1,6 +1,6 @@
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	// The workspace's Scenarios tab (?tab=scenarios, docs/ui.md § Scenarios,
 	// docs/scenarios.md): the project's scenarios, a form to start one on a
 	// run, and the chosen one (?scenario=<id>) in the editor. Viewers read
@@ -20,17 +20,17 @@
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { navigating, page } from '$app/state';
-	import { api, ApiError, type Run, type RunMeta, type Scenario, type ScenarioWithCheck } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { fmtDate } from '$lib/format/number';
-	import { withParam, withoutParam } from '$lib/workspace/overlays';
-	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { api, ApiError, type Run, type RunMeta, type Scenario, type ScenarioWithCheck } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { fmtDate } from '#lib/format/number.js';
+	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
+	import { guardUnsaved } from '#lib/nav/unsaved.js';
 	import { leavesScenariosTab } from './leaves';
 	import ScenarioEditor from './ScenarioEditor.svelte';
 	import { scenariosSummary } from './summary';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 
 	let {
 		projectId,
@@ -122,12 +122,12 @@
 
 	/** Pick a scenario (`replace`: in place, as the default pick is, so Back doesn't stop on the bare list). */
 	function select(id: string | null, replace = false) {
-		const q = new URLSearchParams(page.url.searchParams);
+		const q = new URLSearchParams(page.url.search);
 		if (id) q.set('scenario', id);
 		else q.delete('scenario');
 		q.delete('new');
 		q.delete('base');
-		return goto(`?${q}`, { noScroll: true, keepFocus: true, replaceState: replace });
+		return goto(`?${q}`, { reset: false, replace: replace });
 	}
 	// None picked: open the first (the newest). Not while the URL asks for the
 	// create dialog (it picks the new one), and not while any navigation is in
@@ -229,7 +229,7 @@
 	$effect(() => {
 		// Closed (Cancel, Esc, the ✕): drop `new` in place.
 		if (!createOpen && untrack(() => newParam)) {
-			void goto(withoutParam(page.url, 'new'), { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(withoutParam(page.url, 'new'), { replace: true, reset: false });
 		}
 	});
 	$effect(() => {

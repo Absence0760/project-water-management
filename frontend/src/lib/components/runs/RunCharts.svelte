@@ -1,5 +1,5 @@
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	// The standard result views of one run: hydrograph, flow-duration curve,
 	// and an explorer for any stored series (EWR vs outflow moved to River &
 	// reserve with the rest of its group, river/RiverTab.svelte, and a unit's
@@ -13,17 +13,17 @@
 	import { untrack, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { FLOW_QUALITY_COLUMN, type DailySeries, type QualityFlagSettings } from '@water-management/engine';
-	import { api, type RunSeriesRef } from '$lib/api';
+	import { api, type RunSeriesRef } from '#lib/api/index.js';
 	import { beforeForecast, FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { fmtNum, fmtQty } from '$lib/format/number';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import { fmtNum, fmtQty } from '#lib/format/number.js';
 	import { cachedSeries } from './cache';
 	import { calibrationSiteOf, CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
-	import { forecastBand } from '$lib/components/forecast/forecast';
+	import { forecastBand } from '#lib/components/forecast/forecast.js';
 	import RunChart from './RunChart.svelte';
 	import { toDisplayUnit } from './results';
 	import { clipExclusions, exclusionKeyText, seriesSpan, type ExcludedPeriod } from './exclusionShading';
-	import { flowFlagLanes } from '$lib/calibration/flowFlags';
+	import { flowFlagLanes } from '#lib/calibration/flowFlags.js';
 	import GaugeCheckFlows from './GaugeCheckFlows.svelte';
 	import type { CheckGauge } from './checkGauges';
 

@@ -54,10 +54,15 @@ sides share.
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
   query's, the RLS role check's, the Step 2 60-farm load checks, the
   Map search over 150 000 gazetteer places and reading 5,000 allocations).
-- **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
+- **frontend/**: SvelteKit 3 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome` and `/welcome/af`, prerendered once per language, architecture.md), Vite, TypeScript, uPlot
-  charts, vitest. The Map tab draws with MapLibre GL (`maplibre-gl`, BSD-3) and
+  charts, vitest. SvelteKit's config is the `sveltekit({…})` call in
+  `vite.config.ts` (the Svelte options in `svelte-options.js`); `#lib/…` is a
+  `package.json` `imports` subpath with the file's extension (`#lib/api/index.js`);
+  public env vars are declared in `src/env.ts` and read from `$app/env/public`;
+  links use `resolve()`/`asset()` from `$app/paths`, and `basePath()`
+  (`lib/nav/base.ts`) where code needs the prefix itself. The Map tab draws with MapLibre GL (`maplibre-gl`, BSD-3) and
   reads its self-hosted PMTiles basemap with `pmtiles`, both dynamic imports
   that load only when the map is drawn ([maps.md](./maps.md)). No spreadsheet library ships: the `.xlsx` run export
   writes its own OOXML (`lib/spreadsheet/export/writer.ts`) and the b023
@@ -377,7 +382,8 @@ Prefer reading these over guessing. Update them when behaviour changes.
   site alike) while `check` stays green. Svelte 5.56.0–5.56.3 left `?` on
   optional parameters (sveltejs/svelte#18455). The guard is
   `frontend/src/lib/components/__fixtures__/tsSyntax.test.ts`: it compiles a
-  fixture through `svelte.config.js`'s preprocess and Vite's parser (Rolldown's). Add a
+  fixture through the build's preprocess (`frontend/svelte-options.js`, which
+  `vite.config.ts` hands to `sveltekit()`) and Vite's parser (Rolldown's). Add a
   case to its fixture when a new TS form breaks a build. It does fail on
   warnings: the frontend's svelte-check runs with `--fail-on-warnings`, so a
   Svelte a11y or unused-CSS warning breaks `check` (and CI) like a type error.

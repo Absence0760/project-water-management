@@ -8,8 +8,8 @@
 -->
 <script lang="ts">
 	import type { ValidationSignatures } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { holdoutText, scoredRecordText, signatureRows, signaturesOk } from './signatures';
 
 	let { signatures }: { signatures: ValidationSignatures | null } = $props();

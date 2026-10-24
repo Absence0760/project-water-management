@@ -1579,7 +1579,7 @@ Interaction details that bit:
   box is one step: its first change after the box takes the focus pushes,
   the rest replace (the project list, Runs' label filter, History's
   Parameter filter, one `SearchStep` each from `lib/nav/searchStep.ts`:
-  `onfocus={step.focus}`, `replaceState: step.replace()`). A default pick, a redirect from an old link and closing an
+  `onfocus={step.focus}`, goto's `replace: step.replace()`). A default pick, a redirect from an old link and closing an
   overlay replace. Every sort and filter is in the URL, so a reload keeps it
   (the Applications sort `sort=status`, Runs' `q=`).
 - **A failed load says what failed and offers Try again.** A panel that reads

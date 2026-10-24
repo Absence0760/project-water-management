@@ -9,8 +9,8 @@ import { blankEwrDailySource, type EwrDailySource } from '@water-management/engi
 import EwrDailySourceFields from './EwrDailySourceFields.svelte';
 
 // The fields read the last run through the API only once the MAR ratio is in use in a browser; nothing here runs effects.
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 /** The value of the option the scaling select renders as selected. */
 const selectedScaling = (html: string) => {

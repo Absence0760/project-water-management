@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ApiKey } from '$lib/api/types';
+import type { ApiKey } from '#lib/api/types.js';
 import { SERIES_KINDS, unitOptions } from '@water-management/engine';
 import { apiBase, curlExample, INGEST_EXAMPLE_BODY, keyRow, keyState, revokeKeyQuestion, sortKeys } from './apiKeys';
 

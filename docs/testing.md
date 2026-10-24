@@ -124,8 +124,8 @@ after a Node major bump ([upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md
    where `$effect` and `$effect.root` do nothing, so the constructor's effect
    never runs and a test awaiting its request waits forever. Wrap the class
    in `$effect.root(…)`, call `flushSync()` after changing its inputs, and
-   pass its requests in rather than importing `$lib/api` (whose
-   `$env/static/public` exists only under SvelteKit;
+   pass its requests in rather than importing `#lib/api/index.js` (whose
+   `$app/env/public` exists only under SvelteKit;
    `components/map/riverLayer.svelte.test.ts` is the pattern).
 
 ## Layout checks and fonts

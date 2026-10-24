@@ -13,13 +13,13 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { api, type UnitMapProposal } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import ProposalNoDataset from '$lib/components/proposals/ProposalNoDataset.svelte';
-	import ProposalPanel from '$lib/components/proposals/ProposalPanel.svelte';
-	import ProposalSource from '$lib/components/proposals/ProposalSource.svelte';
-	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { api, type UnitMapProposal } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import ProposalNoDataset from '#lib/components/proposals/ProposalNoDataset.svelte';
+	import ProposalPanel from '#lib/components/proposals/ProposalPanel.svelte';
+	import ProposalSource from '#lib/components/proposals/ProposalSource.svelte';
+	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { appliedNotice, candidateLabel, coverageLine, coveredText, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
 
 	let {

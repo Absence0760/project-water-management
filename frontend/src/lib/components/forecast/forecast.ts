@@ -4,7 +4,7 @@
 // "expected", "about", never a promise, and never mixed into the historical
 // figures (the engine keeps them out of every other summary).
 import type { ForecastSummary } from '@water-management/engine';
-import { fmtDay, fmtNum } from '$lib/format/number';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 /** The band's label on every daily chart of a forecast run. */
 export const FORECAST_BAND_LABEL = 'Forecast';

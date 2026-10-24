@@ -2,7 +2,7 @@
 // menu imports this module dynamically, so neither it nor the worker (the
 // workbook writer and its fetching, ~10 KB gzip) is in any page chunk. cancel() terminates the worker at
 // once, fetches and all; nothing is saved.
-import type { WorkbookRequest } from '$lib/export/urls';
+import type { WorkbookRequest } from '#lib/export/urls.js';
 import type { ExportProgress } from './collect';
 import { XLSX_MIME, type FromWorker, type ToWorker } from './messages';
 

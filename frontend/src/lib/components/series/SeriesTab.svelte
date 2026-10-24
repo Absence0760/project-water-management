@@ -16,13 +16,13 @@
 	// Uploading is the header's Add data (series/AddDataDialog.svelte): the
 	// page charts what it uploaded (`series=`), and the empty state's button
 	// opens the same dialog (`onadddata`).
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, untrack } from 'svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { withParam, withoutParam } from '$lib/workspace/overlays';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import {
 		agreementOptions,
 		checkSeries,
@@ -47,38 +47,38 @@
 		type SeriesKind,
 		type SeriesMeta
 	} from '@water-management/engine';
-	import { api, type RunMeta } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { prefetch } from '$lib/components/common/lazy';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { downloads } from '$lib/export';
-	import { fmtDay, fmtNum } from '$lib/format/number';
-	import { projectToday } from '$lib/components/projects/freshness';
-	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
-	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
-	import { CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote } from '$lib/series/provenance';
-	import { firstOutletSeries } from '$lib/series/pick';
+	import { api, type RunMeta } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { prefetch } from '#lib/components/common/lazy.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { downloads } from '#lib/export/index.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
+	import { projectToday } from '#lib/components/projects/freshness.js';
+	import { CsvError, parseSeriesCsv, type ParsedSeries } from '#lib/series/csv.js';
+	import { defaultUnit, KIND_OPTIONS, kindLabel } from '#lib/series/kinds.js';
+	import { CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote } from '#lib/series/provenance.js';
+	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { asksSite, productField, rowSiteMark, siteText, uploadUnitText } from './details';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
-	import { agoText } from '$lib/format/age';
+	import { agoText } from '#lib/format/age.js';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
 	import EditDay from './EditDay.svelte';
-	import { handDayCount, handPoints, handRangesText } from '$lib/series/editDay';
+	import { handDayCount, handPoints, handRangesText } from '#lib/series/editDay.js';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
-	import { flowFlagLanes } from '$lib/calibration/flowFlags';
+	import { flowFlagLanes } from '#lib/calibration/flowFlags.js';
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
-	import { foldList } from '$lib/components/common/fold';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import { holdAnchor } from '$lib/help/anchor';
+	import { foldList } from '#lib/components/common/fold.js';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import { holdAnchor } from '#lib/help/anchor.js';
 
 	let {
 		projectId,
@@ -180,7 +180,7 @@
 	/** Chart a series: a URL change, so it can be shared and Back returns; the chart, under the table, comes into view. */
 	function choose(id: string, replaceState = false) {
 		if (id === selectedId && seriesParam === id) return;
-		void goto(withParam(page.url, 'series', id), { noScroll: true, keepFocus: true, replaceState }).then(() => {
+		void goto(withParam(page.url, 'series', id), { reset: false, replace: replaceState }).then(() => {
 			if (!replaceState) showChart();
 		});
 	}
@@ -462,7 +462,7 @@
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
 			// The deleted series was charted: back to the default, without a history entry for it.
-			if (seriesParam === s.id) void goto(withoutParam(page.url, 'series'), { noScroll: true, keepFocus: true, replaceState: true });
+			if (seriesParam === s.id) void goto(withoutParam(page.url, 'series'), { reset: false, replace: true });
 			// Its row, and the Delete that had the focus, have gone: the View of the series now in its place takes it.
 			await focusAfterRemove(at, '#series-rows button[aria-pressed]', 'ser-h');
 		} catch (e) {

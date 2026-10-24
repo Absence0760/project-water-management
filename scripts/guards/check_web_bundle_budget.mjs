@@ -296,7 +296,7 @@ export const kb = (bytes) => Math.ceil(bytes / 1024);
 export function tabModules(pageSource) {
 	const block = /\bconst LOAD\s*=\s*\{([\s\S]*?)\n\s*\};/.exec(pageSource);
 	if (!block) return [];
-	return [...block[1].matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1].replace(/^\$lib\//, 'src/lib/'));
+	return [...block[1].matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1].replace(/^#lib\//, 'src/lib/').replace(/\.js$/, '.ts'));
 }
 
 /**

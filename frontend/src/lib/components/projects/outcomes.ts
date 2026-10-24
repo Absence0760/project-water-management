@@ -3,9 +3,9 @@
 // The figures are the portfolio's (GET /projects/outcomes), worded by the
 // portfolio's own helpers, so a catchment reads the same on both pages.
 // Pure, so it is unit-tested apart from the page.
-import type { PortfolioProject, ProjectSummary } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
-import { ageText, comparePortfolio, type SortDir, curtailmentHref, farmsShortText, feedsText, irrigationText } from '$lib/components/portfolio/portfolio';
+import type { PortfolioProject, ProjectSummary } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
+import { ageText, comparePortfolio, type SortDir, curtailmentHref, farmsShortText, feedsText, irrigationText } from '#lib/components/portfolio/portfolio.js';
 
 export type Outcomes = ReadonlyMap<string, PortfolioProject>;
 

@@ -1,17 +1,17 @@
 <script lang="ts">
 	// The project’s import record on the Project page (017_project_import; docs/ui.md
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	// § Project, "Import record"): which file it was imported from, when and by
 	// whom, and what the importer flagged, its notes and the unmapped report,
 	// each list closed at first. Shown only for an imported project, to every
 	// member (viewers included), so a reviewer or assessor can see what the
 	// importer interpreted long after the import. The text came from the file:
 	// ImportReportLists renders it as text only, never {@html}.
-	import { api, type StoredImportReport } from '$lib/api';
-	import ImportReportLists from '$lib/components/import/ImportReportLists.svelte';
-	import { importerLabel } from '$lib/components/import/importReport';
-	import { fmtDate } from '$lib/format/number';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { api, type StoredImportReport } from '#lib/api/index.js';
+	import ImportReportLists from '#lib/components/import/ImportReportLists.svelte';
+	import { importerLabel } from '#lib/components/import/importReport.js';
+	import { fmtDate } from '#lib/format/number.js';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 
 	let { projectId }: { projectId: string } = $props();
 

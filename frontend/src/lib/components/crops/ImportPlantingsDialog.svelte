@@ -9,11 +9,11 @@
 	// can't read by its line; nothing changes until Apply, which edits the
 	// model like any other edit: the save bar saves it. Its own chunk, loaded
 	// when the button is first pressed (CropsTab).
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import { latestFileText } from '$lib/files/latest';
-	import { fmtNum } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
+	import { latestFileText } from '#lib/files/latest.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { applyPlantingsImport, planPlantingsImport, plantingsCsv, PLANTINGS_FORMAT, PLANTINGS_MAX_BYTES, type PlantingsApplied } from './plantingsImport';
 
 	let {

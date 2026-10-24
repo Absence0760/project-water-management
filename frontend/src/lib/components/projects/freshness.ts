@@ -5,8 +5,8 @@
 // portfolio and the list's outcome columns count their ages to, so one row
 // never reads two ages a day apart (issue #137). Worded by the one age
 // formatter ($lib/format/age), as everywhere else.
-import { dateAge, daysBetween, isStale } from '$lib/format/age';
-import { fmtDay, localIsoDate, zonedIsoDate } from '$lib/format/number';
+import { dateAge, daysBetween, isStale } from '#lib/format/age.js';
+import { fmtDay, localIsoDate, zonedIsoDate } from '#lib/format/number.js';
 
 /**
  * A project's calendar date now (YYYY-MM-DD, in its time zone, 058): the day

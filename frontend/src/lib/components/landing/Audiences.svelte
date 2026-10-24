@@ -3,7 +3,7 @@
 	// Who it's for (issue #57): the roadmap's four audiences (docs/roadmap/),
 	// each with its drawn icon, which draws itself on when its card comes into view.
 	import { onMount } from 'svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import DrawnIcon from './DrawnIcon.svelte';
 
 	let el: HTMLElement | undefined = $state();

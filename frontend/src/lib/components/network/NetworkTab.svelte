@@ -1,53 +1,53 @@
 <script lang="ts">
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
-	import { api, type RunMeta } from '$lib/api';
-	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { damChanges } from '$lib/components/dams/dams';
-	import { damEndPctFromSummary, damInRun, type DamEnd, damLevel, damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
-	import { historyEnd } from '$lib/components/overview/latestRun';
-	import { farmPlanting } from '$lib/components/crops/farmDrawer';
-	import { fmtDate } from '$lib/format/number';
+	import { api, type RunMeta } from '#lib/api/index.js';
+	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
+	import { damChanges } from '#lib/components/dams/dams.js';
+	import { damEndPctFromSummary, damInRun, type DamEnd, damLevel, damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '#lib/components/overview/damLevels.js';
+	import { historyEnd } from '#lib/components/overview/latestRun.js';
+	import { farmPlanting } from '#lib/components/crops/farmDrawer.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { ranAgo, supplyByNode } from './supplyColour';
 	import { damColouring, supplyColouring, type ColourMode, type Colouring } from './farmColour';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import MoveControls from '$lib/components/model/MoveControls.svelte';
-	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { ownEfficiencyUsed, pctText, plantingSystemsLine, unitEfficiency } from '$lib/model/systems';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import MoveControls from '#lib/components/model/MoveControls.svelte';
+	import { refocusMover, RowReorder } from '#lib/components/model/rowReorder.svelte.js';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { ownEfficiencyUsed, pctText, plantingSystemsLine, unitEfficiency } from '#lib/model/systems.js';
 	import { divertMonthsCell } from './supply';
 	import { cardLabel, fieldScale, fieldUnused, GROUPS, hasDam, isPct, isVolume, KIND_WORD, NODE_FIELDS, returnFlowHint, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import { nodeNavGroups, nodeSections } from './nodeSections';
 	import { keepInView } from './scroll';
 	import NetworkSchematic from './NetworkSchematic.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import ModelSaveRow from '#lib/components/model/ModelSaveRow.svelte';
 	import NodeCard from './NodeCard.svelte';
 	import NodeDetail from './NodeDetail.svelte';
-	import { TABLES_MENU, withParam, withoutParam } from '$lib/workspace/overlays';
-	import { mapNodeHref } from '$lib/workspace/mapLinks';
-	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { TABLES_MENU, withParam, withoutParam } from '#lib/workspace/overlays.js';
+	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
+	import { MappedNodes } from '#lib/workspace/mappedNodes.svelte.js';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import UserFields from './UserFields.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
 	import { applyNodePaste, NODE_TABLE_FORMAT, nodeTableCsv, planNodePaste } from './nodePaste';
-	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 	import { describeUser } from './users';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 
 	// The Yield panel (WP-3.6) and its chart load only when a farm is focused.
-	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
+	const loadYield = () => import('#lib/components/yield/YieldPanel.svelte');
 
 	let {
 		editor,
@@ -202,7 +202,7 @@
 			q.delete('view');
 			if (v === 'table') q.set('grid', 'nodes');
 			else if (v === 'node' && nodes[0]) q.set('edit', q.get('node') ?? nodes[0].id);
-			void goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(`?${q}`, { replace: true, reset: false });
 		});
 	});
 
@@ -220,11 +220,11 @@
 			// The section a link opened it on (`section=`) goes with it, and the pick (`node=`) when that
 			// node has gone (removed from the sheet): one navigation, since a second one started beside
 			// this from the same URL put back what the other took out.
-			const url = new URL(page.url);
+			const url = new URL(page.url.href);
 			url.searchParams.delete('section');
 			const picked = url.searchParams.get('node');
 			if (picked && !untrack(() => nodes.some((n) => n.id === picked))) url.searchParams.delete('node');
-			void goto(withoutParam(url, 'edit'), { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(withoutParam(url, 'edit'), { replace: true, reset: false });
 		}
 	});
 	$effect(() => {
@@ -237,7 +237,7 @@
 		q.set('edit', id);
 		q.delete('section');
 		if (!only) q.set('node', id);
-		return goto(`?${q}`, { replaceState: replace, noScroll: true, keepFocus: true });
+		return goto(`?${q}`, { replace: replace, reset: false });
 	}
 	// Which nodes have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
 	// tab has drawn, so the map's list never delays it (workspace/mapLinks.ts).
@@ -277,7 +277,7 @@
 	function pick(id: string) {
 		selectedId = id;
 		if (only || nodeParam === id) return;
-		void goto(withParam(page.url, 'node', id), { noScroll: true, keepFocus: true });
+		void goto(withParam(page.url, 'node', id), { reset: false });
 	}
 
 	function select(id: string) {
@@ -328,7 +328,7 @@
 		if (selectedId === id) selectedId = null;
 		if (editParam === id) sheetOpen = false;
 		// From the sheet, closing it drops `node=` too (above).
-		else if (nodeParam === id) void goto(withoutParam(page.url, 'node'), { replaceState: true, noScroll: true, keepFocus: true });
+		else if (nodeParam === id) void goto(withoutParam(page.url, 'node'), { replace: true, reset: false });
 		// The button that was pressed has gone (the row's ✕, or the sheet with its Remove and the
 		// card's Edit it would hand the focus back to): put the focus somewhere that still is.
 		await tick();
@@ -963,7 +963,7 @@
 					onremove={() => remove(editing!.id, editing!.name || 'unnamed hydrological unit')}
 					farmersNote={editing.kind === 'farm' ? linkedNote(farmerCount?.[editing.id] ?? 0) : null}
 					mapHref={mapped.has(editing.id) ? mapNodeHref(editing.id) : null}
-					previewHref={editing.kind === 'farm' && projectId ? `${base}/farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(editing.id)}` : null}
+					previewHref={editing.kind === 'farm' && projectId ? resolve(`farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(editing.id)}`) : null}
 					onmakeoutlet={() => setOutlet(editing.id)}
 					landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === editing.id)}
 					onaddcover={() => editor.addLandCover(editing.id)}

@@ -2,10 +2,10 @@
 // state, the words for its row, and the curl example. Pure, so they are
 // unit-tested (apiKeys.test.ts).
 import { SERIES_KINDS } from '@water-management/engine';
-import type { ApiKey, ApiKeySeries } from '$lib/api/types';
-import type { FileFormat } from '$lib/components/common/formatHelp';
-import { fmtDate } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
+import type { ApiKey, ApiKeySeries } from '#lib/api/types.js';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
+import { fmtDate } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
 
 /** How long a new key lives: the choices offered (the API takes any 1–3650 days, or none). */
 export const KEY_EXPIRY_CHOICES = [

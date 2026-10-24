@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, MapGeometry } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { MapFeature, MapGeometry } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import { BAND_LABEL, BAND_SHORT, bandColours, hatchPixels, unitUse, useBand, useBounds, useLabel, useLayers, useMapData, useSentence, useShading, USE_BANDS, wholeWaterYears } from './useMap';
 
 describe('useBand: modelled use ÷ registered volume', () => {

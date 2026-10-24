@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { attachDrawing, type DrawMap } from './attachDrawing';
 import { Draft } from './draft.svelte';
 import { DRAW_CHOICES } from './shape';
-import type { MapFeature } from '$lib/api/types';
+import type { MapFeature } from '#lib/api/types.js';
 
 const parcel = DRAW_CHOICES.find((c) => c.id === 'farm_parcel')!;
 

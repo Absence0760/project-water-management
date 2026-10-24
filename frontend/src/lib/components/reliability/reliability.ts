@@ -2,7 +2,7 @@
 // docs/model.md §2.11a–b): the stress heat map's cells and the water
 // account's rows. Unit-tested in reliability.test.ts.
 import { STRESS_LABEL, type StressClass, type StressGrid, type StressSummary, type SupplyAssurance, type SupplyReliability, type WaterAccountRow } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** The engine version that first computed RunSummary.supplyAssurance. */
 export const ASSURANCE_ENGINE = '0.32.0';

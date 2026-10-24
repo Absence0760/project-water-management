@@ -4,7 +4,7 @@
 // read a month the same way. Apart from heatmap.ts so the Summary's chunk
 // doesn't carry the heat map's helpers.
 import { EWR_TRAFFIC_LIGHT, type EwrBand, type EwrTrafficLight } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 export const EWR_BANDS: readonly EwrBand[] = ['green', 'amber', 'red'];
 

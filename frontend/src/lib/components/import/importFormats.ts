@@ -1,6 +1,6 @@
 // The project list's import boxes' Expected formats (ImportProjectDialog,
 // issue #456; the File formats help page, issue #477).
-import type { FileFormat } from '$lib/components/common/formatHelp';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
 import { WORKBOOK_MAX_MB } from './workbookFile';
 
 export const B023_WORKBOOK_FORMAT: FileFormat = {

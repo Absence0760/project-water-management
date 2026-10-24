@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { dailyEwrName } from '$lib/components/ewr/notMet';
+	import { dailyEwrName } from '#lib/components/ewr/notMet.js';
 	// EWR (River & reserve until issue #558, which made it the one EWR results
 	// page; issue #17, option A · Outcomes): one run's river, for the run the
 	// URL names (`run=`) or else the newest (river.ts pickRiverRun). The page
@@ -18,43 +18,43 @@
 	// what if", the run-it-yourself tools, each one row until it has run (common/ToolRow): the
 	// uncertainty bands, the sensitivity runs, the outcome matrix and the seasonal outlook.
 	import { onDestroy, tick, untrack } from 'svelte';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import Delta from '$lib/components/compare/Delta.svelte';
-	import { runOptionLabel } from '$lib/components/compare/picker';
-	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
-	import EwrRequiredMet from '$lib/components/ewr/EwrRequiredMet.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { runHref } from '$lib/components/overview/attention';
-	import { historyDays } from '$lib/components/overview/latestRun';
-	import { hasRuleLine } from '$lib/components/overview/summaryChart';
-	import { resolveHeadline } from '$lib/components/runs/ewrAssurance';
-	import { heatmapHeadlineNote, judgedByText } from '$lib/components/ewr/headline';
-	import { detailCache } from '$lib/components/runs/cache';
-	import { fmtDate, fmtDay } from '$lib/format/number';
-	import { holdAnchor } from '$lib/help/anchor';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import UncertaintyPanel from '$lib/components/uncertainty/UncertaintyPanel.svelte';
-	import SensitivityPanel from '$lib/components/uncertainty/SensitivityPanel.svelte';
-	import OutcomeMatrixPanel from '$lib/components/outcomes/OutcomeMatrixPanel.svelte';
-	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
-	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
+	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import Delta from '#lib/components/compare/Delta.svelte';
+	import { runOptionLabel } from '#lib/components/compare/picker.js';
+	import EwrHeatmap from '#lib/components/ewr/EwrHeatmap.svelte';
+	import EwrRequiredMet from '#lib/components/ewr/EwrRequiredMet.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { runHref } from '#lib/components/overview/attention.js';
+	import { historyDays } from '#lib/components/overview/latestRun.js';
+	import { hasRuleLine } from '#lib/components/overview/summaryChart.js';
+	import { resolveHeadline } from '#lib/components/runs/ewrAssurance.js';
+	import { heatmapHeadlineNote, judgedByText } from '#lib/components/ewr/headline.js';
+	import { detailCache } from '#lib/components/runs/cache.js';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { holdAnchor } from '#lib/help/anchor.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import UncertaintyPanel from '#lib/components/uncertainty/UncertaintyPanel.svelte';
+	import SensitivityPanel from '#lib/components/uncertainty/SensitivityPanel.svelte';
+	import OutcomeMatrixPanel from '#lib/components/outcomes/OutcomeMatrixPanel.svelte';
+	import OutlookPanel from '#lib/components/outlook/OutlookPanel.svelte';
+	import WaterAccountPanel from '#lib/components/reliability/WaterAccountPanel.svelte';
 	import { RIVER_STRIP_ANCHOR, riverAnchor } from './links';
 	import ReserveStrip from './ReserveStrip.svelte';
 	import { EWR_MONTHS_HEADING, ewrRuleText, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups } from './river';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
 	// water account) are in this tab's chunk: only this tab uses them, and as chunks of their own they
 	// loaded on every visit anyway, paying split overhead (issue #9). The flow chart (uPlot), the
 	// water-year bars (shared with Compare runs) and Reserve compliance (only with a rule table) stay lazy.
-	const loadFlowVsReserve = () => import('$lib/components/overview/FlowVsReserve.svelte');
-	const loadReserveYears = () => import('$lib/components/compare/ReserveYearsChart.svelte');
-	const loadAssurancePanel = () => import('$lib/components/runs/EwrAssurancePanel.svelte');
+	const loadFlowVsReserve = () => import('#lib/components/overview/FlowVsReserve.svelte');
+	const loadReserveYears = () => import('#lib/components/compare/ReserveYearsChart.svelte');
+	const loadAssurancePanel = () => import('#lib/components/runs/EwrAssurancePanel.svelte');
 
 	let {
 		projectId,
@@ -81,10 +81,10 @@
 
 	// A run picked is a new history entry, so Back returns to the run before.
 	function choose(id: string) {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		url.searchParams.set('run', id);
 		url.hash = '';
-		goto(url, { noScroll: true, keepFocus: true });
+		goto(url, { reset: false });
 	}
 
 	// --- the run's record and the one before it, through the Runs tab's cache ---

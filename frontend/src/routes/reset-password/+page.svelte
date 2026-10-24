@@ -1,17 +1,17 @@
 <!-- i18n-section: reset -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api';
-	import { emailAuthApi, linkToken, passwordProblem } from '$lib/api/emailAuth';
-	import { session } from '$lib/auth/session.svelte';
-	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
-	import { t, tRich } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import Rich from '$lib/i18n/Rich.svelte';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { emailAuthApi, linkToken, passwordProblem } from '#lib/api/emailAuth.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
+	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
+	import { t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import Rich from '#lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -19,7 +19,7 @@
 	// history or get copied along with the URL.
 	const token = linkToken(page.url);
 	onMount(() => {
-		if (page.url.searchParams.has('token')) replaceState(`${base}/reset-password`, {});
+		if (page.url.searchParams.has('token')) void goto(resolve('reset-password'), { shallow: true, replace: true });
 	});
 
 	let password = $state('');
@@ -60,10 +60,10 @@
 <AuthCard title={t('Choose a new password')} subtitle={t('Pick a password you don’t use anywhere else.')}>
 	{#if done}
 		<div class="alert alert-info" role="status">{t('Your password has been changed and you’ve been signed out everywhere. Sign in with your new password.')}</div>
-		<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
+		<a class="btn btn-primary" href={resolve('login')}>{t('Sign in')}</a>
 	{:else if linkDead}
 		<div class="alert alert-error" role="alert">{t('This reset link is invalid, already used, or older than 1 hour.')}</div>
-		<a class="btn btn-primary" href="{base}/forgot-password">{t('Send a new link')}</a>
+		<a class="btn btn-primary" href={resolve('forgot-password')}>{t('Send a new link')}</a>
 	{:else}
 		{#if session.user}
 			<p class="signed-in"><Rich text={tRich('You’re signed in as **{email}**. Setting a new password signs this browser out too.', { email: session.user.email })} /></p>
@@ -92,9 +92,9 @@
 	{/if}
 	{#snippet footer()}
 		{#if session.user}
-			<a href="{base}/">{t('Back to your projects')}</a>
+			<a href={resolve('')}>{t('Back to your projects')}</a>
 		{:else}
-			<a href="{base}/login">{t('Back to sign in')}</a>
+			<a href={resolve('login')}>{t('Back to sign in')}</a>
 		{/if}
 	{/snippet}
 </AuthCard>

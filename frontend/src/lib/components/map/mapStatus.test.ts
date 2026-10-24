@@ -3,8 +3,8 @@
 // for each role, and the fill colours.
 import { describe, expect, it } from 'vitest';
 import type { CurtailmentFarm, EwrSiteSummary, FarmSummary, RunAllocations, RunSummary, SupplyReliability } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
-import type { DamLevel } from '$lib/components/overview/damLevels';
+import type { RunMeta } from '#lib/api/types.js';
+import type { DamLevel } from '#lib/components/overview/damLevels.js';
 import {
 	BAND_TOKEN,
 	bandFills,

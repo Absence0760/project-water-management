@@ -3,8 +3,8 @@
 // one still reads ("300 000 m³ · starts 60 % · min 15 % · seepage 0 %/day"),
 // and each "More … settings" fold names its fields with their values.
 import { hasCropShares, SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, type FlowShareMethod, type NetworkNode } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
-import { pctText } from '$lib/model/systems';
+import { fmtNum } from '#lib/format/number.js';
+import { pctText } from '#lib/model/systems.js';
 import { fieldScale, hasDam, isPct, type NodeField } from './fields';
 import type { NodeSection } from './nodeSections';
 import { pumpUnit, riverToDamUnit } from './flowUnit.svelte';

@@ -6,8 +6,8 @@
 // cards carry the same numbers and tints, so the cards are the map's key; a
 // card with the focus or the pointer lights its piece, and a piece (or its
 // number) under the pointer lights its card's. Pure, so vitest checks it.
-import type { DividePlan, StartPlan } from '$lib/api';
-import type { MapGeometry, MapPosition } from '$lib/api/types';
+import type { DividePlan, StartPlan } from '#lib/api/index.js';
+import type { MapGeometry, MapPosition } from '#lib/api/types.js';
 
 /** The rest of the catchment's key among the pieces (a unit's key is its map feature's id, a uuid). */
 export const REST_KEY = 'rest';

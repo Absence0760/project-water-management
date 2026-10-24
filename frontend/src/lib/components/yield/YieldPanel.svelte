@@ -14,13 +14,13 @@
 	// The preview runs this web build's engine (ENGINE_VERSION, the worker is
 	// part of the same build) and names it, with a note when the stored
 	// result came from another engine (the backend is released separately).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onDestroy, untrack } from 'svelte';
-	import { api, type JobMeta, type RunMeta, type YieldResult } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
-	import type { PreviewEngine } from '$lib/preview/runner';
-	import { runInputFor } from '$lib/preview/inputs';
+	import { api, type JobMeta, type RunMeta, type YieldResult } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import { fmtDate, fmtNum, fmtPct } from '#lib/format/number.js';
+	import type { PreviewEngine } from '#lib/preview/runner.js';
+	import { runInputFor } from '#lib/preview/inputs.js';
 	import { ENGINE_VERSION } from '@water-management/engine/version';
 	import type { YieldPoint } from '@water-management/engine';
 	import {
@@ -185,7 +185,7 @@
 		try {
 			const input = await runInputFor(projectId, src.runId, api.uncertainty.runInput);
 			if (seq !== previewSeq) return;
-			engine ??= (await import('$lib/preview/runner')).createPreviewEngine();
+			engine ??= (await import('#lib/preview/runner.js')).createPreviewEngine();
 			if (seq !== previewSeq) return;
 			// A plain copy: the scenario's ops come from reactive state, and a proxy can't be posted to a worker.
 			const ops = src.ops ? $state.snapshot(src.ops) : undefined;

@@ -10,11 +10,11 @@
 	Settings tab chunk sits at its size ceiling.
 -->
 <script lang="ts">
-	import { localIsoDate } from '$lib/format/number';
+	import { localIsoDate } from '#lib/format/number.js';
 	import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, type NetworkNode, type UnitRainSettings } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import {
 		CATCHMENT_GAUGE,
 		mapPeriodNote,

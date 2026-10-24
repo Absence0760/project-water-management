@@ -6,10 +6,10 @@
 	// the *real* gauge, so its NSE is not an outcome of the what-if
 	// (ScenarioCompare, issue #177).
 	import { SUPPLY_TARGET, type MetricDelta, type RunComparison } from '@water-management/engine';
-	import { fmtPct } from '$lib/format/number';
+	import { fmtPct } from '#lib/format/number.js';
 	import Delta from './Delta.svelte';
 	import { fmtMetric, type MetricSpec } from './delta';
-	import { calibrationSample } from '$lib/components/calibration/sample';
+	import { calibrationSample } from '#lib/components/calibration/sample.js';
 
 	let { comparison, water: showWater = true, fit = true }: { comparison: RunComparison; water?: boolean; fit?: boolean } = $props();
 

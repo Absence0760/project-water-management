@@ -7,25 +7,25 @@
 	// sheet its row's Edit opens, and the crops' demand comes from their
 	// planted areas (the farm drawer). Edits go into the shared ModelEditor.
 	import type { ProjectSettings } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, type AllocationList } from '$lib/api';
-	import { STATUS_LABEL } from '$lib/components/allocations/allocations';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import { saveBlob } from '$lib/export/download';
-	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-	import { fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { withoutParam, withParam } from '$lib/workspace/overlays';
+	import { api, type AllocationList } from '#lib/api/index.js';
+	import { STATUS_LABEL } from '#lib/components/allocations/allocations.js';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
+	import { saveBlob } from '#lib/export/download.js';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
+	import { fmtNum, fmtPct, fmtQty, localIsoDate } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { withoutParam, withParam } from '#lib/workspace/overlays.js';
 	import { demandRows, demandShares, demandTotal, type DemandRow } from './demands';
 	import { DEMANDS_UNIT_CHOICES, demandsUnitView, parseDemandsUnit, UNIT_PARAM } from './demandUnits';
 	import { nodeSpans, registeredCells, registeredTotal } from './demandsRegistered';
 	import DemandsRunCaption from './DemandsRunCaption.svelte';
 	import { latestRunFigures } from './demandsRunLoad.svelte';
-	import type { RunMeta } from '$lib/api';
+	import type { RunMeta } from '#lib/api/index.js';
 	import { applyDemandPaste, demandsCsv, demandsFormat, pasteNames, planDemandPaste } from './demandsPaste';
 
 	let {
@@ -58,7 +58,7 @@
 	const show = (m3Day: number) => fmtNum(m3Day * uv.scale, uv.decimals);
 	function pickUnit(v: string) {
 		const next = parseDemandsUnit(v);
-		void goto(next ? withParam(page.url, UNIT_PARAM, next) : withoutParam(page.url, UNIT_PARAM), { noScroll: true, keepFocus: true });
+		void goto(next ? withParam(page.url, UNIT_PARAM, next) : withoutParam(page.url, UNIT_PARAM), { reset: false });
 	}
 	// --- registered volumes (docs/allocations.md): per unit or user, read as the Allocations page reads them, so a viewer
 	// sees per-unit volumes only when the owners allow it, and a farmer is refused (no column) ---

@@ -17,7 +17,7 @@
 // mean, SD and CV, then the modified flows: low flows (maintenance,
 // drought), high flows (maintenance) and the total flows (maintenance), the
 // last column, in Mm³ a month.
-import type { ExampleFile } from '$lib/components/common/formatHelp';
+import type { ExampleFile } from '#lib/components/common/formatHelp.js';
 import { DEFAULT_ASSURANCE_POINTS, EWR_PERCENTILE_POINTS, type EwrDailySource, type EwrRuleTable } from '@water-management/engine';
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];

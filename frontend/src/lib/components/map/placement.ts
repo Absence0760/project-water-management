@@ -4,8 +4,8 @@
 // larger one. The editor's choices live in the sheet's draft, keyed by the
 // map feature's id ('' for the outlet gauge), and go with every proposal
 // until changed.
-import type { PlacementChoice, PointPlacement } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { PlacementChoice, PointPlacement } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** The key the outlet gauge's choices are kept under (the server's too). */
 export const OUTLET_KEY = '';

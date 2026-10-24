@@ -9,13 +9,13 @@
 	// mode). Nothing unpublished, no other farm's inputs, no other applicant's
 	// drafts: the API enforces all three.
 	import { untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, type ProjectSummary, type Publication } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
-	import { withParam } from '$lib/workspace/overlays';
-	import { fmtDate } from '$lib/format/number';
+	import { api, type ProjectSummary, type Publication } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import SectionHeader from '#lib/components/workspace/SectionHeader.svelte';
+	import { withParam } from '#lib/workspace/overlays.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import ScenariosTab from './ScenariosTab.svelte';
 
 	let { project }: { project: ProjectSummary } = $props();
@@ -54,7 +54,7 @@
 		<span aria-hidden="true">·</span>
 		<span class="yours">
 			Your hydrological unit{farms.length === 1 ? '' : 's'}:
-			{#each farms as f, i (f.nodeId)}{i ? ', ' : ''}<a href="{base}/farm/{encodeURIComponent(project.id)}?node={encodeURIComponent(f.nodeId)}">{f.name}</a>{/each}
+			{#each farms as f, i (f.nodeId)}{i ? ', ' : ''}<a href={resolve(`farm/${encodeURIComponent(project.id)}?node=${encodeURIComponent(f.nodeId)}`)}>{f.name}</a>{/each}
 		</span>
 	{/if}
 {/snippet}
@@ -70,7 +70,7 @@
 	{/if}
 {/snippet}
 
-<SectionHeader title="Applications" guide="{base}/help/guides/applications-page" {badge} {context} main={publication ? newApplication : null} {notices} />
+<SectionHeader title="Applications" guide={resolve('help/guides/applications-page')} {badge} {context} main={publication ? newApplication : null} {notices} />
 
 <LoadState {loading} {error} retry={load}>
 	<ScenariosTab projectId={project.id} runs={null} canEdit={false} applicant publishedRunId={publication?.runId ?? null} onRunsChange={() => {}} reloadRuns={async () => {}} />

@@ -15,16 +15,16 @@
 	the request would have.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { tick } from 'svelte';
-	import { api, type DelineationProposal, type DelineationRequest, type DelineationState, type MapFeature } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import type { MapPosition } from '$lib/api/types';
-	import { ApiError } from '$lib/api/client';
+	import { api, type DelineationProposal, type DelineationRequest, type DelineationState, type MapFeature } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import type { MapPosition } from '#lib/api/types.js';
+	import { ApiError } from '#lib/api/client.js';
 	import { afterPollError, CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, waitingText } from './delineation';
 	import { parseDegrees, positionText } from './mapData';
 	import { largerChannelOf } from './largerChannel';
-	import type { LargerChannel } from '$lib/api';
+	import type { LargerChannel } from '#lib/api/index.js';
 
 	let {
 		open = $bindable(false),

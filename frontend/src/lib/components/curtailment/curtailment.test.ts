@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runModel, type CurtailmentFarm, type CurtailmentSummary, type ModelOutput } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { actionOf, curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtDemandLeft, fmtSigned, fmtVol, userPriorityText } from './curtailment';
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({

@@ -15,7 +15,7 @@ import {
 	type DroughtRestrictionLevel,
 	type DroughtRestrictionRule
 } from '@water-management/engine';
-import { projectToday } from '$lib/components/projects/freshness';
+import { projectToday } from '#lib/components/projects/freshness.js';
 
 /** Each part of demand as the editor's row names it. */
 export const PART_LABEL: Record<DemandPart, string> = {

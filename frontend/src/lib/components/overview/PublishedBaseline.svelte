@@ -9,14 +9,14 @@
 	with the comparison against the published run.
 -->
 <script lang="ts">
-	import { base } from '$app/paths';
-	import { compareTabHref } from '$lib/components/compare/picker';
+	import { resolve } from '$app/paths';
+	import { compareTabHref } from '#lib/components/compare/picker.js';
 	import { onMount } from 'svelte';
-	import { autoRunToPublish } from '$lib/components/autorun/autoRun';
-	import { api, type Publication, type RunMeta } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { noticeLanguages, restrictionSummary } from '$lib/components/runs/publication';
-	import { fmtDay, fmtStamp } from '$lib/format/number';
+	import { autoRunToPublish } from '#lib/components/autorun/autoRun.js';
+	import { api, type Publication, type RunMeta } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { noticeLanguages, restrictionSummary } from '#lib/components/runs/publication.js';
+	import { fmtDay, fmtStamp } from '#lib/format/number.js';
 	import { runHref } from './attention';
 	import { pickRuns } from './latestRun';
 
@@ -72,7 +72,7 @@
 		<h2 id="baseline-h">Published baseline</h2>
 		{#if current}
 			<span class="links">
-				<a href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(current.runId)}">Report</a>
+				<a href={resolve(`projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(current.runId)}`)}>Report</a>
 				<a href={runHref(current.runId)}>Open in Runs</a>
 			</span>
 		{/if}

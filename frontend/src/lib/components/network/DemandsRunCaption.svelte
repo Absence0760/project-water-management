@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The Demands grid's line naming the run its Supplied and Short columns come from (docs/ui.md § Demands grid).
-	import { fmtDate } from '$lib/format/number';
+	import { fmtDate } from '#lib/format/number.js';
 	import { ranAgo } from './supplyColour';
 	import type { DemandsRun } from './demandsRunLoad.svelte';
 

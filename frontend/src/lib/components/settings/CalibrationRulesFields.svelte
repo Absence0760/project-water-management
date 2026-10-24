@@ -30,13 +30,13 @@
 		type ObjectiveId
 	} from '@water-management/engine';
 	import type { Snippet } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import { BOUNDS_LABEL, searchSummary } from '$lib/calibration/fit';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { BOUNDS_LABEL, searchSummary } from '#lib/calibration/fit.js';
 	import { pctToShare, rulesFieldsError, rulesStatusText, shareToPct, toggled } from './calibrationRules';
 	import { keptOr } from './kept';
-	import { localIsoDate } from '$lib/format/number';
+	import { localIsoDate } from '#lib/format/number.js';
 
 	let {
 		value = $bindable(),

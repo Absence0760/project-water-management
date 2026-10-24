@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode } from '@water-management/engine';
-import type { DamLevel } from '$lib/components/overview/damLevels';
+import type { DamLevel } from '#lib/components/overview/damLevels.js';
 import { damColouring, supplyColouring } from './farmColour';
 
 const node = (id: string, kind: NetworkNode['kind'] = 'farm', damCapacityM3 = 1000) =>

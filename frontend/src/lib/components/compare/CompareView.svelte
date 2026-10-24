@@ -19,50 +19,50 @@
 	// has no section header, so it keeps the view's own h1 with the same
 	// action beside it. A what-if is any run: a new one comes from running
 	// the model again or from the Scenarios tab, which the empty state names.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { api, ApiError, type ProjectSummary, type RunCompareResponse, type RunMeta } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import ChangesList from '$lib/components/compare/ChangesList.svelte';
-	import { attributionSummary, historyHref, lineAuthors } from '$lib/components/compare/attribution';
-	import Delta from '$lib/components/compare/Delta.svelte';
-	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
-	import EwrAssuranceCompare from '$lib/components/compare/EwrAssuranceCompare.svelte';
-	import EwrFdcCompare from '$lib/components/compare/EwrFdcCompare.svelte';
-	import AssuranceDeltaTable from '$lib/components/compare/AssuranceDeltaTable.svelte';
-	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
-	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
-	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
-	import PlausibilityCompare from '$lib/components/compare/PlausibilityCompare.svelte';
-	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
-	import { fmtMetric } from '$lib/components/compare/delta';
-	import { rainSourceNote } from '$lib/components/compare/rainSource';
-	import { asFitRecord } from '$lib/components/compare/fit';
-	import { compareDamStorage, leadChange, outcomeRows, takeaways } from '$lib/components/compare/summary';
-	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '$lib/series/provenance';
-	import RunPicker from '$lib/components/compare/RunPicker.svelte';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import { COMPARE_HEADINGS as HEADING, compareNavGroups } from '$lib/components/compare/sections';
-	import { defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
-	import { compareEvidenceNote } from '$lib/components/runs/evidence';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { runYears } from '$lib/components/runs/runList';
-	import { fmtDate } from '$lib/format/number';
+	import { resolve } from '$app/paths';
+	import { api, ApiError, type ProjectSummary, type RunCompareResponse, type RunMeta } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import ChangesList from '#lib/components/compare/ChangesList.svelte';
+	import { attributionSummary, historyHref, lineAuthors } from '#lib/components/compare/attribution.js';
+	import Delta from '#lib/components/compare/Delta.svelte';
+	import EwrAgreementCompare from '#lib/components/compare/EwrAgreementCompare.svelte';
+	import EwrAssuranceCompare from '#lib/components/compare/EwrAssuranceCompare.svelte';
+	import EwrFdcCompare from '#lib/components/compare/EwrFdcCompare.svelte';
+	import AssuranceDeltaTable from '#lib/components/compare/AssuranceDeltaTable.svelte';
+	import FarmDeltaTable from '#lib/components/compare/FarmDeltaTable.svelte';
+	import HeadlineDeltas from '#lib/components/compare/HeadlineDeltas.svelte';
+	import FitValidationCompare from '#lib/components/compare/FitValidationCompare.svelte';
+	import PlausibilityCompare from '#lib/components/compare/PlausibilityCompare.svelte';
+	import { chirpsFitNote } from '#lib/components/compare/chirpsFit.js';
+	import { fmtMetric } from '#lib/components/compare/delta.js';
+	import { rainSourceNote } from '#lib/components/compare/rainSource.js';
+	import { asFitRecord } from '#lib/components/compare/fit.js';
+	import { compareDamStorage, leadChange, outcomeRows, takeaways } from '#lib/components/compare/summary.js';
+	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '#lib/series/provenance.js';
+	import RunPicker from '#lib/components/compare/RunPicker.svelte';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import { COMPARE_HEADINGS as HEADING, compareNavGroups } from '#lib/components/compare/sections.js';
+	import { defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, type RunRef } from '#lib/components/compare/picker.js';
+	import { compareEvidenceNote } from '#lib/components/runs/evidence.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { runYears } from '#lib/components/runs/runList.js';
+	import { fmtDate } from '#lib/format/number.js';
 
 	// Every comparison renders the paired uncertainty band (issue #4 phase 9), the daily series
 	// overlay (issue #8) and the days below the reserve each year (issue #17 A4), so they are static
 	// imports: the band sits in this chunk (tab chunks have their own ceiling,
 	// scripts/guards/check_web_bundle_budget.mjs), and the overlay and the reserve years, which the
 	// Scenarios and EWR tabs load lazily, stay shared chunks this one preloads.
-	import PairedUncertaintyPanel from '$lib/components/uncertainty/PairedUncertaintyPanel.svelte';
-	import CompareOverlay from '$lib/components/compare/CompareOverlay.svelte';
-	import ReserveYearsChart from '$lib/components/compare/ReserveYearsChart.svelte';
-	import { dailyEwrName, daysBelowTestOf } from '$lib/components/ewr/notMet';
+	import PairedUncertaintyPanel from '#lib/components/uncertainty/PairedUncertaintyPanel.svelte';
+	import CompareOverlay from '#lib/components/compare/CompareOverlay.svelte';
+	import ReserveYearsChart from '#lib/components/compare/ReserveYearsChart.svelte';
+	import { dailyEwrName, daysBelowTestOf } from '#lib/components/ewr/notMet.js';
 	// A scenario run's overrides (issue #18): their own chunk, fetched only when a side is a scenario run.
-	const loadOverrides = () => import('$lib/components/scenarios/ScenarioOverrides.svelte');
+	const loadOverrides = () => import('#lib/components/scenarios/ScenarioOverrides.svelte');
 	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
 
 	type Side = 'a' | 'b' | 'c';
@@ -169,7 +169,7 @@
 	});
 
 	function navigate(a: RunRef | null, b: RunRef | null, c: RunRef | null, replace = false) {
-		return goto(hrefFor(a, b, c), { replaceState: replace, keepFocus: true, noScroll: true });
+		return goto(hrefFor(a, b, c), { replace: replace, reset: false });
 	}
 	/** The current runs with one replaced. */
 	function withRun(side: Side, ref: RunRef | null): [RunRef | null, RunRef | null, RunRef | null] {
@@ -392,7 +392,7 @@
 	function reportHref(side: WhatIf): string | null {
 		const r = refOf(side);
 		if (!r || !refA) return null;
-		return `${base}/projects/${r.projectId}/report?${new URLSearchParams({ run: r.runId, against: formatRef(refA) })}`;
+		return resolve(`projects/${r.projectId}/report?${new URLSearchParams({ run: r.runId, against: formatRef(refA) })}`);
 	}
 	const reports = $derived(
 		whatIfs.flatMap((s) => {
@@ -532,7 +532,7 @@
 					another project (for example a copy of this one) as what-if 1 above.
 				</p>
 			{/if}
-			<a class="btn" href="{base}/projects/{soloProject}?tab=runs">Go to the project's runs</a>
+			<a class="btn" href={resolve(`projects/${soloProject}?tab=runs`)}>Go to the project's runs</a>
 		</div>
 	{:else if !refA || !refB}
 		{#if !resolving}
@@ -540,7 +540,7 @@
 				<p>Choose a baseline and a what-if to see what changed.</p>
 				<p>
 					A what-if is any other run: change the model and run it again, or run a scenario{#if projectA}{' '}on the
-						<a href="{base}/projects/{projectA}?tab=scenarios">Scenarios tab</a>{/if}.
+						<a href={resolve(`projects/${projectA}?tab=scenarios`)}>Scenarios tab</a>{/if}.
 				</p>
 			</div>
 		{/if}

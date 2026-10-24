@@ -152,7 +152,7 @@ describe('isTranslatedPath', () => {
 	const routes = fileURLToPath(new URL('../../routes/', import.meta.url));
 	const pages = (readdirSync(routes, { recursive: true }) as string[])
 		.filter((f) => /(^|\/)\+page\.(svelte|ts)$/.test(f))
-		.filter((f) => readFileSync(routes + f, 'utf8').includes('$lib/i18n/locale.svelte'))
+		.filter((f) => readFileSync(routes + f, 'utf8').includes('#lib/i18n/locale.svelte.js'))
 		.map((f) => {
 			const path = ('/' + f.replace(/(^|\/)\+page\.(svelte|ts)$/, '')).replace(/\/\[\[[^\]]+\]\]/g, '').replace(/\[([^\]=]+)[^\]]*\]/g, '$1');
 			return path === '/' ? path : path.replace(/\/$/, '');

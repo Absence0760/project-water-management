@@ -4,17 +4,18 @@
 	// other guides. Guide text is plain strings with a small markup that
 	// inline() parses, so nothing here is {@html}.
 	import { tick } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import Diagram from '$lib/components/help/Diagram.svelte';
-	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
-	import PictureTour from '$lib/components/help/PictureTour.svelte';
-	import RichText from '$lib/components/help/RichText.svelte';
-	import { hashId, holdAnchor } from '$lib/help/anchor';
-	import { helpFor } from '$lib/help/content';
-	import { glossaryPath } from '$lib/help/glossaryLinks';
-	import { GUIDE_KIND_TITLES, TAB_TITLES, guideFor, sectionId } from '$lib/help/guides';
-	import { currentSection } from '$lib/help/spy';
+	import Diagram from '#lib/components/help/Diagram.svelte';
+	import HelpCrumbs from '#lib/components/help/HelpCrumbs.svelte';
+	import PictureTour from '#lib/components/help/PictureTour.svelte';
+	import RichText from '#lib/components/help/RichText.svelte';
+	import { hashId, holdAnchor } from '#lib/help/anchor.js';
+	import { helpFor } from '#lib/help/content.js';
+	import { glossaryPath } from '#lib/help/glossaryLinks.js';
+	import { GUIDE_KIND_TITLES, TAB_TITLES, guideFor, sectionId } from '#lib/help/guides.js';
+	import { currentSection } from '#lib/help/spy.js';
 
 	const guide = $derived(guideFor(page.params.id ?? ''));
 	const terms = $derived((guide?.terms ?? []).map((id) => helpFor(id)).filter((e) => e !== undefined));
@@ -83,13 +84,13 @@
 <article class="guide-page">
 	<HelpCrumbs
 		trail={guide
-			? [{ label: 'Help', href: `${base}/help` }, { label: GUIDE_KIND_TITLES[guide.kind] }, { label: guide.title }]
-			: [{ label: 'Help', href: `${base}/help` }]}
+			? [{ label: 'Help', href: resolve('help') }, { label: GUIDE_KIND_TITLES[guide.kind] }, { label: guide.title }]
+			: [{ label: 'Help', href: resolve('help') }]}
 	/>
 
 	{#if !guide}
 		<h1 class="title">Guide not found</h1>
-		<p>There is no guide called “{page.params.id}”. <a href="{base}/help">See all guides and the glossary</a>.</p>
+		<p>There is no guide called “{page.params.id}”. <a href={resolve('help')}>See all guides and the glossary</a>.</p>
 	{:else}
 		<header class="head">
 			<h1 class="title">{guide.title}</h1>
@@ -150,7 +151,7 @@
 				<dl>
 					{#each terms as e (e.id)}
 						<div>
-							<dt><a href="{base}{glossaryPath(e)}">{e.term}</a></dt>
+							<dt><a href="{basePath()}{glossaryPath(e)}">{e.term}</a></dt>
 							<dd class="muted">{e.short}</dd>
 						</div>
 					{/each}
@@ -164,7 +165,7 @@
 				<ul class="related">
 					{#each related as g (g.id)}
 						<li>
-							<a href="{base}/help/guides/{g.id}">{g.title}</a>
+							<a href={resolve(`help/guides/${g.id}`)}>{g.title}</a>
 							<p class="muted">{g.summary}</p>
 						</li>
 					{/each}

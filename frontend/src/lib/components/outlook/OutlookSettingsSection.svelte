@@ -5,11 +5,11 @@
 	// the review triggers' day). Part of the Settings
 	// form (the save bar saves it), in the Settings tab's chunk. No model input. The defaults are the engine's, confirmed by
 	// the client (plan.md O3, O6, issue #90).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { DEFAULT_OUTLOOK_SEASON, DEFAULT_PLANNING_SHARE, defaultReviewDate } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { monthName } from '$lib/format/months';
-	import type { OutlookSettings } from '$lib/api/types';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import { monthName } from '#lib/format/months.js';
+	import type { OutlookSettings } from '#lib/api/types.js';
 
 	let { value = $bindable(), readonly, error, summary = null }: { value: OutlookSettings; readonly: boolean; error: string | null; summary?: string | null } = $props();
 

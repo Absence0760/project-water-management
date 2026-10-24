@@ -3,7 +3,7 @@
 // holds now, whether a date is one the series has, how a typed value reads,
 // and which days are marked as edited by hand.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
-import { fmtDay, parseNum } from '$lib/format/number';
+import { fmtDay, parseNum } from '#lib/format/number.js';
 
 export interface DailyValues {
 	startDate: string;

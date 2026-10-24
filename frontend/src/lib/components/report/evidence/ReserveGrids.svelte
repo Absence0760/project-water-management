@@ -3,7 +3,7 @@
 	// (§1 The river, C10; grid.ts says how a cell is shaded). Real tables:
 	// each cell carries its number and its verdict in words.
 	import type { EvidenceSite } from '@water-management/engine';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { reserveGrid, waterYearLabel } from './grid';
 
 	let { site, application }: { site: EvidenceSite; application: boolean } = $props();

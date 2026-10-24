@@ -1,6 +1,6 @@
 // Pure helpers for the pending-invite lists on the project Members panel and
 // the team page (PendingInvites.svelte).
-import type { Invite } from '$lib/api/types';
+import type { Invite } from '#lib/api/types.js';
 
 /** Put `inv` in the list (replacing the one for the same id or address), newest first. */
 export function upsertInvite(list: readonly Invite[], inv: Invite): Invite[] {

@@ -9,20 +9,20 @@
 	// /auth/me, components/account/DeleteAccount.svelte). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
 	import { tick } from 'svelte';
-	import { base } from '$app/paths';
-	import { PUBLIC_API_URL } from '$env/static/public';
-	import { api, ApiError } from '$lib/api';
-	import { displayNameProblem, passwordProblem } from '$lib/api/emailAuth';
-	import { session } from '$lib/auth/session.svelte';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import DeleteAccount from '$lib/components/account/DeleteAccount.svelte';
-	import EmailText from '$lib/components/common/EmailText.svelte';
-	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import { resumeProblem, suppressedText } from '$lib/components/alerts/words';
-	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
-	import TwoStepSignIn from '$lib/components/account/TwoStepSignIn.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
+	import { resolve } from '$app/paths';
+	import { PUBLIC_API_URL } from '$app/env/public';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { displayNameProblem, passwordProblem } from '#lib/api/emailAuth.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import DeleteAccount from '#lib/components/account/DeleteAccount.svelte';
+	import EmailText from '#lib/components/common/EmailText.svelte';
+	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
+	import { resumeProblem, suppressedText } from '#lib/components/alerts/words.js';
+	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
+	import TwoStepSignIn from '#lib/components/account/TwoStepSignIn.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
 
 	const msg = errorText;
 
@@ -132,9 +132,9 @@
 		exportChunkFailed = false;
 		exporting = true;
 		try {
-			let download: typeof import('$lib/export/download');
+			let download: typeof import('#lib/export/download.js');
 			try {
-				download = await import('$lib/export/download');
+				download = await import('#lib/export/download.js');
 			} catch {
 				exportChunkFailed = true;
 				return;
@@ -354,9 +354,9 @@
 					{/if}
 					<p class="status" role="status" aria-live="polite">{resumed ? t('Alert emails are back on.') : ''}</p>
 					<p class="muted intro">{t('Choose which alerts you get by email, and how often.')}</p>
-					<p class="link-row"><a class="btn" href="{base}/account/alerts">{t('Choose your alert emails')}</a></p>
+					<p class="link-row"><a class="btn" href={resolve('account/alerts')}>{t('Choose your alert emails')}</a></p>
 					<!-- Invitations to accept or decline (issue #136): an account joins nothing it hasn't accepted. -->
-					<p class="link-row"><a class="btn" href="{base}/account/invitations">{t('Your invitations')}</a></p>
+					<p class="link-row"><a class="btn" href={resolve('account/invitations')}>{t('Your invitations')}</a></p>
 				</section>
 
 				<section class="panel" aria-labelledby="data-h">

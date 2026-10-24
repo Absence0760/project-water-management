@@ -1,10 +1,10 @@
 // Alert emails on the translated pages (WP-2.13, docs/ui.md § Alerts): the
 // alert emails page, the unsubscribe page and the farm view's alert card,
 // from the message catalogue. Pure, so it is unit-tested apart from the pages.
-import type { AlertChoice, AlertEvent, AlertMode, FeedbackAnswered, Unsubscribed, User } from '$lib/api/types';
-import { ApiError } from '$lib/api/client';
-import { fmtPct } from '$lib/components/farm/numbers';
-import { msg, t, type Msg } from '$lib/i18n/locale.svelte';
+import type { AlertChoice, AlertEvent, AlertMode, FeedbackAnswered, Unsubscribed, User } from '#lib/api/types.js';
+import { ApiError } from '#lib/api/client.js';
+import { fmtPct } from '#lib/components/farm/numbers.js';
+import { msg, t, type Msg } from '#lib/i18n/locale.svelte.js';
 
 export const ALERT_MODES: readonly AlertMode[] = ['immediate', 'daily_digest', 'off'];
 

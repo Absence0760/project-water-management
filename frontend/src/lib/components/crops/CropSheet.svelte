@@ -4,18 +4,18 @@
 	// the URL). It edits the shared ModelEditor, the same values as the Crop
 	// factors grid. The sheet is modal, which hides the save bar, so it
 	// carries the save row (model/ModelSaveRow.svelte), as the farm drawer does.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
-	import { gridPasteTarget, type PastePlan } from '$lib/spreadsheet/paste/grid';
-	import { fmtNum } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
+	import ModelSaveRow from '#lib/components/model/ModelSaveRow.svelte';
+	import { gridPasteTarget, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { applyFactorPaste, cropFactorsCsv, planFactorPaste } from './areaPaste';
-	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
+	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 	import { joinNames } from './demand';
 
 	let {

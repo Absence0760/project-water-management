@@ -3,7 +3,7 @@
 	// the counts written beside it ("1 red, 4 green"). The bar is decoration:
 	// the words are what a screen reader (and anyone who can't tell the
 	// colours apart) reads.
-	import type { PortfolioEwrStatus } from '$lib/api/types';
+	import type { PortfolioEwrStatus } from '#lib/api/types.js';
 	import { STATUS_ORDER, statusSummary } from './portfolio';
 
 	let { counts, empty = 'No catchments yet' }: { counts: Record<PortfolioEwrStatus, number>; empty?: string } = $props();

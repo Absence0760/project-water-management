@@ -10,13 +10,13 @@
 -->
 <script lang="ts">
 	import type { EwrRuleTable, NetworkNode } from '@water-management/engine';
-	import type { OutcomeSettings, RunCompareResponse } from '$lib/api';
-	import ChangesList from '$lib/components/compare/ChangesList.svelte';
-	import Delta from '$lib/components/compare/Delta.svelte';
-	import { fmtMetric } from '$lib/components/compare/delta';
-	import { compareDamStorage, outcomeRows, takeaways } from '$lib/components/compare/summary';
-	import { chooseSite, matrixSites } from '$lib/components/outcomes/matrix';
-	import { fmtDate } from '$lib/format/number';
+	import type { OutcomeSettings, RunCompareResponse } from '#lib/api/index.js';
+	import ChangesList from '#lib/components/compare/ChangesList.svelte';
+	import Delta from '#lib/components/compare/Delta.svelte';
+	import { fmtMetric } from '#lib/components/compare/delta.js';
+	import { compareDamStorage, outcomeRows, takeaways } from '#lib/components/compare/summary.js';
+	import { chooseSite, matrixSites } from '#lib/components/outcomes/matrix.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import LicenceImpactBoard from './LicenceImpactBoard.svelte';
 	import type { ImpactSeries } from './impactSeries';
 	import { buildLicenceImpactBoard } from './licenceImpact';

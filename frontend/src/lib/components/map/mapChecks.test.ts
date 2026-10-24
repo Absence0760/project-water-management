@@ -4,7 +4,7 @@
 // placed as lon/lat, rounded to 6 decimals like the seeded example
 // (backend/scripts/examples/map.ts), so shared edges carry real rounding.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, MapFeatureKind, MapGeometry, MapNodeArea, MapPosition } from '$lib/api/types';
+import type { MapFeature, MapFeatureKind, MapGeometry, MapNodeArea, MapPosition } from '#lib/api/types.js';
 import { GAUGE_RIVER_DISTANCE_M, haversineM, mapChecks, OVERLAP_TOLERANCE_M } from './mapChecks';
 
 const ORIGIN: MapPosition = [21.2, -33.64];

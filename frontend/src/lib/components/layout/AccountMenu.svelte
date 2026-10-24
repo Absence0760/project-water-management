@@ -11,13 +11,14 @@
 	// need stays in sight after the banner is dismissed (docs/ui.md, the
 	// two-step sign-in banner).
 
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { base } from '$app/paths';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
-	import { mfaPrompt, pendingKind } from '$lib/auth/mfaPrompt.svelte';
-	import { session } from '$lib/auth/session.svelte';
-	import { loginReturningTo, signOutTo } from '$lib/auth/signOut';
+	import { api } from '#lib/api/index.js';
+	import { mfaPrompt, pendingKind } from '#lib/auth/mfaPrompt.svelte.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import { loginReturningTo, signOutTo } from '#lib/auth/signOut.js';
 
 	let { up = false, compact = false }: { up?: boolean; compact?: boolean } = $props();
 
@@ -29,7 +30,7 @@
 
 	const mfaNeeded = $derived(pendingKind(mfaPrompt, session.user?.id ?? null));
 
-	const onAccountPage = $derived((page.url.pathname.slice(base.length) || '/') === '/account');
+	const onAccountPage = $derived((page.url.pathname.slice(basePath().length) || '/') === '/account');
 
 	const initials = $derived(
 		(session.user?.displayName ?? '')
@@ -116,7 +117,7 @@
 		<ul id={menuId} class="menu" hidden={!menuOpen}>
 			{#if mfaNeeded === 'setup'}
 				<li>
-					<a class="item item-warning" href="{base}/account#two-step" onclick={() => closeMenu()}>
+					<a class="item item-warning" href={resolve('account#two-step')} onclick={() => closeMenu()}>
 						<span class="label">Set up two-step sign-in</span>
 						<span class="hint">Your role needs it</span>
 					</a>
@@ -132,7 +133,7 @@
 			<li>
 				<a
 					class="item"
-					href="{base}/account"
+					href={resolve('account')}
 					aria-current={onAccountPage ? 'page' : undefined}
 					onclick={() => closeMenu()}
 				>

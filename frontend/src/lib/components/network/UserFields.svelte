@@ -7,9 +7,9 @@
 	// A Priority user also has a fixed restriction % (engine 1.86.0, issue
 	// #523 B3); switching to Non-priority clears it.
 	import { USER_PRIORITIES, type NetworkNode, type UserPriority } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import MonthFields from './MonthFields.svelte';
 	import PumpCapacityField from './PumpCapacityField.svelte';
 	import { userDemandOf, userPriorityNote, userPumpNote, userRestrictionNote } from './users';

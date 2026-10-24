@@ -7,9 +7,9 @@
 	// announced as they change (a polite live region), and the takeaway uses
 	// Compare runs' words: what the change costs the river, and what it gives
 	// the farm.
-	import { t } from '$lib/i18n/locale.svelte';
-	import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
-	import { SUPPLY_TARGET } from '$lib/components/runs/results';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { LOW_SUPPLY } from '#lib/components/network/supplyColour.js';
+	import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
 	import { DATA } from './data.generated';
 	import { fmt, signed } from './format';
 

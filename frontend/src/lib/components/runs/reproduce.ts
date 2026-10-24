@@ -1,7 +1,7 @@
 // "Check reproduction" (roadmap WP-3.1, GET …/runs/:runId/reproduce): what the
 // answer says, in words. Pure, so it is unit-tested without the component.
-import type { Reproduction, ReproductionDifference } from '$lib/api';
-import { fmtReading } from '$lib/format/number';
+import type { Reproduction, ReproductionDifference } from '#lib/api/index.js';
+import { fmtReading } from '#lib/format/number.js';
 
 /** A difference too small for fmtReading's four decimals still shows as a number. */
 const size = (v: number) => (v !== 0 && Math.abs(v) < 1e-4 ? v.toExponential(2) : fmtReading(v));

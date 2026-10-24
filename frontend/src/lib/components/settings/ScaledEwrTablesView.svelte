@@ -12,8 +12,8 @@
 -->
 <script lang="ts">
 	import { EWR_PERCENTILE_POINTS } from '@water-management/engine';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtQty } from '$lib/format/number';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtQty } from '#lib/format/number.js';
 	import { DAILY_TABLE_LABELS, type ScaledEwrTables } from './ewrDailySource';
 
 	let { tables }: { tables: ScaledEwrTables } = $props();

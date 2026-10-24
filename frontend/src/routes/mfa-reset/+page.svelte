@@ -8,20 +8,20 @@
 	// linked: the help (/help, /farm/words) needs a sign-in, and whoever opens
 	// this can't sign in.
 	import { onMount } from 'svelte';
-	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api';
-	import { linkToken } from '$lib/api/emailAuth';
-	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
-	import { fmtStampTime } from '$lib/components/farm/format';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { linkToken } from '#lib/api/emailAuth.js';
+	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
+	import { fmtStampTime } from '#lib/components/farm/format.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
 
 	// Read once, then dropped from the address bar so it doesn't linger in history.
 	const token = linkToken(page.url);
 	onMount(() => {
-		if (page.url.searchParams.has('token')) replaceState(`${base}/mfa-reset`, {});
+		if (page.url.searchParams.has('token')) void goto(resolve('mfa-reset'), { shallow: true, replace: true });
 	});
 
 	let busy = $state(false);
@@ -58,10 +58,10 @@
 			<p>{t('The 3-day wait has started. Two-step sign-in will be removed at {when}, and every device will be signed out.', { when: fmtStampTime(effectiveAt) })}</p>
 			<p>{t('We’ll email you every day until then. Then sign in with your password alone, and set up two-step sign-in again on your Account page.')}</p>
 		</div>
-		<a class="btn btn-primary" href="{base}/login">{t('Back to sign in')}</a>
+		<a class="btn btn-primary" href={resolve('login')}>{t('Back to sign in')}</a>
 	{:else if linkDead}
 		<div class="alert alert-error" role="alert">{t('This link is invalid, already used, or older than 1 hour. Sign in again and ask for a new one.')}</div>
-		<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
+		<a class="btn btn-primary" href={resolve('login')}>{t('Sign in')}</a>
 	{:else}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<p>{t('Confirm to start a 3-day wait. When it ends, two-step sign-in is removed from your account and every device is signed out.')}</p>
@@ -71,7 +71,7 @@
 		<p class="muted">{t('If you didn’t ask for this, close this page: someone knows your password, so choose a new one.')}</p>
 	{/if}
 	{#snippet footer()}
-		<a href="{base}/login">{t('Back to sign in')}</a>
+		<a href={resolve('login')}>{t('Back to sign in')}</a>
 	{/snippet}
 </AuthCard>
 

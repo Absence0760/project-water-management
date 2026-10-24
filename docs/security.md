@@ -875,7 +875,7 @@ and goes on. Below the threshold nobody sees a puzzle.
   (`<id>.edge.sdk.awswaf.com`, which `jsapi.js` loads; without it no token is
   issued), and `media-src` allows `data:` for the audio. SvelteKit's meta CSP
   adds the same two to `script-src` from the build's script URL
-  (`frontend/svelte.config.js` refuses any other shape). No `'unsafe-eval'`,
+  (`frontend/svelte-options.js` `wafCaptchaOrigins` refuses any other shape). No `'unsafe-eval'`,
   no `blob:`, no wildcard: loading AWS's SDK (2026-09) under exactly this
   policy in Chromium drew no violation beyond its web-font stylesheet on
   `static.captcha.awswaf.com`, left blocked (the puzzle uses the system font).
@@ -4475,8 +4475,8 @@ nothing else.
   `<meta>` CSP to `'self'` plus the hash of its one inline bootstrap script
   (and the sign-in CAPTCHA SDK's two origins once configured, § Sign-in CAPTCHA),
   and the frontend deploy refuses a build without that meta policy
-  (`infra/scripts/check-csp.mjs`). This needs `kit.csp.mode = 'hash'` in
-  `frontend/svelte.config.js`. Styles keep `'unsafe-inline'`, because Svelte
+  (`infra/scripts/check-csp.mjs`). This needs `csp.mode = 'hash'` in
+  `frontend/vite.config.ts`'s `sveltekit({…})`. Styles keep `'unsafe-inline'`, because Svelte
   templates and uPlot set inline `style` attributes. CSS injection can't run
   script; Svelte's escaping and the ban on `{@html}` with user data remain the
   first XSS defence.

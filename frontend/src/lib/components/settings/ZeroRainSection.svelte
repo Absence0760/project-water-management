@@ -9,9 +9,9 @@
 -->
 <script lang="ts">
 	import { ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM, type ZeroRainSettings } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import PeriodList from '$lib/components/common/PeriodList.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import PeriodList from '#lib/components/common/PeriodList.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { ACCUMULATION_OPTIONS, ZERO_RAIN_OPTIONS } from './rain';
 
 	let {

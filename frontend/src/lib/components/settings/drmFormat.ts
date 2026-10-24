@@ -3,7 +3,7 @@
 // part of a Desktop Reserve Model file fills, for the daily EWR at the outlet
 // and for a Reserve rule table, with synthetic example files (the .rul in
 // m³/s and in Mm³, the .tab, and each form's CSV layouts).
-import type { FileFormat } from '$lib/components/common/formatHelp';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
 import { drmExampleFiles } from './drmFiles';
 import { exampleDailyCsv } from './ewrDailySource';
 import { exampleGridCsv } from './ewrRules';

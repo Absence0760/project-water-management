@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
 	import type { BoardView } from './licenceImpact';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 
 	let { view }: { view: BoardView } = $props();
 	const METHOD = { terciles: 'terciles', quintiles: 'quintiles' } as const;

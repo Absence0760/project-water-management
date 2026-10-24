@@ -1,6 +1,6 @@
 // A drawing's shape (shape.ts): the geometry a draft saves as, what stops it saving, editing an existing feature's corners.
 import { describe, expect, it } from 'vitest';
-import type { MapPosition } from '$lib/api/types';
+import type { MapPosition } from '#lib/api/types.js';
 import { canFinish, distinctCorners, draftProblem, DRAW_CHOICES, editableCorners, geometryOf, KINDS_FOR_SHAPE, midpoints, outlineCrosses, shapeOf, withoutCorner } from './shape';
 
 const square: MapPosition[] = [

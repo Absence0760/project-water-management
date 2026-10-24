@@ -2,10 +2,11 @@
 // the language its words came out in; every other page (the fallback
 // index.html above all) keeps app.html's `en`, whatever the i18n state holds.
 import { describe, expect, it, vi } from 'vitest';
-import type { RequestEvent, ResolveOptions } from '@sveltejs/kit';
+import type { RequestEvent } from '@sveltejs/kit';
+import type { ResolveOptions } from '@sveltejs/kit/hooks';
 
 const words = vi.hoisted(() => ({ lang: 'af' }));
-vi.mock('$lib/i18n/locale.svelte', () => ({ wordsLang: () => words.lang }));
+vi.mock('#lib/i18n/locale.svelte.js', () => ({ wordsLang: () => words.lang }));
 const { handle } = await import('./hooks.server');
 
 const HTML = '<!doctype html>\n<html lang="en">\n\t<head></head><body></body></html>';

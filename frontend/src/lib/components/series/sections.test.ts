@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { navText } from '$lib/components/common/sectionNav';
+import { navText } from '#lib/components/common/sectionNav.js';
 import { DATA_ANCHORS, dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 
 const ids = (p: Parameters<typeof dataNavGroups>[0]) => dataNavGroups(p).flatMap((g) => g.sections.map((s) => s.id));

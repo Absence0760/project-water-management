@@ -2,10 +2,10 @@
 	// The report's disclaimer (WP-3.13, Step 2 decision D10). A wording the
 	// engine marks draft says so where it is shown. `{site}` becomes this
 	// site's address, so the Terms URL prints in full.
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE, withSite } from '@water-management/engine';
 
-	const site = `${location.origin}${base}`;
+	const site = `${location.origin}${basePath()}`;
 </script>
 
 <div class="disclaimer" data-disclaimer-version={DISCLAIMER.version}>

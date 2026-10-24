@@ -1,7 +1,7 @@
 // Loading the /share page (WP-2.3 phase 2): the view, then the two flow
 // series for the chart. Pure over an API, so the outcomes are unit-tested.
-import { ApiError } from '$lib/api/client';
-import type { SharePack, ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
+import { ApiError } from '#lib/api/client.js';
+import type { SharePack, ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '#lib/api/types.js';
 import { flowMonths, type FlowMonth } from './chart';
 
 export interface ShareApi {

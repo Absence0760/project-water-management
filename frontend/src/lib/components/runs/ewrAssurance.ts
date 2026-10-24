@@ -1,9 +1,9 @@
 // Runs & results → Reserve compliance (engine ≥ 0.21.0, docs/model.md §2.9c):
 // pure helpers for EwrAssurancePanel.svelte and the headline card.
 import { EWR_NATURAL_MAR_TOLERANCE, ewrSourceConfidence, naturalMarBeyondTolerance, type EwrAssuranceMonth, type EwrAssuranceSite, type EwrHighFlowReport, type RunSummary } from '@water-management/engine';
-import type { EwrHeadline } from '$lib/api/types';
-import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
-import { monthName } from '$lib/format/months';
+import type { EwrHeadline } from '#lib/api/types.js';
+import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
+import { monthName } from '#lib/format/months.js';
 
 /**
  * The rule-table site the headline reports, or null for the pragmatic EWR,

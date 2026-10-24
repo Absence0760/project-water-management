@@ -6,12 +6,12 @@
 	// own objects, so edits land in the model directly.
 	import { tick } from 'svelte';
 	import { BOREHOLE_MODES, ga538VolumeM3, type Borehole, type BoreholeMode, type BoreholeTarget, type NetworkNode } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import { pumpUnit } from './flowUnit.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { hasDam as damOn } from './fields';
 	import { boreholeQuestion, focusAfter, itemName } from './removeQuestions';
 

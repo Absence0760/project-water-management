@@ -8,8 +8,8 @@
 // rainfall and flow that nobody with projects needs, so it is a lazy chunk of
 // its own: loaded on hover, focus or press, never with the page.
 // example.test.ts keeps every static import of it out.
-import type { ImportResult, ProjectFile } from '$lib/api';
-import { loadOnce, type Loader } from '$lib/components/common/lazy';
+import type { ImportResult, ProjectFile } from '#lib/api/index.js';
+import { loadOnce, type Loader } from '#lib/components/common/lazy.js';
 
 export const loadExample: Loader<ProjectFile> = () =>
 	import('./exampleCatchment.generated.json').then((m) => ({ default: m.default as unknown as ProjectFile }));

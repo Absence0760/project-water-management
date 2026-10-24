@@ -1,11 +1,11 @@
 // How current a project's input data is, whether runs are behind it, and
 // which stored series an uploaded file most likely updates.
 import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 
 /** Days after which data counts as stale: the one threshold ($lib/format/age). */
-export { STALE_DAYS } from '$lib/format/age';
-import { STALE_DAYS } from '$lib/format/age';
+export { STALE_DAYS } from '#lib/format/age.js';
+import { STALE_DAYS } from '#lib/format/age.js';
 
 type Meta = SeriesMeta & { updatedAt?: string };
 

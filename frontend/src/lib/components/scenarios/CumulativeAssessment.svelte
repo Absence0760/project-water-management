@@ -9,12 +9,12 @@
 	// changes), with a CSV of the raw numbers and the applicants' "Ask the
 	// assessors why" questions with their answers (issue #523 G7). Editors only (the tab is the
 	// assessors'; the API refuses anyone else).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
-	import { api, assessmentCheckOf, type Assessment, type AssessmentCheck, type Scenario } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { saveBlob } from '$lib/export/download';
-	import { fmtDate } from '$lib/format/number';
+	import { api, assessmentCheckOf, type Assessment, type AssessmentCheck, type Scenario } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { saveBlob } from '#lib/export/download.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { describeOp } from './ops';
 	import {
 		assessable,

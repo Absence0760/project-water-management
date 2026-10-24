@@ -10,13 +10,13 @@
 	// map, which covered about a fifth of the 280 px phone map (farmMap.ts
 	// farmMapCredits; issue #523 C6).
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import type { ModelBand } from '@water-management/engine';
-	import type { FarmMapFeature } from '$lib/api/types';
-	import CatchmentMap from '$lib/components/map/CatchmentMap.svelte';
-	import { appIsDark, watchAppTheme } from '$lib/components/map/appTheme';
-	import { mapCredits } from '$lib/components/map/mapLayers';
-	import { BASEMAP_ATTRIBUTION, overlayColours } from '$lib/components/map/mapStyle';
+	import type { FarmMapFeature } from '#lib/api/types.js';
+	import CatchmentMap from '#lib/components/map/CatchmentMap.svelte';
+	import { appIsDark, watchAppTheme } from '#lib/components/map/appTheme.js';
+	import { mapCredits } from '#lib/components/map/mapLayers.js';
+	import { BASEMAP_ATTRIBUTION, overlayColours } from '#lib/components/map/mapStyle.js';
 	import { asMapFeatures, FARM_BAND_TOKEN, farmFills, farmMapCredits, mapWords, type LegendItem } from './farmMap';
 
 	let {
@@ -47,7 +47,7 @@
 		void dark;
 		return farmFills(features, band, readToken);
 	});
-	const credits = $derived(farmMapCredits(mapCredits(drawn), tilesUrl ? BASEMAP_ATTRIBUTION : null, `${base}/data-sources`));
+	const credits = $derived(farmMapCredits(mapCredits(drawn), tilesUrl ? BASEMAP_ATTRIBUTION : null, resolve('data-sources')));
 	const landColour = $derived(band ? `var(${FARM_BAND_TOKEN[band]})` : colours.parcel);
 
 	onMount(() => watchAppTheme(() => (dark = appIsDark())));

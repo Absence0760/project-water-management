@@ -5,8 +5,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
-import { TERRAIN_ATTRIBUTION } from '$lib/components/map/mapStyle';
-import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '$lib/components/map/delineation';
+import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
+import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
 
 const doc = (name: string) => readFileSync(new URL(`../../../../../docs/${name}`, import.meta.url), 'utf8').replace(/\s+/g, ' ');
 

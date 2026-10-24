@@ -8,12 +8,13 @@
 	// no workspace, no chart library, no engine. The art is generated
 	// (`pnpm gen:landing-art`); every figure comes from an invented example
 	// catchment (never client data), named as an example where it is shown.
-	import { base } from '$app/paths';
+	import { asset, resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import BrandMark from '$lib/components/layout/BrandMark.svelte';
-	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
-	import { language, LANGUAGES, t, wordsLang, type Locale } from '$lib/i18n/locale.svelte';
-	import { LANDING_PATH, landingPath } from '$lib/auth/session.svelte';
+	import BrandMark from '#lib/components/layout/BrandMark.svelte';
+	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
+	import { language, LANGUAGES, t, wordsLang, type Locale } from '#lib/i18n/locale.svelte.js';
+	import { LANDING_PATH, landingPath } from '#lib/auth/session.svelte.js';
 	import Audiences from './Audiences.svelte';
 	import Hero from './Hero.svelte';
 	import HowItWorks from './HowItWorks.svelte';
@@ -31,7 +32,7 @@
 
 	// Absolute URLs for the link-preview tags, resolved against the page:
 	// `base` is relative ('.') while prerendering and absolute in the browser.
-	const abs = (path: string) => new URL(`${base}${path}`, page.url).href;
+	const abs = (path: string) => new URL(`${basePath()}${path}`, page.url.href).href;
 	const title = $derived(t('Water Management: daily water balance for a catchment'));
 	const description = $derived(
 		t('Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.')
@@ -43,7 +44,7 @@
 	const { width: cw, height: ch } = ART.contours;
 	// The Open Graph locale, as `af_ZA` (the table's Intl locale).
 	const ogLocale = (l: Locale) => language(l).intl.replace('-', '_');
-	const switchHref = (l: Locale) => `${base}${landingPath(l)}`;
+	const switchHref = (l: Locale) => `${basePath()}${landingPath(l)}`;
 </script>
 
 <svelte:head>
@@ -73,18 +74,18 @@
 
 <div class="landing">
 	<header class="top">
-		<a class="lockup" href="{base}/" aria-label={t('Water Management, home')}>
+		<a class="lockup" href={resolve('')} aria-label={t('Water Management, home')}>
 			<BrandMark size={32} />
 			<span>Water Management</span>
 		</a>
 		<nav class="nav" aria-label={t('Account')}>
 			<LanguageSwitch compact addressOf={lang ? switchHref : undefined} />
-			<a class="btn" href="{base}/login">{t('Sign in')}</a>
+			<a class="btn" href={resolve('login')}>{t('Sign in')}</a>
 		</nav>
 	</header>
 
 	<main class="page-body">
-		<div class="contours" aria-hidden="true"><svg viewBox="0 0 {cw} {ch}" width={cw} height={ch} focusable="false"><use href="{base}/landing/contours.svg#contours" /></svg></div>
+		<div class="contours" aria-hidden="true"><svg viewBox="0 0 {cw} {ch}" width={cw} height={ch} focusable="false"><use href={asset('landing/contours.svg') + '#contours'} /></svg></div>
 		<div class="wrap">
 			<Hero />
 			<RiverDivider />
@@ -102,24 +103,24 @@
 			<section class="closing" aria-labelledby="closing-title">
 				<h2 id="closing-title">{t('See your catchment day by day.')}</h2>
 				<div class="actions">
-					<a class="btn btn-primary btn-lg" href="{base}/register">{t('Create an account')}</a>
-					<a class="btn btn-lg" href="{base}/login">{t('Sign in')}</a>
+					<a class="btn btn-primary btn-lg" href={resolve('register')}>{t('Create an account')}</a>
+					<a class="btn btn-lg" href={resolve('login')}>{t('Sign in')}</a>
 				</div>
 			</section>
 		</div>
 	</main>
 
 	<footer class="foot">
-		<div class="contours" aria-hidden="true"><svg viewBox="0 0 {cw} {ch}" width={cw} height={ch} focusable="false"><use href="{base}/landing/contours.svg#contours" /></svg></div>
+		<div class="contours" aria-hidden="true"><svg viewBox="0 0 {cw} {ch}" width={cw} height={ch} focusable="false"><use href={asset('landing/contours.svg') + '#contours'} /></svg></div>
 		<div class="wrap foot-row">
 			<span class="lockup small"><BrandMark size={24} /><span>Water Management</span></span>
 			<nav aria-label={t('Footer')}>
-				<a href="{base}/login">{t('Sign in')}</a>
-				<a href="{base}/register">{t('Create an account')}</a>
-				<a href="{base}/privacy">{t('Privacy notice')}</a>
-				<a href="{base}/terms">{t('Terms of use')}</a>
-				<a href="{base}/methods">{t('How the model is checked')}</a>
-				<a href="{base}/data-sources">{t('Data sources')}</a>
+				<a href={resolve('login')}>{t('Sign in')}</a>
+				<a href={resolve('register')}>{t('Create an account')}</a>
+				<a href={resolve('privacy')}>{t('Privacy notice')}</a>
+				<a href={resolve('terms')}>{t('Terms of use')}</a>
+				<a href={resolve('methods')}>{t('How the model is checked')}</a>
+				<a href={resolve('data-sources')}>{t('Data sources')}</a>
 			</nav>
 		</div>
 	</footer>

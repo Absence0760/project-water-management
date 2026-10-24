@@ -1,8 +1,8 @@
 // Labels for the fit record display (FitProvenance.svelte). Pure, so it is unit-tested.
 import { CALIBRATION_PARAMS, type ApanDailyFingerprint, type RunoffModelId } from '@water-management/engine';
-import { fittedAtText } from '$lib/calibration/fit';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { fmtNum } from '$lib/format/number';
+import { fittedAtText } from '#lib/calibration/fit.js';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /**
  * "Production store capacity X1" for GR4J's x1; the key itself when unknown,

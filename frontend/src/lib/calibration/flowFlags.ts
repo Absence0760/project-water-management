@@ -6,7 +6,7 @@
 // `observed_flow_quality` column; the Data tab's flow chart computes the
 // same classes from the stored record (engine recordFlowFlags). Pure.
 import { FLAG_USE_TEXT, FLOW_DAY_FLAGS, FLOW_FLAG_LABEL, fromEpochDay, toEpochDay, type FlowDayFlag, type QualityFlagSettings } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** One class's strip: the days it covers as inclusive date ranges, and its key line. */
 export interface FlagLane {

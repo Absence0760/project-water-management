@@ -9,10 +9,10 @@
 	// acting for the authority can, and anyone can step down. Every change is
 	// in the History.
 	import { onMount, tick } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { api, roleLabel, type AuthorityDelegates, type AuthorityDelegate, type Project } from '$lib/api';
-	import { fmtDay, localIsoDate } from '$lib/format/number';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { api, roleLabel, type AuthorityDelegates, type AuthorityDelegate, type Project } from '#lib/api/index.js';
+	import { fmtDay, localIsoDate } from '#lib/format/number.js';
 
 	let {
 		projectId,

@@ -1,6 +1,6 @@
 import type { InputChange } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { CompareAttribution, HistoryRevision } from '$lib/api/types';
+import type { CompareAttribution, HistoryRevision } from '#lib/api/types.js';
 import { attributionSummary, byline, historyHref, lineAuthors } from './attribution';
 
 const rev = (id: string, actor: string | null, over: Partial<HistoryRevision> = {}): HistoryRevision => ({

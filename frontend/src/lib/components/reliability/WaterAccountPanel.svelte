@@ -11,11 +11,11 @@
 	rather than copying it (balanceHref).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { SupplyAssurance, WaterAccountRow } from '@water-management/engine';
-	import { fmtNum } from '$lib/format/number';
-	import { waterYearLabel } from '$lib/components/calibration/metrics';
-	import { fmtVolume } from '$lib/components/ewr/heatmap';
+	import { fmtNum } from '#lib/format/number.js';
+	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
+	import { fmtVolume } from '#lib/components/ewr/heatmap.js';
 	import { accountBars, accountLines, notComputedText } from './reliability';
 
 	let {

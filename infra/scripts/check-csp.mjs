@@ -4,7 +4,7 @@
 // The CloudFront header allows `script-src 'self' 'unsafe-inline'` because the
 // SvelteKit bootstrap script's hash changes every build. What makes the
 // effective policy strict is SvelteKit's own <meta http-equiv=
-// "content-security-policy"> (kit.csp.mode = 'hash'), which the browser
+// "content-security-policy"> (csp.mode = 'hash'), which the browser
 // enforces on top of the header. If that meta tag ever disappears, the site
 // silently falls back to 'unsafe-inline'. This script refuses that build.
 //
@@ -50,7 +50,7 @@ export function checkHtml(html) {
 	const content = meta && /\bcontent\s*=\s*"([^"]*)"/i.exec(meta)?.[1];
 
 	if (!content) {
-		if (inline.length) errors.push(`${inline.length} inline script(s) but no <meta http-equiv="content-security-policy"> (set kit.csp.mode = 'hash' in frontend/svelte.config.js)`);
+		if (inline.length) errors.push(`${inline.length} inline script(s) but no <meta http-equiv="content-security-policy"> (set csp.mode = 'hash' in frontend/vite.config.ts's sveltekit({…}))`);
 	} else {
 		const scriptSrc = content
 			.split(';')

@@ -5,8 +5,8 @@
 	when the piece holds pans; nothing is chosen silently, gross until changed.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { MapAreaBasis } from '$lib/api/types';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { MapAreaBasis } from '#lib/api/types.js';
 	import { basisOptions } from './areaBasis';
 
 	let {

@@ -17,8 +17,8 @@
 // short in-memory memo lets main → "Why?" → back skip the network. Refetched
 // when the page becomes visible again; never polled.
 import type { FarmIndex, FarmView } from '@water-management/engine';
-import type { Api } from '$lib/api/client';
-import { hasRole, type Role } from '$lib/api/types';
+import type { Api } from '#lib/api/client.js';
+import { hasRole, type Role } from '#lib/api/types.js';
 import { classify, pickNode } from './load';
 import { clearSaved, latestSavedNode, readSaved, writeSaved } from './savedCopy';
 

@@ -16,8 +16,8 @@ rules, rule 11).
      any tracked `*.sops.yaml`, `.env` or `terraform.tfvars`;
    - the committed `*/.env.development` files hold only local, non-sensitive
      values (`pnpm check:env`);
-   - frontend code reading anything but `PUBLIC_*` (`$env/static/private`,
-     `$env/dynamic/*`, `process.env`), and server config inlined into the bundle;
+   - frontend code reading anything but `PUBLIC_*` (`$app/env/private`,
+     a non-static variable in `frontend/src/env.ts`, `process.env`), and server config inlined into the bundle;
    - `dotenv` reachable from a Lambda entry point
      (`scripts/guards/check_lambda_bundle.mjs`);
    - workflow `env:` blocks with literals, secrets echoed in logs, and any

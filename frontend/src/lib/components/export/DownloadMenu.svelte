@@ -10,11 +10,11 @@
 	// closes the menu and opens the in-page table (export/DailyTableDialog).
 	// Focus moves to the Download button first, so closing the dialog returns
 	// focus there rather than to a button inside the now-hidden list.
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import { fetchDownload, saveBlob } from '$lib/export/download';
-	import { menuPlacement, placementStyle } from '$lib/export/menuPosition';
-	import type { DownloadItem, WorkbookRequest } from '$lib/export/urls';
-	import type { ExportProgress } from '$lib/spreadsheet/export/collect';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import { fetchDownload, saveBlob } from '#lib/export/download.js';
+	import { menuPlacement, placementStyle } from '#lib/export/menuPosition.js';
+	import type { DownloadItem, WorkbookRequest } from '#lib/export/urls.js';
+	import type { ExportProgress } from '#lib/spreadsheet/export/collect.js';
 
 	let {
 		items,
@@ -54,9 +54,9 @@
 	async function buildWorkbook(request: WorkbookRequest) {
 		close(true);
 		progress = { phase: 'fetch', done: 0, total: 1, label: 'the run' };
-		let runner: typeof import('$lib/spreadsheet/export/runner');
+		let runner: typeof import('#lib/spreadsheet/export/runner.js');
 		try {
-			runner = await import('$lib/spreadsheet/export/runner');
+			runner = await import('#lib/spreadsheet/export/runner.js');
 		} catch {
 			progress = null;
 			writerFailed = true;

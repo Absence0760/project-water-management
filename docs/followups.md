@@ -5541,7 +5541,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       brings it). Then decide whether the root layout's `onNavigate(() =>
       stylesheetsReady())` workaround stays (it is cheap and also guards a
       slow link) or goes, and update the upstream doc either way.
-- [ ] **Playwright 1.64 (Dependabot #529, left out of #537, 2026-10-12).**
+- [x] **Playwright 1.64 (Dependabot #529, left out of #537, 2026-10-12).**
       #529 moved only the renderer image (`backend/renderer.Dockerfile`, both
       FROM lines) to `v1.64.0-noble`. With the npm packages still on 1.63 the
       pins disagree (`pnpm check:pins`), and the image lacks the Chromium build
@@ -5560,7 +5560,10 @@ assume, the questions for counsel); these are the actions, with triggers.
 
       **Trigger:** on or after 2026-10-14, when 1.64.0 passes
       `minimumReleaseAge`, or when Dependabot next opens the image PR.
-- [ ] **SvelteKit 3 and adapter-static 4 (Dependabot #533, #535, left out of
+      **Done (2026-10-23, #570, from Dependabot #542 and #544):** all six pins
+      on 1.64.1, the image at its current digest, the apt snapshot moved with
+      `pnpm gen:renderer-apt`; `check:pins` and `check:renderer-image` pass.
+- [x] **SvelteKit 3 and adapter-static 4 (Dependabot #533, #535, left out of
       #537, 2026-10-12).** Kit 3 no longer reads `svelte.config.js`, so
       `svelte-kit sync` fails (#533's red). adapter-static 4 needs kit 3. The
       [migration guide](https://svelte.dev/docs/kit/migrating-to-sveltekit-3)
@@ -5589,6 +5592,19 @@ assume, the questions for counsel); these are the actions, with triggers.
       meta CSP behaving as they do now.
       **Trigger:** when someone takes it. There is no deadline, since kit 2 is
       still supported. Until then Dependabot keeps reopening #533 and #535.
+      **Done (2026-10-23, #570, from Dependabot #547):** kit 3.0.1 and
+      adapter-static 4.0.0. `sv migrate sveltekit-3` reprints every `.svelte`
+      script it touches and lost TypeScript types and comments doing it (a
+      component's props type, an `i18n-section` marker moved to the end), so
+      it was used only to read its mappings; the change is text-level
+      codemods and hand edits: `#lib/….js` imports, `$app/env(/public)` with
+      `src/env.ts`, `resolve()`/`asset()` for links and `basePath()`
+      (`lib/nav/base.ts`) where code needs the prefix, `goto`'s
+      `replace`/`reset`, shallow `goto` for `replaceState` (the leave guard
+      skips it), `ReadonlyURL` for helpers handed `page.url`, `src/params.ts`,
+      the config in `vite.config.ts` with `svelte-options.js`, and
+      `version.pollInterval: 0` (kit 2 never polled; it still checks on tab
+      focus). The cookie override is gone.
 - [ ] **Two sources no one could check (from #259; moved from issue #90,
       2026-10-11).** WR2012's own lake factors (the WR2012 resource centre
       needs a login; used by #256) and Linsley, Kohler & Paulhus (1982)

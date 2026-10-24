@@ -11,8 +11,8 @@
 // already stores, summed here (no engine change): pure, unit-tested in
 // calibrationCheck.test.ts.
 import { beforeForecast, toEpochDay, type DailySeries } from '@water-management/engine';
-import type { ChartSeries } from '$lib/components/charts/series';
-import { upstreamOf } from '$lib/components/network/reorder';
+import type { ChartSeries } from '#lib/components/charts/series.js';
+import { upstreamOf } from '#lib/components/network/reorder.js';
 
 type RefLike = { key: string; nodeId: string | null };
 /** A node of the run's own network, as much as the check reads. */

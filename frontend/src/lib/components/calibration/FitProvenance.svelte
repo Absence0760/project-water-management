@@ -7,13 +7,13 @@
 -->
 <script lang="ts">
 	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, gapFillRecordLabel, originLabel, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
-	import { fittedAtText, objectiveName, rankedByText, scoreCellText, scoreColumns, waterYearsText } from '$lib/calibration/fit';
-	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
-	import { describeRainChecks } from '$lib/components/settings/dataQuality';
-	import { peText } from '$lib/components/settings/peInput';
-	import { fmtNum } from '$lib/format/number';
+	import { fittedAtText, objectiveName, rankedByText, scoreCellText, scoreColumns, waterYearsText } from '#lib/calibration/fit.js';
+	import { FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '#lib/components/settings/rain.js';
+	import { describeRainChecks } from '#lib/components/settings/dataQuality.js';
+	import { peText } from '#lib/components/settings/peInput.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 	import { dayQualityGist, ratingLine } from './dayQuality';
 

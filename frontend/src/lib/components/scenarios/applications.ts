@@ -1,7 +1,7 @@
 // The assessors' Applications list (ApplicationsTab.svelte, WP-3.3): its sort,
 // the status filter (`status=` in the URL), the counts and the header's line.
 // Pure, so it is unit-tested without a component.
-import { OUTCOME_LABEL, type Scenario, type ScenarioOutcome } from '$lib/api/types';
+import { OUTCOME_LABEL, type Scenario, type ScenarioOutcome } from '#lib/api/types.js';
 
 export type ApplicationSort = 'date' | 'status';
 

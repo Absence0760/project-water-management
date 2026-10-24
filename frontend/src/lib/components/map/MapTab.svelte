@@ -61,22 +61,22 @@
 	// boundaries (start-16), the dams and pumps inside each linked to it, their
 	// order proposed and ticked value by value; the empty map leads with
 	// Delineate and Draw (D4).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { prefetch } from '$lib/components/common/lazy';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { saveBlob } from '$lib/export/download';
-	import { fmtNum, localIsoDate } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { TAB_GRIDS, withParam, withoutParam } from '$lib/workspace/overlays';
+	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
+	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { prefetch } from '#lib/components/common/lazy.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { saveBlob } from '#lib/export/download.js';
+	import { fmtNum, localIsoDate } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { TAB_GRIDS, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import FeatureList from './FeatureList.svelte';
 	import MapChecks from './MapChecks.svelte';
@@ -106,7 +106,7 @@
 	import type { DivideDraft } from './divideFlow';
 	import { emptyPlacement } from './placement';
 	import { litPieces, piecesShape } from './pieces';
-	import type { MapAreaBasis, MapGeometry, MapPosition } from '$lib/api/types';
+	import type { MapAreaBasis, MapGeometry, MapPosition } from '#lib/api/types.js';
 	import { basisNote, basisOptions, offersEffective, takenAreaM2 } from './areaBasis';
 	import { Draft } from './draw/draft.svelte';
 	import DrawBar from './draw/DrawBar.svelte';
@@ -195,7 +195,7 @@
 		const q = new URLSearchParams(page.url.search);
 		q.set('feature', id);
 		q.delete('node');
-		return goto(`?${q}`, { noScroll: true, keepFocus: true });
+		return goto(`?${q}`, { reset: false });
 	}
 	/**
 	 * A pick from the list. Stacked (a phone, a narrow column) the card sits above the list, so bring
@@ -216,7 +216,7 @@
 		q.delete('node');
 		if (id) q.set('feature', id);
 		else q.delete('feature');
-		return goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+		return goto(`?${q}`, { replace: true, reset: false });
 	}
 
 	// --- the sheets and the grid: open while the URL names them; closing drops the param in place ---
@@ -227,7 +227,7 @@
 			open = asked;
 		});
 		$effect(() => {
-			if (!open && untrack(() => params.has(name))) void goto(withoutParam(page.url, name), { replaceState: true, noScroll: true, keepFocus: true });
+			if (!open && untrack(() => params.has(name))) void goto(withoutParam(page.url, name), { replace: true, reset: false });
 		});
 		return {
 			get open() {
@@ -283,7 +283,7 @@
 		if (params.get('checks') !== '1') return;
 		untrack(() => {
 			sideTab = 'checks';
-			void goto(withoutParam(page.url, 'checks'), { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(withoutParam(page.url, 'checks'), { replace: true, reset: false });
 		});
 	});
 	const tabEls: Record<string, HTMLButtonElement | undefined> = $state({});
@@ -379,7 +379,7 @@
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
 		delineateStep = 'ask';
-		await goto(withParam(page.url, 'delineate', '1'), { noScroll: true, keepFocus: true });
+		await goto(withParam(page.url, 'delineate', '1'), { reset: false });
 	}
 	/** A proposal came back: the drawing mode ends and the sheet (still open) shows it from the reloaded state. */
 	async function proposed() {
@@ -432,7 +432,7 @@
 		const sheet = backToSheet;
 		if (!sheet) return;
 		backToSheet = null;
-		await goto(withParam(page.url, sheet, '1'), { noScroll: true, keepFocus: true });
+		await goto(withParam(page.url, sheet, '1'), { reset: false });
 	}
 	/**
 	 * Leave the sheet for one of the map's own tools (the sheet's param goes first, in place). Every tool
@@ -440,7 +440,7 @@
 	 * delineation, never brings the sheet back.
 	 */
 	async function fromStart(start: () => unknown, back = true, sheet: 'start' | 'divide' = 'start') {
-		await goto(withoutParam(page.url, sheet), { replaceState: true, noScroll: true, keepFocus: true });
+		await goto(withoutParam(page.url, sheet), { replace: true, reset: false });
 		await start();
 		backToSheet = back ? sheet : null;
 	}
@@ -568,7 +568,7 @@
 	}
 	async function pickPiece(key: string) {
 		pieceFocus = key;
-		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { noScroll: true, keepFocus: true });
+		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { reset: false });
 	}
 	$effect(() => {
 		// A sheet closed: nothing is lit or waiting to be focused.
@@ -718,7 +718,7 @@
 			return;
 		}
 		if (draft.mode === 'place') {
-			await goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true });
+			await goto(withParam(page.url, 'place', '1'), { reset: false });
 			return;
 		}
 		const f = draft.feature;
@@ -1082,7 +1082,7 @@
 		onsave={saveDraft}
 		onpaste={() => (pasteOpen = true)}
 		oncoords={() =>
-			tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+			tracing ? goto(withParam(page.url, 'trace', '1'), { reset: false }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { reset: false })}
 		onlocated={located}
 		{delineating}
 		{tracing}
@@ -1624,7 +1624,7 @@
 					{features}
 					info={startInfo!}
 					bind:draft={startDraft}
-					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { noScroll: true, keepFocus: true }), false)}
+					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { reset: false }), false)}
 					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
 					ondraw={() => fromStart(() => startDraw('catchment_boundary'))}
 					onplace={() => fromStart(startPlace)}

@@ -6,9 +6,9 @@
 // met" on another. "Not met" is the framing the flow chart's shading, the
 // EWR by month grid and the projects list already use.
 import type { RunSummary } from '@water-management/engine';
-import { fmtNum, fmtPct } from '$lib/format/number';
-import { headlineSite } from '$lib/components/runs/ewrAssurance';
-import type { EwrHeadline } from '$lib/api/types';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
+import { headlineSite } from '#lib/components/runs/ewrAssurance.js';
+import type { EwrHeadline } from '#lib/api/types.js';
 
 /** The term, on every card, tile and label that counts days below the pragmatic EWR. */
 export const EWR_NOT_MET = 'EWR not met';

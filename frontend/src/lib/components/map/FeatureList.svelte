@@ -8,7 +8,7 @@
 	picked row is kept in view inside the list, never by scrolling the page.
 -->
 <script lang="ts">
-	import type { MapFeature, MapNodeArea } from '$lib/api/types';
+	import type { MapFeature, MapNodeArea } from '#lib/api/types.js';
 	import { featureSummary } from './mapData';
 	import { areaSourceOf, areaSourceText, featureName, groupFeatures } from './mapList';
 

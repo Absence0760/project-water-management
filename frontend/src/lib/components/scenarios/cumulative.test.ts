@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CumulativeReport, CumulativeRow } from '@water-management/engine';
-import type { AssessorQuestion, Scenario } from '$lib/api/types';
+import type { AssessorQuestion, Scenario } from '#lib/api/types.js';
 import { assessable, assessmentCsv, assessmentState, changeText, changeTone, interactionWords, pickBlocked, rowLabel, valueText } from './cumulative';
 
 const app = (id: string, status: Scenario['status'], baseRunId = 'r1', name = id): Scenario => ({ id, name, status, baseRunId }) as Scenario;

@@ -14,14 +14,14 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { EWR_ASSURANCE_MIN_YEARS, EWR_NATURAL_MAR_TOLERANCE, type EwrRuleTable } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { latestFileText } from '$lib/files/latest';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { latestFileText } from '#lib/files/latest.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import EwrHighFlowsEditor from './EwrHighFlowsEditor.svelte';
 	import DrmFormatHelp from './DrmFormatHelp.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
 	import { planRuleTablePaste, ruleTableCsv } from './ewrPaste';
 	import { parseDrmFile, ruleTableFromRul, ruleTableFromTab } from './drmFiles';
 	import {

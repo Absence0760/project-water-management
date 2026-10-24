@@ -5,7 +5,7 @@
 // Dams page's (`modelDams`: farms with at least 1 m³, a capacity on any other
 // kind is inert in the engine). Pure, no DOM.
 import type { ProjectModel } from '@water-management/engine';
-import { modelDams } from '$lib/components/dams/dams';
+import { modelDams } from '#lib/components/dams/dams.js';
 
 export interface ModelFacts {
 	/** Hydrological units (kind 'farm'). */

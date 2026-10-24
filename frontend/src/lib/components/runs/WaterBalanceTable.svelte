@@ -7,9 +7,9 @@
 	copying it (accountHref).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import { fmtNum, fmtQty, MINUS } from '$lib/format/number';
+	import { fmtNum, fmtQty, MINUS } from '#lib/format/number.js';
 	import { balanceColumns, balanceEquation, balanceTableRows, residualIsNoise, waterYearLabel } from './checks';
 
 	let {

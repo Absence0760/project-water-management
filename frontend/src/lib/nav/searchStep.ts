@@ -3,7 +3,7 @@
 // was before the search; the rest of that search replace it, so Back never steps letter by letter. Shared by the
 // project list, Runs' label filter and History's Parameter filter.
 
-/** One search box's history steps: call `focus` from its onfocus, and pass `replace()` as `replaceState` on each write. */
+/** One search box's history steps: call `focus` from its onfocus, and pass `replace()` as goto's `replace` on each write. */
 export class SearchStep {
 	#stepped = false;
 
@@ -12,7 +12,7 @@ export class SearchStep {
 		this.#stepped = false;
 	};
 
-	/** `replaceState` for a write the box is about to make: false for the first since the focus, true after. */
+	/** goto's `replace` for a write the box is about to make: false for the first since the focus, true after. */
 	replace(): boolean {
 		const replace = this.#stepped;
 		this.#stepped = true;

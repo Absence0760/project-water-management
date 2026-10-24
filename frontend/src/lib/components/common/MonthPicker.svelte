@@ -5,7 +5,7 @@
 	// in words (`summary`) on a line under them. Each toggle is at least 24 × 24 px
 	// (WCAG 2.5.8); in a narrow column or on a touch screen they wrap to two rows
 	// of six at the 44 px tap size.
-	import { monthName, WATER_YEAR_CALENDAR } from '$lib/format/months';
+	import { monthName, WATER_YEAR_CALENDAR } from '#lib/format/months.js';
 
 	let {
 		months = $bindable(),

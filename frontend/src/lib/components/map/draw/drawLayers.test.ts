@@ -1,6 +1,6 @@
 // How a draft is drawn (drawLayers.ts): what the `draft` source holds in each phase.
 import { describe, expect, it } from 'vitest';
-import type { MapPosition } from '$lib/api/types';
+import type { MapPosition } from '#lib/api/types.js';
 import { DRAFT_CORNER_LAYER, DRAFT_MID_LAYER, draftData, draftLayers } from './drawLayers';
 
 const c: MapPosition[] = [

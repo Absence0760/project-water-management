@@ -8,14 +8,14 @@
 	// alerts off; a mail client's own one-click unsubscribe (RFC 8058) posts
 	// to the API directly. Its words come from $lib/i18n.
 	import { onMount } from 'svelte';
-	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError, type Unsubscribed } from '$lib/api';
-	import { fragmentToken, unsubscribedText } from '$lib/components/alerts/words';
-	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
+	import { api, ApiError, type Unsubscribed } from '#lib/api/index.js';
+	import { fragmentToken, unsubscribedText } from '#lib/components/alerts/words.js';
+	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
 
 	let token = $state<string | null>(null);
 	let status = $state<'loading' | 'ask' | 'working' | 'done' | 'dead' | 'incomplete'>('loading');
@@ -26,7 +26,7 @@
 	onMount(() => {
 		token = fragmentToken(page.url.hash);
 		// Out of the address bar and the history once read.
-		if (page.url.hash) replaceState(`${base}/alerts/unsubscribe`, {});
+		if (page.url.hash) void goto(resolve('alerts/unsubscribe'), { shallow: true, replace: true });
 		status = token ? 'ask' : 'incomplete';
 	});
 
@@ -67,10 +67,10 @@
 			</button>
 		{:else if status === 'done' && done}
 			<div class="alert alert-info" role="status">{unsubscribedText(done)}</div>
-			<a class="btn btn-primary" href="{base}/account/alerts">{t('Manage alerts')}</a>
+			<a class="btn btn-primary" href={resolve('account/alerts')}>{t('Manage alerts')}</a>
 		{:else if status === 'dead'}
 			<div class="alert alert-error" role="alert">{t('This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment.')}</div>
-			<a class="btn btn-primary" href="{base}/account/alerts">{t('Manage alerts')}</a>
+			<a class="btn btn-primary" href={resolve('account/alerts')}>{t('Manage alerts')}</a>
 		{:else if status === 'incomplete'}
 			<div class="alert alert-error" role="alert">{t('This link is incomplete. Open it again from the email, or copy the whole link.')}</div>
 		{/if}
@@ -78,5 +78,5 @@
 </AuthCard>
 
 {#snippet manageLink()}
-	<a href="{base}/account/alerts">{t('Manage alerts')}</a>
+	<a href={resolve('account/alerts')}>{t('Manage alerts')}</a>
 {/snippet}

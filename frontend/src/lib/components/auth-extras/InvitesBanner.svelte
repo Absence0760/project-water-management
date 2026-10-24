@@ -7,10 +7,11 @@
 	// routes/+layout.svelte, for a confirmed address only (an unconfirmed one
 	// gets VerifyEmailBanner: confirming it accepts its invites).
 	import { page } from '$app/state';
-	import { base } from '$app/paths';
-	import { session } from '$lib/auth/session.svelte';
-	import { t, tn } from '$lib/i18n/locale.svelte';
-	import { plural } from '$lib/i18n/msg';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import { t, tn } from '#lib/i18n/locale.svelte.js';
+	import { plural } from '#lib/i18n/msg.js';
 	import { invitesChanged, loadPendingInvites, pendingInvites } from './inviteCount.svelte';
 
 	const INVITATIONS = plural({ one: '{n} invitation', other: '{n} invitations' });
@@ -28,14 +29,14 @@
 		return () => document.removeEventListener('visibilitychange', onVisible);
 	});
 
-	const here = $derived(page.url.pathname.slice(base.length) === '/account/invitations');
+	const here = $derived(page.url.pathname.slice(basePath().length) === '/account/invitations');
 	const show = $derived(!!session.user?.emailVerified && pendingInvites.user === session.user.id && pendingInvites.count > 0 && !here);
 </script>
 
 {#if show}
 	<section class="invites-banner" aria-label={t('Invitations')}>
 		<p>{t('You have {invitations} waiting.', { invitations: tn(INVITATIONS, pendingInvites.count) })}</p>
-		<a class="btn btn-sm" href="{base}/account/invitations">{t('See invitations')}</a>
+		<a class="btn btn-sm" href={resolve('account/invitations')}>{t('See invitations')}</a>
 	</section>
 {/if}
 

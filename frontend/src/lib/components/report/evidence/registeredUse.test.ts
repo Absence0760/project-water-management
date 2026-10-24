@@ -3,7 +3,7 @@
 import type { EvidenceAllocationSource, EvidenceAllocationYear } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { bandText, countsText, measuredNote, partNote, ratioText, registeredText, unitSourceLabel, USE_AXIS_MAX, USE_AXIS_MIN, useRows } from './registeredUse';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 const year = (waterYear: number, over: Partial<EvidenceAllocationYear> = {}): EvidenceAllocationYear => ({
 	waterYear,

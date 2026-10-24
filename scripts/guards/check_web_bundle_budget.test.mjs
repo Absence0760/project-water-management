@@ -148,11 +148,11 @@ test("the calibration, preview and map workers must share the page build's chunk
 test('the tab modules are the LOAD map of the workspace page, nothing else', () => {
 	const page = `<script module lang="ts">
 	const LOAD = {
-		network: () => import('$lib/components/network/NetworkTab.svelte'),
-		runs: () => import("$lib/components/runs/RunsTab.svelte"),
-		compare: () => import('$lib/components/compare/CompareView.svelte')
+		network: () => import('#lib/components/network/NetworkTab.svelte'),
+		runs: () => import("#lib/components/runs/RunsTab.svelte"),
+		compare: () => import('#lib/components/compare/CompareView.svelte')
 	};
-	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
+	const loadAddData = () => import('#lib/components/series/AddDataDialog.svelte');
 </script>`;
 	assert.deepEqual(tabModules(page), [
 		'src/lib/components/network/NetworkTab.svelte',

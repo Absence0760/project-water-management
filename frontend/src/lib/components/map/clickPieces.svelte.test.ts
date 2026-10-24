@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ClickPiece, ClickPieces } from '$lib/api/types';
+import type { ClickPiece, ClickPieces } from '#lib/api/types.js';
 import { ClickDivider, clickShape, pieceLine, savable } from './clickPieces.svelte';
 
 const sq = (x: number): ClickPiece['geometry'] => ({ type: 'Polygon', coordinates: [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 1], [x, 0]]] });

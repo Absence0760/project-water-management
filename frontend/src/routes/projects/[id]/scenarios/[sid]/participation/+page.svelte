@@ -10,14 +10,14 @@
 	// comments as a CSV, one row per text. A commenter's email is here only
 	// where they ticked the reg 18 box. Part of the workspace, so English.
 	import { untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError, type ParticipationExport } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import { api, ApiError, type ParticipationExport } from '#lib/api/index.js';
+	import { fmtDate } from '#lib/format/number.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const scenarioId = $derived(page.params.sid ?? '');
-	const back = $derived(`${base}/projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(scenarioId)}`);
+	const back = $derived(resolve(`projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(scenarioId)}`));
 
 	let record = $state.raw<ParticipationExport | null>(null);
 	let status = $state<'loading' | 'loaded' | 'not-found' | 'error'>('loading');

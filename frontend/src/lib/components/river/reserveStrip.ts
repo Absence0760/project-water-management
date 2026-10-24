@@ -11,8 +11,8 @@
 // table gives a verdict per month, not a count of days, so it can't be drawn
 // as days below.
 import { ewrBand, type EwrBand, type EwrCompliance } from '@water-management/engine';
-import { EWR_NOT_MET, dailyEwrName, daysBelowTest, type DailyEwrSource } from '$lib/components/ewr/notMet';
-import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
+import { EWR_NOT_MET, dailyEwrName, daysBelowTest, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
+import { WATER_YEAR_CALENDAR, monthName } from '#lib/format/months.js';
 
 export interface StripMonth {
 	/** Calendar year and month (1–12). */

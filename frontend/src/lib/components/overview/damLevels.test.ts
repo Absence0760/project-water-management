@@ -1,6 +1,6 @@
 import { damCapacityOn, damFigures, fromEpochDay, toEpochDay, type FarmSummary, type NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { damColouring } from '$lib/components/network/farmColour';
+import { damColouring } from '#lib/components/network/farmColour.js';
 import { AGO_DAYS, capacityOnDate, damEndPctFromSummary, damEndTile, damInRun, damLevel, damLevelsFromSummary, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
 
 const dam = { nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 };

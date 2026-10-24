@@ -1,6 +1,6 @@
 // What changed in the terms and privacy notice, version by version, and
 // which of those lines the re-acceptance step shows (TermsUpdate.svelte).
-import { msg, type Msg } from '$lib/i18n/locale.svelte';
+import { msg, type Msg } from '#lib/i18n/locale.svelte.js';
 
 /** One version's changes, as TermsUpdate.svelte lists them: its LEGAL_VERSION and its lines (messages, msg()). */
 export interface TermsChange<T = string> {

@@ -20,9 +20,9 @@
 	// The language switch (WP-2.5) sits above the form: the sign-in pages are
 	// the first thing an invited farmer sees.
 	import type { Snippet } from 'svelte';
-	import { base } from '$app/paths';
-	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import BrandMark from './BrandMark.svelte';
 	import CatchmentScene from './CatchmentScene.svelte';
 
@@ -56,7 +56,7 @@
 		<div class="form-box">
 			<div class="top">
 				<!-- Home: the landing page signed out, the projects signed in. -->
-				<a class="lockup" href="{base}/" aria-label={t('Water Management, home')}>
+				<a class="lockup" href={resolve('')} aria-label={t('Water Management, home')}>
 					<BrandMark size={40} />
 					<span>Water Management</span>
 				</a>
@@ -69,8 +69,8 @@
 			{#if footer}<div class="footer">{@render footer()}</div>{/if}
 			{#if legal}
 				<nav class="legal" aria-label={t('Legal')}>
-					<a href="{base}/privacy">{t('Privacy notice')}</a>
-					<a href="{base}/terms">{t('Terms of use')}</a>
+					<a href={resolve('privacy')}>{t('Privacy notice')}</a>
+					<a href={resolve('terms')}>{t('Terms of use')}</a>
 				</nav>
 			{/if}
 		</div>

@@ -12,12 +12,12 @@
 	// says so and the focus moves to the page's title (it was on a button that
 	// is gone).
 	import { tick } from 'svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
-	import { focusPageStart } from '$lib/a11y/focusPage';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { issueHref } from '$lib/model/validate';
-	import { listAnd } from '$lib/nav/unsaved';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { useInvalidFields } from '#lib/components/common/invalidFields.svelte.js';
+	import { focusPageStart } from '#lib/a11y/focusPage.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { issueHref } from '#lib/model/validate.js';
+	import { listAnd } from '#lib/nav/unsaved.js';
 	import { AREA_WORDS, changedAreas } from './changedAreas';
 	import type { PageDraft, ProblemLink } from './pageDraft';
 	import ProblemLinks from './ProblemLinks.svelte';

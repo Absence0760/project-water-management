@@ -7,13 +7,13 @@
 	// system follows), adds a system of the scheme's own, or removes one (asked
 	// first while anything is on it: those fall back to none). Edits go into the
 	// shared ModelEditor and are saved with the model.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { sabiRange, systemsOf, systemUse } from '$lib/model/systems';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { sabiRange, systemsOf, systemUse } from '#lib/model/systems.js';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 	import { applySystemPaste, planSystemPaste, systemsCsv, SYSTEMS_FORMAT } from './systemsPaste';
 
 	let { editor, readonly }: { editor: ModelEditor; readonly: boolean } = $props();

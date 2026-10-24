@@ -3,10 +3,10 @@
 	// Explorer for any stored output series of a run: pick a node (catchment
 	// first, then the network order) and one of its series by name. Fetches
 	// only the series picked.
-	import { api, type RunSeriesRef } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import type { ChartSeries } from '$lib/components/charts/series';
-	import LoadState from '$lib/components/common/LoadState.svelte';
+	import { api, type RunSeriesRef } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import type { ChartSeries } from '#lib/components/charts/series.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { cachedSeries } from './cache';
 	import { displayUnit, seriesGroups, toDisplayUnit } from './results';
 

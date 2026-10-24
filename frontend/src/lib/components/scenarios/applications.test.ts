@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Scenario } from '$lib/api/types';
+import type { Scenario } from '#lib/api/types.js';
 import {
 	applicationCounts,
 	applicationsContext,

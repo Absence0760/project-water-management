@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectSummary, Team } from '$lib/api/types';
+import type { ProjectSummary, Team } from '#lib/api/types.js';
 import {
 	filterProjects,
 	fold,

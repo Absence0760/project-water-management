@@ -4,8 +4,8 @@
 // provenance line while current and once typed over, and the confirmation's
 // words, which say the crop is the modeller's call.
 import { describe, expect, it } from 'vitest';
-import type { CroplandProposals } from '$lib/api';
-import { fmtDate } from '$lib/format/number';
+import type { CroplandProposals } from '#lib/api/index.js';
+import { fmtDate } from '#lib/format/number.js';
 import { areaChoices, CAUTION, confirmWords, cropRows, fmtHa, provenanceText } from './croplandProposals';
 
 const dataset = {

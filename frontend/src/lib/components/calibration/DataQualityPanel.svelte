@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
 	import type { DayQuality } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { dayQualityGist, flowRows, rainRows, ratingLine } from './dayQuality';
 
 	let { quality }: { quality: DayQuality } = $props();

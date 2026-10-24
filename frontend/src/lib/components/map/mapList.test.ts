@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, MapFeatureKind, MapNodeArea } from '$lib/api/types';
+import type { MapFeature, MapFeatureKind, MapNodeArea } from '#lib/api/types.js';
 import { areaSourceOf, areaSourceText, boundaryNextStep, delineationLines, featureForNode, groupFeatures, headerLine, inListOrder, keyGroups, pickedFeature, presentKey, shortHash } from './mapList';
 import { channelColour, overlayColours, riverNetworkColour } from './mapStyle';
 

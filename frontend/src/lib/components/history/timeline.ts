@@ -3,11 +3,11 @@
 // entries into the viewer's calendar days. No DOM, no fetch.
 import { ALLOCATION_MODE_LABEL, registrationLine, type AllocationMode } from '@water-management/engine';
 import { language, LOCALES } from '@water-management/engine/languages';
-import { roleLabel } from '$lib/api/roleLabels';
-import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
-import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
-import { KIND_NAME } from '$lib/components/alerts/alerts';
+import { roleLabel } from '#lib/api/roleLabels.js';
+import type { HistoryEvent, HistoryItem, HistoryRevision } from '#lib/api/types.js';
+import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { KIND_NAME } from '#lib/components/alerts/alerts.js';
 
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
 export const KIND_FILTERS: { value: string; label: string }[] = [

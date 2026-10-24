@@ -3,8 +3,8 @@
 // switching between them, the annual total the form shows, the check that
 // blocks Save, and a one-line description for the fit record and the report.
 import { gr4jPeMonthlyMm, PE_SOURCE_MAX, type PeInput, type PeKind } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
+import { fmtNum } from '#lib/format/number.js';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 
 /** The form's mutable copy of a `monthly` input (the engine's `Monthly` is a readonly tuple). */
 export type EditablePe = { kind: 'pan' } | { kind: 'monthly'; mm: number[]; source: string };

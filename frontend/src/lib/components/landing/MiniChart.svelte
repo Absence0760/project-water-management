@@ -8,7 +8,7 @@
 	//   pair   `values` against `against` (supply vs demand, flow vs the
 	//          reserve), the weeks `values` falls below `against` shaded
 	// `scale: 'sqrt'` gives low values room beside a flood peak (river flow).
-	import { language, wordsLang } from '$lib/i18n/state.svelte';
+	import { language, wordsLang } from '#lib/i18n/state.svelte.js';
 
 	let {
 		kind,

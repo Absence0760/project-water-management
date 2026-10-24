@@ -11,6 +11,7 @@
 // Closing the tab or reloading can't show an app dialog: the browser asks its
 // own "Leave site?" there, and that is the only place it does.
 import { onMount } from 'svelte';
+import type { ReadonlyURL } from '$app/state';
 
 export interface UnsavedWork {
 	/** Whether there is unsaved work now. */
@@ -22,7 +23,7 @@ export interface UnsavedWork {
 	 * any change of page (path); a tab change within the workspace keeps the
 	 * page's own state, so only its parts that live in one tab say more.
 	 */
-	leaves?: (from: URL, to: URL) => boolean;
+	leaves?: (from: ReadonlyURL, to: ReadonlyURL) => boolean;
 }
 
 const registered = new Set<UnsavedWork>();
@@ -40,10 +41,10 @@ export function guardUnsaved(work: UnsavedWork): void {
 	onMount(() => registerUnsaved(work));
 }
 
-export const pathChanges = (from: URL, to: URL) => from.pathname !== to.pathname;
+export const pathChanges = (from: ReadonlyURL, to: ReadonlyURL) => from.pathname !== to.pathname;
 
 /** The registered work a navigation from `from` to `to` would drop (`to` null: the page is unloading). */
-export function unsavedDroppedBy(from: URL, to: URL | null, works: Iterable<UnsavedWork> = registered): UnsavedWork[] {
+export function unsavedDroppedBy(from: ReadonlyURL, to: ReadonlyURL | null, works: Iterable<UnsavedWork> = registered): UnsavedWork[] {
 	return [...works].filter((w) => w.dirty() && (!to || (w.leaves ?? pathChanges)(from, to)));
 }
 

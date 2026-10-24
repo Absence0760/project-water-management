@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mine = vi.fn<() => Promise<unknown[]>>();
-vi.mock('$lib/api', () => ({ api: { invites: { mine: () => mine() } } }));
+vi.mock('#lib/api/index.js', () => ({ api: { invites: { mine: () => mine() } } }));
 
 const { invitesChanged, loadPendingInvites, pendingInvites } = await import('./inviteCount.svelte');
 

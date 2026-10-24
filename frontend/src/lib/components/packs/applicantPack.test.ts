@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ApplicantPackOwnUnit } from '$lib/api';
+import type { ApplicantPackOwnUnit } from '#lib/api/index.js';
 import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from './applicantPack';
 
 const own = (over: Partial<ApplicantPackOwnUnit> = {}): ApplicantPackOwnUnit => ({

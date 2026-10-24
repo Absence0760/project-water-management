@@ -14,8 +14,8 @@ import type {
 	RecessionDelta,
 	SignaturesDelta
 } from '@water-management/engine';
-import { fmtNum, fmtPct } from '$lib/format/number';
-import { scoredRecordText } from '$lib/components/runs/signatures';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
+import { scoredRecordText } from '#lib/components/runs/signatures.js';
 
 /** 2001 → "2001/02". */
 export const waterYear = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`;

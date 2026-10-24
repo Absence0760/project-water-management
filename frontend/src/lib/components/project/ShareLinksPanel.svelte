@@ -15,11 +15,11 @@
 	// With `pack` (WP-3.15, 128_pack_share_notes; docs/ui.md § Evidence pack)
 	// it is one issued evidence pack's links, on the pack's page: its editors
 	// list, make and withdraw them.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
-	import { api, SHARE_LABEL_MAX, type PackStatus, type ScenarioStatus, type ShareLink } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
+	import { api, SHARE_LABEL_MAX, type PackStatus, type ScenarioStatus, type ShareLink } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { DEFAULT_EXPIRY_DAYS, EXPIRY_CHOICES, linkRow, revokeQuestion, sortLinks, STATE_WORD } from './shareLinks';
 
 	let {

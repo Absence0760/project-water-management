@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PortfolioProject, ProjectSummary } from '$lib/api/types';
+import type { PortfolioProject, ProjectSummary } from '#lib/api/types.js';
 import { parseSort, sortProjects } from './grouping';
 import { attention, needsAttention, sortByOutcome } from './outcomes';
 

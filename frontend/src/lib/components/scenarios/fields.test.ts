@@ -12,7 +12,7 @@ import {
 	transferFieldError
 } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { pumpUnit, riverToDamUnit, type FlowUnitId } from '$lib/components/network/flowUnit.svelte';
+import { pumpUnit, riverToDamUnit, type FlowUnitId } from '#lib/components/network/flowUnit.svelte.js';
 import {
 	CROP_FIELD_SPECS,
 	DEMAND_OBJECT_FIELD_SPECS,

@@ -3,7 +3,7 @@
 // their ops, and the "Add a change" form's draft turned into a ScenarioOp.
 // The engine owns the rules (applyScenario, validateScenarioOps); this only
 // reads and builds its data. No Svelte, no API.
-import { findSystem, systemLabel } from '$lib/model/systems';
+import { findSystem, systemLabel } from '#lib/model/systems.js';
 import {
 	blankEwrRuleTable,
 	DEMAND_OBJECT_CATEGORY_LABEL,
@@ -40,9 +40,9 @@ import {
 	type TransferSetField
 } from '@water-management/engine';
 import type { DroughtRestrictionRule, EwrDailySource } from '@water-management/engine';
-import { newNode } from '$lib/model/editor.svelte';
-import { DAY_FIRST_EXAMPLES, fmtDay, fmtNum, parseDay, parseNum } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
+import { newNode } from '#lib/model/editor.svelte.js';
+import { DAY_FIRST_EXAMPLES, fmtDay, fmtNum, parseDay, parseNum } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
 import {
 	CROP_FIELD_SPECS,
 	DEMAND_OBJECT_FIELD_SPECS,

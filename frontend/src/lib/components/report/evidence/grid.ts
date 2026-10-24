@@ -5,7 +5,7 @@
 // verdict. A failed month is the heavier mark, so it survives a photocopy;
 // the numbers are in the cells too, never only a shade (§8).
 import type { EvidenceChange, EvidenceSite } from '@water-management/engine';
-import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
+import { WATER_YEAR_CALENDAR, monthName } from '#lib/format/months.js';
 import { signed, worseText } from './format';
 
 export interface GridCell {

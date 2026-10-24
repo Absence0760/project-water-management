@@ -8,7 +8,7 @@
 // does. Pure (no MapLibre): the map hands in its projection, so vitest
 // covers it (snap.test.ts), and any tool that draws (the draw bar, a guided
 // start) can call it.
-import type { MapFeature, MapGeometry, MapPosition } from '$lib/api/types';
+import type { MapFeature, MapGeometry, MapPosition } from '#lib/api/types.js';
 
 /** A screen point, px. */
 export type ScreenPt = { x: number; y: number };

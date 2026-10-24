@@ -1,8 +1,8 @@
 // Project-list organisation: who a project belongs to (personal / a team /
 // shared with you), text search, sorting and grouping. Pure functions so the
 // list page stays thin and this stays unit-tested.
-import type { ProjectSummary, Team } from '$lib/api/types';
-import type { SortDir } from '$lib/components/portfolio/portfolio';
+import type { ProjectSummary, Team } from '#lib/api/types.js';
+import type { SortDir } from '#lib/components/portfolio/portfolio.js';
 import { sortByOutcome, type OutcomeSortKey, type Outcomes } from './outcomes';
 
 /** `personal`, `shared`, or `team:<id>`. */

@@ -9,10 +9,10 @@
 //
 // Pure functions of POST /share/view's answer and the chart's months; the
 // words come from the message catalogue (the share.summary section).
-import type { SharedCatchmentView } from '$lib/api/types';
-import { count, DAYS, fmtDay } from '$lib/components/farm/format';
-import { msg } from '$lib/i18n/msg';
-import { t } from '$lib/i18n/locale.svelte';
+import type { SharedCatchmentView } from '#lib/api/types.js';
+import { count, DAYS, fmtDay } from '#lib/components/farm/format.js';
+import { msg } from '#lib/i18n/msg.js';
+import { t } from '#lib/i18n/locale.svelte.js';
 import type { FlowMonth } from './chart';
 import type { ReserveState } from './share';
 

@@ -12,7 +12,7 @@ import {
 	type EwrRuleTable,
 	type NetworkNode
 } from '@water-management/engine';
-import { DECIMAL_COMMA_NOTE, numberReader, readPastedBlock, splitCsvRow } from '$lib/spreadsheet/paste/read';
+import { DECIMAL_COMMA_NOTE, numberReader, readPastedBlock, splitCsvRow } from '#lib/spreadsheet/paste/read.js';
 
 /** An EWR site a table can be at: the outlet (id null) or a gauge. */
 export interface SiteOption {

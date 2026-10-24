@@ -13,19 +13,19 @@
 	// Its own chunk, loaded when the button is first pressed (CropsTab).
 	import { onDestroy, tick, untrack } from 'svelte';
 	import type { ProjectSettings } from '@water-management/engine';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import { describeFailure, WORKBOOK_ACCEPT, WORKBOOK_MAX_MB } from '$lib/components/import/workbookFile';
-	import type { WorkbookImportSession } from '$lib/spreadsheet/import/runner';
-	import { fmtNum } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
+	import { describeFailure, WORKBOOK_ACCEPT, WORKBOOK_MAX_MB } from '#lib/components/import/workbookFile.js';
+	import type { WorkbookImportSession } from '#lib/spreadsheet/import/runner.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { ARC4_URL, citation, CROP_LIBRARY, libraryCropFactor, type LibraryCrop } from './library';
 	import { cropAreaTotals, rankCrops } from './cards';
 	import CropSystemSelect from './CropSystemSelect.svelte';
-	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
+	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 	import { applyLine, matchedLine, plantingFor, rowsByChange, type PlantingDraft } from './loadFactorsView';
 	import {
 		applyChanges,
@@ -166,7 +166,7 @@
 		reading = true;
 		let s: WorkbookImportSession | null = null;
 		try {
-			const { createWorkbookImport, WorkbookImportFailed, WorkbookImportCancelled } = await import('$lib/spreadsheet/import/runner');
+			const { createWorkbookImport, WorkbookImportFailed, WorkbookImportCancelled } = await import('#lib/spreadsheet/import/runner.js');
 			if (mine !== attempt) return;
 			s = session = createWorkbookImport();
 			try {

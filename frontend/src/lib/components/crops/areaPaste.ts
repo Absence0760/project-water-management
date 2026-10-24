@@ -5,12 +5,12 @@
 // the Reserve rule tables); this file turns hectares into the m² the model
 // stores and checks each value is 0 or more.
 import type { Crop, CropArea, NetworkNode } from '@water-management/engine';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { fmtNum } from '$lib/format/number';
-import { mapPaste, sameValue, toCsv, type GridFormat, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-import { MONTH_COLS } from '$lib/spreadsheet/paste/monthlyRows';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { fmtNum } from '#lib/format/number.js';
+import { mapPaste, sameValue, toCsv, type GridFormat, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
+import { MONTH_COLS } from '#lib/spreadsheet/paste/monthlyRows.js';
 
-export { LONG_MONTHS, MONTH_COLS } from '$lib/spreadsheet/paste/monthlyRows';
+export { LONG_MONTHS, MONTH_COLS } from '#lib/spreadsheet/paste/monthlyRows.js';
 
 const M2_PER_HA = 10_000;
 /** Headings the grid's first column goes by. */

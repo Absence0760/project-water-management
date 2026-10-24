@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
 	import type { EwrAssuranceSite } from '@water-management/engine';
-	import { monthName } from '$lib/format/months';
+	import { monthName } from '#lib/format/months.js';
 	import { fmtFlow, UNIT_LABEL } from './ewrAssurance';
 	import { fdcLines, fdcOverlayChart } from './ewrReporting';
 

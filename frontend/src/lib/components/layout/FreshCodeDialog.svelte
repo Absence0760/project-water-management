@@ -8,12 +8,12 @@
 	// (POST /auth/mfa/email/send) and the same field takes it. The workspace's
 	// (English). Its own chunk, mounted by routes/+layout.svelte only while it asks.
 	import { onDestroy, onMount } from 'svelte';
-	import { api, ApiError } from '$lib/api';
-	import { answerCode } from '$lib/auth/freshCode.svelte';
-	import { resendTimer } from '$lib/auth/resendTimer.svelte';
-	import { freshCodeWords, freshSendLabel, sendState } from '$lib/auth/codeMethods';
-	import type { MfaMethod } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { answerCode } from '#lib/auth/freshCode.svelte.js';
+	import { resendTimer } from '#lib/auth/resendTimer.svelte.js';
+	import { freshCodeWords, freshSendLabel, sendState } from '#lib/auth/codeMethods.js';
+	import type { MfaMethod } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 
 	// Which ways the account has: the email button only with codes by email on. Until read (or if it can't be), the app's.
 	let methods = $state<MfaMethod[]>(['totp']);

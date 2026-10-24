@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newNetworkNode, type NetworkNode } from '@water-management/engine';
-import { navText } from '$lib/components/common/sectionNav';
+import { navText } from '#lib/components/common/sectionNav.js';
 import { nodeNavGroups, nodeSections, sectionId, SECTION_SHORT, SECTION_TITLE } from './nodeSections';
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({ ...newNetworkNode('n', 1, 'out'), ...over });

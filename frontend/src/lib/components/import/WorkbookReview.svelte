@@ -5,9 +5,9 @@
 	// (ImportReportLists, shared with the Overview's import record).
 	// Everything here comes from the file (farm names, formula text), so it is
 	// rendered as text only: plain interpolation, never {@html}.
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { CHIRPS_CHOICES } from '$lib/series/provenance';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { CHIRPS_CHOICES } from '#lib/series/provenance.js';
 	import ImportReportLists from './ImportReportLists.svelte';
 	import { DEFAULT_CHIRPS_KEY, type WorkbookReport } from './workbookFile';
 

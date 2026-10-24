@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { HELP, helpFor } from './content';
 import { SHOTS } from './pictures';
 import { TOUR } from './tour';
-import { SETTINGS_SECTIONS } from '$lib/components/settings/sections';
-import { ALL_TABS, TAB_GUIDE } from '$lib/workspace/tabs';
+import { SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
+import { ALL_TABS, TAB_GUIDE } from '#lib/workspace/tabs.js';
 import {
 	DIAGRAM_IDS,
 	GUIDE_KIND_TITLES,
@@ -430,7 +430,8 @@ describe('links into help from the app', () => {
 		const broken: string[] = [];
 		let seen = 0;
 		for (const f of sources) {
-			for (const m of read(f).matchAll(/\/help\/guides\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:#([a-z0-9-]+))?/g)) {
+			// `/help/guides/x` in a built path, `resolve('help/guides/x')` in a link (SvelteKit 3 pathnames have no leading '/').
+			for (const m of read(f).matchAll(/(?:\/|['"`])help\/guides\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:#([a-z0-9-]+))?/g)) {
 				seen++;
 				const g = guideFor(m[1]!);
 				if (!g) broken.push(`${f.slice(SRC.length)}: no guide ${m[1]}`);
@@ -452,7 +453,7 @@ describe('links into help from the app', () => {
 		];
 		for (const [file, id] of links) {
 			expect(guideFor(id), id).toBeDefined();
-			expect(read(fileURLToPath(new URL(file, import.meta.url))), file).toContain(`/help/guides/${id}`);
+			expect(read(fileURLToPath(new URL(file, import.meta.url))), file).toContain(`help/guides/${id}`);
 		}
 	});
 

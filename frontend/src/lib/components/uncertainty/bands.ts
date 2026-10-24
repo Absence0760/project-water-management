@@ -11,9 +11,9 @@ import {
 	type RecordCoverage,
 	type RejectReason
 } from '@water-management/engine';
-import type { Ensemble } from '$lib/api';
-import { fmtDate, fmtNum } from '$lib/format/number';
-import { FORMER_MEMBER } from '$lib/format/maker';
+import type { Ensemble } from '#lib/api/index.js';
+import { fmtDate, fmtNum } from '#lib/format/number.js';
+import { FORMER_MEMBER } from '#lib/format/maker.js';
 
 /** Digits that read well for a value of this size (3 significant figures, whole numbers from 100). */
 export function sig(v: number | null | undefined): string {

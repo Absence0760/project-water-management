@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
+import type { ImportNote, UnmappedItem } from '#lib/spreadsheet/import/report.js';
 import { buildImportReport, clip, importerLabel, importerVersion, projectFileNotes, REPORT_LIMITS, REPORT_MAX_BYTES, REPORT_MAX_ITEMS } from './importReport';
 
 const note: ImportNote = { code: 'dam-area-unknown', severity: 'info', message: 'dams have no surface area', sheet: 'Farm spec' };

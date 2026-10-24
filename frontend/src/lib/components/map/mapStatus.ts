@@ -17,13 +17,13 @@
 // - an EWR site is met when the run's reporting window has no day not met
 //   (summary.curtailment.ewrSites, the curtailment table's EWR sites).
 import { allocationStatus, type AllocationStatus, type NetworkNode, type RunSummary } from '@water-management/engine';
-import type { MapFeature, Role, RunMeta } from '$lib/api/types';
-import { STATUS_LABEL } from '$lib/components/allocations/allocations';
-import { LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
-import { DAM_FULL_PCT, damColouring } from '$lib/components/network/farmColour';
-import { LOW_SUPPLY, type SupplyBand } from '$lib/components/network/supplyColour';
-import { SUPPLY_TARGET } from '$lib/components/runs/results';
-import { fmtNum, fmtPct } from '$lib/format/number';
+import type { MapFeature, Role, RunMeta } from '#lib/api/types.js';
+import { STATUS_LABEL } from '#lib/components/allocations/allocations.js';
+import { LOW_PCT, type DamLevel } from '#lib/components/overview/damLevels.js';
+import { DAM_FULL_PCT, damColouring } from '#lib/components/network/farmColour.js';
+import { LOW_SUPPLY, type SupplyBand } from '#lib/components/network/supplyColour.js';
+import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
 
 /** What a hydrological unit's parcel is coloured by. `daysShort` is the default (D-A1). */
 export type MapMeasure = 'daysShort' | 'curtailment' | 'damLevel' | 'allocation';

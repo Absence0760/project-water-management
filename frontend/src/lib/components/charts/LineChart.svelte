@@ -6,10 +6,10 @@
 	// legend doubles as the hover read-out.
 	import { onDestroy, untrack, type Snippet } from 'svelte';
 	import uPlot from 'uplot';
-	import { onFontsLoaded } from '$lib/components/common/fontsLoaded';
+	import { onFontsLoaded } from '#lib/components/common/fontsLoaded.js';
 	import 'uplot/dist/uPlot.min.css';
-	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
+	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
+	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
 
 	let {

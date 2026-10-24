@@ -7,10 +7,10 @@
 -->
 <script lang="ts">
 	import { waterYearLabel, type DoubleMass } from '@water-management/engine';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { fmtCompact } from '$lib/components/charts/series';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import { fmtCompact } from '#lib/components/charts/series.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { doubleMassChart } from './doubleMass';
 
 	let { dm }: { dm: DoubleMass } = $props();

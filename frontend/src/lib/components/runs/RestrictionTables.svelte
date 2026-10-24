@@ -8,8 +8,8 @@
 -->
 <script lang="ts">
 	import type { RunSummary } from '@water-management/engine';
-	import { foldList } from '$lib/components/common/fold';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { foldList } from '#lib/components/common/fold.js';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { restrictionView } from './restrictions';
 
 	let {

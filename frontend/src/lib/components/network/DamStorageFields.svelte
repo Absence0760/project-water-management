@@ -6,11 +6,11 @@
 	// number fields in the Farm dam group (./fields.ts).
 	import { tick } from 'svelte';
 	import { DAM_RELEASE_RULES, type DamReleaseRule, type NetworkNode } from '@water-management/engine';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { curveQuestion } from './removeQuestions';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { curveNotes, curveText, parseDamCurve } from './damCurve';
 	import MonthFields from './MonthFields.svelte';
 	import { monthsOf } from './monthFields';

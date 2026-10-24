@@ -12,10 +12,10 @@
 	// signs the pack statement, and says first that the signer's name and
 	// registration are shown publicly on the pack's verify page.
 	import { tick, untrack } from 'svelte';
-	import { api, ApiError, type PackSignoffList, type Signoff, type SignoffKind, type SignoffList } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { api, ApiError, type PackSignoffList, type Signoff, type SignoffKind, type SignoffList } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import {
 		BLOCKED_CATEGORIES_NOTE,
 		REGISTRATION_BODIES,

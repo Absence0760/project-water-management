@@ -5,7 +5,7 @@
 // server checks everything again on import: this only keeps the table from
 // offering a choice it would refuse.
 import { oneLineName } from '@water-management/engine';
-import type { MapFeatureKind, MapGeometry, MapImportPreview, MapImportPreviewFeature, MapImportProblem, MapImportReviewed } from '$lib/api/types';
+import type { MapFeatureKind, MapGeometry, MapImportPreview, MapImportPreviewFeature, MapImportProblem, MapImportReviewed } from '#lib/api/types.js';
 import { KIND_LABEL, KIND_NODES } from './mapData';
 
 /** The geometry types each kind may have (backend geo/geojson.ts KIND_GEOMETRY). */

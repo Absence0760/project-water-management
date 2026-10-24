@@ -13,10 +13,10 @@ import {
 	type OutlookStat,
 	type ScenarioOp
 } from '@water-management/engine';
-import type { Outlook, OutlookExcludedYear, OutlookRequest, OutlookResult, OutlookSeasonSetting } from '$lib/api/types';
-import { monthName } from '$lib/format/months';
-import { fmtDay, fmtNum } from '$lib/format/number';
-import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
+import type { Outlook, OutlookExcludedYear, OutlookRequest, OutlookResult, OutlookSeasonSetting } from '#lib/api/types.js';
+import { monthName } from '#lib/format/months.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
+import { dailyEwrName, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
 
 /** The demand levels a new outlook starts with, % of today's demand (planning-outputs.md S3). */
 export const DEFAULT_OUTLOOK_LEVELS: readonly number[] = Object.freeze([100, 85, 70]);

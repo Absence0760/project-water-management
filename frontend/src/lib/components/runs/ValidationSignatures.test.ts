@@ -9,8 +9,8 @@ import PlausibilityPanel from './PlausibilityPanel.svelte';
 
 // SvelteKit's runtime modules aren't there under vitest: the panel fetches other runoff models' runs in an
 // $effect, which the server renderer never runs, and the help tip only needs the base path.
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 import ValidationSignatures from './ValidationSignatures.svelte';
 import { PROVISIONAL_SIGNATURE_LIMITS } from './signatures';
 

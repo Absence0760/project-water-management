@@ -1,8 +1,8 @@
 // Display helpers for the Plausibility checks panel (RunSummary.plausibility,
 // engine ≥ 0.25.0; docs/model.md §2.10d, docs/ui.md). Pure, unit-tested.
 import type { FlowBreakHint, LowFlowCurve, LowFlowCurves, PlausibilityChecks } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
-import { describeMonths } from '$lib/format/months';
+import type { RunMeta } from '#lib/api/types.js';
+import { describeMonths } from '#lib/format/months.js';
 import { signaturesOk } from './signatures';
 
 const RECORD: Record<string, string> = {

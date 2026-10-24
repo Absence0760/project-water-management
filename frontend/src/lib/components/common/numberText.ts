@@ -1,7 +1,7 @@
 // Text form of a grouped numeric field (NumberInput `grouped`): the app's usual
 // number formatting (format/number.ts, narrow no-break thousands separators). Typed or
 // pasted input is read back with parseNum, which accepts 1,500 / 1 500 / 1500.
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 const round = (n: number) => Math.round(n * 1e9) / 1e9;
 

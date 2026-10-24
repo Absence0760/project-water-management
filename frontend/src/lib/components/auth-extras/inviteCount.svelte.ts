@@ -2,7 +2,7 @@
 // issue #136), for the banner every page shows while one does
 // (InvitesBanner.svelte). Read once per signed-in account, and again when the
 // invitations page accepts or declines one or the tab comes back into view.
-import { api } from '$lib/api';
+import { api } from '#lib/api/index.js';
 
 export const pendingInvites = $state<{ user: string | null; count: number }>({ user: null, count: 0 });
 

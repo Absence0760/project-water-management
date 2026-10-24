@@ -2,7 +2,7 @@
 // reading pasted rows (from a spreadsheet or the DW789 form) and the checks
 // the form shows beside the table. Pure: no Svelte, no API.
 import { DAM_CURVE_CAPACITY_TOLERANCE, DAM_CURVE_MAX_ROWS, damCurveProblem, type DamCurvePoint } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 export interface ParsedCurve {
 	rows: DamCurvePoint[];

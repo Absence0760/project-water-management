@@ -10,9 +10,9 @@
 	// shows no figure. Public comments as on an application's link
 	// (./ShareComments.svelte), while the pack stands. Every word is in
 	// ./pack.ts, ./ShareComments.svelte or t() here.
-	import { base } from '$app/paths';
-	import type { SharePack } from '$lib/api/types';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import type { SharePack } from '#lib/api/types.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { bandLine, monthRows, packSiteRows, packStatusLine, rowChange, rowLabel, rowValue, signerLine, standingNote, successorCode } from './pack';
 	import ShareComments from './ShareComments.svelte';
 	import { shareCaveat } from './share';
@@ -47,7 +47,7 @@
 			<p class="desc" data-testid="share-pack-reason">{v.withdrawnReason}</p>
 		{/if}
 		{#if successor}
-			<p>{t('The version that replaced it has the code {code}.', { code: successor })} <a href="{base}/verify/{encodeURIComponent(successor)}">{t('Check it on the verify page')}</a></p>
+			<p>{t('The version that replaced it has the code {code}.', { code: successor })} <a href={resolve(`verify/${encodeURIComponent(successor)}`)}>{t('Check it on the verify page')}</a></p>
 		{/if}
 	</section>
 {/if}
@@ -136,7 +136,7 @@
 		<section class="card" aria-labelledby="pk-check-h" data-testid="share-pack-check">
 			<h2 id="pk-check-h">{t('Check this pack')}</h2>
 			<p>{t('Its code is {code}. Anyone holding a copy of the pack can check it against this app on the verify page.', { code: view.pack.shortCode })}</p>
-			<p><a href="{base}/verify/{encodeURIComponent(view.pack.shortCode)}" data-testid="share-pack-verify">{t('Open the verify page')}</a></p>
+			<p><a href={resolve(`verify/${encodeURIComponent(view.pack.shortCode)}`)} data-testid="share-pack-verify">{t('Open the verify page')}</a></p>
 			<dl class="hashes">
 				<dt>{t('Manifest SHA-256')}</dt>
 				<dd class="mono">{v.manifestSha256}</dd>
@@ -160,7 +160,7 @@
 			<p>{t('A licensing evidence pack: the model results an applicant attaches to a water-use licence application, signed by a registered professional and fixed once issued. This page shows part of it, read-only, and names no hydrological unit.')}</p>
 			<p class="fine">{t('This link works until it expires or is withdrawn. If the pack is withdrawn or replaced, the link says so instead of showing its figures.')}</p>
 			<p class="fine">{t('It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.')}</p>
-			<p class="fine legal-links"><a href="{base}/terms">{t('Terms of use')}</a> · <a href="{base}/privacy">{t('Privacy notice')}</a></p>
+			<p class="fine legal-links"><a href={resolve('terms')}>{t('Terms of use')}</a> · <a href={resolve('privacy')}>{t('Privacy notice')}</a></p>
 		</section>
 	</div>
 </div>

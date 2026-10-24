@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findElsewhere } from '$lib/components/common/sectionNav';
+import { findElsewhere } from '#lib/components/common/sectionNav.js';
 import { AUTOMATION_LABEL, saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {

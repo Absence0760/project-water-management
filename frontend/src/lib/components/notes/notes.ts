@@ -1,7 +1,7 @@
 // Notes and comments (WP-2.7; docs/ui.md § Notes): what a notes drawer is
 // about, the query and create body for it, its count badge, and the words
 // for a note's target. Pure, so the rules are unit-tested.
-import { NOTE_MAX, type Note, type NoteCounts, type NoteCreate, type NotesQuery, type NoteVisibility } from '$lib/api/types';
+import { NOTE_MAX, type Note, type NoteCounts, type NoteCreate, type NotesQuery, type NoteVisibility } from '#lib/api/types.js';
 import { NOTES_EN, type NotesWords } from './words';
 
 /** What a drawer or list holds notes about. */

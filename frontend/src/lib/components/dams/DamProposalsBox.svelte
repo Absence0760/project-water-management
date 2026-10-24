@@ -16,13 +16,13 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { api, type DamProposals } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import ProposalNoDataset from '$lib/components/proposals/ProposalNoDataset.svelte';
-	import ProposalPanel from '$lib/components/proposals/ProposalPanel.svelte';
-	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
-	import { mapNodeHref } from '$lib/workspace/mapLinks';
-	import { fmtNum } from '$lib/format/number';
+	import { api, type DamProposals } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import ProposalNoDataset from '#lib/components/proposals/ProposalNoDataset.svelte';
+	import ProposalPanel from '#lib/components/proposals/ProposalPanel.svelte';
+	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
+	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { confirmWords, damProposalRows, fmtDamArea, proposalsLine, searchedFrom, type DamProposalRow } from './damProposals';
 
 	let {

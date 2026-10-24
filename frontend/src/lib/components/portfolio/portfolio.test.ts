@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PortfolioProject } from '$lib/api/types';
+import type { PortfolioProject } from '#lib/api/types.js';
 import {
 	ageText,
 	alertsText,

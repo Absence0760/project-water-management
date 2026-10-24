@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FarmIndex, FarmView } from '@water-management/engine';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { clearFarmMemo, FarmState } from './farmState.svelte';
 import { vaalbankFixture } from './fixture';
 import { readSaved, SAVED_KEY, writeSaved } from './savedCopy';

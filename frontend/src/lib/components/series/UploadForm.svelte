@@ -10,24 +10,24 @@
 	// same reader ($lib/series/paste.ts), note, preview and requests.
 	import { tick, untrack } from 'svelte';
 	import { fromEpochDay, toEpochDay, unitOptions, type DayBoundary, type SeriesMeta } from '@water-management/engine';
-	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '$lib/series/provenance';
-	import { api } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
-	import { CsvError, type ParsedSeries } from '$lib/series/csv';
-	import { parseSeriesFile } from '$lib/series/file';
-	import { parsePastedSeries } from '$lib/series/paste';
-	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
+	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '#lib/series/provenance.js';
+	import { api } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
+	import { CsvError, type ParsedSeries } from '#lib/series/csv.js';
+	import { parseSeriesFile } from '#lib/series/file.js';
+	import { parsePastedSeries } from '#lib/series/paste.js';
+	import { defaultUnit, KIND_OPTIONS, kindLabel } from '#lib/series/kinds.js';
 	import { holeBefore, mergePreview, type Daily } from './coverage';
 	import { dataEnd, guessSeries, headerLine, seriesEnd } from './freshness';
-	import { latestFileText } from '$lib/files/latest';
+	import { latestFileText } from '#lib/files/latest.js';
 	import { inStoredUnit, type UploadResult, type UploadSubmit } from './upload';
-	import type { SeriesWriteResult } from '$lib/api/types';
+	import type { SeriesWriteResult } from '#lib/api/types.js';
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 	import { newSeriesEffect } from './roles';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import { SERIES_FILE_FORMAT, SERIES_PASTE_FORMAT } from '$lib/series/example';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
+	import { SERIES_FILE_FORMAT, SERIES_PASTE_FORMAT } from '#lib/series/example.js';
 
 	let {
 		projectId,

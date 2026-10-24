@@ -1,7 +1,7 @@
 // EWR → the flow vs reserve chart (FlowVsReserve.svelte): the days the outflow was below the
 // reserve, as date ranges to shade, and the chart's time windows.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
-import type { DailyEwrSource } from '$lib/components/ewr/notMet';
+import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';
 
 /** The chart's time windows (LineChart `windows`); `days: null` is the whole run. It opens on a year. */
 export const FLOW_WINDOWS = [

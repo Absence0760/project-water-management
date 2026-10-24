@@ -5,9 +5,9 @@
 	// from the cards about what happened, like the forecast: an edge and
 	// "Season outlook" in words. Loaded lazily by the farm page (issue #122):
 	// most farms have no outlook published, and the page chunk is near its budget.
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { wordsHref } from './load';
 	import type { OutlookVm } from './outlookCard';
 
@@ -22,7 +22,7 @@
 	{#if vm.dam}<p>{vm.dam}</p>{/if}
 	{#if vm.review}<p>{vm.review}</p>{/if}
 	<p class="fine">{vm.fine}</p>
-	<a class="link" href={wordsHref(base, page.url, 'farm-season-outlook')}>{t('What is the season outlook?')}</a>
+	<a class="link" href={wordsHref(basePath(), page.url, 'farm-season-outlook')}>{t('What is the season outlook?')}</a>
 </section>
 
 <style>

@@ -3,9 +3,9 @@
 // and overlay layers that tell features apart by more than colour.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { MapFeature } from '$lib/api/types';
+import type { MapFeature } from '#lib/api/types.js';
 import { PIECE_TINT_COUNT } from './pieces';
-import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION } from '#lib/components/legal/dataCredits.js';
 import {
 	creditLayer,
 	creditLink,

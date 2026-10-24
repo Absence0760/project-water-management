@@ -21,7 +21,7 @@ const LINKS: [string, string][] = [
 
 describe('the farmer words the cards link to', () => {
 	it.each(LINKS)('%s links to %s, which exists in English and Afrikaans', (file, id) => {
-		expect(src(file)).toContain(`wordsHref(base, page.url, '${id}')`);
+		expect(src(file)).toContain(`wordsHref(basePath(), page.url, '${id}')`);
 		const entry = FARMER_HELP.find((e) => e.id === id);
 		expect(entry, id).toBeDefined();
 		const af = HELP_AF[id];
@@ -39,7 +39,7 @@ describe('the farmer words the cards link to', () => {
 
 	it('sends a farmer to farm-two-step, and anyone with the workspace to its guide', () => {
 		const box = src('../components/account/TwoStepSignIn.svelte');
-		expect(box).toMatch(/\{#if inFarmFrame\(\)\}<a href=\{wordsHref\(base, page\.url, 'farm-two-step'\)\}>[^{]*\{t\('How two-step sign-in works'\)\}<\/a>\{:else\}<a href="\{base\}\/help\/guides\/two-step-sign-in">/);
+		expect(box).toMatch(/\{#if inFarmFrame\(\)\}<a href=\{wordsHref\(basePath\(\), page\.url, 'farm-two-step'\)\}>[^{]*\{t\('How two-step sign-in works'\)\}<\/a>\{:else\}<a href=\{resolve\('help\/guides\/two-step-sign-in'\)\}>/);
 	});
 
 	it('says on the signed-out reset pages what happens next, since the words need a sign-in', () => {

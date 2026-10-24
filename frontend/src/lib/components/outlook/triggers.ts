@@ -6,8 +6,8 @@
 // sentence its describeTriggerRow; this module only formats them. It counts
 // years; it never picks a level.
 import { describeDroughtRestriction, describeTriggerRow, restrictionRuleFromTriggers, type DroughtRestrictionRule } from '@water-management/engine';
-import type { Outlook, OutlookTriggerTable } from '$lib/api/types';
-import { fmtDay, fmtNum } from '$lib/format/number';
+import type { Outlook, OutlookTriggerTable } from '#lib/api/types.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 import { waterYearLabel } from './view';
 
 export interface TriggerRowView {

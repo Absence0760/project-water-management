@@ -1,11 +1,11 @@
 <script lang="ts">
 	// Which team (if any) owns the project, and — for owners — moving it into
 	// one of your teams or back to personal.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, untrack } from 'svelte';
-	import { base } from '$app/paths';
-	import { api, hasTeamRole, type Member, type Project, type Team } from '$lib/api';
+	import { resolve } from '$app/paths';
+	import { api, hasTeamRole, type Member, type Project, type Team } from '#lib/api/index.js';
 	import { cached } from './cache';
 
 	let {
@@ -67,7 +67,7 @@
 	{#if project.team}
 		<p class="owner-line">
 			{#if project.team.name}
-				Belongs to <a href="{base}/teams/{project.team.id}"><strong>{project.team.name}</strong></a>.
+				Belongs to <a href={resolve(`teams/${project.team.id}`)}><strong>{project.team.name}</strong></a>.
 			{:else}
 				Belongs to a team you're not in. You have access because it was shared with you directly.
 			{/if}
@@ -99,7 +99,7 @@
 				You're an owner through the team, so you can't make it personal: add yourself under Members as an owner first.
 			</p>
 		{:else if movable && !movable.length}
-			<p class="muted small"><a href="{base}/teams">Create a team</a> to share this catchment with colleagues in one step.</p>
+			<p class="muted small"><a href={resolve('teams')}>Create a team</a> to share this catchment with colleagues in one step.</p>
 		{/if}
 	{/if}
 </section>

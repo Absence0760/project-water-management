@@ -5,7 +5,7 @@
 //
 // One entry per tab. Adding a tab is one line in TAB_GROUP; the page decides
 // the order and which tabs it renders, and passes those ids in.
-import type { Role } from '$lib/api/types';
+import type { Role } from '#lib/api/types.js';
 
 /**
  * - `core`: every member sees it (Overview, results, data).

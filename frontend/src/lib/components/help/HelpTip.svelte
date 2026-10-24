@@ -6,11 +6,11 @@
 	// for the /help pages (lib/help/content.test.ts keeps it out of here).
 	// Shared by every HelpTip; a failed fetch is forgotten so the next mount
 	// retries.
-	import type { HelpTipText } from '$lib/help/types';
+	import type { HelpTipText } from '#lib/help/types.js';
 
 	let help: Promise<(key: string) => HelpTipText | undefined> | undefined;
 	function loadHelp() {
-		help ??= import('$lib/help/tips').then(
+		help ??= import('#lib/help/tips.js').then(
 			(m) => m.tipFor,
 			(err: unknown) => {
 				help = undefined;
@@ -39,9 +39,9 @@
 	// button's rect, below it or above when there's no room, and follows it on
 	// scroll and resize.
 	import { tick } from 'svelte';
-	import { base } from '$app/paths';
-	import { glossaryPath } from '$lib/help/glossaryLinks';
-	import { DUSK_MEDIA, SHOTS, TIP_PICTURES, pictureSrc } from '$lib/help/pictures';
+	import { basePath } from '#lib/nav/base.js';
+	import { glossaryPath } from '#lib/help/glossaryLinks.js';
+	import { DUSK_MEDIA, SHOTS, TIP_PICTURES, pictureSrc } from '#lib/help/pictures.js';
 
 	let { key, label }: { key: string; label?: string } = $props();
 
@@ -151,9 +151,9 @@
 					{#if shot}
 						<span class="pic">
 							<picture>
-								<source media={DUSK_MEDIA} srcset="{base}{pictureSrc(shot, SHOTS[shot].width / 2, 'dusk')}" />
+								<source media={DUSK_MEDIA} srcset="{basePath()}{pictureSrc(shot, SHOTS[shot].width / 2, 'dusk')}" />
 								<img
-									src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
+									src="{basePath()}{pictureSrc(shot, SHOTS[shot].width / 2)}"
 									width={SHOTS[shot].width / 2}
 									height={SHOTS[shot].height / 2}
 									alt=""
@@ -165,7 +165,7 @@
 					<strong class="term">{entry.term}</strong>
 					<span class="short">{entry.short}</span>
 					{#if entry.units}<span class="units">Units: {entry.units}</span>{/if}
-					<a class="more" href="{base}{glossaryPath(entry)}">More in the glossary</a>
+					<a class="more" href="{basePath()}{glossaryPath(entry)}">More in the glossary</a>
 				</span>
 			{/if}
 		</span>

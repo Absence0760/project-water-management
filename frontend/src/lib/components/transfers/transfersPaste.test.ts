@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Transfer } from '@water-management/engine';
-import { planMonthlyPaste } from '$lib/spreadsheet/paste/monthlyRows';
+import { planMonthlyPaste } from '#lib/spreadsheet/paste/monthlyRows.js';
 import { applyTransferPaste, planTransferPaste, transferRows, transfersCsv, TRANSFERS_FORMAT } from './transfersPaste';
 
 const names: Record<string, string> = { u: 'Upper farm', l: 'Lower farm' };

@@ -7,9 +7,9 @@
 -->
 <script lang="ts">
 	import type { ProjectSettings } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { AREAL_METHOD_OPTIONS, flatFactor, storedArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
 
 	let {

@@ -16,7 +16,7 @@
 // back); while the need stands the account menu keeps a badge
 // (layout/AccountMenu.svelte, `pendingKind`), so it is never out of sight.
 // This module holds no words.
-import type { MfaStatus } from '$lib/api/types';
+import type { MfaStatus } from '#lib/api/types.js';
 
 export type MfaPromptKind = 'setup' | 'step-up';
 

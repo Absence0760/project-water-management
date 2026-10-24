@@ -5,9 +5,9 @@
 // app compares modelled use with a registered volume and leaves the finding to
 // the authority (docs/allocations.md § What the comparison is not).
 import { allocationStatus, type AllocationComparison, type AllocationMode, type AllocationStatus, type AllocationYear } from '@water-management/engine';
-import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationTotal, AllocationPurpose, AllocationWaterSourceKind, AllocationWaterUse } from '$lib/api/types';
-import type { FileFormat } from '$lib/components/common/formatHelp';
-import { fmtNum } from '$lib/format/number';
+import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationTotal, AllocationPurpose, AllocationWaterSourceKind, AllocationWaterUse } from '#lib/api/types.js';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
+import { fmtNum } from '#lib/format/number.js';
 
 export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
 	registration: 'Registration (WARMS)',

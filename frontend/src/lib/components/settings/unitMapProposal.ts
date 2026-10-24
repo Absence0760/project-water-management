@@ -3,8 +3,8 @@
 // area-weighted MAP from one MAP grid, beside what its form holds. One grid
 // for the whole project, never a mix; a unit the grid doesn't cover is listed,
 // not filled from another grid.
-import type { UnitMapApplied, UnitMapCandidate, UnitMapProposal } from '$lib/api';
-import { fmtNum } from '$lib/format/number';
+import type { UnitMapApplied, UnitMapCandidate, UnitMapProposal } from '#lib/api/index.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** What the panel can show: why there is nothing to use, or the rows. */
 export type UnitMapView =

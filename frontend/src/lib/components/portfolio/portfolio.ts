@@ -3,9 +3,9 @@
 // the teams list and the team page. Every status is written out as text as
 // well as coloured, so colour is never the only signal; every unknown says
 // why. Pure, so it is unit-tested apart from the pages.
-import type { PortfolioEwrStatus, PortfolioProject, PortfolioThresholds } from '$lib/api/types';
-import { dateAge, sharedWindowText, windowText, type DataEnd } from '$lib/format/age';
-import { fmtNum } from '$lib/format/number';
+import type { PortfolioEwrStatus, PortfolioProject, PortfolioThresholds } from '#lib/api/types.js';
+import { dateAge, sharedWindowText, windowText, type DataEnd } from '#lib/format/age.js';
+import { fmtNum } from '#lib/format/number.js';
 
 export const STATUS_LABEL: Record<PortfolioEwrStatus, string> = { red: 'Red', amber: 'Amber', green: 'Green', unknown: 'Unknown' };
 

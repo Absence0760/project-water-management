@@ -13,7 +13,7 @@
 // holds a different volume on each day (damCapacityOn), so a long record
 // surveyed recently never reads above 100 %. A dam whose capacity doesn't
 // change reads against its entered capacity, as before.
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { beforeForecast, damCapacityOn, fromEpochDay, toEpochDay, type DailySeries, type FarmSummary, type NetworkNode } from '@water-management/engine';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);

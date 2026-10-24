@@ -7,9 +7,9 @@
 // farm dams (many unregistered), so its volume is the user's to enter: a
 // registered capacity is never used for it (#523 C1; #90). Only the area is
 // accepted, and the page asks first.
-import type { DamProposals, RegisterDamProposal } from '$lib/api';
-import { fmtNum } from '$lib/format/number';
-import { positionText } from '$lib/components/map/mapData';
+import type { DamProposals, RegisterDamProposal } from '#lib/api/index.js';
+import { fmtNum } from '#lib/format/number.js';
+import { positionText } from '#lib/components/map/mapData.js';
 import { fmtVolume } from './dams';
 
 export type DamProposalRow =

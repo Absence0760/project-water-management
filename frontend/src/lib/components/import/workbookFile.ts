@@ -5,11 +5,11 @@
 // failure says, the gauge and run-of-river options, and the review's notes and unmapped
 // report. Type-only imports from the parser, so no SheetJS here.
 import { B023_CHIRPS_DEFAULT, provenanceKey } from '@water-management/engine';
-import type { ProjectFile } from '$lib/api';
-import { provenanceFields } from '$lib/series/provenance';
-import type { ImportResult } from '$lib/spreadsheet/import/extract';
-import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
-import type { WorkbookImportFailure, WorkbookImportOptions, WorkbookImportProgress } from '$lib/spreadsheet/import/messages';
+import type { ProjectFile } from '#lib/api/index.js';
+import { provenanceFields } from '#lib/series/provenance.js';
+import type { ImportResult } from '#lib/spreadsheet/import/extract.js';
+import type { ImportNote, UnmappedItem } from '#lib/spreadsheet/import/report.js';
+import type { WorkbookImportFailure, WorkbookImportOptions, WorkbookImportProgress } from '#lib/spreadsheet/import/messages.js';
 import type { ParsedImport } from './projectFile';
 
 /** File types the workbook picker offers: .xlsx and .xlsm (b023 workbooks are macro-enabled). */

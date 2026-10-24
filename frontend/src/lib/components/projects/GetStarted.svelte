@@ -4,10 +4,11 @@
 	// catchment to start from instead (issue #286, example.ts).
 	import { onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { api } from '$lib/api';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import { prefetch } from '$lib/components/common/lazy';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import { api } from '#lib/api/index.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import { prefetch } from '#lib/components/common/lazy.js';
 	import { loadExample, startFromExample, type ExampleFailure } from './example';
 
 	let { oncreate, hasTeams }: { oncreate: () => void; hasTeams: boolean } = $props();
@@ -31,7 +32,7 @@
 			const r = await startFromExample((file, opts) => api.projects.importProject(file, opts));
 			if (!r.ok) failure = r;
 			else if (r.runError) unrun = { path: r.path, runError: r.runError };
-			else if (!gone) await goto(`${base}${r.path}`);
+			else if (!gone) await goto(`${basePath()}${r.path}`);
 		} finally {
 			starting = false;
 		}
@@ -80,7 +81,7 @@
 			{#if hasTeams}
 				You can create it in one of your teams so colleagues can work on it too.
 			{:else}
-				Working with colleagues? <a href="{base}/teams">Create a team</a> first to share catchments.
+				Working with colleagues? <a href={resolve('teams')}>Create a team</a> first to share catchments.
 			{/if}
 		</span>
 	</div>
@@ -111,7 +112,7 @@
 	{:else if unrun}
 		<div class="alert alert-warning" role="alert">
 			The example was created, but the model didn’t run: {unrun.runError}.
-			<a href="{base}{unrun.path}">Open the example</a> and run it from Runs &amp; results.
+			<a href="{basePath()}{unrun.path}">Open the example</a> and run it from Runs &amp; results.
 		</div>
 	{/if}
 </section>

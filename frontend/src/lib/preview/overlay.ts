@@ -9,7 +9,7 @@
 // Page-side and engine-free (types only), so a tab can build the input
 // without loading the model's run code; the worker runs it (./compute.ts).
 import type { ModelInput, ProjectModel } from '@water-management/engine';
-import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
+import { isScenarioRun, type ScenarioRunFields } from '#lib/components/runs/scenarioRun.js';
 
 type Plain = Record<string, unknown>;
 const isPlain = (v: unknown): v is Plain => typeof v === 'object' && v !== null && !Array.isArray(v);

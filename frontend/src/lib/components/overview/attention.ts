@@ -6,11 +6,11 @@
 // hydrological unit beside it already say so (issue #177). Nor is the EWR: its
 // results are the EWR page's, not the Summary's (issue #558).
 import type { ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
-import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
-import { dateAge } from '$lib/format/age';
-import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
-import { fmtNum } from '$lib/format/number';
+import type { RunMeta } from '#lib/api/types.js';
+import { farmDrawerHref } from '#lib/components/crops/farmDrawer.js';
+import { dateAge } from '#lib/format/age.js';
+import { freshness, newDataSinceRun, STALE_DAYS } from '#lib/components/series/freshness.js';
+import { fmtNum } from '#lib/format/number.js';
 
 export type AttentionId = 'run-warnings' | 'new-data' | 'stale-data' | 'unplanted';
 

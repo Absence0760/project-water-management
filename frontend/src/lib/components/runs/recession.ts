@@ -14,8 +14,8 @@ import {
 	type RecessionCheck,
 	type RecessionFit
 } from '@water-management/engine';
-import type { ChartSeries } from '$lib/components/charts/series';
-import { fmtNum } from '$lib/format/number';
+import type { ChartSeries } from '#lib/components/charts/series.js';
+import { fmtNum } from '#lib/format/number.js';
 
 const SEC_PER_DAY = 86_400;
 const RECORD: Record<string, string> = { flow_observed_m3s: 'gauge', flow_logger_m3s: 'logger' };

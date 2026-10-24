@@ -12,10 +12,10 @@
 	// their series. Pure parts: checkGauges.ts.
 	import type { Snippet } from 'svelte';
 	import { CHECK_GAUGE_FLOW_KEY, type DailySeries } from '@water-management/engine';
-	import { api } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { foldList } from '$lib/components/common/fold';
-	import { fmtNum } from '$lib/format/number';
+	import { api } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import { foldList } from '#lib/components/common/fold.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { cachedSeries } from './cache';
 	import { checkFdc, checkHydrograph, gaugeStatsLine, type CheckGauge } from './checkGauges';
 	import { toDisplayUnit } from './results';

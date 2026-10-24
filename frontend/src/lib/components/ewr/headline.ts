@@ -5,7 +5,7 @@
 // applies the choice to a run.
 import { dailyEwrName, type DailyEwrSource } from './notMet';
 import type { EwrAssuranceSite, EwrRuleTable, NetworkNode } from '@water-management/engine';
-import type { EwrHeadline } from '$lib/api/types';
+import type { EwrHeadline } from '#lib/api/types.js';
 
 export const HEADLINE_AUTO: EwrHeadline = Object.freeze({ source: 'auto' });
 

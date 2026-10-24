@@ -7,8 +7,8 @@
 -->
 <script lang="ts">
 	import type { EwrAssuranceSite } from '@water-management/engine';
-	import EwrFdcOverlay from '$lib/components/runs/EwrFdcOverlay.svelte';
-	import { matchSite } from '$lib/components/runs/ewrReporting';
+	import EwrFdcOverlay from '#lib/components/runs/EwrFdcOverlay.svelte';
+	import { matchSite } from '#lib/components/runs/ewrReporting.js';
 
 	let { a, b, labelA, labelB }: { a: EwrAssuranceSite[]; b: EwrAssuranceSite[]; labelA: string; labelB: string } = $props();
 

@@ -3,11 +3,11 @@
 // through the app's API client, and the form helpers are pure so they can be
 // tested without a page.
 import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, compareSeriesNames, provenanceLabel, sameProvenance, type SeriesMeta, type SeriesProvenance } from '@water-management/engine';
-import type { Api } from '$lib/api';
-import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '$lib/api/types';
-import { ApiError } from '$lib/api/client';
-import { fmtDate, fmtDay, fmtNum } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
+import type { Api } from '#lib/api/index.js';
+import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '#lib/api/types.js';
+import { ApiError } from '#lib/api/client.js';
+import { fmtDate, fmtDay, fmtNum } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
 
 export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
 /** CHIRPS v3's two daily products (backend/src/feeds/config.ts CHIRPS_DAILY_PRODUCTS). */

@@ -4,7 +4,7 @@
 	// supplied, and the outlet's EWR at risk. Everything else on the page
 	// covers the days before them; this panel says so, and words every figure
 	// as what the model expects, not what will happen.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { ForecastSummary } from '@water-management/engine';
 	import { forecastHeading, forecastRows, outletLine } from './forecast';
 

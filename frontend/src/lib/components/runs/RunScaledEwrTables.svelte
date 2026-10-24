@@ -8,8 +8,8 @@
 -->
 <script lang="ts">
 	import type { EwrDailySource, OutletEwrInfo } from '@water-management/engine';
-	import ScaledEwrTablesView from '$lib/components/settings/ScaledEwrTablesView.svelte';
-	import { scaledEwrTables } from '$lib/components/settings/ewrDailySource';
+	import ScaledEwrTablesView from '#lib/components/settings/ScaledEwrTablesView.svelte';
+	import { scaledEwrTables } from '#lib/components/settings/ewrDailySource.js';
 
 	let { source, info }: { source: EwrDailySource; info: OutletEwrInfo } = $props();
 

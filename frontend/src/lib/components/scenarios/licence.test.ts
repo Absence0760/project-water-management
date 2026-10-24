@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DecisionEvent, LicenceTerms } from '$lib/api/types';
+import type { DecisionEvent, LicenceTerms } from '#lib/api/types.js';
 import { earliestEventDate, eventHeading, licensedTerms, licenceLine, nextEvents } from './licence';
 
 const terms = (v: number): LicenceTerms => ({

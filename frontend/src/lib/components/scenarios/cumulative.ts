@@ -3,8 +3,8 @@
 // can be picked together, the report's rows as the matrix shows them, and its
 // CSV. Pure, so it is unit-tested without a component.
 import { CUMULATIVE_METRIC_LABEL, type CumulativeReport, type CumulativeRow } from '@water-management/engine';
-import type { Assessment, AssessorQuestion, Scenario } from '$lib/api/types';
-import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+import type { Assessment, AssessorQuestion, Scenario } from '#lib/api/types.js';
+import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 
 /** Applications an assessor can assess together: submitted or decided (a draft is the applicant's, a withdrawn one is off the table). */
 export function assessable(items: readonly Scenario[]): Scenario[] {

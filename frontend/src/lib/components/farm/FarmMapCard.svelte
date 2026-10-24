@@ -11,12 +11,12 @@
 	// page's own ready state doesn't wait for the map, which draws after it.
 	// It draws without basemap tiles too: only the farm's features, on the
 	// plain background the note under the lines describes.
-	import { PUBLIC_TILES_URL } from '$env/static/public';
+	import { PUBLIC_TILES_URL } from '$app/env/public';
 	import type { FarmProjection } from '@water-management/engine';
-	import { api, type FarmMapFeature } from '$lib/api';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import Rich from '$lib/i18n/Rich.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { api, type FarmMapFeature } from '#lib/api/index.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import Rich from '#lib/i18n/Rich.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { farmMapCard, showsMap } from './farmMap';
 
 	let { projectId, farm }: { projectId: string; farm: FarmProjection } = $props();

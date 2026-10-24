@@ -3,9 +3,9 @@
 	// "Your dam" (design §3 Q3): how full, the stop mark, the 30-day change and
 	// the days-left line, or the no-stop-level wording. Not rendered for a farm
 	// with no dam (the page checks damCard() first).
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { damModelled, type DamVm } from './cards';
-	import Rich from '$lib/i18n/Rich.svelte';
+	import Rich from '#lib/i18n/Rich.svelte';
 
 	let { vm, href }: { vm: DamVm; href: string } = $props();
 </script>

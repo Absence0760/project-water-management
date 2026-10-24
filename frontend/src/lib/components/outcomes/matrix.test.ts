@@ -1,7 +1,7 @@
 import { toEpochDay } from '@water-management/engine';
 import type { RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { OutcomeSettings, Sweep, SweepMember } from '$lib/api/types';
+import type { OutcomeSettings, Sweep, SweepMember } from '#lib/api/types.js';
 import {
 	boundsText,
 	buildMatrixView,

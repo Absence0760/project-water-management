@@ -29,8 +29,8 @@ import {
 	type SeriesProvenance,
 	type ApanDailyFingerprint
 } from '@water-management/engine';
-import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
-import { fmtDay, fmtNum } from '$lib/format/number';
+import { FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 export interface FitRequest {
 	input: ModelInput;

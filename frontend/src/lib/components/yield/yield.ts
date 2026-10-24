@@ -2,10 +2,10 @@
 // status line, the stored results split into the latest firm yield and the
 // latest curve, and the storage–yield chart's data.
 import type { ScenarioOp, YieldPoint } from '@water-management/engine';
-import type { ChartSeries } from '$lib/components/charts/series';
-import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
-import { fmtNum } from '$lib/format/number';
-import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+import type { ChartSeries } from '#lib/components/charts/series.js';
+import type { JobMeta, RunMeta, YieldJob, YieldResult } from '#lib/api/index.js';
+import { fmtNum } from '#lib/format/number.js';
+import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 
 /** Assurance choices: the firm yield, then the levels South African planning quotes (1 in 50, 1 in 20, 1 in 10, 1 in 5 years). */
 export const ASSURANCE_OPTIONS = [

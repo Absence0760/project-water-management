@@ -5,7 +5,7 @@
 	// for no cut (cards.ts lookingBackFolds).
 	import type { FarmProjection } from '@water-management/engine';
 	import { lookingBack, lookingBackShort, notOfficial } from './cards';
-	import Rich from '$lib/i18n/Rich.svelte';
+	import Rich from '#lib/i18n/Rich.svelte';
 
 	let { farm, href, collapsed }: { farm: FarmProjection; href: string; collapsed: boolean } = $props();
 	const vm = $derived(lookingBack(farm));

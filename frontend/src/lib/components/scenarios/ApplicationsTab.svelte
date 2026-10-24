@@ -17,21 +17,21 @@
 	// applicants' "Ask the assessors why" questions, when there are any
 	// (AssessorQuestions.svelte, 164).
 	import { untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, type Pack, type Scenario } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { packHref, packsByScenario } from '$lib/components/packs/pack';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { api, type Pack, type Scenario } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import PackBadge from '#lib/components/packs/PackBadge.svelte';
+	import { packHref, packsByScenario } from '#lib/components/packs/pack.js';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import CumulativeAssessment from './CumulativeAssessment.svelte';
 	import AssessorQuestions from './AssessorQuestions.svelte';
-	import { scenarioAudiences } from '$lib/components/notes/notes';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { fmtDate } from '$lib/format/number';
-	import { withoutParam, withParam } from '$lib/workspace/overlays';
+	import { scenarioAudiences } from '#lib/components/notes/notes.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { fmtDate } from '#lib/format/number.js';
+	import { withoutParam, withParam } from '#lib/workspace/overlays.js';
 	import {
 		APPLICATION_FILTERS,
 		applicationCounts,
@@ -48,7 +48,7 @@
 		type ApplicationFilter,
 		type ApplicationSort
 	} from './applications';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -83,7 +83,7 @@
 	// In the URL like the filter, so a reload and Back keep it (issue #521); a new sort is a step in history.
 	const sort = $derived<ApplicationSort>(parseSort(page.url.searchParams.get('sort')));
 	function setSort(next: ApplicationSort) {
-		if (next !== sort) void goto(next === 'date' ? withoutParam(page.url, 'sort') : withParam(page.url, 'sort', next), { noScroll: true, keepFocus: true });
+		if (next !== sort) void goto(next === 'date' ? withoutParam(page.url, 'sort') : withParam(page.url, 'sort', next), { reset: false });
 	}
 	const assessView = $derived(page.url.searchParams.get('view') === 'assess');
 	const assessHref = $derived(withParam(page.url, 'view', 'assess'));
@@ -229,7 +229,7 @@
 											{@const list = packs.get(a.id) ?? []}
 											<span class="cell-label">Evidence packs:{' '}</span>
 											{#each list as p (p.id)}
-												<a class="pack-link" href={packHref(base, projectId, p.id)}><span class="visually-hidden">Evidence pack{' '}</span><PackBadge status={p.status} version={p.version} /></a>
+												<a class="pack-link" href={packHref(basePath(), projectId, p.id)}><span class="visually-hidden">Evidence pack{' '}</span><PackBadge status={p.status} version={p.version} /></a>
 											{:else}
 												<span class="sub none">none</span>
 											{/each}

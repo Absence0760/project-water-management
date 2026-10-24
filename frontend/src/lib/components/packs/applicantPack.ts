@@ -7,8 +7,8 @@
 // What it shows is D2's: the pack's standing and verify fields, the river's
 // rows and sites a pack link shows, their own units by name, and every other
 // unit only as "Farm n" / "Water user n" with its change in whole points.
-import type { ApplicantPack, ApplicantPackMeta, ApplicantPackOwnUnit, SharedBand, SharedPackRow, SharedPackSite } from '$lib/api';
-import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
+import type { ApplicantPack, ApplicantPackMeta, ApplicantPackOwnUnit, SharedBand, SharedPackRow, SharedPackSite } from '#lib/api/index.js';
+import { fmtDate, fmtNum, fmtPct } from '#lib/format/number.js';
 
 /** The applicant's pack view: /projects/:id/scenarios/:sid/packs/:packId. */
 export const applicantPackHref = (base: string, projectId: string, scenarioId: string, packId: string) =>

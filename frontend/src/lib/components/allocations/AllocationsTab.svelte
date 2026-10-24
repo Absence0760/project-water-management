@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	// Allocations (?tab=allocations, WP-3.10, issue #17 option A, docs/ui.md
 	// § Allocations): a run's modelled use against the registered volumes.
 	// The section header counts the volumes and the units above registered and
@@ -30,27 +30,27 @@
 	// with its own Save, the same settings PATCH the Settings save bar sends, and
 	// the page's settings draft takes the change in (onProjectChange). Farmers
 	// never reach the workspace.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { tick, untrack } from 'svelte';
-	import { hashId, holdAnchor } from '$lib/help/anchor';
+	import { hashId, holdAnchor } from '#lib/help/anchor.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
-	import { api, type Allocation, type AllocationCapYears, type AllocationList, type Project, type RunMeta } from '$lib/api';
+	import { api, type Allocation, type AllocationCapYears, type AllocationList, type Project, type RunMeta } from '#lib/api/index.js';
 	import { ALLOCATION_MODE_LABEL, type ProjectSettings } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { foldList } from '$lib/components/common/fold';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { fmtDate, fmtNum } from '$lib/format/number';
-	import { withoutParam, withParam } from '$lib/workspace/overlays';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { foldList } from '#lib/components/common/fold.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { fmtDate, fmtNum } from '#lib/format/number.js';
+	import { withoutParam, withParam } from '#lib/workspace/overlays.js';
 	import AllocationForm from './AllocationForm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import AllocationImport from './AllocationImport.svelte';
 	import AllocationTotals from './AllocationTotals.svelte';
 	import AllocationUseMap from './AllocationUseMap.svelte';
-	import type { AllocationComparisonTotals } from '$lib/api';
+	import type { AllocationComparisonTotals } from '#lib/api/index.js';
 	import UsePlot from './UsePlot.svelte';
 	import YearTable from './YearTable.svelte';
 	import { comparisonUseRows } from './usePlot';
@@ -157,7 +157,7 @@
 	const run = $derived(named ?? defaultRun);
 	const runLabel = (r: RunMeta) => `${r.label || 'Untitled run'} · ${fmtDate(r.createdAt, true)}${r.published ? ' · published' : ''}${isScenarioRun(r) ? ' · scenario' : ''}`;
 	function pickRun(id: string) {
-		void goto(withParam(url, 'run', id), { noScroll: true, keepFocus: true });
+		void goto(withParam(url, 'run', id), { reset: false });
 	}
 
 	// --- the comparison for that run ---
@@ -267,7 +267,7 @@
 	function choose(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
-		void goto(withParam(url, 'unit', id), { noScroll: true, keepFocus: true }).then(() => {
+		void goto(withParam(url, 'unit', id), { reset: false }).then(() => {
 			// Stacked, the detail is under the list; beside an opened list read far down, it has scrolled away above.
 			if (detailEl && (!side || detailEl.getBoundingClientRect().top < 0)) detailEl.scrollIntoView({ block: 'start' });
 		});
@@ -276,7 +276,7 @@
 	// --- the map of the units shaded by band (issue #510): `map=1`; a unit picked there opens its comparison above ---
 	const mapOpen = $derived(url.searchParams.get('map') === '1');
 	function pickFromMap(id: string) {
-		void goto(withParam(url, 'unit', id), { noScroll: true, keepFocus: true }).then(() => detailEl?.scrollIntoView({ block: 'start' }));
+		void goto(withParam(url, 'unit', id), { reset: false }).then(() => detailEl?.scrollIntoView({ block: 'start' }));
 	}
 
 	// --- the sheets: add or change a volume (`volume=new|<id>`), import (`import=1`); editors only ---
@@ -288,7 +288,7 @@
 	});
 	$effect(() => {
 		// Closed (Save, Cancel, Esc, the ✕): drop `volume` in place, so Back goes to where it was opened from.
-		if (!formOpen && data && untrack(() => volumeParam)) void goto(withoutParam(url, 'volume'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!formOpen && data && untrack(() => volumeParam)) void goto(withoutParam(url, 'volume'), { replace: true, reset: false });
 	});
 	const importParam = $derived(url.searchParams.get('import'));
 	let importOpen = $state(false);
@@ -296,9 +296,9 @@
 		importOpen = canEdit && importParam === '1';
 	});
 	$effect(() => {
-		if (!importOpen && untrack(() => importParam)) void goto(withoutParam(url, 'import'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!importOpen && untrack(() => importParam)) void goto(withoutParam(url, 'import'), { replace: true, reset: false });
 	});
-	const openSheet = (name: string, value: string) => goto(withParam(url, name, value), { noScroll: true, keepFocus: true });
+	const openSheet = (name: string, value: string) => goto(withParam(url, name, value), { reset: false });
 
 	async function remove(a: Allocation) {
 		const ok = await confirmDialog({

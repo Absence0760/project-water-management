@@ -5,8 +5,8 @@
 // dialog applies the accepted changes to the ModelEditor, and the normal save
 // (with its reason) saves them.
 import { type CropDef, type ProjectModel } from '@water-management/engine';
-import type { FileFormat } from '$lib/components/common/formatHelp';
-import { WORKBOOK_MAX_MB } from '$lib/components/import/workbookFile';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
+import { WORKBOOK_MAX_MB } from '#lib/components/import/workbookFile.js';
 import { farmDemands } from './demand';
 
 /** Lower case, no accents or punctuation, a plural "s" dropped ("Pecans" ~ "pecan"; not "-ss", "-us": "Grass", "Citrus"). */

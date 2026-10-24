@@ -10,7 +10,7 @@
 	// the line, never after a hyphen the browser would otherwise break at. Not
 	// the default, since an inline block may leave a sentence's closing "." on a
 	// line of its own (the confirm-email banner).
-	import { emailGroups, emailParts } from '$lib/format/email';
+	import { emailGroups, emailParts } from '#lib/format/email.js';
 
 	/** Wrap only after these characters (and before the "@"), the "@" first. */
 	let { email, breakAfter }: { email: string; breakAfter?: string } = $props();

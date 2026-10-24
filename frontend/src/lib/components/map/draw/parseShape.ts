@@ -5,7 +5,7 @@
 // shape without a pointer (WCAG 2.1.1, 2.5.7), and the way in for coordinates
 // copied from QGIS or a surveyor's file. Pure, so vitest covers it
 // (parseShape.test.ts). The server checks the saved geometry again.
-import type { MapGeometry, MapPosition } from '$lib/api/types';
+import type { MapGeometry, MapPosition } from '#lib/api/types.js';
 
 export type Parsed = { geometry: MapGeometry } | { error: string };
 

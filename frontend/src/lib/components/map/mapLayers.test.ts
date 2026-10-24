@@ -1,7 +1,7 @@
 // The Map tab's layers (mapLayers.ts, issue #326 A6, the relief, the river network #345):
 // `layers=` in the URL and the bbox the quaternaries and rivers are asked for around the features.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature } from '$lib/api/types';
+import type { MapFeature } from '#lib/api/types.js';
 import {
 	CHIRPS_MAX_POINTS,
 	DEM_GRID_BBOX_MAX_DEG,

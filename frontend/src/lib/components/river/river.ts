@@ -6,13 +6,13 @@
 // their `#res-…` ids moved with them, so an old
 // `?tab=runs&run=…#res-reserve` link is sent here (links.ts riverAnchor).
 import { metricDelta, type MetricDelta, type RunSummary } from '@water-management/engine';
-import type { EwrHeadline, RunMeta } from '$lib/api/types';
-import type { NavGroup } from '$lib/components/common/sectionNav';
-import type { MetricSpec } from '$lib/components/compare/delta';
-import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '$lib/components/ewr/notMet';
-import { headlines } from '$lib/components/overview/latestRun';
-import { flowHeading } from '$lib/components/overview/summaryChart';
-import { fmtNum } from '$lib/format/number';
+import type { EwrHeadline, RunMeta } from '#lib/api/types.js';
+import type { NavGroup } from '#lib/components/common/sectionNav.js';
+import type { MetricSpec } from '#lib/components/compare/delta.js';
+import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
+import { headlines } from '#lib/components/overview/latestRun.js';
+import { flowHeading } from '#lib/components/overview/summaryChart.js';
+import { fmtNum } from '#lib/format/number.js';
 import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
 
 const created = (r: RunMeta) => {

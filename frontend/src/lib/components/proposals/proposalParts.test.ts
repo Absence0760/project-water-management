@@ -9,7 +9,7 @@ import ProposalSource from './ProposalSource.svelte';
 import ProposalSynthetic from './ProposalSynthetic.svelte';
 
 // HelpTip links to the glossary under the app's base path.
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 // Comments stripped until none are left (CodeQL js/incomplete-multi-character-sanitization).
 const text = (html: string) => {

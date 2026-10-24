@@ -3,7 +3,7 @@
 // snapshot and re-validates on every edit.
 import { NEW_FARM_IRRIGATION_SYSTEM, newNetworkNode, OFFTAKE_DEFAULTS, type IrrigationSystemDef, transferRatesM3s, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
-import { renumberSupplyOrder } from '$lib/components/network/demandObjectOrder';
+import { renumberSupplyOrder } from '#lib/components/network/demandObjectOrder.js';
 import { systemsOf } from './systems';
 import { validateModel, type ModelIssue } from './validate';
 

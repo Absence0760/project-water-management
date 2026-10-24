@@ -8,12 +8,12 @@
 -->
 <script lang="ts">
 	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary, type RunSummary } from '@water-management/engine';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol, userPriorityText } from './curtailment';
 	import ShareThePainBoard from './ShareThePainBoard.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { basicNeedsNote } from './shareThePain';
-	import { SUPPLY_TARGET } from '$lib/components/runs/results';
+	import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
 
 	let {
 		summary,

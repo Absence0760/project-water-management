@@ -19,18 +19,19 @@
 	// as an editor's) and withdraws the ones they made, whatever its standing.
 	// Part of the workspace, so English (docs/ui.md § Language).
 	import { onDestroy, untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api, ApiError, type ApplicantPack } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { errataFoundSinceNote, latestOnly } from '$lib/components/packs/pack';
-	import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from '$lib/components/packs/applicantPack';
-	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
-	import { fmtDate } from '$lib/format/number';
-	import { reportPageRule } from '$lib/components/report/printPage';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
+	import { api, ApiError, type ApplicantPack } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import PackBadge from '#lib/components/packs/PackBadge.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { errataFoundSinceNote, latestOnly } from '#lib/components/packs/pack.js';
+	import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from '#lib/components/packs/applicantPack.js';
+	import ShareLinksPanel from '#lib/components/project/ShareLinksPanel.svelte';
+	import { fmtDate } from '#lib/format/number.js';
+	import { reportPageRule } from '#lib/components/report/printPage.js';
+	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const scenarioId = $derived(page.params.sid ?? '');
@@ -72,12 +73,12 @@
 	const sites = $derived(fig ? siteLines(fig.river, application) : []);
 	const own = $derived(view?.units ? ownUnitLines(view.units.own) : []);
 	const others = $derived(view?.units ? otherUnitLines(view.units.others) : []);
-	const back = $derived(`${base}/projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(scenarioId)}`);
+	const back = $derived(resolve(`projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(scenarioId)}`));
 	let shareOpen = $state(false);
 
 	// --- the printable copy (165_applicant_copy) -------------------------------------
 	const copy = $derived(view?.copy ?? null);
-	const verifyUrl = $derived(pack ? `${page.url.origin}${base}/verify/${encodeURIComponent(pack.shortCode)}` : '');
+	const verifyUrl = $derived(pack ? `${page.url.origin}${basePath()}/verify/${encodeURIComponent(pack.shortCode)}` : '');
 	/** The server's PDF of this page prints it on every page: a derived copy, never the pack. */
 	const footer = $derived(pack ? `Applicant’s copy, not the pack · Evidence pack v${pack.version}, code ${pack.shortCode} · check the pack at ${verifyUrl} ·` : undefined);
 	let asking = $state(false);
@@ -168,7 +169,7 @@
 				{#if pack.isOwner}
 					<button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="applicant-pack-share-open">Share link…</button>
 				{/if}
-				<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>
+				<a class="btn" href={resolve(`verify/${encodeURIComponent(pack.shortCode)}`)}>Verify page</a>
 				{#if copy?.status === 'ready'}
 					<a class="btn" href={api.scenarios.packCopyUrl(projectId, scenarioId, pack.id)} data-testid="applicant-copy-download">Download your printable copy</a>
 				{:else if copy?.status === 'rendering'}
@@ -189,7 +190,7 @@
 			{#if copyError}<p class="alert alert-warning no-print" role="alert">{copyError}</p>{/if}
 			<p data-testid="applicant-pack-standing" data-status={pack.status}>{standingLine(pack)}</p>
 			{#if pack.supersededById}
-				<p><a href={applicantPackHref(base, projectId, scenarioId, pack.supersededById)} data-testid="applicant-pack-successor">Open the version that replaced it</a></p>
+				<p><a href={applicantPackHref(basePath(), projectId, scenarioId, pack.supersededById)} data-testid="applicant-pack-successor">Open the version that replaced it</a></p>
 			{/if}
 			<p class="note no-print" data-testid="applicant-pack-note">
 				Your copy of the pack. It shows your own hydrological units by name and every other farm or water user only by a number, as

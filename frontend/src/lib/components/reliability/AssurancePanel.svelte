@@ -12,14 +12,14 @@
 	lands here) and follows a new pick.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { STRESS_LABEL, type StressGrid, type SupplyAssurance } from '@water-management/engine';
 	import { page } from '$app/state';
-	import { UNIT_PARAM } from '$lib/components/supply/links';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtNum } from '$lib/format/number';
-	import { waterYearLabel } from '$lib/components/calibration/metrics';
-	import { fmtVolume } from '$lib/components/ewr/heatmap';
+	import { UNIT_PARAM } from '#lib/components/supply/links.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
+	import { fmtVolume } from '#lib/components/ewr/heatmap.js';
 	import { classCounts, notComputedText, partWaterYears, pctText, STRESS_BIN, STRESS_ORDER, STRESS_SHORT, stressLegend } from './reliability';
 
 	let {

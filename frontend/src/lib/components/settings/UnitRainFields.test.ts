@@ -7,10 +7,10 @@ import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import UnitRainFields from './UnitRainFields.svelte';
 
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/') } }));
 // FieldHistoryLine reads the field's history through the app's API client.
-vi.mock('$env/static/public', () => ({ PUBLIC_API_URL: 'http://localhost:3001' }));
+vi.mock('$app/env/public', () => ({ PUBLIC_API_URL: 'http://localhost:3001' }));
 
 const nodes = [
 	{ id: 'a', name: 'Upper unit', kind: 'farm' as const, areaKm2: 10, mapMm: 700 },

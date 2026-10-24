@@ -7,8 +7,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { FARMER_NOTICE_VERSION } from '@water-management/engine/legal';
-import { messageId } from '$lib/i18n/msg';
-import { af } from '$lib/i18n/messages/af';
+import { messageId } from '#lib/i18n/msg.js';
+import { af } from '#lib/i18n/messages/af.js';
 import { disclaimer } from './cards';
 import { farmNoticeButton, farmNoticeEnglish, farmNoticePoints, farmNoticeTitle } from './farmNotice';
 

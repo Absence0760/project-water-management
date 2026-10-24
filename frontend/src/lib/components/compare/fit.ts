@@ -2,7 +2,7 @@
 // score next to its validation scores, from each run's stored fit record.
 // Pure, so it is unit-tested; FitValidationCompare.svelte draws it.
 import { describeFitRecord, fitRecordStatus, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type FitScores, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
-import { fittedAtText, objectiveName } from '$lib/calibration/fit';
+import { fittedAtText, objectiveName } from '#lib/calibration/fit.js';
 
 export interface FitValidationRow {
 	label: string;

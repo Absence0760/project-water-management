@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { AUTO_RUN_DEFAULTS, autoRunError, autoRunToPublish, rerunQueuedText, resolveAutoRun } from './autoRun';
 
 const tz = process.env.TZ;
