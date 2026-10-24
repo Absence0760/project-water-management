@@ -445,7 +445,8 @@ export const historyRoutes = new Hono<AuthEnv>()
 				db,
 				id,
 				{ ...body, provenance: rowProvenance(body), origin: rowOrigin({ source, sourceUnit, sourceUnitFactor }) },
-				{ restoredFrom: rev }
+				// A deleted series comes back under its own id (a rainfall station a setting names, issue #553).
+				{ restoredFrom: rev, reuseId: seriesId }
 			);
 			// And the days edited by hand (212_series_hand_days): they mark the values that come back (a replace clears them).
 			const { rows: marked } = await db.query<SeriesMetaRow>(

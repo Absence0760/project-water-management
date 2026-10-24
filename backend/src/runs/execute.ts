@@ -13,6 +13,7 @@ import {
 	type ModelInput,
 	type ModelOutput,
 	type OpClass,
+	type RainStationInputs,
 	type RunVerification,
 	type ScenarioOp,
 	type SeriesChoice,
@@ -30,6 +31,7 @@ import {
 } from '@water-management/engine';
 import { isUnitRainKind } from '../series/site.js';
 import { referenceCellInput } from './referenceCell.js';
+import { stationInputs } from './stationInput.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -138,12 +140,21 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// stored series, so it has no series id; only when settings.unitRain names a reference, so other inputs are as before.
 	const cell = await referenceCellInput(db, projectId, (settings as { unitRain?: UnitRainSettings | null }).unitRain);
 	if (cell) (series as Record<string, DailySeries>)[cell.key] = cell.series;
+	// The rainfall stations (engine ≥ 1.91.0, issue #553, runs/stationInput.ts): each station's record, the CHIRPS at its
+	// own cell where the cache holds it, and its details; only when settings.rainStations assigns one, so other inputs are
+	// as before. They have no series id: run_input_series.series_id names a series of the key's kind, and these keys are none.
+	const stationed = await stationInputs(db, projectId, settings.rainStations, read?.id ?? null);
+	if (stationed) Object.assign(series, stationed.series);
 	// The EWR is assessed and reported in the baseline, never applied (issue #523 B4, projects/ewrRules.ts): the
 	// rules that keep water for it are a scenario's, so whatever the store holds, the baseline runs without them.
 	// A save refuses them and 220 switched the stored ones off, so this normally changes nothing.
 	const baseline = withoutEwrKeepingRules({ settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model }).project;
 	const seriesChoice = await chirpsSeriesChoice(db, projectId);
-	return { input: { settings: baseline.settings, model: baseline.model, series, ...(seriesChoice ? { seriesChoice } : {}) }, seriesIds, publishedRecords };
+	return {
+		input: { settings: baseline.settings, model: baseline.model, series, ...(seriesChoice ? { seriesChoice } : {}), ...(stationed ? { stations: stationed.stations } : {}) },
+		seriesIds,
+		publishedRecords
+	};
 }
 
 /**
@@ -633,7 +644,9 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		// A forecast run: where its forecast rain came from (the report credits CHIRPS-GEFS only on 'chirps_gefs').
 		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {}),
 		// The CHIRPS series the run read and the others (engine ≥ 1.90.0, issue #561): its warning reads them, so a reproduction needs them.
-		...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {})
+		...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {}),
+		// The rainfall stations' names and details (engine ≥ 1.91.0, issue #553): the forcing reads their MAPs, so a reproduction needs them.
+		...(input.stations ? { stations: input.stations } : {})
 	};
 	// The id is made here, not RETURNING'd: RETURNING needs the new row to pass
 	// a SELECT policy, and a contributor running their application reads no
@@ -804,6 +817,7 @@ interface StoredRun {
 		series?: Record<string, SnapshotSeries>;
 		forecastRainSource?: ForecastRainSource;
 		seriesChoice?: SeriesChoice | null;
+		stations?: RainStationInputs | null;
 	};
 }
 interface StoredRef {
@@ -846,11 +860,14 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 	const source = r.inputs.forecastRainSource;
 	// The CHIRPS series it read and the others (engine ≥ 1.90.0, issue #561), which its warning reads.
 	const choice = r.inputs.seriesChoice;
+	// The rainfall stations' details (engine ≥ 1.91.0, issue #553), which the station forcing reads.
+	const stations = r.inputs.stations;
 	return {
 		settings: r.inputs.settings,
 		model: r.inputs.model,
 		series,
 		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}),
-		...(choice ? { seriesChoice: choice } : {})
+		...(choice ? { seriesChoice: choice } : {}),
+		...(stations ? { stations } : {})
 	};
 }

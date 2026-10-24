@@ -817,6 +817,28 @@ alongside teams, e.g. to give an outside client `viewer` access.
   input, no series of its own). No other key (the engine-only
   `pinnedFactors` included). Anything else is a `400` (the engine's
   `unitRainError`, which the save also applies).
+  `rainStations` (engine ≥ 1.91.0, issue #553, [model.md
+  §2.4i](./model.md); `projects/rainStationSettings.ts`) is `null` or absent
+  (the rain as before) or `{ catchment?, units?, catchmentMapMm?,
+  catchmentMapSource?, sites?, unreliable? }`, replaced whole by a `PATCH`
+  (a unit left out is unassigned). `catchment` (or `null`) and each
+  `units[<land unit id>]` are `{ stationId, scaleToMap?, correctAgainst? }`,
+  station ids being the series ids of the project's rainfall stations
+  (`rain_catchment_mm` with no site). `catchmentMapMm` (1–12 000 mm) needs
+  `catchmentMapSource` (1–600 characters; blank = none); `sites` is
+  `{ <station id>: { unitId } }`, the land unit a station without
+  coordinates stands in; `unreliable` is `{ <station id>: [[from, to], …] }`,
+  inclusive `YYYY-MM-DD` dates, `from` ≤ `to`, at most 200 a station. At
+  most 500 units and 200 stations. The save checks each station is one of
+  this project's stations and each unit one of its land units (a farm with
+  an area), `400` naming which (`rainfall stations: a unit's station is not
+  a rainfall station of this project …`). `pinnedFactors` is the engine's
+  own and refused. A stored setting whose station is later deleted doesn't
+  block other saves; the run warns. With any assignment a run's input
+  carries every station (`stations`, and its record as
+  `rain_station_mm#<id>`) and the CHIRPS at a placed station's cached cell
+  (`rain_chirps_station_mm#<id>`; [data-model.md § Rainfall
+  stations](./data-model.md#rainfall-stations-239_rain_stationssql)).
   `rainSource` (engine ≥ 0.30.0, issue #40 (b)) is a list (0–100, default
   `[]`) of periods whose catchment rain comes from another series, replaced
   whole by a `PATCH`: `{ start, end, series, factors, provenance?,
@@ -1932,7 +1954,7 @@ series (its values stay as they are until the swap);
 `days` how many of the series' days are still the feed's, `time_series.feed_days`, 031, [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)),
 or `null` when no day is a feed's, and always `null` to an API key (below viewer, it can't read `data_feed`; the Data tab's mark);
 `handDays` is the days a person typed in by hand, `[from, to][]` inclusive dates in date order (`time_series.hand_days`, 212), or `null` for none;
-`station` is a rainfall station's details, `{ mapMm, mapSource, lat, lon }` (each `null` when not recorded; 239_rain_stations, issue #553), or `null` when the series is no station: only a `rain_catchment_mm` series with no site has them (a project may have several stations, by name). A run takes the MAP of the station it reads (the first catchment rain series by the name's bytes) and its source as `settings.unitRain.gaugeMapMm` / `gaugeMapSource`, over the settings' own; without a station MAP, the settings' as before. A copy, the project document (`station` per series, only when recorded) and its import carry them;
+`station` is a rainfall station's details, `{ mapMm, mapSource, lat, lon }` (each `null` when not recorded; 239_rain_stations, issue #553), or `null` when the series is no station: only a `rain_catchment_mm` series with no site has them (a project may have several stations, by name). A run takes the MAP of the station it reads (the first catchment rain series by the name's bytes) and its source as `settings.unitRain.gaugeMapMm` / `gaugeMapSource`, over the settings' own; without a station MAP, the settings' as before. A copy, the project document (`station` per series, only when recorded) and its import carry them; when `settings.rainStations` is set the document also gives each station its `id` (a reference within the file, which the setting names; only a station may carry one, each once), and a copy or an import moves the setting onto the new series' ids;
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
 

@@ -35,7 +35,7 @@ export async function replaceSeries(
 	db: Db,
 	projectId: string,
 	body: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; provenance?: SeriesProvenance | null; origin?: SeriesOrigin | null },
-	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown>; feedId?: string } = {}
+	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown>; feedId?: string; reuseId?: string } = {}
 ): Promise<{ meta: SeriesMetaRow; daysChanged: number }> {
 	const existing = await lockSeries(db, projectId, body.kind, body.name);
 	if (!existing) await assertRoomForSeries(db, projectId);
@@ -50,9 +50,12 @@ export async function replaceSeries(
 		// feed_days, 031_feed_days). A data feed's confirmed replacement
 		// (opts.feedId, feeds/ingest.ts) makes it the feed's: every day of the
 		// new record is one it wrote, so its later re-reads still revise them.
-		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, feed_id, feed_days,
+		// A restore of a deleted series (opts.reuseId, history/routes.ts) brings it back under its own id while no series
+		// holds that id, so what names it by id (settings.rainStations, issue #553) finds it again.
+		`INSERT INTO time_series (id, project_id, kind, name, unit, start_date, "values", product, product_version, feed_id, feed_days,
 			source, source_unit, source_unit_factor)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::uuid,
+		 VALUES (COALESCE((SELECT $13::uuid WHERE NOT EXISTS (SELECT 1 FROM time_series WHERE id = $13::uuid)), gen_random_uuid()),
+			$1, $2, $3, $4, $5, $6, $7, $8, $9::uuid,
 			CASE WHEN $9::uuid IS NULL THEN NULL ELSE datemultirange(daterange($5::date, $5::date + cardinality($6::float8[]))) END,
 			$10, $11, $12)
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
@@ -73,7 +76,8 @@ export async function replaceSeries(
 			opts.feedId ?? null,
 			origin?.source ?? null,
 			origin?.unit ?? null,
-			origin?.factor ?? null
+			origin?.factor ?? null,
+			opts.reuseId ?? null
 		]
 	);
 	const meta = rows[0]!;

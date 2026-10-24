@@ -533,6 +533,30 @@ mapMm, mapSource, lat, lon }`):
   both ways, RLS, and the copy, run on a seeded transaction and rolled back)
   and `series/station.db.test.ts` (the API, the run builder, and a restore
   after a delete and after a replace).
+- **Named by its series id.** `settings.rainStations` (engine ≥ 1.91.0,
+  [api.md § Projects](./api.md)) names a station by its `time_series.id`, so
+  everything that makes new ids carries the setting along: a project copy
+  maps each station to the copy's series of the same kind and name; the
+  project document gives each station its `id` when the setting is present,
+  and an import gives the series fresh ids and the setting follows; a
+  restore of a deleted series brings it back under its own id while no
+  series holds it (`series/replace.ts` `reuseId`). A deleted station the
+  setting names doesn't block other saves or the run (the engine warns); a
+  save that names it again is refused.
+- **What a run reads.** Only when `settings.rainStations` assigns a station
+  to the catchment or a unit (`runs/stationInput.ts`): every station's
+  record under `rain_station_mm#<series id>` and its name, MAP, source and
+  place in `ModelInput.stations` (`isCatchmentGauge` on the one read as
+  `rain_catchment_mm`), and, for a station an assignment reads that has
+  coordinates, the CHIRPS of the 0.05° cell holding it from the shared cell
+  cache (208) as `rain_chirps_station_mm#<series id>`, in the product of the
+  feed of the first unit it corrects (else the catchment's feed, else
+  `rnl`). Nothing fetches a station's cell on its own: the cache holds it
+  when a feed of any project covers it (a boundary or unit feed); without
+  it the engine pairs the station against the CHIRPS of the unit it stands
+  in (`rainStations.sites`), else refuses the pairing. These inputs have no
+  `run_input_series.series_id` (their key is no stored kind). Tested by
+  `runs/stations.db.test.ts`.
 
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
@@ -615,7 +639,12 @@ unit also holds `seriesChoice` (engine ≥ 1.90.0, issue #561, `runs/execute.ts`
 (`unitChirps`, by node id), the name of the one it read and the others'
 names with their first and last day with a value. Only a run warning reads it; a
 reproduction, a scenario run on the run and an evidence pack's re-run carry
-it, so they warn alike. The compare "what changed" list (engine `diffInputs`, see
+it, so they warn alike. A run under `settings.rainStations` (engine ≥ 1.91.0,
+issue #553) holds `stations`, the input's `ModelInput.stations` (each
+station's name, MAP and source, place, and `isCatchmentGauge`): the station
+forcing reads the MAPs, so a reproduction, a scenario run, an uncertainty
+member and an evidence pack's re-run carry it, and "what changed" lists a
+station's MAP or place changing. The compare "what changed" list (engine `diffInputs`, see
 [run-comparison.md](./run-comparison.md)) sees a series being extended or
 trimmed, and values edited within the same dates when both runs carry a hash.
 The same hash could later drive an "inputs changed since this run" flag.
