@@ -12,6 +12,7 @@ import {
 	exclusionKey,
 	EXCLUSIONS_MAX,
 	EWR_CHARGE_SOURCES,
+	EWR_SPLIT_METHODS,
 	EWR_NATURAL_SOURCES,
 	EWR_RULE_COMPONENTS,
 	EWR_RULE_POINTS_MAX,
@@ -1062,6 +1063,8 @@ export const SettingsPatch = z
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
 		apanMm: monthlyNonNeg,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
+		// How the EWR is split between the units (engine ≥ 1.94.0, issue #553): the flow share or each unit's natural MAR.
+		ewrSplit: z.enum(EWR_SPLIT_METHODS),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
 		runoffModel: z.enum(RUNOFF_MODELS, { error: 'the legacy runoff model was removed in engine 1.0.0: GR4J is the only runoff model' }),

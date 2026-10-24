@@ -82,6 +82,8 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
+		// Engine ≥ 1.94.0 (issue #553): only on a run that asked for the natural MAR, so older reports and the default read as before.
+		...(s.ewrSplit === 'naturalMar' ? [['EWR split between units', ewrSplitText(s)] as [string, string]] : []),
 		// Engine ≥ 1.77.0; the Reserve table it reads, engine ≥ 1.90.0 (issue #552). Only on a run that had one, so older reports read as before.
 		...(s.ewrDailySource ? [['Daily EWR at the outlet', describeEwrDailySource(s.ewrDailySource)] as [string, string]] : []),
 		// Monthly factors (engine ≥ 0.35.0, WP-3.5) are listed with the monthly rows; engine ≥ 1.49.0 adds where
@@ -93,6 +95,13 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		]
 	);
 	return rows;
+}
+
+/** How the EWR was split between the units under settings.ewrSplit 'naturalMar' (engine ≥ 1.94.0), in words. */
+function ewrSplitText(s: RunSettings): string {
+	if (s.runoffModel === 'gr4j' && s.unitRain?.mode === 'perUnit')
+		return 'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review';
+	return 'the flow share: natural MAR was asked for, but GR4J ran once on the catchment rain, so each unit’s natural MAR share is its flow share';
 }
 
 /** Monthly settings in water-year order (Oct … Sep). */

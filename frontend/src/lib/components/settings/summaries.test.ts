@@ -75,6 +75,12 @@ describe('settingsSummaries', () => {
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 
+	it('names an EWR split other than the flow share in the Flow share summary (issue #553)', () => {
+		expect(settingsSummaries(base({ ewrSplit: 'flowShare' }))['set-share']).toBe('By catchment area');
+		expect(settingsSummaries(base({ ewrSplit: 'naturalMar', unitRain: { mode: 'perUnit' } }))['set-share']).toBe('By catchment area · the EWR split by each unit’s natural MAR');
+		expect(settingsSummaries(base({ ewrSplit: 'naturalMar' }))['set-share']).toBe('By catchment area · the EWR split by natural MAR (the flow share under Fragmentation)');
+	});
+
 	it('names rain for each unit in the Flow calibration summary only while it is on (issue #482)', () => {
 		expect(settingsSummaries(base())['set-flow']).not.toContain('rain for each unit');
 		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-flow']).not.toContain('rain for each unit');

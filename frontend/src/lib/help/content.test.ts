@@ -55,7 +55,7 @@ const TRANSFER: Record<keyof Transfer, true> = {
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
 	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
-	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, avgGroundwaterToDamM3Day: true, flowShare: true,
+	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, avgGroundwaterToDamM3Day: true, flowShare: true, ewrShare: true,
 	avgRiverAbstractionM3Day: true, damEndM3: true, damAgoM3: true, damLowM3: true, damLowDate: true, damDaysAtMin: true,
 	demandObjects: true, riverTakes: true
 };

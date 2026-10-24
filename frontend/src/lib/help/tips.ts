@@ -1460,6 +1460,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.ewrChargeSource', 'run.ewr_charge_shortfall']
 	},
 	{
+		id: 'ewr-split',
+		term: 'Split the EWR between units by',
+		short: 'Each unit’s EWR share: its flow share (default) or its natural MAR ÷ the units’ total, which differs only with rain for each unit.',
+		units: 'fraction 0–1 (shown as %)',
+		category: 'ewr',
+		fields: ['settings.ewrSplit', 'summary.ewrShare']
+	},
+	{
 		id: 'ewr-daily-source',
 		term: 'The daily EWR at the outlet',
 		short: 'Where the outlet’s daily EWR comes from: the pragmatic EWR, the DRM TAB file, or the DRM percentile tables, scaled to the model.',

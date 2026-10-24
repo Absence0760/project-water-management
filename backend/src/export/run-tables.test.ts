@@ -82,9 +82,9 @@ describe('summary sheet', () => {
 		const farmHeader = lines.findIndex((l) => l.startsWith('Farm,'));
 		expect(lines[farmHeader]).toContain('Average crop water requirement (m³/day),Average abstraction demand (m³/day)');
 		expect(lines[farmHeader]).toContain('Demand supplied (%)');
-		// The fixture is a run before engine 0.27.0: no flow share, so that cell is empty.
-		expect(lines[farmHeader]).toMatch(/^Farm,Flow share \(%\),Average crop water requirement/);
-		expect(lines[farmHeader + 1]).toBe('"Farm, upper",,90,100,80,20,80,-5,3');
+		// The fixture is a run before engine 0.27.0: no flow share or EWR share, so those cells are empty.
+		expect(lines[farmHeader]).toMatch(/^Farm,Flow share \(%\),EWR share \(%\),Average crop water requirement/);
+		expect(lines[farmHeader + 1]).toBe('"Farm, upper",,,90,100,80,20,80,-5,3');
 		expect(lines).toContain('Mean natural flow (m³/day),1000');
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
@@ -95,6 +95,27 @@ describe('summary sheet', () => {
 		// double-mass check, plausibility checks, calibration, WR2012 check, column guide, warnings)
 		expect(lines.filter((l) => l === '').length).toBe(20);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day charged),Days charged for the EWR');
+	});
+
+	it('writes each farm’s EWR share beside its flow share (engine ≥ 1.94.0), an older run’s as its flow share, and the split when it isn’t the flow share', () => {
+		const farm = summary.farms[0]!;
+		const rowOf = (s: RunSummary) => {
+			const lines = [...summaryCsvLines(meta, s)];
+			return { lines, row: lines[lines.findIndex((l) => l.startsWith('Farm,')) + 1] };
+		};
+		// A run before 1.94.0: the flow share split the EWR.
+		expect(rowOf({ ...summary, farms: [{ ...farm, flowShare: 0.25 }] }).row).toBe('"Farm, upper",25,25,90,100,80,20,80,-5,3');
+		const mar = rowOf({
+			...summary,
+			farms: [{ ...farm, flowShare: 0.25, ewrShare: 0.4 }],
+			ewrSplit: { method: 'naturalMar', applied: 'naturalMar', period: { start: '2000-10-01', end: '2005-09-30', waterYears: 5 } }
+		});
+		expect(mar.row).toBe('"Farm, upper",25,40,90,100,80,20,80,-5,3');
+		expect(mar.lines).toContain('EWR split between units by,each unit’s natural MAR,2000-10-01 – 2005-09-30 (5 complete water years)');
+		const frag = rowOf({ ...summary, farms: [{ ...farm, flowShare: 0.25, ewrShare: 0.25 }], ewrSplit: { method: 'naturalMar', applied: 'flowShare', why: 'catchmentRain' } });
+		expect(frag.lines).toContain('EWR split between units by,the flow share,the flow share: GR4J ran once on the catchment rain');
+		// The default writes no line.
+		expect(rowOf({ ...summary, ewrSplit: { method: 'flowShare', applied: 'flowShare' } }).lines.some((l) => l.startsWith('EWR split'))).toBe(false);
 	});
 
 	it('writes the rainfall stations block (engine ≥ 1.91.0, issue #553) only when the run had it: each area, then each pairing', () => {
@@ -314,7 +335,7 @@ describe('summary sheet', () => {
 		s.farms[0]!.fractionSupplied = 0.07;
 		s.catchment.ewrFractionDaysNotMet = 1 / 3;
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",,90,100,80,20,7,-5,3');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",,,90,100,80,20,7,-5,3');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),33.3333333333');
 	});
 
@@ -322,9 +343,9 @@ describe('summary sheet', () => {
 		const s = structuredClone(summary);
 		s.farms[0]!.flowShare = 0.07;
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",7,90,100,80,20,80,-5,3');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",7,7,90,100,80,20,80,-5,3');
 		s.farms[0]!.flowShare = 0;
-		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",0,90,100,80,20,80,-5,3');
+		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",0,0,90,100,80,20,80,-5,3');
 	});
 
 	it('keeps fields the engine adds later and says when calibration is missing', () => {

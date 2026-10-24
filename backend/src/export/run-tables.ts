@@ -2,6 +2,7 @@
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
 import {
 	CROPS_TAKE_KEY,
+	EWR_SPLIT_LABEL,
 	USER_PRIORITY_LABEL,
 	USER_RESTRICTION_NOTE,
 	demandPctNote,
@@ -165,11 +166,13 @@ export interface SummaryMeta {
  */
 const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).toPrecision(12)) : v);
 /** Fields converted with `pct` (the engine's own key names). */
-const PERCENT_KEYS = new Set(['flowShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
+const PERCENT_KEYS = new Set(['flowShare', 'ewrShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
 
 const FARM_COLUMNS: [key: string, header: string][] = [
-	// Engine ≥ 0.27.0; empty on older runs. The share of both the flow (I) and the EWR (Y).
+	// Engine ≥ 0.27.0; empty on older runs. The share of the flow (I), and of the EWR (Y) unless split otherwise.
 	['flowShare', 'Flow share (%)'],
+	// Engine ≥ 1.94.0 (settings.ewrSplit, issue #553): the share of the EWR (Y) as applied; an older run's is its flow share.
+	['ewrShare', 'EWR share (%)'],
 	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
 	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
@@ -1130,6 +1133,18 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield csvRow(['Farm summary']);
+	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553): only when a split other than the flow share was asked for.
+	const split = summary.ewrSplit;
+	if (split && split.method !== 'flowShare')
+		yield csvRow([
+			'EWR split between units by',
+			EWR_SPLIT_LABEL[split.applied],
+			split.period
+				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water years` : 'the whole run: no complete water year'})`
+				: split.why === 'catchmentRain'
+					? 'the flow share: GR4J ran once on the catchment rain'
+					: 'the flow share: no unit made natural runoff'
+		]);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
 	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);
 	const extra = [...new Set(farms.flatMap((f) => Object.keys(f)))].filter(
@@ -1150,7 +1165,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		const id = String(f.nodeId);
 		yield csvRow([
 			String(f.name ?? ''),
-			...FARM_COLUMNS.map(([k]) => scalar(PERCENT_KEYS.has(k) ? pct(f[k]) : f[k]) ?? null),
+			...FARM_COLUMNS.map(([k]) => {
+				// A run before engine 1.94.0 split the EWR by the flow share.
+				const v = k === 'ewrShare' ? (f.ewrShare ?? f.flowShare) : f[k];
+				return scalar(PERCENT_KEYS.has(k) ? pct(v) : v) ?? null;
+			}),
 			...(capacity ? [capacity[id] ?? null] : []),
 			...(endCapacity ? [endCapacity[id] ?? capacity![id] ?? null] : []),
 			...extra.map((k) => scalar(f[k]) ?? null)

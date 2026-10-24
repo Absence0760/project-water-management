@@ -29,6 +29,8 @@
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	// Rain for each unit (settings.unitRain, issue #482): out of the tab's chunk, for the same reason; its areal body its own.
 	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
+	// Split the EWR between units by (settings.ewrSplit, issue #553): out of the tab's chunk, for the same reason.
+	const loadEwrSplit = () => loadSections().then((m) => ({ default: m.EwrSplitFields }));
 	const loadArealRain = () => import('./ArealRainBody.svelte');
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
@@ -813,7 +815,12 @@
 		{#if s.unitRain?.mode === 'perUnit'}
 			<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
 			<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
-				Each unit makes its own runoff; this now splits only the EWR and the land cover’s low-flow threshold between units, not the flow. See
+				{#if s.ewrSplit === 'naturalMar'}
+					<!-- The EWR split by each unit's natural MAR (issue #553 round 4): the share then splits neither the flow nor the EWR. -->
+					Each unit makes its own runoff and the EWR is split by each unit’s natural MAR (below); this now splits only the land cover’s low-flow threshold between units. See
+				{:else}
+					Each unit makes its own runoff; this now splits only the EWR and the land cover’s low-flow threshold between units, not the flow. See
+				{/if}
 				<a href="#set-unit-rain">Rain for each unit</a>.
 			</p>
 		{:else}
@@ -853,6 +860,13 @@
 				</fieldset>
 			{/if}
 		</div>
+		<!-- Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553): the flow share above or each unit's natural MAR. -->
+		<Lazy load={loadEwrSplit}>
+			{#snippet children(EwrSplitFields)}
+				<EwrSplitFields value={s.ewrSplit} perUnit={s.unitRain?.mode === 'perUnit'} {readonly} onchange={(v) => (s.ewrSplit = v)} />
+			{/snippet}
+		</Lazy>
+		<FieldHistoryLine field="settings:ewrSplit" />
 	</section>
 
 	<!-- Drought restrictions (engine ≥ 1.54.0, WP-3.8) ---------------------------------------->
