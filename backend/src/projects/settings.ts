@@ -41,6 +41,7 @@ import {
 	UNIT_RAIN_MODES,
 	unitRainError,
 	unitRainFingerprintError,
+	catchmentStationFingerprintError,
 	AREAL_RAIN_FACTOR_MIN,
 	AREAL_RAIN_METHODS,
 	resolveFitRecord,
@@ -997,6 +998,14 @@ export const FitRecord = z
 					.superRefine((v, ctx) => {
 						const err = unitRainFingerprintError(v);
 						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
+					})
+					.optional(),
+				// Engine ≥ 1.91.0 (issue #553): the catchment's rainfall station, recorded only with one. Optional, as above.
+				catchmentStation: z
+					.unknown()
+					.superRefine((v, ctx) => {
+						const err = catchmentStationFingerprintError(v);
+						if (err) ctx.addIssue({ code: 'custom', message: `catchment station fingerprint: ${err}` });
 					})
 					.optional()
 			})

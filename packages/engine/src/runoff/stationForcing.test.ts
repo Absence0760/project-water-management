@@ -18,6 +18,10 @@ import { catchmentMapOf, stationAreaDays, stationRatio, STATION_DAY_SOURCE } fro
 import { checkedStationRecord } from './stationRecord';
 import { pairingFactorOn } from './stationPairing';
 import { Hasher } from '../warmstart/plain';
+import { calibrate } from '../calibrate/calibrate';
+import { fitRecordCaveats, fitRecordFromReport, fitRecordStatus } from '../calibrate/provenance';
+import { catchmentStationFingerprint, catchmentStationFingerprintError } from './stationFingerprint';
+import { unitRainFingerprintChanged, unitRainFingerprintOfSummary } from './unitRainFingerprint';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
 const START = '2015-01-01';
@@ -360,4 +364,61 @@ describe('the station paths stay bit-identical (golden)', () => {
 			if (process.env.GOLDEN_PRINT) console.log(name, JSON.stringify(got));
 			expect(got).toEqual(EXPECTED[name]);
 		});
+});
+
+describe('fit provenance', () => {
+	const ctxOf = (x: ModelInput) => ({ settings: settingsOf(x), validate: false, validationRecord: null, engineVersion: 'test', fittedAt: '2026-10-23T00:00:00Z' });
+	const plain = catchment();
+	const station = catchment({ rainStations: { catchment: { stationId: 'S' }, sites: SITES } });
+	const plainRecord = fitRecordFromReport(calibrate(plain, { budget: 10, seed: 1 }), ctxOf(plain));
+	const stationRecord = fitRecordFromReport(calibrate(station, { budget: 10, seed: 1 }), ctxOf(station));
+	const now = (x: ModelInput) => ({ catchmentStation: catchmentStationFingerprint(runModel(x).summary.stations) });
+
+	it('a fit records the catchment’s station, its MAP, ratio and pairing factors; one without a station records none', () => {
+		expect(plainRecord.forcing!.catchmentStation).toBeUndefined();
+		const fp = stationRecord.forcing!.catchmentStation!;
+		expect(fp).toMatchObject({ stationId: 'S', scaleToMap: true, correctAgainst: 'S' });
+		expect(fp.factors).toEqual(runModel(station).summary.stations!.pairings[0]!.months.map((m) => m.factor));
+		expect(catchmentStationFingerprintError(JSON.parse(JSON.stringify(fp)))).toBeNull();
+		expect(catchmentStationFingerprintError({ ...fp, factors: [1] })).toMatch(/12 numbers/);
+		expect(fitRecordStatus(settingsOf(station), stationRecord, now(station)).catchmentStationChanged).toBeUndefined();
+		expect(fitRecordStatus(settingsOf(station), stationRecord, now(station)).forcingChanged).toBe(false);
+	});
+
+	it('assigning a station since a fit is its own reason, not a CHIRPS factor drift (settings alone, and with a run)', () => {
+		for (const n of [{}, now(station)]) {
+			const st = fitRecordStatus(settingsOf(station), plainRecord, n);
+			expect(st.catchmentStationChanged).toBe(true);
+			expect(st.forcingChanged).toBe(true);
+			expect(st.chirpsFactorsChanged).toBe(false);
+			expect(fitRecordCaveats(st).some((c) => c.startsWith('The catchment’s rainfall station has changed'))).toBe(true);
+		}
+	});
+
+	it('removing it since a fit, or its pairing factors drifting, reads the same', () => {
+		expect(fitRecordStatus(settingsOf(plain), stationRecord, now(plain)).catchmentStationChanged).toBe(true);
+		const drifted = structuredClone(stationRecord);
+		drifted.forcing!.catchmentStation!.factors = drifted.forcing!.catchmentStation!.factors!.map((k, m) => (m === 6 ? k * 1.05 : k));
+		expect(fitRecordStatus(settingsOf(station), drifted, now(station)).catchmentStationChanged).toBe(true);
+		// Within 2 %: the same forcing.
+		const close = structuredClone(stationRecord);
+		close.forcing!.catchmentStation!.factors = close.forcing!.catchmentStation!.factors!.map((k) => k * 1.01);
+		expect(fitRecordStatus(settingsOf(station), close, now(station)).catchmentStationChanged).toBeUndefined();
+		// Settings alone (no run) can't see a drift, only an assignment change.
+		expect(fitRecordStatus(settingsOf(station), drifted).catchmentStationChanged).toBeUndefined();
+		const other = catchment({ rainStations: { catchment: { stationId: 'S', scaleToMap: false }, sites: SITES } });
+		expect(fitRecordStatus(settingsOf(other), stationRecord).catchmentStationChanged).toBe(true);
+	});
+
+	it('a station unit’s pairing drift is caught from a run’s summary.stations', () => {
+		const x = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' } }, sites: SITES } });
+		const out = runModel(x);
+		const fit = unitRainFingerprintOfSummary(out.summary.unitRain, out.summary.stations)!;
+		expect(fit.units.find((u) => u.nodeId === 'A')).toMatchObject({ rule: 'station', stationCorrectAgainst: 'S' });
+		const drifted = structuredClone(fit);
+		const a = drifted.units.find((u) => u.nodeId === 'A')!;
+		a.stationFactors = a.stationFactors!.map((k, m) => (m === 0 ? k * 1.1 : k));
+		expect(unitRainFingerprintChanged(drifted, fit)).toBe(true);
+		expect(unitRainFingerprintChanged(fit, unitRainFingerprintOfSummary(runModel(x).summary.unitRain, runModel(x).summary.stations))).toBe(false);
+	});
 });

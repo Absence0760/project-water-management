@@ -36,6 +36,8 @@ import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
+import { rainStationSummary } from '../runoff/stationForcing';
+import { catchmentStationFingerprint, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
@@ -261,6 +263,8 @@ export interface CalibrationReport {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing the fit ran under (engine ≥ 1.78.0, docs/model.md §2.4h); absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
+	/** The catchment's rainfall station the fit's rain read (engine ≥ 1.91.0, docs/model.md §2.4i); absent without one. */
+	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
 	 * The per-day quality flags of the fitted record and its rain (engine ≥
 	 * 1.22.0, calibration research CR-18/22, ./dayFlags.ts): days by class,
@@ -361,6 +365,8 @@ export interface CalibrationProblem {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing (engine ≥ 1.78.0, settings.unitRain `perUnit`), for fit provenance; absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
+	/** The catchment's rainfall station (engine ≥ 1.91.0, §2.4i), for fit provenance; absent without one. */
+	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
 	 * The run's daily rain over the whole run as calibration reads it (catchment,
 	 * else bias-corrected CHIRPS, else forecast, × the areal factor; null =
@@ -556,6 +562,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
 		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : {}),
+		...(run.stations?.catchment ? { catchmentStation: catchmentStationFingerprint(rainStationSummary(run.stations.context, run.stations.catchment, [], run.stations.plan?.map ?? null)) } : {}),
 		rain: arealRainOn(usedRain, areal, month),
 		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
 		simulate: simulator(Math.max(idx[idx.length - 1]!, lastAll) + 1),
@@ -1063,6 +1070,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
 		...(pb.unitRain ? { unitRain: pb.unitRain } : {}),
+		...(pb.catchmentStation ? { catchmentStation: pb.catchmentStation } : {}),
 		dayQuality: pb.dayQuality ?? null,
 		fitAllDays,
 		evaluations,

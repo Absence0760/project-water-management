@@ -2934,9 +2934,22 @@ catchment gauge, so results change and a refit is due.
 and its corrected CHIRPS days under `days.unitChirps`. No areal correction
 (the station sets the level). A unit without a station keeps its §2.4h
 chain, which reads "the catchment's rain" as the catchment forcing, the
-station's when the catchment has one. The fit fingerprint records the
-station unit's correcting station and its 12 factors, so a factor moving by
-more than 2 % is "Forcing changed since fit".
+station's when the catchment has one.
+
+**Fit provenance** (§2.10b). A fit records the catchment's station
+(`FitRecord.forcing.catchmentStation`, `CatchmentStationFingerprint`: the
+station, `scaleToMap`, the correcting station, the catchment MAP, the ratio
+and the pairing's 12 factors, null when refused; absent without one) and,
+in the per-unit fingerprint, each station unit's correcting station and 12
+factors. A station assigned to or removed from the catchment, another
+station, scaling or correcting station (read from the settings alone), or,
+against a run, the ratio, the catchment MAP or a factor moving by more than
+2 % is its own "Forcing changed since fit" reason
+(`FitRecordStatus.catchmentStationChanged`, its own caveat), never a CHIRPS
+factor drift. A screen with a run builds the comparison with
+`runForcingOfSummary(summary)` (the per-unit fingerprint with
+`summary.stations`, and the catchment station's), so a pairing's drift
+isn't missed.
 
 **What the run records.** `summary.stations` (`RainStationSummary`, only
 when some area has a station): `pairings` (each station used, station-id

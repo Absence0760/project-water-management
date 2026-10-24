@@ -952,6 +952,15 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, extra: 1 } })).toBe(false); // no other keys
 	});
 
+	it('accepts an optional catchment station fingerprint inside forcing (engine ≥ 1.91.0, issue #553), and refuses a malformed one', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		const catchmentStation = { stationId: 's1', scaleToMap: true, correctAgainst: 's1', catchmentMapMm: 683.3, ratio: 1.22, factors: new Array(12).fill(1.1) };
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation: { ...catchmentStation, factors: null } } })).toBe(true); // a refused pairing
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation: { ...catchmentStation, factors: [1] } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation: { ...catchmentStation, extra: 1 } } })).toBe(false);
+	});
+
 	it('accepts an optional unitRain fingerprint inside forcing (engine ≥ 1.78.0, issue #482), and refuses a malformed one', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
 		const unit = { nodeId: 'u1', rule: 'gaugeMap', rainKey: 'rain_catchment_mm', factor: 1.2, factorSource: 'gaugeMap', gaugeMapFactor: 1.2, chirpsSource: 'map', chirpsFactor: 1.9 };

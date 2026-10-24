@@ -14,7 +14,9 @@ import { toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar
 import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
-import { unitRainFingerprintChanged, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
+import { unitRainFingerprintChanged, unitRainFingerprintOfSummary, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
+import { catchmentStationFingerprint, catchmentStationFingerprintChanged, catchmentStationSettingChanged, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
+import type { RunSummary } from '../project';
 import type { RunoffModelId } from '../runoff/types';
 import { sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from '../seriesProvenance';
 import type { FlowGapFillSettings, FlowGapFillSpec } from '../flowGapFill';
@@ -270,6 +272,14 @@ export interface FitRecord {
 		 * a change, and so is any unit's rule, record or factor changing.
 		 */
 		unitRain?: UnitRainFingerprint | null;
+		/**
+		 * The catchment's rainfall station (engine ≥ 1.91.0, settings.rainStations
+		 * .catchment, docs/model.md §2.4i): its station, scaling, correcting
+		 * station, the catchment MAP and ratio, and the pairing's factors.
+		 * Recorded only with one: absent = the catchment rain without a station,
+		 * as every fit before it ran, so assigning one since is a change.
+		 */
+		catchmentStation?: CatchmentStationFingerprint | null;
 	};
 	/**
 	 * Where the fitted record (flowKind) came from and the unit it was given
@@ -465,7 +475,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {}),
 			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {}),
 			rainChecks: rainChecksOf(ctx.settings.dataQuality),
-			...(r.unitRain ? { unitRain: structuredClone(r.unitRain) } : {})
+			...(r.unitRain ? { unitRain: structuredClone(r.unitRain) } : {}),
+			...(r.catchmentStation ? { catchmentStation: structuredClone(r.catchmentStation) } : {})
 		},
 		...(ctx.observedOrigin !== undefined ? { observedOrigin: ctx.observedOrigin ? { ...ctx.observedOrigin } : null } : {}),
 		// A gauge's record is never gap filled (the specs are the outlet records').
@@ -583,6 +594,14 @@ export interface FitRecordStatus {
 	 * say. Also sets `forcingChanged`.
 	 */
 	chirpsFactorsChanged: boolean;
+	/**
+	 * The catchment's rainfall station (engine ≥ 1.91.0, docs/model.md §2.4i)
+	 * was assigned or removed since the fit, another station, scaling or
+	 * correcting station chosen, or (when the caller gives a run's) its ratio,
+	 * catchment MAP or pairing factors moved by more than 2 %. Its own caveat;
+	 * also sets `forcingChanged`. Absent when not.
+	 */
+	catchmentStationChanged?: true;
 	/**
 	 * The fitted record now comes from another source, or was given in
 	 * another unit, than when it was fitted (107_series_source.sql, engine ≥
@@ -800,11 +819,30 @@ export interface FitForcingNow {
 	/** The fitted record's source and unit now (null = not recorded); omit when not known. */
 	observedOrigin?: SeriesOrigin | null;
 	/**
+	 * The catchment's rainfall station a run applied (catchmentStationFingerprint
+	 * of its summary.stations; null = none); omit when not known (the Settings
+	 * form: then only settings.rainStations.catchment itself is compared).
+	 */
+	catchmentStation?: CatchmentStationFingerprint | null;
+	/**
 	 * The per-unit forcing a run applied (unitRainFingerprintOfSummary of its
 	 * summary.unitRain; null = catchment rain); omit when not known (the
 	 * Settings form, which has no run: then only settings.unitRain itself is compared).
 	 */
 	unitRain?: UnitRainFingerprint | null;
+}
+
+/**
+ * What a run's summary says of the rain forcing now, for fitRecordStatus's
+ * `now`: the per-unit forcing (with each station unit's pairing factors,
+ * from summary.stations) and the catchment's station. The one way a screen
+ * with a run should build them, so a pairing's drift is never missed. A
+ * summary from before engine 1.91.0 has no stations: no catchment station,
+ * as it ran. Nothing without a summary (the Settings form).
+ */
+export function runForcingOfSummary(summary: Pick<RunSummary, 'unitRain' | 'stations'> | null | undefined): Pick<FitForcingNow, 'unitRain' | 'catchmentStation'> {
+	if (!summary) return {};
+	return { unitRain: unitRainFingerprintOfSummary(summary.unitRain, summary.stations), catchmentStation: catchmentStationFingerprint(summary.stations) };
 }
 
 /** A record's gap-fill spec, copied; null when it isn't filled (or isn't a record a spec fills). */
@@ -858,6 +896,12 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		apanThen !== undefined &&
 		now.apanDaily !== undefined &&
 		!sameApanDaily(apanThen, now.apanDaily);
+	// The catchment's rainfall station (engine ≥ 1.91.0, §2.4i): assigned or removed since the fit, another station or
+	// scaling, or (when a run says what it is now) its ratio, MAP or pairing factors moving. Only on a forcing recorded.
+	const stationThen = record.forcing?.catchmentStation ?? null;
+	const catchmentStationChanged =
+		record.forcing !== undefined &&
+		(catchmentStationSettingChanged(settings.rainStations, stationThen) || (now.catchmentStation !== undefined && catchmentStationFingerprintChanged(stationThen, now.catchmentStation)));
 	// The factors drifted with the settings and product the same: a change of those is said already (issue #51).
 	const factorsThen = record.forcing?.chirpsFactors;
 	const chirpsFactorsChanged =
@@ -866,6 +910,8 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		!chirpsSourceChanged &&
 		!forcing?.chirpsBiasCorrection &&
 		!forcing?.chirpsFitPeriod &&
+		// A station put on or taken off the catchment empties or fills the factor sets: that change is said on its own.
+		!catchmentStationChanged &&
 		chirpsFactorsDrifted(factorsThen, now.chirpsFactors);
 	// The units' rules, records and factors, when a run says what they are now (engine ≥ 1.78.0).
 	const unitRainChanged = !forcing?.unitRain && now.unitRain !== undefined && record.forcing !== undefined && unitRainFingerprintChanged(record.forcing.unitRain ?? null, now.unitRain);
@@ -882,7 +928,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
 		siteChanged: (settings.calibrationSiteNodeId ?? null) !== (record.siteNodeId ?? null),
+		...(catchmentStationChanged ? { catchmentStationChanged: true as const } : {}),
 		forcingChanged:
+			catchmentStationChanged ||
 			chirpsSourceChanged ||
 			apanDailyChanged ||
 			chirpsFactorsChanged ||
@@ -976,7 +1024,12 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 		out.push('Automated calibration picked this fit under draft rules, not yet signed off by the hydrologist, so it is not evidence until they are (Settings → Fit the parameters → Calibration rules).');
 	}
 	if (status.rulesChanged) out.push('The calibration rules have changed since automated calibration picked this fit: run it again under the current rules.');
-	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged) {
+	if (status.catchmentStationChanged) {
+		out.push(
+			'The catchment’s rainfall station has changed since the fit: one was assigned or removed (Settings → Flow generation), another station or scaling chosen, or its MAP ratio or the monthly factors that correct the catchment CHIRPS on its gaps moved by more than 2 %. That changes the rain GR4J runs on: refit before relying on the parameters.'
+		);
+	}
+	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged) {
 		out.push(
 			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods, zero-rain run handling or the rain each unit runs on (runoff from each unit’s own rain, its records, MAPs and factors) has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS, rain-source and per-unit rain settings change the rain fed to it, so refit before relying on them.'
 		);
