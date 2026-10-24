@@ -6906,22 +6906,41 @@ settings.ewrDailySource = null (absent: the pragmatic EWR, every run before 1.77
   tableMarMm3:   number | null,   // the tables' natural MAR, Mm³/a (the TAB header's "MAR =")
   tableAreaKm2:  number | null,   // the tables' catchment area, km²
   tabM3s:        number[12] | null,          // TAB "Total Flows, Maint.", m³/s, Oct … Sep
-  naturalPctM3s: number[12][10] | null,      // RUL "Natural Flow Percentile Table", m³/s
-  reservePctM3s: number[12][10] | null       // RUL "Total Reserve Flow Percentile Table", m³/s
+  naturalPctM3s: number[12][10] | null,      // RUL "Natural Duration curves", m³/s
+  reservePctM3s: number[12][10] | null,      // RUL total Reserve flows (the first, unheaded table, with high flows), m³/s
+  lowFlowPctM3s?: number[12][10] | null,     // RUL "Reserve Flows without High Flows", m³/s (engine ≥ 1.90.0; absent = null)
+  reserveTable?: 'total' | 'withoutHighFlows' // the Reserve table 'percentile' reads (engine ≥ 1.90.0; absent = 'total')
 }
 ```
+
+**The Reserve table (engine ≥ 1.90.0, issue #552).** A DRM `.rul` holds three
+percentile tables: the total Reserve flows (its first table, with high flows),
+the Reserve flows without high flows, and the natural duration curves. Loading
+a `.rul` on Settings fills all three (`lowFlowPctM3s` is null when the file has
+no such block, so no table from an older file is left beside the new ones).
+Under `percentile` the user picks which Reserve table is the daily
+requirement: the total Reserve flows (`'total'`, the default and every earlier
+run) or the Reserve flows without high flows (`'withoutHighFlows'`). The chosen
+table is read exactly as the total always was (below), × s; the other is kept
+and shown × s beside it as the EWR at the outlet (the drift logger), and drives
+nothing. Both new fields are optional, so a source saved before 1.90.0, and one
+that reads the total with or without the third table, runs bit-identically
+(guarded by a test); the version moves because a source can now read a table
+it couldn't. `'withoutHighFlows'` needs `lowFlowPctM3s` and not
+`reservePctM3s`; `'total'` the reverse.
 
 The tables' columns are the DRM's ten points, 0.1 0.2 … 0.9 0.99
 (`EWR_PERCENTILE_POINTS`); a natural row falls with the point. Values are
 ≥ 0 and at most 10⁶ m³/s; the MAR and area are above 0. A method needs its
-tables (`tab`: `tabM3s`; `percentile`: both grids) and its scaling's divisor
+tables (`tab`: `tabM3s`; `percentile`: the natural grid and the chosen Reserve grid) and its scaling's divisor
 (`mar`: `tableMarMm3`; `area`: `tableAreaKm2`); the settings API refuses a
 source that lacks them (`ewrDailySourceIssues`, shared by the API, the form
 and the engine), and the engine runs the pragmatic EWR with a warning if one
 reaches it anyway. `method: 'pragmatic'` keeps tables half entered, so
 switching back loses nothing; it runs exactly as `null`. A run comparison
-lists a change of source, scaling, divisor or table values only when the
-source isn't the pragmatic EWR on both sides.
+lists a change of source, Reserve table, scaling, divisor or table values only
+when the source isn't the pragmatic EWR on both sides; the values of a Reserve
+table the newer source doesn't read aren't listed.
 
 **The three methods**, on day t of water-year month m (Oct = 0):
 
@@ -6931,7 +6950,8 @@ source isn't the pragmatic EWR on both sides.
 3. **Percentile tables**: with q = the day's natural flow at the outlet in m³/s
    (m³/day ÷ 86 400; a negative one reads as 0) and the month's rows scaled,
    N'_k = N_k × s (each natural row's running minimum first, since a duration
-   curve can't rise; the run notes a row that rises) and R'_k = R_k × s:
+   curve can't rise; the run notes a row that rises) and R'_k = R_k × s, R
+   the chosen Reserve table (the total, or the flows without high flows):
 
    ```
    q ≥ N'_1:   R = R'_1                                        (at or above the wettest point)
@@ -6991,9 +7011,13 @@ its own EWR (and s): the ensemble's EWR line (`ewrByMonthM3Day`) is member
 
 **What a run says.** With a source other than the pragmatic EWR the run
 carries `summary.catchment.outletEwr` = `{ method, scaling, scale,
-modelMarMm3 + tableMarMm3 | modelAreaKm2 + tableAreaKm2, pinned? }`, the
-`ewr` series is labelled `EWR from the DRM TAB file (scaled)` or `… DRM
-percentile tables (scaled)`, and a warning names the source and s, e.g. *the
+modelMarMm3 + tableMarMm3 | modelAreaKm2 + tableAreaKm2, pinned?,
+reserveTable? }` (`reserveTable: 'withoutHighFlows'` only when that table was
+read, so a run on the total carries what it always did; a resumed run names
+its own table, beside the capture run's s), the `ewr` series is labelled
+`EWR from the DRM TAB file (scaled)`, `… DRM percentile tables (scaled)` or
+`… DRM percentile tables, without high flows (scaled)`, and a warning names
+the source and s, e.g. *the
 daily EWR at the outlet comes from the DRM TAB file (total flows,
 maintenance), scaled by s = 0.4123 (the model's natural MAR at the outlet,
 31.6 Mm³/a, ÷ the table's 92.4 Mm³/a)*. s = 0 (no natural flow, or no area)

@@ -4,7 +4,7 @@
 // rebuilt and hashed. Every figure comes from the runs' own stored summaries
 // and the stored ensembles, by the same definitions the compare page and the
 // ensemble use (G14): nothing here re-runs the model.
-import { resolveEwrDailySource } from '../reserve/dailySource';
+import { chosenReserveGrid, resolveEwrDailySource } from '../reserve/dailySource';
 import {
 	allocationStatus,
 	DEFAULT_ALLOCATION_TOLERANCE,
@@ -1929,7 +1929,7 @@ function evidenceFlags(
 	const daily = resolveEwrDailySource(settings?.ewrDailySource, []);
 	const pragmatic = settings?.ewrPragmaticM3PerDay;
 	const zeroDaily = daily
-		? (daily.method === 'tab' ? daily.tabM3s! : daily.reservePctM3s!.flat()).every((v) => v === 0)
+		? (daily.method === 'tab' ? daily.tabM3s! : chosenReserveGrid(daily)!.flat()).every((v) => v === 0)
 		: Array.isArray(pragmatic) && pragmatic.length > 0 && pragmatic.every((v) => v === 0);
 	// A run whose daily EWR scale factor came out 0 (no natural flow, or no area) asked for 0 every day too (§2.9f).
 	const zeroScale = b.summary.catchment?.outletEwr?.scale === 0;
