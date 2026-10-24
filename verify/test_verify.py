@@ -390,6 +390,31 @@ MUTANTS = [
     ("the reference fit keeps the catchment gauge's accumulation windows (engine 1.85.0)", 'out_of_fit = rain["fit_window_days"]', "out_of_fit = set()"),
     ("the reference fit keeps a unit gauge's accumulation windows (engine 1.85.0)", 'out_of_fit = prep["fit_window_days"] if for_fit else set()', "out_of_fit = set()"),
     ("the reference fit reads the gauge as stored (item 1c)", "gv = gauge(o)", "gv = stored.get(o)"),
+    # Rainfall stations (§2.4i, engine 1.91.0, issue #553).
+    ("a station's MAP ratio isn't clamped", "        f = area_map / st_map\n        r = min(FACTOR_MAX, max(FACTOR_MIN, f))", "        f = area_map / st_map\n        r = f"),
+    ("scaleToMap false still scales by the MAP ratio", 'if a.get("scaleToMap") is False:', "if False:"),
+    ("a station's MAP ratio is 1 whatever the MAPs", "        f = area_map / st_map\n", "        f = 1.0\n"),
+    ("an area's gap days take its corrected CHIRPS × the MAP ratio too", 'return w * f[cal_month(o)], "chirps"', 'return w * f[cal_month(o)] * r, "chirps"'),
+    ("an area's gap days take its raw CHIRPS (no pairing factors)", 'return w * f[cal_month(o)], "chirps"', 'return w, "chirps"'),
+    ("a unit's station gaps beyond its CHIRPS are dry, not the catchment forcing", "                    v = p_used[i]\n", "                    v = 0.0\n"),
+    ("correctAgainst is ignored (the area's own station corrects it)", 'f = self.pairing(a.get("correctAgainst") or sid)', "f = self.pairing(sid)"),
+    ("a pairing takes 4 complete years in common (5)", "STATION_PAIRING_MIN_YEARS = 5", "STATION_PAIRING_MIN_YEARS = 4"),
+    ("a pairing needs 6 complete years in common (5)", "STATION_PAIRING_MIN_YEARS = 5", "STATION_PAIRING_MIN_YEARS = 6"),
+    ("a pairing keeps the station's accumulation windows", "sv, cv = rec.fit_value(o), h.get(o)", "sv, cv = rec.value(o), h.get(o)"),
+    ("a pairing month needs no 50 mm of CHIRPS", "        if n[m] >= FIT_MIN_DAYS and c[m] >= FIT_MIN_MM:\n            f = g[m] / c[m]", "        if n[m] >= FIT_MIN_DAYS:\n            f = g[m] / c[m]"),
+    ("a pairing factor isn't clamped", "            cf = min(FACTOR_MAX, max(FACTOR_MIN, f))", "            cf = f"),
+    ("a station without a cell or a site is paired with the catchment's CHIRPS", "if site else None\n", 'if site else series.get("rain_chirps_mm")\n'),
+    ("a station's unreliable periods are read", "return v if src == 0 and o not in self.unreliable else None", "return v if src == 0 else None"),
+    ("a station's record is read as stored, without the checks", '        v, src = self.prep["pick"](o)\n        return v if src == 0 and o not in self.unreliable', "        v, src = self.stored.get(o), 0\n        return v if src == 0 and o not in self.unreliable"),
+    ("a station's negative value is a reading", '"values": [None if not valid(v) else v for v in raw["values"]]}', '"values": list(raw["values"])}'),
+    ("every station gets the catchment gauge's dated lists", '        if not meta.get("isCatchmentGauge"):\n            zr.update(', "        if False:\n            zr.update("),
+    ("the catchment gauge's station doesn't get its dated lists", '        if not meta.get("isCatchmentGauge"):\n            zr.update(', "        if True:\n            zr.update("),
+    ("the catchment gauge's station is checked against the CHIRPS at it", 'chirps = series.get("rain_chirps_mm") if meta.get("isCatchmentGauge") else', "chirps = at if meta.get(\"isCatchmentGauge\") and at else"),
+    ("the catchment's station is ignored (the stored gauge runs)", '    if not a or st.record(a["stationId"]) is None:\n        return rain', "    if True:\n        return rain"),
+    ("the catchment MAP is the units' plain mean, not area-weighted", ('num += f["mapMm"] * f["areaKm2"]', 'num += f["mapMm"]'), ('den += f["areaKm2"]', "den += 1")),
+    ("catchmentMapMm is ignored", "if isinstance(m, (int, float)) and MAP_MM_MIN <= m <= MAP_MM_MAX:", "if False:"),
+    ("the run window follows the station's stored record, not its checked days", "if rec.value(o) is not None] if rec.stored else []", "if rec.stored.get(o) is not None] if rec.stored else []"),
+    ("the run window counts the catchment CHIRPS a refused pairing doesn't correct", "if (h and f is not None) else []", "if h else []"),
 ]
 
 
@@ -443,6 +468,8 @@ class CrossCheck(unittest.TestCase):
             # Issue #500's decisions.
             "unit_k_from_map", "unit_chirps_unusable", "unit_forecast_levelled", "unit_forecast_shape_ratio", "unit_gauge_set_aside",
             "unit_gauge_windows", "unit_ref_days_checked_out", "unit_ref_window_days_out",
+            # Rainfall stations (§2.4i).
+            *model.STATION_DIAG,
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 

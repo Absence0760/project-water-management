@@ -23,7 +23,10 @@ limitBound and scaled rows), demand factors (§2.3 item 4a), demand objects
 and the basic-needs floor (§2.7f), river off-takes and canal seepage (§2.6a),
 other water users (§2.7c), supply rules and the river pump (§2.7e), dam
 survey curves and releases (§2.7a) and hands-off flows with River to dam by
-month (§2.7h). `unsupported(input_doc)` lists what an input uses beyond that.
+month (§2.7h). Per-unit rain (§2.4h) and, engine 1.91.0, rainfall stations
+(§2.4i: the catchment's and each land unit's station × the MAP ratio, the
+area's CHIRPS × the station pairing's factors on the gaps). `unsupported(input_doc)`
+lists what an input uses beyond that.
 """
 
 from __future__ import annotations
@@ -691,6 +694,9 @@ def unsupported(doc: dict) -> list[str]:
     # The uncertainty ensemble's engine-only pinned reference factors (§2.4h): outside verify/ with the ensemble.
     if ((s.get("unitRain") or {}).get("reference") or {}).get("pinnedFactors"):
         out.append("pinned reference factors (unitRain.reference.pinnedFactors)")
+    # Pinned station pairing factors are engine-only too (a snapshot, an outlook member, the ensemble), §2.4i.
+    if (s.get("rainStations") or {}).get("pinnedFactors"):
+        out.append("pinned station pairing factors (rainStations.pinnedFactors)")
     return sorted(set(out))
 
 
@@ -895,7 +901,7 @@ def reference_factors(ur: dict, settings: dict, series: dict, rain: dict, units:
     return out, ref_unit
 
 
-def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: list[int], finals: list[float], sources: list, p_used: list[float], units: list[dict], forecast_source, diag: dict) -> dict[str, list[float]]:
+def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: list[int], finals: list[float], sources: list, p_used: list[float], units: list[dict], forecast_source, diag: dict, st=None) -> dict[str, list[float]]:
     """Each land unit's daily rain (§2.4h): its rule, chosen from the records
     the input holds, then the rule's chain day by day; 0 mm where no link has
     a value, and never below 0 (GR4J's rain)."""
@@ -905,6 +911,9 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
     c_raw = series.get("rain_catchment_mm")
     # "Catchment gauge rain": any reading at all in the stored catchment series (a negative one is a reading, §2.4b).
     has_catchment = bool(c_raw) and any(v is not None and math.isfinite(v) for v in c_raw["values"])
+    if "has_catchment" in rain:
+        # §2.4i: under the catchment's station, "the catchment's rain" is the station's.
+        has_catchment = rain["has_catchment"]
     fac = rain["factors"]
     has_bias = any(f is not None for f in fac[1:])
     ref = reference_factors(ur, settings, series, rain, units, diag)
@@ -913,6 +922,24 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
     out: dict[str, list[float]] = {}
     for u in units:
         uid = u["id"]
+        a = st.rs["units"].get(uid) if st is not None else None
+        if a is not None and st.record(a["stationId"]) is not None:
+            # §2.4i: the unit's station × r, its CHIRPS × the pairing's factors, then the catchment forcing × 1.
+            diag["station_units"] += 1
+            area = st.area_rain(a, u.get("mapMm"), Series(series.get(f"rain_chirps_mm@{uid}")))
+            vals = []
+            for i, o in enumerate(days):
+                v, kind = area(o)
+                if kind == "station":
+                    diag["station_unit_days"] += 1
+                elif kind == "chirps":
+                    diag["station_unit_chirps_days"] += 1
+                else:
+                    diag["station_unit_fallback_days"] += 1
+                    v = p_used[i]
+                vals.append(0.0 if v is None or v < 0 else v)
+            out[uid] = vals
+            continue
         own_g = Series(series.get(f"rain_catchment_mm@{uid}"))
         own_c = Series(series.get(f"rain_chirps_mm@{uid}"))
         has_g = any(valid(v) for v in own_g.values)
@@ -987,11 +1014,268 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
     return out
 
 
+# --------------------------------------------------------------------------
+# Rainfall stations (docs/model.md §2.4i, engine >= 1.91.0, issue #553)
+# --------------------------------------------------------------------------
+
+# Complete calendar years a station and the CHIRPS at it need in common for a pairing.
+STATION_PAIRING_MIN_YEARS = 5
+MAP_MM_MIN, MAP_MM_MAX = 1, 12000
+# Coverage counts (verify/diff.py): pairings fitted and refused, months fitted and clamped, ratios clamped,
+# unscaled and without a MAP, the catchment's station and its MAP from the units, station days, CHIRPS days and
+# fallback days on units, station days the checks set aside and accumulation windows.
+STATION_DIAG = (
+    "station_pairings_fitted", "station_pairings_refused", "station_months_fitted", "station_factors_clamped",
+    "station_ratio_clamped", "station_unscaled", "station_ratio_missing_map", "station_catchment",
+    "station_catchment_map_from_units", "station_catchment_map_missing", "station_unit_days", "station_unit_chirps_days",
+    "station_unit_fallback_days", "station_checks_set_aside", "station_windows", "station_units",
+)
+
+
+def station_key(sid: str) -> str:
+    return f"rain_station_mm#{sid}"
+
+
+def station_settings(settings: dict) -> dict:
+    """settings.rainStations with the assignments §2.4i drops (no station id) left out."""
+    rs = settings.get("rainStations") or {}
+    if not isinstance(rs, dict):
+        return {}
+    out = dict(rs)
+    c = rs.get("catchment")
+    out["catchment"] = c if isinstance(c, dict) and c.get("stationId") else None
+    out["units"] = {k: v for k, v in (rs.get("units") or {}).items() if isinstance(v, dict) and v.get("stationId")}
+    return out
+
+
+def station_chirps_at(sid: str, rs: dict, series: dict) -> dict | None:
+    """The CHIRPS at a station: its own cell, else the CHIRPS of the unit it stands in (`sites`); None without either."""
+    cell = series.get(f"rain_chirps_station_mm#{sid}")
+    if cell:
+        return cell
+    site = (rs.get("sites") or {}).get(sid)
+    return (series.get(f"rain_chirps_mm@{site.get('unitId')}") or None) if site else None
+
+
+class StationRecord:
+    """A station's checked record (§2.4i): the stored record, negative
+    values blanked (a no-data code in every record), through the
+    catchment's §2.4c zero runs and §2.4d accumulations with its modes,
+    fill threshold and data-quality limits but not its dated lists (the
+    station that is the catchment gauge gets those too), compared against
+    the CHIRPS at the station, else the catchment's; then the user's
+    unreliable periods blanked. `value(o)` is the checked reading or None
+    (a gap); `fit_value(o)` also None on the days §2.4b's fit leaves out for
+    accumulations."""
+
+    def __init__(self, sid: str, settings: dict, series: dict, rs: dict, stations: dict, diag: dict):
+        raw = series[station_key(sid)]
+        g = {"startDate": raw["startDate"], "values": [None if not valid(v) else v for v in raw["values"]]}
+        meta = stations.get(sid) or {}
+        zr = dict(settings["zeroRainRuns"])
+        if not meta.get("isCatchmentGauge"):
+            zr.update(missing=[], keepDry=[], keepReadings=[], addAccumulations=[])
+        at = station_chirps_at(sid, rs, series)
+        # The catchment gauge's checks are the catchment's, against the catchment's CHIRPS (as today's run checks
+        # that record); any other station's against the CHIRPS at it, else the catchment's (random seed 4).
+        chirps = series.get("rain_chirps_mm") if meta.get("isCatchmentGauge") else (at or series.get("rain_chirps_mm"))
+        self.prep = prepare_rain({**settings, "zeroRainRuns": zr}, {"rain_catchment_mm": g, "rain_chirps_mm": chirps})
+        self.unreliable = days_of({"start": a, "end": b} for a, b in ((rs.get("unreliable") or {}).get(sid) or []))
+        self.stored = Series(g)
+        self.at = Series(at) if at else None
+        diag["station_checks_set_aside"] += self.prep["diag"]["zero_run_days_set_aside"]
+        diag["station_windows"] += self.prep["diag"]["accumulation_windows"]
+
+    def value(self, o: int):
+        v, src = self.prep["pick"](o)
+        return v if src == 0 and o not in self.unreliable else None
+
+    def fit_value(self, o: int):
+        return None if o in self.prep["fit_window_days"] else self.value(o)
+
+
+def fit_station_pairing(rec: StationRecord, diag: dict):
+    """§2.4i's pairing: per calendar month Σ station ÷ Σ CHIRPS at the
+    station over the days both have a reading (the checked record,
+    accumulation windows left out), over their whole records; 1 without 90
+    shared days and 50 mm of CHIRPS; clamped to 0.25–4. None (refused) with
+    no CHIRPS at the station or fewer than 5 complete calendar years in
+    common (every day of the year a reading in both)."""
+    h = rec.at
+    if h is None or not h or not rec.stored:
+        diag["station_pairings_refused"] += 1
+        return None
+    lo, hi = max(rec.stored.start, h.start), min(rec.stored.end, h.end)
+    n = [0] * 13
+    g = [0.0] * 13
+    c = [0.0] * 13
+    per_year: dict[int, int] = {}
+    for o in range(lo, hi + 1):
+        sv, cv = rec.fit_value(o), h.get(o)
+        if valid(sv) and valid(cv):
+            m = cal_month(o)
+            n[m] += 1
+            g[m] += sv
+            c[m] += cv
+            y = _dt.date.fromordinal(o).year
+            per_year[y] = per_year.get(y, 0) + 1
+    complete = sum(1 for y, k in per_year.items() if k == (_dt.date(y, 12, 31) - _dt.date(y, 1, 1)).days + 1)
+    if complete < STATION_PAIRING_MIN_YEARS:
+        diag["station_pairings_refused"] += 1
+        return None
+    out = [None]
+    for m in range(1, 13):
+        if n[m] >= FIT_MIN_DAYS and c[m] >= FIT_MIN_MM:
+            f = g[m] / c[m]
+            cf = min(FACTOR_MAX, max(FACTOR_MIN, f))
+            diag["station_months_fitted"] += 1
+            if cf != f:
+                diag["station_factors_clamped"] += 1
+            out.append(cf)
+        else:
+            out.append(1.0)
+    diag["station_pairings_fitted"] += 1
+    return out
+
+
+class Stations:
+    """The run's stations: each checked record and pairing, built once."""
+
+    def __init__(self, settings: dict, series: dict, stations: dict, diag: dict):
+        self.rs = station_settings(settings)
+        self.settings, self.series, self.stations, self.diag = settings, series, stations or {}, diag
+        self._rec: dict[str, StationRecord | None] = {}
+        self._pair: dict[str, list | None] = {}
+
+    def record(self, sid: str):
+        if sid not in self._rec:
+            self._rec[sid] = StationRecord(sid, self.settings, self.series, self.rs, self.stations, self.diag) if self.series.get(station_key(sid)) else None
+        return self._rec[sid]
+
+    def pairing(self, sid: str):
+        if sid not in self._pair:
+            rec = self.record(sid)
+            if rec is None:
+                self.diag["station_pairings_refused"] += 1
+            self._pair[sid] = None if rec is None else fit_station_pairing(rec, self.diag)
+        return self._pair[sid]
+
+    def ratio(self, a: dict, sid: str, area_map) -> float:
+        if a.get("scaleToMap") is False:
+            self.diag["station_unscaled"] += 1
+            return 1.0
+        st_map = (self.stations.get(sid) or {}).get("mapMm")
+        if area_map is None or st_map is None:
+            self.diag["station_ratio_missing_map"] += 1
+            return 1.0
+        f = area_map / st_map
+        r = min(FACTOR_MAX, max(FACTOR_MIN, f))
+        if r != f:
+            self.diag["station_ratio_clamped"] += 1
+        return r
+
+    def area_rain(self, a: dict, area_map, chirps: Series):
+        """The area's rain by §2.4i's rule, o → (value, kind) with kind
+        'station' or 'chirps', or (None, None) for the area's next fallback."""
+        sid = a["stationId"]
+        rec = self.record(sid)
+        r = self.ratio(a, sid, area_map)
+        f = self.pairing(a.get("correctAgainst") or sid)
+
+        def rain(o):
+            v = rec.value(o)
+            if v is not None:
+                return v * r, "station"
+            if f is not None:
+                w = chirps.get(o)
+                if valid(w):
+                    return w * f[cal_month(o)], "chirps"
+            return None, None
+
+        return rain
+
+
+def catchment_map(rs: dict, farms: list[dict], diag: dict):
+    """The catchment MAP for its station's ratio (§2.4i): catchmentMapMm when
+    usable, else the land units' area-weighted mean MAP (None when any land
+    unit has none)."""
+    m = rs.get("catchmentMapMm")
+    if isinstance(m, (int, float)) and MAP_MM_MIN <= m <= MAP_MM_MAX:
+        return float(m)
+    land = sorted((f for f in farms if (f.get("areaKm2") or 0) > 0), key=lambda x: x["id"])
+    if not land or any(f.get("mapMm") is None for f in land):
+        diag["station_catchment_map_missing"] += 1
+        return None
+    num = den = 0.0
+    for f in land:
+        num += f["mapMm"] * f["areaKm2"]
+        den += f["areaKm2"]
+    diag["station_catchment_map_from_units"] += 1
+    return num / den
+
+
+def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
+    """The catchment rain under its station (§2.4i): station × r on the
+    station's days, the catchment CHIRPS × the pairing's factors on the
+    others, then the forecast. The stored catchment gauge isn't read, and
+    there are no §2.4b factors. The run window follows the station's record
+    in the gauge's place. Returns a `rain` dict as prepare_rain's, or the
+    one given when the catchment has no station (or its station no record)."""
+    a = st.rs.get("catchment")
+    if not a or st.record(a["stationId"]) is None:
+        return rain
+    series = st.series
+    h = Series(series.get("rain_chirps_mm"))
+    fc = Series(series.get("rain_forecast_mm"))
+    area = st.area_rain(a, catchment_map(st.rs, farms, st.diag), h)
+    rec = st.record(a["stationId"])
+
+    def pick(o):
+        v, kind = area(o)
+        if kind == "station":
+            return v, 0
+        if kind == "chirps":
+            return v, 2
+        v = fc.get(o)
+        if v is not None:
+            return v, 4
+        return None, None
+
+    # The run window: the first (last) day the catchment rain has a value: a station day, a corrected
+    # CHIRPS day (none when the pairing is refused) or a forecast day.
+    cands = []
+    st_days = [o for o in range(rec.stored.start, rec.stored.end + 1) if rec.value(o) is not None] if rec.stored else []
+    f = st.pairing(a.get("correctAgainst") or a["stationId"])
+    ch_days = [o for o in range(h.start, h.end + 1) if valid(h.get(o))] if (h and f is not None) else []
+    fc_days = [fc.start + i for i, v in enumerate(fc.values) if v is not None and math.isfinite(v)]
+    for d_ in (st_days, ch_days, fc_days):
+        if d_:
+            cands.append((d_[0], d_[-1]))
+    has = bool(st_days)
+    st.diag["station_catchment"] += 1
+    return {
+        "diag": {k: 0 for k in rain["diag"]},
+        "pick": pick,
+        "factors": [None] * 13,
+        "fit_factors": [None] * 13,
+        "fit_window_days": set(),
+        "first": min(x for x, _ in cands) if cands else None,
+        "last": max(y for _, y in cands) if cands else None,
+        "chirps": h,
+        "bias_on": False,
+        "has_catchment": has,
+    }
+
+
 def run(doc: dict) -> dict:
     settings = merge_settings(doc.get("settings") or {})
     model = doc["model"]
     series = doc.get("series") or {}
     rain = prepare_rain(settings, series)
+    # §2.4i: the catchment's station replaces its rain; the stations' records and pairings, built once.
+    sdiag = {k: 0 for k in STATION_DIAG}
+    st = Stations(settings, series, doc.get("stations"), sdiag)
+    rain = station_catchment_rain(st, rain, [x for x in model["nodes"] if x["kind"] == "farm"])
 
     start = iso_to_ord(settings["simulationStart"]) if settings.get("simulationStart") else rain["first"]
     end = iso_to_ord(settings["simulationEnd"]) if settings.get("simulationEnd") else rain["last"]
@@ -1019,6 +1303,8 @@ def run(doc: dict) -> dict:
                 # a unit gauge's days set aside and accumulation windows (6), reference fit days the checks left out (1c).
                 unit_k_from_map=0, unit_chirps_unusable=0, unit_forecast_levelled=0, unit_forecast_shape_ratio=0, unit_gauge_set_aside=0,
                 unit_gauge_windows=0, unit_ref_days_checked_out=0, unit_ref_window_days_out=0)
+    diag.update(sdiag)
+    st.diag = diag
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})
@@ -1103,7 +1389,7 @@ def run(doc: dict) -> dict:
             exch.append(r["exchange"])
         rain_gr4j = p_used
     else:
-        forcing = unit_rain_forcing(ur, settings, series, rain, days, finals, sources, p_used, units, doc.get("forecastRainSource"), diag)
+        forcing = unit_rain_forcing(ur, settings, series, rain, days, finals, sources, p_used, units, doc.get("forecastRainSource"), diag, st)
         local = {}
         acc = {k: [0.0] * n for k in ("rain", "aet", "prod", "rout", "uh", "exch")}
         natural = [0.0] * n
