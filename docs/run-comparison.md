@@ -119,7 +119,7 @@ Above the detail, for the baseline and every what-if at once
   other dates, or on another engine version, gets a line saying part of its
   change comes from that.
 - **Days below the reserve, each year** (`ReserveYearsChart.svelte`, a chunk
-  shared with River & reserve): grouped bars per water year (Oct–Sep) for every run, from each
+  shared with EWR): grouped bars per water year (Oct–Sep) for every run, from each
   run's stored `ewr_shortfall` series (through the Runs tab's series cache)
   by the engine's `reserveDaysByWaterYear` (`views/reserveYears.ts`). That
   is the test behind `summary.catchment.ewrDaysNotMet` (a day whose

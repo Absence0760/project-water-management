@@ -90,7 +90,7 @@ describe('stripWords (issue #177: "reserve" named two different tests)', () => {
 		expect(w.list).toBe('Days below the pragmatic EWR by month');
 		for (const words of [w.heading, w.list, stripWhat(ms, w), monthText(oct!, w.test)]) expect(words).not.toMatch(/reserve\b(?! rules)/i);
 		expect(stripWhat(ms, w)).toBe(
-			'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2021 – Jan 2022. The Reserve rules card above judges whole months by the rule table instead.'
+			'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2021 – Jan 2022. The Reserve rules met tile judges whole months by the rule table instead.'
 		);
 		expect(monthText(oct!, w.test)).toBe('Oct 2021: below the pragmatic EWR on 1 of 31 days (green)');
 		const [met] = recentMonths(grid(2021, 1, () => 0, (_r, m) => m === 0));

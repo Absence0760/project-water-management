@@ -27,7 +27,8 @@ export const TAB_GROUP = {
 	series: 'core',
 	settings: 'inputs',
 	runs: 'core',
-	// One run's river against its EWR (issue #17, option A): the Runs tab's River & Reserve group, moved.
+	// One run's river against its EWR (issue #17, option A): the Runs tab's River & Reserve group, moved; named EWR
+	// since issue #558 (?tab=ewr and ?tab=reserve open it too), the id kept so saved section choices still hold.
 	river: 'core',
 	// Each unit's supply against its demand, curtailment and assurance of supply for a run (issue #17 option A · Outcomes): anyone who can read runs.
 	supply: 'core',
@@ -63,7 +64,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	series: 'Data',
 	settings: 'Settings & calibration',
 	runs: 'Runs & results',
-	river: 'River & reserve',
+	river: 'EWR',
 	supply: 'Hydrological units',
 	dams: 'Dams',
 	compare: 'Compare runs',

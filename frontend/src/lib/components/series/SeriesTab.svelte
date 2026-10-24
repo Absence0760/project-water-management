@@ -507,7 +507,7 @@
 	);
 	// A link to a panel (`?tab=series#data-checks`, the menu's own links reloaded): the tab is a lazy
 	// chunk and most panels wait for the series, so land on it once drawn and hold it while the page
-	// settles (as Settings, Runs and River & reserve do), with focus on its heading.
+	// settles (as Settings, Runs and EWR do), with focus on its heading.
 	onMount(() => {
 		let hash = page.url.hash.slice(1);
 		// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in

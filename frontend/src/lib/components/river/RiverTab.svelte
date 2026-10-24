@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { dailyEwrName } from '$lib/components/ewr/notMet';
-	// River & reserve (issue #17, option A · Outcomes): one run's river, for
-	// the run the URL names (`run=`) or else the newest (river.ts pickRiverRun).
-	// The page header and run picker, two KPI tiles (river.ts riverKpis), then
+	// EWR (River & reserve until issue #558, which made it the one EWR results
+	// page; issue #17, option A · Outcomes): one run's river, for the run the
+	// URL names (`run=`) or else the newest (river.ts pickRiverRun). The page
+	// header and run picker, two KPI tiles (river.ts riverKpis: the EWR
+	// headline card, the Summary's until issue #558, merged with the EWR not met
+	// tile, and the mean outflow), the days below the reserve in each of the
+	// last twelve months (ReserveStrip, the Summary's until issue #558), then
 	// the flow against the EWR (the app's one flow vs reserve chart, with its
-	// 30 days / 1 year / All switch and the days below the reserve shaded; the
-	// Summary shows the days below by month and links here, issue #162) beside
+	// 30 days / 1 year / All switch and the days below the reserve shaded) beside
 	// the days below the reserve per water year. The page flows in the window's
 	// one scroll (nothing is sized to the window, and no card or table scrolls
 	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
@@ -40,7 +43,8 @@
 	import OutcomeMatrixPanel from '$lib/components/outcomes/OutcomeMatrixPanel.svelte';
 	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
-	import { riverAnchor } from './links';
+	import { RIVER_STRIP_ANCHOR, riverAnchor } from './links';
+	import ReserveStrip from './ReserveStrip.svelte';
 	import { EWR_MONTHS_HEADING, ewrRuleText, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups } from './river';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
@@ -251,7 +255,7 @@
 	     under its first screen. From 80rem of page a side index on the left, every group named over
 	     its links; narrower a bar under the header, its links evenly spaced (issue #162, #462). The
 	     page's own widths are read from river-body, the column beside the index. -->
-	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="River sections" railFrom={RIVER_RAIL_FROM_REM}>
+	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="EWR sections" railFrom={RIVER_RAIL_FROM_REM}>
 	<div class="river-body">
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
@@ -264,9 +268,13 @@
 		</p>
 	{/if}
 	<div class="first" bind:clientWidth={firstW}>
-		<div class="top">
+		<!-- The tiles, and beside them where the column is wide enough (under them on a phone) the days below the
+		     reserve in each of the last twelve months: the Summary's strip until issue #558. Side by side, so the
+		     flow chart and the next panel's top still show in a 1440 × 960 window. -->
+		<div class="top" class:with-strip={!!shown}>
+		<div class="tiles">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>
-			<dl class="stats kpis" aria-label="River and reserve figures">
+			<dl class="stats kpis" aria-label="EWR figures">
 				{#each kpis as k (k.id)}
 					<div class="stat" class:flagged={k.flagged} data-kpi={k.id}>
 						<dt>{k.term}{#if k.help} <HelpTip key={k.help} />{/if}</dt>
@@ -286,6 +294,16 @@
 				</p>
 			{/if}
 		</LoadState>
+		</div>
+		{#if shown}
+			<ReserveStrip
+				id={RIVER_STRIP_ANCHOR}
+				compliance={shown.run.summary.ewrCompliance}
+				forecastFrom={shown.run.summary.forecast?.from ?? null}
+				{ruleTable}
+				daily={shown.run.summary.catchment.outletEwr}
+			/>
+		{/if}
 		</div>
 		{#if shown}
 			<div class="cols">
@@ -421,6 +439,15 @@
 		gap: 1rem;
 		margin-bottom: 1rem;
 	}
+	.top {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+		align-items: start;
+	}
+	.tiles {
+		min-width: 0;
+	}
 	/* Two tiles side by side, at every width. */
 	.kpis {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -494,6 +521,11 @@
 	/* From the column's width, not the window's: beside the side index the column is 13rem narrower (issue #462).
 	   56rem is the column a 1100 px window gave it before (240 px sidebar, gutters, scrollbar). */
 	@container river-body (min-width: 56rem) {
+		/* The tiles beside the reserve strip, half the column each, both as tall as the taller. */
+		.top.with-strip {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			align-items: stretch;
+		}
 		.cols {
 			grid-template-columns: minmax(0, 1fr) clamp(300px, 36cqi, 400px);
 			align-items: stretch;

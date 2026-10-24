@@ -37,3 +37,25 @@ export async function pickImport(page: Page, which: 'Import workbook' | 'Import 
 export async function outcomesReady(page: Page) {
 	await expect(page.locator('main.projects-page')).toHaveAttribute('data-outcomes-ready', 'true');
 }
+
+/** A catchment's irrigation figure from GET /projects/outcomes or the portfolio (issue #558: the list's status). */
+export interface IrrigationFigure {
+	status: 'green' | 'amber' | 'red' | 'unknown';
+	fractionSupplied: number | null;
+	units: number | null;
+	unitsBelow: number | null;
+}
+
+const STATUS = { red: 'Red', amber: 'Amber', green: 'Green' } as const;
+
+/** What the list's status pill says for a known irrigation figure (frontend portfolio.ts irrigationText, short); null when unknown. */
+export function irrigationPill(r: IrrigationFigure): string | null {
+	if (r.status === 'unknown' || r.fractionSupplied === null) return null;
+	return `${STATUS[r.status]}: ${(r.fractionSupplied * 100).toFixed(1)}% supplied`;
+}
+
+/** The line under the pill: "3 of 14 units below 95% over the run", or null when no unit is. */
+export function irrigationUnits(r: IrrigationFigure): string | null {
+	if (r.status === 'unknown' || !r.unitsBelow || !r.units) return null;
+	return `${r.unitsBelow} of ${r.units} ${r.units === 1 ? 'unit' : 'units'} below 95% over the run`;
+}

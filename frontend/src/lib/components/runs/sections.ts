@@ -108,18 +108,18 @@ function wr2012Heading(report: NonNullable<RunSummary['wr2012']>): string {
 
 /**
  * The side index's last groups (issue #462): the panels that moved from here
- * to River & reserve and Hydrological units (issue #17), by the same headings
+ * to EWR and Hydrological units (issue #17), by the same headings
  * those pages give them, linked with the run shown. Only in the rail, which has
  * a line for each: on the bar the run header's links to the two pages do it.
  * The main findings only, so the rail fits a laptop's window: each page's own
  * index lists the rest.
  */
 export function otherPageGroups(runId: string | null): NavGroup[] {
-	const river = (id: string, label: string): NavSection => ({ id: `river-${id}`, label, href: riverHref(runId, id), page: 'River & reserve' });
+	const river = (id: string, label: string): NavSection => ({ id: `river-${id}`, label, href: riverHref(runId, id), page: 'EWR' });
 	const units = (id: string, label: string): NavSection => ({ id: `units-${id}`, label, href: supplyHref(runId, { hash: id }), page: 'Hydrological units' });
 	return [
 		{
-			label: 'On River & reserve',
+			label: 'On EWR',
 			sections: [river('res-reserve', RESERVE_MONTHS_HEADING), river('res-ewr-grid', EWR_MONTHS_HEADING), river('res-water-account', 'Water account')]
 		},
 		{
@@ -134,7 +134,7 @@ export const resultSections = (summary: SectionInput, rail = false): ResultSecti
 
 /**
  * Where a `#res-…` fragment on Runs & results now lives, when it moved: a panel
- * of River & reserve or Hydrological units (the same panel there, keeping the run
+ * of EWR or Hydrological units (the same panel there, keeping the run
  * and the curtailment's reporting window), or the link rows those groups left
  * here for a while (`#res-river`, `#res-units`: the page itself). null for a
  * panel that is still on this page.

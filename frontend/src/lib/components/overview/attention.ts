@@ -3,7 +3,8 @@
 // freshness checks, the model being edited). Each item links to the tab where
 // it is fixed or read. An empty list hides the panel. Hydrological units short
 // of water aren't an item: the Irrigation supplied card above and Supply by
-// hydrological unit beside it already say so (issue #177).
+// hydrological unit beside it already say so (issue #177). Nor is the EWR: its
+// results are the EWR page's, not the Summary's (issue #558).
 import type { ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { farmDrawerHref } from '$lib/components/crops/farmDrawer';

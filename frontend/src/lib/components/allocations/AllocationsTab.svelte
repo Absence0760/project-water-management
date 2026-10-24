@@ -119,7 +119,7 @@
 	});
 	// A link to the comparison band (Settings' Find a setting, `#alloc-band`): the card draws once the
 	// volumes are in, after the browser's own jump found nothing, so land on it then, hold it while the
-	// page settles, and focus its heading (as Settings and River & reserve do for theirs).
+	// page settles, and focus its heading (as Settings and EWR do for theirs).
 	let bandLanded = false;
 	$effect(() => {
 		if (!data || bandLanded) return;

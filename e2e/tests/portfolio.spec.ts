@@ -1,6 +1,7 @@
 // A team's portfolio is the project list filtered to the team (issue #176,
 // docs/ui.md § Project list; WP-2.14 built it as its own page): every catchment
-// of the team with its EWR status in words, where the figures come from and
+// of the team with its status in words (irrigation supplied since issue #558;
+// the team's EWR thresholds judge the team page's EWR status), where the figures come from and
 // how old they are, the restriction and the alerts firing, the rule the
 // statuses were judged by and whose it is; sortable both ways; old
 // `/teams/:id/portfolio` links land on it; a farmer never gets in. Layout at
@@ -13,7 +14,7 @@ import { plantFiringAlert } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { DEMO, DROEVLEI, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { outcomesReady, row } from '../support/projects.ts';
+import { irrigationPill, outcomesReady, row, type IrrigationFigure } from '../support/projects.ts';
 
 const PHONE = { width: 360, height: 740 };
 
@@ -21,6 +22,7 @@ interface Row {
 	id: string;
 	name: string;
 	ewr: { status: 'green' | 'amber' | 'red' | 'unknown'; daysNotMet30: number | null; days30: number | null };
+	irrigation: IrrigationFigure;
 }
 
 /**
@@ -51,7 +53,7 @@ async function arrange(request: APIRequestContext, tag: string, extra = 0) {
 }
 
 const LABEL = { red: 'Red', amber: 'Amber', green: 'Green' } as const;
-/** What the page must say for a known status. */
+/** What the team page's EWR pill says for a known status. */
 const statusText = (r: Row) =>
 	r.ewr.status === 'unknown' ? null : r.ewr.daysNotMet30 ? `${LABEL[r.ewr.status]}: EWR not met ${r.ewr.daysNotMet30} of ${r.ewr.days30} days` : `${LABEL[r.ewr.status]}: EWR met all ${r.ewr.days30} days`;
 
@@ -64,9 +66,9 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	void owner;
 	const a = await arrange(page.request, 'A');
 	const pubRow = a.rows.find((r) => r.id === a.published.id)!;
-	expect(pubRow.ewr.status).not.toBe('unknown');
+	expect(pubRow.irrigation.status).not.toBe('unknown');
 
-	// From the team page: the project list, filtered to the team, worst EWR first.
+	// From the team page: the project list, filtered to the team, worst first.
 	await page.goto(`/teams/${a.team.id}`);
 	await page.getByRole('link', { name: 'Project list', exact: true }).click();
 	await expect(page).toHaveURL(teamUrl(a.team.id));
@@ -77,30 +79,30 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(heads(page)).toHaveCount(3);
 	await expect(page.getByText('Pf personal A')).toHaveCount(0);
 	// The tiles' counts in the header's one line: the statuses, the alert firing, the stale figures.
-	await expect(page.getByTestId('projects-context')).toHaveText(/^\s*3 catchments · EWR, 30 days to 28 Jan 2022: .+ · 1 alert firing · 2 with stale figures\s*$/);
+	await expect(page.getByTestId('projects-context')).toHaveText(/^\s*3 catchments · Irrigation supplied: .+ · 1 alert firing · 2 with stale figures\s*$/);
 
 	// Published: the status in words, the source, the age, the restriction, the alerts, and the units link.
 	const pr = row(page, 'Pf published A');
-	await expect(pr.locator('td.c-ewr')).toContainText(statusText(pubRow)!);
+	await expect(pr.locator('td.c-status')).toContainText(irrigationPill(pubRow.irrigation)!);
 	// The seeded rain ends on 28 Jan 2022: the one age wording, and dates, not "this week" (issue #162).
-	await expect(pr.locator('td.c-ewr')).toContainText(/Published · to 28 Jan 2022 \(\d+ years ago\)/);
+	await expect(pr.locator('td.c-status')).toContainText(/Published · to 28 Jan 2022 \(\d+ years ago\)/);
 	await expect(pr.locator('td.c-dam')).toContainText('Restriction: Advisory · 15 %');
 	await expect(pr.locator('td.c-units')).toContainText(/\d+ of \d+ hydrological units? short in the week to 28 Jan 2022/);
 	await expect(pr.locator('td.c-units')).toContainText(/\d+ in the 30 days to 28 Jan 2022/);
 	await expect(pr.locator('td.c-data')).toContainText(/Rain to 28 Jan 2022 \(\d+ years ago\)/);
 	await expect(pr.locator('td.c-alerts')).toHaveText('1 firing');
-	await expect(page.getByRole('columnheader', { name: /^EWR, 30 days to 28 Jan 2022/ })).toHaveAttribute('aria-sort', 'ascending');
+	await expect(page.getByRole('columnheader', { name: /^Irrigation supplied/ })).toHaveAttribute('aria-sort', 'ascending');
 
-	// Run only: the EWR from the run, units, dams and the restriction honestly not published.
+	// Run only: irrigation from the run; units, dams and the restriction honestly not published.
 	const rr = row(page, 'Pf run only A');
-	await expect(rr.locator('td.c-ewr')).toContainText('Latest run · to 28 Jan 2022');
+	await expect(rr.locator('td.c-status')).toContainText('Latest run · to 28 Jan 2022');
 	await expect(rr.locator('td.c-units')).toHaveText('Not published');
 	await expect(rr.locator('td.c-dam')).toHaveText('Not published');
 	await expect(rr.locator('td.c-alerts')).toHaveText('None');
 
 	// Nothing run: unknown, and why.
 	const er = row(page, 'Pf empty A');
-	await expect(er.locator('td.c-ewr')).toHaveText('Unknown: no run yet');
+	await expect(er.locator('td.c-status')).toHaveText('Unknown: no run yet');
 	await expect(er.locator('td.c-run')).toHaveText('Not run yet');
 	await expect(er.locator('td.c-data')).toContainText('No rain yet');
 
@@ -109,7 +111,7 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(page).toHaveURL(new RegExp(`/projects/${a.published.id}$`));
 });
 
-test('the team filter states which thresholds apply, and judges by the team’s once an admin sets them; a viewer is told who can', async ({ page, owner, signIn }) => {
+test('the team filter states the irrigation rule and which EWR thresholds apply; the team page judges by the team’s once an admin sets them; a viewer is told who can', async ({ page, owner, signIn }) => {
 	void owner;
 	const a = await arrange(page.request, 'T');
 	const pub = a.rows.find((r) => r.id === a.published.id)!;
@@ -120,9 +122,13 @@ test('the team filter states which thresholds apply, and judges by the team’s 
 	await page.goto(`/?owner=team:${a.team.id}`);
 	await outcomesReady(page);
 	const note = page.getByTestId('team-thresholds');
+	// The list's status is irrigation (issue #558), by its own provisional rule; the team's EWR thresholds judge the team page.
+	await expect(note).toContainText('Status is irrigation supplied over the run the figures come from');
+	await expect(note).toContainText('green from 95 % of demand supplied over the run, amber from 80 %, red below, a provisional default that can’t be changed yet.');
 	await expect(note).toContainText('green when it was not met on under 5 % of them, amber under 20 %, red otherwise');
 	await expect(note).toContainText('These are the default thresholds: a provisional default, not yet confirmed by the catchment’s hydrologist.');
-	await expect(row(page, 'Pf published T').locator('td.c-ewr')).toContainText(statusText(pub)!);
+	const listed = row(page, 'Pf published T').locator('td.c-status');
+	await expect(listed).toContainText(irrigationPill(pub.irrigation)!);
 
 	// A team viewer reads the same rule, and who can change it.
 	const viewer = await signIn('Portfolio viewer');
@@ -134,7 +140,7 @@ test('the team filter states which thresholds apply, and judges by the team’s 
 	await expect(viewer.page.getByRole('link', { name: 'Change them on the team page' })).toHaveCount(0);
 	await expect(viewer.page.getByRole('table').getByRole('rowheader')).toHaveCount(3);
 
-	// Thresholds that move the published row where they can: a default green becomes amber
+	// Thresholds that move the published row's EWR status where they can: a default green becomes amber
 	// under a 0 % green, anything short of every day becomes green under 99.9 %; a row that
 	// missed every day is red under any thresholds.
 	const t = d === n ? { green: 1, amber: 2 } : d * 100 < 5 * n ? { green: 0, amber: 100 } : { green: 99.9, amber: 100 };
@@ -151,14 +157,18 @@ test('the team filter states which thresholds apply, and judges by the team’s 
 	const expected = d * 100 < t.green * n ? 'green' : d * 100 < t.amber * n ? 'amber' : 'red';
 	expect(now.ewr.status).toBe(expected);
 	if (d < n) expect(now.ewr.status).not.toBe(pub.ewr.status);
+	// The irrigation status doesn't move with the EWR's thresholds.
+	expect(now.irrigation).toEqual(pub.irrigation);
+	// The team page's EWR status judges by them now.
+	await page.goto(`/teams/${a.team.id}`);
+	await expect(page.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'Pf published T', exact: true }) }).getByText(statusText(now)!)).toBeVisible();
 
-	// The panel links back to the list, which judges by them now (GET /projects/outcomes reads the team's).
-	await panel.getByRole('link', { name: 'project list' }).click();
-	await expect(page).toHaveURL(teamUrl(a.team.id));
+	// The list says the team's thresholds now apply, and its irrigation status is as it was.
+	await page.goto(`/?owner=team:${a.team.id}`);
 	await outcomesReady(page);
 	await expect(note).toContainText(`green when it was not met on under ${String(t.green)} % of them, amber under ${String(t.amber)} %, red otherwise`);
 	await expect(note).toContainText('These are the team’s own thresholds.');
-	await expect(row(page, 'Pf published T').locator('td.c-ewr')).toContainText(statusText(now)!);
+	await expect(listed).toContainText(irrigationPill(pub.irrigation)!);
 });
 
 // The link lands on the table, not the top of Hydrological units (docs/followups.md;
@@ -210,9 +220,10 @@ test('“hydrological units short in the week to …” opens Hydrological units
 test('an old portfolio link lands on the team filter, worst first; headings sort both ways and the sort stays in the address', async ({ page, owner }) => {
 	void owner;
 	const a = await arrange(page.request, 'B');
+	// Worst irrigation supply first (the list's status since issue #558): red, amber, unknown, green; less supplied first within one.
 	const RANK = { red: 0, amber: 1, unknown: 2, green: 3 } as const;
 	const worstFirst = [...a.rows]
-		.sort((x, y) => RANK[x.ewr.status] - RANK[y.ewr.status] || (y.ewr.daysNotMet30 ?? 0) / (y.ewr.days30 || 1) - (x.ewr.daysNotMet30 ?? 0) / (x.ewr.days30 || 1) || x.name.localeCompare(y.name))
+		.sort((x, y) => RANK[x.irrigation.status] - RANK[y.irrigation.status] || (x.irrigation.fractionSupplied ?? 1) - (y.irrigation.fractionSupplied ?? 1) || x.name.localeCompare(y.name))
 		.map((r) => r.name);
 
 	// The old address is replaced, so Back doesn't bounce off it.
@@ -221,8 +232,7 @@ test('an old portfolio link lands on the team filter, worst first; headings sort
 	await expect(page).toHaveURL(teamUrl(a.team.id));
 	await outcomesReady(page);
 	await expect(names(page)).toHaveText(worstFirst);
-	// Every catchment with figures ends on 28 Jan 2022: the heading names it rather than "last 30 days".
-	const statusHead = page.getByRole('columnheader', { name: /^EWR, 30 days to 28 Jan 2022/ });
+	const statusHead = page.getByRole('columnheader', { name: /^Irrigation supplied/ });
 	await expect(statusHead).toHaveAttribute('aria-sort', 'ascending');
 	await expect(page.getByLabel('Sort')).toHaveValue('status');
 
@@ -238,7 +248,7 @@ test('an old portfolio link lands on the team filter, worst first; headings sort
 	// A reload keeps it; the status heading goes back to worst first; the Sort menu starts a key its own way round.
 	await page.reload();
 	await expect(names(page)).toHaveText(['Pf run only B', 'Pf published B', 'Pf empty B']);
-	await page.getByRole('button', { name: /^EWR, 30 days to 28 Jan 2022/ }).click();
+	await page.getByRole('button', { name: /^Irrigation supplied/ }).click();
 	await expect(names(page)).toHaveText(worstFirst);
 	await expect(page).not.toHaveURL(/dir=/);
 	// The Data heading sorts by the figures' age, oldest first, as the portfolio's did; never-run last.
@@ -288,8 +298,8 @@ test('the demo team shows its two examples, not the analyst’s own catchment', 
 	await outcomesReady(page);
 	for (const name of [KLEINBERG, DROEVLEI]) {
 		const r = row(page, name);
-		await expect(r.locator('td.c-ewr')).toContainText(/(Red|Amber|Green): EWR (not met \d+ of 30 days|met all 30 days)|Unknown: /);
-		await expect(r.locator('td.c-ewr')).toContainText('Published');
+		await expect(r.locator('td.c-status')).toContainText(/(Red|Amber|Green): [\d.]+% supplied|Unknown: /);
+		await expect(r.locator('td.c-status')).toContainText('Published');
 	}
 	await expect(page.getByRole('rowheader', { name: SANDSPRUIT })).toHaveCount(0);
 });

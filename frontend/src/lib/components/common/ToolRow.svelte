@@ -1,7 +1,7 @@
 <!--
 	A run-it-yourself tool that hasn't been run, as one row (issue #465): its
 	name with its ⓘ, one line saying what it is for, and its action at the
-	row's end (a Run button, or why it can't run). River & reserve's
+	row's end (a Run button, or why it can't run). The EWR page's
 	uncertainty bands, sensitivity runs, outcome matrix and seasonal outlook
 	each show this until they have a result or the editor opens the form, so
 	four paragraphs and forms don't push the water account down the page.

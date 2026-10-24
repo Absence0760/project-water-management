@@ -1,20 +1,22 @@
 <script lang="ts">
-	// Summary → the newest run's KPI row (issue #17 A1): the Reserve, irrigation
-	// supplied, Dams today and the calibration NSE, each with its change from
-	// the run before (Dams: over the run's last 30 days, and the card opens the
-	// Dams page); overview/latestRun.ts has the rules. The mean simulated outflow
-	// isn't here: it is a tile on River & reserve, with its change.
+	// Summary → the newest run's KPI row (issue #17 A1; irrigation first since
+	// issue #558): Irrigation supplied, the Shortfall, the units curtailed (or
+	// the worst-supplied unit) and Dams today, each with its change from the
+	// run before (Dams: over the run's last 30 days, and the card opens the
+	// Dams page); overview/latestRun.ts has the rules. The EWR's headline card
+	// and the mean simulated outflow are on the EWR page, the calibration NSE
+	// on Runs & results.
 	// Only this section waits for the run's summary; the rest of the tab
 	// renders at once. Which run it is (label, period, engine, age, a link to
 	// it) is the section header's context line (OverviewTab, RunContext).
-	import type { EwrHeadline, Run, RunMeta } from '$lib/api';
+	import type { Run, RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from './attention';
 	import { dataEndOf } from '$lib/format/age';
 	import { localIsoDate } from '$lib/format/number';
-	import { damsEnd, damsHeadline, headlines, historyDays, ranAgo, type DamsState } from './latestRun';
+	import { damsEnd, damsHeadline, historyDays, ranAgo, summaryHeadlines, type DamsState } from './latestRun';
 
 	let {
 		meta,
@@ -26,8 +28,7 @@
 		error,
 		previousError,
 		retry,
-		dams,
-		headline = null
+		dams
 	}: {
 		/** The run shown (from the page's list). */
 		meta: RunMeta;
@@ -45,13 +46,12 @@
 		retry: () => void;
 		/** All dams at the end of the run (their series load after the summary). */
 		dams: DamsState;
-		/** The project's settings.ewrHeadline (issue #444): which test the Reserve card reports; null = automatic. */
-		headline?: EwrHeadline | null;
 	} = $props();
 
-	const all = $derived(run ? headlines(run.summary, historyDays(run), previous?.summary ?? null, headline) : []);
-	// Reserve · Irrigation supplied · Dams today ("Dams on <date>" once the dams' last day is stale) · NSE; the outflow is River & reserve's.
-	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams, dataEndOf(damsEnd(dams, meta), localIsoDate())), ...all.filter((h) => h.id === 'nse')] : []);
+	// Irrigation supplied · Shortfall · Units curtailed · Dams today ("Dams on <date>" once the dams' last day is stale).
+	const cards = $derived(
+		run ? [...summaryHeadlines(run.summary, historyDays(run), previous?.summary ?? null), damsHeadline(dams, dataEndOf(damsEnd(dams, meta), localIsoDate()))] : []
+	);
 	const name = (r: RunMeta) => r.label || 'Untitled run';
 </script>
 

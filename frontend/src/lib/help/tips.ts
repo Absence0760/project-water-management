@@ -173,7 +173,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'needs-attention',
 		term: 'Needs attention',
-		short: 'The catchments in view to look at first, most urgent first: a red EWR, units short, alerts firing, failing feeds or old figures.',
+		short: 'The catchments in view to look at first, most urgent first: red irrigation supply, units short, alerts firing, failing feeds or old figures.',
 		category: 'basics'
 	},
 	{

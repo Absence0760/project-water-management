@@ -123,7 +123,7 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	const saved = await getJson<{ project: { settings: { outcomes: unknown } } }>(page.request, `/projects/${project.id}`);
 	expect(saved.project.settings.outcomes).toEqual({ yearClassMethod: 'terciles', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: null }, siteNodeId: null });
 
-	// River & reserve: no sweep yet, then one, queued until the worker runs it.
+	// EWR: no sweep yet, then one, queued until the worker runs it.
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('outcome-matrix');
 	await expect(panel).toHaveAttribute('data-state', 'empty');

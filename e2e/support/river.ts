@@ -1,4 +1,4 @@
-// River & reserve (issue #17, docs/ui.md § River & reserve): a synthetic
+// EWR (issue #17, docs/ui.md § EWR): a synthetic
 // catchment with a few water years of rain and a monthly EWR the river misses
 // in the dry months, and opening the page with its chart drawn.
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
@@ -17,7 +17,7 @@ export async function seedRiverProject(request: APIRequestContext, name: string,
 	return project.id;
 }
 
-/** Opens River & reserve (for `runId`, else the newest run) and waits for the tiles and the drawn flow chart. */
+/** Opens EWR (for `runId`, else the newest run) and waits for the tiles and the drawn flow chart. */
 export async function openRiver(page: Page, projectId: string, runId?: string) {
 	await page.goto(`/projects/${projectId}?tab=river${runId ? `&run=${runId}` : ''}`);
 	await expect(riverTiles(page)).toHaveCount(2);
@@ -27,5 +27,5 @@ export async function openRiver(page: Page, projectId: string, runId?: string) {
 /** The page's two KPI tiles. */
 export const riverTiles = (page: Page) => page.locator('dl.kpis > [data-kpi]');
 
-/** One tile by its data-kpi id (EWR not met, outflow). */
-export const riverTile = (page: Page, id: 'ewr' | 'outflow') => page.locator(`[data-kpi="${id}"]`);
+/** One tile by its data-kpi id (EWR not met, or Reserve rules met when a rule table judges; the outflow). */
+export const riverTile = (page: Page, id: 'ewr' | 'reserve' | 'outflow') => page.locator(`[data-kpi="${id}"]`);

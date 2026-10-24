@@ -1,5 +1,5 @@
 // Captures the app screens the landing page shows (issue #57): a catchment's
-// Summary, its Network and River & reserve at 1440 × 900 as the demo
+// Summary, its Network and EWR at 1440 × 900 as the demo
 // hydrologist, and the farm view on a 390 × 844 phone as the demo farmer, in
 // light and dark. Invented example catchments only (`pnpm seed:examples`),
 // never client data. bin/gen-landing-art.sh frames and converts them.
@@ -84,7 +84,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await page.goto(`${project}?tab=river`);
-		await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
+		await expect(page.getByRole('heading', { level: 1, name: 'EWR' })).toBeVisible();
 		await expect(page.locator('.uplot').first()).toBeVisible();
 		await settled(page);
 		await page.setViewportSize({ width: 1280, height: 800 });

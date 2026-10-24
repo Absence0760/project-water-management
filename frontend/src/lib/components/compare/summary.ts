@@ -129,7 +129,7 @@ export function compareDamStorage(d: { a: DamSide; b: DamSide }): MetricDelta {
  */
 export function outcomeRows(comparisons: readonly RunComparison[], dams: readonly MetricDelta[] = []): OutcomeRow[] {
 	return [
-		// Framed as the Summary's card and River & reserve's tile (ewr/notMet.ts, issue #162): the share not met, lower is better.
+		// Framed as the Summary's card and the EWR page's tile (ewr/notMet.ts, issue #162): the share not met, lower is better.
 		row('ewrNotMet', EWR_NOT_MET, '% of days', { format: 'fraction', better: 'lower' }, (c) => c.catchment.ewrFractionDaysNotMet, comparisons),
 		row('supplied', 'Irrigation supplied', '% of demand', { format: 'fraction', better: 'higher' }, (c) => c.totals.fractionSupplied, comparisons),
 		// The volume behind that share (the Headline results water balance's row until issue #175 merged it in here).

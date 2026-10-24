@@ -3,7 +3,7 @@ import { addMember, createProject, createRun, nominateRun, putModel, putSeries, 
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
-import { importButton, openRowMenu, outcomesReady, row } from '../support/projects.ts';
+import { importButton, irrigationPill, irrigationUnits, openRowMenu, outcomesReady, row, type IrrigationFigure } from '../support/projects.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { runsList } from '../support/runs.ts';
@@ -367,16 +367,8 @@ test.describe('data age under a skewed time zone', () => {
 
 interface Outcome {
 	id: string;
-	ewr: { status: 'green' | 'amber' | 'red' | 'unknown'; daysNotMet30: number | null; days30: number | null };
+	irrigation: IrrigationFigure;
 }
-const LABEL = { red: 'Red', amber: 'Amber', green: 'Green' } as const;
-/** What the pill says for a known status: the portfolio's words. */
-const pillText = (o: Outcome) =>
-	o.ewr.status === 'unknown'
-		? null
-		: o.ewr.daysNotMet30
-			? `${LABEL[o.ewr.status]}: EWR not met ${o.ewr.daysNotMet30} of ${o.ewr.days30} days`
-			: `${LABEL[o.ewr.status]}: EWR met all ${o.ewr.days30} days`;
 
 async function publish(request: APIRequestContext, projectId: string) {
 	const runId = await createRun(request, projectId, 'Baseline');
@@ -397,31 +389,36 @@ test('each row says how its catchment is doing, from the portfolio’s figures, 
 	await createProject(page.request, 'Outcome empty');
 	const figures = (await (await page.request.get(`${API_URL}/projects/outcomes`)).json()).projects as Outcome[];
 	const pubFig = figures.find((f) => f.id === pub.id)!;
-	expect(pubFig.ewr.status).not.toBe('unknown');
+	expect(pubFig.irrigation.status).not.toBe('unknown');
 
 	// "published today" on the publication's own day (support/clock.ts).
 	await pinClockToProject(page, pub.id, 'publishedAt');
 	await page.goto('/');
 	await outcomesReady(page);
-	// The figures end on 28 Jan 2022, long past: dates, not "last 30 days" or "this week" (issue #162).
-	await expect(page.getByTestId('projects-context')).toHaveText(/^\s*3 catchments · EWR, 30 days to 28 Jan 2022: .+$/);
-	await expect(page.getByRole('columnheader', { name: /^EWR, 30 days to 28 Jan 2022/ }).first()).toBeVisible();
+	// The status is irrigation supplied over the run, not the EWR (issue #558: the EWR is the teams pages' and the EWR page's).
+	await expect(page.getByTestId('projects-context')).toHaveText(/^\s*3 catchments · Irrigation supplied: .+$/);
+	await expect(page.getByRole('columnheader', { name: /^Irrigation supplied/ }).first()).toBeVisible();
+	await expect(page.getByRole('columnheader', { name: /^EWR/ })).toHaveCount(0);
 
 	// Published: the status in words, where it comes from, units short and the lowest dam.
 	const pr = row(page, 'Outcome published');
-	await expect(pr.locator('td.c-ewr')).toContainText(pillText(pubFig)!);
-	await expect(pr.locator('td.c-ewr')).toContainText(/Published · to 28 Jan 2022 \(\d+ years ago\)/);
+	await expect(pr.locator('td.c-status .st')).toHaveText(irrigationPill(pubFig.irrigation)!);
+	const below = irrigationUnits(pubFig.irrigation);
+	if (below) await expect(pr.locator('td.c-status')).toContainText(below);
+	await expect(pr.locator('td.c-status')).not.toContainText('EWR');
+	await expect(pr.locator('td.c-status')).toContainText(/Published · to 28 Jan 2022 \(\d+ years ago\)/);
 	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ hydrological units? short in the week to 28 Jan 2022 \d+ in the 30 days to 28 Jan 2022\s*$/);
 	// Published without a restriction: said so, under the dam.
 	await expect(pr.locator('td.c-dam')).toHaveText(/ \d+ % Restriction: None\s*$/);
 	await expect(pr.locator('td.c-run')).toContainText('published today');
 
-	// Run, not published: the EWR from the run; unit figures wait for a publication.
+	// Run, not published: irrigation from the run's own summary; the week's unit figures wait for a publication.
 	const dr = row(page, 'Outcome draft');
-	await expect(dr.locator('td.c-ewr')).toContainText('Latest run · to 28 Jan 2022');
+	await expect(dr.locator('td.c-status')).toContainText(irrigationPill(figures.find((f) => f.id === draft.id)!.irrigation)!);
+	await expect(dr.locator('td.c-status')).toContainText('Latest run · to 28 Jan 2022');
 	await expect(dr.locator('td.c-units')).toHaveText('Not published');
 	await expect(dr.locator('td.c-dam')).toHaveText('Not published');
-	await expect(row(page, 'Outcome empty').locator('td.c-ewr')).toHaveText('Unknown: no run yet');
+	await expect(row(page, 'Outcome empty').locator('td.c-status')).toHaveText('Unknown: no run yet');
 
 	// Both runs' figures end in 2022: stale, so both are flagged, with the reason in words.
 	const strip = page.getByRole('region', { name: 'Needs attention' });
@@ -456,12 +453,12 @@ test('owner chips, search and sort live in the URL; old links still work', async
 	await page.goBack();
 	await expect(page.getByRole('rowheader')).toHaveCount(2);
 
-	// A column heading sorts (worst EWR first), and says so.
+	// A column heading sorts (worst irrigation supply first), and says so.
 	await outcomesReady(page);
-	const ewrHead = page.getByRole('columnheader', { name: /^EWR, last 30 days/ }).first();
-	await ewrHead.getByRole('button').click();
+	const statusHead = page.getByRole('columnheader', { name: /^Irrigation supplied/ }).first();
+	await statusHead.getByRole('button').click();
 	await expect(page).toHaveURL(/[?&]sort=status/);
-	await expect(page.getByRole('columnheader', { name: /^EWR, last 30 days/ }).first()).toHaveAttribute('aria-sort', 'ascending');
+	await expect(page.getByRole('columnheader', { name: /^Irrigation supplied/ }).first()).toHaveAttribute('aria-sort', 'ascending');
 	await page.reload();
 	await expect(page.getByLabel('Sort')).toHaveValue('status');
 

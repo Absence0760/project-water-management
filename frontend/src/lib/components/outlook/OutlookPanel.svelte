@@ -12,7 +12,7 @@
 	engine's words (./triggers.ts). An editor can publish one level to the
 	project's farmers (R5, E3): each farm page then shows its own figures at
 	that level until the season ends, or the WUA withdraws it. Its own chunk:
-	River & reserve (river/RiverTab.svelte) loads it lazily.
+	EWR (river/RiverTab.svelte) loads it lazily.
 
 	It reports what the analogue years did at each level; it never picks one.
 	The pending state follows the outlook's own status and its job's (polled),

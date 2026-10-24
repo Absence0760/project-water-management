@@ -56,7 +56,7 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await expectNoViolations(page, { include: '#res-forecast' });
 	await expectNoViolations(page, { include: '#res-hydrograph' });
 	const runId = new URL(page.url()).searchParams.get('run')!;
-	// EWR vs outflow, on River & reserve now, shades the forecast days too.
+	// EWR vs outflow, on EWR now, shades the forecast days too.
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	await expect(page.locator('#res-ewr figure')).toHaveAttribute('data-band-from', FROM);
 	await page.goBack();

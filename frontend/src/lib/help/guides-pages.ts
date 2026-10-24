@@ -307,7 +307,7 @@ export const PAGE_GUIDES: Guide[] = [
 	},
 	{
 		id: 'river-page',
-		title: 'River & reserve: is enough left in the river?',
+		title: 'EWR: is enough left in the river?',
 		summary: 'One run’s river against its Ecological Reserve: the days the EWR was not met, the water account and how this run differs from the one before.',
 		kind: 'page',
 		tab: 'river',
@@ -317,7 +317,7 @@ export const PAGE_GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'One run’s river against its [[ewr]]: tiles for the share of days the EWR was not met at the outflow gauge ([[ewr-days-not-met]]), each with its change from the run before; the flow chart against the EWR; [[reserve-compliance|Reserve compliance]] at each EWR site; and the [[water-account]] of where the catchment’s water went.'
+						text: 'Every EWR result for one run, gathered here so the Summary can be about irrigation: the headline tile, the share of days the EWR was not met at the outflow gauge ([[ewr-days-not-met]]) or, when a Reserve rule table judges the results, the share of months its rules were met, with its change from the run before; the days below the reserve in each of the last twelve months; the flow chart against the [[ewr]]; [[reserve-compliance|Reserve compliance]] at each EWR site; and the [[water-account]] of where the catchment’s water went.'
 					},
 					{
 						type: 'p',

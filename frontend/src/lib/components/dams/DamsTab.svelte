@@ -287,7 +287,7 @@
 		</section>
 	{:else}
 		{#if runs === null}
-			<!-- The page loads the run list before any tab draws, so null is a failure, never "still loading" (as River & reserve). -->
+			<!-- The page loads the run list before any tab draws, so null is a failure, never "still loading" (as EWR). -->
 			<p class="alert alert-error" role="alert" data-testid="dams-runs-error">
 				The run list couldn’t be loaded, so the cards show each dam's capacity only. Reload the page to try again.
 			</p>

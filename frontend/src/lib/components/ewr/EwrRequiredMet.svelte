@@ -2,7 +2,7 @@
 	EWR required vs met at each EWR site (the outlet, then the gauges), per
 	water year and over the run (engine ≥ 0.32.0, WP-3.4, docs/model.md
 	§2.11b): the share of the required volume that passed the site, the
-	volume required and the days short. River & reserve shows it in the EWR
+	volume required and the days short. EWR shows it in the EWR
 	by month panel; it was the tail of the water account until issue #175,
 	though it isn't part of the mass balance. Input:
 	RunSummary.supplyAssurance.waterAccount; nothing shows on older runs.

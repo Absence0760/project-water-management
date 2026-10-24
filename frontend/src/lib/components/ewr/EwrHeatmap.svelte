@@ -47,7 +47,7 @@
 		headlineNote?: string;
 		/** The outlet's daily test by name (ewr/notMet.ts dailyEwrName; engine ≥ 1.77.0 it can be a DRM table). */
 		daily?: string;
-		/** The heading. River & reserve calls it "Days below the EWR, by month", apart from Reserve compliance (issue #465). */
+		/** The heading. EWR calls it "Days below the EWR, by month", apart from Reserve compliance (issue #465). */
 		title?: string;
 	} = $props();
 

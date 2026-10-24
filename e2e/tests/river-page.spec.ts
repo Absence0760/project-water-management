@@ -1,7 +1,9 @@
-// River & reserve (issue #17, option A · Outcomes; docs/ui.md § River & reserve): one run's river
-// against its EWR. The KPI tiles, the flow chart with its windows and shading, the days below the
-// reserve per water year, the panels moved from Runs & results, the run picker, the links in from
-// the Summary and Runs & results (old #res-… links included), the empty state and a viewer.
+// EWR (River & reserve until issue #558; issue #17, option A · Outcomes; docs/ui.md § EWR): one
+// run's river against its EWR. The KPI tiles (the EWR headline, the Summary's card until issue #558),
+// the reserve strip (the Summary's until issue #558), the flow chart with its windows and shading,
+// the days below the reserve per water year, the panels moved from Runs & results, the run picker,
+// the links in from the Summary and Runs & results (old #res-… links and ?tab= aliases included),
+// the empty state and a viewer.
 import type { Page } from '@playwright/test';
 import { addMember, createProject, createRun, putModel, sampleModel, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -28,8 +30,8 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	const second = await createRun(page.request, id, 'Second');
 	await openRiver(page, id);
 
-	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'River & reserve', exact: true })).toHaveAttribute('aria-current', 'page');
-	await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'EWR', exact: true })).toHaveAttribute('aria-current', 'page');
+	await expect(page.getByRole('heading', { level: 1, name: 'EWR' })).toBeVisible();
 	const context = page.getByTestId('river-context');
 	await expect(context).toContainText('Second');
 	await expect(context).toContainText('1 Oct 2019 – 30 Sep 2022');
@@ -105,6 +107,8 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	// Findings first: the two monthly panels, named apart, then the water account; the run-it-yourself tools after
 	// them, under their own heading, each one row (name, purpose, ⓘ, Run) until it has run.
 	expect(await page.locator('[id^="res-"]').evaluateAll((els) => els.map((e) => e.id))).toEqual([
+		// The reserve strip beside the tiles (the Summary's until issue #558).
+		'res-reserve-strip',
 		'res-ewr',
 		'res-reserve-years',
 		'res-reserve',
@@ -133,6 +137,12 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	expect(Math.abs(chart.y + chart.height - (bars.y + bars.height))).toBeLessThan(2);
 	expect(chart.height).toBeGreaterThan(500);
 	expect((await page.locator('#res-ewr figure.chart .u-over').boundingBox())!.height).toBeGreaterThan(300);
+	// The reserve strip beside the tiles (the Summary's until issue #558), its top level with theirs, over the chart.
+	const tilesBox = (await page.locator('dl.kpis').boundingBox())!;
+	const strip = (await page.getByRole('region', { name: 'Days below the reserve', exact: true }).boundingBox())!;
+	expect(strip.x).toBeGreaterThan(tilesBox.x + tilesBox.width - 1);
+	expect(Math.abs(strip.y - tilesBox.y)).toBeLessThan(2);
+	expect(chart.y).toBeGreaterThan(Math.max(strip.y + strip.height, tilesBox.y + tilesBox.height) - 1);
 	// The next panel is Reserve rules met (or its stub; findings first, issue #465).
 	expect((await page.locator('#res-reserve').boundingBox())!.y).toBeLessThan(vh);
 	expect(await innerScrollers(page)).toEqual([]);
@@ -237,15 +247,45 @@ test('the flow chart keeps the Runs tab’s controls: m³/s ↔ m³/day, and Ear
 	await expect(move).toHaveCount(0);
 });
 
-test('the flow chart is drawn once, here: the Summary shows the days below by month instead (issue #162)', async ({ page, owner }) => {
+test('the reserve strip: the days below the EWR in each month of the run, adding up to the EWR not met tile (the Summary’s until issue #558)', async ({ page, owner }) => {
+	void owner;
+	const id = await seedRiverProject(page.request, 'River strip', 120);
+	await createRun(page.request, id, 'Baseline');
+	await openRiver(page, id);
+	const strip = page.getByRole('region', { name: 'Days below the reserve', exact: true });
+	await expect(strip).toHaveAttribute('id', 'res-reserve-strip');
+	// The run is 120 days (1 Oct 2019 – 28 Jan 2020): its four months, each in words for a screen reader.
+	await expect(strip.getByTestId('reserve-strip-what')).toHaveText(
+		'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2019 – Jan 2020'
+	);
+	const months = strip.getByRole('listitem');
+	await expect(months).toHaveCount(4);
+	await expect(months.nth(3)).toHaveAttribute('data-month', '2020-01');
+	await expect(months.nth(3)).toContainText(/^Jan 2020: (EWR met every day \(28 days\)|below the EWR on \d+ of 28 days)/);
+	// The months add up to the tile's count: the same test, one framing ("EWR not met", issue #162).
+	const counts = await months.evaluateAll((lis) => lis.map((li) => Number(li.getAttribute('data-not-met'))));
+	await expect(riverTile(page, 'ewr').locator('dt')).toContainText('EWR not met');
+	const notMet = Number(/(\d+) of 120 days/.exec((await riverTile(page, 'ewr').textContent()) ?? '')![1]);
+	expect(counts.reduce((a, b) => a + b, 0)).toBe(notMet);
+	// Each bar in the EWR traffic light's band for its month (under 5 % of days green, under 20 % amber), stated in a key.
+	const days = [31, 30, 31, 28];
+	const bands = await months.evaluateAll((lis) => lis.map((li) => li.getAttribute('data-band')));
+	expect(bands).toEqual(counts.map((n, i) => (n * 100 < 5 * days[i]! ? 'green' : n * 100 < 20 * days[i]! ? 'amber' : 'red')));
+	await expect(strip.getByTestId('reserve-strip-key').locator('.item')).toHaveText(['Green: under 5% of days below the EWR', 'Amber: 5% to under 20%', 'Red: 20% or more']);
+});
+
+test('the Summary has no EWR: the headline card and the strip are here, and the flow chart is drawn once (issues #162, #558)', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River summary chart');
 	await createRun(page.request, id, 'Baseline');
 	await page.goto(`/projects/${id}`);
-	const strip = page.getByRole('region', { name: 'Days below the reserve' });
-	await expect(strip.getByRole('listitem')).toHaveCount(12);
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="supply"]')).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Days below the reserve', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
 	await expect(page.locator('figure.chart')).toHaveCount(0);
+	await openRiver(page, id);
+	await expect(page.getByRole('region', { name: 'Days below the reserve', exact: true }).getByRole('listitem')).toHaveCount(12);
+	await expect(page.locator('figure.chart')).toHaveCount(1);
 });
 
 test('the run picker: another run is a URL, Back returns, a reload keeps it', async ({ page, owner }) => {
@@ -284,7 +324,7 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	// The run header links here, keeping the run.
 	await page.goto(`/projects/${id}?tab=runs&run=${baseline}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
-	const link = page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'River & reserve for this run' });
+	const link = page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'EWR for this run' });
 	await expect(link).toHaveAttribute('href', `?tab=river&run=${baseline}`);
 	await link.click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${baseline}$`));
@@ -298,22 +338,28 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	await expect(heading).toBeInViewport();
 });
 
-test('the Summary links here: its reserve strip', async ({ page, owner }) => {
+test('the Summary links here, and ?tab=ewr and the old ?tab=reserve open it', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River from summary');
 	const run = await createRun(page.request, id, 'Baseline');
 	await page.goto(`/projects/${id}`);
-	// (The Summary's mean outflow line, which linked here too, was dropped in #171; the outflow is this page's tile.)
-	await page.getByRole('region', { name: 'Days below the reserve' }).getByRole('link', { name: 'More on River & reserve' }).click();
+	// The EWR's results left the Summary (issue #558): one link under its supply list, for the run it shows.
+	await page.getByRole('link', { name: /^Reserve and EWR results\s+EWR$/ }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));
 	await expect(riverTiles(page)).toHaveCount(2);
+	for (const alias of ['ewr', 'reserve']) {
+		await page.goto(`/projects/${id}?tab=${alias}`);
+		await expect(page.getByRole('heading', { level: 1, name: 'EWR' })).toBeVisible();
+		await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'EWR', exact: true })).toHaveAttribute('aria-current', 'page');
+		await expect(riverTiles(page)).toHaveCount(2);
+	}
 });
 
 test('before the first run: the frame, and a way to run the model', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'River empty');
 	await page.goto(`/projects/${project.id}?tab=river`);
-	await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'EWR' })).toBeVisible();
 	const empty = page.getByRole('region', { name: 'No run yet' });
 	await expect(empty).toContainText('After a run, this page shows the simulated outflow against the EWR');
 	await expect(empty.getByRole('link', { name: 'Run the model' })).toHaveAttribute('href', '?tab=runs');
@@ -333,7 +379,7 @@ test('a viewer reads it too, with no run button', async ({ page, owner, signIn }
 
 	await createRun(page.request, id, 'Baseline');
 	await viewer.page.goto(`/projects/${id}`);
-	await viewer.page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'River & reserve', exact: true }).click();
+	await viewer.page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'EWR', exact: true }).click();
 	await expect(riverTiles(viewer.page)).toHaveCount(2);
 	await expect(viewer.page.getByTestId('river-context')).toContainText('Baseline');
 	await expect(viewer.page.getByRole('region', { name: /^Days below the EWR, by month/ })).toBeVisible();
@@ -439,7 +485,7 @@ test('with a Reserve rule table the panels that count the pragmatic EWR name it,
 	await updateSettings(page.request, id, { ewrRules: [table(null)] });
 	await createRun(page.request, id, 'At the outlet');
 	await openRiver(page, id);
-	const menu = page.getByRole('navigation', { name: 'River sections' });
+	const menu = page.getByRole('navigation', { name: 'EWR sections' });
 	// The water-year bars are the pragmatic EWR's days, in the heading, the drawing's name and its table.
 	await expect(page.getByRole('region', { name: 'Days below the reserve, each water year' })).toHaveCount(0);
 	const years = page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' });
@@ -469,4 +515,34 @@ test('with a Reserve rule table the panels that count the pragmatic EWR name it,
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
 	await expect(menu.getByRole('link', { name: 'Flow vs pragmatic EWR' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' }).getByRole('img')).toBeVisible();
+});
+
+test('with a Reserve rule table the headline tile is Reserve rules met, with the pragmatic EWR’s days under it, and the strip is named for the test it counts (issue #558)', async ({ page, owner }) => {
+	void owner;
+	const id = await seedRiverProject(page.request, 'River headline rules', 120);
+	// A synthetic table that asks for nothing: the Reserve rules are the table's, not the pragmatic EWR's.
+	const points = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
+	await updateSettings(page.request, id, {
+		ewrRules: [
+			{ siteNodeId: null, source: 'Synthetic rule table for tests', component: 'total', unit: 'mcm', points, ewr: Array.from({ length: 12 }, () => points.map(() => 0)), naturalSource: 'run', natural: null, scale: 1 }
+		]
+	});
+	await createRun(page.request, id, 'With rules');
+	await openRiver(page, id);
+	await expect(riverTiles(page).locator('dt')).toHaveText(['Reserve rules met', 'Mean simulated outflow']);
+	const head = page.locator('[data-kpi="reserve"]');
+	await expect(head).toContainText('of months');
+	await expect(head.locator('dd.sub').first()).toHaveText(/^\d+ of \d+ months at the outlet$/);
+	// The pragmatic EWR's days under the months, named as that test: the share and the count, then a year's worth.
+	await expect(head.locator('dd.sub')).toContainText([/^EWR not met \(pragmatic\): [\d.]+% of days, \d+ of 120 days at the outflow gauge$/, /^[\d.]+ days? in an average year$/]);
+	await expect(page.locator('[data-kpi="ewr"]')).toHaveCount(0);
+	// No "Days below the reserve": that would call the pragmatic count the Reserve the tile beside it judges.
+	await expect(page.getByRole('region', { name: 'Days below the reserve', exact: true })).toHaveCount(0);
+	const strip = page.getByRole('region', { name: 'Days below the pragmatic EWR', exact: true });
+	await expect(strip.getByRole('list', { name: 'Days below the pragmatic EWR by month, Oct 2019 – Jan 2020' })).toBeVisible();
+	await expect(strip.getByTestId('reserve-strip-what')).toHaveText(
+		'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2019 – Jan 2020. The Reserve rules met tile judges whole months by the rule table instead.'
+	);
+	await expect(strip.getByRole('listitem').nth(3)).toContainText(/^Jan 2020: (pragmatic EWR met every day \(28 days\)|below the pragmatic EWR on \d+ of 28 days)/);
+	await expectNoViolations(page);
 });

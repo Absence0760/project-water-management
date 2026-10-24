@@ -106,6 +106,8 @@
 		demand: 'crops',
 		calibration: 'settings',
 		results: 'runs',
+		// The EWR page (issue #558) keeps its old id, so a saved choice of sections and old links still work.
+		ewr: 'river',
 		reserve: 'river',
 		units: 'supply',
 		farms: 'supply',

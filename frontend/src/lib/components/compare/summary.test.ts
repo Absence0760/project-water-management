@@ -36,7 +36,7 @@ const ctx = (n: number) => ({ samePeriod: Array(n).fill(true), engineChanged: Ar
 describe('outcomeRows', () => {
 	it('gives each outcome the baseline and every what-if, EWR not met as the share of days and no days-a-year restatement of it', () => {
 		const rows = outcomeRows([cmp({ ewrShare: [0.13, 0.166] }), cmp({ ewrShare: [0.13, 0.139] })]);
-		// Framed as the Summary and River & reserve frame it (issue #162): the share not met, a rise is worse.
+		// Framed as the Summary and EWR frame it (issue #162): the share not met, a rise is worse.
 		const notMet = rows.find((r) => r.id === 'ewrNotMet')!;
 		expect(notMet.label).toBe('EWR not met');
 		expect(notMet.spec).toEqual({ format: 'fraction', better: 'lower' });

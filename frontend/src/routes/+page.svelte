@@ -19,7 +19,8 @@
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
 	import { needsAttention } from '$lib/components/projects/outcomes';
 	import {
-		ewrWindowLabel,
+		IRRIGATION_LABEL,
+		IRRIGATION_RULE,
 		portfolioTotals,
 		statusSummary,
 		thresholdsRule,
@@ -219,11 +220,12 @@
 	// team portfolio's tiles counted (alerts firing, stale figures) when there are any.
 	const inView = $derived(outcomes ? filtered.map((p) => outcomes!.get(p.id)).filter((o): o is PortfolioProject => !!o) : []);
 	const totals = $derived(portfolioTotals(inView));
-	const summaryLine = $derived(statusSummary(totals.counts));
+	// The list's status is irrigation supply (issue #558); the EWR's statuses are the teams pages'.
+	const summaryLine = $derived(statusSummary(totals.irrigation));
 	const contextLine = $derived(
 		[
 			`${filtered.length} catchment${filtered.length === 1 ? '' : 's'}`,
-			summaryLine && `${ewrWindowLabel(inView)}: ${summaryLine}`,
+			summaryLine && `${IRRIGATION_LABEL}: ${summaryLine}`,
 			totals.alertsFiring && `${totals.alertsFiring} alert${totals.alertsFiring === 1 ? '' : 's'} firing`,
 			totals.stale && `${totals.stale} with stale figures`
 		]
@@ -449,9 +451,11 @@
 
 			{#if selectedTeam}
 				<!-- The team filter is the team's portfolio (issue #176): the rule its statuses are judged by, and whose. -->
+				<!-- The list's status is irrigation supply (issue #558); the team's EWR thresholds judge the team page's EWR status. -->
 				<p class="team-note muted" data-testid="team-thresholds">
-					EWR status is the outlet over the 30 days to the figures' last day (the published run, or the latest when none
-					is): {thresholdsRule(selectedTeam.portfolioThresholds)}.
+					Status is irrigation supplied over the run the figures come from (the published run, or the latest when none is):
+					{IRRIGATION_RULE}, a provisional default that can’t be changed yet. The team page's EWR status is the outlet over the 30 days to the figures'
+					last day: {thresholdsRule(selectedTeam.portfolioThresholds)}.
 					{thresholdsSource(selectedTeam.portfolioThresholds)}
 					{#if hasTeamRole(selectedTeam.role, 'admin')}<a href="{base}/teams/{selectedTeam.id}?settings=1">Change them on the team page</a
 						>.{:else}A team owner can change them on the <a href="{base}/teams/{selectedTeam.id}">team page</a>.{/if}

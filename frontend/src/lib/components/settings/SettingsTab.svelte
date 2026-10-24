@@ -461,7 +461,7 @@
 
 	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
 	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
-	// panels settle (as River & reserve does), and focus its heading.
+	// panels settle (as EWR does), and focus its heading.
 	onMount(() => {
 		const hash = page.url.hash.slice(1);
 		const el = hash.startsWith('set-') ? document.getElementById(hash) : null;
@@ -492,7 +492,7 @@
 <div class="settings-form explain-scope" class:explained={explainSwitch.on}>
 
 	<!-- Judge results by (issue #444): first, as the client asked; it reads results and changes none. Not in the
-	     section menu, which starts right above it; River & reserve's "Change" links here (#set-judge). -->
+	     section menu, which starts right above it; the EWR page's "Change" links here (#set-judge). -->
 	<EwrHeadlineField
 		bind:value={s.ewrHeadline}
 		ewrRules={s.ewrRules}
