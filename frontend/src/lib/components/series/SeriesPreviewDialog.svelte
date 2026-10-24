@@ -16,13 +16,31 @@
 	// number comes from, how it's derived and what it tells you. The bubble is a
 	// top-layer popover, so neither the sideways scroll nor the sticky header
 	// clips it; the headers have no sort or other click behaviour to trigger.
+	//
+	// With `loadAreas`, the dialog also shows each area's rain under its station
+	// (issue #553: the average catchment rainfall and each land unit, the Full
+	// CSV's derived columns, derivedRain.ts): asked for when the dialog opens,
+	// computed by SeriesTab in its own lazily loaded chunk, never stored.
 	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { kindLabel } from '$lib/series/kinds';
-	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { kindLabel } from '#lib/series/kinds.js';
+	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import type { Daily } from './coverage';
-	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag, type RainSource } from './preview';
+	import {
+		areaCell,
+		areaTitle,
+		buildAreaColumns,
+		buildPreviewColumns,
+		buildPreviewRows,
+		FLAG_LABEL,
+		filterPreviewRows,
+		headerUnit,
+		seriesColumnId,
+		type PreviewArea,
+		type PreviewFlag,
+		type RainSource
+	} from './preview';
 
 	let {
 		open = $bindable(false),
@@ -32,7 +50,8 @@
 		/** Set when opened from a row's own "Preview" button: that series' column is un-hidden, scrolled into view and highlighted. Null (the card header's "Preview all data" button) shows every column. */
 		focusSeriesId = null,
 		failed = {},
-		onRetry
+		onRetry,
+		loadAreas
 	}: {
 		open?: boolean;
 		list: SeriesMeta[];
@@ -42,6 +61,8 @@
 		/** Series whose values failed to load, with the error (SeriesTab's loadValues). */
 		failed?: Record<string, string>;
 		onRetry?: () => void;
+		/** Each area's rain under its station (SeriesTab, derivedRain.ts); asked for on every open, so it is never older than its inputs. */
+		loadAreas?: () => Promise<PreviewArea[]>;
 	} = $props();
 
 	const uid = $props.id();
@@ -53,7 +74,29 @@
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let hidden = $state(new Set<string>());
 
-	const columns = $derived(buildPreviewColumns(list));
+	// Each area's derived lines: null until asked for, then the areas (each with its lines or why not) or the error.
+	let areas = $state.raw<PreviewArea[] | null>(null);
+	let areasLoading = $state(false);
+	let areasError = $state<string | null>(null);
+	let areasAsk = 0;
+	async function fetchAreas() {
+		if (!loadAreas) return;
+		const ask = ++areasAsk;
+		areasLoading = true;
+		areasError = null;
+		try {
+			const got = await loadAreas();
+			if (ask === areasAsk) areas = got;
+		} catch (e) {
+			if (ask === areasAsk) areasError = e instanceof Error ? e.message : String(e);
+		} finally {
+			if (ask === areasAsk) areasLoading = false;
+		}
+	}
+	const areaLines = $derived(new Map((areas ?? []).map((a) => [a.nodeId, a.lines])));
+	const areasFailed = $derived((areas ?? []).filter((a) => a.error));
+
+	const columns = $derived([...buildPreviewColumns(list), ...buildAreaColumns(areas ?? [])]);
 	const visibleColumns = $derived(columns.filter((c) => !hidden.has(c.id)));
 	const visibleSeriesIds = $derived(visibleColumns.filter((c) => c.group === 'series').map((c) => c.seriesId!));
 	const missingIds = $derived(list.filter((s) => !values[s.id]).map((s) => s.id));
@@ -87,6 +130,7 @@
 				hidden = next;
 			}
 			query = '';
+			void fetchAreas();
 			missingOnly = false;
 			flaggedOnly = false;
 			scrollTop = 0;
@@ -167,6 +211,15 @@
 			</div>
 		{/if}
 
+		{#if areasLoading}
+			<p class="muted areas-note" role="status" data-testid="preview-areas"><span class="spinner" aria-hidden="true"></span> Computing each area’s rain under its station…</p>
+		{:else if areasError || areasFailed.length}
+			<div class="alert alert-warning" role="status" data-testid="preview-areas">
+				{#if areasError}Couldn’t compute each area’s rain ({areasError}).{:else}Couldn’t compute the rain of {areasFailed.map((a) => `${areaTitle(a)} (${a.error})`).join(', ')}.{/if}
+				<button type="button" class="btn btn-sm" onclick={fetchAreas}>Try again</button>
+			</div>
+		{/if}
+
 		<div class="controls">
 			<div class="search-row">
 				<label for="{uid}-q" class="visually-hidden">Search by date or value</label>
@@ -200,6 +253,14 @@
 							<label><input type="checkbox" checked={!hidden.has(col.id)} onchange={() => toggleColumn(col.id)} /> {col.label}</label>
 						{/each}
 					</fieldset>
+					{#if columns.some((c) => c.group === 'area')}
+						<fieldset>
+							<legend>Each area’s rain (derived, not stored)</legend>
+							{#each columns.filter((c) => c.group === 'area') as col (col.id)}
+								<label><input type="checkbox" checked={!hidden.has(col.id)} onchange={() => toggleColumn(col.id)} /> {col.label}</label>
+							{/each}
+						</fieldset>
+					{/if}
 				</div>
 			</details>
 		</div>
@@ -222,11 +283,12 @@
 						<th scope="col" class="datecol">Date <HelpTip key="preview.date" label="About the date column" /></th>
 						{#each visibleColumns as col (col.id)}
 							{@const unit = headerUnit(col)}
-							<th scope="col" class:num={col.id !== 'excluded'} class:hl={col.seriesId === focusSeriesId} data-series-col={col.id}>
+							<th scope="col" class:num={col.id !== 'excluded' && col.area?.line !== 'source'} class:hl={col.seriesId === focusSeriesId} data-series-col={col.id}>
 								{col.label}{#if unit}
 									<span class="u">({unit})</span>
 								{/if}
 								<HelpTip key={col.helpKey} label="About {col.label}" />
+								{#if col.group === 'area'}<span class="derived" data-testid="derived-tag">Derived · not stored</span>{/if}
 							</th>
 						{/each}
 					</tr>
@@ -253,6 +315,10 @@
 									<td class="num">{row.derived.chirpsFactor == null ? '–' : `${fmtNum(row.derived.chirpsFactor, 2)}×`}</td>
 								{:else if col.id === 'chirpsCorrected'}
 									<td class="num">{numText(row.derived.chirpsCorrectedMm)}</td>
+								{:else if col.area}
+									{@const lines = areaLines.get(col.area.nodeId)}
+									{@const v = lines ? areaCell(lines, col.area.line, row.date) : null}
+									<td class:num={col.area.line !== 'source'} class="area">{typeof v === 'string' ? v : numText(v)}</td>
 								{:else if col.id === 'excluded'}
 									<td class:flag={row.derived.excluded}>
 										{row.derived.excluded ? 'Excluded' : '–'}{#if row.derived.exclusionReason}<span class="tag" data-testid="exclusion-reason"> · {row.derived.exclusionReason}</span>{/if}
@@ -400,6 +466,23 @@
 	}
 	.hl {
 		background: var(--accent-soft);
+	}
+	/* An area's derived column: said in its header, and its cells set apart from the stored values. */
+	.derived {
+		display: block;
+		font-size: var(--font-xs);
+		font-weight: 400;
+		color: var(--text-2);
+	}
+	table.data td.area {
+		font-style: italic;
+	}
+	.areas-note {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+		margin: 0 0 0.5rem;
 	}
 	.state {
 		display: flex;

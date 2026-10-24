@@ -7,9 +7,9 @@
 	// uploads they do nothing (Cancel is disabled): the request would finish
 	// anyway, and the page reports it.
 	import { untrack } from 'svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import type { SeriesMeta } from '@water-management/engine';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult, UploadSubmit } from './upload';
 

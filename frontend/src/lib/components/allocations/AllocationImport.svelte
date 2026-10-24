@@ -5,10 +5,10 @@
 	// unmatched row matched by hand) → import. The server keeps no preview: the
 	// commit sends the file again and re-checks it. Closing the sheet drops a
 	// preview.
-	import { api, type AllocationImportKind, type AllocationPreview } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fmtNum } from '$lib/format/number';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import { api, type AllocationImportKind, type AllocationPreview } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { fmtNum } from '#lib/format/number.js';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
 	import { ALLOCATIONS_FORMAT, AUTHORISATION_LABEL, MATCHED_BY_LABEL, previewOrder, SOURCE_LABEL, TEMPLATE_CSV, volumeCell } from './allocations';
 
 	let { projectId, open = $bindable(false), onimported }: { projectId: string; open?: boolean; onimported: (message: string) => void } = $props();

@@ -7,7 +7,7 @@
 // `parseDay`, and the field shows it back as "15 Nov 2021" (fmtDay). The value
 // stored and sent is always YYYY-MM-DD, '' for a blank field. Every step is
 // string work, never a Date, so no time zone can move a day.
-import { DAY_FIRST_EXAMPLES, fmtDay, parseDay } from '$lib/format/number';
+import { DAY_FIRST_EXAMPLES, fmtDay, parseDay } from '#lib/format/number.js';
 
 export interface DayBounds {
 	/** The first day the field takes, YYYY-MM-DD. */

@@ -4,18 +4,18 @@
 	went, the change in dam storage and the closure residual; a pair of bars
 	for one period (in vs out). Input: RunSummary.supplyAssurance.waterAccount;
 	absent on older runs. The EWR required vs met at each site, which closed
-	this panel until issue #175, is not part of the balance: River & reserve
+	this panel until issue #175, is not part of the balance: EWR
 	shows it in the EWR by month panel (ewr/EwrRequiredMet.svelte). Runs &
 	results' Water balance is the same years summed over the hydrological units
 	(with rain, the runoff coefficient and storage); each links to the other
 	rather than copying it (balanceHref).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { SupplyAssurance, WaterAccountRow } from '@water-management/engine';
-	import { fmtNum } from '$lib/format/number';
-	import { waterYearLabel } from '$lib/components/calibration/metrics';
-	import { fmtVolume } from '$lib/components/ewr/heatmap';
+	import { fmtNum } from '#lib/format/number.js';
+	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
+	import { fmtVolume } from '#lib/components/ewr/heatmap.js';
 	import { accountBars, accountLines, notComputedText } from './reliability';
 
 	let {

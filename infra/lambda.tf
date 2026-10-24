@@ -113,6 +113,11 @@ resource "aws_cloudwatch_log_group" "lambda" {
 # (backend/src/logging/logEvent.ts), so every filter matches
 # `$.message.event` (alarms.tf, jobs.tf; pinned in tests/logging.tftest.hcl).
 locals {
+  # The pg pool per container (backend/src/db/pool.ts): one request or job at
+  # a time, so 2. The connection precondition below sums cap x pool.
+  api_db_pool_max    = "2"
+  worker_db_pool_max = "2"
+
   lambda_logging = {
     log_format            = "JSON"
     system_log_level      = "WARN"
@@ -133,6 +138,7 @@ resource "aws_lambda_function" "backend" {
   timeout       = var.lambda_timeout_seconds
   memory_size   = var.lambda_memory_mb
 
+  # Bounds spend and DB connections (25 x a pool of 2, DB_POOL_MAX below).
   reserved_concurrent_executions = var.lambda_reserved_concurrency
 
   # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
@@ -160,6 +166,10 @@ resource "aws_lambda_function" "backend" {
       ALLOWED_ORIGINS        = local.site_origin
       COOKIE_SECURE          = "true"
       NODE_EXTRA_CA_CERTS    = local.rds_ca_path
+      # One request per container at a time, so a pool of 2 (db/pool.ts):
+      # x lambda_reserved_concurrency (25) = 50 connections at most
+      # (variables.tf, infra/README.md § Connections).
+      DB_POOL_MAX = local.api_db_pool_max
 
       # Sign-up by invitation (auth/signupOpen.ts): closed unless signup_open.
       # The backend treats an unset value on Lambda as closed too.
@@ -233,6 +243,19 @@ resource "aws_lambda_function" "backend" {
     # and peaks near 460 MB at its window cap (docs/design/delineation.md §
     # Where it runs): a smaller or shorter API Lambda would cut it off
     # mid-request instead of letting it refuse.
+    # The database's connections (infra/README.md § Connections): every
+    # DB-connected Lambda's cap x its pool, plus the migrator's 2, leaves
+    # db.t4g.micro (~80 max_connections, the default class) room for the
+    # operator and RDS's own. Checked on every tfvars, so raising a cap or a
+    # pool past it fails the plan instead of the database (issue #541).
+    precondition {
+      condition = (
+        var.lambda_reserved_concurrency * tonumber(local.api_db_pool_max) +
+        var.worker_reserved_concurrency * tonumber(local.worker_db_pool_max) +
+        var.migrate_reserved_concurrency * 2
+      ) <= 70
+      error_message = "lambda_reserved_concurrency x DB_POOL_MAX + worker_reserved_concurrency x its DB_POOL_MAX + the migrator's 2 must stay <= 70 database connections (db.t4g.micro's ~80 less headroom). Redo infra/README.md § Connections (or move to RDS Proxy) before raising a cap or a pool."
+    }
     precondition {
       condition     = !var.delineation_dem || (var.lambda_memory_mb >= 1024 && var.lambda_timeout_seconds >= 25)
       error_message = "delineation_dem needs the API Lambda at lambda_memory_mb >= 1024 (a delineation peaks near 460 MB) and lambda_timeout_seconds >= 25 (it keeps a 20 s budget)."

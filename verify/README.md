@@ -33,7 +33,7 @@ returns. It imports the engine by path and the example catchments from
 
 | File | What |
 | --- | --- |
-| `model.py` | The Python model (stdlib only). `run(input)` returns the daily series, the allocation summary's run-dependent rows and coverage counts; `unsupported(input)` lists what an input uses beyond phases 1 and 2a and per-unit rain; `Refused` is a run the docs say is refused |
+| `model.py` | The Python model (stdlib only). `run(input)` returns the daily series, the allocation summary's run-dependent rows and coverage counts; `unsupported(input)` lists what an input uses beyond phases 1 and 2a, per-unit rain and rainfall stations; `Refused` is a run the docs say is refused |
 | `run_engine.ts` | `run <in> <out> …` runs `runModel` on each input; `examples <dir>` writes the three example catchments' inputs (`pnpm seed:examples`' data, without the automatic fit) |
 | `generate.py` | This harness's own seeded random-network generator (stdlib `random`; not the engine's fuzz generator, which is never read). Synthetic data only. `dense=True` puts every phase-2a feature in most networks (each in about a third otherwise) |
 | `probes.py` | Hand-built inputs, each pinning a point the docs left open (§ Findings), and a few coverage probes for rules the random networks rarely reach |
@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 139 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 171 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -299,6 +299,90 @@ factors, day counts, per-unit balances) is a reduction of these and not
 compared; the engine's `checkRunoffBalance` closes it. The areal correction
 (§2.4g) stays unsupported, so a rule-4 unit runs on the catchment rain × 1.
 
+## What rainfall stations cover
+
+Added on engine 1.91.0 (issue #553), written from docs/model.md §2.4i, in
+about 30 % of the random networks and 65 % of the dense ones (`generate.py`
+`add_rain_stations`, its own random stream, drawn last, so the rest of a
+network is unchanged; station records reach up to six years before the
+network so some pairings have their five years):
+
+- **The rule** for the catchment (`settings.rainStations.catchment`, under
+  Fragmentation and under per-unit rain alike) and for each land unit
+  (`units`, per-unit rain only): the station's checked reading × r, r =
+  clamp(area MAP ÷ station MAP, 0.25–4), × 1 with `scaleToMap` false or
+  either MAP missing; on its gaps the area's CHIRPS (`rain_chirps_mm`, a
+  unit's `rain_chirps_mm@<unit>`) × the pairing factor of `correctAgainst`
+  (default its own station), as is; then the catchment: the forecast, a
+  unit: the catchment forcing × 1; else 0 mm.
+- **The checked record**: negative values blanked; §2.4c and §2.4d with the
+  catchment's modes, threshold and limits but none of its dated lists,
+  against the CHIRPS at the station (its cell, else its site unit's CHIRPS,
+  else the catchment's); the station that is the catchment gauge
+  (`isCatchmentGauge`) with the dated lists too, against the catchment's
+  CHIRPS (below); then the unreliable periods blanked.
+- **The pairing**: per calendar month Σ station ÷ Σ CHIRPS at the station on
+  the days both have a reading (accumulation windows out), whole records,
+  90 days and 50 mm else 1, clamped; refused with no record, no CHIRPS at the
+  station (never the catchment's), or fewer than 5 complete calendar years in
+  common (a window day or an unreliable day makes its year incomplete).
+- **The catchment under its station**: the stored gauge unread, no §2.4b
+  factors, the catchment MAP `catchmentMapMm` (when in 1–12 000 mm) else the
+  land units' area-weighted mean (none, so r = 1, when a land unit has no
+  MAP), the run window from the first to the last day the catchment rain has
+  a value (a checked station day, a corrected CHIRPS day, a forecast day).
+- **Units without a station** keep §2.4h's chain on the catchment's rain,
+  the station's when the catchment has one: rule 2's gauge rain is station ×
+  r and its MAP ratio divides by the level that rain is at, station MAP × r
+  (`gaugeMapMm` only switches rule 2 on; without the station's MAP rule 2
+  doesn't apply), the same ratio on the unit's gaps and forecast days; a
+  `rain_catchment_mm` reference gauge is fitted on station × r with the
+  station's accumulation windows left out. An assignment without a station
+  id, or naming a station without a record, runs as without it.
+
+Compared: `rain_final`, `rain_used`, each land unit's `rain_unit` and
+`runoff_natural` and everything downstream. `summary.stations` is a
+reduction of these and isn't compared. The engine-only pinned pairing
+factors (`rainStations.pinnedFactors`) and a unit's own forecast
+(`rain_forecast_mm@<unit>`, outlook members) stay out (§ Phase 2b).
+
+Probes: `station-units` (two units sharing a station at ratios 1.2 and 0.7,
+ratios clamped up and down, `scaleToMap` false, `correctAgainst`, a unit
+without CHIRPS, a unit without a MAP, a unit without a station; gap,
+no-data, zero-run and unreliable days on the corrected CHIRPS; a pairing on
+a site unit's CHIRPS with a month under 50 mm, one on a cell with a clamped
+month; the catchment's missing list not applied), `station-pairing-refused`
+(five complete years fitted, four refused, a year made incomplete by an
+accumulation window, a station with no CHIRPS at it, `correctAgainst` a
+refused pairing), `station-catchment` (Fragmentation on a station that is
+the catchment gauge: the units' mean MAP, its missing list, its zero run
+checked against the catchment's CHIRPS, a refused pairing falling to the
+forecast), `station-catchment-map` (an entered catchment MAP, clamped; the
+catchment's CHIRPS × a site unit's pairing; a unit on a refused pairing
+falling to the station-forced catchment rain), `station-catchment-window`
+(the run window from the checked station days),
+`station-catchment-reference` (the reference fit on station × r, its
+window left out) and `station-catchment-rule2` / `-no-map` (rule 2 at the
+station rain's level, 900 mm not `gaugeMapMm`'s 450, on station days, gaps
+and the forecast; no rule 2 without the station's MAP).
+
+## What the EWR split covers
+
+`settings.ewrSplit` (model.md §2.5b, engine ≥ 1.94.0, issue #553): with
+`'naturalMar'` under per-unit rain, each unit's EWR share is its own
+`runoff_natural` (days above 0) summed over the complete water years of the
+historical days, else every historical day, ÷ the units' total in node-id
+order, every farm without runoff at 0; with no runoff over the period, and
+under catchment rain, the flow shares. `add_ewr_split` (its own random
+stream, last) sets it on half the per-unit networks and a tenth of the
+others. Compared: every unit's `ewr` and everything downstream
+(`ewr_cumulative`, `ewr_shortfall`). Probes:
+`ewr-split-station-units` (station-units' network: two units on one station,
+one draining into the other, twelve calendar years whose complete water years
+leave out the first nine months) and `ewr-split-short-run` (eight months, no
+complete water year: the whole run). Mutants: the split ignored, and the MAR
+taken over every day instead of the complete water years.
+
 ## Phase 2b (not covered yet)
 
 `model.unsupported()` names each of these, and the generator never produces
@@ -308,7 +392,8 @@ docs/followups.md § Verification ("`verify/` phase 2b").
 - the seasonal outlook's engine-only per-unit inputs (a unit's
   `rain_forecast_mm@<unit>`, `settings.unitRain.pinned`), §2.4h and §2.15,
   and the uncertainty ensemble's pinned reference factors
-  (`settings.unitRain.reference.pinnedFactors`), §2.4h;
+  (`settings.unitRain.reference.pinnedFactors`), §2.4h, and pinned station
+  pairing factors (`settings.rainStations.pinnedFactors`), §2.4i;
 - Reserve rule tables (and audit A1–A7), §2.9c–d;
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
@@ -342,7 +427,20 @@ curve) of its start-of-day storage, so float noise in an empty dam becomes a
 visible area (an exponent of 0.62 turns 1e-13 m³ into 4e-4 m²), and the
 rain on it and its evaporation follow. On a day both sides started with a
 storage within 1e-6 m³ of 0, those three columns aren't compared; the
-storage itself still is. Likewise `ewr_binding_site` labels a day with a
+storage itself still is, net of the water a noise area gained. That rain
+can grow the noise past 1e-6 m³ over a wet spell (dense seed 206: an
+exponent of 0.53 turned 8.5e-14 m³ into 1.2e-5 m³ in two days, and the next
+day's area 0.03 m²). So each side carries the water its noise areas gained
+(rain on the dam less evaporation on a noise day, never more than its
+storage, until the dam lets it go), the next noise day is judged on the
+storage net of it, and the storage column compares the net storage
+(`_dam_noise` in diff.py). The water then goes on to real flows (dense 206:
+it stood in for 1.28e-4 m³ of borehole pumping, and the depletion lag spread
+that), so a case's tolerance is widened by exactly the water the two sides'
+noise areas gained apart: Σ |Δ(rain on the dam − evaporation)| over the
+noise days. It is 0 in a case without such an episode (177 of 180 station
+cases; the other two under 1e-20 m³), never a fixed amount, and a real
+difference is still bigger than the noise water it rides on. Likewise `ewr_binding_site` labels a day with a
 charge, so on a day both sides' charge on the unit is within 1e-6 m³ of 0
 (float noise either side of the attribution's 10⁻¹² cut-off: dense seed
 1101, a 1e-8 m³ charge on 12 000 m³ of flow) the label isn't compared; the
@@ -355,7 +453,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (138
+`test_verify.py` breaks `model.py` one documented rule at a time (171
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -413,7 +511,22 @@ one levelled too, a unit's gauge read as recorded or its accumulations not
 spread, the catchment's missing periods blanking a unit's gauge, a unit
 gauge without CHIRPS checked against none, the reference fit reading the
 gauge as stored, and it keeping the catchment's or a unit gauge's
-accumulation windows. Each mutant must disagree with the engine somewhere on the examples,
+accumulation windows. Rainfall stations' 24 (engine 1.91.0): the MAP ratio
+unclamped, or 1 whatever the MAPs, `scaleToMap` false ignored; gap days ×
+the MAP ratio too, or on raw CHIRPS; a unit's last gaps dry rather than the
+catchment forcing; `correctAgainst` ignored; the pairing's five years at 4
+or 6, its windows kept, a month without the 50 mm test, a factor unclamped,
+a station without CHIRPS at it paired with the catchment's; unreliable
+periods read, the checks skipped, a negative value a reading; every station
+given the catchment's dated lists, the catchment gauge's station without
+them, or checked against the CHIRPS at it; the catchment's station ignored;
+the catchment MAP an unweighted mean, `catchmentMapMm` ignored; the run
+window from the stored record, or counting CHIRPS a refused pairing doesn't
+correct; rule 2 dividing by `gaugeMapMm`, or by the station MAP without r,
+or applying without the station's MAP; the reference fit keeping the
+station's windows. The EWR split's 2 (engine 1.94.0): the natural MAR
+split ignored, and its MAR taken over every day rather than the complete
+water years. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
@@ -568,3 +681,36 @@ open.
 | `unit-rain-gauge-catchment-settings` | A catchment's listed missing period doesn't blank a unit gauge's days (u1); a unit gauge without CHIRPS of its own is checked against the catchment's (u2: a run day at 1 mm keeps its 0) |
 | `unit-rain-reference-checked` | The reference fit leaves the catchment gauge's set-aside zero-run days and its accumulation window out |
 | `unit-rain-reference-unit-gauge-checked` | The same with a unit's own gauge as the reference, and that unit's filled days on its levelled CHIRPS |
+
+Rainfall stations, 2026-10-24 (engine 1.91.0, written from §2.4i on branch
+`feat/553-rain-stations` while the engine landed beside it): the probes
+and the station networks of random and dense seeds 1–259 (170 cases) agree
+on every compared column. Three points were settled from the engine's
+output, one of them an engine fix:
+
+- **The run window under the catchment's station** ("follows the station's
+  record in the gauge's place") is the first to the last day the catchment
+  rain has a value: a checked station day (not a blank, set-aside or
+  unreliable one), a corrected CHIRPS day (none when the pairing is
+  refused) or a forecast day. This harness first took the stored records'
+  spans (random seeds 4, 5 and 12; probe `station-catchment-window`). Now
+  in §2.4i.
+- **Which CHIRPS the catchment gauge's station is checked against**: the
+  catchment's `rain_chirps_mm`, as today's run checks that record, not the
+  CHIRPS at the station (random seed 4: a 193-day zero run whose cell reads
+  0 kept 13 days dry, the 13 where the catchment CHIRPS reads at most 2 mm;
+  probe `station-catchment`). Now in §2.4i.
+- **The §2.4h reference fit under the catchment's station** (resolved, an
+  engine fix). §2.4i said every reader of the catchment rain sees station
+  × r and the stored gauge isn't read; the first engine 1.91.0 still fitted
+  a `rain_catchment_mm` reference gauge on the stored, prepared gauge
+  (dense seed 20: April 235 ÷ 1 644 mm, the stored gauge's sums, against
+  339 ÷ 1 644 on the station; probe `station-catchment-reference`, where a
+  unit's rain differed by up to 27.4 mm a day). Fixed in the engine
+  (86b2b80dc, fitting on station × r), and with it rule 2's MAP ratio now
+  divides by the station rain's level, station MAP × r, not `gaugeMapMm`
+  (3e949975f; probes `station-catchment-rule2` and `-no-map`).
+
+§2.4i also said a negative value is a no-data code "as in §2.4b", where
+§2.4b reads a negative catchment reading as a reading; it now says a value
+below 0 is a gap in a station's record and no CHIRPS in an area's.

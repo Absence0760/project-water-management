@@ -58,7 +58,8 @@ const runOf = (name: string) => runs.get(byName(name).name)!;
 beforeAll(() => {
 	examples = buildExamples();
 	for (const ex of examples) runs.set(ex.name, runModelChecked(inputOf(ex)));
-}, 120_000);
+	// A hang guard, not a budget: the GR4J fit dominates, and a coverage run is several times slower (vitest.config.ts).
+}, 120_000 * Number(process.env.COVERAGE_SLOWDOWN ?? 1));
 
 describe('example catchments: current schema', () => {
 	it('builds the three examples, deterministically', () => {

@@ -42,26 +42,27 @@
 	// notes on it and sees its public comments (Notes). Neither shows to a
 	// render session, which reads no project.
 	import { untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
 	import { REPORT_FOOTER } from '@water-management/engine';
-	import { api, ApiError, hasRole, type PackDetail, type PackSignoffList, type Project } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { loadOnce } from '$lib/components/common/lazy';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import { packAudiences } from '$lib/components/notes/notes';
-	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
-	import PackSendDialog from '$lib/components/packs/PackSendDialog.svelte';
-	import PackActions from '$lib/components/packs/PackActions.svelte';
-	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
+	import { api, ApiError, hasRole, type PackDetail, type PackSignoffList, type Project } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { loadOnce } from '#lib/components/common/lazy.js';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { packAudiences } from '#lib/components/notes/notes.js';
+	import ShareLinksPanel from '#lib/components/project/ShareLinksPanel.svelte';
+	import PackSendDialog from '#lib/components/packs/PackSendDialog.svelte';
+	import PackActions from '#lib/components/packs/PackActions.svelte';
+	import PackBadge from '#lib/components/packs/PackBadge.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '#lib/components/packs/pack.js';
+	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 
-	const loadReport = () => import('$lib/components/report/evidence/EvidenceReport.svelte');
+	const loadReport = () => import('#lib/components/report/evidence/EvidenceReport.svelte');
 
 	const projectId = $derived(page.params.id ?? '');
 	const packId = $derived(page.params.packId ?? '');
@@ -178,13 +179,13 @@
 	let sendOpen = $state(false);
 	const ready = $derived(status === 'loaded');
 	const stamp = $derived(pack ? packStamp(pack) : '');
-	const verify = $derived(pack ? packVerifyRef(pack, page.url.origin, base) : null);
+	const verify = $derived(pack ? packVerifyRef(pack, page.url.origin, basePath()) : null);
 	// The frozen project name, as the manifest recorded it.
 	const footer = $derived(
 		detail && pack ? [stamp, verify ? packVerifyLine(verify) : null, REPORT_FOOTER(detail.manifest.project.name, pack.title, 'Appendix B.3')].filter(Boolean).join(' · ') : undefined
 	);
 	const back = $derived(
-		pack?.scenarioId ? `${base}/projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(pack.scenarioId)}` : `${base}/projects/${encodeURIComponent(projectId)}?tab=runs&run=${encodeURIComponent(pack?.baselineRunId ?? '')}`
+		pack?.scenarioId ? resolve(`projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(pack.scenarioId)}`) : resolve(`projects/${encodeURIComponent(projectId)}?tab=runs&run=${encodeURIComponent(pack?.baselineRunId ?? '')}`)
 	);
 
 	let manifestUrl = $state<string | null>(null);
@@ -220,11 +221,11 @@
 	});
 </script>
 
-<svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}Water Management</title></svelte:head>
+<svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}IC-WBT</title></svelte:head>
 
 <main class="page report pack-page" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={status === 'loading'}>
 	{#if status === 'not-found'}
-		<div class="alert alert-error" role="alert">This evidence pack doesn’t exist, or you don’t have access to it. <a href="{base}/">Back to projects</a></div>
+		<div class="alert alert-error" role="alert">This evidence pack doesn’t exist, or you don’t have access to it. <a href={resolve('')}>Back to projects</a></div>
 	{:else if status === 'forbidden'}
 		<div class="alert alert-error" role="alert" data-testid="pack-forbidden">
 			{#if forbiddenReason}You can’t open this pack here: {forbiddenReason}.{:else}An evidence pack needs the viewer role or above on this project.{/if}
@@ -250,7 +251,7 @@
 		<div class="bar no-print">
 			<a href={back}>← Back</a>
 			<PackBadge status={pack.status} version={pack.version} />
-			<a href="{base}/help/guides/issue-an-evidence-pack" data-testid="pack-guide">How evidence packs work</a>
+			<a href={resolve('help/guides/issue-an-evidence-pack')} data-testid="pack-guide">How evidence packs work</a>
 			{#if pdf?.status === 'ready'}
 				<a class="btn btn-primary" href={api.packs.pdfUrl(projectId, pack.id)} data-testid="pack-pdf-download">Download PDF</a>
 				<button type="button" class="btn" onclick={() => window.print()}>Print this page</button>
@@ -259,7 +260,7 @@
 			{/if}
 			{#if manifestUrl}<a class="btn" href={manifestUrl} download={manifestFileName(pack.shortCode)} data-testid="pack-manifest-download">Download manifest</a>{/if}
 			{#if bundleUrl}<a class="btn" href={bundleUrl} data-testid="pack-bundle-download">Download reproduction bundle</a>{/if}
-			{#if verify}<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>{/if}
+			{#if verify}<a class="btn" href={resolve(`verify/${encodeURIComponent(pack.shortCode)}`)}>Verify page</a>{/if}
 			{#if canShare}<span class="with-tip"><button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="pack-share-open">Share link…</button><HelpTip key="pack-share-link" label="About sharing a pack by link" /></span>{/if}
 			{#if canEdit && pack.status === 'issued'}<span class="with-tip"><button type="button" class="btn" onclick={() => (sendOpen = true)} data-testid="pack-send-open">Send to the authority…</button><HelpTip key="send-to-authority" label="About sending a pack to the authority" /></span>{/if}
 			{#if project}<NotesDrawer {projectId} target={{ kind: 'pack', packId: pack.id, name: `evidence pack v${pack.version}`, audiences: packAudiences(pack.status === 'issued') }} />{/if}

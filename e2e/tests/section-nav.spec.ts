@@ -3,7 +3,7 @@
 // results took three rows at 1280 px), and what doesn't fit goes into a More menu at the end of the bar.
 // From a 1440 px window it is a side index instead, every group named and every link named as its panel's
 // heading (issue #462; the bar keeps shorter names). It is on Settings & calibration, Runs & results,
-// River & reserve, Hydrological units and Data. Synthetic data.
+// EWR, Hydrological units and Data. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
@@ -18,9 +18,9 @@ const SETTINGS_LINKS = [
 	'Rain gaps',
 	'Data quality',
 	'Demand',
-	'Flow share',
 	'Drought restrictions',
 	'Reporting',
+	'Flow generation',
 	'Flow calibration',
 	'Calibration record',
 	'Fit the parameters',
@@ -36,8 +36,8 @@ const SETTINGS_LINKS = [
 /** The side index's groups at 1440 px (issue #468): every panel, under its task. */
 const SETTINGS_RAIL: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
-	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions', 'Reporting']],
-	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
+	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automation & access', ['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']]
@@ -147,7 +147,7 @@ const RUNS_RAIL: [string | null, string[]][] = [
 	],
 	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication']],
 	['Dig deeper', ['Self-checks', 'Explore any output']],
-	['On River & reserve', ['Reserve rules met, by month, on River & reserve', 'Days below the EWR, by month, on River & reserve', 'Water account, on River & reserve']],
+	['On EWR', ['Reserve rules met, by month, on EWR', 'Days below the EWR, by month, on EWR', 'Water account, on EWR']],
 	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]
 ];
 
@@ -166,10 +166,10 @@ test('Runs & results: at 1280 px every link is on the bar, in at most two rows; 
 	await expectEvenGaps(menu);
 
 	// Wider, a column on the right of the results (the runs list is the left one), each link its panel's heading,
-	// and the panels that moved to River & reserve and Hydrological units under their pages, for this run.
+	// and the panels that moved to EWR and Hydrological units under their pages, for this run.
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await expectRail(menu, RUNS_RAIL, page.locator('#res-calibration'), 'right');
-	const reserve = menu.getByRole('link', { name: 'Reserve rules met, by month, on River & reserve' });
+	const reserve = menu.getByRole('link', { name: 'Reserve rules met, by month, on EWR' });
 	await expect(reserve).toHaveAttribute('href', `?tab=river&run=${run}#res-reserve`);
 	await expect(menu.getByRole('link', { name: 'Curtailment targets, on Hydrological units' })).toHaveAttribute('href', `?tab=supply&run=${run}#res-curtailment`);
 	// The rail marks the section read and jumps like the bar; a link to another page is never marked.
@@ -273,13 +273,13 @@ test('the open More menu passes axe; wider, More goes; on a phone the strip has 
 	await expectNoViolations(page);
 });
 
-test('River & reserve has the menu: every panel by its heading, a jump that lands, and a loaded link that lands', async ({ page, owner }) => {
+test('EWR has the menu: every panel by its heading, a jump that lands, and a loaded link that lands', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'Menu river');
 	await createRun(page.request, id, 'Baseline');
 	await page.setViewportSize({ width: 1280, height: 960 });
 	await openRiver(page, id);
-	const menu = page.getByRole('navigation', { name: 'River sections' });
+	const menu = page.getByRole('navigation', { name: 'EWR sections' });
 	// On the bar: findings first, the water account straight after them, the run-it-yourself tools last; Reserve rules
 	// met is listed without a rule table too, as its panel then says what it needs (issue #465). Shorter names there.
 	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);

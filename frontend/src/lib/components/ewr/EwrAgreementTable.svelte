@@ -10,8 +10,8 @@
 -->
 <script lang="ts">
 	import type { EwrAgreementSite, RunSummary } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { AGREEMENT_HELP, agreementGap, biasVerdict, fmtRatio, monthRows, waterYearRows, type AgreementRow } from './agreement';
 
 	let {

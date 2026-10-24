@@ -22,24 +22,24 @@
 	// Every field's accessible name starts with its visible label, then the
 	// rule ("From, transfer 3"), so speech input can say what it sees (WCAG
 	// 2.5.3).
-	import FlowUnitSelect from '$lib/components/network/FlowUnitSelect.svelte';
-	import { transferUnit } from '$lib/components/network/flowUnit.svelte';
+	import FlowUnitSelect from '#lib/components/network/FlowUnitSelect.svelte';
+	import { transferUnit } from '#lib/components/network/flowUnit.svelte.js';
 	import { onDestroy, tick } from 'svelte';
 	import { page as appPage } from '$app/state';
-	import { hashId, holdAnchor } from '$lib/help/anchor';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { transferIsBlank, type ModelEditor } from '$lib/model/editor.svelte';
-	import { transferAnchor } from '$lib/model/validate';
+	import { hashId, focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { transferIsBlank, type ModelEditor } from '#lib/model/editor.svelte.js';
+	import { transferAnchor } from '#lib/model/validate.js';
 	import MonthRates from './MonthRates.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 	import { applyTransferPaste, planTransferPaste, transferRows, transfersCsv, TRANSFERS_FORMAT } from './transfersPaste';
 	import type { Transfer, TransferSizing, TransferSource } from '@water-management/engine';
-	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from '$lib/components/network/ewrScenarioOnly';
+	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from '#lib/components/network/ewrScenarioOnly.js';
 
 	let {
 		editor,
@@ -172,7 +172,7 @@
 		}
 		release();
 		release = holdAnchor(heading);
-		heading.focus({ preventScroll: true });
+		focusAnchor(heading);
 	});
 	onDestroy(() => release());
 </script>

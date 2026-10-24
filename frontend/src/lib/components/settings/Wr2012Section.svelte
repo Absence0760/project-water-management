@@ -15,15 +15,15 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { WR2012_MONTHLY_SUM_TOLERANCE, type Wr2012Settings } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import { settingTarget } from '$lib/components/notes/notes';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import { fmtNum } from '$lib/format/number';
-	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '#lib/components/notes/notes.js';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import MonthPicker from '#lib/components/common/MonthPicker.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { fmtNum } from '#lib/format/number.js';
+	import { describeMonths, WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors, wr2012JudgingAtDefaults, wr2012JudgingLine, type MarBand, type Wr2012Draft } from './wr2012';
 
 	let {

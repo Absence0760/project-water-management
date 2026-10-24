@@ -10,11 +10,11 @@
 	// closes and leaves any edit for the save bar. The project details stay
 	// with the save bar, which saves and discards them.
 	import { tick } from 'svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { issueHref, type ModelIssue } from '$lib/model/validate';
-	import { listAnd } from '$lib/nav/unsaved';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { useInvalidFields } from '#lib/components/common/invalidFields.svelte.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { issueHref, type ModelIssue } from '#lib/model/validate.js';
+	import { listAnd } from '#lib/nav/unsaved.js';
 	import { AREA_WORDS, changedAreas } from './changedAreas';
 	import ProblemLinks from './ProblemLinks.svelte';
 

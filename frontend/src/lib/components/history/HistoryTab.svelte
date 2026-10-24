@@ -12,20 +12,20 @@
 	(the workspace sends them to their farm page, and the API refuses them).
 -->
 <script lang="ts">
-	import { SearchStep } from '$lib/nav/searchStep';
+	import { SearchStep } from '#lib/nav/searchStep.js';
 	import { untrack } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { InputChange } from '@water-management/engine';
-	import { api, ApiError, type HistoryItem, type HistoryRevision, type Relink } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import ChangesList from '$lib/components/compare/ChangesList.svelte';
-	import { fmtDate, fmtDay } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { withoutParam, withParam } from '$lib/workspace/overlays';
+	import { api, ApiError, type HistoryItem, type HistoryRevision, type Relink } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import ChangesList from '#lib/components/compare/ChangesList.svelte';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { withoutParam, withParam } from '#lib/workspace/overlays.js';
 	import {
 		entryHeading,
 		entrySummary,
@@ -105,7 +105,7 @@
 			if (words) q.set('q', words);
 			else q.delete('q');
 			q.delete('entry');
-			void goto(`?${q}`, { replaceState: queryStep.replace(), noScroll: true, keepFocus: true });
+			void queryStep.write(`?${q}`, (replace) => goto(`?${q}`, { replace, reset: false }));
 		}, 400);
 	}
 	$effect(() => () => clearTimeout(queryTimer));
@@ -162,7 +162,7 @@
 		if (value) q.set(name, value);
 		else q.delete(name);
 		q.delete('entry');
-		void goto(`?${q}`, { noScroll: true, keepFocus: true });
+		void goto(`?${q}`, { reset: false });
 	}
 
 	// --- the layout: a list beside the picked change when there's room, measured, not assumed ---
@@ -236,7 +236,7 @@
 
 	/** After a restore the newest entry is the restore itself: show it (in place, so Back doesn't step to the old pick). */
 	function showNewest() {
-		if (entryParam) void goto(withoutParam(url, 'entry'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (entryParam) void goto(withoutParam(url, 'entry'), { replace: true, reset: false });
 	}
 
 	// --- Restore this version ---------------------------------------------------

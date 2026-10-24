@@ -2,7 +2,7 @@
 // always shown with a sign and ▲/▼, and whether that's better or worse is
 // spelled out in text too, so colour is never the only cue (WCAG 1.4.1).
 import type { FarmDelta, FarmSummary, MetricDelta } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** Which way is good for a metric. 'zero' / 'one' = closer to it; 'neutral' = neither (e.g. demand). */
 export type Better = 'higher' | 'lower' | 'zero' | 'one' | 'neutral';

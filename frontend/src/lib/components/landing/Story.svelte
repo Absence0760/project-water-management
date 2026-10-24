@@ -9,7 +9,7 @@
 	// motion the scene switches without transitions. On a phone the scene
 	// isn't pinned: each step is read with its chart.
 	import { onMount } from 'svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import Diorama, { type StepId } from './Diorama.svelte';
 	import MiniChart from './MiniChart.svelte';
 	import { ART } from './art.generated';

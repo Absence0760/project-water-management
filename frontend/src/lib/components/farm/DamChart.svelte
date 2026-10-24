@@ -4,7 +4,7 @@
 	// (design §6.3, board 3). aria-hidden, with a summary sentence and a table
 	// of every month behind "Show the numbers", like MonthlyChart.
 	import type { FarmProjection } from '@water-management/engine';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { CHART_FONT_PX, damChart, damRows, damSummary, LABEL_Y } from './chart';
 
 	let { farm, caption }: { farm: FarmProjection; caption: string } = $props();

@@ -14,10 +14,10 @@
 	widens for the table; on a phone each row is a card of labelled fields.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { api, ApiError, type MapFeatureKind, type MapImportPreview, type MapImportProblem, type MapSource } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { api, ApiError, type MapFeatureKind, type MapImportPreview, type MapImportProblem, type MapSource } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
 	import { areaText, GEO_MAX_BYTES, importProblems, KIND_LABEL, KIND_NODES, problemText } from './mapData';
 	// The example file the "Expected format" offers; the backend's geojson.test.ts checks it passes the upload's checks.
 	import { GEOJSON_FORMAT } from './uploadFormat';

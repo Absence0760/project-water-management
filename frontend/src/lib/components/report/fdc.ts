@@ -2,7 +2,7 @@
 // Q10–Q95 table, from the same engine function (views/fdc.ts) the chart and
 // the exports read, in m³/s, on the days the chart shows by default.
 import type { FdcPercentileRow, FdcPercentileTable, FdcRecord } from '@water-management/engine';
-import { fmtNum, fmtQty } from '$lib/format/number';
+import { fmtNum, fmtQty } from '#lib/format/number.js';
 
 const LABEL: Record<FdcRecord, string> = { natural: 'Natural', simulated: 'Simulated outflow', observed: 'Observed' };
 

@@ -46,6 +46,9 @@ test.describe('the printable report', () => {
 			await page.emulateMedia({ media: 'print' });
 			await expect(frame).toBeHidden();
 			await expect(page.getByRole('heading', { level: 1, name: `Report frame ${label}` })).toBeVisible();
+			// The app's full name on the cover (issue #551), on paper too.
+			await expect(page.getByTestId('report-product')).toHaveText('Integrated Catchment - Water Balance Tool (IC-WBT)');
+			await expect(page).toHaveTitle(`Report · Report frame ${label} · IC-WBT`);
 			const left = await page.locator('main.report').evaluate((el) => el.getBoundingClientRect().left);
 			expect(left).toBeLessThan(40);
 		});

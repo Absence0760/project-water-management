@@ -9,7 +9,7 @@
 	const loadFlowGapFill = () => loadSections().then((m) => ({ default: m.FlowGapFillFields }));
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
-	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
+	const loadAutoFit = () => import('#lib/components/calibration/AutoFitPanel.svelte');
 	// Settings → Evidence, the declared uncertainty rule (issue #71): out of the tab's chunk, for the same reason.
 	const loadEvidenceRule = () => loadSections().then((m) => ({ default: m.EvidenceRuleFields }));
 	// Settings → Drought restrictions (engine ≥ 1.54.0, WP-3.8): its own chunk, for the same reason.
@@ -17,9 +17,9 @@
 	// The daily EWR at the outlet (engine ≥ 1.77.0, issue #455): its own chunk, for the same reason.
 	const loadEwrDailySource = () => import('./EwrDailySourceFields.svelte');
 	// API keys render for owners only, so the rest of the team never downloads them.
-	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
+	const loadApiKeys = () => import('#lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
-	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
+	const loadDataFeeds = () => import('#lib/components/feeds/DataFeedsPanel.svelte');
 	// Scheduled reports: out of the tab's chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
 	const loadReportSchedules = () => loadSections().then((m) => ({ default: m.ReportSchedulesPanel }));
 	// Evaporation from the map (issue #326 B-evap): out of the tab's chunk, for the same reason as the panels above; it loads its proposal on mount.
@@ -29,6 +29,10 @@
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	// Rain for each unit (settings.unitRain, issue #482): out of the tab's chunk, for the same reason; its areal body its own.
 	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
+	// Flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
+	const loadFlowGenUnits = () => loadSections().then((m) => ({ default: m.FlowGenerationUnits }));
+	// Split the EWR between units by (settings.ewrSplit, issue #553): out of the tab's chunk, for the same reason.
+	const loadEwrSplit = () => loadSections().then((m) => ({ default: m.EwrSplitFields }));
 	const loadArealRain = () => import('./ArealRainBody.svelte');
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
@@ -38,17 +42,18 @@
 </script>
 
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { withParam } from '$lib/workspace/overlays';
-	import { holdAnchor } from '$lib/help/anchor';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import { settingTarget } from '$lib/components/notes/notes';
+	import { withParam } from '#lib/workspace/overlays.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '#lib/components/notes/notes.js';
 	import {
 		CALIBRATION_FLOW_KINDS,
 		calibrationSeriesKey,
 		calibrationSites,
+		fitFlowMethod,
 		fitRecordCaveats,
 		fitRecordStatus,
 		hasPotentialEvaporation,
@@ -70,6 +75,7 @@
 		type FlowShareMethod,
 		type PeInput,
 		type ProjectSettings,
+		type UnitRainSettings,
 		type CalibrationFlowKind,
 		type SeriesOrigin,
 		type SeriesProvenance,
@@ -79,58 +85,61 @@
 		defaultProjectSettings,
 		resolveCatchmentAreaKm2
 	} from '@water-management/engine';
-	import { apanDailyOfValues } from '$lib/series/provenance';
-	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
-	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
+	import { apanDailyOfValues } from '#lib/series/provenance.js';
+	import { applyReport, marPenaltyOn } from '#lib/calibration/fit.js';
+	import CalibrationExclusions from '#lib/components/calibration/CalibrationExclusions.svelte';
+	import LowFlowPeriods from '#lib/components/calibration/LowFlowPeriods.svelte';
 	import { qualityFlagsAtDefaults, qualityFlagsSummary } from './qualityFlagsLine';
 	import MarPenaltyFields from './MarPenaltyFields.svelte';
-	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
-	import type { FitSession } from '$lib/calibration/fitSession.svelte';
-	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import { fitRecordLine } from '$lib/components/calibration/provenance';
-	import { api, type Project } from '$lib/api';
-	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { annualMm3 } from '$lib/components/crops/demand';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import FitPanel from '#lib/components/calibration/FitPanel.svelte';
+	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
+	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
+	import { fitRecordLine } from '#lib/components/calibration/provenance.js';
+	import { api, type Project } from '#lib/api/index.js';
+	import CalibrationWindowFields from '#lib/components/calibration/CalibrationWindowFields.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import { annualMm3 } from '#lib/components/crops/demand.js';
+	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { fitSummary, GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { dataQualityError } from './dataQuality';
 	import DataQualitySection from './DataQualitySection.svelte';
-	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError } from '$lib/components/autorun/autoRun';
-	import { outcomesError } from '$lib/components/outcomes/outcomeSettings';
-	import { outlookError } from '$lib/components/outlook/settings';
+	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError } from '#lib/components/autorun/autoRun.js';
+	import { outcomesError } from '#lib/components/outcomes/outcomeSettings.js';
+	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
 	import { saveBlockers, SETTINGS_ELSEWHERE, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-	import { applyMonthlyPaste } from '$lib/spreadsheet/paste/monthlyRows';
+	import type { CatchmentStation } from './unitRain';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
+	import { applyMonthlyPaste } from '#lib/spreadsheet/paste/monthlyRows.js';
 	import { MONTHLY_SETTINGS_FORMAT, monthlySettingRows, monthlySettingsCsv, planSettingsPaste, type MonthlySettingId } from './monthlyPaste';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import EwrHeadlineField from './EwrHeadlineField.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
-	import { explainSwitch } from '$lib/components/common/explain.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import ExplainSwitch from '#lib/components/common/ExplainSwitch.svelte';
+	import { explainSwitch } from '#lib/components/common/explain.svelte.js';
+	import Fold from '#lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
 	import { arealRainFormError, storedArealRain, withArealRain, type EditableArealRain } from './arealRain';
-	import { unitRainFormError } from './unitRain';
+	import { unitRainFormError, withUnitRain } from './unitRain';
+	import { FLOW_METHODS, flowMethodOf, methodLabel, stationOptions, type FlowGenerationMethod } from './flowGeneration';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
 	// ceiling in scripts/guards/check_web_bundle_budget.mjs). Data feeds, API keys and scheduled
 	// reports save through their own APIs, never through the save bar (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
-	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
-	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
+	import OutcomeSettingsSection from '#lib/components/outcomes/OutcomeSettingsSection.svelte';
+	import OutlookSettingsSection from '#lib/components/outlook/OutlookSettingsSection.svelte';
 	import type { SettingsDraft } from './settingsDraft.svelte';
 
 	let {
@@ -144,6 +153,8 @@
 		observedOrigins,
 		apanSeries,
 		flowRecordId = null,
+		catchmentRain,
+		rainSeries,
 		readonly,
 		onProjectChange,
 		onModelChanged = () => {}
@@ -169,6 +180,10 @@
 		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		/** A flow record the calibration can score against, for the link to where its site is set (the Data tab). */
 		flowRecordId?: string | null;
+		/** The catchment rain series a run reads, whose station MAP Rain for each unit reads (issue #553): null = none, undefined = not loaded. */
+		catchmentRain?: CatchmentStation | null;
+		/** The project's catchment rain series, the rainfall stations Flow generation → Per unit assigns (issue #553); undefined = not loaded. */
+		rainSeries?: (Pick<SeriesMeta, 'id' | 'name' | 'kind' | 'station'> & { siteNodeId?: string | null })[];
 		readonly: boolean;
 		onProjectChange: (p: Project) => void;
 		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
@@ -208,6 +223,21 @@
 	const arealError = $derived(arealRainFormError(areal));
 	// Rain for each unit (settings.unitRain, issue #482): checked here, so Save is blocked before its chunk has loaded.
 	const unitRainError = $derived(unitRainFormError(s.unitRain));
+	// Flow generation (issue #553 round 3): the radio is settings.unitRain on or off, as the checkbox it replaced was, so
+	// no stored project changes. The one switched off is kept until saved, so switching back brings it back as it was.
+	const flowMethod = $derived(flowMethodOf(s.unitRain));
+	const stations = $derived(rainSeries ? stationOptions(rainSeries) : undefined);
+	function setFlowMethod(m: FlowGenerationMethod) {
+		if (m === flowMethod) return;
+		if (m === 'fragmentation') {
+			if (s.unitRain) draft.kept.unitRain = $state.snapshot(s.unitRain);
+			s.unitRain = withUnitRain(false);
+		} else {
+			// A stored `catchment` setting (its gauge MAP, its period) comes back on too.
+			const last = (draft.kept.unitRain as UnitRainSettings | null | undefined) ?? s.unitRain ?? null;
+			s.unitRain = withUnitRain(true, last);
+		}
+	}
 	function setArealOn(on: boolean) {
 		if (!on && areal) draft.lastAreal = $state.snapshot(areal) as EditableArealRain;
 		s.arealRain = storedArealRain(withArealRain(on, draft.lastAreal));
@@ -265,6 +295,7 @@
 		saveBlockers([
 			{ id: 'set-record', message: errs.calWindow },
 			{ id: 'set-record', message: errs.exclusions },
+			{ id: 'set-record', message: errs.lowFlow },
 			{ id: 'set-record', message: errs.qualityFlags },
 			{ id: 'set-fit', message: errs.rules },
 			{ id: 'set-rain', message: errs.fitPeriod },
@@ -272,7 +303,7 @@
 			{ id: 'set-rain', message: errs.rainSource },
 			{ id: 'set-flow', message: peError },
 			{ id: 'set-flow', message: arealError },
-			{ id: 'set-flow', message: unitRainError },
+			{ id: 'set-share', message: unitRainError },
 			{ id: 'set-wr2012', message: errs.wr2012 },
 			{ id: 'set-ewr', message: errs.ewrSource },
 			{ id: 'set-reserve', message: errs.reserve },
@@ -442,6 +473,8 @@
 
 	// The section header (issue #17): where the parameters came from, and the way to the fit.
 	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
+	/** The fit's method when the parameters were fitted under the other one: "parameters not fitted for this method" (the fit status's methodChanged). */
+	const fitMismatch = $derived(fitStatus?.methodChanged && s.fitRecord ? fitFlowMethod(s.fitRecord) : null);
 	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
 	// Rain gaps at its defaults: one line that opens its two cards (rain.ts).
 	const rainAtDefaults = $derived(rainGapsAtDefaults(s));
@@ -461,7 +494,7 @@
 
 	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
 	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
-	// panels settle (as River & reserve does), and focus its heading.
+	// panels settle (as EWR does), and focus its heading.
 	onMount(() => {
 		const hash = page.url.hash.slice(1);
 		const el = hash.startsWith('set-') ? document.getElementById(hash) : null;
@@ -470,7 +503,7 @@
 		const heading = el.querySelector<HTMLElement>('h2, h3');
 		if (heading) {
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 		}
 		return release;
 	});
@@ -492,7 +525,7 @@
 <div class="settings-form explain-scope" class:explained={explainSwitch.on}>
 
 	<!-- Judge results by (issue #444): first, as the client asked; it reads results and changes none. Not in the
-	     section menu, which starts right above it; River & reserve's "Change" links here (#set-judge). -->
+	     section menu, which starts right above it; the EWR page's "Change" links here (#set-judge). -->
 	<EwrHeadlineField
 		bind:value={s.ewrHeadline}
 		ewrRules={s.ewrRules}
@@ -795,47 +828,6 @@
 		</Fold>
 	</section>
 
-	<!-- Flow share ----------------------------------------------------------------->
-	<section class="panel" id="set-share" aria-labelledby="share-h">
-		<div class="panel-head">
-			<h2 id="share-h">Flow share</h2>
-			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
-		</div>
-		<p class="summary" data-testid="summary-share">{summaries['set-share']}</p>
-		<p class="hint explain">Splits catchment natural flow and the EWR into parts per hydrological unit.</p>
-		<div class="fields">
-			<div class="field">
-				<span class="lbl"><label for="st-method">Method</label><HelpTip key="settings.flowShareMethod" /></span>
-				<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
-					{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
-				</select>
-				<span class="hint explain" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>'s In use column.</span>
-				<FieldHistoryLine field="settings:flowShareMethod" />
-			</div>
-			<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->
-			{#if s.flowShareMethod === 'hiLo'}
-				<fieldset class="plain hilo" data-testid="hilo-split">
-					<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
-					<div class="form-row">
-						<div class="field">
-							<label for="st-hi">High <span class="u">(%)</span></label>
-							<NumberInput id="st-hi" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.hi} />
-						</div>
-						<div class="field">
-							<label for="st-lo">Low <span class="u">(%)</span></label>
-							<NumberInput id="st-lo" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.lo} />
-						</div>
-						<div class="field">
-							<span class="label">Sum</span>
-							<span class="sum" class:warn={Math.abs(hiLoSum - 1) > 1e-6}>{fmtPct(hiLoSum, 1)}</span>
-						</div>
-					</div>
-					<span class="hint explain">Should add up to 100 %. Default 50 / 50; an imported workbook brings its own.</span>
-				</fieldset>
-			{/if}
-		</div>
-	</section>
-
 	<!-- Drought restrictions (engine ≥ 1.54.0, WP-3.8) ---------------------------------------->
 	<section class="panel" id="set-restrict" aria-labelledby="restrict-h">
 		<div class="panel-head">
@@ -908,6 +900,121 @@
 				<span class="hint explain" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
 				<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
 			</div>
+		</div>
+	</section>
+
+	<!-- Flow generation (issue #553 round 3) -------------------------------------------->
+	<!-- How natural flow is made: one choice, Fragmentation or Per unit (settings.unitRain off or `perUnit`, docs/model.md
+	     §2.4h, §2.5), with each method's settings under it. Its id stays set-share, so the links to the flow share and the
+	     panel's notes (settingTarget('share')) still land here. -->
+	<section class="panel" id="set-share" aria-labelledby="share-h">
+		<div class="panel-head">
+			<h2 id="share-h">Flow generation</h2>
+			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
+		</div>
+		<p class="summary" data-testid="summary-share">{summaries['set-share']}</p>
+		<fieldset class="plain flowgen-method" data-testid="flowgen-method" aria-describedby="st-flowgen-h">
+			<legend>Method <HelpTip key="settings.unitRain" /></legend>
+			<div class="radios">
+				{#each FLOW_METHODS as m (m.value)}
+					<label class="check">
+						<input type="radio" name="st-flowgen" value={m.value} checked={flowMethod === m.value} disabled={readonly} onchange={() => setFlowMethod(m.value)} />
+						{m.label}
+					</label>
+				{/each}
+			</div>
+			<span class="hint explain" id="st-flowgen-h">
+				{FLOW_METHODS.find((m) => m.value === flowMethod)?.help} GR4J’s parameters depend on the rain they were fitted on, so switching method needs a refit.
+			</span>
+		</fieldset>
+		{#if fitMismatch}
+			<!-- A state line, not an explanation (it stays when the explanations are off): the fit is the other method's. -->
+			<p class="alert alert-warning" role="status" data-testid="flowgen-refit">
+				Parameters not fitted for this method: the GR4J parameters were fitted under {methodLabel(fitMismatch)}. <a href="#set-fit">Fit the parameters</a> again
+				before relying on the results.
+			</p>
+		{/if}
+		{#if flowMethod === 'perUnit'}
+			<div class="sub-card" data-testid="flowgen-stations-card">
+				<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
+				<Lazy load={loadFlowGenUnits}>
+					{#snippet children(FlowGenerationUnits)}
+						<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} />
+					{/snippet}
+				</Lazy>
+			</div>
+			<div class="sub-card" data-testid="flowgen-chain-card">
+				<!-- What a unit without a station runs on (settings.unitRain, issue #482): the rule from before stations. -->
+				<Lazy load={loadUnitRain}>
+					{#snippet children(UnitRainFields)}
+						<UnitRainFields bind:value={s.unitRain} {readonly} nodes={editor?.model.nodes ?? []} {catchmentRain} />
+					{/snippet}
+				</Lazy>
+				{#if !readonly && editor}
+					<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
+					<Lazy load={loadUnitMap}>
+						{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
+					</Lazy>
+				{/if}
+			</div>
+		{/if}
+		<div class="sub-card" data-testid="flowgen-share-card">
+			<h3 class="sub first">{flowMethod === 'perUnit' ? 'Flow share: the EWR between units' : 'Flow share'}</h3>
+			<!-- What the shares split depends on the method (issue #553, docs/model.md §2.4h, §2.5): Fragmentation, GR4J's one
+			     run's flow and the EWR; Per unit, each unit makes its own runoff, so they split the EWR and the land-cover low-flow threshold. -->
+			{#if flowMethod === 'perUnit'}
+				<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
+				<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
+					{#if s.ewrSplit === 'naturalMar'}
+						<!-- The EWR split by each unit's natural MAR (issue #553 round 4): the share then splits neither the flow nor the EWR. -->
+						Each unit makes its own runoff and the EWR is split by each unit’s natural MAR (below); the flow share now splits only the land cover’s low-flow threshold between units.
+					{:else}
+						Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.
+					{/if}
+				</p>
+			{:else}
+				<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
+					GR4J runs once on the catchment rain; the flow share splits its flow and the EWR between units. To give each unit its own runoff, choose Per unit above.
+				</p>
+			{/if}
+			<div class="fields">
+				<div class="field">
+					<span class="lbl"><label for="st-method">Flow share method</label><HelpTip key="settings.flowShareMethod" /></span>
+					<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
+						{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
+					</select>
+					<span class="hint explain" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>'s In use column.</span>
+					<FieldHistoryLine field="settings:flowShareMethod" />
+				</div>
+				<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->
+				{#if s.flowShareMethod === 'hiLo'}
+					<fieldset class="plain hilo" data-testid="hilo-split">
+						<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
+						<div class="form-row">
+							<div class="field">
+								<label for="st-hi">High <span class="u">(%)</span></label>
+								<NumberInput id="st-hi" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.hi} />
+							</div>
+							<div class="field">
+								<label for="st-lo">Low <span class="u">(%)</span></label>
+								<NumberInput id="st-lo" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.lo} />
+							</div>
+							<div class="field">
+								<span class="label">Sum</span>
+								<span class="sum" class:warn={Math.abs(hiLoSum - 1) > 1e-6}>{fmtPct(hiLoSum, 1)}</span>
+							</div>
+						</div>
+						<span class="hint explain">Should add up to 100 %. Default 50 / 50; an imported workbook brings its own.</span>
+					</fieldset>
+				{/if}
+			</div>
+			<!-- Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553 round 4): the flow share above or each unit's natural MAR. -->
+			<Lazy load={loadEwrSplit}>
+				{#snippet children(EwrSplitFields)}
+					<EwrSplitFields value={s.ewrSplit} perUnit={flowMethod === 'perUnit'} {readonly} onchange={(v) => (s.ewrSplit = v)} />
+				{/snippet}
+			</Lazy>
+			<FieldHistoryLine field="settings:ewrSplit" />
 		</div>
 	</section>
 
@@ -1013,7 +1120,7 @@
 				</span>
 				{#if s.unitRain?.mode === 'perUnit'}
 					<!-- A state line, not an explanation: it stays when the explanations are off. -->
-					<span class="hint" role="note" data-testid="areal-rain-unit-note">With rain for each unit on (below), it applies only to the units that fall back to the catchment rain.</span>
+					<span class="hint" role="note" data-testid="areal-rain-unit-note">With flow generation Per unit (<a href="#set-share">Flow generation</a>), it applies only to the units that fall back to the catchment rain.</span>
 				{/if}
 				{#if areal}
 					<!-- Its own chunk (issue #521): most projects leave the correction off. -->
@@ -1022,18 +1129,6 @@
 					</Lazy>
 				{/if}
 			</fieldset>
-			<!-- Rain for each unit (settings.unitRain, issue #482): GR4J per unit with land on its own rain; arealRain then applies only to units on the catchment rain. -->
-			<Lazy load={loadUnitRain}>
-				{#snippet children(UnitRainFields)}
-					<UnitRainFields bind:value={s.unitRain} bind:last={draft.kept.unitRain} {readonly} nodes={editor?.model.nodes ?? []} />
-				{/snippet}
-			</Lazy>
-			{#if !readonly && editor && s.unitRain?.mode === 'perUnit'}
-				<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
-				<Lazy load={loadUnitMap}>
-					{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
-				</Lazy>
-			{/if}
 		</div>
 		<div class="sub-card" data-testid="flow-pe-card">
 			<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
@@ -1210,6 +1305,15 @@
 			dataHref={flowRecordId ? `?tab=series&series=${encodeURIComponent(flowRecordId)}#data-chart` : null}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
+		<!-- Periods in which only a record's low flows are valid (issue #557): stored with the quality flags, shown beside the exclusions. -->
+		<LowFlowPeriods
+			bind:list={() => s.qualityFlags.lowFlowPeriods ?? [], (v) => (s.qualityFlags = { ...s.qualityFlags, lowFlowPeriods: v.length ? v : undefined })}
+			bind:error={draft.errors.lowFlow}
+			{readonly}
+			{seriesKinds}
+			flowKind={s.calibrationFlowKind ?? null}
+			siteName={s.calibrationSiteNodeId ? (nodeName(s.calibrationSiteNodeId) ?? 'a gauge inside the network') : null}
+		/>
 		<!-- Rarely changed: the gauged ranges, the day rules, the river-stop months and gap filling, folded into one line of
 		     their values (ui-playbook.md § 2, "Rarely changed settings fold into their values"). -->
 		<Fold
@@ -1713,6 +1817,15 @@
 		align-items: center;
 		min-height: 36px;
 	}
+	/* Flow generation's two methods side by side, wrapping on a phone (issue #553). */
+	.radios {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 1.25rem;
+	}
+	.flowgen-method + .alert {
+		margin-top: 0.5rem;
+	}
 	.lbl {
 		display: inline-flex;
 		align-items: center;
@@ -1725,6 +1838,7 @@
 	}
 	legend :global(.helptip),
 	h2 :global(.helptip),
+	h3 :global(.helptip),
 	th :global(.helptip) {
 		margin-left: 0.15rem;
 	}

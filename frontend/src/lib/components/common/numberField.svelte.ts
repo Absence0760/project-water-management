@@ -7,7 +7,7 @@
 // volume, a cell of the node table): any space, a comma in a valid grouping
 // (1,500) as a separator, and otherwise one comma as a decimal comma (12,5 =
 // 12.5), through `parseNum`.
-import { fmtNum, parseNum } from '$lib/format/number';
+import { fmtNum, parseNum } from '#lib/format/number.js';
 import { groupedText, plainText } from './numberText';
 
 export interface NumberBounds {

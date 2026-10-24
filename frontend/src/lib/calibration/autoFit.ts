@@ -4,8 +4,8 @@
 // (AutoFitPanel.svelte) is thin. The server fits every case, one job each,
 // from the saved rules only, and applies the kept fit itself.
 import { canonicalJson, FILTER_LABEL, ruleCaseCount, SELECTION_TEST_LABEL, type CalibrationRules } from '@water-management/engine';
-import type { AutoCalibration, AutoCalibrationCase } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { AutoCalibration, AutoCalibrationCase } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import { fmtScore, objectiveName, totalRuns } from './fit';
 
 /** Model runs the rules make: each case is a full fit with both validation tests (and one without the WR2012 penalty when it is on). */

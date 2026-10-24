@@ -1,7 +1,7 @@
 // The note counts behind every notes badge in a project's workspace: one
 // GET /notes/counts shared by all the drawers on screen, loaded when the
 // first one mounts and again after any note is added, edited or deleted.
-import { api, type NoteCounts } from '$lib/api';
+import { api, type NoteCounts } from '#lib/api/index.js';
 
 export class ProjectNoteCounts {
 	counts = $state<NoteCounts | null>(null);

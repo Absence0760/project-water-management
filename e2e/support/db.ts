@@ -281,6 +281,21 @@ export async function plantPreSignaturesRun(runId: string): Promise<void> {
 }
 
 /**
+ * A run as engine 1.89.0 stored it, before the checks-only gauges' records
+ * (issue #554, engine 1.90.0): no `observed_flow_check` series. The API only
+ * makes current runs, so the spec that shows how an older run reads plants
+ * one. Its run stamp no longer matches (it reads as unverified).
+ */
+export async function plantPreCheckGaugeRun(runId: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(`UPDATE model_run SET engine_version = '1.89.0' WHERE id = $1`, [runId]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+		const d = await db.query(`DELETE FROM run_series WHERE run_id = $1 AND key = 'observed_flow_check'`, [runId]);
+		if (!d.rowCount) throw new Error(`run ${runId} has no observed_flow_check series`);
+	});
+}
+
+/**
  * A sign-off as it was recorded under statement signoff-2, before the
  * registration category and field were (092_signoff_registration): a
  * free-text body and NULL category and field. The route only makes current

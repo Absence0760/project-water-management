@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Nomination, RunMeta } from '$lib/api';
+import type { Nomination, RunMeta } from '#lib/api/index.js';
 import {
 	compareEvidenceNote,
 	currentNomination,

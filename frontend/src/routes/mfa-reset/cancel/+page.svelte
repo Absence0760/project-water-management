@@ -6,18 +6,19 @@
 	// protects may not be able to sign in. A button, not on load, like the
 	// confirmation page.
 	import { onMount } from 'svelte';
-	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api';
-	import { linkToken } from '$lib/api/emailAuth';
-	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { linkToken } from '#lib/api/emailAuth.js';
+	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
+	import { errorText } from '#lib/i18n/apiError.js';
 
 	const token = linkToken(page.url);
 	onMount(() => {
-		if (page.url.searchParams.has('token')) replaceState(`${base}/mfa-reset/cancel`, {});
+		if (page.url.searchParams.has('token')) void goto(resolve('mfa-reset/cancel'), { shallow: true, replace: true });
 	});
 
 	let busy = $state(false);
@@ -45,7 +46,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Keep two-step sign-in') })}</title>
+	<title>{t('{page} · {app}', { page: t('Keep two-step sign-in'), app: APP_SHORT_NAME })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
@@ -55,17 +56,17 @@
 			<p>{t('Cancelled. Two-step sign-in stays on your account.')}</p>
 			<p>{t('If you didn’t ask for it to be removed, someone knows your password and can read your email: change both passwords now.')}</p>
 		</div>
-		<a class="btn btn-primary" href="{base}/forgot-password">{t('Choose a new password')}</a>
+		<a class="btn btn-primary" href={resolve('forgot-password')}>{t('Choose a new password')}</a>
 	{:else if linkDead}
 		<div class="alert alert-error" role="alert">{t('This link no longer works: the request was already cancelled, or two-step sign-in has already been removed.')}</div>
-		<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
+		<a class="btn btn-primary" href={resolve('login')}>{t('Sign in')}</a>
 	{:else}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<p>{t('Someone asked to remove two-step sign-in from your account. If it wasn’t you, or you found your phone, cancel it.')}</p>
 		<button type="button" class="btn btn-primary" onclick={cancel} disabled={busy}>{busy ? t('Checking…') : t('Cancel the removal')}</button>
 	{/if}
 	{#snippet footer()}
-		<a href="{base}/login">{t('Back to sign in')}</a>
+		<a href={resolve('login')}>{t('Back to sign in')}</a>
 	{/snippet}
 </AuthCard>
 

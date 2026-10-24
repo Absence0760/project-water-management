@@ -19,6 +19,8 @@ export interface CoverageStats {
 	meanDaily: number | null;
 	/** Depth series only (rain, daily A-pan evaporation): mean daily × 365.25, mm/a. */
 	meanAnnualMm: number | null;
+	/** First day that carries a value (null if none): a stored record can start with blank days (issue #556). */
+	firstValueDate: string | null;
 	/** Last day that carries a value (null if none). */
 	lastValueDate: string | null;
 }
@@ -29,12 +31,14 @@ export function coverageStats(s: Daily, kind: string): CoverageStats {
 	const n = s.values.length;
 	let present = 0;
 	let sum = 0;
+	let first = -1;
 	let last = -1;
 	for (let i = 0; i < n; i++) {
 		const v = s.values[i];
 		if (v == null || !Number.isFinite(v)) continue;
 		present++;
 		sum += v;
+		if (first < 0) first = i;
 		last = i;
 	}
 	const d0 = toEpochDay(s.startDate);
@@ -47,6 +51,7 @@ export function coverageStats(s: Daily, kind: string): CoverageStats {
 		missingPct: n ? ((n - present) / n) * 100 : 0,
 		meanDaily,
 		meanAnnualMm: isRain(kind) && meanDaily !== null ? meanDaily * 365.25 : null,
+		firstValueDate: first >= 0 ? fromEpochDay(d0 + first) : null,
 		lastValueDate: last >= 0 ? fromEpochDay(d0 + last) : null
 	};
 }
@@ -98,7 +103,7 @@ export function coverageBins(s: Daily): CoverageBin[] {
 }
 
 /** Whole days from `iso` to `todayIso` (both YYYY-MM-DD): the one age module's. */
-export { daysBetween } from '$lib/format/age';
+export { daysBetween } from '#lib/format/age.js';
 
 export interface MergePreview {
 	/** Days that get a value where the stored series had none (or didn't reach). */

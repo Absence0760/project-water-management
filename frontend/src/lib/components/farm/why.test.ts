@@ -1,11 +1,11 @@
 // The "Why about 83 %?" page (board 4: docs/design/farmer-view-prototype/Why.dc.html)
 // with the Vaalbank fixture, and the design's rules for the other cases.
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLocale } from '$lib/i18n/locale.svelte';
-import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
+import { setLocale } from '#lib/i18n/locale.svelte.js';
+import { markedCatalogue } from '#lib/i18n/fixtureCatalogue.js';
 import type { FarmProjection } from '@water-management/engine';
 import { vaalbankFixture } from './fixture';
-import { plainText, type Rich } from '$lib/i18n/rich';
+import { plainText, type Rich } from '#lib/i18n/rich.js';
 import { kHidden, shareComparison, step1, step2, step3, whatThisIsNot, whyIntro, whyTitle, wuaDecided } from './why';
 
 const sp = (s: string | null | undefined) => s?.replace(/[\u00a0\u202f]/g, ' ');

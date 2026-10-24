@@ -13,7 +13,7 @@ import { extractCalibration, extractCalibrationWindow } from './calibration';
 import { cropTableNotes, grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
 import { asRunOfRiver, type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote, smallPoolNote } from './farms';
-import { type ImportedSeries, readFlowData } from './flowData';
+import { type ImportedSeries, nameLoggerAfterOutlet, outletName, readFlowData } from './flowData';
 import { duplicateLogger, type GaugeScaling, gaugeAsReference, validateScaling } from './gauge';
 import { projectIds } from './ids';
 import { downstreamLinks, readNetwork } from './network';
@@ -339,6 +339,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 	const zero = zeroRainNote(flow.series);
 	if (zero) report.note('zero-rain-runs', zero, { sheet: 'Flow data' });
 	duplicateLogger(flow.series, settings, report);
+	nameLoggerAfterOutlet(flow.series, outletName(elements, outflow, downstream));
 	if (reference !== false) gaugeAsReference(flow.series, settings, scaling, report);
 	if (flow.pitmanDays) {
 		report.note(

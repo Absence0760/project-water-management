@@ -7,7 +7,7 @@
 // Every other route stays a client-rendered SPA page (routes/+layout.ts).
 // CloudFront serves each from its .html (infra/s3_cloudfront.tf, spa_rewrite).
 import { DEFAULT_LOCALE, LOCALES, type Locale } from '@water-management/engine/languages';
-import { loadCatalogue } from '$lib/i18n/locale.svelte';
+import { loadCatalogue } from '#lib/i18n/locale.svelte.js';
 import type { EntryGenerator, PageLoad } from './$types';
 
 export const ssr = true;

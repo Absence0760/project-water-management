@@ -135,11 +135,11 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByText('Reserve rules met')).toBeVisible();
 	await expect(summary.getByText('33 of 36 months at the outlet')).toBeVisible();
-	// The plain-words summary above the cards leads with the same measure.
-	await expect(summary.getByText(/^The Reserve rules were met in 91\.7% of months at the outlet \(33 of 36\)\./)).toBeVisible();
+	// The plain-words summary above the cards names the same measure, after the units' supply (issue #558).
+	await expect(summary.getByText(/hydrological units? got .*\. The Reserve rules were met in 91\.7% of months at the outlet \(33 of 36\)\.$/)).toBeVisible();
 	await expect(summary.getByText('Days below the pragmatic EWR')).toBeVisible();
 
-	// "by month of the year" opens the panel, on River & reserve for this run (issue #17).
+	// "by month of the year" opens the panel, on EWR for this run (issue #17).
 	await summary.getByRole('link', { name: 'by month of the year' }).click();
 	await expect(page).toHaveURL(/[?&]tab=river&run=[^#]+#res-reserve$/);
 	const panel = page.getByRole('region', { name: /^Reserve rules met, by month/ });
@@ -352,11 +352,10 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 		'Results are judged by the Reserve rule table at the outlet, Outflow gauge (automatic), the project’s setting when this report was printed.'
 	);
 
-	// Automatic: the outlet's rule table heads the Summary, and River & reserve says so at the top.
-	await page.goto(`/projects/${id}?tab=overview`);
-	const latest = page.getByRole('region', { name: 'Latest run' });
-	await expect(latest.getByText('Reserve rules met')).toBeVisible();
+	// Automatic: the outlet's rule table heads the EWR page (the Summary's headline until issue #558), which says so at the top.
 	await page.goto(`/projects/${id}?tab=river`);
+	const headline = page.locator('dl.kpis > [data-kpi]').first();
+	await expect(headline.locator('dt')).toHaveText('Reserve rules met');
 	const judged = page.getByTestId('river-judged-by');
 	await expect(judged).toHaveText(/^Results are judged by the Reserve rule table at the outlet, Outflow gauge \(automatic\)\. Change$/);
 	// The EWR by month heat map counts days below the pragmatic EWR, and says that isn't the test the results are judged by.
@@ -382,16 +381,15 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	await expect(page.getByTestId('judge-charge-note')).toHaveCount(0);
 	await saveSettings(page);
 
-	// The same run, now headed by the pragmatic EWR: Summary, Runs & results and River & reserve.
-	await page.goto(`/projects/${id}?tab=overview`);
-	await expect(latest.getByText('EWR not met')).toBeVisible();
-	await expect(latest.getByText('Reserve rules met')).toHaveCount(0);
+	// The same run, now headed by the pragmatic EWR: Runs & results and the EWR page.
 	await page.goto(`/projects/${id}?tab=runs`);
 	const summary = page.getByRole('region', { name: 'Run summary' });
-	await expect(summary.getByText(/^Flow at the outflow gauge was below the EWR on/)).toBeVisible();
+	await expect(summary.getByText(/\. Flow at the outflow gauge was below the EWR on [\d.]+% of days \([\d\s]+ days\)\.$/)).toBeVisible();
 	await expect(summary.getByText('Reserve rules met')).toHaveCount(0);
 	await page.goto(`/projects/${id}?tab=river`);
 	await expect(judged).toHaveText(/^Results are judged by the pragmatic EWR at the outflow gauge\. Change$/);
+	await expect(headline.locator('dt')).toHaveText('EWR not met');
+	await expect(page.locator('[data-kpi="reserve"]')).toHaveCount(0);
 	// The heat map's test is now the headline's own: no clause.
 	await expect(heatNote).toContainText('A day counts when simulated outflow at the outlet is below the pragmatic EWR.');
 	await expect(heatNote).not.toContainText('the results are judged by');
@@ -404,7 +402,7 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	await expect(page.getByRole('heading', { level: 2, name: 'Days below the reserve, each water year' })).toBeVisible();
 
 	// The outlet's table chosen, then the table removed: Settings says the choice can't be
-	// followed, and River & reserve says the run is judged automatically.
+	// followed, and EWR says the run is judged automatically.
 	await updateSettings(page.request, id, { ewrHeadline: { source: 'ruleTable', siteNodeId: null } });
 	await createRun(page.request, id, 'Before removal');
 	await updateSettings(page.request, id, { ewrRules: [] });

@@ -1,7 +1,7 @@
 // Snapping while drawing (snap.ts; issue #326 C2): a plain projection stands
 // in for the map's, 10 000 px to a degree, y down.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, MapPosition } from '$lib/api/types';
+import type { MapFeature, MapPosition } from '#lib/api/types.js';
 import { snapLines, snapPoint, traceAlong, type SnapLine } from './snap';
 
 const project = (q: MapPosition) => ({ x: (q[0] - 21) * 10000, y: -(q[1] + 33) * 10000 });

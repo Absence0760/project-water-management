@@ -23,7 +23,7 @@ import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirps
 import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
-import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
+import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags, withoutPeriodHighs } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
@@ -46,6 +46,7 @@ import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { baseflowOf, BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, hasBaseflow } from './network/baseflow';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
 import { flowShares, overAllocationError } from './network/shares';
+import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, fillPlanEwrShares, resolveEwrSplit, type EwrSplitInfo, type EwrSplitMethod, type EwrSplitPlan, type PinnedEwrSplit } from './network/ewrSplit';
 import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
@@ -60,7 +61,7 @@ import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology'
 import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
-import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
+import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, withReserveTable, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
 import { naturalFlowFor, perUnitAreaKm2, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
@@ -68,6 +69,9 @@ import {
 	arealRainFactors,
 	CALIBRATION_FLOW_KINDS,
 	calibrationRecordsAt,
+	CHECK_GAUGE_FLOW_KEY,
+	checkGaugeFlowLabel,
+	gaugeCheckKind,
 	calibrationSeriesKey,
 	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
@@ -106,8 +110,10 @@ import type { AllocationLimitBound, DemandPart } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
+import { pairingFactors, rainStationSummary } from './runoff/stationForcing';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn, entersServiceAfter } from './network/development';
 import { forecastTail } from './forecastTail';
+import { chirpsChoiceWarnings } from './seriesChoice';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -316,17 +322,19 @@ function runNetwork(
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h) holds one state per land unit, catchment rain one.
 	if (resume && !!resume.runoff.units !== (perUnitAreaKm2(input) !== null))
 		throw new ModelStateMismatchError('input', resume.runoff.units ? 'the snapshot holds each unit’s runoff state (runoff from each unit’s own rain); this run forces the catchment rain' : 'the snapshot holds the catchment’s one runoff state; this run forces each unit with its own rain');
-	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, chirpsCorrection, ...(runoffWarm ? { warm: runoffWarm } : {}) });
+	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, chirpsCorrection, stations: prepared.stations?.context ?? null, ...(runoffWarm ? { warm: runoffWarm } : {}) });
 	if (nf.naturalFlowM3Day.length !== days) {
 		throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	}
 	if (capturing && !nf.state && !nf.unitStates) throw new Error('this natural flow has no state to capture (only the engine\u2019s own runoff models can be captured)');
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
+	// Rainfall stations (engine ≥ 1.91.0, §2.4i): the catchment's forcing, the units' and every pairing used.
+	const stationSummary = prepared.stations ? rainStationSummary(prepared.stations.context, prepared.stations.catchment, nf.stationUnits ?? [], prepared.stations.plan?.map ?? null) : null;
 	const areal = arealRainFactors(settings.arealRain);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month, !!nf.unitRain);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
-	const finalRain = runRain(aligned, hasRainInput(series, settings.rainSource), days);
+	const finalRain = runRain(aligned, hasRainInput(series, settings.rainSource, settings.rainStations), days);
 	// The rain on the catchment as GR4J ran on it (engine ≥ 1.13.0, §2.4g): rain_final × the areal
 	// factor. What the catchment's own water balance reads (the WR2012 rain scaling, the water
 	// account, the plausibility checks); the same array as finalRain without a correction.
@@ -348,9 +356,14 @@ function runNetwork(
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
 		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {}),
 		// The daily outlet EWR's scale factor (engine ≥ 1.77.0): the capture run's, as its other record-wide figures.
-		...(resume?.pinned.outletEwr ? { outletEwr: resume.pinned.outletEwr } : {})
+		...(resume?.pinned.outletEwr ? { outletEwr: resume.pinned.outletEwr } : {}),
+		// A natural MAR EWR split's shares (engine ≥ 1.94.0), likewise; null = resumed from a run that pinned none.
+		...(resume ? { ewrSplit: resume.pinned.ewrSplit ?? null } : {})
 	}, historyDays);
 	const { plan, topo } = built;
+	// How the EWR was split between the units (engine ≥ 1.94.0, §2.5b): a split other than the flow share says so.
+	const splitNote = ewrSplitNote(built.ewrSplit.info);
+	if (splitNote) warnings.push(splitNote);
 	const outletEwr = built.outletEwr?.info;
 	if (outletEwr) {
 		// What the run's EWR was judged by (engine ≥ 1.77.0, §2.9f): every run that doesn't use the pragmatic EWR says so.
@@ -475,6 +488,18 @@ function runNetwork(
 		const other = kinds.find((k) => k !== calKind);
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
 	}
+	// The kind the gauges' checks read (gaugeCheckKind, engine-audit.md G2): the scored kind, else the kind asked for.
+	const gaugeKind = calKind ?? settings.calibrationFlowKind ?? null;
+	// Every other gauge inside the network with a record of its own (engine ≥ 1.90.0, issue #554, docs/model.md
+	// §2.10k): the record its plausibility checks read (plausibility/index.ts gaugeChecks), beside the gauge's `outflow`, for its checks-only hydrograph.
+	for (const [i, node] of nodes.map((n, i) => [i, n] as const).sort(([, a], [, b]) => cmpStr(a.id, b.id))) {
+		if (node.kind !== 'gauge' || i === topo.outflow || node.id === calSite?.nodeId) continue;
+		// The record plausibility's gaugeChecks reads there (one rule, gaugeCheckKind, engine-audit.md G2).
+		const kind = gaugeCheckKind(gaugeKind, calibrationRecordsAt(series, node.id));
+		if (!kind) continue;
+		const obs = alignFlow(series[calibrationSeriesKey(kind, node.id)], start, days);
+		push(node.id, CHECK_GAUGE_FLOW_KEY, checkGaugeFlowLabel(kind), 'm³/day', obs.map((x) => (x === null ? NaN : x * SEC_PER_DAY)));
+	}
 	// The scored record's per-day quality flags (engine ≥ 1.48.0, CR-18, ./calibrate/dayFlags.ts): the classes the fit
 	// reads, beside the scored `observed_flow` (the outlet's or the calibration site's), only when a day is flagged.
 	// A run resumed from a snapshot whose capture run stored them stores them too, so the two have the same columns.
@@ -511,7 +536,7 @@ function runNetwork(
 		if (siteId === null) outletFlowFlags = flags;
 		scoredFlowFlags = flags;
 	}
-	push(null, 'ewr', outletEwr ? OUTLET_EWR_LABELS[outletEwr.method] : 'Pragmatic EWR', 'm³/day', ewr);
+	push(null, 'ewr', outletEwrSeriesLabel(outletEwr), 'm³/day', ewr);
 	// The drought restriction (engine ≥ 1.54.0, docs/model.md §2.7i): the level in force each day and, per part a
 	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
 	const restrictionRule = plan.restriction ? resolveDroughtRestriction(settings.droughtRestriction, []) : null;
@@ -844,6 +869,8 @@ function runNetwork(
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
 			flowShare: plan.nodes[i]!.share,
+			// Its EWR share as applied (engine ≥ 1.94.0, settings.ewrSplit): the flow share unless split by natural MAR.
+			ewrShare: plan.nodes[i]!.ewrShare ?? plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
@@ -903,6 +930,8 @@ function runNetwork(
 	const window = resolveReportWindow(settings, start, days, warnings);
 	const forecastRain = forecastRainDays(input, aligned, start, days, window, warnings);
 	missingRainWarning(input, settings.rainSource, aligned, start, days, window, warnings);
+	// Another CHIRPS series spans more of the run than the one it read, at the outlet or a unit (engine ≥ 1.90.0, issue #561).
+	warnings.push(...chirpsChoiceWarnings(input, start, days));
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
@@ -953,9 +982,15 @@ function runNetwork(
 	// Gauge and logger records measure the impacted river (farms, dams,
 	// abstraction), so they are compared with the simulated outflow: the
 	// outlet's, or the calibration site's (engine ≥ 1.41.0).
+	// Inside a low-flow period (engine ≥ 1.90.0, issue #557, settings.qualityFlags.lowFlowPeriods) a reading above
+	// its threshold is wrong, so the statistics, the EWR test on the observed record and the plausibility checks
+	// leave it out. The periods are the outlet records', as the gauged ranges are.
+	const lowFlowPeriods = settings.qualityFlags.lowFlowPeriods;
+	// A gap-filled day is no reading: the infilled treatment decides it, never the period (issue #567).
+	const calScored = calKind && !calSite ? withoutPeriodHighs(calObserved, lowFlowPeriods, calKind, start, flowFill?.[calKind]?.code) : calObserved;
 	const calibration = calKind
 		? {
-				...calibrationStats(calSim, calObserved, {
+				...calibrationStats(calSim, calScored, {
 					startDate,
 					windowStart: settings.calibrationStart,
 					windowEnd: settings.calibrationEnd,
@@ -987,17 +1022,17 @@ function runNetwork(
 	// isn't evidence here either.
 	const ewrObserved =
 		observedKind
-			? ewrAgreement(simOutflow, observedM3s, ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
+			? ewrAgreement(simOutflow, withoutPeriodHighs(observedM3s, lowFlowPeriods, observedKind, start, flowFill?.[observedKind]?.code), ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
 			: null;
 	// The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0, docs/model.md §2.10k):
-	// its record against its simulated outflow and its own pragmatic requirement.
+	// its record against its simulated outflow and its own pragmatic requirement. The record is the one the
+	// plausibility checks and the checks-only series read there (engine ≥ 1.90.0, gaugeCheckKind, engine-audit.md G2).
 	const ewrAgreementSites: EwrAgreementSite[] = [];
 	for (const node of [...siteNodes].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))) {
 		if (node === topo.outflow) continue;
 		const id = nodes[node]!.id;
-		const kinds = calibrationRecordsAt(series, id);
-		if (!kinds.length) continue;
-		const kind = settings.calibrationFlowKind && kinds.includes(settings.calibrationFlowKind) ? settings.calibrationFlowKind : kinds[0]!;
+		const kind = gaugeCheckKind(gaugeKind, calibrationRecordsAt(series, id));
+		if (!kind) continue;
 		const obs = alignFlow(series[calibrationSeriesKey(kind, id)], start, days);
 		const r = sim.nodes[node]!;
 		ewrAgreementSites.push({
@@ -1049,6 +1084,8 @@ function runNetwork(
 		natural,
 		simOutflow,
 		observedKind,
+		scoredKind: gaugeKind,
+		historyDays,
 		aligned,
 		accumulation,
 		finalRain: catchmentRain,
@@ -1064,7 +1101,7 @@ function runNetwork(
 		// The scored record (engine ≥ 1.55.0): the validation signatures follow the calibration site.
 		scored:
 			calKind && scoredFlowFlags
-				? { kind: calKind, observedM3s: calObserved, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
+				? { kind: calKind, observedM3s: calScored, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
 				: null
 	});
 	if (checked) warnings.push(...checked.warnings);
@@ -1177,9 +1214,16 @@ function runNetwork(
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
 				// The daily outlet EWR's scale factor and its inputs (engine ≥ 1.77.0), without the resumed run's mark.
 				...(outletEwr ? { outletEwr: (({ pinned: _, ...rest }) => rest)(outletEwr) } : {}),
+				// A natural MAR EWR split's period and shares by node id (engine ≥ 1.94.0), none when it had no runoff to split by.
+				...(built.ewrSplit.pin ? { ewrSplit: built.ewrSplit.pin } : {}),
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
 				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.53.0).
-				fits: { ...prepared.fits!, chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!) }
+				fits: {
+					...prepared.fits!,
+					chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!),
+					// Every pairing the run used, the units' included (engine ≥ 1.91.0, §2.4i).
+					...(prepared.stations ? { stationFactors: pairingFactors(prepared.stations.context) } : {})
+				}
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: [],
@@ -1218,9 +1262,11 @@ function runNetwork(
 			},
 			...(nf.balance ? { runoff: nf.balance } : {}),
 			...(nf.unitRain ? { unitRain: nf.unitRain } : {}),
+			...(stationSummary ? { stations: stationSummary } : {}),
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
+			ewrSplit: built.ewrSplit.info,
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
@@ -1255,6 +1301,10 @@ function runPlausibility(r: {
 	natural: Float64Array;
 	simOutflow: Float64Array;
 	observedKind: CalibrationFlowKind | null;
+	/** The kind the run's calibration statistics score (calKind), else the kind asked for in Settings: the gauges' checks read it (gaugeCheckKind). */
+	scoredKind: CalibrationFlowKind | null;
+	/** The days before a forecast tail: the gauges' fit checks read only these. */
+	historyDays: number;
 	aligned: (kind: SeriesKind) => (number | null)[];
 	accumulation: AccumulationRun | null;
 	finalRain: (number | null)[] | null;
@@ -1287,7 +1337,8 @@ function runPlausibility(r: {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
 	const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
-	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = r.aligned(kind);
+	// A reading above a low-flow period's threshold (engine ≥ 1.90.0, issue #557) misleads the checks as it would the scores.
+	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = withoutPeriodHighs(r.aligned(kind), settings.qualityFlags.lowFlowPeriods, kind, start, r.flowFill?.[kind]?.code);
 	const excluded = new Uint8Array(days);
 	for (const x of exclusionRanges(settings.calibrationExclusions)) {
 		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;
@@ -1334,6 +1385,8 @@ function runPlausibility(r: {
 		simulatedM3Day: r.simOutflow,
 		observed,
 		calibrationKind: r.observedKind,
+		scoredKind: r.scoredKind,
+		...(r.historyDays < days ? { historyDays: r.historyDays } : {}),
 		excluded,
 		...(flowFlagged ? { flowFlagged } : {}),
 		damsM3Day: dams,
@@ -1501,10 +1554,15 @@ export function buildNetworkPlan(
 		 * is 0. The arrays are the plan's own, so a calibration can refill them.
 		 */
 		unitRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
+		/**
+		 * A natural MAR EWR split's period and shares (engine ≥ 1.94.0): the capture run's, as its other record-wide
+		 * figures. null: a resumed run whose capture run pinned none (it split by the flow share), which keeps the flow share.
+		 */
+		ewrSplit?: PinnedEwrSplit | null;
 	} = {},
 	/** The run's historical days, before a forecast tail (./forecastTail.ts); a full allocation's factors read only these. */
 	historyDays: number = days
-): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array; outletEwr?: OutletEwrPlan } {
+): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array; outletEwr?: OutletEwrPlan; ewrSplit: PlannedEwrSplit } {
 	if (settings.demandFactorFrom != null && start === undefined) throw new Error('buildNetworkPlan: settings.demandFactorFrom needs the run start');
 	if (settings.damStorageReset != null && start === undefined) throw new Error('buildNetworkPlan: settings.damStorageReset needs the run start');
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
@@ -1617,7 +1675,7 @@ export function buildNetworkPlan(
 		if (nodes.some((n) => n.kind === 'farm' && n.damCapacityM3 > 0))
 			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
-	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource), days);
+	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource, settings.rainStations), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
 	// A dam with a survey curve (WP-3.5) takes its area from it; one the run can't use says why and runs on the power law.
 	for (const n of nodes) {
@@ -1819,9 +1877,66 @@ export function buildNetworkPlan(
 		const areaKm2 = resolveCatchmentAreaKm2(settings.calibration, { ...input, model });
 		outletEwr = { source: ewrSource, info: fillPlanOutletEwr(plan, topo.outflow, natural, ewrSource, areaKm2, historyDays, days, warm.outletEwr) };
 	}
-	const ewrPart = outletEwr ? { outletEwr } : {};
+	// How the EWR is split between the units (engine ≥ 1.94.0, ./network/ewrSplit.ts, §2.5b): set on the plan's farms.
+	const ewrSplit = planEwrSplit(plan, nodes, resolveEwrSplit(settings.ewrSplit, []), unitRunoffOf, start, historyDays, warm.ewrSplit);
+	const ewrPart = outletEwr ? { outletEwr, ewrSplit } : { ewrSplit };
 	if (warm.captureAt === undefined) return { plan, topo, allocation, ...ewrPart };
 	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0), ...ewrPart };
+}
+
+/**
+ * A plan's EWR split (engine ≥ 1.94.0): what the run reports, and with a natural MAR split the farms and period
+ * a calibration refills each candidate's shares from (`refill`, absent when the shares are pinned or the flow share).
+ */
+export interface PlannedEwrSplit {
+	info: EwrSplitInfo;
+	refill?: EwrSplitPlan;
+	/** The shares applied, by node id (natural MAR only). */
+	shares?: Map<string, number>;
+	/** What a snapshot of this run pins (a natural MAR split asked for under per-unit rain): its period and shares, none without runoff. */
+	pin?: PinnedEwrSplit;
+}
+
+/**
+ * Set the plan's farms' EWR shares for settings.ewrSplit (./network/ewrSplit.ts): nothing for the flow share (the
+ * run is the one before, to the bit) or under catchment rain; a resumed run's pinned shares; else each unit's
+ * natural MAR over the complete water years of the historical days.
+ */
+function planEwrSplit(
+	plan: NetworkPlan,
+	nodes: readonly NetworkNode[],
+	method: EwrSplitMethod,
+	unitRunoffOf: ReadonlyMap<string, Float64Array>,
+	start: number | undefined,
+	historyDays: number,
+	pinned: PinnedEwrSplit | null | undefined
+): PlannedEwrSplit {
+	if (method === 'flowShare') return { info: { method, applied: 'flowShare' } };
+	if (!unitRunoffOf.size) return { info: { method, applied: 'flowShare', why: 'catchmentRain' } };
+	// Resumed from a run that split by the flow share (or had no runoff to split by): its own days are a part of the
+	// record, not the period, so it keeps the flow share rather than work shares out on them.
+	if (pinned === null) return { info: { method, applied: 'flowShare', why: 'resumed' } };
+	if (pinned) {
+		// The capture run had no runoff to split by (no shares pinned): the flow share, as it did.
+		if (!pinned.shares.length) return { info: { method, applied: 'flowShare', why: 'noRunoff', pinned: true }, pin: pinned };
+		// The snapshot's fingerprint refuses another model, so every farm is in the pinned shares; one that isn't gets 0.
+		const byId = new Map(pinned.shares.map((x) => [x.nodeId, x.share]));
+		nodes.forEach((n, i) => {
+			if (n.kind === 'farm') plan.nodes[i]!.ewrShare = byId.get(n.id) ?? 0;
+		});
+		return { info: { method, applied: 'naturalMar', period: pinned.period, pinned: true }, shares: byId, pin: pinned };
+	}
+	const days = ewrSplitDays(start, historyDays);
+	const refill: EwrSplitPlan = {
+		days,
+		farms: nodes.flatMap((n, i) => (n.kind === 'farm' ? [{ index: i, nodeId: n.id, runoff: plan.nodes[i]!.localRunoff }] : []))
+	};
+	const shares = fillPlanEwrShares(plan.nodes, refill);
+	const period = ewrSplitPeriod(start, days);
+	const info: EwrSplitInfo = shares ? { method, applied: 'naturalMar', period } : { method, applied: 'flowShare', why: 'noRunoff' };
+	// What a snapshot pins: the shares, or none when there was no runoff to split by, so a resumed run does as this one did.
+	const pin: PinnedEwrSplit = { period, shares: shares ? [...shares].map(([nodeId, share]) => ({ nodeId, share })) : [] };
+	return { info, refill, pin, ...(shares ? { shares } : {}) };
 }
 
 /** The daily outlet EWR's source when it isn't the pragmatic EWR (engine ≥ 1.77.0), and what the plan's `ewr` was filled from. */
@@ -1851,7 +1966,8 @@ export function fillPlanOutletEwr(
 	pinned?: OutletEwrInfo
 ): OutletEwrInfo {
 	const at = naturalAtOutlet(plan, outflow, natural) ?? natural;
-	const info: OutletEwrInfo = pinned ? { ...pinned, pinned: true } : ewrDailyScale(source, at, historyDays, areaKm2);
+	// A pinned factor keeps its scale; the Reserve table read is this run's own (issue #552).
+	const info: OutletEwrInfo = pinned ? withReserveTable({ ...pinned, pinned: true }, source) : ewrDailyScale(source, at, historyDays, areaKm2);
 	fillOutletEwr(source, info.scale, plan.month, at, plan.ewr, 0, n);
 	return info;
 }
@@ -2611,7 +2727,7 @@ function catchmentRunoffCoefficient(
 	let rainMm = 0;
 	if (perUnit && balance) rainMm = balance.rainMm;
 	else {
-		if (!hasRainInput(input.series, settings.rainSource)) return null;
+		if (!hasRainInput(input.series, settings.rainSource, settings.rainStations)) return null;
 		const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 		for (let t = 0; t < natural.length; t++) {
 			const v = c[t] ?? ch[t] ?? f[t] ?? null;
@@ -2792,6 +2908,16 @@ export const OUTLET_EWR_LABELS: Record<OutletEwrInfo['method'], string> = {
 	percentile: 'EWR from the DRM percentile tables (scaled)'
 };
 
+/** The `ewr` series label when the percentile tables read the Reserve flows without high flows (engine ≥ 1.90.0, issue #552). */
+export const OUTLET_EWR_WITHOUT_HIGH_FLOWS_LABEL = 'EWR from the DRM percentile tables, without high flows (scaled)';
+
+/** The outlet `ewr` series' label: "Pragmatic EWR", or the DRM table the run read it from. */
+export function outletEwrSeriesLabel(info: { method: string; reserveTable?: string } | null | undefined): string {
+	if (!info || info.method === 'pragmatic') return 'Pragmatic EWR';
+	if (info.method === 'percentile' && info.reserveTable === 'withoutHighFlows') return OUTLET_EWR_WITHOUT_HIGH_FLOWS_LABEL;
+	return OUTLET_EWR_LABELS[info.method as OutletEwrInfo['method']];
+}
+
 /** The label of an EWR site's `ewr_charge_shortfall` series (engine ≥ 1.3.0, settings.ewrChargeSource 'ruleTable'). */
 export const EWR_CHARGE_SHORTFALL_LABEL = 'EWR shortfall the charge follows: the Reserve rule table’s requirement (negative)';
 
@@ -2919,7 +3045,7 @@ function missingRainWarning(
 	warnings: string[]
 ): void {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
-	if (!hasRainInput(input.series, periods)) return;
+	if (!hasRainInput(input.series, periods, input.settings?.rainStations)) return;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	const ranges: [number, number][] = [];
 	let missing = 0;

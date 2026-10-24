@@ -3,7 +3,7 @@
 // match the view moved to, the live line, and the places' credit. Kept apart
 // from the markup so the flow is tested without a DOM
 // (mapSearchState.svelte.test.ts).
-import type { MapSearchAnswer, MapSearchHit } from '$lib/api/types';
+import type { MapSearchAnswer, MapSearchHit } from '#lib/api/types.js';
 import { hitName, placeCredits, resultLine } from './mapSearch';
 
 export class MapSearchState {

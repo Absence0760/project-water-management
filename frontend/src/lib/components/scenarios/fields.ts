@@ -13,6 +13,7 @@ import {
 	NODE_SET_FIELDS,
 	SETTINGS_PATHS,
 	EWR_CHARGE_SOURCES,
+	EWR_SPLIT_METHODS,
 	LOW_FLOW_MEASURES,
 	ALLOCATION_MODE_LABEL,
 	ALLOCATION_MODES,
@@ -45,15 +46,15 @@ import {
 	type TransferSetField
 } from '@water-management/engine';
 import { describeDroughtRestriction, describeEwrDailySource, ewrDailySourceIssues, type DroughtRestrictionRule, type EwrDailySource } from '@water-management/engine';
-import { restrictionFormError } from '$lib/components/settings/droughtRestriction';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { DAY_FIRST_EXAMPLES, fmtDay, fmtNum, parseDay, parseNum } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
-import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/components/settings/peInput';
-import { curveText, parseDamCurve } from '$lib/components/network/damCurve';
-import { SOURCE_OPTION_LABEL } from '$lib/components/network/demandObjectSource';
-import { PRIORITY_OPTION_LABEL } from '$lib/components/network/demandObjectOrder';
-import { pumpUnit, riverToDamUnit, type FlowUnit } from '$lib/components/network/flowUnit.svelte';
+import { restrictionFormError } from '#lib/components/settings/droughtRestriction.js';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { DAY_FIRST_EXAMPLES, fmtDay, fmtNum, parseDay, parseNum } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { peFormError, peOf, peText, withPeKind, type EditablePe } from '#lib/components/settings/peInput.js';
+import { curveText, parseDamCurve } from '#lib/components/network/damCurve.js';
+import { SOURCE_OPTION_LABEL } from '#lib/components/network/demandObjectSource.js';
+import { PRIORITY_OPTION_LABEL } from '#lib/components/network/demandObjectOrder.js';
+import { pumpUnit, riverToDamUnit, type FlowUnit } from '#lib/components/network/flowUnit.svelte.js';
 
 export interface EnumOption {
 	value: string;
@@ -368,6 +369,8 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 		label: 'Flow-share method',
 		spec: { t: 'enum', options: plain(['area', 'hiLo', 'manual'], { area: 'By area', hiLo: 'High/low MAP', manual: 'Manual' }) }
 	},
+	// How the EWR is split between the units (engine ≥ 1.94.0, issue #553); differs from the flow share only with rain for each unit.
+	ewrSplit: { label: 'EWR split between units by', spec: { t: 'enum', options: plain(EWR_SPLIT_METHODS, { flowShare: 'The flow share', naturalMar: 'Each unit’s natural MAR' }) } },
 	'hiLoSplit.hi': { label: 'High-MAP share of runoff', spec: pct() },
 	'hiLoSplit.lo': { label: 'Low-MAP share of runoff', spec: pct() },
 	'gr4j.x1': { label: 'GR4J production store X1', spec: num('mm') },

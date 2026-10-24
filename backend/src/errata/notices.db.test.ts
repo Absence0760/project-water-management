@@ -198,8 +198,8 @@ describe('sending', () => {
 			expect(r.failed).toBe(0);
 			const toOwner = outbox.filter((m) => m.to === owner.email && m.kind === 'erratum_notice');
 			expect(toOwner.map((m) => m.subject).sort()).toEqual([
-				'Known engine bug ER-9001 may affect Erratum <i>catchment</i> — Water Management',
-				'Known engine bug ER-9003 may affect Erratum <i>catchment</i> — Water Management'
+				'Known engine bug ER-9001 may affect Erratum <i>catchment</i> — IC-WBT',
+				'Known engine bug ER-9003 may affect Erratum <i>catchment</i> — IC-WBT'
 			]);
 			const m = toOwner.find((x) => x.subject.includes('ER-9001'))!;
 			expect(m.text).toContain('2 runs in Erratum <i>catchment</i> were made by engine 90.1.0 or later');

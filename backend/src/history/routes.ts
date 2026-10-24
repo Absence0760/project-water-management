@@ -5,7 +5,7 @@
 // Viewers read; editors restore. Farmers get 403 (requireRole 'viewer'), and
 // RLS shows them nothing either way (D4).
 import { isUnitRainKind, siteProblem, type SiteNode } from '../series/site.js';
-import { cleanModelNames, diffInputs, upgradeLegacyModel, type InputChange, type RunInputsSnapshot } from '@water-management/engine';
+import { cleanModelNames, diffInputs, upgradeLegacyModel, type InputChange, type RainStationMeta, type RunInputsSnapshot } from '@water-management/engine';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
@@ -20,7 +20,8 @@ import { saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
-import { rowOrigin, rowProvenance, SERIES_META, type SeriesMetaRow } from '../series/merge.js';
+import { rowOrigin, rowProvenance, SERIES_META, stationSql, type SeriesMetaRow } from '../series/merge.js';
+import { stationProblem } from '../series/station.js';
 import { replaceSeries } from '../series/replace.js';
 import { setDayBoundary } from '../series/routes.js';
 import { fieldHistory } from './fields.js';
@@ -394,7 +395,7 @@ export const historyRoutes = new Hono<AuthEnv>()
 				`SELECT r.id::text AS id, r.created_at AS "createdAt", u.display_name AS "createdBy", r.reason,
 					to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", cardinality(r."values") AS length, r.values_sha256 AS "valuesSha256",
 					r.kind, r.name, r.unit, r.product, r.product_version AS "productVersion", r.day_boundary AS "dayBoundary", r.site_node_id AS "siteNodeId",
-					r.source, r.source_unit AS "sourceUnit", r.source_unit_factor AS "sourceUnitFactor"
+					r.source, r.source_unit AS "sourceUnit", r.source_unit_factor AS "sourceUnitFactor", ${stationSql('r')} AS station
 				 FROM series_revision r LEFT JOIN app_user u ON u.id = r.created_by
 				 WHERE r.project_id = $1 AND (r.series_id = $2
 					OR (r.kind, r.name) IN (SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2))
@@ -423,10 +424,11 @@ export const historyRoutes = new Hono<AuthEnv>()
 				source: string | null;
 				sourceUnit: string | null;
 				sourceUnitFactor: number | null;
+				station: RainStationMeta | null;
 			}>(
 				`SELECT r.kind, r.name, r.unit, to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", r."values", r.product, r.product_version AS "productVersion",
 					r.day_boundary AS "dayBoundary", r.site_node_id AS "siteNodeId",
-					r.source, r.source_unit AS "sourceUnit", r.source_unit_factor AS "sourceUnitFactor"
+					r.source, r.source_unit AS "sourceUnit", r.source_unit_factor AS "sourceUnitFactor", ${stationSql('r')} AS station
 				 FROM series_revision r
 				 WHERE r.project_id = $1 AND r.id = $3 AND (r.series_id = $2
 					OR (r.kind, r.name) IN (SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2))`,
@@ -438,12 +440,13 @@ export const historyRoutes = new Hono<AuthEnv>()
 			// So does the day boundary (033_series_day_boundary).
 			// A restore puts back values the project had, not new data, so it queues no automatic re-run.
 			// And its source and given unit (107_series_source).
-			const { siteNodeId, source, sourceUnit, sourceUnitFactor, ...body } = rows[0];
+			const { siteNodeId, source, sourceUnit, sourceUnitFactor, station, ...body } = rows[0];
 			const { meta } = await replaceSeries(
 				db,
 				id,
 				{ ...body, provenance: rowProvenance(body), origin: rowOrigin({ source, sourceUnit, sourceUnitFactor }) },
-				{ restoredFrom: rev }
+				// A deleted series comes back under its own id (a rainfall station a setting names, issue #553).
+				{ restoredFrom: rev, reuseId: seriesId }
 			);
 			// And the days edited by hand (212_series_hand_days): they mark the values that come back (a replace clears them).
 			const { rows: marked } = await db.query<SeriesMetaRow>(
@@ -454,6 +457,13 @@ export const historyRoutes = new Hono<AuthEnv>()
 			meta.handDays = marked[0]!.handDays;
 			// And its site (085): a gauge record comes back at its gauge, never quietly at the outlet, and a land
 			// unit's own rain (209) at its unit, never quietly as the catchment's.
+			// And a rainfall station's details (239): cleared before a site comes back (a station has none), and put back after.
+			// The revision has the series' kind and site, so details only come back with no site on a catchment rain series.
+			const sameStation = JSON.stringify(meta.station) === JSON.stringify(station);
+			if (!sameStation && meta.station) {
+				await db.query('UPDATE time_series SET station_map_mm = NULL, station_map_source = NULL, station_lat = NULL, station_lon = NULL WHERE project_id = $1 AND id = $2', [id, meta.id]);
+				meta.station = null;
+			}
 			if (meta.siteNodeId !== siteNodeId) {
 				if (siteNodeId !== null) {
 					const { rows: node } = await db.query<SiteNode>(
@@ -475,6 +485,20 @@ export const historyRoutes = new Hono<AuthEnv>()
 				}
 				await db.query('UPDATE time_series SET site_node_id = $3 WHERE project_id = $1 AND id = $2', [id, meta.id, siteNodeId]);
 				meta.siteNodeId = siteNodeId;
+			}
+			if (!sameStation && station) {
+				// A revision from before a site was recorded with station details can't exist (time_series_station_only), but say so plainly if one does.
+				const problem = stationProblem(body.kind, siteNodeId);
+				if (problem) throw new ApiError(409, `these values were a rainfall station's, and ${problem}`);
+				await db.query('UPDATE time_series SET station_map_mm = $3, station_map_source = $4, station_lat = $5, station_lon = $6 WHERE project_id = $1 AND id = $2', [
+					id,
+					meta.id,
+					station.mapMm,
+					station.mapSource,
+					station.lat,
+					station.lon
+				]);
+				meta.station = station;
 			}
 			return c.json(await setDayBoundary(db, id, meta, body.dayBoundary));
 		});

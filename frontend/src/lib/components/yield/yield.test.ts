@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { YIELD_DEFAULT_TOLERANCE, type ScenarioOp, type YieldPoint } from '@water-management/engine';
-import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
+import type { JobMeta, RunMeta, YieldJob, YieldResult } from '#lib/api/index.js';
 import { assuranceLabel, curveChart, engineDiffersNote, jobStatus, jobToFollow, latestResults, modelRuns, yieldWithheld, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
 
 const job = (over: Partial<JobMeta>): JobMeta => ({

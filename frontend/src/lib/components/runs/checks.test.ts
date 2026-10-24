@@ -1,6 +1,6 @@
 import { FARM_COLUMNS, type RunVerification, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { RunCatchmentDay, RunDay } from '$lib/api';
+import type { RunCatchmentDay, RunDay } from '#lib/api/index.js';
 import { BALANCE_COLUMNS, balanceClosure, balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 const check = (passed: boolean) => ({ id: 'balance' as const, label: 'x', passed, detail: passed ? null : 'broken' });

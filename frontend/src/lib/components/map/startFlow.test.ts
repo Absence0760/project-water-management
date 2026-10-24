@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, StartPlan, StartProposal, StartState, StartUnit } from '$lib/api';
+import type { MapFeature, StartPlan, StartProposal, StartState, StartUnit } from '#lib/api/index.js';
 import {
 	applySummary,
 	applyTicks,

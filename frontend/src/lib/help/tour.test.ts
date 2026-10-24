@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HELP } from './content';
-import { NAV_SECTIONS, TAB_LABELS } from '$lib/workspace/tabs';
+import { NAV_SECTIONS, TAB_LABELS } from '#lib/workspace/tabs.js';
 import { DIAGRAM_IDS, GUIDES, OPTIONAL_MODEL_TABS, SETUP_STEPS, SETUP_TABS, TAB_TITLES, guideFor, inline, plainText } from './guides';
 import { SHOTS, SHOT_ALT, TIP_PICTURES, pictureSrc, pictureSrcset, type Light, type ShotId } from './pictures';
 import { TOUR } from './tour';

@@ -6,12 +6,13 @@
 	// members beside them. The name, the thresholds and leave/delete sit in the
 	// settings sheet (`?settings=1`, lib/components/teams/TeamSettings.svelte),
 	// out of the reading path.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
 	import {
 		api,
@@ -26,15 +27,15 @@
 		type Team,
 		type TeamMember,
 		type TeamRole
-	} from '$lib/api';
-	import { emailAuthApi } from '$lib/api/emailAuth';
-	import { session } from '$lib/auth/session.svelte';
-	import PendingInvites from '$lib/components/auth-extras/PendingInvites.svelte';
-	import { upsertInvite } from '$lib/components/auth-extras/invites';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import EmailText from '$lib/components/common/EmailText.svelte';
-	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
-	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
+	} from '#lib/api/index.js';
+	import { emailAuthApi } from '#lib/api/emailAuth.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import PendingInvites from '#lib/components/auth-extras/PendingInvites.svelte';
+	import { upsertInvite } from '#lib/components/auth-extras/invites.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import EmailText from '#lib/components/common/EmailText.svelte';
+	import StatusBar from '#lib/components/portfolio/StatusBar.svelte';
+	import StatusPill from '#lib/components/portfolio/StatusPill.svelte';
 	import {
 		ageText,
 		alertsText,
@@ -49,11 +50,11 @@
 		sourceText,
 		statusSummary,
 		thresholdsRule
-	} from '$lib/components/portfolio/portfolio';
-	import TeamSettings from '$lib/components/teams/TeamSettings.svelte';
-	import { withParam, withoutParam } from '$lib/workspace/overlays';
-	import { STALE_DAYS } from '$lib/format/age';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	} from '#lib/components/portfolio/portfolio.js';
+	import TeamSettings from '#lib/components/teams/TeamSettings.svelte';
+	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
+	import { STALE_DAYS } from '#lib/format/age.js';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
 
 	const teamId = $derived(page.params.id ?? '');
 	const me = $derived(session.user?.id ?? '');
@@ -101,7 +102,7 @@
 	});
 	$effect(() => {
 		// Closed (Done, Esc, the ✕): drop `settings` in place.
-		if (!settingsOpen && untrack(() => settingsParam)) void goto(withoutParam(page.url, 'settings'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!settingsOpen && untrack(() => settingsParam)) void goto(withoutParam(page.url, 'settings'), { replace: true, reset: false });
 	});
 	const settingsHref = $derived(withParam(page.url, 'settings', '1'));
 
@@ -204,7 +205,7 @@
 		error = null;
 		try {
 			await api.teams.removeMember(teamId, m.userId);
-			if (self) return void (await goto(`${base}/teams`));
+			if (self) return void (await goto(resolve('teams')));
 			const at = members.findIndex((x) => x.userId === m.userId);
 			members = members.filter((x) => x.userId !== m.userId);
 			if (team) team.memberCount -= 1;
@@ -267,7 +268,7 @@
 		error = null;
 		try {
 			await api.teams.remove(team.id);
-			await goto(`${base}/teams`);
+			await goto(resolve('teams'));
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -281,14 +282,14 @@
 	const canPublish = (p: PortfolioProject) => p.role === 'editor' || p.role === 'owner';
 </script>
 
-<svelte:head><title>{team ? `${team.name} · ` : ''}Teams · Water Management</title></svelte:head>
+<svelte:head><title>{team ? `${team.name} · ` : ''}Teams · IC-WBT</title></svelte:head>
 
 {#snippet projectRow(p: PortfolioProject)}
 	{@const age = ageText(p)}
 	{@const short = farmsShortText(p)}
 	<li class="prow">
 		<div class="p-name">
-			<a class="name" href="{base}/projects/{p.id}">{p.name}</a>
+			<a class="name" href={resolve(`projects/${p.id}`)}>{p.name}</a>
 			<span class="sub">
 				{sourceText(p)}{#if p.source === null && canPublish(p)}{' '}· run the model to see figures{/if}
 			</span>
@@ -303,7 +304,7 @@
 				<dt>Hydrological units short</dt>
 				<dd>
 					{#if short}
-						{#if p.farmsShort7 && p.sourceRunId}<a href={curtailmentHref(p, base)}>{short}</a>{:else}{short}{/if}
+						{#if p.farmsShort7 && p.sourceRunId}<a href={curtailmentHref(p, basePath())}>{short}</a>{:else}{short}{/if}
 					{:else}<span class="muted">{farmsUnknownText(p)}</span>{/if}
 				</dd>
 			</div>
@@ -323,10 +324,10 @@
 	<LoadState {loading} error={loadError} retry={load}>
 		{#if notFound || !team}
 			<div class="alert alert-error" role="alert">
-				This team doesn't exist or you're not a member. <a href="{base}/teams">Back to teams</a>
+				This team doesn't exist or you're not a member. <a href={resolve('teams')}>Back to teams</a>
 			</div>
 		{:else}
-			<nav class="crumbs" aria-label="Breadcrumb"><a href="{base}/teams">Teams</a> <span aria-hidden="true">/</span></nav>
+			<nav class="crumbs" aria-label="Breadcrumb"><a href={resolve('teams')}>Teams</a> <span aria-hidden="true">/</span></nav>
 			<header class="page-head">
 				<div class="title">
 					<div class="head">
@@ -339,11 +340,11 @@
 					</p>
 				</div>
 				<div class="head-actions">
-					<a class="btn" href="{base}/help/guides/share-with-a-team">How teams work</a>
-					<a class="btn" href="{base}/?owner=team:{team.id}&sort=status">Project list</a>
+					<a class="btn" href={resolve('help/guides/share-with-a-team')}>How teams work</a>
+					<a class="btn" href={resolve(`?owner=team:${team.id}&sort=status`)}>Project list</a>
 					<a class="btn" href={settingsHref} data-sveltekit-noscroll bind:this={settingsLink}>Team settings</a>
 					{#if isAdmin}<button type="button" class="btn" onclick={focusAddMember}>Add member</button>{/if}
-					{#if canAddProjects}<a class="btn btn-primary" href="{base}/?owner=team:{team.id}&new=1">New project</a>{/if}
+					{#if canAddProjects}<a class="btn btn-primary" href={resolve(`?owner=team:${team.id}&new=1`)}>New project</a>{/if}
 				</div>
 			</header>
 

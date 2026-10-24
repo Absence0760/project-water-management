@@ -8,10 +8,14 @@ import {
 	defaultQualityFlags,
 	FLOW_DAY_FLAGS,
 	FLOW_FLAG_CODE,
+	FLOW_FLAG_PRECEDENCE,
 	flaggedDayMask,
 	flaggedYearExclusions,
 	flaggedYearsText,
 	flowDayFlags,
+	lowFlowPeriodError,
+	lowFlowPeriodsError,
+	lowFlowThresholds,
 	qualityFlagChanges,
 	rainDayFlags,
 	ratingError,
@@ -20,7 +24,9 @@ import {
 	resolveQualityFlags,
 	scoringDays,
 	zeroFlowMonthsError,
+	withoutPeriodHighs,
 	zeroFlowSuspect,
+	type LowFlowPeriod,
 	type QualityFlagSettings
 } from './dayFlags';
 
@@ -285,9 +291,168 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(names(flowDayFlags({ kind: 'flow_observed_m3s', series: undefined, start: d0, days: 3 }))).toEqual(['missing', 'missing', 'missing']);
 	});
 
-	it('flaggedDayMask marks extrapolated, suspect and infilled days, never missing or in-range ones', () => {
+	it('flaggedDayMask marks extrapolated, suspect, infilled and period-high days, never missing or in-range ones', () => {
 		const flags = Uint8Array.from(FLOW_DAY_FLAGS.map((f) => code(f)));
-		expect(Array.from(flaggedDayMask(flags))).toEqual(FLOW_DAY_FLAGS.map((f) => (['aboveRating', 'belowRating', 'suspect', 'infilled'].includes(f) ? 1 : 0)));
+		expect(Array.from(flaggedDayMask(flags))).toEqual(FLOW_DAY_FLAGS.map((f) => (['aboveRating', 'belowRating', 'suspect', 'infilled', 'periodHigh'].includes(f) ? 1 : 0)));
+	});
+});
+
+describe('low-flow periods (issue #557)', () => {
+	const period = (over: Partial<LowFlowPeriod> = {}): LowFlowPeriod => ({ kind: 'flow_logger_m3s', start: '2000-10-11', end: '2000-10-20', maxM3s: 1.2, reason: 'high flows wrong', source: 'client note', ...over });
+	const values = (): (number | null)[] => varying(40);
+
+	it('flags a reading above the threshold inside the period periodHigh, and nothing outside it or at the threshold', () => {
+		const v = values();
+		v[12] = 1.2; // at the threshold: scored as usual
+		v[13] = 5; // above it, inside the period
+		v[25] = 5; // above it, outside the period
+		const got = names(flowDayFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values: v }, start: d0, days: 40, lowFlowPeriods: [period()] }));
+		for (let t = 10; t < 20; t++) expect(got[t], `day ${t}`).toBe((v[t] as number) > 1.2 ? 'periodHigh' : 'inRange');
+		expect(got[12]).toBe('inRange');
+		expect(got[13]).toBe('periodHigh');
+		expect(got.filter((f) => f === 'periodHigh').length).toBeGreaterThan(1);
+		expect(got[25]).not.toBe('periodHigh');
+		expect(got.slice(0, 10).concat(got.slice(20)).includes('periodHigh')).toBe(false);
+	});
+
+	it('applies only to its own record, and the lowest threshold where periods overlap', () => {
+		const v = values();
+		const s = { startDate: start, values: v };
+		expect(names(flowDayFlags({ kind: 'flow_observed_m3s', series: s, start: d0, days: 40, lowFlowPeriods: [period()] })).includes('periodHigh')).toBe(false);
+		const two = [period({ maxM3s: 100 }), period({ start: '2000-10-15', end: '2000-10-15', maxM3s: 0.01 })];
+		const got = names(flowDayFlags({ kind: 'flow_logger_m3s', series: s, start: d0, days: 40, lowFlowPeriods: two }));
+		expect(got[14]).toBe('periodHigh');
+		expect(got.filter((f) => f === 'periodHigh').length).toBe(1);
+	});
+
+	it('ranks above the gauged range and suspect, and below infilled and missing', () => {
+		const v: (number | null)[] = varying(200);
+		v[11] = 9; // above the rating and the threshold
+		v[12] = null;
+		v[13] = 500; // > 10 × the 99th percentile: an outlier
+		const got = names(
+			flowDayFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values: v }, start: d0, days: 200, rating: { gaugedMaxM3s: 4, gaugedMinM3s: null, source: 'x' }, infilled: Uint8Array.from({ length: 200 }, (_, t) => (t === 14 ? 1 : 0)), lowFlowPeriods: [period({ maxM3s: 0.5 })] })
+		);
+		// The outlier is above the threshold too: a wrong high reading, so periodHigh, not suspect.
+		expect(got.slice(11, 15)).toEqual(['periodHigh', 'missing', 'periodHigh', 'infilled']);
+		expect(FLOW_FLAG_PRECEDENCE.indexOf('periodHigh')).toBeGreaterThan(FLOW_FLAG_PRECEDENCE.indexOf('suspect'));
+		expect(FLOW_FLAG_PRECEDENCE.indexOf('periodHigh')).toBeLessThan(FLOW_FLAG_PRECEDENCE.indexOf('infilled'));
+		expect([...FLOW_FLAG_PRECEDENCE].sort()).toEqual([...FLOW_DAY_FLAGS].sort());
+	});
+
+	it('a suspect day above the threshold is left out even when suspect days are scored', () => {
+		const v: (number | null)[] = varying(200);
+		v[13] = 500; // an outlier, and above the threshold
+		v[30] = 500; // an outlier outside the period
+		const qf: QualityFlagSettings = { ...defaultQualityFlags(), suspect: 'include', lowFlowPeriods: [period()] };
+		const flags = recordFlowFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values: v }, start: d0, days: 200, settings: { qualityFlags: qf }, siteNodeId: null });
+		expect(names(flags)[13]).toBe('periodHigh');
+		expect(names(flags)[30]).toBe('suspect');
+		const idx = Array.from(scoringDays(Int32Array.from({ length: 200 }, (_, t) => t), flags, qf, null, 200).idx);
+		expect(idx.includes(13)).toBe(false);
+		expect(idx.includes(30)).toBe(true);
+	});
+
+	it('places a period on the same days whatever the process time zone (rule 7)', () => {
+		const tz = process.env.TZ;
+		const at = () => Array.from(lowFlowThresholds([period()], 'flow_logger_m3s', d0, 40)!, (x) => (Number.isNaN(x) ? 0 : 1));
+		try {
+			process.env.TZ = 'Pacific/Kiritimati';
+			const east = at();
+			process.env.TZ = 'Pacific/Pago_Pago';
+			const west = at();
+			expect(east).toEqual(west);
+			expect(east.indexOf(1)).toBe(10);
+			expect(east.lastIndexOf(1)).toBe(19);
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
+	it('keeps the stored codes of the older classes: periodHigh is appended as code 7', () => {
+		expect(FLOW_DAY_FLAGS.slice(0, 7)).toEqual(['inRange', 'humanUse', 'belowRating', 'aboveRating', 'suspect', 'infilled', 'missing']);
+		expect(FLOW_FLAG_CODE.periodHigh).toBe(7);
+	});
+
+	it('scoringDays always leaves periodHigh days out, whatever the treatments say (never censored)', () => {
+		const flags = Uint8Array.from([code('inRange'), code('periodHigh'), code('aboveRating')]);
+		const include: QualityFlagSettings = { ...defaultQualityFlags(), aboveRating: 'include', belowRating: 'include', suspect: 'include', infilled: 'include' };
+		const r = scoringDays([0, 1, 2], flags, include, { gaugedMaxM3s: 4, gaugedMinM3s: null, source: 'x' }, 3);
+		expect(Array.from(r.idx)).toEqual([0, 2]);
+		const censor = scoringDays([0, 1, 2], flags, defaultQualityFlags(), { gaugedMaxM3s: 4, gaugedMinM3s: null, source: 'x' }, 3);
+		expect(Array.from(censor.idx)).toEqual([0, 2]);
+		expect(censor.censor![1]).toBeNaN();
+	});
+
+	it('recordFlowFlags reads them from the settings at the outlet, never at an inner gauge', () => {
+		const v = values();
+		v[13] = 5;
+		const settings = { qualityFlags: { ...defaultQualityFlags(), lowFlowPeriods: [period()] } };
+		const at = (siteNodeId: string | null) => names(recordFlowFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values: v }, start: d0, days: 40, settings, siteNodeId }));
+		expect(at(null)[13]).toBe('periodHigh');
+		expect(at('G').includes('periodHigh')).toBe(false);
+	});
+
+	it('the year rule counts a periodHigh day as neither observed nor flagged, like a stored exclusion', () => {
+		const flags = new Uint8Array(365).fill(code('inRange'));
+		for (let t = 0; t < 200; t++) flags[t] = code('periodHigh');
+		const r = flaggedYearExclusions(flags, Int32Array.from({ length: 365 }, (_, t) => t), start, 0.01);
+		expect(r.years).toEqual([{ waterYear: 2000, observedDays: 165, flaggedDays: 0, share: 0, excluded: false }]);
+	});
+
+	it('dayQuality counts them, notes the periods and leaves the periods out of `use`', () => {
+		const v = values();
+		v[13] = 5;
+		const qf: QualityFlagSettings = { ...defaultQualityFlags(), lowFlowPeriods: [period()] };
+		const flags = recordFlowFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values: v }, start: d0, days: 40, settings: { qualityFlags: qf }, siteNodeId: null });
+		const windowIdx = Int32Array.from({ length: 40 }, (_, t) => t);
+		const scoring = scoringDays(windowIdx, flags, qf, null, 40);
+		const q = dayQuality({ flowKind: 'flow_logger_m3s', settings: qf, windowIdx, flags, scoring, observed: Float64Array.from(v, (x) => (x ?? NaN) * 86_400), rainFlags: null, zeroRunMask: null });
+		const high = names(flags).filter((f) => f === 'periodHigh').length;
+		expect(q.flow.periodHigh).toBe(high);
+		expect(q.leftOutDays).toBe(high);
+		expect(q.notes.some((n) => n.includes('only the logger record’s low flows are valid') && n.includes('2000-10-11 – 2000-10-20, 1.2 m³/s'))).toBe(true);
+		expect('lowFlowPeriods' in q.use).toBe(false);
+	});
+
+	it('validates a period: record, dates, threshold above 0, reason and source; a list once per record and range', () => {
+		expect(lowFlowPeriodError(period())).toBeNull();
+		expect(lowFlowPeriodError(period({ kind: 'rain_catchment_mm' as never }))).toMatch(/record/);
+		expect(lowFlowPeriodError(period({ start: '2000-02-30' }))).toMatch(/YYYY-MM-DD/);
+		expect(lowFlowPeriodError(period({ start: '2001-01-01', end: '2000-01-01' }))).toMatch(/ends before/);
+		expect(lowFlowPeriodError(period({ maxM3s: 0 }))).toMatch(/above 0/);
+		expect(lowFlowPeriodError(period({ maxM3s: Number.NaN }))).toMatch(/above 0/);
+		expect(lowFlowPeriodError(period({ reason: ' ' }))).toMatch(/reason/);
+		expect(lowFlowPeriodError(period({ source: '' }))).toMatch(/source/);
+		expect(lowFlowPeriodsError([period(), period({ kind: 'flow_observed_m3s' })])).toBeNull();
+		expect(lowFlowPeriodsError([period(), period({ maxM3s: 3 })])).toMatch(/Low-flow period 2: .* listed twice/);
+		expect(lowFlowPeriodsError({})).toMatch(/list/);
+	});
+
+	it('resolveQualityFlags keeps the valid periods, drops the rest with a warning, and adds no key without any', () => {
+		const warnings: string[] = [];
+		const r = resolveQualityFlags({ lowFlowPeriods: [period({ reason: ' trimmed ' }), period({ maxM3s: -1 })] }, warnings);
+		expect(r.lowFlowPeriods).toEqual([period({ reason: 'trimmed' })]);
+		expect(warnings.some((w) => /low-flow period .* threshold/.test(w))).toBe(true);
+		expect('lowFlowPeriods' in resolveQualityFlags({})).toBe(false);
+		expect('lowFlowPeriods' in resolveQualityFlags({ lowFlowPeriods: [] })).toBe(false);
+		expect(resolveQualityFlags(defaultQualityFlags())).toEqual(defaultQualityFlags());
+	});
+
+	it('run comparison names an added or removed period', () => {
+		const a = defaultQualityFlags();
+		const b = { ...a, lowFlowPeriods: [period()] };
+		expect(qualityFlagChanges(a, b)).toEqual([{ subject: 'Low flows only', text: 'Low flows only: added logger record 2000-10-11 – 2000-10-20 at or below 1.2 m³/s' }]);
+		expect(qualityFlagChanges(b, a)[0]!.text).toMatch(/removed logger record/);
+		expect(qualityFlagChanges(b, b)).toEqual([]);
+	});
+
+	it('withoutPeriodHighs blanks only the readings above the threshold, and returns the values themselves without one', () => {
+		const v: (number | null)[] = [5, 5, 0.5, null, 5];
+		const out = withoutPeriodHighs(v, [period({ start: '2000-10-02', end: '2000-10-04' })], 'flow_logger_m3s', d0);
+		expect(out).toEqual([5, null, 0.5, null, 5]);
+		expect(withoutPeriodHighs(v, undefined, 'flow_logger_m3s', d0)).toBe(v);
+		expect(withoutPeriodHighs(v, [period()], 'flow_observed_m3s', d0)).toBe(v);
 	});
 });
 
@@ -397,7 +562,7 @@ describe('dayQuality (CR-22)', () => {
 	it('counts days by class, scored and left out, and suspect zero flow', () => {
 		const q = base();
 		expect(q.windowDays).toBe(6);
-		expect(q.flow).toEqual({ inRange: 3, humanUse: 0, belowRating: 0, aboveRating: 0, suspect: 2, infilled: 0, missing: 1 });
+		expect(q.flow).toEqual({ inRange: 3, humanUse: 0, belowRating: 0, aboveRating: 0, suspect: 2, infilled: 0, missing: 1, periodHigh: 0 });
 		expect(q.scoredDays).toBe(3);
 		expect(q.leftOutDays).toBe(2);
 		expect(q.censoredDays).toBe(0);

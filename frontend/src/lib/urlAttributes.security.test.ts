@@ -4,7 +4,8 @@
 // `formaction` and `srcdoc`. This walks every component under src/ and checks
 // each URL-bearing attribute:
 //
-//   - a value whose head is literal text ("/…", "?tab=…", "#…", "{base}/farm")
+//   - a value whose head is literal text ("/…", "?tab=…", "#…", "{basePath()}/farm"), or
+//     SvelteKit's resolve()/asset() of a path that starts with a literal segment
 //     fixes the scheme itself, and the scheme must be http(s), mailto or tel
 //     (never javascript:, data:, vbscript:, and never a protocol-relative
 //     "//host");
@@ -49,42 +50,44 @@ const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
  * local `href`, an imported `runHref`), so the same name in another
  * component is unreviewed until it is added here; a listed component that no
  * longer uses the name fails as stale. The builders marked BUILDER are
- * called with hostile ids in the last test.
+ * called with hostile ids in the last test. `<base>` in a reason is the app's
+ * base path, which the code puts first through resolve() or basePath().
  */
 const REVIEWED: Record<string, { why: string; in: string[] }> = {
-	// App URL builders: each returns "?tab=…", "#…" or "{base}/…" with its ids encoded (BUILDER).
+	// App URL builders: each returns "?tab=…", "#…" or the base path + "/…" with its ids encoded (BUILDER).
 	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/allocations/AllocationsTab.svelte', 'lib/components/allocations/AllocationUseMap.svelte', 'lib/components/crops/CropsTab.svelte', 'lib/components/scenarios/ApplicantView.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/map/MapTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/settings/SettingsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
-	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/runs/RunsTab.svelte'] },
+	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/overview/OverviewTab.svelte', 'lib/components/runs/RunsTab.svelte'] },
 	mapNodeHref: { why: 'BUILDER: "?tab=map&node=" + encoded node id (workspace/mapLinks.ts, #326 A2)', in: ['lib/components/crops/CroplandProposalsBox.svelte', 'lib/components/dams/DamProposalsBox.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	'view.src': { why: 'LocalityMap: data:image/svg+xml of the engine\'s own locality figure (packages/engine/src/geo/localityMap.ts, numbers and escaped names only), shown in an <img>, where an SVG runs no script (report/evidence/locality.ts)', in: ['lib/components/report/evidence/LocalityMap.svelte'] },
 	mapHref: { why: 'NodeCard/NodeDetail: their `mapHref` prop, which NetworkTab builds with mapNodeHref(node id) or leaves null', in: ['lib/components/network/NodeCard.svelte', 'lib/components/network/NodeDetail.svelte'] },
 	allocationsHref: { why: 'BUILDER: "?" + URLSearchParams (tab=allocations, the run id and unit node id from the API; allocations/links.ts, #444)', in: ['lib/components/overview/OverviewTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
-	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id (FarmShell: its own projectId prop and a ?node= it encodes; FarmStatus: the page’s projectId and the farm index’s node ids); NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/farm/FarmShell.svelte', 'lib/components/farm/FarmStatus.svelte', 'lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
+	farmHref: { why: 'BUILDER: "<base>/farm/" + encoded project id (FarmShell: its own projectId prop and a ?node= it encodes; FarmStatus: the page’s projectId and the farm index’s node ids); NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/farm/FarmShell.svelte', 'lib/components/farm/FarmStatus.svelte', 'lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	evidenceRunHref: { why: 'EvidencePanel: a literal "?tab=runs&run=" + encodeURIComponent(the current evidence run id from the API) + "#res-evidence", or null (issue #521)', in: ['lib/components/runs/EvidencePanel.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
+	stationHref: { why: 'BUILDER: "?tab=series&series=" + encoded series id + "#data-chart" (settings/unitRain.ts, issue #553)', in: ['lib/components/settings/UnitRainFields.svelte', 'lib/components/settings/FlowGenerationUnits.svelte'] },
 	packHref: {
-		why: 'BUILDER: "{base}/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',
+		why: 'BUILDER: "<base>/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',
 		in: ['lib/components/packs/PackActions.svelte', 'lib/components/report/evidence/EvidencePage.svelte', 'lib/components/scenarios/ApplicationPanel.svelte', 'lib/components/scenarios/ApplicationsTab.svelte']
 	},
 	'c.licenceUrl': { why: 'data sources page: each credit\'s licence link, a literal https:// URL in lib/components/legal/dataCredits.ts (dataCredits.test.ts checks every one starts with https://)', in: ['routes/data-sources/+page.svelte'] },
 	bundleUrl: { why: 'pack page: api.packs.bundleUrl (PUBLIC_API_URL + the encoded project and pack ids), never from a response', in: ['routes/projects/[id]/packs/[packId]/+page.svelte'] },
 	manifestUrl: { why: 'pack page: URL.createObjectURL of the manifest JSON it builds, a blob: URL for the download', in: ['routes/projects/[id]/packs/[packId]/+page.svelte'] },
-	curtailmentHref: { why: 'BUILDER: "{base}/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'lib/components/projects/ProjectTable.svelte'] },
+	curtailmentHref: { why: 'BUILDER: "<base>/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'lib/components/projects/ProjectTable.svelte'] },
 	historyHref: { why: 'BUILDER: compare/attribution.ts "/projects/" + encoded project id + "?tab=history"', in: ['lib/components/compare/CompareView.svelte'] },
-	// Local builders and constants in the component itself: a literal "?", "#" or "{base}/" head.
+	// Local builders and constants in the component itself: a literal "?" or "#" head, or resolve() of a literal path.
 	tabHref: { why: 'routes/projects/[id]: "?tab=<TabId>" or the current pathname', in: ['routes/projects/[id]/+page.svelte'] },
-	addDataHref: { why: 'ProjectTable: `${base}/projects/${id}?add=data`', in: ['lib/components/projects/ProjectTable.svelte'] },
+	addDataHref: { why: 'ProjectTable: `<base>/projects/${id}?add=data`', in: ['lib/components/projects/ProjectTable.svelte'] },
 	projectHref: { why: 'OverviewTab: project/links.ts "?tab=project" + an anchor', in: ['lib/components/overview/OverviewTab.svelte'] },
-	guide: { why: 'SectionHeader: its `guide` prop, which the workspace page and ApplicantView build as "{base}/help/guides/" + a TAB_GUIDE id (lib/workspace/tabs.ts, a constant; guides.test.ts checks each is a real guide)', in: ['lib/components/workspace/SectionHeader.svelte'] },
-	loginHref: { why: 'register page: `${base}/login?next=` + encoded next', in: ['routes/register/+page.svelte'] },
-	termsHref: { why: 'TermsSummary: its `termsHref` prop, "/terms" by default; the register page passes `${base}/terms`', in: ['lib/components/legal/TermsSummary.svelte'] },
-	forgotHref: { why: 'login page: `${base}/forgot-password…`', in: ['routes/login/+page.svelte'] },
+	guide: { why: 'SectionHeader: its `guide` prop, which the workspace page and ApplicantView build as "<base>/help/guides/" + a TAB_GUIDE id (lib/workspace/tabs.ts, a constant; guides.test.ts checks each is a real guide)', in: ['lib/components/workspace/SectionHeader.svelte'] },
+	loginHref: { why: 'register page: `<base>/login?next=` + encoded next', in: ['routes/register/+page.svelte'] },
+	termsHref: { why: 'TermsSummary: its `termsHref` prop, "/terms" by default; the register page passes `<base>/terms`', in: ['lib/components/legal/TermsSummary.svelte'] },
+	forgotHref: { why: 'login page: `<base>/forgot-password…`', in: ['routes/login/+page.svelte'] },
 	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
 	back: {
-		why: 'EvidencePage, the pack pages: `${base}/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id',
+		why: 'EvidencePage, the pack pages: `<base>/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id',
 		in: [
 			'lib/components/report/evidence/EvidencePage.svelte',
 			'routes/projects/[id]/packs/[packId]/+page.svelte',
@@ -93,7 +96,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 		]
 	},
 	applicantPackHref: {
-		why: 'BUILDER: "{base}/projects/" + encoded project id + "/scenarios/" + encoded scenario id + "/packs/" + encoded pack id (packs/applicantPack.ts; a pack id the API maps as a UUID or drops)',
+		why: 'BUILDER: "<base>/projects/" + encoded project id + "/scenarios/" + encoded scenario id + "/packs/" + encoded pack id (packs/applicantPack.ts; a pack id the API maps as a UUID or drops)',
 		in: ['lib/components/scenarios/ApplicationPanel.svelte', 'routes/projects/[id]/scenarios/[sid]/packs/[packId]/+page.svelte']
 	},
 	scenarioHref: { why: 'ApplicationsTab: local "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
@@ -112,7 +115,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	},
 	accountHref: { why: 'WaterBalanceTable: riverHref(run id, "res-water-account"), which RunsTab passes', in: ['lib/components/runs/WaterBalanceTable.svelte'] },
 	wordsHref: {
-		why: 'BUILDER: "{base}/farm/words", its ?from= only a path farmReturn accepts (one farm page\'s own /farm/<id>…), URL-encoded, and a literal anchor',
+		why: 'BUILDER: "<base>/farm/words", its ?from= only a path farmReturn accepts (one farm page\'s own /farm/<id>…), URL-encoded, and a literal anchor',
 		in: ['lib/components/account/TwoStepSignIn.svelte', 'lib/components/farm/FarmShell.svelte', 'lib/components/farm/ForecastCard.svelte', 'lib/components/farm/OutlookCard.svelte', 'lib/components/farm/RegisteredCard.svelte', 'lib/components/farm/SupplyCard.svelte', 'routes/account/alerts/+page.svelte', 'routes/account/invitations/+page.svelte', 'routes/farm/[projectId]/+page.svelte', 'routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte']
 	},
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
@@ -122,17 +125,18 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	transfersHref: { why: 'NodeDetail: NetworkTab passes the literal "?tab=transfers" or null', in: ['lib/components/network/NodeDetail.svelte'] },
 	main: { why: 'farm why/dam pages: farmHref(…)', in: ['routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte'] },
 	href: { why: 'the farm page’s href(sub) = farmHref(…), RecentNotes’ noteHref(…), and DamCard/LookingBack’s `href` prop, whose callers are checked here too', in: ['lib/components/farm/DamCard.svelte', 'lib/components/farm/LookingBack.svelte', 'lib/components/notes/RecentNotes.svelte', 'routes/farm/[projectId]/+page.svelte'] },
-	reports: { why: 'CompareView: reportHref(), `${base}/projects/<project id>/report?` + URLSearchParams (run, against)', in: ['lib/components/compare/CompareView.svelte'] },
-	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `${base}/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
+	reports: { why: 'CompareView: reportHref(), `<base>/projects/<project id>/report?` + URLSearchParams (run, against)', in: ['lib/components/compare/CompareView.svelte'] },
+	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `<base>/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
 	fieldHistoryHref: { why: 'BUILDER: history/fieldLine.ts "?" + URLSearchParams (tab, kind, unit, q)', in: ['lib/components/history/FieldHistoryLine.svelte'] },
 	editHref: { why: 'DemandsTable: the literal "?tab=crops&farm=" or "?tab=network&edit=" + encodeURIComponent(node id) + "&section=demand"', in: ['lib/components/network/DemandsTable.svelte'] },
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
+	recordLink: { why: 'GaugeCheckFlows: its recordHref prop, runs/checkGauges.ts recordHref: the literal "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/runs/GaugeCheckFlows.svelte'] },
 	dataHref: { why: 'CalibrationWindowFields prop: SettingsTab passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
 	'moved.href': { why: 'SectionNav: a moved setting\'s link from the page\'s `elsewhere` list, a literal "?tab=…#…" constant (settings/sections.ts SETTINGS_ELSEWHERE, issue #521)', in: ['lib/components/common/SectionNav.svelte'] },
 	hrefOf: { why: 'SectionNav: a section\'s `href` (a literal "?tab=…" from the page that lists it) or "#" + its id', in: ['lib/components/common/SectionNav.svelte'] },
 	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=settings&rain=boundary#set-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
-	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
+	reportHref: { why: 'report job page: `<base>/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'register.registerUrl': {
 		why: 'SignoffSection, the public verify page, the registration checks panel: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',
 		in: ['lib/components/liability/SignoffSection.svelte', 'routes/verify/[[code]]/+page.svelte', 'lib/components/project/RegistrationChecksPanel.svelte']
@@ -141,26 +145,26 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	FAO56_TABLE5_URL: { why: 'crops/loadFactors.ts constant https:// link to FAO-56 ch. 3 (Table 5)', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
 	glossaryPath: { why: 'help glossary: "/help/glossary/<slug>#<id>", the slug from TOPIC_SLUGS and the id from the static help text (lib/help/glossaryLinks.ts)', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/RichText.svelte', 'routes/help/glossary/+page.svelte', 'routes/help/glossary/[topic]/+page.svelte', 'routes/help/guides/[id]/+page.svelte', 'routes/help/search/+page.svelte'] },
 	topicPath: { why: 'help glossary: "/help/glossary/<slug>" from the TOPIC_SLUGS table (lib/help/glossaryLinks.ts)', in: ['routes/help/glossary/+page.svelte'] },
-	'unrun.path': { why: 'GetStarted: projects/example.ts startFromExample\'s "/projects/" + encodeURIComponent(the new project\'s id), after {base}', in: ['lib/components/projects/GetStarted.svelte'] },
+	'unrun.path': { why: 'GetStarted: projects/example.ts startFromExample\'s "/projects/" + encodeURIComponent(the new project\'s id), after <base>', in: ['lib/components/projects/GetStarted.svelte'] },
 	'l.href': { why: 'HelpNav: "/help…" paths built in the component from guide ids (lib/help/guides.ts) and topicPath', in: ['lib/components/help/HelpNav.svelte'] },
 	pictureSrc: { why: 'help pictures: "/help/<static file name>" from the SHOTS table', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/PictureTour.svelte'] },
 	pictureSrcset: { why: 'help pictures: two pictureSrc paths with widths (help/pictures.ts)', in: ['lib/components/help/PictureTour.svelte'] },
-	srcset: { why: 'landing Diorama: `${base}/landing/hero-<day|dusk>-<width>.<avif|webp>`, the widths from art.generated.ts (numbers)', in: ['lib/components/landing/Diorama.svelte'] },
-	set: { why: 'landing Shot: `${base}/landing/screen-<name>-<light|dark>-<width>.<avif|webp>`, name a literal from Screens.svelte', in: ['lib/components/landing/Shot.svelte'] },
-	addressOf: { why: 'LanguageSwitch: its `addressOf` prop; the landing page passes `${base}` + landingPath(code), "/welcome" or "/welcome/<code>" for a code of the language table (issue #137)', in: ['lib/i18n/LanguageSwitch.svelte'] },
-	abs: { why: 'landing link-preview tags: new URL(`${base}` + a literal path, page.url).href, the page’s own origin', in: ['lib/components/landing/Landing.svelte'] },
+	srcset: { why: 'landing Diorama: `<base>/landing/hero-<day|dusk>-<width>.<avif|webp>`, the widths from art.generated.ts (numbers)', in: ['lib/components/landing/Diorama.svelte'] },
+	set: { why: 'landing Shot: `<base>/landing/screen-<name>-<light|dark>-<width>.<avif|webp>`, name a literal from Screens.svelte', in: ['lib/components/landing/Shot.svelte'] },
+	addressOf: { why: 'LanguageSwitch: its `addressOf` prop; the landing page passes `<base>` + landingPath(code), "/welcome" or "/welcome/<code>" for a code of the language table (issue #137)', in: ['lib/i18n/LanguageSwitch.svelte'] },
+	abs: { why: 'landing link-preview tags: new URL(`<base>` + a literal path, page.url).href, the page’s own origin', in: ['lib/components/landing/Landing.svelte'] },
 	// Objects built in code from the builders above.
-	'done.href': { why: 'the invitations page: `${base}/teams/`, `/farm/` or `/projects/` + the encoded id of what was joined', in: ['routes/account/invitations/+page.svelte'] },
-	'back.href': { why: 'FarmShell prop: callers pass `${base}/farm`, farmHref(…), or (the words page) `${base}` + a ?from= farmReturn accepted', in: ['lib/components/farm/FarmShell.svelte'] },
-	'preview.href': { why: 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
-	'more.href': { why: 'SupplyByFarm / ReserveStrip prop: OverviewTab passes supplyHref / riverHref', in: ['lib/components/overview/ReserveStrip.svelte', 'lib/components/overview/SupplyByFarm.svelte'] },
+	'done.href': { why: 'the invitations page: `<base>/teams/`, `/farm/` or `/projects/` + the encoded id of what was joined', in: ['routes/account/invitations/+page.svelte'] },
+	'back.href': { why: 'FarmShell prop: callers pass `<base>/farm`, farmHref(…), or (the words page) `<base>` + a ?from= farmReturn accepted', in: ['lib/components/farm/FarmShell.svelte'] },
+	'preview.href': { why: 'FarmShell prop: FarmPage builds `<base>/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
+	'more.href': { why: 'SupplyByFarm prop: OverviewTab passes supplyHref', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	'h.href': { why: 'LatestRun: latestRun.ts rows with DAMS_HREF and the builders', in: ['lib/components/overview/LatestRun.svelte'] },
-	'r.href': { why: 'CompareView: the `reports` list, reportHref() (`${base}/projects/<id>/report?` + URLSearchParams); projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`${base}/projects/…`) or absent', in: ['lib/components/compare/CompareView.svelte', 'lib/components/projects/NeedsAttention.svelte'] },
+	'r.href': { why: 'CompareView: the `reports` list, reportHref() (`<base>/projects/<id>/report?` + URLSearchParams); projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`<base>/projects/…`) or absent', in: ['lib/components/compare/CompareView.svelte', 'lib/components/projects/NeedsAttention.svelte'] },
 	allHref: { why: 'projects/NeedsAttention prop: the list page passes hrefWith(…)', in: ['lib/components/projects/NeedsAttention.svelte'] },
-	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `${base}/`', in: ['routes/+page.svelte'] },
+	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `<base>/`', in: ['routes/+page.svelte'] },
 	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
 	'c.href': {
-		why: 'RunSummaryView: credibility.ts "#res-…" anchors; FarmMapCanvas: farmMap.ts farmMapCredits, "{base}/data-sources" and its "#hydrorivers" / "#jrc-water" anchors, or null',
+		why: 'RunSummaryView: credibility.ts "#res-…" anchors; FarmMapCanvas: farmMap.ts farmMapCredits, "<base>/data-sources" and its "#hydrorivers" / "#jrc-water" anchors, or null',
 		in: ['lib/components/runs/RunSummaryView.svelte', 'lib/components/farm/FarmMapCanvas.svelte']
 	},
 	// Values that come from outside the component, each checked where it enters.
@@ -185,7 +189,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 		why: 'ImportPlantingsDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the project’s plantings as CSV, plantingsCsv, names defused by toCsv; empty while closed)',
 		in: ['lib/components/crops/ImportPlantingsDialog.svelte']
 	},
-	formatPath: { why: 'FormatHelp: {base} + "/help/formats#" + a format id, a literal in code (common/formatHelp.ts; fileFormats.test.ts checks each is a lowercase slug)', in: ['lib/components/common/FormatHelp.svelte'] },
+	formatPath: { why: 'FormatHelp: <base> + "/help/formats#" + a format id, a literal in code (common/formatHelp.ts; fileFormats.test.ts checks each is a lowercase slug)', in: ['lib/components/common/FormatHelp.svelte'] },
 	exampleUrl: { why: 'FormatBody (FormatHelp and the File formats help page): exampleHref() = `data:<type>;charset=utf-8,` + encodeURIComponent(the example text), one per example file; the type is a literal at every caller (text/csv by default, application/geo+json, text/plain for the synthetic DRM .rul / .tab files of settings/drmFiles.ts drmExampleFiles), and the texts are built in code, never from user input', in: ['lib/components/common/FormatBody.svelte'] },
 	templateHref: { why: 'AllocationImport: `data:text/csv;charset=utf-8,` + encodeURIComponent(the template CSV)', in: ['lib/components/allocations/AllocationImport.svelte'] }
 };
@@ -324,15 +328,93 @@ function parts(value: string): { lit?: string; expr?: string }[] {
 /** `runHref(meta.id)` → `runHref`, `api.farm.exportUrl(p)` → `api.farm.exportUrl`, `data!` → `data`. */
 const headName = (expr: string) => /^[\w$.]+/.exec(expr.replace(/^\(|!$/g, ''))?.[0] ?? expr;
 
+/** The index just past the string or template literal that opens at `i` (nested `${…}` and templates skipped), or -1. */
+function literalEnd(src: string, i: number): number {
+	const q = src[i];
+	if (q !== "'" && q !== '"' && q !== '`') return -1;
+	for (let j = i + 1; j < src.length; j++) {
+		const c = src[j];
+		if (c === '\\') j++;
+		else if (c === q) return j + 1;
+		else if (q === '`' && src.startsWith('${', j)) {
+			const k = groupEnd(src, j + 1);
+			if (k < 0) return -1;
+			j = k - 1;
+		} else if (q !== '`' && c === '\n') return -1;
+	}
+	return -1;
+}
+
+/** The index just past the bracket group (`(`, `[` or `{`) that opens at `i`, strings and templates skipped, or -1. */
+function groupEnd(src: string, i: number): number {
+	const close: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+	const stack: string[] = [];
+	for (let j = i; j < src.length; j++) {
+		const c = src[j]!;
+		if (c === "'" || c === '"' || c === '`') {
+			const k = literalEnd(src, j);
+			if (k < 0) return -1;
+			j = k - 1;
+		} else if (close[c]) stack.push(close[c]);
+		else if (c === ')' || c === ']' || c === '}') {
+			if (stack.pop() !== c) return -1;
+			if (!stack.length) return j + 1;
+		}
+	}
+	return -1;
+}
+
+/**
+ * A URL attribute's expression that SvelteKit's resolve() or asset() keeps on the app's
+ * origin: exactly one `resolve(<literal>)`/`asset(<literal>)` whose path starts with a
+ * literal segment (they put the base and a '/' before it), optionally `+` more terms
+ * appended after it. A tail may hold only names, member access, calls, strings and
+ * templates joined by `+`: any other operator at its top level (`||`, `??`, `?:`, `,`,
+ * `&&`, …) binds looser than `+`, so the value could be something else entirely. The
+ * empty path counts only alone: `resolve('') + x` would let x start "//host".
+ */
+function sameOriginPath(expr: string): boolean {
+	const call = /^(?:resolve|asset)\(\s*/.exec(expr);
+	if (!call) return false;
+	const start = call[0].length;
+	const end = literalEnd(expr, start);
+	if (end < 0) return false;
+	const after = /^\s*\)/.exec(expr.slice(end));
+	if (!after) return false;
+	const tail = expr.slice(end + after[0].length).trim();
+	const path = expr.slice(start + 1, end - 1);
+	if (path === '') return tail === '' && expr.startsWith('resolve(');
+	if (!/^[\w?#.-]/.test(path)) return false;
+	if (tail === '') return true;
+	if (!tail.startsWith('+')) return false;
+	for (let j = 1; j < tail.length; j++) {
+		const c = tail[j]!;
+		if (c === "'" || c === '"' || c === '`') {
+			const k = literalEnd(tail, j);
+			if (k < 0) return false;
+			j = k - 1;
+		} else if (c === '(' || c === '[') {
+			const k = groupEnd(tail, j);
+			if (k < 0) return false;
+			j = k - 1;
+		} else if (!/[\w$.+\s!]/.test(c)) return false;
+	}
+	return true;
+}
+
 type Verdict = { ok: true } | { ok: false; why: string } | { dynamic: string };
 
 /** How a URL attribute's value decides its scheme. */
 function classify(value: string): Verdict {
 	let ps = parts(value);
-	// `{base}` is the app's base path ("" or "/x", from svelte.config.js): what follows it is the head.
-	if (ps[0]?.expr === 'base') ps = ps.slice(1);
+	// `{basePath()}` is the app's base path ("" or "/x", lib/nav/base.ts): what follows it is the head.
+	if (ps[0]?.expr === 'basePath()') ps = ps.slice(1);
 	const first = ps[0];
 	if (!first) return { ok: true };
+	// SvelteKit's resolve() and asset() put the base and a '/' before their path, so a path
+	// that starts with a literal segment (or is empty) stays on the app's origin. One that
+	// starts with '/' or an expression could make "//host": that stays a head to review.
+	if (first.expr !== undefined && ps.length === 1 && sameOriginPath(first.expr)) return { ok: true };
 	if (first.expr !== undefined) return { dynamic: headName(first.expr) };
 	// What the browser reads: it drops ASCII whitespace and control characters, so "java\tscript:" is javascript:.
 	const lit = first.lit!.replace(/[\u0000- ]/g, '');
@@ -371,18 +453,34 @@ describe('URL attributes', () => {
 			['href', '{href}'],
 			['...', '...rest']
 		]);
-		expect(classify('{base}/p/{id}')).toEqual({ ok: true });
+		expect(classify('{basePath()}/p/{id}')).toEqual({ ok: true });
+		expect(classify('{resolve(`p/${id}`)}')).toEqual({ ok: true });
+		expect(classify("{resolve('')}")).toEqual({ ok: true });
+		expect(classify("{asset('landing/x.webp')}")).toEqual({ ok: true });
 		expect(classify('?tab=runs&run={id}')).toEqual({ ok: true });
 		expect(classify('#{b.id}')).toEqual({ ok: true });
 		expect(classify('https://example.org/x')).toEqual({ ok: true });
 		expect(classify('mailto:{email}')).toEqual({ ok: true });
 		expect(classify('{runHref(meta.id)}')).toEqual({ dynamic: 'runHref' });
 		expect(classify('{api.farm.exportUrl(p, n)}')).toEqual({ dynamic: 'api.farm.exportUrl' });
-		expect(classify('{base}{pictureSrc(shot)}')).toEqual({ dynamic: 'pictureSrc' });
-		expect(classify('{base}/{x}')).toEqual({ dynamic: 'x' });
+		expect(classify('{basePath()}{pictureSrc(shot)}')).toEqual({ dynamic: 'pictureSrc' });
+		// resolve() of a path that starts with an expression or a '/' could make "//host": reviewed by hand.
+		expect(classify('{resolve(next)}')).toEqual({ dynamic: 'resolve' });
+		expect(classify('{resolve(`${next}`)}')).toEqual({ dynamic: 'resolve' });
+		expect(classify("{resolve('/x')}")).toEqual({ dynamic: 'resolve' });
+		expect(classify("{resolve('x') + y}")).toEqual({ ok: true });
+		expect(classify("{resolve('') + y}")).toEqual({ dynamic: 'resolve' });
+		expect(classify("{resolve('x') + (y ? '#a' : '')}")).toEqual({ ok: true });
+		expect(classify("{resolve('x')+y}")).toEqual({ ok: true });
+		expect(classify('{resolve(`a/${`b${c}`}`) + d}')).toEqual({ ok: true });
+		// Anything binding looser than + after the call leaves the value to another expression.
+		for (const e of ["resolve('x\\') || next", "resolve('x') /* ) */ || next", "resolve('x') ?? next", "resolve('x') ? userHref : ''", "asset('a'), x", "resolve('x') + a || b", "resolve('x') + a ? b : c", "resolve('x') && x", "resolve(x)", "resolve('x', y)", "resolve('x')(y)"]) {
+			expect(classify(`{${e}}`), e).toEqual({ dynamic: e.startsWith('asset') ? 'asset' : 'resolve' });
+		}
+		expect(classify('{basePath()}/{x}')).toEqual({ dynamic: 'x' });
 		expect(classify('/{x}')).toEqual({ dynamic: 'x' });
 		// The script URLs, however they are spelled.
-		for (const bad of ['javascript:alert(1)', 'JavaScript:{x}', ' java\tscript:x', 'vbscript:x', 'data:text/html,<b>', '//evil.example', '/\\evil.example', '{base}//evil.example']) {
+		for (const bad of ['javascript:alert(1)', 'JavaScript:{x}', ' java\tscript:x', 'vbscript:x', 'data:text/html,<b>', '//evil.example', '/\\evil.example', '{basePath()}//evil.example']) {
 			expect(classify(bad), bad).toMatchObject({ ok: false });
 		}
 	});

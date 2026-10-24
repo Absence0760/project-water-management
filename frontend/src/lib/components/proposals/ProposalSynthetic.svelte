@@ -1,6 +1,6 @@
 <!-- The warning every map-proposal panel shows over the repo's invented data (ProposalPanel.svelte). -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	let { testid, subject, notWhat, forWhat }: { testid: string; subject: string; notWhat: string; forWhat: string } = $props();
 </script>
 

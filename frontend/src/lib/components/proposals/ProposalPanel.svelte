@@ -15,8 +15,8 @@
 -->
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
 
 	let {
 		testid,

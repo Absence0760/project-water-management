@@ -2,9 +2,9 @@
 	// The workspace's own Network, Crops and Transfers tabs, each its own chunk
 	// (the same modules the workspace page loads, so the same chunks).
 	const LOAD = {
-		network: () => import('$lib/components/network/NetworkTab.svelte'),
-		crops: () => import('$lib/components/crops/CropsTab.svelte'),
-		transfers: () => import('$lib/components/transfers/TransfersTab.svelte')
+		network: () => import('#lib/components/network/NetworkTab.svelte'),
+		crops: () => import('#lib/components/crops/CropsTab.svelte'),
+		transfers: () => import('#lib/components/transfers/TransfersTab.svelte')
 	};
 </script>
 
@@ -23,15 +23,15 @@
 	// listed with a link, and closing or leaving asks.
 	import { untrack } from 'svelte';
 	import type { ModelInput, ProjectSettings, ScenarioOp } from '@water-management/engine';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { provideUnsaved } from '$lib/components/common/chunkFailed';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { provideInvalidFields } from '$lib/components/common/invalidFields.svelte';
-	import { guardUnsaved } from '$lib/nav/unsaved';
-	import IssueList from '$lib/components/model/IssueList.svelte';
-	import ProblemLinks from '$lib/components/model/ProblemLinks.svelte';
-	import type { ProblemLink } from '$lib/components/model/pageDraft';
-	import { ModelEditor } from '$lib/model/editor.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { provideUnsaved } from '#lib/components/common/chunkFailed.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { provideInvalidFields } from '#lib/components/common/invalidFields.svelte.js';
+	import { guardUnsaved } from '#lib/nav/unsaved.js';
+	import IssueList from '#lib/components/model/IssueList.svelte';
+	import ProblemLinks from '#lib/components/model/ProblemLinks.svelte';
+	import type { ProblemLink } from '#lib/components/model/pageDraft.js';
+	import { ModelEditor } from '#lib/model/editor.svelte.js';
 	import OpList from './OpList.svelte';
 	import { namesOf, opItems } from './ops';
 	import { diffModel } from './overrideDiff';

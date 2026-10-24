@@ -7,8 +7,8 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { latestFileText } from '$lib/files/latest';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { latestFileText } from '#lib/files/latest.js';
 
 	let {
 		open = $bindable(false),

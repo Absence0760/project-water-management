@@ -6,8 +6,8 @@
 // `xx` catalogue ships.
 import { render } from 'svelte/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fmtDay, fmtNumber, fmtVolume } from '$lib/components/farm/format';
-import { dateLocale, decimalMark } from '$lib/components/farm/numbers';
+import { fmtDay, fmtNumber, fmtVolume } from '#lib/components/farm/format.js';
+import { dateLocale, decimalMark } from '#lib/components/farm/numbers.js';
 import LanguageSwitch from './LanguageSwitch.svelte';
 import { markedCatalogue } from './fixtureCatalogue';
 import { i18n, isLocale, LANGUAGES, resolveLocale, setLocale, t, wordsLang } from './locale.svelte';
@@ -17,8 +17,8 @@ vi.mock('@water-management/engine/languages', async (importOriginal) => {
 	const real = await importOriginal<typeof import('@water-management/engine/languages')>();
 	return { ...real, ...real.languageTable([...real.LANGUAGES, { code: 'xx', name: 'Xx-test', intl: 'en-US', decimalMark: ',' }]) };
 });
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$lib/auth/session.svelte', () => ({ session: { user: null } }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('#lib/auth/session.svelte.js', () => ({ session: { user: null } }));
 
 // The stand-in's code, typed as a Locale the way a real third entry would be.
 const XX = 'xx' as (typeof LANGUAGES)[number]['code'];

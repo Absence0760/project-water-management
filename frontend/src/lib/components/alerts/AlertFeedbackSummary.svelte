@@ -5,8 +5,8 @@
 	// gave them. Answers come only from people who chose to answer: there is
 	// no open or click tracking, so this says nothing about who read a mail.
 	import { onMount } from 'svelte';
-	import { api, type AlertFeedbackSummary } from '$lib/api';
-	import { fmtDay } from '$lib/format/number';
+	import { api, type AlertFeedbackSummary } from '#lib/api/index.js';
+	import { fmtDay } from '#lib/format/number.js';
 	import { feedbackKindName, feedbackRows, feedbackShare } from './alerts';
 
 	let { projectId }: { projectId: string } = $props();

@@ -1,6 +1,6 @@
 <!-- i18n-section: landing.how -->
 <script lang="ts">
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 </script>
 
 <section class="how" aria-labelledby="how-title">

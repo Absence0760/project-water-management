@@ -1,6 +1,6 @@
 // The draft (draft.svelte.ts): drawing, finishing, undo, editing corners, pasting, placing a point.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature } from '$lib/api/types';
+import type { MapFeature } from '#lib/api/types.js';
 import { cutText, Draft } from './draft.svelte';
 import { DRAW_CHOICES } from './shape';
 

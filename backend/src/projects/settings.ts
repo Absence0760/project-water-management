@@ -12,6 +12,7 @@ import {
 	exclusionKey,
 	EXCLUSIONS_MAX,
 	EWR_CHARGE_SOURCES,
+	EWR_SPLIT_METHODS,
 	EWR_NATURAL_SOURCES,
 	EWR_RULE_COMPONENTS,
 	EWR_RULE_POINTS_MAX,
@@ -41,6 +42,7 @@ import {
 	UNIT_RAIN_MODES,
 	unitRainError,
 	unitRainFingerprintError,
+	catchmentStationFingerprintError,
 	AREAL_RAIN_FACTOR_MIN,
 	AREAL_RAIN_METHODS,
 	resolveFitRecord,
@@ -65,6 +67,9 @@ import {
 	FLOW_DAY_FLAGS,
 	ratingError,
 	RATING_SOURCE_MAX,
+	LOW_FLOW_PERIODS_MAX,
+	LOW_FLOW_TEXT_MAX,
+	lowFlowPeriodsError,
 	ZERO_RUN_RULES,
 	calibrationRulesError,
 	resolveCalibrationRules,
@@ -88,6 +93,7 @@ import { OutcomesPatch } from './outcomeSettings.js';
 import { OutlookPatch } from './outlookSettings.js';
 import { ResponsibleAuthorityPatch } from './authoritySettings.js';
 import { EwrHeadlinePatch } from './ewrHeadlineSettings.js';
+import { RainStations, remapRainStations } from './rainStationSettings.js';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -181,6 +187,8 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 		if (at > 0 && ids.has((ref.gauge as string).slice(at + 1))) ref.gauge = `${(ref.gauge as string).slice(0, at)}@${ids.get((ref.gauge as string).slice(at + 1))}`;
 		s.unitRain = { ...s.unitRain, reference: ref };
 	}
+	// The rainfall stations' units (issue #553): the units given a station and the unit each station stands in.
+	if (isObj(s.rainStations)) s.rainStations = remapRainStations(s.rainStations, ids);
 	if (typeof s.calibrationSiteNodeId === 'string' && ids.has(s.calibrationSiteNodeId)) s.calibrationSiteNodeId = ids.get(s.calibrationSiteNodeId);
 	if (isObj(s.fitRecord) && typeof s.fitRecord.siteNodeId === 'string' && ids.has(s.fitRecord.siteNodeId)) {
 		s.fitRecord = { ...s.fitRecord, siteNodeId: ids.get(s.fitRecord.siteNodeId) };
@@ -199,9 +207,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * And the EWR headline choice (issue #444): a site kept from a rule-table
  * choice under `{ source: 'pragmatic' }` would be a field no choice has. So
  * is the daily outlet EWR's source (engine ≥ 1.77.0, issue #455): its tables
- * are one set, entered together.
+ * are one set, entered together. And the rainfall stations' assignments
+ * (issue #553): a unit left out of a save is unassigned, not kept.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -731,6 +740,27 @@ const QualityFlags = z
 				const err = zeroFlowMonthsError(v);
 				if (err) ctx.addIssue({ code: 'custom', message: err });
 			})
+			.optional(),
+		// Engine ≥ 1.90.0 (issue #557): periods in which only a record's low flows are valid (lowFlowPeriodsError is
+		// the rule). Optional, so settings and fit records from before it still validate (absent = none).
+		lowFlowPeriods: z
+			.array(
+				z
+					.object({
+						kind: z.enum(CALIBRATION_FLOW_KINDS),
+						start: z.string(),
+						end: z.string(),
+						maxM3s: z.number().finite().gt(0),
+						reason: z.string().max(LOW_FLOW_TEXT_MAX),
+						source: z.string().max(RATING_SOURCE_MAX)
+					})
+					.strict()
+			)
+			.max(LOW_FLOW_PERIODS_MAX)
+			.superRefine((v, ctx) => {
+				const err = lowFlowPeriodsError(v);
+				if (err) ctx.addIssue({ code: 'custom', message: err });
+			})
 			.optional()
 	})
 	.strict();
@@ -742,11 +772,17 @@ const DayQuality = z
 	.object({
 		flowKind: z.enum(CALIBRATION_FLOW_KINDS),
 		rating: z.object({ gaugedMaxM3s: z.number().finite().nullable(), gaugedMinM3s: z.number().finite().nullable(), source: z.string().max(RATING_SOURCE_MAX) }).strict().nullable(),
-		use: QualityFlags.omit({ ratings: true, zeroFlowMonths: true }),
+		use: QualityFlags.omit({ ratings: true, zeroFlowMonths: true, lowFlowPeriods: true }),
 		// Engine ≥ 1.81.0: the river-stops months the flags read. Absent on an older record.
 		zeroFlowMonths: z.array(z.number().int().min(1).max(12)).max(12).optional(),
 		windowDays: dayCount,
-		flow: z.object(Object.fromEntries(FLOW_DAY_FLAGS.map((f) => [f, dayCount])) as Record<(typeof FLOW_DAY_FLAGS)[number], typeof dayCount>).strict(),
+		// periodHigh (engine ≥ 1.90.0, issue #557) is absent on an older record.
+		flow: z
+			.object({
+				...(Object.fromEntries(FLOW_DAY_FLAGS.filter((f) => f !== 'periodHigh').map((f) => [f, dayCount])) as Record<Exclude<(typeof FLOW_DAY_FLAGS)[number], 'periodHigh'>, typeof dayCount>),
+				periodHigh: dayCount.optional()
+			})
+			.strict(),
 		scoredDays: dayCount,
 		censoredDays: dayCount,
 		leftOutDays: dayCount,
@@ -964,6 +1000,14 @@ export const FitRecord = z
 						const err = unitRainFingerprintError(v);
 						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
 					})
+					.optional(),
+				// Engine ≥ 1.91.0 (issue #553): the catchment's rainfall station, recorded only with one. Optional, as above.
+				catchmentStation: z
+					.unknown()
+					.superRefine((v, ctx) => {
+						const err = catchmentStationFingerprintError(v);
+						if (err) ctx.addIssue({ code: 'custom', message: `catchment station fingerprint: ${err}` });
+					})
 					.optional()
 			})
 			.strict()
@@ -1019,6 +1063,8 @@ export const SettingsPatch = z
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
 		apanMm: monthlyNonNeg,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
+		// How the EWR is split between the units (engine ≥ 1.94.0, issue #553): the flow share or each unit's natural MAR.
+		ewrSplit: z.enum(EWR_SPLIT_METHODS),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
 		runoffModel: z.enum(RUNOFF_MODELS, { error: 'the legacy runoff model was removed in engine 1.0.0: GR4J is the only runoff model' }),
@@ -1041,6 +1087,9 @@ export const SettingsPatch = z
 		arealRain: ArealRain.nullable(),
 		// Rain for each land unit (issue #482, project.ts UnitRainSettings); replaced whole, null = the catchment's rain.
 		unitRain: UnitRain.nullable(),
+		// Which rainfall station forces the catchment and each land unit (engine ≥ 1.91.0, issue #553, rainStationSettings.ts);
+		// replaced whole, null = the rain as before. The route checks its stations and units against the project.
+		rainStations: RainStations.nullable(),
 		// Where the pan-coefficient row came from (engine ≥ 0.31.1): free text, provenance only; '' = none.
 		panCoefficientSource: z.string().trim().max(PE_SOURCE_MAX),
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),

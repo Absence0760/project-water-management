@@ -3,14 +3,14 @@
 	// glance (issue #17, option A · A2). Edit opens its full form (the node
 	// sheet); a farm's planted areas open in the farm drawer.
 	import type { NetworkNode } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
-	import { fmtNum, fmtPct } from '$lib/format/number';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { FarmPlanting } from '#lib/components/crops/farmDrawer.js';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { BAND_LABEL, type FarmSupply } from './supplyColour';
 	import { hasDam, KIND_WORD } from './fields';
 	import { describeUser } from './users';
-	import { damEndTile, type DamEnd } from '$lib/components/overview/damLevels';
+	import { damEndTile, type DamEnd } from '#lib/components/overview/damLevels.js';
 
 	let {
 		node,

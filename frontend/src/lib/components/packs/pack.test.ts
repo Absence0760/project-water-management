@@ -5,7 +5,7 @@
 import { packManifestText, type PackManifest } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Pack, PackReproductionState } from '$lib/api';
+import type { Pack, PackReproductionState } from '#lib/api/index.js';
 import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, reproductionNote, sha256Hex, verifyUrl } from './pack';
 
 const tz = process.env.TZ;
@@ -211,7 +211,7 @@ describe('issueChecklist', () => {
 });
 
 describe('the verify page’s lookup (lookUpCode, latestOnly)', () => {
-	const found = (code: string) => ({ shortCode: code }) as unknown as import('$lib/api').PackVerification;
+	const found = (code: string) => ({ shortCode: code }) as unknown as import('#lib/api/index.js').PackVerification;
 	const notFound = new Error('404');
 	const isNotFound = (e: unknown) => e === notFound;
 	const parse = (c: string) => (/^[0-9a-f-]+$/.test(c) ? c : null);
@@ -227,9 +227,9 @@ describe('the verify page’s lookup (lookUpCode, latestOnly)', () => {
 
 	it('shows only the latest of two quick lookups, whichever answers last (the page’s load)', async () => {
 		// Two navigations: the first code's answer is held until after the second's.
-		const answers = new Map<string, (v: import('$lib/api').PackVerification) => void>();
+		const answers = new Map<string, (v: import('#lib/api/index.js').PackVerification) => void>();
 		const failures = new Map<string, (e: unknown) => void>();
-		const verify = (c: string) => new Promise<import('$lib/api').PackVerification>((res, rej) => (answers.set(c, res), failures.set(c, rej)));
+		const verify = (c: string) => new Promise<import('#lib/api/index.js').PackVerification>((res, rej) => (answers.set(c, res), failures.set(c, rej)));
 		const shown: string[] = [];
 		const latest = latestOnly();
 		const load = async (c: string) => {

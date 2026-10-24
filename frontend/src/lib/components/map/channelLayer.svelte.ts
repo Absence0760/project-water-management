@@ -8,7 +8,7 @@
 // comes in with the deps (MapTab passes api.map's), so this module never
 // imports the app-wide API client and the tests can drive it.
 import { untrack } from 'svelte';
-import type { ChannelTileAnswer } from '$lib/api/types';
+import type { ChannelTileAnswer } from '#lib/api/types.js';
 import type { ChannelLineData } from './mapStyle';
 
 /** A tile's side (degrees), as the server's (backend delineation/channels.ts CHANNEL_TILE_DEG). */

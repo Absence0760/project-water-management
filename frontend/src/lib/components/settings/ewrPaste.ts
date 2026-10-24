@@ -7,8 +7,8 @@
 // gives the same values; this file turns the result into the dialog's preview
 // (every value it changes, Now and Pasted) and the grid into a CSV to fill in.
 import { EWR_PERCENTILE_POINTS, type EwrDailySource, type EwrRuleTable } from '@water-management/engine';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { sameValue, toCsv, type PastePlan } from '$lib/spreadsheet/paste/grid';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { sameValue, toCsv, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 import { parseMonthlyRow } from './ewrDailySource';
 import { applyPaste, parseGrid, type GridKey, type ParsedGrid } from './ewrRules';
 
@@ -53,7 +53,9 @@ export function ruleTableCsv(t: EwrRuleTable, which: GridKey): string {
 }
 
 const PCT_LABELS = EWR_PERCENTILE_POINTS.map((p) => pointLabel(Math.round(p * 100)));
-export type DailyTable = 'tabM3s' | 'naturalPctM3s' | 'reservePctM3s';
+export type DailyTable = 'tabM3s' | 'naturalPctM3s' | 'reservePctM3s' | 'lowFlowPctM3s';
+
+const DAILY_TABLE_NAME: Record<Exclude<DailyTable, 'tabM3s'>, string> = { naturalPctM3s: 'natural flow', reservePctM3s: 'total Reserve flow', lowFlowPctM3s: 'Reserve flow without high flows' };
 
 /** What a paste into the daily EWR's TAB flows or a percentile table does: the preview, the patch and the line said after it. */
 export function planDailyPaste(src: EwrDailySource, which: DailyTable, text: string): { plan: PastePlan; patch: Partial<EwrDailySource>; message: string } | { error: string } {
@@ -70,7 +72,7 @@ export function planDailyPaste(src: EwrDailySource, which: DailyTable, text: str
 	if (g.rows[0]!.length !== EWR_PERCENTILE_POINTS.length) return { error: `The paste has ${g.rows[0]!.length} values a row; the table has ${EWR_PERCENTILE_POINTS.length}, one per point (10 % … 99 %).` };
 	const plan = diff(src[which], g.rows, PCT_LABELS, 'm³/s');
 	plan.notes.push(rowsNote(g), ...g.notes);
-	const message = [`Filled the ${which === 'naturalPctM3s' ? 'natural flow' : 'total Reserve flow'} table${g.monthLabels ? ' (rows matched by month name)' : ' (rows read as Oct … Sep)'}.`, ...g.notes].join(' ');
+	const message = [`Filled the ${DAILY_TABLE_NAME[which]} table${g.monthLabels ? ' (rows matched by month name)' : ' (rows read as Oct … Sep)'}.`, ...g.notes].join(' ');
 	return { plan, patch: { [which]: g.rows.map((r) => [...r]) }, message };
 }
 

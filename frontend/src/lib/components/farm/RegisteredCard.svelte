@@ -4,9 +4,9 @@
 	// the farm's own registered volumes and storage, never anyone else's, with
 	// what a registration is not. Rendered only when something is registered
 	// (registeredCard() is null otherwise).
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { registeredNote, type RegisteredVm } from './cards';
 	import { wordsHref } from './load';
 
@@ -21,7 +21,7 @@
 	{#if vm.use}<p>{vm.use}</p>{/if}
 	{#if vm.dam}<p>{vm.dam}</p>{/if}
 	<p class="fine">{registeredNote()}</p>
-	<a class="link" href={wordsHref(base, page.url, 'farm-registered')}>{t('What is registered water?')}</a>
+	<a class="link" href={wordsHref(basePath(), page.url, 'farm-registered')}>{t('What is registered water?')}</a>
 </section>
 
 <style>

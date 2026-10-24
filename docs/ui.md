@@ -427,8 +427,11 @@ other signed-out route still goes to `/login?next=`.
   the page's own address, `hreflang` alternates name every language's (and
   `x-default` → `/welcome`), and `og:locale` is the language's (`af_ZA`).
 - **Frame.** Outside the app shell, like the sign-in pages: a slim header (the
-  mark and name, the language switch, **Sign in**), the page, a footer. A
-  reading page with a 1200 px column; on a phone the header keeps the mark only.
+  mark and the short name, IC-WBT; the language switch, **Sign in**), the
+  page, a footer with the full name. A reading page with a 1200 px column; on
+  a phone the header keeps the mark only. The hero's kicker is the full name,
+  and the tab title is "IC-WBT: daily water balance for a catchment" (the
+  description translated, [§ Language](#language), The app's name).
 - **Sections**, in order: the hero (headline, lede, **Sign in** and **Create an
   account**, the animated catchment); *From rainfall to river* (five steps over
   a pinned diorama, each with a small chart); *Try a what-if* (two sliders over
@@ -448,7 +451,7 @@ other signed-out route still goes to `/login?next=`.
   account). `/welcome` is also the address for a visitor whose language
   isn't known yet: once the app runs, a visitor whose choice (the
   account's, this device's, else the browser's) is another language goes on
-  to that language's address (`replaceState`). `/welcome/af` stays
+  to that language's address (`goto` with `replace`). `/welcome/af` stays
   Afrikaans whatever the browser says, and reading it becomes the device's
   choice when it has none, so the sign-in pages it leads to carry on in
   Afrikaans. A signed-out `/` switches in place, as the sign-in pages do.
@@ -481,7 +484,7 @@ screen, and open from 601 px. The footer's links (Home, the three pages, and
 **Contact**, which goes to the terms' contact section, `/terms#contact`, so
 the address is written once) start in line with the text column. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). Each has its
-own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
+own `<title>` (*Privacy notice · IC-WBT*, …) in the HTML itself:
 `app.html`'s fallback title sits after the page's head, since the document's
 title is the first `<title>` and these pages run no script to correct it
 (WCAG 2.4.2; `legal.spec.ts`). English
@@ -835,7 +838,7 @@ the standard "Loading…" state in the meantime
 The tabs are grouped into three sections, in this order: **Review**
 (Project, Applications, History), **Build the model** (Network, Map, Crops &
 demand, Transfers, Data, Settings & calibration) and **Outcomes** (Summary,
-River & reserve, Hydrological units, Runs & results, Dams, Compare runs,
+EWR, Hydrological units, Runs & results, Dams, Compare runs,
 Scenarios, Allocations). The operator chose this order on 2026-10-05 (before
 it, Outcomes led: issue #17's option A, and issue #162). A project still
 opens on its Summary, the first tab under Outcomes, and Help's "Getting
@@ -908,7 +911,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
+| viewer | Summary, EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -1199,7 +1202,7 @@ role, freshness, Add data) and each tab's own header:
   ("8 farms · 8 dams · 2 gauges · draining to … · 184.0 km²"); Crops its
   line ("3 crops · 675 ha irrigated on 8 hydrological units · …"); Settings & calibration
   where the runoff parameters came from; Runs & results its run count and
-  when the newest ran; River & reserve the run it shows (label, badges,
+  when the newest ran; EWR the run it shows (label, badges,
   period, engine, the EWR rule); Hydrological units, Dams, Scenarios,
   Allocations, Project and Applications a summary of what they hold; History
   the latest change, by whom and when. The others count what they hold (`workspace/context.ts`):
@@ -1211,7 +1214,7 @@ role, freshness, Add data) and each tab's own header:
   Crops' **Tables** and **+ Add crop**, Transfers' **Show on the Network** and
   **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
   **Fit the parameters** (a viewer: **Fit record**, when there is one),
-  River & reserve's **Run** menu and **Open in Runs & results**, Hydrological
+  the EWR page's **Run** menu and **Open in Runs & results**, Hydrological
   units' run menu and **Open in Runs & results**, Dams' **Open in Runs & results**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
@@ -1261,7 +1264,7 @@ role, freshness, Add data) and each tab's own header:
   a 16rem floor made a short one wrap its controls under it in a wide font,
   Data at 1024 in DejaVu Sans), so the controls sit beside the title only while the context
   fits on one line there; a longer context puts them under the title instead
-  of wrapping to 3–4 short lines in a narrow column (River & reserve for a
+  of wrapping to 3–4 short lines in a narrow column (EWR for a
   viewer at 1440 and Compare runs at 1024 did). A context that fits keeps the
   header as it was. `section-header.spec.ts` pins at most 2 context lines at
   1440/1280/1024, and 1 whenever the controls are beside it.
@@ -1270,7 +1273,7 @@ role, freshness, Add data) and each tab's own header:
   the first half of a 360 × 740 screen (issue #521 round 5: it started at
   429–579 px, the header taking 48–78 % of the first screen). The
   catchment's name and your role go in the app's phone bar in place of the
-  "Water Management" word mark (the logo stays, linking to the projects;
+  "IC-WBT" word mark (the logo stays, linking to the projects;
   `layout/sidebar.svelte.ts` `fillPhoneTitle`), the name in at most two
   lines with the whole name in its title. **How this page works** is a "?"
   after the title (36 px, its target 44 px), named in words. The pills share
@@ -1402,6 +1405,30 @@ same way on every screen:
   whose last cell is blank (`2025-04-03<tab>`, as a spreadsheet copies or
   saves it) reads as a gap; until 2026-10-10 the trailing tab was trimmed
   away and the row refused as one column.
+- **Rainfall — station** (issue #553): a kind in the *Kind* list, after
+  *Rainfall — catchment*. A rainfall station is one gauge's daily rain record
+  with its own MAP: stored as a catchment rain series (`rain_catchment_mm`,
+  no site) with station details (`SeriesMeta.station`,
+  239_rain_stations.sql). A catchment may have several, by name, and each can
+  serve one or more hydrological units. The kind's hint says so, and that
+  until Settings has a Flow generation section runs read catchment rainfall
+  as today (the first catchment rain series by name, which may be a
+  station); *Rainfall — catchment*'s hint points to the station kind. For a
+  new station the form asks for a **Station name** (required), and in *The
+  station* group **MAP (mm)** and **Source of the MAP** (both required, as a
+  unit's MAP and its source are) and **Latitude** / **Longitude** (optional,
+  decimal degrees WGS84, a decimal comma taken; both or neither). Each
+  problem shows under its field once the field is left or the days are read,
+  and **Upload** stays off until they pass (`series/stationInput.ts`
+  `stationProblem`, worded for the field and stricter than the API's rule,
+  engine `rainStationError`, which it also applies). The details go in the
+  upload's own request: `PUT /projects/:id/series` with `station: { mapMm,
+  mapSource, lat, lon }`. A name that is already a station appends to it as
+  catchment rain does, saying its MAP ("“Bergwater” is a station: MAP 745 mm
+  (…). The days are added to it."), without the station fields; the name
+  field suggests the project's stations. A name that is a catchment rain
+  series without station details says so and appends to it too
+  (`e2e/tests/rain-station.spec.ts`).
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
   updates from its name and header (`guessSeries`). An existing series
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
@@ -1475,10 +1502,9 @@ put the results first; its first screen follows board A1 of the redesign
 
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
    leads, then Needs attention: there is nothing to summarise yet, so there
-   is no KPI row, reserve strip or supply list.
+   is no KPI row or supply list.
 2. **The first screen, once there is a run**: the **Latest run** KPI row
-   (four cards, the mean outflow in the line under them), the **Days below
-   the reserve** strip across the page under it, then **Needs attention**
+   (four cards, irrigation first: issue #558), then **Needs attention**
    with the **Active alerts** ([§ Alerts](#alerts)) under it, beside
    **Supply by farm** with the **published baseline** and the links under it
    (two columns from 900 px; stacked below 900 px, Needs attention and the
@@ -1498,9 +1524,15 @@ put the results first; its first screen follows board A1 of the redesign
    it, and its heading is inside a 1440 × 960 window even with thirty
    units.
    Until issue #162 the Summary drew the full **Flow vs reserve** chart here,
-   filling what the KPIs left; River & reserve draws the same chart, larger
-   and with more controls, so the Summary now shows the strip and links
-   there instead: the flow chart is drawn once, on River & reserve.
+   filling what the KPIs left, and until issue #558 it led with the EWR: the
+   headline card was *Reserve rules met* or *EWR not met*, with the **Days
+   below the reserve** strip across the page under the cards. The operator
+   didn't read EWR (then River & reserve) as "the EWR page" while the
+   Summary led with the EWR, so issue #558 made the Summary about irrigation
+   supply and moved the EWR's headline card and the strip to the top of the
+   [EWR](#ewr) page, one link away (below). The flow chart is drawn once,
+   there. Needs attention never raised an EWR card (`attention.ts`; a test
+   holds it to that).
 3. **The published baseline and the links**: once there is a run, in the
    right-hand column under Supply by farm, which is usually shorter than
    Needs attention and the alerts, so a typical catchment (the example
@@ -1511,7 +1543,9 @@ put the results first; its first screen follows board A1 of the redesign
    the columns; `overview.spec.ts` checks the seeded catchment fits). Before
    the first run, when there is no first screen, the active alerts sit
    beside the baseline, two columns once the tab is 56rem wide (a container
-   query; stacked below that). The links are **Model facts, details, team
+   query; stacked below that). The links are, once there is a run,
+   **Reserve and EWR results → EWR** (`riverHref`, `river/links.ts`, for the
+   run the Summary shows; issue #558), **Model facts, details, team
    and sharing → Project** and, for a role that sees Allocations,
    **Registered vs modelled use → Allocations** (`allocationsHref`,
    `allocations/links.ts`, with `run=` the run the Summary shows; issue
@@ -1528,7 +1562,10 @@ put the results first; its first screen follows board A1 of the redesign
    fragments on the Summary (`#details-h`, `#import-record-h`,
    `#recent-notes-h`, `#team-h`, `#members-h`, `#farmers-h`, `#share-h`,
    and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`) is
-   sent there, replacing the history entry so Back skips it.
+   sent there, replacing the history entry so Back skips it. So is a link to
+   the reserve strip's old ids (`#strip-h`, `#reserve-strip`) or an EWR
+   panel's `#res-…` id: to the EWR page's `#res-reserve-strip` or that panel
+   (`river/links.ts` `summaryToRiverAnchor`, issue #558).
 4. **Setup.** While a step still needs work (or the lists are loading and
    nothing known is missing: a one-line "Checking data and runs…" bar) the
    checklist is on the page: first before a run, under the columns after
@@ -1552,51 +1589,8 @@ put the results first; its first screen follows board A1 of the redesign
   it, so the page grows until then: an e2e spec that measures layout (page height, box positions)
   waits on it first (`summaryReady` in `e2e/tests/overview.spec.ts`), never on a sleep.
 
-- **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
-  `overview/reserveStrip.ts`), once the latest run's record is in: the days
-  below the pragmatic EWR at the outlet in each of the run's last twelve
-  months (`recentMonths`, from the run summary's monthly grid,
-  `RunSummary.ewrCompliance`, so it draws with the cards: no series to fetch,
-  no chart library), oldest first. Each month is a small bar (its height the
-  share of the month's days below), the count above it and the month under it, the year under the
-  first month and each January; each is a list item whose words ("Jan 2024:
-  below the EWR on 12 of 31 days (red)") are what a screen reader and the tooltip
-  get. The bar takes the month's **EWR traffic-light** colour (issue #444),
-  the portfolio's bands: green under 5 % of the month's days below, amber
-  under 20 %, red from 20 % (`ewrBand`, engine `reserve/trafficLight.ts`
-  `EWR_TRAFFIC_LIGHT`, the same constant backend `portfolio/status.ts`
-  judges the portfolio by; the `--success`, `--warning` and `--danger`
-  tokens, each ≥ 5:1 on the track in both themes), and a key under the
-  months states the bands (`ewr/bands.ts` `bandLabels`, naming what the
-  strip counts: "Green: under 5% of days below the EWR" (the pragmatic EWR
-  beside a rule table), "Amber: 5% to under 20%", "Red: 20% or more"), so the
-  colour is never the only cue: the count is written too. The bands are the
-  defaults; a team's own portfolio thresholds don't reach the workspace.
-  (Until then every bar was the warning colour.) A line under the heading says what it counts and the span ("… (EWR
-  not met), the run's last 12 months: Jan 2024 – Dec 2024"). On a forecast
-  run it stops before the month the forecast starts in, as the cards are the
-  history's. Six a row on a phone. A run made before the monthly grid says
-  so. Beside its heading, **More on River & reserve** opens [River &
-  reserve](#river--reserve) for that run (`riverHref`, `river/links.ts`),
-  where the **Flow vs reserve** chart is.
-  **When the results are judged by a Reserve rule table** (issue #177; by
-  default whenever the project has one, or as chosen in Settings → [Judge
-  results by](#settings--calibration), issue #444) the headline card is
-  *Reserve rules met*, judged by the table (whole months at a site,
-  `headlineSite` with the project's `settings.ewrHeadline`), while the strip still counts days below the pragmatic
-  EWR at the outlet, so "the reserve" would name two different tests on one
-  screen. There the strip is headed **Days below the pragmatic EWR** (its
-  region and month list named the same, a month "below the pragmatic EWR on
-  12 of 31 days"), and the line under the heading adds "The Reserve rules
-  card above judges whole months by the rule table instead."
-  (`stripWords`/`stripWhat`, `reserveStrip.ts`, its name from
-  `ewr/notMet.ts` `daysBelowTest`, which River & reserve's panels share;
-  OverviewTab passes `ruleTable` from `headlineSite`). Judged by the
-  pragmatic EWR, the strip keeps its plain **Days below the reserve**. It keeps counting the pragmatic EWR
-  rather than switching to the table's test: the table gives one verdict
-  per complete month, not a count of days, so there is no "days below"
-  to draw from it, and its months are already the card's figure (and
-  River & reserve's Reserve compliance by month).
+- **Days below the reserve** moved to the top of the [EWR](#ewr) page, beside
+  its tiles, in issue #558 (`river/ReserveStrip.svelte`).
 - **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
   `overview/supplyBars.ts`): every farm in the latest run with a bar and the
   % of its demand supplied, emptiest first (fullest first until 2026-09-29;
@@ -1634,16 +1628,25 @@ put the results first; its first screen follows board A1 of the redesign
   that its figures are for workbook comparison only, not evidence, and that
   engine 1.0.0 removed the model, so it can't be re-run and a new run uses
   GR4J) and the evidence run. **Open in Runs** links
-  to `?tab=runs&run=<id>`. Four cards, the same figures and labels as the Runs
-  tab's headline (`RunSummaryView.svelte`): *Reserve rules met* (the rule-table
-  site from `headlineSite`, under the project's choice in Settings → Judge
-  results by) or, judged by the pragmatic EWR (by choice, or with no rule
-  table), *EWR not met* (days below the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
-  M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
-  (in-sample)" only when the parameters were fitted on those days, otherwise
-  why not, as on the Runs tab; "–" without observed flow). They show in the
-  order Reserve · Irrigation supplied · **Dams today** · NSE (**Dams on
-  31 Dec 2024** once the run's last day is more than a week old). *Dams today*
+  to `?tab=runs&run=<id>`. Four cards, irrigation first (issue #558,
+  `latestRun.ts` `summaryHeadlines`): *Irrigation supplied* (% of all units'
+  demand, with "N of M hydrological units below" `SUPPLY_TARGET`, the Runs
+  tab's figure); the **Shortfall** (`shortfallHeadline`: the volume of demand
+  not supplied over the run, Σ each unit's mean deficit × the run's history
+  days, in Mm³, with the same in an average year (× 365.25) and its share of
+  demand under it; its change from the previous run is the average-year
+  figure, "Mm³ a year, vs previous run", since two runs rarely cover the same
+  days); **Units curtailed** (`curtailedHeadline`: the days a drought
+  restriction level was in force, `droughtRestriction.daysByLevel` past
+  level 0, with their share of the run and the deepest level reached) or, when the
+  run has none, the **Worst-supplied unit** and its share of demand supplied
+  (flagged below `SUPPLY_TARGET`; "no drought restriction days in the run"
+  under it when the rule is on but never restricted); and **Dams today**
+  (**Dams on 31 Dec 2024** once the run's last day is more than a week old).
+  All come from fields the run summary already had: no engine change. The
+  EWR's headline card (*Reserve rules met* or *EWR not met*) is the [EWR](#ewr)
+  page's first tile, and the *Calibration NSE* is on Runs & results only
+  (both were Summary cards until issue #558). *Dams today*
   (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
@@ -1653,13 +1656,12 @@ put the results first; its first screen follows board A1 of the redesign
   "loading dam levels" until they are in; "no dams in the run" without any. The card links to the [Dams](#dams) page: its term is a link
   (`Headline.href`, `DAMS_HREF`) stretched over the whole card, as the model
   facts' tiles are. *Mean simulated outflow* isn't on the Summary: it is a
-  tile on [River & reserve](#river--reserve), with its change. Under the
+  tile on [EWR](#ewr), with its change. Under the
   cards, the run the changes are against. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
   better/worse, so colour is never the only cue), only when both runs have the
-  figure: the Reserve only at the same site, the pragmatic EWR only when
-  neither run headlines a rule table. The full records come through the Runs
+  figure. The full records come through the Runs
   tab's `detailCache`, so only this section shows a loading or error state
   (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
   cards in a row, 2 × 2 below 760 px.
@@ -1852,7 +1854,7 @@ for every workspace tab. Its own chunk.
   it), with no chart. A run list that failed to load (the page loads it
   before any tab draws, so `runs` null means failed, never still loading) is
   said as such, an error to reload, not "No run yet" with a prompt to run,
-  and each card reads "Run list couldn’t be loaded" (as River & reserve).
+  and each card reads "Run list couldn’t be loaded" (as EWR).
 - **Proposed from the register and the map** (issue #326 B-dams,
   `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
   sources and rules in [maps.md § Dams from the register and the
@@ -2158,8 +2160,9 @@ line).
 
 `/` (`routes/+page.svelte`, issue #17) answers "which of my catchments need
 me?" on the first screen, then lists every project you can see. Its header
-has the title, one line with the count and the EWR status of the catchments
-in view ("50 catchments · EWR, last 30 days: 2 red, 1 amber, 18 green"),
+has the title, one line with the count and the irrigation status of the
+catchments in view ("50 catchments · Irrigation supplied: 2 red, 1 amber, 18
+green"; the EWR's until issue #558),
 and **Import workbook**, **Import project file (.json)** and **New
 project**. Both import buttons open the same dialog; the button only
 sets its wording and what the file picker offers, and the picked file's type
@@ -2210,10 +2213,12 @@ and the list still works). The wording comes from the portfolio's helpers
 (`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same here,
 on the teams list and on the team page. Columns: **Catchment** (the name, then owner/team for *Shared
 with me*, your role and "edited <date>", when the project itself last
-changed, and the description on one line), **EWR, last 30 days** (the pill
-in words and colour, and *Published* or *Latest run* with the figures' age,
-"to 31 Dec 2024 (20 months ago)"; the header names the date instead once the
-figures are stale), **Hydrological units short** ("2 of 8 units
+changed, and the description on one line), **Irrigation supplied** (the
+status pill in words and colour, "Amber: 88.0% supplied", `irrigationText`,
+then on a line under it the units below 95 % of their demand over the run
+("3 of 14 units below 95% over the run", `irrigationUnitsText`: the whole
+run, not the week the next column counts), and *Published* or *Latest run* with the figures'
+age, "to 31 Dec 2024 (20 months ago)"), **Hydrological units short** ("2 of 8 units
 short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
 *Not published* until a run is published; under it the count over 30 days,
 "1 in the last 30 days"), **Lowest dam** (with the published restriction
@@ -2226,22 +2231,38 @@ when it was published) and **Alerts** (the alerts firing now, "None" or a
 project where your role is farmer or applicant has no figures ("Not shown
 to your role").
 
+**The status is irrigation supply** (issue #558, the operator's decision:
+"take it out and show irrigation instead"): the share of all units' demand
+supplied over the whole run the figures come from (the published run, else
+the newest), the workspace Summary's *Irrigation supplied* card, with the
+units below 95 % of theirs; green from 95 %, amber from 80 %, red below
+(backend `portfolio/status.ts` `IRRIGATION_THRESHOLDS`, provisional, no team
+setting yet), unknown without a run, without units or without demand. Until
+then the column was **EWR, last 30 days** (the outlet over the 30 days to the
+figures' last day); that EWR status lives on the teams list and the team
+page, the workspace's [EWR](#ewr) page lights each month with the same
+bands (its reserve strip and EWR by month grid), and the API still returns it
+(`ewr`, [api.md § Portfolio](./api.md#portfolio)).
+
 The header's line adds what the portfolio's tiles counted, when there is
 any: "… · 1 alert firing · 2 with stale figures" (figures over 7 days old;
 `portfolioTotals`). The portfolio's stacked bar went: the line already says
 the counts in words.
 
 **A team's portfolio** (issue #176) is the team's chip (`?owner=team:<id>`):
-a note under the chips states the rule the statuses were judged by ("EWR
-status is the outlet over the 30 days to the figures' last day (the
-published run, or the latest when none is): green when it was not met on
-under 5 % of them, amber under 20 %, red otherwise") and whose it is (the
+a note under the chips states the rules: the list's ("Status is irrigation
+supplied over the run the figures come from (the published run, or the
+latest when none is): green from 95 % of demand supplied over the run, amber
+from 80 %, red below, a provisional default") and the team page's EWR status
+("the outlet over the 30 days to the figures' last day: green when it was
+not met on under 5 % of them, amber under 20 %, red otherwise") and whose it is (the
 team's `portfolioThresholds` from `GET /teams`: *These are the team's own
 thresholds* or *the default thresholds, still to be confirmed by the
 hydrologist*), then *Change them on the team page* (admins, the settings
-sheet) or "A team owner can change them on the team page". The rows'
+sheet) or "A team owner can change them on the team page". The EWR
 statuses are judged by each project's own team's thresholds
-(`GET /projects/outcomes`), so the note and the rows agree. *New project*
+(`GET /projects/outcomes`); the irrigation status, the rows', doesn't move
+with them. *New project*
 preselects the team, the empty state offers *New project in <team>* to
 members, the tab title names the team, and a team that isn't yours (a
 stale link) says "This team doesn't exist or you're not a member" with links
@@ -2250,8 +2271,8 @@ settings sheet link here as **Project list** (`?owner=team:<id>&sort=status`).
 
 **Needs attention** (`projects/NeedsAttention.svelte`, rules in
 `projects/outcomes.ts` `attention`): the catchments in view to look at
-first, most urgent first: a red EWR, hydrological units short this week, alerts firing,
-an amber EWR, failing or stale feeds, newer rain than the figures, figures
+first, most urgent first: red irrigation supply, hydrological units short this week, alerts firing,
+amber irrigation supply (the EWR's red and amber until issue #558), failing or stale feeds, newer rain than the figures, figures
 over 7 days old (the portfolio's *stale*: "Figures to 31 Dec 2024 (20 months ago)"). Up to four cards (two a row on a
 mid-width page, three stacked on a phone), each naming its reasons in words
 with the colour only repeating them; the count says "3 of 50", and **Show
@@ -2263,12 +2284,16 @@ that hasn't run is not flagged.
 (All projects, Personal, each team, Shared with me, with counts, and
 **Manage teams**), or a select when the page is 600 px or narrower. Search
 matches name, description and team (`?q=`); a search is one step in history:
-its first keystroke after the box takes the focus adds an entry, the rest
-replace it, so Back returns to the list before the search, not letter by
+its first change that lands after the box takes the focus adds an entry, the
+rest replace it, so Back returns to the list before the search, not letter by
 letter (until issue #521 every keystroke replaced the entry the list came
-from, so Back left the page). Sort (`?sort=`): *Recently
-updated* (the default), *Needs attention first*, *EWR status* (worst
-first), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
+from, so Back left the page; on SvelteKit 3 a first keystroke's push the next
+keystroke overtook never landed, so `SearchStep` waits for one that does).
+Back and Forward also return the window to where it was on that entry
+(`lib/nav/backScroll.ts`; ui-playbook § URL state). Sort (`?sort=`): *Recently
+updated* (the default), *Needs attention first*, *Irrigation supplied*
+(worst first: red, amber, unknown, green, less supplied first within one;
+the EWR status until issue #558; `?sort=status`), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
 first; the Data heading), *Last run* (newest first), *Name*, from the Sort
 select or a column heading (`aria-sort`). A second click on the sorted
 heading turns it round (`?dir=desc`: best or oldest first, Z–A), as the
@@ -2391,7 +2416,11 @@ it's read in a Web Worker (`lib/spreadsheet/import/import.worker.ts`, loaded
 only now; [architecture.md § Code splitting](./architecture.md#code-splitting-frontend)),
 and only the extracted project is sent to `POST /projects/import`, like a
 `.json` file. The view logic is `import/workbookFile.ts`; the review's
-workbook part is `WorkbookReview.svelte`.
+workbook part is `WorkbookReview.svelte`. Its `[Flow data]` series each
+record their workbook column as their Source and m³/s or mm as their Upload
+unit, and the logger column is named "&lt;outlet&gt; logger" rather than its
+heading, the client's own code (issue #556, `flowData.ts`; the Python
+importer's README § What it reads).
 
 The app never shows the client build's code name ("b023", "b02x"; issue
 #523): the button is *Import workbook*, a file is "a Water Balance Tool
@@ -3006,7 +3035,7 @@ itself.
   unit's Catchment area section, after the areas, an optional **MAP**
   (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
   a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only with Settings' Rain for each unit on, where **MAP from the
+  read only under Settings' Flow generation, Per unit, where **MAP from the
   grid** can fill it and its source from a loaded MAP grid for every unit
   at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
@@ -4101,7 +4130,10 @@ map" card) stays the schematic; this is the geography.
   its area; a name shows its polygon. **MAP grid** (`layers=mapgrid`, the
   ramp as its swatch): on, one loaded MAP grid's points in view, each
   coloured and labelled with its MAP ("812 mm"), the box saying how many,
-  from which grid and their range, the source line, a **Grid** picker when
+  from which grid and their range, the source line (with "Credit: …" when
+  the grid's attribution differs from its source; the Southwestern Cape
+  surface's credit also goes on the map's attribution control while its
+  points are drawn), a **Grid** picker when
   more than one is loaded, and "Zoom in to see the MAP grid" or "This view
   holds more than 5 000 of the grid’s points" when the view is too wide.
   **DEM grid** (`layers=demgrid`, the elevation ramp as its swatch; not
@@ -5127,10 +5159,10 @@ show the same cards, with **+ Add transfer** under them.
 
 The long workspace pages share one in-page menu, `common/SectionNav.svelte`
 (its rules in `common/sectionNav.ts`): **Settings & calibration**, **Runs &
-results**, **River & reserve**, **Hydrological units**, **Data** and
+results**, **EWR**, **Hydrological units**, **Data** and
 **Compare runs**, and the Network's node sheet as a bar of its own (below).
 Each page gives it its sections in groups (a `nav` labelled "Settings
-sections", "Result sections", "River sections", "Hydrological units
+sections", "Result sections", "EWR sections", "Hydrological units
 sections", "Data sections", "Comparison sections"; "Sections of the form" in
 the node sheet); each group is a list named for screen readers. Each link says
 its panel's heading (`label`), so the menu and the page read alike ("EWR by
@@ -5143,7 +5175,7 @@ group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
 spaced: a wider gap with no name on it read as a spacing bug (issue #162).
 On the bar Hydrological units and Data show their names (every rail does).
-Settings & calibration, Runs & results and River & reserve don't, and space their links evenly: with the
+Settings & calibration, Runs & results and EWR don't, and space their links evenly: with the
 names, Settings' links no longer fit two rows at 1280 px, Runs'
 last links went into More and River's bar took a second row at 1440 px (in
 CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Network, Crops,
@@ -5182,7 +5214,7 @@ History is left to its own redesign.
 - **Phones** (up to 640 px): one strip that scrolls sideways inside itself
   with every link (no More), the marked link kept in view, never the page.
 - **The side rail** (issue #468 on Settings & calibration; issue #462 on
-  Runs & results, River & reserve, Hydrological units and Data): a
+  Runs & results, EWR, Hydrological units and Data): a
   page that passes its content as SectionNav's `children` and a `railFrom`
   width (rem) gets, from that content width, a sticky 13rem column on the
   left (`railSide="right"`: on the right, Runs & results, whose runs list is
@@ -5217,12 +5249,12 @@ History is left to its own redesign.
   in the popover it closes it, focus back on Find.
 - **Other pages.** A section may link to another page (`href` on it): it is
   listed like the rest, never marked as the one being read, and in the rail
-  ends in a muted ↗; its `page` ("River & reserve") follows its name for
-  screen readers (", on River & reserve"), as its group's heading says it to
+  ends in a muted ↗; its `page` ("EWR") follows its name for
+  screen readers (", on EWR"), as its group's heading says it to
   the eye. The link carries that whole name as its `aria-label`
   (`sectionNav.ts` `pageLinkName`), not as a hidden span after its text,
-  which Chromium spaces off ("by month , on River & reserve"). Runs & results' rail lists the main panels that moved to River &
-  reserve and Hydrological units under *On River & reserve* and *On
+  which Chromium spaces off ("by month , on EWR"). Runs & results' rail lists the main panels that moved to River &
+  reserve and Hydrological units under *On EWR* and *On
   Hydrological units* (`runs/sections.ts` `otherPageGroups`), for the run
   shown.
 - **Adopting the rail** is wrapping the page's content in SectionNav,
@@ -5297,11 +5329,87 @@ with the table the data needs).
   automatically (CHIRPS rain, forecast, DWS flow) → Data feeds** opens
   Settings & calibration at [Data feeds](#data-feeds) (`?tab=settings#set-feeds`,
   `data-testid="data-feeds-link"`; issue #444): the feeds live there, and a
-  project that used none had no way in from the page about its data.
-- **Freshness first**: the table lists the series **behind** first, most
-  days behind first, then the series a run reads, then the rest (another
-  series of that kind is read, reference only), keeping the list's order
-  within each group (`series/freshness.ts` `freshnessOrder`). *Behind* is
+  project that used none had no way in from the page about its data. After it,
+  for anyone, **Download (CSV)** offers the grouped list as one file,
+  Compact or Full (see *Groups* below); it sits with the table it
+  exports, not in the header beside Preview all data, because it is the
+  list's own (as each row's CSV is the row's).
+- **Groups** (issue #553 round 5, `series/groups.ts`): the table is split
+  by what each series is, one `<tbody>` named by its heading row each:
+  **Rainfall stations** (catchment rain with no site; each row adds its
+  MAP and source, or *No MAP recorded*, and where its rain goes from
+  `settings.rainStations`: *Rain for the catchment and Upper unit. Corrects
+  the CHIRPS gaps of Lower unit.*, or *Not assigned to the catchment or a
+  unit.*), **Catchment rainfall** (CHIRPS, the alternative gauge, the
+  reanalysis and the forecast with no site), **Hydrological units**,
+  **Flow records** (a gauge's record too) and **Other inputs** (A-pan
+  evaporation), in that order, an empty group left out. Each group's
+  heading row is a `<th scope="rowgroup">` holding its `<h3>`, which names
+  the `<tbody>`. The role badges know the groups: a unit's own CHIRPS reads
+  *Upper unit’s own rain* (*Not used: per-unit rain is off* without
+  per-unit rain), and a station a run reads for an area or a pairing,
+  though not the catchment rain read by name, reads *Rainfall station*
+  (`roles.ts roleBadge`; both read as gauge records or *Not used* before).
+  Past three areas a station's line counts the units (*Rain for the
+  catchment and 30 units.*).
+  - **Derived rows.** With a station for the catchment, *Catchment
+    rainfall* opens with **Average catchment rainfall** (Fragmentation's
+    rain), and *Hydrological units* has one row per land unit: every one
+    when units have rain of their own (per-unit rain on, or a unit
+    assigned a station), else those a series is measured at. Each says
+    its MAP and, in one sentence, what its rain is made of with the
+    settings as saved (`areaSentence`, the engine's `stationRatio`):
+    *Bergwater × 1.16 (unit MAP 863.1 mm ÷ station MAP 745.0 mm); gaps
+    from CHIRPS corrected against Bergwater.*, or that the ratio is 1 (a
+    MAP missing), clamped or off, that the unit has no CHIRPS of its own,
+    that no station is assigned, or that per-unit rain is off so its
+    station isn't read. A unit's own series (its CHIRPS feed, a
+    migration-209 gauge) are listed under it, not in the groups above
+    (*1 series measured here: …*), and a series behind marks its unit and
+    brings it to the top of its group. The catchment row's kind reads
+    *Catchment average (derived)*.
+  - **Show rain used** (`aria-expanded`; **Show its series** for a unit
+    without a station) opens the row: the unit's series as indented rows,
+    then `series/AreaRainPanel.svelte`: the day counts (*2 182 days from
+    the station, 10 from corrected CHIRPS.*) and the pairing's twelve
+    factors or why it is refused, with **Rain used (CSV)** beside them, then
+    one chart (the last year first) of the four lines behind the rain used
+    (the station as recorded, dashed; the station × the ratio; the area's
+    CHIRPS as stored, dashed, and corrected against its pairing station)
+    with the **rain used** drawn last, on top and wider, in the palette's
+    order without `--series-4`, and a strip at its foot for the days that
+    didn't come from the station (corrected CHIRPS, the next fallback, no
+    rain), its key in words. The disclosure's `aria-controls` names the
+    unit's series rows and the panel. A `series=` link to a unit's series
+    opens its unit. The lines are computed when opened, never stored
+    (`series/derivedRain.ts`): the rain used and its sources are the
+    engine's `stationAreaRain` over `GET …/model-input` (the input a run
+    would read, so the line equals the run's `rain_unit` / `rain_used` to
+    the bit, `derivedRain.test.ts`), the factors are the pairing that run
+    fits; the input is fetched once and dropped whenever the series or the
+    settings change.
+  - **Download (CSV)** beside the panel's heading (`series/groupedCsv.ts`,
+    built in the browser): **Compact** (the stations, the average
+    catchment rainfall, each unit's rain used, the flow records) or
+    **Full** (every stored series group by group, a unit's under it, and
+    each area's station × ratio, corrected CHIRPS, rain used and *rain
+    used from*: station, chirps, fallback or none), one row a day over
+    every column's span. Both open with `#` lines: the export, the engine
+    version and date, and each area's sentence (Full adds the factors; a
+    refused pairing or an area that couldn't be computed says so). Header
+    cells that read as a formula get an apostrophe, and a `#` line's
+    commas, quotes and line breaks are percent-encoded, so it stays one
+    cell. It waits for every series' values, and says so if they haven't
+    loaded. **Preview all data** shows the same derived columns as the Full
+    CSV (see *Preview* below). `data-tab-groups.spec.ts` covers the groups, a
+    unit opened, a link to its series, both downloads and the derived
+    columns in Preview.
+- **Freshness first**: within each group the table lists the series
+  **behind** first, most days behind first, then the series a run reads,
+  then the rest (another series of that kind is read, reference only),
+  keeping the list's order within each (`series/freshness.ts`
+  `freshnessOrder`). Until issue #553 round 5 the one ungrouped list put
+  every series behind at its top. *Behind* is
   exactly the sidebar badge's rule (`freshness().behind`): a series a run is
   driven by (recorded rain, daily A-pan) ending more than 7 days
   (`STALE_DAYS`) before the project's date; a forecast runs ahead and observed
@@ -5311,7 +5419,12 @@ with the table the data needs).
   count. **Data up to** is the column straight after the series; **From**
   after it gives only the first date (both day first, `1 Oct 2021`, as is
   the CSV menu's period line; issue #521) (it was a *Period* start → end, whose
-  end repeated Data up to, issue #174). (Until 2026-09-26 any row
+  end repeated Data up to, issue #174). Both, and the CSV menu's period
+  line, are the first and last days **with a value** (`freshness.ts`
+  `dataSpan`, issue #556), not the stored rows' ends: a b023 import stores a
+  logger column from the workbook's first date, years of blank days before
+  its first reading included, so From used to show 1 Oct 2009 for a record
+  that starts in April 2013. (Until 2026-09-26 any row
   older than 31 days, flow included, was amber, which disagreed with the
   badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
   (`agoText` in `lib/format/age.ts`; those two days used to read "1 months" / "1 years").
@@ -5320,23 +5433,29 @@ with the table the data needs).
   and Back returns to the series before. Without `series=` (or with one that
   no longer exists) the observed flow a run reads is charted, else the main
   rainfall, else the first. Deleting the charted series drops the parameter
-  (`replaceState`); an upload through **Add data** on this tab charts the
-  uploaded series (`series=<id>`, `replaceState`, the page's `onUploaded`).
+  (`goto` with `replace`); an upload through **Add data** on this tab charts the
+  uploaded series (`series=<id>`, with `replace`, the page's `onUploaded`).
   The chart sits under the table, so after a pick it scrolls just into view
   (smoothly, unless the viewer prefers reduced motion; not at all when it is
-  already in view, and not for the upload's `replaceState` pick).
+  already in view, and not for the upload's replacing pick).
 - **Layout**: the page flows in the window's one scroll, and nothing on it
   scrolls inside itself (the table grows with its rows rather than the
-  global 70vh table box; it would still scroll sideways if it had to). With
-  more than seven series the table shows the first six in its order (four
-  in a column 640 px or narrower, where each row is a card), then **Show all N series**
-  (`aria-expanded`, `aria-controls="series-rows"`; open, **Show only the
-  first 6 series**), which opens the rest in place (`common/fold.ts`
-  `foldList`). The charted series' row always shows, after the first six
-  when it sits further down, so a `series=` link or a pick never hides its
-  row. The chart follows the table at a fixed 320 px plot; at 1440 × 960
-  with 30 series the six rows, the button and the chart's head are on the
-  first screen. Until 2026-09-29 a page 720 px wide and tall was fitted to
+  global 70vh table box; it would still scroll sideways if it had to). Each
+  group folds on its own: with more than five rows (a unit's row counts
+  once) it shows the first four (three in a column 640 px or narrower,
+  where each row is a card), then **Show all N stations** / **catchment series**
+  / **units** / **flow records** / **series** (`aria-expanded`,
+  `aria-controls` its `<tbody>`, `grp-<group>`; open, **Show only the
+  first 4 …**), which opens the rest in place (`common/fold.ts`
+  `foldList`). The charted series' row always shows, after its group's
+  first six when it sits further down (its unit's row, opened, for a
+  unit's series), so a `series=` link or a pick never hides its row. The
+  chart follows the table at a fixed 320 px plot. Until issue #553 round
+  5 one fold over the whole list kept six rows, the button and the chart's
+  head on a 1440 × 960 first screen; grouped, every group shows its first
+  rows, so a long project's chart sits further down (a decision: the
+  groups' heads outrank the chart's on a first screen), and a pick or the
+  Data sections menu's **Chart** brings it into view. Until 2026-09-29 a page 720 px wide and tall was fitted to
   the window: the table took up to 55 % with its rows scrolling inside its
   box and the chart filled the rest, so the panels below went unseen
   (`data-page.spec.ts` pins the flow, the fold and no inner scroller on
@@ -5386,10 +5505,37 @@ gauge record adds a line saying where it is checked and scored
 keyboard, touch and screen-reader users never got. **Series details**
 (issue #464, `series/details.ts`): under the chart, one labelled row for the
 charted series (a group named *Series details*, a `<dl>` whose terms are the
-fields' visible labels): **Product**, **Measured at**, **Source**,
+fields' visible labels): **Name** (editors only, issue #556: a text box saved
+on change, `PATCH …/series/:id { name }`; one line, 1–100 characters, unique
+among the project's series of its kind, else *Not saved: another series of
+this kind already has that name*. Runs read the first series of each kind,
+at each site, by name, so a new name that changes which one they read asks
+first, *Change which series runs read?* "Runs will read “Bergwater gauge”
+instead of “Average” for Rainfall — catchment …" (`lib/series/pick.ts`
+`renamePickChange`); Cancel puts the old name back. A series a data feed or
+an API key writes into, or whose name a live key's series list holds, keeps
+its name, and a new name a feed or a key's list already uses is refused too:
+the server refuses it with why, shown under the box as *Not saved: …* (the
+feed case reads as words with why up front).
+Viewers read the name in the table row), **Product**, **Measured at**, **Source**,
 **Upload unit** and **Edited by hand** (the days typed in, "2021-10-02,
 2021-10-04 to 2021-10-06"), each only where it applies, wrapping to one
-column on a phone. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
+column on a phone. A catchment rain series with no site is a **rainfall
+station** (issue #553, `series/StationFields.svelte`, helpers in
+`series/station.ts`): under the row, a group named *Rainfall station* holds
+its **MAP (mm)**, the MAP's required **Source of the MAP** once a MAP is
+typed, and an optional **Latitude** and **Longitude** (WGS84 degrees, both
+or neither), saved together with **Save the station** (`PATCH
+…/series/:id { station }`, null once every field is empty; disabled while
+nothing changes or while the engine's `rainStationError` finds a problem,
+which shows under the fields: *Say where the station's MAP comes from …*,
+*A station's coordinates need both a latitude and a longitude, or
+neither.*). It says *Saved the station.*, or *Not saved: &lt;reason&gt;*.
+Viewers read the MAP with its source and where it stands, or *Not
+recorded*. Settings → Flow generation, Per unit, reads the run's catchment rain
+station's MAP from here, and History says *Recorded … as a rainfall
+station: MAP 745 mm (…)*, *Changed the rainfall station details of …* or
+*Cleared …*. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
 editors only; recommended to the client, whose answer to the issue's
 question 1 is still open) follows: a *Day* text field read day first
 (`parseDay`: "2 Oct 2021", "2/10/2021" or "2021-10-02"; not a native date
@@ -5465,7 +5611,9 @@ record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were
 interpolated and how many came from the donor record × its ratio, why a donor
-was refused, and how many gaps stay open (`series/flowFill.ts`). **Quality
+was refused, and how many gaps stay open (`series/flowFill.ts`). It reads
+past a low-flow period's high readings as a run does (engine ≥ 1.90.0, issue
+#567): they anchor nothing and are out of the donor's ratio and the clamp. **Quality
 flags**: on a flow record a run reads (the outlet's gauge or logger record,
 or the calibration site's record when calibration scores a gauge inside the
 network), the days Fit automatically would flag (above
@@ -5596,7 +5744,25 @@ for every flow series; **Rain used (model)** and its source (catchment / CHIRPS 
 forecast) after gap-fill, in words beside the value; the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
-inside a Settings → *Calibration exclusions* period. A flagged value says
+inside a Settings → *Calibration exclusions* period. A third group, *Each
+area’s rain (derived, not stored)*, has the Full CSV's columns for each area
+with a station (the average catchment rainfall, then each land unit, in the
+list's order; issue #553): *station × ratio*, *CHIRPS corrected* (absent when
+the area has no CHIRPS), *rain used* and *rain used from* (station, corrected
+CHIRPS, next fallback, or no source), each header marked *Derived · not
+stored* and its cells set in italics. They are asked for on every open from
+the Data tab (`SeriesTab` `derivedAreas`, the same lines and the same lazily
+loaded `derivedRain.ts` chunk as the area rows and the grouped CSV: the
+engine's `stationAreaRain` over `GET …/model-input`, one run preparation for
+every area, kept until the series, settings or model change), so the dialog
+itself never runs that code; *Computing each area’s rain under its station…*
+shows meanwhile, and an area that couldn't be computed is named with the
+reason and a **Try again**. They cover the run window, so a day of the
+stored series outside it is blank (`preview.ts` `buildAreaColumns`,
+`areaCell`; help `preview.areaStationScaled`, `preview.areaChirpsCorrected`,
+`preview.areaRainUsed`, `preview.areaRainFrom`). The search's value
+comparison and *Missing only* / *Flagged only* still look only at the stored
+series. A flagged value says
 which check flagged it beside it (*12.4 · Outlier*), Rain used its source
 and Excluded its reason, in small text on screen, not only to a screen
 reader; the row stays 28 px. Every column header,
@@ -5605,7 +5771,7 @@ it is derived and what it tells you: a raw series column reuses its kind's
 `series.<SeriesKind>` entry, and each derived column has its own
 `preview.<column>` entry (`preview.date`, `preview.flowM3Day`,
 `preview.rainUsed`, `preview.chirpsFactor`, `preview.chirpsCorrected`,
-`preview.excluded`), the key set per column in `series/preview.ts`. The bubble
+`preview.excluded`, and the four area keys above), the key set per column in `series/preview.ts`. The bubble
 is a top-layer popover, so the sideways scroll and sticky header don't clip
 it, and Escape closes the tip without closing the dialog. A header shows its
 unit once: the m³/day columns name it in their label, so no second `(m³/day)`
@@ -5632,7 +5798,11 @@ that read the series, the columns that run used (docs/api.md § Export,
 The download menus (`export/DownloadMenu.svelte`) open fixed to the window,
 below their button or above it when there's no room
 (`lib/export/menuPosition.ts`), so a table's scroll box never clips them;
-scrolling or resizing closes an open menu.
+resizing, or a scroll that moves the button (`triggerMoved`), closes an open
+menu. A scroll that leaves the button in place doesn't: the browser's scroll
+anchoring fires one when content above changes size, which closed the Data
+tab's menu as it opened while an area's rain panel showed an error
+(`data-tab-groups.spec.ts`).
 
 The run downloads (in the results' Download menu) are where the numbers can be
 checked outside the app. A farm's **daily CSV** has every column in the
@@ -5721,7 +5891,7 @@ section header, which it fills (`fillHeader`) like the other sections.
   Reserve rule table at …** for each site with a table (the outlet first, a
   table keyed by the outlet node counting as the outlet, then gauges in
   network order). It decides which test the Summary's headline card, the run
-  sentence (Runs & results, the printable report), River & reserve's tiles
+  sentence (Runs & results, the printable report), the EWR page's tiles
   and line, and the "days below" wording report (`runs/ewrAssurance.ts`
   `resolveHeadline`). It changes no result, so it needs no re-run and saving
   it alone doesn't put the latest run out of date: every run, old ones
@@ -5759,8 +5929,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   `settingsNavGroups`): **Data & rain** (Simulation period `#set-period`, Rain
   gaps `#set-rain`, Data quality `#set-quality`: its zero-rain and
   low-vs-CHIRPS limits change results, issue #173), **Demand & supply**
-  (Demand `#set-demand`, Flow share `#set-share`, Drought restrictions
-  `#set-restrict`, Reporting `#set-reporting`), **Runoff & calibration** (Flow calibration `#set-flow`,
+  (Demand `#set-demand`, Drought restrictions
+  `#set-restrict`, Reporting `#set-reporting`), **Runoff & calibration** (Flow generation
+  `#set-share`, the id it had as the Flow share panel, kept so its links and notes still land, issue #553; Flow calibration `#set-flow`,
   Calibration record `#set-record`, Fit the parameters `#set-fit`, WR2012
   check `#set-wr2012`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
   tables `#set-reserve`), **Reading results** (Outcome matrix
@@ -5853,9 +6024,11 @@ section header, which it fills (`fillHeader`) like the other sections.
   each says the rest); inside the long ones each sub-group is
   an `h3` in the order shown (in its fieldset's legend where it has one), so
   heading navigation reaches them: under Flow calibration its cards, GR4J
-  parameters, Rain into GR4J (with the areal rainfall correction and rain for
-  each unit as `h4`s), GR4J potential evaporation and Evaporation from the map
-  (issue #521); under
+  parameters, Rain into GR4J (with the areal rainfall correction as an `h4`),
+  GR4J potential evaporation and Evaporation from the map
+  (issue #521); under Flow generation its cards (Per unit: Each unit's
+  rainfall station, then the Flow share card; Units without a station an `h4`
+  in its legend, issue #553); under
   Rain gaps its two cards, CHIRPS gap filling and Flagged rain, with the
   Flagged rain card's zero-rain runs, multi-day accumulations and rain
   source periods as `h4`s (issue #521); under the Calibration record the
@@ -5937,8 +6110,9 @@ two.
   (closed while it is 365). Each field's "Changed 1× · last by …" history
   line is one line here (cut with an ellipsis; the whole text is its link's
   name and title), so a changed field's cell is as tall as its neighbours'.
-  **Rain into GR4J**: the areal rainfall correction and rain for each unit,
-  each one switch while off, with the MAP-grid proposal under them.
+  **Rain into GR4J**: the areal rainfall correction, one switch while off
+  (rain for each unit and the MAP-grid proposal moved to Flow generation →
+  Per unit, issue #553).
   **GR4J potential evaporation**: the choice, the annual figure and the
   monthly row; under the pan row, **Fill or edit the row: preset, FAO-56
   helper, paste · source: …** folds the preset, the FAO-56 helper, **Paste
@@ -5981,27 +6155,35 @@ two.
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
     under ("Areal rainfall correction"), and the report's inputs table
-    shows it. With rain for each unit on, a note under it (shown even with
-    the explanations off) says it applies only to the units that fall back
+    shows it. Under Flow generation's Per unit, a note under it (shown even with
+    the explanations off, linking to Flow generation) says it applies only to the units that fall back
     to the catchment rain, and the report's inputs table adds a "Rain for
     each unit (GR4J rain)" row (`report/inputs.ts`).
-    Then **Rain for each unit** (`settings.unitRain`, issue #482,
+    **Units without a station** (`settings.unitRain`, issue #482,
     `settings/UnitRainFields.svelte`, its own chunk, helpers in
-    `settings/unitRain.ts`; [model.md §2.4h](./model.md)): a checkbox
-    "Runoff from each unit's own rain" (off: null, the catchment rain as
-    before; on: `{ mode: 'perUnit' }`, and the setting switched off comes
-    back if ticked again before saving). On, a line says how many units with
+    `settings/unitRain.ts`; [model.md §2.4h](./model.md)) was this card's
+    "Rain for each unit" until issue #553 round 3 moved it, without its
+    checkbox, to Flow generation → Per unit (below): what a land unit with no
+    rainfall station runs on, the rule from before stations. A line says how many units with
     land have a MAP ("1 of 2 units with land has a MAP."), with a link that
     opens Data feeds' Rain for each unit (`?rain=units#set-feeds`), and names
     the units without one (the first six, each a link to its form, "and N
-    more"); then an optional **Rain gauge's MAP**
-    (mm, 1–12 000; with it a unit with a MAP runs on the gauge's rain × unit
-    MAP ÷ gauge MAP) and, once it is set, its required **Source**; then the
+    more"); then the **Rain gauge's MAP**, a read-out since issue #553: the
+    station MAP of the catchment rain series a run reads (the first
+    `rain_catchment_mm` with no site by name, `firstOutletSeries`), with its
+    source and the series' name, and a link, *Change it in Series details*
+    (*Set it …* when none; *See it …* for a viewer), to
+    `?tab=series&series=<id>#data-chart`, where it is edited. With it a unit
+    with a MAP runs on the gauge's rain × unit MAP ÷ gauge MAP. The station
+    wins; a project whose station has no MAP still shows its older
+    `settings.unitRain.gaugeMapMm`, "kept from these settings", until one is
+    set on the station (migration 239 copied it there). Until issue #553 it
+    was an input here with its own Source; then the
     **MAP period** as a first and a last year (1 Jan to 31 Dec; 1991–2020,
     the default, is stored as none). A period under five years, or starting
-    before 1981, gets a note but saves; a gauge MAP out of range, one without
-    its source, or a first year after the last blocks Save, the message under
-    its field (named by `aria-describedby`) and in the save bar. Then
+    before 1981, gets a note but saves; a stored settings gauge MAP out of range or
+    without its source (its message under the read-out), or a first year
+    after the last blocks Save, the message under its field (named by `aria-describedby`) and in the save bar. Then
     **Reference gauge for the units' CHIRPS** (engine ≥ 1.80.0, issue #500,
     [model.md §2.4h *Reference gauge*](./model.md#reference-gauge-engine--1800-issue-500)):
     a **Reference gauge** select (None, the default: each unit's CHIRPS
@@ -6016,9 +6198,8 @@ two.
     reference unit the model no longer has with land says so under the
     field (runs ignore the reference until another is picked). The Settings
     tab checks it itself (`unitRainFormError`), so Save is blocked before the
-    chunk has loaded. The group's summary line adds "rain for each unit"
-    while it is on.
-    With it on, editors also get **MAP from the grid**
+    chunk has loaded; the problem is listed against Flow generation.
+    Under Per unit, editors also get **MAP from the grid**
     (`settings/UnitMapProposal.svelte`, its own chunk, helpers in
     `settings/unitMapProposal.ts`; `GET`/`POST …/map/unit-map`, [maps.md § MAP
     for each unit](./maps.md#map-for-each-unit)), a proposal panel
@@ -6264,7 +6445,19 @@ two.
   2015-10-01 – 2016-09-30"). A blank reason, a reversed range or a period
   listed twice shows an alert and blocks Save (the save bar links here).
   Excluded days are left out of Fit automatically and the run's calibration
-  statistics (model.md §2.10). Under them, **Quality flags for Fit
+  statistics (model.md §2.10). Under them, **Low flows only**
+  (`calibration/LowFlowPeriods.svelte`; engine ≥ 1.90.0, issue #557,
+  `settings.qualityFlags.lowFlowPeriods`, model.md §2.10h): "Use only low
+  flows in a date range" adds a row with the **Record** (the project's
+  records, the logger first), **From** and **To**, **Valid up to (m³/s)**
+  and a required **Reason** and **Source**. Inside the dates a reading
+  above the threshold is left out of Fit automatically, the run's
+  statistics, its EWR test on the record and the plausibility checks, and
+  the flow gap fill reads past it (issue #567, model.md §2.10i); readings
+  at or below it are scored. A blank reason or source, a reversed
+  range, a threshold not above 0 or the same record and range twice shows
+  an alert and blocks Save (the save bar links here); the section's summary
+  line adds "low flows only in N periods". Under them, **Quality flags for Fit
   automatically** (`settings/QualityFlagsFields.svelte`, helpers in
   `settings/qualityFlags.ts`; engine ≥ 1.22.0, CR-18/19, model.md §2.10h): for
   each calibration record the project has (both when not known), its
@@ -6327,6 +6520,11 @@ two.
   number of excluded periods. With more than one start a **Starts** table
   lists each start's seed, score and fitted parameters, the kept one marked,
   and a note says when near-equal scores come with scattered parameters.
+  The Search choices (bounds, model runs per fit, starts, seed) start from
+  the project's fit record when it has one (issue #554,
+  `FitSession.searchFrom`, once per project load; a record from before
+  starts were recorded ran one start), so a re-fit repeats the last fit
+  unless they are changed; without a record they are the defaults above.
   - **Also validate against** appears only when the project has both a gauge
     and a logger record. It offers the record the fit doesn't use (the
     calibration flow series above, else the default gauge) and defaults to
@@ -6590,10 +6788,79 @@ two.
   it). Unticking **Compare runs with WR2012 naturalised flow**, or the MAR
   band, and ticking it again brings back what was typed until the settings
   are saved or discarded.
-- **Flow share** (between hydrological units): the method, and the **High/low
-  MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
-  is *High/low MAP split*, the one method that reads it (issue #174); under
-  *by area* or *manual* it is hidden and its saved value kept.
+- **Flow generation** (`#set-share`, issue #553 round 3; [model.md §2.4h,
+  §2.4i, §2.5](./model.md)): how natural flow is made, one choice, first in
+  Runoff & calibration. It replaced the Flow share panel and the
+  "Runoff from each unit's own rain" checkbox, which the operator found read as
+  two separate settings (2026-10-23). A **Method** radio pair:
+  **Fragmentation** (the default: `settings.unitRain` null, absent or
+  `catchment`; GR4J once on the catchment rain, its flow split by the flow
+  share) or **Per unit** (`{ mode: 'perUnit' }`: GR4J on each land unit's own
+  rain). The radio writes the same `settings.unitRain` the checkbox did, so no
+  stored project changes and no migration was needed; switching to
+  Fragmentation keeps the Per unit setting (`draft.kept.unitRain`) until the
+  form is saved, and the stations assigned stay stored, unused, so Per unit
+  brings them back. When the form's parameters come from a fit made under
+  the other method (`fitMethodMismatch`, the engine's `fitFlowMethod`: a fit
+  whose forcing records per-unit rain ran Per unit), an alert under the radio
+  says "Parameters not fitted for this method: the GR4J parameters were
+  fitted under Fragmentation. Fit the parameters again …", linking to
+  `#set-fit`, and the fit record lists the same caveat (`methodChanged`,
+  `fitRecordCaveats`); choosing the fit's method again clears it. The
+  summary line names the method ("Fragmentation · flow share: by catchment
+  area", "Per unit · 2 units on a rainfall station · EWR flow share: …").
+  - **Per unit** shows two cards. **Each unit's rainfall station**
+    (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
+    helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
+    [model.md §2.4i](./model.md)): a line ("1 of 2 units with land have a
+    rainfall station."), then a table, one row per land unit (a farm with an
+    area, in model order): the unit with its MAP and source; **Station**, a
+    select of the project's rainfall stations (every catchment rain series
+    with no site, by name) and *No station: as before stations* (the unit keeps
+    the §2.4h rule, so a project from before stations runs as it did).
+    Satellite rain is never an option: CHIRPS only fills a station's gaps
+    (operator, 2026-10-23). **Scale to unit MAP**, a checkbox (on by default,
+    stored as none; off stores `scaleToMap: false`) with the ratio beside it
+    (*× 1.5*, *× 4 (clamped from 6)*, *× 1: the unit has no MAP*, *× 1, as
+    recorded*); **Gaps: CHIRPS corrected against**, the station whose pairing
+    factors correct the unit's CHIRPS on the station's gaps (*Its station*
+    by default, stored as none). A unit whose station was deleted says so in
+    red and keeps its id until another is picked. Editors tick rows (or every
+    row) and give the ticked units one station with **Assign to the ticked
+    units**. Under the table, each station in use once (however many units
+    share it): its MAP and source, the units it runs, a link to edit it in
+    Series details, and either where its CHIRPS is read (its coordinates) or
+    a **Stands in** select of the land units (`settings.rainStations.sites`;
+    without either its pairing is refused). Under 40rem of width each row
+    stacks into a block with its fields labelled, so nothing scrolls sideways
+    (`flow-generation.spec.ts` at 390 px). Then **Units without a station**
+    (above, in Flow calibration's description) and, for editors, MAP from the grid.
+  - **Flow share** (Fragmentation) or **Flow share: the EWR between units**
+    (Per unit), a card: the **Flow share method** and the **High/low MAP
+    split** (High, Low, their Sum, amber unless 100 %) only while the method
+    is *High/low MAP split*, the one method that reads it (issue #174); under
+    *by area* or *manual* it is hidden and its saved value kept. The line
+    under its heading follows the method: Fragmentation, "GR4J runs once on
+    the catchment rain; the flow share splits its flow and the EWR between
+    units. To give each unit its own runoff, choose Per unit above." (an
+    explanation); Per unit, "Each unit makes its own runoff; the flow share
+    now splits only the EWR and the land cover's low-flow threshold between
+    units, not the flow." (a state line, shown with the explanations off;
+    `e2e/tests/flow-share-hint.spec.ts`); with the EWR split by natural MAR
+    (below) the Per unit line says the flow share now splits only the land
+    cover's low-flow threshold. At the card's foot, **Split the EWR between
+    units by** (`settings.ewrSplit`, engine ≥ 1.94.0, issue #553 round 4,
+    model.md §2.5b; `EwrSplitFields.svelte`, in the lazy sections chunk):
+    *The flow share* (the default, what every earlier run did) or *Each
+    unit's natural MAR* (its own natural runoff over the run's complete water
+    years ÷ the units' total; the period is provisional). Its explanation
+    says what follows the split (the charge, curtailment, hands-off EWR
+    flows, the drought restriction's EWR trigger); its state line, shown with
+    the explanations off, follows the method: under Fragmentation both give
+    the flow share and the choice matters only under Per unit; under Per
+    unit, which share splits the EWR. A split other than the flow share
+    joins the panel's summary line, and the field has its change history
+    (`e2e/tests/ewr-split.spec.ts`).
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
@@ -6628,13 +6895,24 @@ two.
   value and inputs; for the MAR ratio the last run's natural MAR ÷ the table
   MAR (the last run's own s when it used the tables, else an estimate from its
   mean natural flow, so labelled; "Run the model to see it" without a run).
-  Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
-  **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
-  ten points, m³/s), each before scaling, and under them **The tables scaled
-  to the model: each value × s** (an open fold, its line saying "once the
-  tables and the scale factor are known" until then; `settings/ScaledEwrTablesView.svelte`,
-  `ewrDailySource.ts scaledEwrTables`, issue #90 B1 gap a): the tables the
-  method reads × s, read only, as soon as s is known (the area ratio at once,
+  Under the percentile tables, **The EWR is the Reserve table** (engine ≥
+  1.90.0, issue #552), first in that field grid, picks `reserveTable`:
+  *Total Reserve flow (with high flows; the default)* or *Reserve flow without
+  high flows*.
+  Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the three
+  **Natural flow**, **Total Reserve flow** and **Reserve flow without high
+  flows percentile tables** (12 rows × the ten points, m³/s; one set of names,
+  `ewrDailySource.ts DAILY_TABLE_LABELS`, for the captions, the paste choices
+  and the scaled view), each before scaling: the Reserve table the daily EWR
+  reads captioned *the daily EWR*, the other folded into its line ("not used
+  by the daily EWR · entered / empty", `common/Fold`), and
+  under them **The tables scaled to the model: each value × s** (an open fold,
+  its line saying "once the tables and the scale factor are known" until then;
+  `settings/ScaledEwrTablesView.svelte`, `ewrDailySource.ts scaledEwrTables`,
+  issue #90 B1 gap a): the tables the method reads × s (under the percentile
+  tables all three, under a line naming them the EWR at the outlet and which
+  Reserve table the daily EWR reads, or that it isn't entered yet; that table
+  is marked *the daily EWR* and the other *not used by the daily EWR*), read only, as soon as s is known (the area ratio at once,
   the MAR ratio from the last run, exact or estimated as the factor line
   says), else a line saying they show once the tables and s are known.
   The TAB row's cells are as slim as the pragmatic row's, so all twelve
@@ -6650,10 +6928,11 @@ two.
   February 28 days) in a preview with **Use these values** (which fills the TAB
   flows and the table MAR from its `MAR =` line; under the percentile tables
   the button is **Use its MAR only**, since a .tab and a .rul from one
-  determination go together) and Cancel; a `.rul` fills both percentile
-  tables (the total Reserve and the natural duration curve, converted from Mm³
-  a month when its unit line says so), asking first over tables already
-  there. A file never changes **Daily EWR from**: a `.rul` loaded under the
+  determination go together) and Cancel; a `.rul` fills the three percentile
+  tables (the natural duration curves, the total Reserve and the Reserve flows
+  without high flows, converted from Mm³ a month when its unit line says so;
+  a file without the last block empties that table, and says so when it is
+  the one the daily EWR reads), asking first over tables already there. A file never changes **Daily EWR from**: a `.rul` loaded under the
   TAB file fills the percentile tables and says the daily EWR still comes
   from the DRM TAB file, with a **Use the percentile tables** button to switch
   on the person's say (`ewrDailySource.ts rulLoad`); a `.tab` under the
@@ -6661,8 +6940,7 @@ two.
   dialog (`model/GridPasteDialog.svelte` with `wholeTable`, which shows only
   its layout line; `settings/ewrPaste.ts`): the 12 TAB flows (a row or a
   column, read by `parseMonthlyRow` as before) or, under the percentile
-  tables, a choice of **The natural flow table** or **The total Reserve
-  table** and a percentile table (as the rule tables' paste: 12 month rows,
+  tables, a choice of the three tables by the same names, and a percentile table (as the rule tables' paste: 12 month rows,
   optional % heading). Its preview lists every value it changes, Now and
   Pasted, before **Apply**; **Download the table as CSV** gives the table to
   fill in, and that CSV pastes back unchanged. The **Expected format** (`settings/DrmFormatHelp.svelte`,
@@ -6677,25 +6955,30 @@ two.
   EWR at the outlet**, in this same editor, refused in the same words
   (issue #460, [scenarios.md](./scenarios.md)). Run results say which EWR a run used: the *EWR not met* stat on
   Runs & results and in the printed report (the same `RunSummaryView`)
-  carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)" or "EWR:
-  the pragmatic EWR", and the run's warnings repeat it. Under the run
+  carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)", "EWR: the
+  DRM percentile tables (Reserve flows without high flows) × …" or "EWR: the
+  pragmatic EWR", and the run's warnings repeat it; the printed report's
+  Inputs table has a **Daily EWR at the outlet** row (the source, its Reserve
+  table and scaling) on a run that had one. Under the run
   summary on Runs & results, a run judged by a DRM table has a closed
   **The daily EWR's tables as this run read them (× s = …)**
   (`runs/RunScaledEwrTables.svelte`, its own chunk): its settings snapshot's
   tables × the s in its summary (`summary.catchment.outletEwr.scale`), so
   they are the values that run read whatever Settings say now. Wherever a screen
   names the outlet's daily test (Judge results by's choice and Automatic, the
-  Summary's reserve strip, River & reserve's judged-by line, water-year bars
+  EWR page's reserve strip and judged-by line, water-year bars
   and EWR by month note, Compare runs' water-year bars, the outcome matrix's
   and the seasonal outlook's days-below measure, the licence impact board,
   the evidence report's days-below rows and the export workbook's EWR grid)
   it uses `ewr/notMet.ts dailyEwrName`: "the pragmatic EWR", or "the daily
-  EWR from the DRM TAB file / percentile tables"; runs compared with
+  EWR from the DRM TAB file / percentile tables" (… "percentile tables
+  without high flows" when that table was read); runs compared with
   different sources are "each run's daily EWR" (`dailyEwrNameOf`), each
   run's own named in the chart's legend and caption. The EWR flow chart
-  (River & reserve, the printed report) labels the outlet's EWR line as the
-  run stored it, "EWR from the DRM TAB file (scaled)" or "… percentile tables
-  (scaled)" (the engine's `OUTLET_EWR_LABELS`), else "Pragmatic EWR", and its
+  (EWR, the printed report) labels the outlet's EWR line as the
+  run stored it, "EWR from the DRM TAB file (scaled)", "… percentile tables
+  (scaled)" or "… percentile tables, without high flows (scaled)" (the
+  engine's `outletEwrSeriesLabel`), else "Pragmatic EWR", and its
   caption counts the days below "the daily EWR line (from the DRM TAB file)"
   (`runs/flowSeries.ts ewrLineWords`); beside a rule table at another site
   it is headed **Flow vs daily EWR**. A DRM source counts as a daily test set
@@ -6973,10 +7256,20 @@ part of the Settings tab's chunk; WP-2.10,
   catchment boundary** (a heading in the card) with the proposal: the boundary (name,
   area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
   in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
-  source, what **Apply** does (attach a new feed, or give an empty feed the
-  cells), and **The cells** (a disclosure with a table: latitude, longitude,
-  share inside, weight). Owners get **Apply**; editors read "An owner of the
-  project applies it"; **Close** closes the card. What Apply did, or the
+  source, "Runs read" (the CHIRPS series runs read now, with its first and
+  last day, when there is one), what **Apply** does (attach a new feed, or
+  give an empty feed the cells), and **The cells** (a disclosure with a table: latitude, longitude,
+  share inside, weight). Owners also choose (issue #561): where runs read a
+  CHIRPS record, **The CHIRPS series runs read** (radios): *Keep “…” for
+  runs, and put the boundary’s rain beside it to compare* (the default; the
+  new series sorts after it) or *Replace “…” with the boundary’s rain, once
+  its whole record is read* (disabled, with the reason, when it can't be
+  replaced); while keeping, **Daily product** (rnl / sat) and **Start date**
+  (a day field), set to the record's first day and rnl when it starts
+  before 1998, else sat and empty (the last 60 days). The Apply sentence
+  follows the choices ("Runs keep reading “…”: the new series sorts after
+  it …", or the replacement's backfill and swap). Owners get **Apply**;
+  editors read "An owner of the project applies it"; **Close** closes the card. What Apply did, or the
   error, sits above that row. The applied feed's card reads "14 cells of the
   catchment boundary “…”, area weighted". The Map tab's link (`?rain=boundary`)
   opens the card on it at once, its heading focused (`DataFeedsPanel` reads
@@ -7069,7 +7362,10 @@ part of the Settings tab's chunk; WP-2.10,
   "“Rainfall — catchment” already has data (1,200 days)", that the values
   already there stay and the records would mix, and a suggested separate
   series name no series or feed of that kind uses ("CHIRPS", "CHIRPS 2",
-  "DWS A2H012"). Focus lands on **Use a separate series: CHIRPS**, which
+  "DWS A2H012"), and never one that sorts ahead of the record runs read
+  (then "<that record> (CHIRPS)": a run reads the first series by name, and
+  the server refuses a new series that would take over, 409
+  `series_takes_over`, whose message the form shows; issue #561). Focus lands on **Use a separate series: CHIRPS**, which
   fills the name and focuses the name field; **Fill its empty days**
   attaches into the existing series; Escape backs out to the name field.
   Changing the series drops the question. Once it runs, the card says how
@@ -7169,10 +7465,16 @@ run's report to chosen members every week or month.
   `e2e/tests/settings-after-form-layout.spec.ts` (the head's action and the
   card's in a 1440×900 window, the phone).
 
-## River & reserve
+## EWR
 
-`?tab=river` (alias `?tab=reserve`), under *Outcomes* after the Summary
-(issue #17, option A: the outcome pages). One run's river against its EWR:
+`?tab=river` (aliases `?tab=ewr` and `?tab=reserve`), under *Outcomes* after
+the Summary (issue #17, option A: the outcome pages). Named **River & reserve**
+until issue #558, which made it the one page for the EWR's results: the
+operator didn't read it as "the EWR page" while the Summary led with the EWR,
+so the Summary's EWR headline card and its **Days below the reserve** strip
+moved here, to the top, and the Summary became about irrigation supply. The
+tab keeps its id, `river`, so a person's saved choice of sections
+(`hiddenTabs`) and every old `?tab=river` link still hold. One run's river against its EWR:
 the Runs & results tab's former **River & Reserve** group, moved here with
 its panels unchanged, laid out as a reading page that flows in the window's
 one scroll (`river/RiverTab.svelte`, its
@@ -7213,14 +7515,21 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   line adds that the run is judged automatically. Reserve compliance keeps
   its panel whenever the run has a table, whatever judges the headline.
 - **Tiles** (`riverKpis`), each with its change from the previous run where
-  both runs have the figure (`Delta`, as on the Summary):
-  *EWR not met* (share of days the outflow was below the pragmatic EWR at
-  the outflow gauge, "N of M days", how many in an average year ("37 days
-  in an average year", one decimal under 10), and when the results are
-  judged by a rule table "Reserve rules: x% of months", which is the rule table's test and named
-  as such; flagged above 5 % of days; a fall is the better change). It
-  is the Summary's *EWR not met* card word for word: both take their term,
-  value and count from `ewr/notMet.ts` `ewrNotMet`, since until issue #162
+  both runs have the figure (`Delta`):
+  the **EWR headline**, the Summary's first card until issue #558 merged it
+  with this page's *EWR not met* tile (both came from `ewr/notMet.ts`).
+  Judged by the pragmatic EWR (by choice, or with no rule table) it is
+  *EWR not met* (`data-kpi="ewr"`: share of days the outflow was below the
+  pragmatic EWR at the outflow gauge, "N of M days", how many in an average
+  year ("37 days in an average year", one decimal under 10); flagged above
+  5 % of days; a fall is the better change). When the results are judged by
+  a Reserve rule table (`headlineSite` under `settings.ewrHeadline`) it is
+  *Reserve rules met* (`data-kpi="reserve"`: the share of complete months the
+  table's rules were met at its site, "N of M months at the outlet", the
+  longest run not met, then the pragmatic EWR's days on one line named as
+  that test, "EWR not met (pragmatic): x% of days, N days in an average
+  year"; its change is against the previous run at the same site, as
+  `latestRun.ts` `headlines` has it). Until issue #162
   this tile framed the same figure the other way round ("Reserve met 21.2%"
   against the Summary's "EWR not met 78.8%"). "Not met" is the framing the
   flow chart's shading, the EWR by month grid and the projects list use;
@@ -7232,13 +7541,60 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   length free) already shows. A fourth, *Worst month*, was removed on
   2026-09-29 (issue #175): it restated the largest figure of the EWR by
   month grid's "All years" row. The two tiles sit side by side at every
-  width.
+  width; beside them, from a 56rem column, the reserve strip (below).
+- **Days below the reserve** (`river/ReserveStrip.svelte`, rules in
+  `river/reserveStrip.ts`; the Summary's under its cards from issue #162
+  until issue #558 moved it here, `#res-reserve-strip`, beside the tiles in
+  a column 56rem wide or more, half the column each, so the flow chart and
+  the next panel's top still show in a 1440 × 960 window; under them
+  narrower), once the run's record is in: the days
+  below the pragmatic EWR at the outlet in each of the run's last twelve
+  months (`recentMonths`, from the run summary's monthly grid,
+  `RunSummary.ewrCompliance`, so it draws with the cards: no series to fetch,
+  no chart library), oldest first. Each month is a small bar (its height the
+  share of the month's days below), the count above it and the month under it, the year under the
+  first month and each January; each is a list item whose words ("Jan 2024:
+  below the EWR on 12 of 31 days (red)") are what a screen reader and the tooltip
+  get. The bar takes the month's **EWR traffic-light** colour (issue #444),
+  the portfolio's bands: green under 5 % of the month's days below, amber
+  under 20 %, red from 20 % (`ewrBand`, engine `reserve/trafficLight.ts`
+  `EWR_TRAFFIC_LIGHT`, the same constant backend `portfolio/status.ts`
+  judges the portfolio by; the `--success`, `--warning` and `--danger`
+  tokens, each ≥ 5:1 on the track in both themes), and a key under the
+  months states the bands (`ewr/bands.ts` `bandLabels`, naming what the
+  strip counts: "Green: under 5% of days below the EWR" (the pragmatic EWR
+  beside a rule table), "Amber: 5% to under 20%", "Red: 20% or more"), so the
+  colour is never the only cue: the count is written too. The bands are the
+  defaults; a team's own portfolio thresholds don't reach the workspace.
+  (Until then every bar was the warning colour.) A line under the heading says what it counts and the span ("… (EWR
+  not met), the run's last 12 months: Jan 2024 – Dec 2024"). On a forecast
+  run it stops before the month the forecast starts in, as the cards are the
+  history's. Six a row on a phone. A run made before the monthly grid says
+  so. It isn't in the page's menu: it is on the first screen, beside the
+  tiles. An old Summary link to it (`?tab=overview#strip-h`) lands on it here.
+  **When the results are judged by a Reserve rule table** (issue #177; by
+  default whenever the project has one, or as chosen in Settings → [Judge
+  results by](#settings--calibration), issue #444) the headline tile is
+  *Reserve rules met*, judged by the table (whole months at a site,
+  `headlineSite` with the project's `settings.ewrHeadline`), while the strip still counts days below the pragmatic
+  EWR at the outlet, so "the reserve" would name two different tests on one
+  screen. There the strip is headed **Days below the pragmatic EWR** (its
+  region and month list named the same, a month "below the pragmatic EWR on
+  12 of 31 days"), and the line under the heading adds "The Reserve rules
+  met tile judges whole months by the rule table instead."
+  (`stripWords`/`stripWhat`, `reserveStrip.ts`, its name from
+  `ewr/notMet.ts` `daysBelowTest`, which the page's other panels share;
+  RiverTab passes `ruleTable` from `resolveHeadline`). Judged by the
+  pragmatic EWR, the strip keeps its plain **Days below the reserve**. It keeps counting the pragmatic EWR
+  rather than switching to the table's test: the table gives one verdict
+  per complete month, not a count of days, so there is no "days below"
+  to draw from it, and its months are already the tile's figure (and
+  Reserve compliance by month's).
 - **First screen.** The **Flow vs reserve** chart, the app's only copy of it
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve
   shaded and counted in its caption, a forecast run's band). The Summary
-  drew it too until issue #162 and now shows the days below by month and
-  links here. Its shading comes from the run's own `ewr_shortfall` series
+  drew it too until issue #162. Its shading comes from the run's own `ewr_shortfall` series
   (`overview/summaryChart.ts` `belowReserve`: negative on a day the engine
   counted as EWR not met), so the caption's count is the *EWR not met*
   tile's; with a Reserve rule table at the outlet it also draws the
@@ -7341,7 +7697,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   the panel's heading ids, so a `#res-…` link focuses it. A tool with a
   result (or one loading, failing or running) shows in full. Each is
   described under [§ Runs & results](#runs--results), where it used to be.
-- **On this page.** A **River sections** menu ([§ On this page
+- **On this page.** A **EWR sections** menu ([§ On this page
   menu](#on-this-page-menu)): from 80rem of page (a 1440 px window,
   `RIVER_RAIL_FROM_REM`) a side index on the left of the panels, every group
   named over its links; narrower a bar under the header, above the tiles (two
@@ -7366,8 +7722,10 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
   for a lazy panel's heading to arrive. An old link to one of these panels on
   Runs & results (`?tab=runs&run=<id>#res-reserve` …, `RIVER_ANCHORS`) is
-  replaced by the same link here. The Summary's reserve strip and outflow line
-  and the run headline's "by month of the year" link here too.
+  replaced by the same link here. The Summary's **Reserve and EWR results**
+  link and the run headline's "by month of the year" link here too, and an
+  old Summary link to the reserve strip (`#strip-h`) or to a panel lands here
+  (issue #558, `summaryToRiverAnchor`).
 - **No run yet:** the header, a "No run yet" panel saying what the page will
   show, and (editors) **Run the model** (`?tab=runs`); a viewer reads that an
   editor can run it.
@@ -7375,7 +7733,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 ## Hydrological units
 
 `?tab=supply` (aliases `?tab=units`, `?tab=farms`), under *Outcomes* after
-River & reserve (issue #17, option A: the outcome pages; the issue's
+EWR (issue #17, option A: the outcome pages; the issue's
 *Farms & supply*, named for the workspace's word for a farm node since
 #54 2a, as its Summary card *Supply by hydrological unit* and the Runs group *Units &
 users*). How much of each unit's irrigation demand one run supplied: the
@@ -7394,7 +7752,7 @@ read it before.
   is gone shows the newest with a note. The run before it (by `createdAt`,
   `previousRunOf`) is what the change is against. The header's **Run shown**
   menu lists every run; picking one is a history entry. **Open in Runs &
-  results** goes to `?tab=runs&run=<id>`, named as on River & reserve (issue #466).
+  results** goes to `?tab=runs&run=<id>`, named as on EWR (issue #466).
 - **Header.** The shared section header; the context line (`supplySummary`)
   is "8 units · 3 short this week · run “Baseline”, ran today", with the
   unit count alone before a run. Once that week's last day is more than a
@@ -7566,9 +7924,9 @@ read it before.
   a second "Results appear here" card had left a mostly empty box beside it
   at 1440 and a screen of it on a phone (`runs-page.spec.ts`).
 - **Outcomes for this run.** The run header has one line, "For this run:
-  River & reserve → · Hydrological units →" (a navigation landmark, *Outcomes
-  for this run*; the links are named "River & reserve for this run" and
-  "Hydrological units for this run"), to the [River & reserve](#river--reserve)
+  EWR → · Hydrological units →" (a navigation landmark, *Outcomes
+  for this run*; the links are named "EWR for this run" and
+  "Hydrological units for this run"), to the [EWR](#ewr)
   and [Hydrological units](#hydrological-units) pages for the shown run. It replaced
   the two link rows (`#res-river`, `#res-units`) and their groups, which a
   link still reaching Runs & results with those anchors is sent to (the page
@@ -7595,7 +7953,7 @@ read it before.
   tag, with a line saying every other figure of the run covers the days
   before the forecast only, and every "X of N days" beside them counts N
   over those days too (`overview/latestRun.ts` `historyDays`, issue #51: the
-  EWR card, River & reserve's tiles, the unit results table's record). Every daily chart of a forecast run (EWR vs
+  EWR card, the EWR page's tiles, the unit results table's record). Every daily chart of a forecast run (EWR vs
   outflow, the hydrograph, dam storage, supply vs demand, the explorer, the
   runoff model's stores, the printed report's two charts, Compare runs'
   overlay)
@@ -7605,7 +7963,7 @@ read it before.
   `data-band-from`. The flow-duration curve has no time axis, so no band: it and its Q table rank
   only the days before the forecast, and the caption says how many forecast
   days it left out (issue #51). The same for every figure read off the
-  stored series: River & reserve's shaded days below the EWR and their
+  stored series: the EWR page's shaded days below the EWR and their
   count, the overlay's difference and read-out ("Run A is a forecast run: …
   stop the day before"), the report's licence-impact board, and a share
   link's chart. `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`)
@@ -7626,7 +7984,7 @@ read it before.
   <quaternary>**, **EWR test: model against observed flow**, **Plausibility
   checks**, **Run notes**, **Evidence**, **Reproduction**, **Validation
   statement**, **Explore any output**), and two last groups for the panels that moved to their own pages
-  (issue #17), linked with the run shown: *On River & reserve* (**Reserve
+  (issue #17), linked with the run shown: *On EWR* (**Reserve
   rules met, by month**, **Days below the EWR, by month**, **Water
   account**) and *On Hydrological units* (**Curtailment targets**,
   **Assurance of supply**; `otherPageGroups`, issue #462). The results keep
@@ -7675,14 +8033,16 @@ read it before.
      gauge inside the network, engine ≥ 1.41.0, adds under the outlet's
      hydrograph "Flow at &lt;gauge&gt;, the calibration site": that gauge's
      record against the simulated flow there, `runs/RunCharts.svelte` from
-     the node's `observed_flow` and `outflow` series), calibration (its
+     the node's `observed_flow` and `outflow` series; and under the
+     flow-duration curve, **Flow at gauges in the network (checks only)**,
+     below), calibration (its
      *Compared with* and the NSE card name the gauge when scored there; with
      where the parameters came from; under its statistics the **calibration
      check**, below), the **water balance** by water year
      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
      hydrologist hands a client first, its own section since issue #137;
      described under [Self-checks](#self-checks); a line under its equation
-     links to River & reserve's **Water account** for the same run, the
+     links to the EWR page's **Water account** for the same run, the
      catchment's own; it fits its column at 1440 and 1280 rather than scrolling
      sideways: its headings wrap, its cells use a dense table's padding, the
      unit column is **Unit runoff**, and two pairs share a column, each year's
@@ -7729,10 +8089,39 @@ read it before.
      render (after the hydrograph has painted), with a count while they load
      and a retry on failure. A run saved without its model has no network to
      sum over: the outlet's chart only, with no demand line, and its caption
-     says why. Other gauges' records aren't in the run, so they
-     get a chart only once picked as the calibration site (Settings →
-     Calibration record → Scored at). The hydrograph above keeps its own
+     says why. Other gauges with a record of their own aren't in the
+     calibration check: they have their hydrographs under the flow-duration
+     curve (next). The hydrograph above keeps its own
      lines (natural hidden at first); the check adds the use beside them.
+     **Flow at gauges in the network (checks only)** (issue #554,
+     `#res-gauges`, `runs/GaugeCheckFlows.svelte`, pure parts in
+     `runs/checkGauges.ts`), under the flow-duration curve: for every gauge
+     inside the network with its own flow record that the run doesn't score
+     (the plausibility checks' gauges less the calibration site), "Flow at
+     &lt;gauge&gt; (checks only): simulated and observed", its record against
+     the simulated `outflow` there (the run's `observed_flow_check` at the
+     node, engine ≥ 1.90.0, model.md §2.10k), in the page's flow unit with a
+     log switch and the last 3 years; then its flow-duration curve, both
+     curves ranked on the record's days (before a forecast); then a
+     **Check, out of sample:** line with the record's NSE, KGE and PBIAS and
+     its days, read from the run summary (`plausibility.gauges[].fit`,
+     computed once by the engine outside the calibration exclusions, as its
+     plausibility checks leave them; the page computes none; the intro says
+     once that these are never the calibration score); and a link, **Series details of
+     &lt;gauge&gt;'s record**, to that record on the Data tab
+     (`?tab=series&series=<id>#data-chart`), where its **Upload unit** is.
+     Each gauge has its name as a heading; they come in the network's
+     order. More than four fold to the first three with **Show all *n*
+     gauges**, and only the gauges shown load their series; a failed load
+     says so with **Try again**.
+     A record 30× the simulated flow (a unit error at upload) reads at a
+     glance as a gap between the lines and a PBIAS near 97 %. A gauge
+     scored instead, made the calibration site in Settings → Calibration
+     record → Scored at, moves to the calibration site's chart above. A run
+     made before engine 1.90.0 says once, naming the gauges, that it was
+     made before gauge records were charted and to run the model again. The side index
+     has a line for it; on the bar the **Flow duration** link stands for it.
+     `e2e/tests/gauge-check-flows.spec.ts` (a synthetic two-gauge network, and five gauges for the fold).
   3. **Record**: notes & evidence (with the run's inputs), the validation
      statement, publication: sign-off, after the results. The **validation
      statement** (`#res-validation`, menu entry **Validation**;
@@ -7759,7 +8148,7 @@ read it before.
   machine (`runs/RunCharts.svelte`); a link to a panel down there
   (`#res-notes`, `#res-calibration`) renders them at once. The menu names the same groups. The river's panels (Reserve compliance,
   EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix,
-  the seasonal outlook, the water account) are on River & reserve and the
+  the seasonal outlook, the water account) are on EWR and the
   units' (curtailment, assurance of supply, unit detail, the per-unit table)
   on Hydrological units (issue #17); a link to one of them here (`#res-reserve`,
   `#res-curtailment`, …) is sent to its panel there. They are still
@@ -7774,7 +8163,7 @@ read it before.
 - **The runs list** (newest first, the newest marked "latest") selects the
   run shown; a run picked from the list (or **Show the newest run**, "go to
   latest", a new run) is a step in history, so Back returns to the run before,
-  as a unit, dam or run pick does on River & reserve, Hydrological units, Dams
+  as a unit, dam or run pick does on EWR, Hydrological units, Dams
   and Allocations; the default pick and the fallback after a delete replace
   the entry (issue #521; until then a pick here replaced it); editors delete one with its ✕ (a run already gone, deleted
   elsewhere or trimmed, just leaves the list; a run that can't be opened
@@ -7863,11 +8252,14 @@ read it before.
   page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
-  always agree with the cards): the river measure the cards lead with (Reserve
-  rules met in X % of months at the headline site when the results are judged
-  by a rule table (Settings → Judge results by), else the % of days below the pragmatic EWR at the outflow gauge), then the
-  farms (how many got less than 95 % of their demand and the lowest one, or
-  "Every hydrological unit got at least 95 %"; left out when the run has no farms). The
+  always agree with the cards): irrigation supply first, the units (how many
+  got less than 95 % of their demand and the lowest one, or "Every
+  hydrological unit got at least 95 %"; left out when the run has no units),
+  then the river: the EWR headline's measure (Reserve rules met in X % of
+  months at the headline site when the results are judged by a rule table
+  (Settings → Judge results by), else the % of days below the pragmatic EWR at
+  the outflow gauge). The river led until issue #558 put irrigation first, as
+  the Summary does; the printable report's cover says the same sentences. The
   calibration fit is left to the NSE and PBIAS cards (a sentence repeating
   them was dropped, issue #177; the printable report draws the same cards). Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
@@ -7976,7 +8368,7 @@ read it before.
   N more"; `balanceClosure`), and a link to the table
   (`checks-balance-link`). In the printable report the table is here, under
   the checks. The table says, under its equation, where the catchment's own
-  account is (River & reserve's **Water account**, from natural flow, in m³;
+  account is (the EWR page's **Water account**, from natural flow, in m³;
   `balance-account-link`), and the account links back: the two cover the
   same water years (Water account, below). Rain,
   runoff coefficient, start storage, unit runoff, transfers, rain on dams,
@@ -8187,10 +8579,31 @@ read it before.
   observed flow's quality flags** (engine ≥ 1.48.0, model.md §2.10h: the
   run's `observed_flow_quality` column, stored only when a day is flagged)
   are thin strips along the foot of the plot, behind the lines, one strip
-  per flagged class (above the highest gauging, below the lowest, suspect,
-  infilled; top to bottom in that order, each in its own `--series-*`
-  colour at full strength, as its key swatch), so a class reads by its place
-  as well as its colour. A key under
+  per flagged class (above the highest gauging, above a low-flow period's
+  threshold, below the lowest, suspect, infilled, human use dominant; top to
+  bottom in that order, each in its own colour token at full strength,
+  as its key swatch), so a class reads by its place as well as its colour.
+  The strips have **two looks**, by what the class says: **solid** for a
+  reading outside the flow it can be trusted at (above the highest gauging
+  red `--series-9`, above a low-flow period's threshold green `--series-7`,
+  below the lowest aqua `--series-10`), and a **double line** for a reading
+  that is itself doubtful or not the river's own (suspect gold, infilled
+  violet, human use rose: `--lane-suspect`, `--lane-infilled`,
+  `--lane-human-use`, the strips' own tokens): two 2 px lines with the
+  ground between, strip and swatch alike. While a strip is a double line the
+  key's heading says what the looks mean ("solid: outside the flow the
+  record can be trusted at; double line: a doubtful reading, or not the river’s own flow") and that
+  strip's line says "double line". It shows on a range one pixel wide (a
+  lone day on a decade's view), which hatching would not. No choice of six
+  palette colours keeps every pair apart for colour-blind readers; within
+  each look every pair is ΔE00 ≥ 10 under normal vision and simulated
+  protanopia, deuteranopia and tritanopia in both themes, every strip is
+  ≥ 3:1 on the card, and none is within ΔE00 13 of a line the flow charts
+  draw (`--series-1…4`, `--chart-obs`; the palette's light violet was
+  `--series-4`'s exact colour, and its yellow and pink under 3:1, which is
+  why the double-line classes have tokens of their own;
+  `calibration/flowFlagColours.test.ts` computes all of it from `app.css`
+  and `LineChart.svelte`). A key under
   the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
   with its days and what Fit automatically does with them under the run's
   own settings snapshot: "Above the highest gauging: 14 days; Fit
@@ -8277,15 +8690,42 @@ read it before.
   wrap focusable so a keyboard can scroll it), **Where each unit's MAP
   comes from** and **Days by where the rain came from** (disclosures, with
   full-height targets),
+  and the **rainfall stations** (issue #553, engine ≥ 1.91.0,
+  in the same panel, helpers in `runs/stationRain.ts`; shown when the summary carries `summary.stations`,
+  so a run whose catchment ran on a station gets the panel, as **Rain from
+  rainfall stations** in the section list, without rain for each unit too):
+  the catchment MAP the ratio used (the units' area-weighted mean, or
+  entered), a warning list (a refused pairing, a ratio held at the 0.25–4
+  bound, a missing MAP leaving the ratio at 1, an area whose gaps no pairing
+  corrects and how many days fell to the next fallback), a table with one
+  row per area, the catchment first, then the units in the run's farm order
+  (its station over "× ratio (area MAP ÷ station MAP mm)" and the station
+  correcting its CHIRPS; area MAP; station MAP; days from the station, from
+  the corrected CHIRPS and from the fallback, with the dry days under it;
+  the days set aside, by the checks and as unreliable), **Where each MAP
+  comes from** (both sources per area), and a table of each station's CHIRPS
+  pairing (where its CHIRPS came from: its own cell or the CHIRPS of the
+  unit it stands in; the fit period with its complete years in common; the
+  shared days; the 12 factors, Jan–Dec, or "refused: …" with the reason).
+  The report's inputs carry the same as two tables, **Rainfall stations**
+  and **Station CHIRPS pairings** (`report/inputs.ts` `stationRows`,
+  `stationPairingRows`), with a "Rainfall stations (GR4J rain)" settings row
+  (which areas, the catchment MAP, the unreliable periods, and that the
+  station rule's choices are provisional, engine-audit.md RS1–RS4), and the summary
+  CSV a "Rain from rainfall stations" block after the per-unit rain
+  (`backend/src/export/run-tables.ts` `stationLines`: one row per area with
+  both MAPs and their sources, own and applied ratio, the correcting
+  station, the days by source and set aside; then each pairing with its fit
+  period, common years, shared days and the 12 factors, or the refusal),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
-  and (its own panel on [River & reserve](#river--reserve), beside the findings it qualifies) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
+  and (its own panel on [EWR](#ewr), beside the findings it qualifies) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
   [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
-  `uncertainty/UncertaintyPanel.svelte`, in River & reserve's chunk,
+  `uncertainty/UncertaintyPanel.svelte`, in the EWR page's chunk,
   `#res-uncertainty`; helpers in
   `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
   **decision rule** in a box above every band (thresholds, split date,
@@ -8315,7 +8755,7 @@ read it before.
   seed, sets, kept), each with how its rule differs from the shown one, and a
   line counts the starts never stored. With no ensemble yet the panel is
   one row until an editor presses **Run…** ([§ River &
-  reserve](#river--reserve), issue #465). Editors get **Run an ensemble**: sets
+  reserve](#ewr), issue #465). Editors get **Run an ensemble**: sets
   (30–1 000, default 300), bounds (the fit's, typical or wide), lowest skill
   kept, worst WR2012 flag kept, the low-flow bias limit (or off) and the pan
   coefficient shift (on a GR4J run with a monthly PE row, engine ≥ 0.31.0,
@@ -8401,7 +8841,7 @@ read it before.
   like, and **Observed days / Whole run** switches; the caption says which
   days each curve ranks),
   EWR against outflow and **Reserve compliance by month** (both on
-  [River & reserve](#river--reserve) since issue #17) when the run has a rule
+  [EWR](#ewr) since issue #17) when the run has a rule
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
   when there are several, the method in one sentence and the table's source,
@@ -8566,16 +9006,16 @@ read it before.
   picker), each cell carrying the class name (Low, Mod, High, Sev, Crit) so
   colour is never the only cue, with a legend of the ranges and a count of
   months per class.
-- **Outcome matrix** (`#res-outcomes`, on River & reserve after the
-  uncertainty bands; `outcomes/OutcomeMatrixPanel.svelte`, in River & reserve's chunk):
+- **Outcome matrix** (`#res-outcomes`, on EWR after the
+  uncertainty bands; `outcomes/OutcomeMatrixPanel.svelte`, in the EWR page's chunk):
   the run's inputs at a few demand levels by class of water year, described
   in [§ Outcome matrix](#outcome-matrix) below.
-- **Seasonal outlook** (`#res-outlook`, on River & reserve after the outcome
-  matrix; `outlook/OutlookPanel.svelte`, in River & reserve's chunk): the season from the
+- **Seasonal outlook** (`#res-outlook`, on EWR after the outcome
+  matrix; `outlook/OutlookPanel.svelte`, in the EWR page's chunk): the season from the
   run's state at a few demand levels over the record's past years, described
   in [§ Seasonal outlook](#seasonal-outlook) below.
-- **Water account** (`#res-water-account`, last on River & reserve;
-  `reliability/WaterAccountPanel.svelte`, in River & reserve's chunk; [model.md §2.11b](./model.md)):
+- **Water account** (`#res-water-account`, last on EWR;
+  `reliability/WaterAccountPanel.svelte`, in the EWR page's chunk; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
   what came in and where it went or was stored, each with a labelled key
   (segments in the categorical palette's order, `--series-1, -2, -3, -5, -6,
@@ -8619,7 +9059,7 @@ read it before.
 
 Calibration research CR-21 ([model.md §2.10g](./model.md#210g-sensitivity-runs-ewr-compliance-as-a-range-engine--1180-calibration-research-cr-21)):
 how far EWR compliance moves when one input the record can't settle is
-changed at a time. On [River & reserve](#river--reserve), in its own card
+changed at a time. On [EWR](#ewr), in its own card
 after the uncertainty bands' (`#res-sensitivity`, the page menu's
 **Sensitivity runs**; it shared the bands' card, three actions in one, until
 issue #521 § 14), `uncertainty/SensitivityPanel.svelte`
@@ -8628,7 +9068,7 @@ with its chart `uncertainty/TornadoChart.svelte` and helpers
 
 - **Anyone who can see the run** can press **Run sensitivity**: until it
   has run, the panel is one row (name, purpose, ⓘ, the button at its end,
-  lined up with the uncertainty bands' **Run…**; [§ River & reserve](#river--reserve),
+  lined up with the uncertainty bands' **Run…**; [§ EWR](#ewr),
   issue #465); after, the button sits in the panel's action row: the page
   fetches the run's own inputs (`…/model-input`) and the calibration worker
   runs the central case and each factor's low and high (at most 11 model
@@ -8664,12 +9104,12 @@ with its chart `uncertainty/TornadoChart.svelte` and helpers
 
 Issue #53 R4 ([planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m),
 [model.md §2.14](./model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
-A panel on [River & reserve](#river--reserve) (`#res-outcomes`; until
+A panel on [EWR](#ewr) (`#res-outcomes`; until
 issue #17 under *River & Reserve* on the Runs tab; `outcomes/OutcomeMatrixPanel.svelte`, in River &
 reserve's chunk, view model `outcomes/matrix.ts`).
 
 - **Starting a sweep** (editors; with no sweep yet the panel is one row
-  until **Run…** opens this form, [§ River & reserve](#river--reserve),
+  until **Run…** opens this form, [§ EWR](#ewr),
   issue #465): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
   with its ⓘ beside the label and "Up to 12, separated by commas" as the
@@ -8751,16 +9191,16 @@ Reserve months, the viewer, the fallback).
 
 Issue #53 R5 ([planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml),
 [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)).
-A panel on [River & reserve](#river--reserve), after the outcome matrix
+A panel on [EWR](#ewr), after the outcome matrix
 (`#res-outlook`; until issue #17 under *River & Reserve* on the Runs tab;
-`outlook/OutlookPanel.svelte`, in River & reserve's chunk,
+`outlook/OutlookPanel.svelte`, in the EWR page's chunk,
 view model `outlook/view.ts`). For the WUA; English, like the workspace.
 The level the WUA sets reaches farmers through **Publish to farmers**
 (below) and the farm page's *This season* card (§ Farmer view; the client
 confirmed farmers see the outlook, O5, issue #90).
 
 - **Starting an outlook** (editors; with no outlook yet the panel is one
-  row until **Run…** opens this form, [§ River & reserve](#river--reserve),
+  row until **Run…** opens this form, [§ EWR](#ewr),
   issue #465): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 6, 0–200 %, separated by commas),
   each one `demand.scale` op on every farm from the decision date. On a
@@ -8928,7 +9368,7 @@ see (WP-2.3); every place it shows says so.
   cut first: its %, demand, demand after the restriction, cut, mean cut on
   restricted days, taken and days restricted, with a note that there is no
   basic-needs floor; the summary CSV's block gains the same rows.
-- **River & reserve → Seasonal outlook → Review triggers**: under the
+- **EWR → Seasonal outlook → Review triggers**: under the
   trigger table, the table *As a drought restriction rule* in words
   (`outlook/triggers.ts` `triggerRuleView`, the engine's
   `restrictionRuleFromTriggers`; *Settings → Drought restrictions* a link
@@ -8997,7 +9437,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   panel of the full comparison drawn for the pair, under *Full comparison*,
   each link its panel's heading (`compare/sections.ts`).
 - **What the change does** (left, ~55 %; "What changes" until issue #466): the outcomes table (*EWR not met*, the
-  share of days, worded as the Summary's card and River & reserve's tile
+  share of days, worded as the Summary's card and the EWR page's tile
   from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
   #162; irrigation supplied, farms below 95 %,
   the irrigation deficit, up to two most-changed farms, dam storage at the
@@ -9009,7 +9449,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
 - **Days below the reserve, each year** (right): grouped bars per water year
-  (`ReserveYearsChart.svelte`, a chunk shared with River & reserve; part years outlined), a legend,
+  (`ReserveYearsChart.svelte`, a chunk shared with EWR; part years outlined), a legend,
   a note and **Show as a table**. Its value axis is labelled "days below";
   when every year is 0 the plot says "No day below the reserve in any
   year" rather than showing empty bars. It fills the height of its row.
@@ -9019,7 +9459,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   that is true of every run in a mixed set. Each run is judged by its own
   project's Settings → Judge results by (issue #444; `GET /compare/runs`
   gives each side's), so runs whose projects all judge by the pragmatic EWR
-  say "the reserve", as River & reserve does for them.
+  say "the reserve", as EWR does for them.
 - **Full comparison:** a divider, "Baseline (run A) against What-if 1 (run B)",
   a **Baseline vs What-if 1 / 2** radio switch when there are two what-ifs,
   then every panel of the two-run comparison, unchanged.
@@ -9051,7 +9491,7 @@ them scenarios).
   rows scroll inside it. The scenario is an editing page and scrolls with
   the page. Narrower, the list stacks above the scenario, capped at a few
   rows that scroll inside it. With none picked, the first (newest) opens in
-  place (`replaceState`, so Back leaves the section rather than stopping on
+  place (`goto` with `replace`, so Back leaves the section rather than stopping on
   the bare list), but only once no navigation is in flight and the URL
   doesn't ask for the create dialog, so it can't cancel a `+ New scenario`
   click made while the list was loading.
@@ -10007,7 +10447,7 @@ March") is kept against what it is about.
     (the run notes stay the modeller's one explanation; these are comments
     from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
-    gaps, Calibration record, WR2012 check, Flow share, EWR, Reserve rule
+    gaps, Calibration record, WR2012 check, Flow generation (keyed `share`, its Flow share name before issue #553), EWR, Reserve rule
     tables, Drought restrictions, Reporting, Simulation period, Data quality,
     Evidence), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
@@ -10125,7 +10565,8 @@ baseline card links to the published run's report (**Report**, beside
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a
   legacy-model warning for a stored run from before engine 1.0.0, the run's
-  summary sentence, for a forecast run (WP-2.12) the engine's
+  summary sentences (Runs & results' `runSentence`: irrigation supply first,
+  then the river, since issue #558), for a forecast run (WP-2.12) the engine's
   `FORECAST_RAIN_NOTE` line, "From <first forecast day>, this run uses
   forecast rain, not recorded rain. …", as a warning (`report/sections.ts`
   `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
@@ -10861,7 +11302,7 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   guards), the model guides and **What each page does**: the page guides
   (kind `page`, 2026-10-02), one for each workspace page the setup path and
   the model guides don't cover (Scenarios, Applications, Allocations, the Map,
-  Dams, River & reserve, Hydrological units, Project and History), each
+  Dams, EWR, Hydrological units, Project and History), each
   saying what the page is for and how to work it. Help names tabs with
   `TAB_TITLES`, the workspace's own `TAB_LABELS`, so a renamed tab can't
   leave help behind.
@@ -11307,6 +11748,26 @@ public shared view (`/share`), the public landing page (`/` signed out,
 address, reset password, the farmer invite, the alert emails and their
 digest). The modeller workspace stays English, and so do the public
 methods and verify pages (their readers are assessors).
+
+- **The app's name** (issue #551). It is **Integrated Catchment - Water
+  Balance Tool**, abbreviated **IC-WBT** (it was Water Management), and it is
+  a proper noun in every language: neither the full name nor the
+  abbreviation is translated, only a descriptive tagline beside it (the
+  landing page's "daily water balance for a catchment"). Messages carry it as
+  a placeholder, `{app}` on the site and `{product}` in the emails, so a
+  later rename touches no translation. The full name goes where there is
+  room: the landing page's hero kicker and footer, its `og:site_name`, the
+  sign-in pages' brand panel, the legal pages' header and first mention,
+  the report and evidence-pack covers, the web manifest and every email's
+  sign-off ("— Integrated Catchment - Water Balance Tool (IC-WBT)"). IC-WBT
+  goes where space is tight: the app's header and the sign-in and landing
+  headers, the browser tab's suffix ("Account · IC-WBT"), email subjects and
+  sentences, the sender name, the authenticator app's label and the
+  recovery-codes file (`icwbt-recovery-codes.txt`). Both live in
+  `frontend/src/lib/brand.ts` and `backend/src/mail/templates.ts`
+  (`PRODUCT`, `PRODUCT_FULL`); `lib/brand.test.ts` fails if "Water
+  Management" comes back in the frontend, the backend or the brand sources.
+  The repo, package, database and AWS names keep `water-management`.
 
 - **The language table.** Every language the site, the emails and the
   database know is one entry in `packages/engine/src/languages.ts`
@@ -11777,8 +12238,8 @@ Share](./api.md#share), [security.md § Share links](./security.md#share-links))
 signed in or out, for someone outside the project, on a phone first.
 
 - **The token** is in the fragment (`/share#t=…`). The page reads it once,
-  strips it from the address bar (`replaceState`, as the reset pages strip
-  `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
+  strips it from the address bar (a shallow `goto` with `replace`, as the
+  reset pages strip `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
   (only the fragment changes) is picked up the same way, and only the latest
   link's answer is shown, however the two answers race (`share/load.ts latestOnly`). The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water
@@ -11825,7 +12286,7 @@ signed in or out, for someone outside the project, on a phone first.
   period chosen, from the same answer: no second renderer, no new data, and
   nothing a link doesn't already show (the counts are `catchment_view`'s
   last 30 days, season or whole run per EWR site; the chart is the same
-  k-ruled series). On paper: "Water Management · Member summary", the
+  k-ruled series). On paper: "IC-WBT · Member summary", the
   catchment's name, the period with its dates, the published line and
   "Printed on *date*." (the day of the print, set on `beforeprint`), the caveat; the WUA's notice (level, words, the %
   beside them, who published it); each EWR site's reserve over

@@ -1,9 +1,25 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, FarmSummary, RunSummary } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { LOW_PCT } from './damLevels';
-import { fmtNum } from '$lib/format/number';
-import { damsEnd, damsHeadline, headlines, historyDays, historyEnd, pickRuns, ranAgo, runDays, supplyFraction, type Headline } from './latestRun';
+import { fmtNum } from '#lib/format/number.js';
+import {
+	curtailedHeadline,
+	damsEnd,
+	damsHeadline,
+	deficitM3Day,
+	headlines,
+	historyDays,
+	historyEnd,
+	pickRuns,
+	ranAgo,
+	restrictedDays,
+	runDays,
+	shortfallHeadline,
+	summaryHeadlines,
+	supplyFraction,
+	type Headline
+} from './latestRun';
 
 const meta = (id: string, createdAt: string, over: Partial<RunMeta> = {}): RunMeta => ({
 	id,
@@ -232,6 +248,62 @@ describe('headlines', () => {
 		expect(hs.some((h) => h.flagged)).toBe(false);
 		expect(card(hs, 'supply').sub).toEqual(['all hydrological units ≥ 95%']);
 		expect(card(hs, 'outflow').sub).toEqual([]);
+	});
+});
+
+describe('summaryHeadlines (the Summary, irrigation first, issue #558)', () => {
+	const restriction = (daysByLevel: number[]) => ({ daysByLevel }) as unknown as RunSummary['droughtRestriction'];
+
+	it('is Irrigation supplied, the Shortfall and the curtailment card: no EWR, no NSE', () => {
+		const hs = summaryHeadlines(summary({ ewrAssurance: [site(null, 18, 24)] }), 120, null);
+		expect(hs.map((h) => h.id)).toEqual(['supply', 'shortfall', 'curtailed']);
+		expect(card(hs, 'supply')).toMatchObject({ term: 'Irrigation supplied', value: '80.0%', unit: 'of demand', sub: ['1 of 2 hydrological units below 95%'] });
+	});
+
+	it('gives the Shortfall as the volume not supplied over the run and in an average year', () => {
+		// 40 m³/day short (Lower: 100 demand, 60 supplied) of 200 demand.
+		expect(deficitM3Day(summary())).toBe(40);
+		const h = shortfallHeadline(summary(), 10_000, null);
+		expect(h).toMatchObject({ term: 'Shortfall', help: 'summary.avgDeficitM3Day', value: '0.40', unit: 'Mm³', flagged: false, delta: null });
+		// 40 × 365.25 = 14 610 m³ a year.
+		expect(h.sub).toEqual([`demand not supplied over the run’s ${fmtNum(10_000)} days`, '0.015 Mm³ in an average year, 20.0% of demand']);
+	});
+
+	it('says every unit got its demand when nothing is short, and has no figure without units', () => {
+		expect(shortfallHeadline(summary({ farms: [farm('Upper', 100, 100)] }), 120, null).sub[1]).toBe('every unit got its whole demand');
+		expect(shortfallHeadline(summary({ farms: [] }), 120, null)).toMatchObject({ value: '–', sub: ['no hydrological units in the run'] });
+		expect(deficitM3Day({ farms: [] })).toBeNull();
+	});
+
+	it('compares the Shortfall a year, since two runs rarely cover the same days', () => {
+		const prev = summary({ farms: [farm('Upper', 100, 100), farm('Lower', 100, 20)] });
+		const h = shortfallHeadline(summary(), 120, prev);
+		// 80 → 40 m³/day short: 29 220 → 14 610 m³ a year.
+		expect(h.delta?.delta).toBeCloseTo((40 - 80) * 365.25 * 1e-6);
+		expect(h.spec.better).toBe('lower');
+		expect(h.deltaLabel).toBe('Mm³ a year, vs previous run');
+	});
+
+	it('counts the drought restriction’s days as the curtailment when the run has any', () => {
+		expect(restrictedDays(summary())).toBeNull();
+		const s = summary({ droughtRestriction: restriction([90, 20, 10]) });
+		expect(restrictedDays(s)).toBe(30);
+		const h = curtailedHeadline(s, 120, summary({ droughtRestriction: restriction([110, 10, 0]) }));
+		expect(h).toMatchObject({ term: 'Units curtailed', help: 'drought-restriction', value: '30', unit: 'days', flagged: true });
+		expect(h.sub).toEqual(['under a drought restriction, of 120 days', '25.0% of the run, level 2 at worst']);
+		expect(h.deltaLabel).toBe('days, vs previous run');
+		expect(curtailedHeadline(summary({ droughtRestriction: restriction([100, 20, 0, 0]) }), 120, null).sub[1]).toBe('16.7% of the run, level 1 at worst');
+		expect(h.delta?.delta).toBe(20);
+		expect(h.spec.better).toBe('lower');
+	});
+
+	it('else names the worst-supplied unit and its share, saying when the rule never restricted', () => {
+		expect(curtailedHeadline(summary(), 120, null)).toMatchObject({ term: 'Worst-supplied unit', value: '60.0%', unit: 'supplied', sub: ['Lower'], flagged: true });
+		const never = curtailedHeadline(summary({ droughtRestriction: restriction([120, 0]) }), 120, null);
+		expect(never.sub).toEqual(['Lower', 'no drought restriction days in the run']);
+		// A tie keeps the run's order; a well-supplied worst unit isn't flagged.
+		expect(curtailedHeadline(summary({ farms: [farm('A', 100, 100), farm('B', 100, 100)] }), 120, null)).toMatchObject({ value: '100.0%', sub: ['A'], flagged: false });
+		expect(curtailedHeadline(summary({ farms: [] }), 120, null)).toMatchObject({ value: '–', sub: ['no hydrological units in the run'] });
 	});
 });
 

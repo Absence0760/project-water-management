@@ -3,8 +3,8 @@
 // backend/src/reports/store.ts ReportView and routes.ts ScheduleView; the
 // calls go through the app's API client, and the wording helpers are pure so
 // they can be tested without a page. Loaded only with the chunks that use it.
-import type { Api } from '$lib/api';
-import { fmtDate } from '$lib/format/number';
+import type { Api } from '#lib/api/index.js';
+import { fmtDate } from '#lib/format/number.js';
 
 export type ReportState = 'queued' | 'rendering' | 'retrying' | 'done' | 'failed';
 

@@ -7,6 +7,7 @@ import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { isUnitRainKind, siteProblem, type SiteNode } from './site.js';
 import { z } from 'zod';
+import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
 import {
 	bodyOrigin,
 	bodyProvenance,
@@ -27,6 +28,7 @@ import { wakeWorker } from '../jobs/wake.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
 import { queueAutoCalibrationFor, queueRerunFor } from './newData.js';
 import { originChange, provenanceChange, replaceSeries } from './replace.js';
+import { setStation, StationField } from './station.js';
 
 // Moved to merge.ts beside mergeSeries (shared with the data feeds and the
 // ingest); re-exported for the project document (projects/document.ts) and
@@ -45,6 +47,14 @@ const DayBody = z
 		unit: z.string().trim().min(1).max(20).optional()
 	})
 	.strict();
+
+/**
+ * An upload's (PUT …/series, POST …/series/merge) rainfall station details
+ * (issue #553): so Add data creates a station in one request. Only on a
+ * catchment rain series (series/station.ts, 400 otherwise, and the upload
+ * rolls back); absent leaves the series' own as they are, null clears them.
+ */
+const UploadStation = z.object({ station: StationField });
 
 /** A day as a one-day series body: the unit conversion and its checks are SeriesBody's (toCanonicalUnit). */
 function parseDay(b: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[] }) {
@@ -67,16 +77,78 @@ export async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
  * it belongs to (`siteNodeId`, without touching its values): where a flow
  * record was measured (084_gauge_records: a gauge node inside the network,
  * null = the outlet), or the land unit whose own rain it is (209: a farm with
- * an area, null = the catchment's rain; series/site.ts).
+ * an area, null = the catchment's rain; series/site.ts), or a rainfall
+ * station's details (`station`, issue #553; series/station.ts).
  */
 const LabelBody = z
-	.object({ ...ProvenanceFields, siteNodeId: z.string().uuid().nullable().optional(), source: SourceField })
+	.object({
+		...ProvenanceFields,
+		siteNodeId: z.string().uuid().nullable().optional(),
+		// A rainfall station's MAP, its source and coordinates (239_rain_stations.sql); null clears them.
+		station: StationField,
+		source: SourceField,
+		// A new name (issue #556): one line, 1–100 characters (the upload's and a data feed's bound), trimmed.
+		name: z.string().trim().min(1).max(100).refine((v) => !hasNameControlChars(v), NAME_CONTROL_MESSAGE).optional()
+	})
 	.strict()
 	.superRefine(checkProvenance)
 	.refine(
-		(b) => b.product !== undefined || b.siteNodeId !== undefined || b.source !== undefined,
-		'give product and productVersion (both null: not recorded), siteNodeId, or source (null: not recorded)'
+		(b) => b.product !== undefined || b.siteNodeId !== undefined || b.source !== undefined || b.name !== undefined || b.station !== undefined,
+		'give product and productVersion (both null: not recorded), siteNodeId, source (null: not recorded), name, or station (null: none)'
 	);
+
+/**
+ * Rename a series (issue #556): the values, site and provenance are
+ * untouched, and so is every run, which reads a series by kind and site and
+ * keeps the name it ran with in its own snapshot. Names are unique among a
+ * project's series of one kind (001's UNIQUE (project_id, kind, name)): 409.
+ *
+ * Refused (409) for a series something outside the app writes by its name:
+ * a data feed (data_feed.target_name), an API key that has pushed days to it
+ * (series_key_days), or a live API key whose series list names it, pushed or
+ * not (allowed_series, read through 240's app_series_name_key_listed, since
+ * an editor can't read api_key). Renaming it would leave the feed or the key
+ * writing a new series under the old name. Likewise a new name a data feed
+ * writes to or a key's list names: it would write into this series. Logged
+ * as series.renamed.
+ */
+async function setName(db: Db, projectId: string, seriesId: string, name: string): Promise<SeriesMetaRow> {
+	const { rows: cur } = await db.query<{ kind: string; name: string }>(
+		'SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE',
+		[projectId, seriesId]
+	);
+	if (!cur[0]) throw new ApiError(404, 'not found');
+	const { kind, name: was } = cur[0];
+	if (was !== name) {
+		const { rows: writers } = await db.query<{ feed: boolean; key: boolean }>(
+			`SELECT EXISTS (SELECT 1 FROM data_feed WHERE project_id = $1 AND target_kind = $2 AND target_name = $3) AS feed,
+				EXISTS (SELECT 1 FROM series_key_days WHERE project_id = $1 AND series_id = $4) OR app_series_name_key_listed($1, $2, $3) AS key`,
+			[projectId, kind, was, seriesId]
+		);
+		if (writers[0]?.feed) throw new ApiError(409, 'a data feed writes into this series by its name, so it keeps its name: renaming it would start a new series under the old name');
+		if (writers[0]?.key) throw new ApiError(409, 'an API key writes into this series by its name, so it keeps its name: renaming it would start a new series under the old name');
+		const { rows: taken } = await db.query('SELECT 1 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 AND id <> $4', [projectId, kind, name, seriesId]);
+		if (taken[0]) throw new ApiError(409, 'another series of this kind already has that name');
+		// A feed set up to write a series of that name (one it hasn't created yet), or a key whose list names it,
+		// would write into this one.
+		const { rows: aimed } = await db.query<{ feed: boolean; key: boolean }>(
+			`SELECT EXISTS (SELECT 1 FROM data_feed WHERE project_id = $1 AND target_kind = $2 AND target_name = $3) AS feed,
+				app_series_name_key_listed($1, $2, $3) AS key`,
+			[projectId, kind, name]
+		);
+		if (aimed[0]?.feed) throw new ApiError(409, 'a data feed writes into a series of that name: pick another name');
+		if (aimed[0]?.key) throw new ApiError(409, 'an API key writes into a series of that name: pick another name');
+	}
+	const { rows } = await db
+		.query<SeriesMetaRow>(`UPDATE time_series SET name = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`, [projectId, seriesId, name])
+		.catch((err: unknown) => {
+			// Two renames to one name at once: the second meets the unique constraint.
+			if ((err as { code?: string }).code === '23505') throw new ApiError(409, 'another series of this kind already has that name');
+			throw err;
+		});
+	if (was !== name) await recordAudit(db, projectId, 'series.renamed', { seriesId, kind, name, rename: { from: was, to: name } });
+	return rows[0]!;
+}
 
 /**
  * Say where a series' values came from (107_series_source.sql), without
@@ -104,12 +176,15 @@ async function setSource(db: Db, projectId: string, seriesId: string, source: st
  * reads it, and null makes it the catchment's again (series/site.ts).
  */
 async function setSite(db: Db, projectId: string, seriesId: string, siteNodeId: string | null): Promise<SeriesMetaRow> {
-	const { rows: cur } = await db.query<{ kind: string; name: string; siteNodeId: string | null }>(
-		`SELECT kind, name, site_node_id AS "siteNodeId" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
+	const { rows: cur } = await db.query<{ kind: string; name: string; siteNodeId: string | null; station: boolean }>(
+		`SELECT kind, name, site_node_id AS "siteNodeId", (station_map_mm IS NOT NULL OR station_lat IS NOT NULL) AS station
+		 FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 		[projectId, seriesId]
 	);
 	if (!cur[0]) throw new ApiError(404, 'not found');
 	if (siteNodeId !== null) {
+		// A station is the project's rain record (issue #553): it has no unit while it carries station details.
+		if (cur[0].station) throw new ApiError(400, 'siteNodeId: this series is a rainfall station, which is the project’s, not one unit’s: clear its station details first (station: null)');
 		const { rows: node } = await db.query<SiteNode>(
 			'SELECT kind::text AS kind, downstream_node_id AS "downstreamNodeId", area_km2 AS "areaKm2" FROM node WHERE project_id = $1 AND id = $2',
 			[projectId, siteNodeId]
@@ -167,7 +242,9 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		});
 	})
 	.put('/:id/series', async (c) => {
-		const body = PutBody.parse(await readJson(c));
+		const raw = await readJson(c);
+		const body = PutBody.parse(raw);
+		const { station } = UploadStation.parse(raw);
 		const id = c.req.param('id');
 		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
@@ -178,7 +255,8 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			const queued = await queueRerunFor(db, id, change);
 			// And a run of the calibration rules, when they ask for one (issue #153).
 			await queueAutoCalibrationFor(db, id, change);
-			return { meta: await setDayBoundary(db, id, r.meta, body.dayBoundary ?? null), queued };
+			const meta = await setDayBoundary(db, id, r.meta, body.dayBoundary ?? null);
+			return { meta: station !== undefined ? await setStation(db, id, meta.id, station) : meta, queued };
 		});
 		await wakeForRerun(queued);
 		return c.json({ ...meta, rerunQueuedFor: queued?.runAfter ?? null });
@@ -195,9 +273,13 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
+			const named = body.name !== undefined ? await setName(db, id, seriesId, body.name) : null;
+			// Clearing a station goes before a new site (which a station refuses); recording one after it (a station has no site).
+			const unstationed = body.station === null ? await setStation(db, id, seriesId, null) : null;
 			const sited = body.siteNodeId !== undefined ? await setSite(db, id, seriesId, body.siteNodeId) : null;
+			const stationed = body.station ? await setStation(db, id, seriesId, body.station) : null;
 			const sourced = body.source !== undefined ? await setSource(db, id, seriesId, body.source) : null;
-			if (body.product === undefined) return c.json((sourced ?? sited)!);
+			if (body.product === undefined) return c.json((sourced ?? stationed ?? sited ?? unstationed ?? named)!);
 			const { rows: cur } = await db.query<{ product: string | null; productVersion: string | null }>(
 				`SELECT product, product_version AS "productVersion" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 				[id, seriesId]
@@ -223,13 +305,15 @@ export const seriesRoutes = new Hono<AuthEnv>()
 	// (feeds/ingest.ts) and an API key's (ingest/routes.ts) don't. The whole
 	// sequence is mergeInto, shared with the ingest.
 	.post('/:id/series/merge', async (c) => {
-		const body = PutBody.parse(await readJson(c));
+		const raw = await readJson(c);
+		const body = PutBody.parse(raw);
+		const { station } = UploadStation.parse(raw);
 		const id = c.req.param('id');
 		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// mergeInto runs the new-data hook (series/newData.ts): a re-send that changes nothing queues nothing.
 			const r = await mergeInto(db, id, body, { keepRevision: true, via: 'user', keepOnNull: true });
-			return { meta: r.meta, queued: r.rerun };
+			return { meta: station !== undefined ? await setStation(db, id, r.meta.id, station) : r.meta, queued: r.rerun };
 		});
 		await wakeForRerun(queued);
 		return c.json({ ...meta, rerunQueuedFor: queued?.runAfter ?? null });

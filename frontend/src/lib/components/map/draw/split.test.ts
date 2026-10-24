@@ -1,6 +1,6 @@
 // Splitting a polygon along a line (split.ts; issue #326 C2).
 import { describe, expect, it } from 'vitest';
-import type { MapPosition } from '$lib/api/types';
+import type { MapPosition } from '#lib/api/types.js';
 import { insideRing, splitPolygon } from './split';
 
 /** A 0.1° square, corners anticlockwise from the south-west. */

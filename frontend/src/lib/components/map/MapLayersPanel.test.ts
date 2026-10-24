@@ -10,7 +10,7 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/projects/p?tab=map') } }));
 
 import MapLayers from './MapLayers.svelte';
-import type { RiverReach } from '$lib/api';
+import type { RiverReach } from '#lib/api/index.js';
 import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { reachKey } from './mapLayers';
 import type { RiverLayer } from './riverLayer.svelte';
@@ -18,7 +18,7 @@ import type { AreaFill } from './areaFill.svelte';
 import { withoutComments } from '../__fixtures__/withoutComments';
 
 // HelpTip links to the glossary under the app's base path.
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const quaternaries = { on: false } as unknown as QuaternaryLayer;
 const riversOff = { on: false } as unknown as RiverLayer;
@@ -173,6 +173,25 @@ describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggle
 		expect(props({ mapGrid: grid({ ...two, dataset: null, datasets: [] }) })).toContain('No MAP grid is loaded');
 		expect(props({ mapGrid: grid(null, { zoomIn: true }) })).toContain('Zoom in to see the MAP grid');
 		expect(props({ mapGrid: grid(null, { error: 'offline' }) })).toContain('The MAP grid couldn’t be loaded: offline');
+	});
+
+	it('names the grid’s credit beside its source when they differ, once when they are the same (issue #560)', () => {
+		const answer = (source: string, attribution: string) => ({
+			bbox: [0, 0, 1, 1],
+			dataset: { dataset: 'WAAS-SWCape-2007', source, version: 'v1.1 (March 2007)', attribution, cellDeg: 0.001, cells: 9, synthetic: false },
+			datasets: [],
+			cells: [[21.305, -33.645, 790]],
+			tooDense: false,
+			max: 5000
+		});
+		const grid = (a: unknown) => ({ on: true, zoomIn: false, error: null, answer: a, range: [790, 790], pick: () => {}, retry: () => {} }) as never;
+		const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+		const same = props({ mapGrid: grid(answer(waas, waas)) });
+		expect(same).toContain(`Source: ${waas.replaceAll('&', '&amp;')}`);
+		expect(same).not.toContain('Credit:');
+		expect(props({ mapGrid: grid(answer('A provincial surface', 'Its authors, 2007')) })).toContain('Source: A provincial surface. Credit: Its authors, 2007');
+		// The synthetic grid's warning already says what its attribution would.
+		expect(props({ mapGrid: grid({ ...answer('Invented grid', 'Synthetic test data'), dataset: { ...answer('Invented grid', 'Synthetic test data').dataset, synthetic: true } }) })).not.toContain('Credit:');
 	});
 });
 

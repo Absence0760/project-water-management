@@ -9,7 +9,7 @@
 -->
 <script lang="ts">
 	import type { Wr2012Settings } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 
 	let {
 		value = $bindable(),

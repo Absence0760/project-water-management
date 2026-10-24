@@ -209,6 +209,22 @@ describe('rain for each unit (from-units)', () => {
 		expect(await unitSeries(s.pid, s.a.id)).toEqual([expect.objectContaining({ id: own, name: 'A own' })]);
 	});
 
+	it('never puts a unit’s feed into a new series that sorts ahead of a record the unit’s runs read (issue #561)', async () => {
+		const s = await setup();
+		await parcel(s.owner, s.pid, s.a.id);
+		expect((await s.owner.call('POST', at(s.pid), { product: 'rnl' })).body.created).toBe(1);
+		// The feed's (empty) series goes, and the unit has a record of its own that sorts after the name a product change would give.
+		await asOwner(`DELETE FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND site_node_id = $2`, [s.pid, s.a.id]);
+		const id = (await s.owner.call('PUT', `/projects/${s.pid}/series`, { kind: 'rain_chirps_mm', name: 'Zed own', unit: 'mm', startDate: '2024-01-01', values: [1, 2] })).body.id as string;
+		expect((await s.owner.call('PATCH', `/projects/${s.pid}/series/${id}`, { siteNodeId: s.a.id })).status).toBe(200);
+		const p = (await s.owner.call('GET', `${at(s.pid)}?product=sat`)).body;
+		expect(p.units).toEqual([]);
+		expect(p.refused).toEqual([{ nodeId: s.a.id, name: 'Unit A', reason: expect.stringMatching(/“CHIRPS v3 \(sat\) Unit A” would take over from “Zed own”, which holds 2 days/) }]);
+		expect((await s.owner.call('POST', at(s.pid), { product: 'sat', nodeIds: [s.a.id] })).body.details).toMatchObject({ code: 'unit_refused' });
+		const input = await withUser(s.owner.id, (db) => loadModelInput(db, s.pid));
+		expect(input.series[unitRainSeriesKey('rain_chirps_mm', s.a.id)]!.values).toEqual([1, 2]);
+	});
+
 	it('names the unit’s series a run reads when it has two: the first by byte order of the name (issue #523)', async () => {
 		const s = await setup();
 		await parcel(s.owner, s.pid, s.a.id);

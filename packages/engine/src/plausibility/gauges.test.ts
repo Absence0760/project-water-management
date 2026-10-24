@@ -7,7 +7,7 @@
 //   C (farm) → K (gauge) → G
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
-import { gaugeSeriesKey, parseGaugeSeriesKey, type ModelInput, type NetworkNode, type RunSeries } from '../project';
+import { CHECK_GAUGE_FLOW_KEY, gaugeSeriesKey, parseGaugeSeriesKey, type ModelInput, type NetworkNode, type RunSeries } from '../project';
 import { runModelWith } from '../run';
 
 const flat = (v: number) => new Array(12).fill(v) as unknown as Monthly;
@@ -93,7 +93,9 @@ describe('plausibility checks at gauge nodes (engine ≥ 1.4.0)', () => {
 	it('a gauge record changes nothing but the gauges block, its EWR test (a gauge EWR site, engine ≥ 1.41.0) and its own warnings', () => {
 		const without = run(withRecords({}).input);
 		const withGauge = run(withRecords({ H: 3 }).input);
-		expect(withGauge.series).toEqual(without.series);
+		// The series gain only H's record as its checks-only series (engine ≥ 1.90.0, issue #554).
+		expect(withGauge.series.filter((s) => s.key !== CHECK_GAUGE_FLOW_KEY)).toEqual(without.series);
+		expect(withGauge.series.filter((s) => s.key === CHECK_GAUGE_FLOW_KEY).map((s) => s.nodeId)).toEqual(['H']);
 		const { gauges, ...rest } = withGauge.summary.plausibility!;
 		expect(rest).toEqual(without.summary.plausibility);
 		expect(gauges).toHaveLength(1);

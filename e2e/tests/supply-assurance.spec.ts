@@ -1,6 +1,6 @@
 // Assurance of supply, stress classes and the water account (engine 0.32.0,
 // WP-3.4) on a synthetic run: assurance of supply on Hydrological units and the
-// water account on River & reserve, both reached from the run on Runs &
+// water account on EWR, both reached from the run on Runs &
 // results (issue #17; docs/ui.md § Assurance of supply).
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -30,9 +30,9 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	await assurance.getByLabel('Show').selectOption({ label: 'Upper farm' });
 	await expect(grid.getByRole('caption')).toContainText('Upper farm');
 
-	// The water account moved to River & reserve (issue #17): the Runs page links there for this run.
+	// The water account moved to EWR (issue #17): the Runs page links there for this run.
 	await page.goBack();
-	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'River & reserve for this run' }).click();
+	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'EWR for this run' }).click();
 	await expect(page).toHaveURL(/[?&]tab=river&run=/);
 	const account = page.getByRole('region', { name: 'Water account' });
 	const table = account.getByTestId('account-table');

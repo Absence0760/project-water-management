@@ -8,7 +8,7 @@
 	// The shared vocabulary below (box, t, s, m, wire, head, …) is the only
 	// styling the diagrams use, so a diagram needs no style block of its own.
 	import type { Component } from 'svelte';
-	import type { DiagramId } from '$lib/help/guides';
+	import type { DiagramId } from '#lib/help/guides.js';
 	import CalibrationLoop from './diagrams/CalibrationLoop.svelte';
 	import FarmDay from './diagrams/FarmDay.svelte';
 	import Gr4j from './diagrams/Gr4j.svelte';

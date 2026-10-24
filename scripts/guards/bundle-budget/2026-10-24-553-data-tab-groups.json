@@ -1,0 +1,4 @@
+{
+	"addKb": 7,
+	"why": "Issue #553 round 5, the grouped Data tab: groups, derived unit and catchment rows, the grouped CSV in the tab chunk, and a lazy chunk (derivedRain.ts: the engine's stationAreaRain and unit rain forcing) loaded when a row opens or a CSV is built. Measured 2047 KB at 6f2ea3826 and 2054 KB with this change (pnpm build:frontend && pnpm check:bundle)."
+}

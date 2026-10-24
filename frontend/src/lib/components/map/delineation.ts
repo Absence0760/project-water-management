@@ -1,8 +1,8 @@
 // The Map's delineation (issue #326 B-delineate; docs/design/delineation.md,
 // docs/ui.md § Map): what the sheet says about a proposal, pure so it is
 // tested without a browser.
-import type { DelineationProposal, DelineationRequest, DelineationState } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { DelineationProposal, DelineationRequest, DelineationState } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** The proposal waiting for a decision, if any (at most one: a new one supersedes it). */
 export const openProposal = (s: DelineationState | null): DelineationProposal | null => s?.proposals.find((p) => p.status === 'proposed') ?? null;

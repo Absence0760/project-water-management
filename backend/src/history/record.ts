@@ -209,6 +209,8 @@ export type AuditKind =
 	| 'series.deleted'
 	| 'series.labelled'
 	| 'series.site_changed'
+	// A series renamed by PATCH (issue #556): `rename: { from, to }`, `name` the new one.
+	| 'series.renamed'
 	| 'series.held'
 	// A key's push into a series too short for the outlier limit: its auto run isn't published by itself until a person runs the model.
 	| 'series.unchecked'
@@ -397,15 +399,19 @@ export async function recordSeriesRevision(
 	reason: 'replace' | 'delete' | 'manual_merge' | 'feed_replace'
 ): Promise<string> {
 	// The product and version, and the day boundary, go with the values, so a restore puts them back too (032, 033),
-	// and so does a flow record's site (085), read from the row as it stands before the change, and the days edited by hand (212).
+	// and so does a flow record's site (085), read from the row as it stands before the change, and the days edited by hand (212),
+	// and a rainfall station's details (239), read like the site.
 	const { rows } = await db.query<{ id: string }>(
 		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason, product, product_version, day_boundary,
-			site_node_id, source, source_unit, source_unit_factor, hand_days)
+			site_node_id, source, source_unit, source_unit_factor, hand_days, station_map_mm, station_map_source, station_lat, station_lon)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9, $10, $11, $12,
 			(SELECT site_node_id FROM time_series WHERE project_id = $1 AND id = $2), $13, $14, $15,
 			CASE WHEN $16::boolean
 				THEN (SELECT range_agg(daterange(DATE '1970-01-01' + d0, DATE '1970-01-01' + d1)) FROM unnest($17::int[], $18::int[]) AS t(d0, d1))
-				ELSE (SELECT hand_days FROM time_series WHERE project_id = $1 AND id = $2) END) RETURNING id`,
+				ELSE (SELECT hand_days FROM time_series WHERE project_id = $1 AND id = $2) END,
+			-- A rainfall station's details (239), from the row as it stands before the change, like the site.
+			(SELECT station_map_mm FROM time_series WHERE project_id = $1 AND id = $2), (SELECT station_map_source FROM time_series WHERE project_id = $1 AND id = $2),
+			(SELECT station_lat FROM time_series WHERE project_id = $1 AND id = $2), (SELECT station_lon FROM time_series WHERE project_id = $1 AND id = $2)) RETURNING id`,
 		[
 			projectId,
 			s.id,

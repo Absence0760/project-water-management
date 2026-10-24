@@ -1,27 +1,28 @@
 <!-- i18n-section: login -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api';
-	import { CAPTCHA_REQUIRED } from '$lib/api/client';
-	import { PUBLIC_WAF_CAPTCHA_API_KEY, PUBLIC_WAF_CAPTCHA_SCRIPT_URL } from '$env/static/public';
-	import { captchaConfig } from '$lib/auth/wafCaptcha';
-	import SignInCaptcha from '$lib/components/auth-extras/SignInCaptcha.svelte';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { CAPTCHA_REQUIRED } from '#lib/api/client.js';
+	import { PUBLIC_WAF_CAPTCHA_API_KEY, PUBLIC_WAF_CAPTCHA_SCRIPT_URL } from '$app/env/public';
+	import { captchaConfig } from '#lib/auth/wafCaptcha.js';
+	import SignInCaptcha from '#lib/components/auth-extras/SignInCaptcha.svelte';
 	import { onDestroy, onMount, tick } from 'svelte';
-	import type { MfaMethod } from '$lib/api';
-	import { resendTimer } from '$lib/auth/resendTimer.svelte';
-	import { firstMode, otherModes, sendState } from '$lib/auth/codeMethods';
-	import { emailAuthApi } from '$lib/api/emailAuth';
-	import { CONFIRM_EMAIL_KEY, safeNext } from '$lib/auth/redirect';
-	import Rich from '$lib/i18n/Rich.svelte';
-	import { session } from '$lib/auth/session.svelte';
-	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import AuthCard from '$lib/components/layout/AuthCard.svelte';
-	import { t, tRich } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import { afterResetAskFailed, resetAsked, type ResetAsked } from '$lib/auth/mfaReset';
-	import { fmtStampTime } from '$lib/components/farm/format';
+	import type { MfaMethod } from '#lib/api/index.js';
+	import { resendTimer } from '#lib/auth/resendTimer.svelte.js';
+	import { firstMode, otherModes, sendState } from '#lib/auth/codeMethods.js';
+	import { emailAuthApi } from '#lib/api/emailAuth.js';
+	import { CONFIRM_EMAIL_KEY, safeNext } from '#lib/auth/redirect.js';
+	import Rich from '#lib/i18n/Rich.svelte';
+	import { session } from '#lib/auth/session.svelte.js';
+	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
+	import AuthCard from '#lib/components/layout/AuthCard.svelte';
+	import { t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import { afterResetAskFailed, resetAsked, type ResetAsked } from '#lib/auth/mfaReset.js';
+	import { fmtStampTime } from '#lib/components/farm/format.js';
 
 	// Dev-only shortcut to the seeded demo account; never in a production build.
 	const DEMO = import.meta.env.DEV ? { email: 'demo@example.com', password: 'demo-password' } : null;
@@ -68,7 +69,7 @@
 
 	// Carries what was typed, so the reset form starts filled in.
 	const forgotHref = $derived(
-		`${base}/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`
+		resolve('forgot-password') + (email.trim() ? `?email=${encodeURIComponent(email.trim())}` : '')
 	);
 
 	// The WAF's sign-in CAPTCHA (issue #126, $lib/auth/wafCaptcha): null
@@ -137,7 +138,7 @@
 		} catch {
 			// Nothing kept.
 		}
-		await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
+		await goto(safeNext(page.url.searchParams.get('next'), resolve('')), { replace: true });
 	}
 
 	async function submitCode(e: SubmitEvent) {
@@ -262,7 +263,7 @@
 	}
 </script>
 
-<svelte:head><title>{t('{page} · Water Management', { page: t('Sign in') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · {app}', { page: t('Sign in'), app: APP_SHORT_NAME })}</title></svelte:head>
 
 <AuthCard title={t('Sign in')} subtitle={t('Welcome back. Sign in to your catchment projects.')}>
 	{#if DEMO}
@@ -371,7 +372,7 @@
 					{:else}
 						<label for="mfa-code">{t('Code from your authenticator app')}</label>
 						<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
-						<span class="hint" id="mfa-code-hint">{t('Open the app on your phone and enter the 6-digit code it shows for Water Management.')}</span>
+						<span class="hint" id="mfa-code-hint">{t('Open the app on your phone and enter the 6-digit code it shows for {app}.', { app: APP_SHORT_NAME })}</span>
 					{/if}
 				</div>
 				<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Checking…') : t('Sign in')}</button>
@@ -402,7 +403,7 @@
 	</form>
 	{/if}
 	{#snippet footer()}
-		{t('No account?')} <a href="{base}/register{page.url.search}">{t('Create one')}</a>
+		{t('No account?')} <a href={resolve('register') + page.url.search}>{t('Create one')}</a>
 	{/snippet}
 </AuthCard>
 

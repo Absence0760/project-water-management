@@ -21,11 +21,11 @@
 	centres, where its daily rainfall values sit.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { MapFeature } from '$lib/api';
-	import { fmtNum } from '$lib/format/number';
+	import type { MapFeature } from '#lib/api/index.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import {
 		CHIRPS_CELL_DEG,
 		CHIRPS_MAX_POINTS,
@@ -91,7 +91,7 @@
 	const uid = $props.id();
 
 	function toggle(layer: MapLayer, on: boolean) {
-		void goto(withLayer(page.url.search, layer, on), { noScroll: true, keepFocus: true });
+		void goto(withLayer(page.url.search, layer, on), { reset: false });
 	}
 
 	const answer = $derived(quaternaries.answer);
@@ -118,6 +118,8 @@
 
 	const mg = $derived(mapGrid?.answer ?? null);
 	const mgRange = $derived(mapGrid?.range ?? null);
+	/** The grid's credit, beside its source when it says more (never the synthetic grid's: its warning says it). */
+	const mgCredit = $derived(mg?.dataset && !mg.dataset.synthetic && mg.dataset.attribution && mg.dataset.attribution !== mg.dataset.source ? mg.dataset.attribution : null);
 	const degrees = (d: number) => fmtNum(d, d < 0.01 ? 4 : 3, true);
 	const mgSummary = $derived.by(() => {
 		if (!mg?.dataset) return '';
@@ -344,7 +346,9 @@
 							{mgSummary}{#if mg.dataset.synthetic}{' '}<strong>Synthetic test data, never real rainfall.</strong>{/if}{labels ? '' : ' The map has no fonts for labels here, so it shows the points without their values.'}
 						</p>
 					{/if}
-					<p class="muted" data-testid="map-mapgrid-source">Mean annual precipitation, mm a year. Source: {mg.dataset.source}</p>
+					<p class="muted" data-testid="map-mapgrid-source">
+						Mean annual precipitation, mm a year. Source: {mg.dataset.source}{mgCredit ? `${/[.!?]$/.test(mg.dataset.source) ? '' : '.'} Credit: ${mgCredit}` : ''}
+					</p>
 				{/if}
 			</div>
 		{/if}

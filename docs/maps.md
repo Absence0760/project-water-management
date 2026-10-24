@@ -282,8 +282,10 @@ server ([§ Delineation](#delineation)).
   (`frontend/vite.config.ts` `workerChunks`, `virtual:maplibre-worker-url`),
   served from the app's origin and passed to `setWorkerUrl`. The existing
   `worker-src 'self'` holds: no `blob:` worker, no `'unsafe-eval'`, no CSP
-  change. The guard checks the worker imports MapLibre's shared code from
-  `chunks/` rather than carrying a second copy.
+  change. Since maplibre-gl 6.13 the worker is self-contained (upstream's
+  fix for a stale cached worker, maplibre-gl-js #8621), a second copy of the
+  code the main thread's chunk holds (~140 KB gzipped); it loads only with
+  the map, so the guard counts it under `mapKb` with the rest of MapLibre.
 - Tiles and glyphs are fetched with `connect-src` (MapLibre `fetch`es glyph
   ranges; they are not CSS fonts, so `font-src` is not involved):
   same-origin in production (`/tiles/*`, `/tiles/fonts/*`), so
@@ -924,8 +926,10 @@ boundary itself rather than over a box around it.
   the boundary (name, area, when it was last changed), the CHIRPS v3 cells
   it covers with how much of them lies inside, the method ("area-weighted
   over N CHIRPS v3 cells (0.05°), each by the share of it inside the
-  boundary"), the source, what Apply will do, and each cell (latitude,
-  longitude, share inside, weight) in a table.
+  boundary"), the source, what Apply will do, the CHIRPS series runs read
+  now ("Runs read", when there is one), the product and start date (owners
+  choose them, as on the grid form), and each cell (latitude, longitude,
+  share inside, weight) in a table.
 - **Apply** (`POST …/from-boundary`, owner, as every feed change): attaches a
   CHIRPS daily feed into the CHIRPS reference series (`rain_chirps_mm`), or
   gives the cells to a CHIRPS feed whose series holds no days yet. It names
@@ -938,9 +942,35 @@ boundary itself rather than over a box around it.
   so new cells never go to a feed whose series already holds a record (409),
   nor while a fetch for that feed is still out (409 `feed_fetching`): its
   answer was asked for with the old cells, so the save waits for it.
-  The proposal then attaches a new feed into a separate series ("CHIRPS
-  boundary") to compare beside the old one. Switch the old feed off once
-  satisfied.
+  The proposal then attaches a new feed into a separate series to compare
+  beside the old one. Switch the old feed off once satisfied.
+- **Beside the record runs read** (issue #561). A run reads the first CHIRPS
+  series by name ([data-model.md § Which series a run
+  reads](./data-model.md#which-series-a-run-reads)), so a new series that
+  sorted first once took over unseen: "CHIRPS boundary" sorts before a
+  workbook's "Rainfall CHIRPS satelite (mm)", and a feed reading the last 60
+  days replaced a 16-year gap-filler with two months. Now:
+  - a new series is always named to sort after the record runs read: `""`
+    while there is none, else "CHIRPS boundary", "CHIRPS boundary 2" … or
+    "<the record's name> (boundary)", the first free one that sorts after it.
+    A `targetName` that would sort ahead is refused (409
+    `series_takes_over`), on this route and on the plain attach and
+    re-target (`feeds/routes.ts refuseTakeOver`); "Rain for each unit"
+    refuses a unit whose new series would sort ahead of its own record;
+  - where a record exists, the feed reads from its first day (no earlier than
+    1981), with `rnl` when that is before 1998 (`sat` begins then), never
+    only the last 60 days; the owner can change the product and the start
+    date;
+  - **Replace** it instead (a choice in the proposal): the feed points at the
+    record as a confirmed replacement, backfills the whole record from its
+    first day into a stage (`feed_stage`), and swaps it in once complete, as
+    [architecture.md § Data feeds](./architecture.md#data-feeds) describes;
+    runs keep reading the old values until then. Not offered while another
+    feed writes the record, or when it already holds the product and version
+    the feed would write (the ingest would add to it rather than replace it);
+  - a run whose CHIRPS series spans less of it than another CHIRPS series
+    warns, naming both ([model.md § Which CHIRPS series the run
+    reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
 - **The weights** (`backend/src/feeds/boundaryCells.ts`, pure). Each 0.05°
   cell gets *share of the cell inside the boundary × cos(cell-centre
   latitude)*, the weighting `bboxCells` gives a box, so a rectangle gets
@@ -2389,21 +2419,44 @@ line; **Synthetic test data, never real rainfall.** for the repo's grid.
   provincial surface is millions of cells: load the box around the
   catchments with `--bbox`. A projected grid, a short or long row and a
   value past 20 000 mm are refused, naming the line.
-- **Licences.** Both grids in hand are blocked for production ([§
-  Sources](#sources)): the national grid's portal lists CC BY-SA 4.0 and "No
-  License Provided" at once, and a provincial surface's terms are its
-  owner's. They are loaded locally only, never committed, and the
-  production loader refuses the `map-grid` kind (`geo/referenceLoad.ts`) until
-  the decision in followups.md is made.
-- **Read by the model through the units' MAP.** Under rain for each unit
-  ([model.md §2.4h](./model.md)) a unit's MAP sets the level of its rain;
+- **Licences, grid by grid** ([§ Sources](#sources)). Each surface's terms
+  are its own owner's, so production allows MAP grids dataset by dataset
+  (`geo/referenceLoad.ts` `REFERENCE_KINDS['map-grid'].datasets`, and the
+  release gate's `DATASETS`; issue #560). The **Southwestern Cape surface
+  (WAAS, 2007)** is allowed by the operator's decision of 2026-10-23 (its
+  terms are not stated; [legal/map-data-licences.md §
+  3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23)):
+  a production load takes it only as dataset `WAAS-SWCape-2007`, from the
+  JSON `--out` writes, and stores its source, version (`v1.1 (March 2007)`)
+  and credit line from that table, never the file's or a `source` input.
+  The **Lynch (2004)** national grid stays blocked (its portal lists CC BY-SA
+  4.0 and "No License Provided" at once; followups.md, Decision: the Lynch
+  (2004) MAP grid's licence), and so does any other surface: a load naming
+  `Lynch-2004` is refused with that decision, any other label with the
+  allowed list. Locally any grid loads (`pnpm import:map-grid`), never
+  committed.
+- **Credit.** While the layer draws the Southwestern Cape surface's points
+  (a grid whose attribution is its credit line), the map's attribution
+  control lists the short "MAP grid: WAAS (2007), Beuster Clarke &
+  Associates", linking to the authors' line whole on
+  `/data-sources#waas-map` ([§ Credits on the map](#credits-on-the-map));
+  the Layers box's source line gives the whole line too, and
+  a grid whose attribution differs from its source adds "Credit: …".
+- **Production file.** `pnpm import:map-grid <grid.asc> --dataset
+  WAAS-SWCape-2007 --source "…" --bbox w,s,e,n --out <file.json.gz>` cuts
+  the grid to the box and writes it in the fixture's JSON form (each cell by
+  its centre, `rainMapToJson`) instead of loading it; the recipe is
+  [deployment.md § Reference datasets](./deployment.md#reference-datasets).
+  The load records the file it read (`reference_load`, migration 238).
+- **Read by the model through the units' MAP.** Under Settings → Flow
+  generation, Per unit ([model.md §2.4h, §2.4i](./model.md)) a unit's MAP sets the level of its rain;
   Settings can take each unit's MAP from a loaded grid ([§ MAP for each
   unit](#map-for-each-unit)). The layer shows the grid so its values can be
   checked against the units and the gauges first.
 
 ## MAP for each unit
 
-Settings → Rain for each unit → **MAP from the grid** (issue #482
+Settings → Flow generation, under Per unit, **MAP from the grid** (issue #482
 follow-up; `geo/unitMap.ts`, `geo/unitMapRoutes.ts`): each land unit's mean
 annual precipitation from one of the loaded MAP grids ([§ MAP
 grid](#map-grid)), proposed beside what its form holds, and written to the
@@ -2526,13 +2579,14 @@ fixtures only.
 | DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`) | DWS, `HyData.aspx` | Same pages, same open question (deployment.md § Sources' terms; followups.md, Terms of use) | as above | per fetch | daily | Built before D-B; its terms are the same open decision, tracked in followups.md |
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
 | List of Registered Dams (the register of dams) | DWS Dam Safety Office ([publications page](https://www.dws.gov.za/DSO/Publications.aspx)) | None stated on the page or in its "Explanation and Legend for List of Registered Dams" PDF (read 2026-10-01). DWS's data terms elsewhere (the NIWIS pages): copyright stays with DWS, data "may not be sold to third parties", use "restricted to use for academic, research or personal purposes" | "Department of Water and Sanitation" as the copyright proprietor (the NIWIS terms) | July 2025 (XLS, no coordinates) and October 2024 (XLS) | A few times a year, irregular | **Blocked: licence unconfirmed** (and DWS's general data terms are non-commercial). Built against the synthetic fixture; ask DWS for written permission before a client deployment loads it |
-| HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Water Management], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", on the Data sources and credits page (`/data-sources#hydrorivers`, 2026-10-02), and a short credit on the map's attribution control linking to it while its reaches are drawn; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted); both conditions met**: the Exhibit B statement is on `/data-sources` (2026-10-02), and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone copying or distribution of the data, no reverse engineering, the licensors' ownership and no warranty; 2026-10-03, pre-counsel, [legal-status.md](./legal-status.md)). Loaded locally from the operator's download; never committed |
+| HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Integrated Catchment - Water Balance Tool] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Integrated Catchment - Water Balance Tool], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", on the Data sources and credits page (`/data-sources#hydrorivers`, 2026-10-02), and a short credit on the map's attribution control linking to it while its reaches are drawn; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted); both conditions met**: the Exhibit B statement is on `/data-sources` (2026-10-02), and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone copying or distribution of the data, no reverse engineering, the licensors' ownership and no warranty; 2026-10-03, pre-counsel, [legal-status.md](./legal-status.md)). Loaded locally from the operator's download; never committed |
 | DWS 1:500 000 rivers (`rivs500k`, Resource Quality Information Services; from the 1994 CDNGI 1:500 000 coverage) | DWS, `https://www.dws.gov.za/iwqs/gis_data/river/rivs500k.aspx` | **Unconfirmed.** Read 2026-10-01: the page and its description (`rivs500txt.html`) answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) shows the coverage offered "as is … for display or modelling", a research mirror listing it with "No License Provided", and DWS's wording on its river reports that they "may be reproduced only for non-commercial purposes and only after appropriate authorisation"; DWS's general data terms (NIWIS) are non-commercial too | "Department of Water and Sanitation" | the operator's download | none (a 1994 coverage, revised by RQIS) | **Blocked: licence unconfirmed** (and DWS's published terms are non-commercial). HydroRIVERS is used instead. To unblock: DWS's written permission for commercial reuse, recorded here with the date |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |
 | Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the MAP grid layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unconfirmed.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", if allowed | the 2008 Atlas zip | none (a 2004 surface) | **Blocked: licence unconfirmed.** Loaded locally only (`pnpm import:map-grid`), never committed; production loads refused. To unblock: the WRC's or the Atlas editor's written terms for showing the grid in a commercial service, recorded here with the date |
-| Provincial MAP surfaces (about 100 m, e.g. a provincial water availability study's) | the study's client or consultant, per surface | **Unconfirmed**: each is a project deliverable whose reuse terms are its owner's | as its owner asks | per surface | none | **Blocked: licence unconfirmed.** Loaded locally only, by the operator who holds the file; never committed; production loads refused |
+| Mean annual rainfall surface for the Southwestern Cape (WAAS, about 100 m): the MAP grid layer ([§ MAP grid](#map-grid)) and MAP from the grid ([§ MAP for each unit](#map-for-each-unit)) | Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now DWS), March 2007; a copy received from the client | **Terms not stated** (read 2026-10-23): the copy's ESRI `metadata.xml` still has the ArcGIS template text in its access and use constraints. **The operator's decision (2026-10-23): use it in production**, recorded in [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23) | "Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.", stored as the grid's source and attribution, shown whole with the layer and on `/data-sources#waas-map`; the map's credits show the short "MAP grid: WAAS (2007), Beuster Clarke & Associates" linking to it ([§ Credits on the map](#credits-on-the-map)) | Version 1.1 (March 2007) | none (a 2007 surface) | allowed (the operator's decision, 2026-10-23): production loads it as dataset `WAAS-SWCape-2007` only, clipped with `--bbox` to the client's area, stored with the credit line above whatever the file says (`geo/referenceLoad.ts`); never committed |
+| Other provincial MAP surfaces (about 100 m, another water availability study's) | the study's client or consultant, per surface | **Unconfirmed**: each is a project deliverable whose reuse terms are its owner's | as its owner asks | per surface | none | **Blocked: licence unconfirmed.** Loaded locally only, by the operator who holds the file; never committed; a production load refuses any label but the allowed ones |
 | Synthetic MAP grid (`backend/fixtures/geo/map-grid.synthetic.json`) | this repo (invented rainfall over region Z) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
 | dPET, the daily files of hPET (hourly potential evapotranspiration, FAO-56 Penman-Monteith, 0.1°, 1981 onwards): the evaporation proposals' reference ET ([§ Evaporation from the map](#evaporation-from-the-map)) | University of Bristol (data.bris); Singer, M.B. et al. (2021), *Sci Data* 8, 224 ([doi:10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp](https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp)) | **CC BY 4.0**: "Licence: Creative Commons Attribution 4.0" on the dataset page ([data.bris.ac.uk](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp), read 2026-10-02); commercial use allowed with attribution. Its README: "This dataset contains modified Copernicus Climate Change Service information", from ERA5-Land, itself CC BY 4.0 (next row) | "hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it." Stored on the dataset row, shown under the panel's Source and method, and on the Data sources and credits page (`/data-sources#dpet`) | v3 (yearly files, one added each January) | yearly | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
@@ -2554,12 +2608,18 @@ also its section on the **Data sources and credits** page:
 | --- | --- | --- |
 | `hydrorivers` | the River network layer draws HydroRIVERS reaches, or a river added from one is drawn (`creditedFeature`) | "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license" |
 | `jrc-water` | an outline traced from JRC Global Surface Water is drawn (`jrcCreditedFeature`: its description carries the archive's "Source: EC JRC/Google", which tracing writes, [§ Assisted drawing](#assisted-drawing); a trace from the synthetic raster names no source and is credited nothing) | "Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified": JRC's attribution for a published map, and that the data was modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3)) |
+| `waas-map` | the MAP grid layer draws points of a grid whose attribution is the Southwestern Cape surface's credit line (`mapCredits`' `mapGridAttribution`, from the drawn grid's dataset row; [§ MAP grid](#map-grid)) | "MAP grid: WAAS (2007), Beuster Clarke & Associates": the study and its authors, short, linking to their credit line whole on the data sources page ("Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1."; terms not stated, the operator's decision, [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23)). The whole line wrapped along the map's foot under its Show everything and Key buttons, at 1280 px as on a phone (PR #570) |
 
 On the Map tab each is its own empty source with an invisible layer, so the
 always-expanded attribution control lists it beside the basemap's
 ("© Protomaps © OpenStreetMap contributors") and the relief's, linking to
 `/data-sources#<id>` (`mapStyle.ts` `creditLink`, `CatchmentMap.svelte`
-`syncCredits`). The farm map draws no attribution control
+`syncCredits`). The control never runs under the Map tab's bottom-left buttons
+(Show everything, Key): the tab measures their row (`--foot-w`,
+`--foot-h` on `.map-body`) and keeps the control beside it on a wide map,
+above it on a map under 30rem, where beside would squeeze it into a narrow
+column (`MapTab.svelte`; `map-layers.spec.ts` checks the boxes don't meet at
+1280 and 390 px). Keep each line short, as these are. The farm map draws no attribution control
 (`CatchmentMap`'s `attribution="outside"`): the same credits are one line
 under its key ([§ The farmer's map](#the-farmers-map)), so they never cover
 the 280 px phone map; OpenStreetMap's guidelines allow a credit adjacent to
@@ -2568,7 +2628,7 @@ credited feature (`credit: 'hydrorivers' | 'jrc-water'`, `farms/view.ts`,
 `geo/credits.ts` `jrcTraced`; never the description it reads). A traced dam
 split in two keeps the credit on both parts (the new part's description
 ends with the statement, `geo/routes.ts`). The GeoJSON download carries the
-same two credits ([§ Download GeoJSON](#download-geojson)).
+first two credits ([§ Download GeoJSON](#download-geojson)); it holds no MAP grid.
 
 ### Checksums
 

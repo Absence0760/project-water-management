@@ -19,7 +19,7 @@ export function fillSidebar(content: Snippet, on: boolean): (() => void) | void 
 
 /**
  * The phone bar's title (issue #521 round 5): the workspace puts its catchment's name and your role there, in
- * place of the "Water Management" word mark (the mark's logo stays, linking to the projects), so the page
+ * place of the "IC-WBT" word mark (the mark's logo stays, linking to the projects), so the page
  * under the bar starts with its Sections button. Call from an $effect while on a phone.
  */
 export function fillPhoneTitle(title: Snippet, on: boolean): (() => void) | void {

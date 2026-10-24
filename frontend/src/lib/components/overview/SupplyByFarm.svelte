@@ -8,9 +8,9 @@
 	// catchment's sixty units don't push the rest of the Summary a screen down. A farm's name opens its farm drawer; `more` links to
 	// Hydrological units for the whole picture (issue #17).
 	import type { FarmSummary } from '@water-management/engine';
-	import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
-	import { BAND_LABEL } from '$lib/components/network/supplyColour';
-	import { fmtPct } from '$lib/format/number';
+	import { farmDrawerHref } from '#lib/components/crops/farmDrawer.js';
+	import { BAND_LABEL } from '#lib/components/network/supplyColour.js';
+	import { fmtPct } from '#lib/format/number.js';
 	import { supplyBars } from './supplyBars';
 
 	let {

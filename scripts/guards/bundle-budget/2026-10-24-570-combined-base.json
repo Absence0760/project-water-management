@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "The combined branch was 3 KB over its own ceiling before rounds 3-5 and #551: a clean build of 6f2ea3826 measured 2047 KB against 2044 KB (most likely #553 round 2's station forcing in Runs & results, the report and run comparison, which had no entry). Measured 2061 KB against 2058 KB at fe22d254a."
+}

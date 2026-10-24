@@ -28,8 +28,8 @@
 // carries Afrikaans month names.
 import { M3_PER_DAY_PER_LS } from '@water-management/engine';
 import { groupDigits } from '@water-management/engine/format';
-import { localIsoDate, zonedIsoDate } from '$lib/format/number';
-import { i18n, language, wordsLang } from '$lib/i18n/state.svelte';
+import { localIsoDate, zonedIsoDate } from '#lib/format/number.js';
+import { i18n, language, wordsLang } from '#lib/i18n/state.svelte.js';
 
 /** No-break space: between a figure and its unit. */
 export const NBSP = ' ';

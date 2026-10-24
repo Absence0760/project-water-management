@@ -4,9 +4,9 @@
 // tab read them) and proposes ranges from their double-mass breaks
 // (./fitRangeProposal.ts). The hydrologist then checks and saves them.
 import type { DailySeries, SeriesMeta } from '@water-management/engine';
-import { api } from '$lib/api';
-import { cachedValues, cacheValues } from '$lib/components/series/valuesCache';
-import { firstOutletSeries } from '$lib/series/pick';
+import { api } from '#lib/api/index.js';
+import { cachedValues, cacheValues } from '#lib/components/series/valuesCache.js';
+import { firstOutletSeries } from '#lib/series/pick.js';
 import { proposalFrom, type FitRangeProposal } from './fitRangeProposal';
 
 /** The catchment rain and CHIRPS a run reads: the outlet's (a unit's own rain is never the catchment's), first by name in byte order. */

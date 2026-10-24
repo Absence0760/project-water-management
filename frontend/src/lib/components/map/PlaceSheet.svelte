@@ -13,9 +13,9 @@
 -->
 <script lang="ts">
 	import { oneLineName } from '@water-management/engine';
-	import { api, type MapFeature, type MapFeatureKind, type MapNodeArea } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import type { MapPosition } from '$lib/api/types';
+	import { api, type MapFeature, type MapFeatureKind, type MapNodeArea } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import type { MapPosition } from '#lib/api/types.js';
 	import { KIND_NODES, parseDegrees, POINT_KINDS, KIND_LABEL, positionText } from './mapData';
 
 	let {

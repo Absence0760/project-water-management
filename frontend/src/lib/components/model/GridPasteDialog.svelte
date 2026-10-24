@@ -13,10 +13,10 @@
 	// grid that can take the paste in more than one table puts the choice in
 	// `target`, above the box (issue #521).
 	import type { Snippet } from 'svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
 	import PasteDialogFrame from './PasteDialogFrame.svelte';
-	import { fmtNum } from '$lib/format/number';
-	import { gridFileFormat, type GridFormat, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { fmtNum } from '#lib/format/number.js';
+	import { gridFileFormat, type GridFormat, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 
 	let {
 		open = $bindable(false),

@@ -97,7 +97,13 @@ function storedRun(hash: SyncHash, runId: string, input: ModelInput, out: ModelO
 		runId,
 		engineVersion: out.engineVersion,
 		startDate: out.startDate,
-		inputs: { settings: input.settings as RunInputsSnapshot['settings'], model: input.model, series, ...(scenario ? { scenario } : {}) },
+		inputs: {
+			settings: input.settings as RunInputsSnapshot['settings'],
+			model: input.model,
+			series,
+			...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {}),
+			...(scenario ? { scenario } : {})
+		},
 		values,
 		summary: JSON.parse(JSON.stringify(out.summary)),
 		series: out.series.map((s) => ({ nodeId: s.nodeId, key: s.key, label: s.label, values: s.values.map((v) => (Number.isFinite(v) ? v : null)) }))
@@ -132,8 +138,13 @@ function fixtureLocality(hash: SyncHash, applicant: boolean, svgSha256?: string)
  * `locality`, the report carries § 1's locality map (evidence-12) and its
  * SVG's SHA-256, or `locality.svgSha256` in its place (a wrong one).
  */
-export function packBundleFixture(hash: SyncHash, opts: { application?: boolean; locality?: boolean | { svgSha256: string } } = {}): PackBundleInput {
+export function packBundleFixture(hash: SyncHash, opts: { application?: boolean; locality?: boolean | { svgSha256: string }; seriesChoice?: boolean } = {}): PackBundleInput {
 	const base = packFixtureInput();
+	// Two CHIRPS series, the one read the shorter (engine ≥ 1.90.0, issue #561): its runs warn, and the warning reads input.seriesChoice.
+	if (opts.seriesChoice) {
+		base.series.rain_chirps_mm = { startDate: START, values: Array.from({ length: 30 }, () => 1) };
+		base.seriesChoice = { rain_chirps_mm: { name: 'CHIRPS boundary', others: [{ name: 'Rainfall CHIRPS', firstDay: START, lastDay: '2030-01-01' }] } };
+	}
 	const baseline = storedRun(hash, '00000000-0000-4000-8000-0000000000a1', base, runModelChecked(structuredClone(base)));
 	let application: PackBundleRun | null = null;
 	if (opts.application !== false) {

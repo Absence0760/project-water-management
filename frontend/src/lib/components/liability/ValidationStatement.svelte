@@ -7,7 +7,7 @@
 	// docs/engine-errata.md, and the methodology statement is cited by version
 	// and hash (docs/methodology).
 	import { validationStatement, type RunSummary } from '@water-management/engine';
-	import { fmtDay, fmtNum } from '$lib/format/number';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { ENGINE_BUILD } from './engineBuild';
 
 	let {

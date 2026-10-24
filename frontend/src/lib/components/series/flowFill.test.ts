@@ -24,4 +24,14 @@ describe('flowFillShading', () => {
 		expect(s.ranges).toEqual([]);
 		expect(s.caption).toMatch(/^No gap is filled \(Settings → Calibration record → Flow gaps\)\. Nothing from the logger flow: the two records share 2 days/);
 	});
+
+	it('reads past a low-flow period’s high readings, as a run does (issue #567)', () => {
+		const fill = { ...defaultFlowGapFill(), flow_observed_m3s: { ...DEFAULT_FLOW_GAP_SPEC, interpolateMaxDays: 2 } };
+		const r = rec([1, 50, null, 1]);
+		expect(flowFillShading('flow_observed_m3s', r, fill, null)!.ranges).toEqual([{ start: '2020-01-03', end: '2020-01-03' }]);
+		const periods = [{ kind: 'flow_observed_m3s' as const, start: '2020-01-01', end: '2020-01-04', maxM3s: 2, reason: 'capped', source: 'site visit' }];
+		const s = flowFillShading('flow_observed_m3s', r, fill, null, periods)!;
+		expect(s.ranges).toEqual([]);
+		expect(s.summary).toMatchObject({ interpolatedDays: 0, openGaps: 1, openDays: 1 });
+	});
 });

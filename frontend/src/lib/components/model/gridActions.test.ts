@@ -7,17 +7,17 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import { defaultProjectSettings, newNetworkNode, type ProjectModel, type ProjectSettings } from '@water-management/engine';
-import { ModelEditor } from '$lib/model/editor.svelte';
-import CropGrids from '$lib/components/crops/CropGrids.svelte';
-import NetworkTab from '$lib/components/network/NetworkTab.svelte';
-import DemandsTable from '$lib/components/network/DemandsTable.svelte';
-import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
-import IrrigationSystemsPanel from '$lib/components/crops/IrrigationSystemsPanel.svelte';
+import { ModelEditor } from '#lib/model/editor.svelte.js';
+import CropGrids from '#lib/components/crops/CropGrids.svelte';
+import NetworkTab from '#lib/components/network/NetworkTab.svelte';
+import DemandsTable from '#lib/components/network/DemandsTable.svelte';
+import TransfersTab from '#lib/components/transfers/TransfersTab.svelte';
+import IrrigationSystemsPanel from '#lib/components/crops/IrrigationSystemsPanel.svelte';
 
 // Nothing here fetches: the network's map links and farmers load after mount, which the server renderer never runs.
-vi.mock('$lib/api', () => ({ api: { map: { linkedNodes: () => Promise.resolve([]) } } }));
-vi.mock('$app/paths', () => ({ base: '' }));
-vi.mock('$app/navigation', () => ({ goto: () => {}, afterNavigate: () => {}, beforeNavigate: () => {}, replaceState: () => {} }));
+vi.mock('#lib/api/index.js', () => ({ api: { map: { linkedNodes: () => Promise.resolve([]) } } }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
+vi.mock('$app/navigation', () => ({ goto: () => {}, afterNavigate: () => {}, beforeNavigate: () => {}, replace: () => {} }));
 vi.mock('$app/state', () => ({ page: { url: new URL('http://x/projects/p?tab=network&grid=nodes'), params: {}, state: {} } }));
 
 function editor(): ModelEditor {

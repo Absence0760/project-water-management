@@ -895,6 +895,13 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...full, qualityFlags: oldFlags, dayQuality: oldDq })).toBe(true);
 		expect(ok({ ...full, qualityFlags: { ...settings, zeroFlowMonths: [13] } })).toBe(false);
 		expect(ok({ ...full, dayQuality: { ...dq, use: { ...dq.use, zeroFlowMonths: [2] } } })).toBe(false);
+		// Engine ≥ 1.90.0 (issue #557): the periodHigh count, absent on an older summary; the periods never in `use`.
+		expect(dq.flow.periodHigh).toBe(0);
+		const { periodHigh: _p, ...oldFlow } = dq.flow;
+		expect(ok({ ...full, dayQuality: { ...dq, flow: oldFlow } })).toBe(true);
+		const lowFlowPeriods = [{ kind: 'flow_logger_m3s', start: '2013-01-01', end: '2013-06-30', maxM3s: 2, reason: 'r', source: 's' }];
+		expect(ok({ ...full, qualityFlags: { ...settings, lowFlowPeriods } })).toBe(true);
+		expect(ok({ ...full, dayQuality: { ...dq, use: { ...dq.use, lowFlowPeriods } } })).toBe(false);
 	});
 
 	it('accepts how automated calibration chose the fit (engine ≥ 1.25.0, issue #153), and refuses a kept case that wasn’t eligible', () => {
@@ -943,6 +950,15 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, panCoefficient: new Array(12).fill(2.1) } })).toBe(false); // out of bounds (0–2)
 		expect(ok({ ...record, forcing: { ...forcing, apanMm: forcing.apanMm.map(() => Infinity) } })).toBe(false); // must be finite
 		expect(ok({ ...record, forcing: { ...forcing, extra: 1 } })).toBe(false); // no other keys
+	});
+
+	it('accepts an optional catchment station fingerprint inside forcing (engine ≥ 1.91.0, issue #553), and refuses a malformed one', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		const catchmentStation = { stationId: 's1', scaleToMap: true, correctAgainst: 's1', catchmentMapMm: 683.3, ratio: 1.22, factors: new Array(12).fill(1.1) };
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation: { ...catchmentStation, factors: null } } })).toBe(true); // a refused pairing
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation: { ...catchmentStation, factors: [1] } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, catchmentStation: { ...catchmentStation, extra: 1 } } })).toBe(false);
 	});
 
 	it('accepts an optional unitRain fingerprint inside forcing (engine ≥ 1.78.0, issue #482), and refuses a malformed one', () => {
@@ -1111,6 +1127,19 @@ describe('SettingsPatch.ewrChargeSource and lowFlowMeasure (engine ≥ 1.3.0, is
 	});
 });
 
+describe('SettingsPatch.ewrSplit (engine ≥ 1.94.0, issue #553)', () => {
+	const ok = (ewrSplit: unknown) => SettingsPatch.safeParse({ ewrSplit }).success;
+
+	it('accepts the flow share and each unit’s natural MAR, and nothing else', () => {
+		for (const v of ['flowShare', 'naturalMar']) expect(ok(v), v).toBe(true);
+		for (const v of ['', 'mar', 'NaturalMar', null, 1]) expect(ok(v), String(v)).toBe(false);
+	});
+
+	it('defaults to the flow share, what every earlier run did, for a project that never set it', () => {
+		expect(mergeSettings({}).ewrSplit).toBe('flowShare');
+	});
+});
+
 describe('SettingsPatch.ewrDailySource (engine ≥ 1.77.0, issue #455)', () => {
 	const ok = (ewrDailySource: unknown) => SettingsPatch.safeParse({ ewrDailySource }).success;
 	const blank = { method: 'pragmatic', scaling: 'mar', tableMarMm3: null, tableAreaKm2: null, tabM3s: null, naturalPctM3s: null, reservePctM3s: null };
@@ -1131,6 +1160,20 @@ describe('SettingsPatch.ewrDailySource (engine ≥ 1.77.0, issue #455)', () => {
 		for (const v of [{ ...tab, tabM3s: null }, { ...tab, tabM3s: [1, 2] }, { ...tab, method: 'monthly' }, { ...tab, extra: 1 }, { ...blank, method: 'percentile', tableMarMm3: 1 }, 'tab', 1]) {
 			expect(ok(v), JSON.stringify(v)).toBe(false);
 		}
+	});
+
+	it('takes the Reserve flows without high flows table and the Reserve table choice (engine ≥ 1.90.0, issue #552)', () => {
+		const pct = { ...blank, method: 'percentile', scaling: 'area', naturalPctM3s: grid, reservePctM3s: grid, tableAreaKm2: 900 };
+		expect(ok({ ...pct, lowFlowPctM3s: grid, reserveTable: 'withoutHighFlows' })).toBe(true);
+		expect(ok({ ...pct, lowFlowPctM3s: null, reserveTable: 'total' })).toBe(true);
+		const r = SettingsPatch.safeParse({ ewrDailySource: { ...pct, reserveTable: 'withoutHighFlows' } });
+		expect(r.success).toBe(false);
+		expect(JSON.stringify(r.error?.issues)).toContain('daily EWR source: lowFlowPctM3s: Enter the Reserve flows without high flows table');
+		expect(ok({ ...pct, reserveTable: 'high' })).toBe(false);
+		expect(ok({ ...pct, lowFlowPctM3s: [[1]] })).toBe(false);
+		// Stored and patched whole, the new keys with it.
+		const stored = mergeSettings({ ewrDailySource: { ...pct, lowFlowPctM3s: grid, reserveTable: 'withoutHighFlows' } });
+		expect(stored.ewrDailySource).toMatchObject({ lowFlowPctM3s: grid, reserveTable: 'withoutHighFlows' });
 	});
 
 	it('defaults to the pragmatic EWR, and a patch replaces the source whole', () => {
@@ -1418,6 +1461,37 @@ describe('SettingsPatch.qualityFlags (engine ≥ 1.22.0, CR-18/19)', () => {
 			infilled: 'exclude',
 			zeroFlowMonths: [2, 3, 4]
 		});
+	});
+});
+
+describe('settings.qualityFlags.lowFlowPeriods (engine ≥ 1.90.0, issue #557)', () => {
+	const ok = (q: unknown) => SettingsPatch.safeParse({ qualityFlags: q }).success;
+	const p = { kind: 'flow_logger_m3s', start: '2019-01-01', end: '2019-06-30', maxM3s: 0.8, reason: 'high flows over-read', source: 'client, 2026-10-23' };
+
+	it('accepts a period with a record, dates, a threshold above 0, a reason and a source; refuses the rest', () => {
+		expect(ok({ lowFlowPeriods: [p] })).toBe(true);
+		expect(ok({ lowFlowPeriods: [] })).toBe(true);
+		expect(ok({ lowFlowPeriods: [p, { ...p, kind: 'flow_observed_m3s' }] })).toBe(true);
+		for (const bad of [
+			{ ...p, kind: 'flow_reference_m3s' },
+			{ ...p, start: '2019-02-30' },
+			{ ...p, start: '2019-07-01' },
+			{ ...p, maxM3s: 0 },
+			{ ...p, maxM3s: -1 },
+			{ ...p, reason: ' ' },
+			{ ...p, source: '' },
+			{ ...p, extra: 1 }
+		])
+			expect(ok({ lowFlowPeriods: [bad] }), JSON.stringify(bad)).toBe(false);
+		const r = SettingsPatch.safeParse({ qualityFlags: { lowFlowPeriods: [p, { ...p, maxM3s: 2 }] } });
+		expect(JSON.stringify(r.error!.issues)).toContain('listed twice');
+	});
+
+	it('is patched whole without touching the rest, and the engine resolves it', () => {
+		const stored = { qualityFlags: { suspect: 'include', zeroFlowMonths: [2] } };
+		const s = patchSettings(stored, { qualityFlags: { lowFlowPeriods: [p] } });
+		expect(s.qualityFlags).toMatchObject({ suspect: 'include', zeroFlowMonths: [2], lowFlowPeriods: [p] });
+		expect(patchSettings(s, { qualityFlags: { lowFlowPeriods: [] } }).qualityFlags.lowFlowPeriods ?? []).toEqual([]);
 	});
 });
 

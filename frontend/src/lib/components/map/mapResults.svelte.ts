@@ -7,12 +7,13 @@
 // tab's init, so its effects belong to the tab.
 import { untrack } from 'svelte';
 import type { NetworkNode } from '@water-management/engine';
-import { api, type MapFeature, type Role, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
-import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-import { damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
-import { historyEnd } from '$lib/components/overview/latestRun';
+import { api, type MapFeature, type Role, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
+import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
+import { damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '#lib/components/overview/damLevels.js';
+import { historyEnd } from '#lib/components/overview/latestRun.js';
 import { BAND_TOKEN, bandFills, chooseMapRun, ewrStatuses, mapRuns, readToken, unitStatuses, type MapBand, type MapStatus } from './mapStatus';
 import { MEASURE_PARAM, RUN_PARAM, resultFills, viewFromParam, type MapView } from './mapResults';
+import type { ReadonlyURLSearchParams } from '$app/state';
 
 export interface MapResultsInput {
 	projectId: () => string;
@@ -21,7 +22,7 @@ export interface MapResultsInput {
 	/** The model's nodes now (the editor's): which units and gauges to show, and the live dams. */
 	nodes: () => readonly NetworkNode[];
 	features: () => readonly MapFeature[];
-	params: () => URLSearchParams;
+	params: () => ReadonlyURLSearchParams;
 	/** The app's theme now (appTheme.ts): the fills are read again when it changes. */
 	dark: () => boolean;
 }

@@ -2,8 +2,8 @@
 // feeds, docs/maps.md § Rain for each unit): the per-unit CHIRPS proposal
 // (GET …/feeds/chirps/from-units) in words, and the checks on the panel's
 // product and start date. Pure, so they test without a page.
-import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProduct, UnitRainProposal, UnitRainProposalUnit } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProduct, UnitRainProposal, UnitRainProposalUnit } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import { CHIRPS_PRODUCT_FIRST_DAY, healthMessage, STATE_LABELS, type FeedMeta, type FeedState } from './feeds';
 
 /** The product a new set of unit feeds reads unless the owner picks the other: rnl, the record from 1981 (decided in issue #500, answer 3; the server's DEFAULT_UNIT_PRODUCT). */

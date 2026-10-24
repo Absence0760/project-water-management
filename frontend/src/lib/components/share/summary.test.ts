@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { SharedCatchmentView } from '$lib/api/types';
-import { setLocale } from '$lib/i18n/locale.svelte';
+import type { SharedCatchmentView } from '#lib/api/types.js';
+import { setLocale } from '#lib/i18n/locale.svelte.js';
 import { addMonths, type FlowMonth } from './chart';
 import { DEFAULT_WINDOW, printedLine, SUMMARY_MIN_MONTHS, SUMMARY_WINDOWS, summaryMonths, summaryRows, windowDates, windowLine, windowName, windowSpan } from './summary';
 

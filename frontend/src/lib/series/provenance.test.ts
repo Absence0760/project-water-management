@@ -118,7 +118,7 @@ describe('observed records’ source and unit (issue #66, 107_series_source.sql)
 		expect(originOfInput({}, 'flow_observed_m3s')).toBeNull();
 		expect(originOfInput(null, 'flow_observed_m3s')).toBeUndefined();
 		// A fit record's own record: the outlet's, or (engine ≥ 1.41.0) its calibration site's.
-		const gauge = { source: 'Weir logger', unit: null, factor: null };
+		const gauge = { source: 'Drift logger', unit: null, factor: null };
 		const input = { flow_observed_m3s: { origin }, 'flow_observed_m3s@g1': { origin: gauge } };
 		expect(originOfFit(input, { flowKind: 'flow_observed_m3s' })).toEqual(origin);
 		expect(originOfFit(input, { flowKind: 'flow_observed_m3s', siteNodeId: null })).toEqual(origin);

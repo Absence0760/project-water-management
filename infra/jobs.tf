@@ -177,7 +177,7 @@ resource "aws_lambda_function" "worker" {
       # GetFunctionConfiguration caller (secrets.tf).
       RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["worker"].arn
       RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["worker"].version_id
-      DB_POOL_MAX            = "2"
+      DB_POOL_MAX            = local.worker_db_pool_max
       NODE_EXTRA_CA_CERTS    = local.rds_ca_path
       # No JOB_TRANSPORT / JOBS_QUEUE_URL: only the API wakes the worker; the
       # worker never sends to the jobs queue (no sqs:SendMessage on it, above).

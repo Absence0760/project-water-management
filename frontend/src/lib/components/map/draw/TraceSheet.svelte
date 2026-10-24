@@ -7,9 +7,9 @@
 	water too large or cut off by the data's edge) shows here with its reason.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { api, type DamTraceProposal, type DamTraceState, type MapPosition, type MinOccurrence } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { api, type DamTraceProposal, type DamTraceState, type MapPosition, type MinOccurrence } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { parseDegrees } from '../mapData';
 
 	let {

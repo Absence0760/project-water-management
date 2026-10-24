@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { checklist, checklistMode, nextStep, progress, type ChecklistStep } from './checklist';
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({

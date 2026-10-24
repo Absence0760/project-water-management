@@ -6,7 +6,7 @@ import UnitRainPanel from './UnitRainPanel.svelte';
 import { factorClamped, factorOutsideBand, factorText, periodText, referenceFactorsText, referenceFitText, sortResultUnits, unitRainNotes, unitRainOf, type UnitRainResult, type UnitRainResultUnit } from './unitRain';
 import { withoutComments } from '../__fixtures__/withoutComments';
 
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const unit = (over: Partial<UnitRainResultUnit> = {}): UnitRainResultUnit => ({
 	nodeId: 'u1',
@@ -63,6 +63,17 @@ describe('the factor in words', () => {
 
 	it('writes the MAP period as years', () => {
 		expect(periodText({ start: '1991-01-01', end: '2020-12-31' })).toBe('1991–2020');
+	});
+});
+
+describe('a unit on its rainfall station (issue #553)', () => {
+	it('says the station and its MAP ratio, held and noted like the gauge’s', () => {
+		const u = unit({ rule: 'station', rainKey: 'rain_station_mm#s1', factor: 4, factorSource: 'gaugeMap', gaugeMapOwnFactor: 4.6, gaugeMapClamped: true });
+		expect(factorText(u)).toBe('× 4, unit MAP ÷ station MAP');
+		expect(factorClamped(u)).toBe(true);
+		expect(unitRainNotes({ units: [u] })).toEqual(['Upper unit: the factor was held at the 0.25–4 bound; check its MAP and the station’s.']);
+		const body = withoutComments(render(UnitRainPanel, { props: { result: result([u]) } }).body);
+		expect(body).toContain('Its rainfall station × MAP ratio');
 	});
 });
 

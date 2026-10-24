@@ -5,10 +5,10 @@
 	// only their own farms' alerts (RLS); this picks the farm on the page.
 	// Nothing shows while there is none, or if the alerts can't be loaded (the
 	// dam card says the same figures).
-	import { base } from '$app/paths';
-	import { api, type AlertEvent } from '$lib/api';
-	import { farmAlertText } from '$lib/components/alerts/words';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import { api, type AlertEvent } from '#lib/api/index.js';
+	import { farmAlertText } from '#lib/components/alerts/words.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { fmtDay, fmtPct } from './format';
 
 	let { projectId, nodeId }: { projectId: string; nodeId: string } = $props();
@@ -33,7 +33,7 @@
 		<h2 id="farm-alert-h">{t('Alerts')}</h2>
 		<p>{text}</p>
 		<!-- A link of its own, not a line of small print: a 44 px target like the page's other links. -->
-		<a class="link" href="{base}/account/alerts">{t('Choose your alert emails')}</a>
+		<a class="link" href={resolve('account/alerts')}>{t('Choose your alert emails')}</a>
 	</section>
 {/if}
 

@@ -119,7 +119,7 @@ Above the detail, for the baseline and every what-if at once
   other dates, or on another engine version, gets a line saying part of its
   change comes from that.
 - **Days below the reserve, each year** (`ReserveYearsChart.svelte`, a chunk
-  shared with River & reserve): grouped bars per water year (Oct–Sep) for every run, from each
+  shared with EWR): grouped bars per water year (Oct–Sep) for every run, from each
   run's stored `ewr_shortfall` series (through the Runs tab's series cache)
   by the engine's `reserveDaysByWaterYear` (`views/reserveYears.ts`). That
   is the test behind `summary.catchment.ewrDaysNotMet` (a day whose
@@ -268,6 +268,18 @@ bottom:
    a bare `Setting "unitRain" changed`. A unit's MAP and its source are node lines ("MAP none →
    700 mm"), and a unit's own rain record is named by its unit
    ("Rainfall (CHIRPS) of the unit …").
+   A change of the rainfall stations (`settings.rainStations`, engine ≥
+   1.91.0, issue #553, [model.md §2.4i](./model.md)) is one settings line
+   each, labelled **Rainfall stations** (field history path `rainStations`,
+   never a bare `Setting "rainStations" changed`), stations named from the
+   run's snapshot (`inputs.stations`, else the series id): the catchment's
+   station ("the catchment's station: none → Hill station, gaps corrected
+   against Low station"; "not scaled to MAP" when scaling is off), each
+   unit's station by unit name, the catchment MAP ("the units' area-weighted
+   mean → 780 mm (source)"), where a station's CHIRPS is read (`sites`),
+   each station's unreliable periods (the date ranges before → after), and
+   a station's MAP as each run read it when both snapshots have it. The
+   engine-only pinned factors are not compared.
    A change of the drought restriction rule (`settings.droughtRestriction`,
    engine ≥ 1.54.0, [model.md §2.7i](./model.md)) is one settings line per
    change, labelled **Drought restriction rule**: "off → reviewed 5 Oct;
@@ -634,7 +646,11 @@ headline, farm and daily-overlay components.
 
 Each run stores a snapshot of its inputs in `model_run.inputs`: the settings
 (merged over the defaults), the whole model document, and each driving series'
-**start date, length and a SHA-256 hash of its values** (`valuesSha256`).
+**start date, length and a SHA-256 hash of its values** (`valuesSha256`). (It may also hold `seriesChoice`, the CHIRPS series the run read and the
+others at the outlet and at each land unit, for a run warning only, and a
+forecast run's `forecastRainSource`: `diffInputs` reads neither, and the
+warning itself shows among the runs' warnings; [model.md § Which CHIRPS
+series the run reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561).)
 Since migration 021 each run also stores the series' **values**
 (`run_input_series` + `series_blob`), and the compare route hands both runs'
 values to `diffInputs` for every series whose dates or hash differ. So "What
@@ -679,7 +695,11 @@ mm"*). Runs store their settings merged over the defaults, so a snapshot
 without a store size predates it (engine < 0.14.0) and compares as 0 mm, which
 is what that run used; the same rule reads a snapshot without a runoff model
 as legacy (a run from before the setting, so it did run the legacy model), and one without a dam evaporation factor (engine < 0.16.0) as 0,
-no dam evaporation. A dam's area when full, area exponent and seepage have
+no dam evaporation. The EWR split (engine ≥ 1.94.0, issue #553,
+`settings.ewrSplit`, model.md §2.5b) is one line, *"EWR split between units
+by: the flow share → each unit’s natural MAR"*; a snapshot without it split
+the EWR by the flow share, so it compares as that and an older run against a
+new default one shows no line. A dam's area when full, area exponent and seepage have
 their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
 (7.2 × capacity^0.77)"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is

@@ -2,6 +2,7 @@
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
 import {
 	CROPS_TAKE_KEY,
+	EWR_SPLIT_LABEL,
 	USER_PRIORITY_LABEL,
 	USER_RESTRICTION_NOTE,
 	demandPctNote,
@@ -40,6 +41,8 @@ import {
 	type FdcPercentileRow,
 	type FdcPercentileTable,
 	type RunSummary,
+	type RainStationSummary,
+	type StationAreaForcing,
 	type UnitRainSummary,
 	type UnitRainUnit,
 	type WaterBalanceRow,
@@ -163,11 +166,13 @@ export interface SummaryMeta {
  */
 const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).toPrecision(12)) : v);
 /** Fields converted with `pct` (the engine's own key names). */
-const PERCENT_KEYS = new Set(['flowShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
+const PERCENT_KEYS = new Set(['flowShare', 'ewrShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
 
 const FARM_COLUMNS: [key: string, header: string][] = [
-	// Engine ≥ 0.27.0; empty on older runs. The share of both the flow (I) and the EWR (Y).
+	// Engine ≥ 0.27.0; empty on older runs. The share of the flow (I), and of the EWR (Y) unless split otherwise.
 	['flowShare', 'Flow share (%)'],
+	// Engine ≥ 1.94.0 (settings.ewrSplit, issue #553): the share of the EWR (Y) as applied; an older run's is its flow share.
+	['ewrShare', 'EWR share (%)'],
 	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
 	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
@@ -393,7 +398,7 @@ const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
  * 1.19.0), then the first and last of those again at each gauge node with a
  * record of its own (engine ≥ 1.4.0). Unrounded.
  */
-export function* plausibilityLines(p: RunSummary['plausibility']): Generator<string> {
+export function* plausibilityLines(p: RunSummary['plausibility'], siteNodeId: string | null = null): Generator<string> {
 	yield csvRow(['Plausibility checks']);
 	if (p === undefined) {
 		yield csvRow(['Run made before engine 0.25.0: no plausibility checks']);
@@ -420,6 +425,12 @@ export function* plausibilityLines(p: RunSummary['plausibility']): Generator<str
 	for (const g of p.gauges ?? []) {
 		yield '';
 		yield csvRow([`At gauge ${g.name}`, 'Share of the catchment natural flow above it (%)', pct(g.naturalShare) as Cell]);
+		// The record's fit against the simulated flow there (engine ≥ 1.90.0, issue #554): a check, never the calibration
+		// score. Out of sample except at the calibration site, whose record the run is fitted to (every read day, its window too).
+		const fitLabel = g.nodeId === siteNodeId ? 'Fit check (in sample at the calibration site)' : 'Fit check (out of sample)';
+		if (g.fit === undefined) yield csvRow([fitLabel, 'Run made before engine 1.90.0: not computed']);
+		else if (g.fit === null) yield csvRow([fitLabel, 'Not computed: no day of the record outside the excluded periods']);
+		else yield csvRow([fitLabel, 'Record', RECORD_TEXT[g.flowKind], 'Days', g.fit.days, 'NSE', g.fit.nse, 'KGE', g.fit.kge, 'PBIAS (%)', g.fit.pbias]);
 		yield* naturalisedLines(g.naturalised);
 		yield '';
 		yield* lowFlowLines(g.lowFlow);
@@ -937,7 +948,9 @@ const UNIT_RAIN_RULE_TEXT: Record<UnitRainUnit['rule'], string> = {
 	unitGauge: "the unit's own rain gauge",
 	gaugeMap: "the catchment gauge × unit MAP ÷ gauge MAP",
 	unitChirps: "the unit's own CHIRPS",
-	catchment: 'the catchment rain (no rain of its own)'
+	catchment: 'the catchment rain (no rain of its own)',
+	// Engine ≥ 1.91.0 (issue #553): the Rain from rainfall stations block names the station.
+	station: 'its rainfall station × unit MAP ÷ station MAP'
 };
 const UNIT_RAIN_FACTOR_TEXT: Record<UnitRainUnit['factorSource'], string> = {
 	gauge: 'as recorded',
@@ -995,8 +1008,10 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 		const level = map ?? kUnit;
 		const mean = level ?? unusable;
 		const chirpsOn = x.rule === 'unitChirps';
-		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : chirpsOn ? (map?.clamped ?? kUnit?.clamped ?? legacy?.mapClamped ?? false) : false;
-		const outside = x.rule === 'gaugeMap' ? !!x.gaugeMapOutsideBand : chirpsOn ? !!(map?.outsideBand ?? kUnit?.outsideBand) : false;
+		// A station unit's factor is its MAP ratio, recorded as rule 2's (issue #553).
+		const scaled = x.rule === 'gaugeMap' || x.rule === 'station';
+		const clamped = scaled ? x.gaugeMapClamped : chirpsOn ? (map?.clamped ?? kUnit?.clamped ?? legacy?.mapClamped ?? false) : false;
+		const outside = scaled ? !!x.gaugeMapOutsideBand : chirpsOn ? !!(map?.outsideBand ?? kUnit?.outsideBand) : false;
 		const span = mean && mean.years.length ? `${mean.years[0]}–${mean.years[mean.years.length - 1]} (${mean.years.length}` : '';
 		yield csvRow([
 			x.name,
@@ -1007,7 +1022,7 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 			x.rainKey ?? '',
 			// On the reference factors the factor varies by month: the column holds k_unit on top of them (null: no complete year yet).
 			x.factor ?? (chirpsOn && ref ? (kUnit?.factor ?? legacy?.mapRatio ?? null) : null),
-			UNIT_RAIN_FACTOR_TEXT[x.factorSource],
+			x.rule === 'station' ? 'unit MAP ÷ station MAP' : UNIT_RAIN_FACTOR_TEXT[x.factorSource],
 			clamped ? 'yes' : 'no',
 			outside ? 'yes' : 'no',
 			mean ? mean.meanAnnualMm : null,
@@ -1040,6 +1055,66 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 	}
 }
 
+/**
+ * The rainfall stations block (engine ≥ 1.91.0, issue #553, docs/model.md
+ * §2.4i): the catchment MAP, one row per area the run forced from a station
+ * (the catchment first), then each station's CHIRPS pairing with its 12
+ * monthly factors or why it was refused.
+ */
+export function* stationLines(st: RainStationSummary): Generator<string> {
+	yield csvRow(['Rain from rainfall stations (docs/model.md §2.4i)']);
+	yield csvRow(['Catchment MAP (mm)', st.catchmentMapMm, st.catchmentMapMm === null ? '' : st.catchmentMapFromUnits ? "the units' area-weighted mean" : 'entered']);
+	yield csvRow([
+		'Area',
+		'Station',
+		'Area MAP (mm)',
+		'Area MAP source',
+		'Station MAP (mm)',
+		'Station MAP source',
+		'Scaled to MAP',
+		'Own ratio',
+		'Ratio applied',
+		'Clamped',
+		'CHIRPS corrected against',
+		'Days: station',
+		'Days: corrected CHIRPS',
+		'Days: fallback',
+		'Days: none',
+		'Set aside: checks',
+		'Set aside: unreliable'
+	]);
+	const name = new Map(st.pairings.map((p) => [p.stationId, p.stationName]));
+	const row = (a: StationAreaForcing) =>
+		csvRow([
+			a.nodeId === null ? `${a.name} (catchment)` : a.name,
+			a.stationName,
+			a.areaMapMm,
+			a.areaMapSource ?? '',
+			a.stationMapMm,
+			a.stationMapSource ?? '',
+			a.scaleToMap ? 'yes' : 'no',
+			a.ownRatio,
+			a.ratio,
+			a.clamped ? 'yes' : 'no',
+			a.correctedBy === null ? 'none (the next fallback)' : (name.get(a.correctedBy) ?? a.correctedBy),
+			a.days.station,
+			a.days.chirps,
+			a.days.fallback,
+			a.days.none,
+			a.setAside.checks,
+			a.setAside.unreliable
+		]);
+	if (st.catchment) yield row(st.catchment);
+	for (const a of st.units) yield row(a);
+	if (!st.pairings.length) return;
+	yield csvRow(['Station CHIRPS pairings (monthly factors: the station ÷ the CHIRPS at it on their shared days)']);
+	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Common years', 'Shared days', 'Pinned', ...MONTHS]);
+	for (const p of st.pairings) {
+		const factors = p.refused === null ? MONTHS.map((_, i) => p.months.find((m) => m.month === i + 1)?.factor ?? null) : MONTHS.map(() => null);
+		yield csvRow([p.stationName, 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell", p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);
+	}
+}
+
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
 	yield csvRow(['Project', meta.projectName]);
 	yield csvRow(['Run', meta.runLabel]);
@@ -1058,6 +1133,18 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield csvRow(['Farm summary']);
+	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553): only when a split other than the flow share was asked for.
+	const split = summary.ewrSplit;
+	if (split && split.method !== 'flowShare')
+		yield csvRow([
+			'EWR split between units by',
+			EWR_SPLIT_LABEL[split.applied],
+			split.period
+				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water years` : 'the whole run: no complete water year'})`
+				: split.why === 'catchmentRain'
+					? 'the flow share: GR4J ran once on the catchment rain'
+					: 'the flow share: no unit made natural runoff'
+		]);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
 	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);
 	const extra = [...new Set(farms.flatMap((f) => Object.keys(f)))].filter(
@@ -1078,7 +1165,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		const id = String(f.nodeId);
 		yield csvRow([
 			String(f.name ?? ''),
-			...FARM_COLUMNS.map(([k]) => scalar(PERCENT_KEYS.has(k) ? pct(f[k]) : f[k]) ?? null),
+			...FARM_COLUMNS.map(([k]) => {
+				// A run before engine 1.94.0 split the EWR by the flow share.
+				const v = k === 'ewrShare' ? (f.ewrShare ?? f.flowShare) : f[k];
+				return scalar(PERCENT_KEYS.has(k) ? pct(v) : v) ?? null;
+			}),
 			...(capacity ? [capacity[id] ?? null] : []),
 			...(endCapacity ? [endCapacity[id] ?? capacity![id] ?? null] : []),
 			...extra.map((k) => scalar(f[k]) ?? null)
@@ -1098,6 +1189,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): the rule, factor and runoff per unit.
 	if (summary.unitRain) {
 		yield* unitRainLines(summary.unitRain);
+		yield '';
+	}
+	// Rain from rainfall stations (engine ≥ 1.91.0, issue #553): each area's station forcing and each station's pairing.
+	if (summary.stations) {
+		yield* stationLines(summary.stations);
 		yield '';
 	}
 
@@ -1171,7 +1267,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield* doubleMassLines(summary.dataQuality ? summary.dataQuality.doubleMass : undefined);
 	yield '';
 
-	yield* plausibilityLines(summary.plausibility);
+	yield* plausibilityLines(summary.plausibility, summary.calibration?.siteNodeId ?? null);
 	yield '';
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);

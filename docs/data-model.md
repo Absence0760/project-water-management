@@ -63,7 +63,7 @@ erDiagram
 | `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
 | `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); `privacy_contact_name` / `_email` / `_postal` (168: whom to ask about the team's projects' personal information); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`, and the zone server-rendered PDFs print in (`app_project_time_zone`, 217: the render-session exchange reads it for any member, issue #521); the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrDailySource` (engine 1.77.0, issue #455: where the outlet's daily EWR comes from, the pragmatic EWR, the DRM TAB file or the DRM percentile tables, with the scaling and the tables, or null = the pragmatic EWR; an optional `[EWR options]` sheet imports it; [model.md §2.9f](./model.md); no SQL migration, null from `mergeSettings`), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Five keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `responsibleAuthority` (163, `projects/authoritySettings.ts`: who decides the project's licence applications), `ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`: `{ source: 'auto' } \| { source: 'pragmatic' } \| { source: 'ruleTable', siteNodeId }`, which EWR test the results are judged by, `auto` by default and for an absent key; a copy remaps its site; no SQL migration), `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
+| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`, and the zone server-rendered PDFs print in (`app_project_time_zone`, 217: the render-session exchange reads it for any member, issue #521); the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrDailySource` (engine 1.77.0, issue #455: where the outlet's daily EWR comes from, the pragmatic EWR, the DRM TAB file or the DRM percentile tables, with the scaling and the tables, or null = the pragmatic EWR; an optional `[EWR options]` sheet imports it; [model.md §2.9f](./model.md); no SQL migration, null from `mergeSettings`), `ewrSplit` (engine 1.94.0, issue #553: how the EWR is split between the units, `'flowShare'` by default or `'naturalMar'`, each unit's natural MAR ÷ the units', [model.md §2.5b](./model.md); no SQL migration, `mergeSettings` gives a project without it the default, what every earlier run did), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Five keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `responsibleAuthority` (163, `projects/authoritySettings.ts`: who decides the project's licence applications), `ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`: `{ source: 'auto' } \| { source: 'pragmatic' } \| { source: 'ruleTable', siteNodeId }`, which EWR test the results are judged by, `auto` by default and for an absent key; a copy remaps its site; no SQL migration), `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and return flow | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `irrigation_system` | A project's irrigation systems (migration 198, engine ≥ 1.72.0, [model.md §2.3](./model.md#23-irrigation-demand)): `name`, `efficiency` (0 < e ≤ 1), `preset` (the SABI 2021 system it started as, NULL for the project's own) and `sort_order`. A trigger seeds every new project with the six SABI rows (through `irrigation_system_seed`, SECURITY INVOKER since migration 200, which `water_app` can't execute: only the project-insert trigger calls it); the backfill added a row "Imported, NN %" for each efficiency in use that none matched. Read from viewer up (201; a farmer or an applicant reads none of it), written by editors | none (the workbook import adds "Workbook, NN %" rows) |
@@ -83,7 +83,7 @@ erDiagram
 | `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
 | `seasonal_outlook` | A seasonal outlook (063, issue #53 R5): a base run × a season (`decision_date`, `season_end`) × demand `levels`, over the record's analogue years, run as one `outlook` job; `planning_share`, `analogue_years`, `status`, `result` (the engine's summary), `engine_version`; see [Seasonal outlooks](#seasonal-outlooks-063_seasonal_outlooksql) | none (the sketch S3 was worked by hand) |
 | `seasonal_outlook_member` | One level in one analogue year of an outlook (063): `level_position`, `water_year`, `status` (`done`, `failed`), `member` (the engine's `OutlookMember`) or `problems`; written once, complete | none |
-| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow. `meta` is `{ label, unit }`, plus `publishedBy: 'DWS'` and `station` on the outlet's `observed_flow` / `observed_flow_other` when it holds a record a DWS river-gauge feed wrote whole (232, #523 G8: shown to share links and applicants at any holder count; runs/publishedRecords.ts). The trigger `run_series_published_mark` (235) strips the two keys from any row it can't trace to such a record: not the outlet's observed flow, a scenario run, or a run whose input of that kind (`run_input_series.series_id`) isn't a DWS feed's for that station, whole |
+| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow. `meta` is `{ label, unit }`, plus `publishedBy: 'DWS'` and `station` on the outlet's `observed_flow` / `observed_flow_other` when it holds a record a DWS river-gauge feed wrote whole (232, #523 G8: shown to share links and applicants at any holder count; runs/publishedRecords.ts). The trigger `run_series_published_mark` (235) strips the two keys from any row it can't trace to such a record: not the outlet's observed flow, a scenario run, or a run whose input of that kind (`run_input_series.series_id`) isn't a DWS feed's for that station, whole. A gauge inside the network keeps its record as the node's `observed_flow` when it is the calibration site, else as `observed_flow_check` (engine ≥ 1.90.0, issue #554, never marked) |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
 Model names are one line (migration 189, issue #385): `node.name`,
@@ -220,13 +220,36 @@ new series will replace…" (frontend `lib/series/pick.ts`), the fit record's
 document (`fit-sweep`, `pan-sensitivity`, `import:project --fit`;
 `backend/scripts/fit-project.ts` `inputSeriesOf`). Lists shown to people
 (the Data tab, the export) keep the database's order; only the pick is
-pinned. An API key may not add a second outlet series of a kind
+pinned. A rename (`PATCH …/series/:id { name }`, issue #556; refused for a
+series a data feed or an API key writes by name, a key's series list
+included, [§ API keys](#api-keys-039_api_keyssql)) can therefore
+change which series the next run reads; the Data tab says which before it
+saves (`renamePickChange`). A run stores no series name (`run_input_series`
+is keyed by kind, with the series id), so the export, the report and the run
+comparison name a series by its current name. An API key may not add a second outlet series of a kind
 (100_key_series_kind.sql), since it could name one to sort first. The local
 and CI databases already sort by byte, so no DB test fails if `COLLATE "C"`
 is dropped: `series/pickOrder.test.ts` checks the two queries' text instead.
 Before a release that carries this, list the production projects whose pick
 moves (series of one kind whose linguistic and byte orders differ;
 deployment.md runbook).
+
+Because the pick is by name, a new series can take over from a record no one
+chose to replace (issue #561: a boundary feed's 60-day "CHIRPS boundary"
+sorted before a workbook's 16-year "Rainfall CHIRPS satelite (mm)"). So a
+data feed never writes a new series that sorts ahead of one of its kind
+holding a record (409 `series_takes_over`, `feeds/routes.ts`
+`refuseTakeOver`; the boundary and per-unit proposals name theirs to sort
+after), and a run records the CHIRPS series it read and the others of that
+kind, the outlet's and each land unit's own, with their first and last day
+with a value
+(`model_run.inputs.seriesChoice`, engine ≥ 1.90.0, `runs/execute.ts`
+`chirpsSeriesChoice`), and warns when another spans more of the run
+([model.md § Which CHIRPS series the run
+reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
+An upload of a new series that would sort first says so before it is saved
+("this one will replace “…” in runs", frontend `lib/series/pick.ts`
+`newSeriesEffect`), so no path adds a series that takes over unseen.
 
 ### Series provenance (032_series_provenance.sql)
 
@@ -372,7 +395,11 @@ measured at a **gauge node inside the network** (engine ≥ 1.4.0, issue #64,
   `settings.calibrationSiteNodeId` names that gauge (engine ≥ 1.41.0,
   [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410);
   the API checks a new site is such a gauge with a record, and a copy or an
-  import moves it with the node ids). The run stores it like any
+  import moves it with the node ids). From engine 1.90.0 a gauge with both
+  a gauge and a logger record is checked on one of them by every reader
+  but calibration (`gaugeCheckKind`: the kind the run's calibration scores,
+  engine-audit.md G2, provisional), and stores it as its
+  `observed_flow_check` when it isn't the calibration site. The run stores it like any
   input series (`run_input_series.kind` = that key, the values in
   `series_blob`), so `loadRunInput` reproduces it; 084 redefines
   `run_input_series_series_kind` (from 056) to compare the kind before the
@@ -460,6 +487,89 @@ area-weighted CHIRPS (`rain_chirps_mm`, the from-units feeds,
   `node` and `data_feed` under the writer's RLS, and whoever may write a
   project's series may read both. No new table, grant, policy or foreign key.
 
+### Rainfall stations (239_rain_stations.sql)
+
+A **rainfall station** (issue #553) is a catchment rain series:
+`kind = 'rain_catchment_mm'` with no site (`site_node_id IS NULL`). A project
+may have several, told apart by `name`. Each carries its own MAP and,
+optionally, where it is (engine `SeriesMeta.station`, `RainStationMeta {
+mapMm, mapSource, lat, lon }`):
+
+- **`station_map_mm`** (1–12 000 mm, the engine's `MAP_MM_MIN` /
+  `MAP_MM_MAX`; NULL = none) and **`station_map_source`** (1–600
+  characters, not blank), with `time_series_station_map_needs_source` (a MAP
+  needs its source; the engine's `mapMmError`), as `node.map_mm` /
+  `map_source` above.
+- **`station_lat`** (−90..90) and **`station_lon`** (−180..180), WGS84
+  degrees, both or neither (`time_series_station_lat_lon_together`); NULL =
+  not known.
+- **Only a station has them** (`time_series_station_only`): every station
+  column is NULL unless the row is `rain_catchment_mm` with no site. A
+  unit's own gauge (209) has none, and a station can't be sited or change
+  kind while it keeps them.
+- **The gauge MAP moves onto the station.** The station's MAP replaces
+  `settings.unitRain.gaugeMapMm` / `gaugeMapSource`. 239 copied each
+  project's stored pair onto the station a run reads, the first
+  `rain_catchment_mm` by the name's bytes among the series with no site
+  ([Which series a run reads](#which-series-a-run-reads)), when the engine
+  would use it (`mapMmError` passes), whatever the mode; a project with no
+  such series copied nothing. Only `project.settings` was read: a scenario
+  can't set `unitRain`, and runs and model revisions keep the settings they
+  were made with. The settings JSON was left as it is (expand only); a later
+  migration drops the two keys once nothing reads them.
+- **Kept by a series revision** (`series_revision.station_map_mm`,
+  `station_map_source`, `station_lat`, `station_lon`, as 085 keeps the site
+  and 107 the source): `recordSeriesRevision` writes them from the row as it
+  stands before the change, and a restore (or the undo of one) puts them
+  back with the values, `null` included, clearing a station's details before
+  a site comes back. A revision has its series' kind and site, so details
+  only ever come back onto a catchment rain series with no site. 239 gave the
+  revisions of each station it filled the copied MAP, so restoring values
+  kept before it doesn't drop the station; a deleted series' older
+  revisions stay NULL.
+- Columns on `time_series` and `series_revision`: their row-level policies
+  (the viewer and editor ones, 039's API-key ones), `time_series`'s
+  same-project triggers and 001's and 030's table grants to `water_app` cover
+  them (`series_revision` stays append-only). No new table, function, policy
+  or foreign key. Tested by `series/stationMigration.db.test.ts` (the CHECKs
+  both ways, RLS, and the copy, run on a seeded transaction and rolled back)
+  and `series/station.db.test.ts` (the API, the run builder, and a restore
+  after a delete and after a replace).
+- **Named by its series id.** `settings.rainStations` (engine ≥ 1.91.0,
+  [api.md § Projects](./api.md)) names a station by its `time_series.id`, so
+  everything that makes new ids carries the setting along: a project copy
+  maps each station to the copy's series of the same kind and name; the
+  project document gives each station its `id` when the setting is present,
+  and an import gives the series fresh ids and the setting follows; a
+  restore of a deleted series brings it back under its own id while no
+  series holds it (`series/replace.ts` `reuseId`). A deleted station the
+  setting names doesn't block other saves or the run (the engine warns): a
+  save is checked only for the stations and units it names that the stored
+  setting doesn't (`checkRainStations`'s `stored`), since the Settings form
+  sends the whole setting with every save (issue #553 round 3). A save that
+  names it anew (one where the stored setting didn't) is refused.
+- **What a run reads.** Only when `settings.rainStations` assigns a station
+  to the catchment or a unit (`runs/stationInput.ts`): every station's
+  record under `rain_station_mm#<series id>` and its name, MAP, source and
+  place in `ModelInput.stations` (`isCatchmentGauge` on the one read as
+  `rain_catchment_mm`), and, for a station an assignment reads that has
+  coordinates, the CHIRPS of the 0.05° cell holding it from the shared cell
+  cache (208) as `rain_chirps_station_mm#<series id>`, in the product of the
+  feed of the first unit it corrects (else the catchment's feed, else
+  `rnl`). Nothing fetches a station's cell on its own: the cache holds it
+  when a feed of any project covers it (a boundary or unit feed); without
+  it the engine pairs the station against the CHIRPS of the unit it stands
+  in (`rainStations.sites`), else refuses the pairing. A station's record
+  names its series in `run_input_series.series_id` (241_station_input_series:
+  `run_input_series_series_kind` takes `rain_station_mm#<id>` naming that
+  very `rain_catchment_mm` series), so a manual run is a person accepting
+  every station it read, as the API-key ingest hold reads it
+  (`series/hold.ts` step 2, not only the one also read as
+  `rain_catchment_mm`), and a station's download shows the run that read it
+  (preferring the `rain_catchment_mm` key, whose columns it has). The CHIRPS
+  at a station's cell is no series and names none. Tested by
+  `runs/stations.db.test.ts`.
+
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
 MB to a few tens of MB. The engine is deterministic, so a run saved since
@@ -532,7 +642,21 @@ can't be. `GET /compare/runs` returns the whole snapshot, and
 `forecastRainSource`): `chirps_gefs` only when the forecast series'
 `feed_id` is a CHIRPS-GEFS feed and its `feed_days` cover every day from
 the first forecast day to the series' end (031_feed_days), read when the
-run is made; the report's forecast line credits CHIRPS-GEFS only then. The compare "what changed" list (engine `diffInputs`, see
+run is made; the report's forecast line credits CHIRPS-GEFS only then.
+The engine reads it too (§2.4h's forecast days), so a reproduction, a
+scenario on the run and an evidence pack's re-run carry it. A
+run of a project with two or more CHIRPS series at the outlet or at a land
+unit also holds `seriesChoice` (engine ≥ 1.90.0, issue #561, `runs/execute.ts`
+`chirpsSeriesChoice`): for the outlet (`rain_chirps_mm`) and each such unit
+(`unitChirps`, by node id), the name of the one it read and the others'
+names with their first and last day with a value. Only a run warning reads it; a
+reproduction, a scenario run on the run and an evidence pack's re-run carry
+it, so they warn alike. A run under `settings.rainStations` (engine ≥ 1.91.0,
+issue #553) holds `stations`, the input's `ModelInput.stations` (each
+station's name, MAP and source, place, and `isCatchmentGauge`): the station
+forcing reads the MAPs, so a reproduction, a scenario run, an uncertainty
+member and an evidence pack's re-run carry it, and "what changed" lists a
+station's MAP or place changing. The compare "what changed" list (engine `diffInputs`, see
 [run-comparison.md](./run-comparison.md)) sees a series being extended or
 trimmed, and values edited within the same dates when both runs carry a hash.
 The same hash could later drive an "inputs changed since this run" flag.
@@ -725,7 +849,9 @@ left out of every calibration score, each a whole water year or a date range
 with a required reason. `settings.qualityFlags` (engine ≥ 1.22.0, CR-18/19)
 holds each calibration record's gauged range (highest and lowest field
 gauging with a source) and how automatic calibration treats extrapolated,
-suspect and infilled days; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
+suspect and infilled days, and from engine 1.90.0 (issue #557) its
+`lowFlowPeriods`, date ranges in which only a record's flows at or below a
+threshold are valid; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
 issue #153) is automated calibration's pre-declared rule set with its
 server-kept revision and the hydrologist's sign-off; no migration either
 (model.md §2.10j). `settings.evidenceUncertaintyRule` (issue #71) is the
@@ -821,6 +947,8 @@ the result change?", and put back any earlier version.
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `series.site_changed` (084: a flow
   record moved to a gauge or back to the outlet, `site: { from, to }`),
+  `series.renamed` (issue #556: a series renamed by PATCH, `rename: { from,
+  to }`, `name` the new one),
   `series.held` (WP-2.16: an API key's
   pushed days the data-quality rules flag, with `negative`, `outlier`, up to
   5 `examples` and the `source` label; automatic runs wait until a person
@@ -2049,7 +2177,10 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   also a view's range lookup) and `map_mm` (0–20 000). A cell not listed has
   no value. Global reference data: RLS lets any signed-in user read it,
   water_app is granted SELECT only, and `pnpm import:map-grid` writes it as
-  the schema owner.
+  the schema owner; in production `load-reference.yml` through the migrate
+  Lambda, for the one allowed dataset (`WAAS-SWCape-2007`, issue #560;
+  deployment.md § Reference datasets), and migration 238 adds `map-grid` to
+  `reference_load`'s kinds.
 - **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
   evaporation row accepted from the map came from. Primary key
   `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the
@@ -2888,6 +3019,17 @@ merges daily readings without a session (WP-2.9;
   any), and NULL in a transaction that also has a user;
   `app_api_key_allows(kind, name)` checks `allowed_series`;
   `app_api_key_label()` is the audit actor label.
+- **Which names a key's list holds** (240_series_name_key_listed.sql):
+  `app_series_name_key_listed(project, kind, name)` (`SECURITY DEFINER`,
+  `EXECUTE` to `water_app`) is true when a live key of the project (not
+  revoked, not expired) has an `allowed_series` naming exactly that
+  `{ kind, name }`; a key with no list names nothing in advance. It is false
+  unless the caller is an editor of the project (`requireRole`'s rule), and
+  returns only the boolean. The series rename (`PATCH …/series/:id { name }`,
+  issue #556) uses it to refuse renaming a listed series or to a listed name,
+  since `api_key` is owner-only and an editor may rename: the key would
+  otherwise push into a new series under the old name, or into this one
+  under the new.
 - **Automatic re-runs** (042_auto_rerun.sql, [§ Jobs](#jobs-016_jobssql)):
   a key's ingest that changes days queues the project's re-run (when it has
   automatic runs on) with the key's **creator** as the acting user; the job
@@ -2991,7 +3133,11 @@ thresholds, `{ "portfolio": { "thresholds": { "green": 5, "amber": 20 } } }`:
 percent of the last 30 days with the outlet EWR not met, green below `green`,
 amber below `amber`, red otherwise, each 0–100 with `green < amber`. Absent
 means the defaults (5 % and 20 %, `portfolio/status.ts` `EWR_THRESHOLDS`),
-which the hydrologist still has to confirm. The `team_settings_valid` CHECK
+which the hydrologist still has to confirm. They judge only the EWR status
+(the teams list and the team page): the project list's status is irrigation
+supply since issue #558, judged by fixed, provisional cut-offs
+(`IRRIGATION_THRESHOLDS`, 95 % and 80 % of demand supplied) that are not a
+team setting. The `team_settings_valid` CHECK
 (`app_team_settings_valid`, plpgsql so each step is guarded before the next
 casts) holds that shape for any writer and rejects unknown keys; the API
 validates the same (`teams/settings.ts`). Access needs no new policy:
@@ -3819,11 +3965,12 @@ the restored one.
 
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
-of a map dataset read (`land-cover`, `evaporation`, `rivers`, and since
-225 `gazetteer`) and the
+of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
+225 `gazetteer`, and since 238 `map-grid`) and the
 SHA-256 it was checked against. Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
-`replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`, through
+`replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`,
+`replaceRainMapDataset`, through
 `geo/referenceOrigin.ts`), and deleted by any other replace of that
 dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like

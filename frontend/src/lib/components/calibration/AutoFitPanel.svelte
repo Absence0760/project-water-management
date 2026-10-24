@@ -11,11 +11,11 @@
 -->
 <script lang="ts">
 	import { rulesLines, waterYearLabel, type CalibrationRules } from '@water-management/engine';
-	import { api } from '$lib/api';
-	import { AutoCalibrationFollower } from '$lib/calibration/autoFollow.svelte';
-	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from '$lib/calibration/autoFit';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { api } from '#lib/api/index.js';
+	import { AutoCalibrationFollower } from '#lib/calibration/autoFollow.svelte.js';
+	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from '#lib/calibration/autoFit.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 
 	let {
 		projectId,

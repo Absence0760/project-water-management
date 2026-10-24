@@ -13,8 +13,8 @@
 	clicks would be lost).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { MapPosition } from '$lib/api/types';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { MapPosition } from '#lib/api/types.js';
 	import { parseDegrees } from './mapData';
 	import { pieceLine, savable, type ClickDivider } from './clickPieces.svelte';
 	import PieceBadge from './PieceBadge.svelte';

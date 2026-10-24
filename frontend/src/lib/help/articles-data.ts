@@ -150,6 +150,28 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		related: ['calibration-exclusions', 'calibration-window'],
 		source: 'Not in the workbook; docs/model.md §2.10'
 	},
+	'preview-area-station-scaled': {
+		long: 'Shown for the average catchment rainfall and each land unit that reads a rainfall station (Settings → Flow generation). It is the station’s record as stored, multiplied by the ratio a run applies: the area’s MAP divided by the station’s MAP, or 1 when a MAP is missing or the scaling is off. Blank where the station has no reading.\n\nNothing here is stored: it is worked out when the preview opens, with the same engine code a run uses over the inputs a run would read, so it changes as soon as a series or a setting does. It is the same column as “station × ratio” in the Data tab’s Full CSV.',
+		aliases: ['station times ratio', 'scaled station rain'],
+		related: ['rain-stations', 'unit-rain', 'preview-area-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
+	},
+	'preview-area-chirps-corrected': {
+		long: 'The area’s own CHIRPS (a unit’s CHIRPS feed, or the catchment CHIRPS for the average catchment rainfall) multiplied by the factor of the day’s month, from the pairing a run fits between that CHIRPS and the area’s correcting station. It is what fills a day the station has no reading. The column is missing when the area has no CHIRPS, and blank when the pairing is refused, so its gaps are not corrected.\n\nDerived when the preview opens, never stored: the Full CSV’s “CHIRPS corrected” column. Unlike the catchment’s CHIRPS (corrected) column, it applies the factor on every day.',
+		related: ['chirps-bias', 'rain-stations', 'preview-area-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4i'
+	},
+	'preview-area-rain-used': {
+		long: 'The rain a run reads for this area, to the bit: the station × ratio where the station has a reading, else the corrected CHIRPS, else the next fallback, else nothing (read as dry, 0). For the average catchment rainfall it is Fragmentation’s rain; for a land unit, its per-unit rain. It covers the run window only.\n\nIt is computed when the preview opens with the engine’s own code over the inputs a run would read, not stored, so it is never older than the series and settings. The Rain used from column says, day by day, which source it came from.',
+		aliases: ['unit rain used', 'area rain'],
+		related: ['rain-stations', 'unit-rain', 'preview-area-rain-from'],
+		source: 'Not in the workbook; docs/model.md §2.4i'
+	},
+	'preview-area-rain-from': {
+		long: 'Each day of the area’s rain used names its source: station (the station × ratio), corrected CHIRPS (the station had no reading, or the day was set aside), next fallback (no corrected CHIRPS that day either) or no source, which a run reads as dry. The Full CSV writes the same as station, chirps, fallback or none.\n\nRead down it to see where a long record leans on CHIRPS, or where an area had no rain at all.',
+		related: ['preview-area-rain-used', 'rain-stations'],
+		source: 'Not in the workbook; docs/model.md §2.4i'
+	},
 	'wr90': {
 		long: 'The standard national source for the monthly evaporation and naturalised-flow inputs.',
 		aliases: ['WR2012', 'Water Resources of South Africa'],
@@ -317,13 +339,13 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/ui.md (Data feeds); docs/architecture.md (Data feeds)'
 	},
 	'boundary-rain': {
-		long: 'Settings → Data feeds → **Attach a feed** → Area **The catchment boundary, from the map** proposes a CHIRPS feed for the boundary on the map: the CHIRPS v3 cells (0.05°, about 5.5 km) it covers, each weighted by the share of it inside the boundary (clipped exactly, holes taken out) × the cosine of its latitude, with a table of the cells. A cell less than 0.1 % inside is left out. At most 100 cells in 25 rows, about 2 500 km²; a larger boundary needs feeds for its parts.\n\nApply attaches a CHIRPS feed into the CHIRPS series, or gives the cells to a CHIRPS feed that holds no days yet. A feed whose series already has a record never gets new cells, since its days were averaged over the old ones: the proposal attaches a new feed into a separate series to compare, and you switch the old one off once satisfied. A boundary redrawn since you looked is refused rather than applied unseen; the Map says when the boundary has changed since its feed read it.',
+		long: 'Settings → Data feeds → **Attach a feed** → Area **The catchment boundary, from the map** proposes a CHIRPS feed for the boundary on the map: the CHIRPS v3 cells (0.05°, about 5.5 km) it covers, each weighted by the share of it inside the boundary (clipped exactly, holes taken out) × the cosine of its latitude, with a table of the cells. A cell less than 0.1 % inside is left out. At most 100 cells in 25 rows, about 2 500 km²; a larger boundary needs feeds for its parts.\n\nApply attaches a CHIRPS feed into the CHIRPS series, or gives the cells to a CHIRPS feed that holds no days yet. A feed whose series already has a record never gets new cells, since its days were averaged over the old ones: the proposal attaches a new feed into a separate series to compare. A run reads the first CHIRPS series by name, so that series is always named to sort after the record runs read: the record stays the run’s until you choose otherwise. Where runs read a record, the feed reads from its first day (rnl when that is before 1998), and an owner may instead **Replace** the record: the feed reads it again whole from its first day and takes its place once complete, the old values kept in the History. The daily product and start date can be changed before Apply. A boundary redrawn since you looked is refused rather than applied unseen; the Map says when the boundary has changed since its feed read it.',
 		aliases: ['CHIRPS from boundary', 'area-weighted rain', 'boundary cells'],
 		related: ['data-feeds', 'chirps', 'chirps-bias'],
 		source: 'docs/maps.md (Rain from the boundary)'
 	},
 	'unit-rain-feeds': {
-		long: 'Under **Settings & calibration → Data feeds → Attach a feed**, the **Area** **Each unit’s parcel** (**Rain for each unit**) proposes one CHIRPS feed for each hydrological unit with land and a parcel on the map (its delineated or drawn area, linked to the unit). Each feed averages the 0.05° CHIRPS cells the parcel covers, each weighted by the share of it inside and by its area, and writes into that unit’s own rain series.\n\nOne daily product serves every unit, end to end: **rnl** (from 1981, final days only) by default, or **sat** (from 1998, with preliminary days); a feed never splices one onto the other. Without a start date the feeds read from the product’s first day, so the MAP period has its years. Units without a parcel are listed, with a link to the map.\n\nNeighbouring small units often share cells, so their raw CHIRPS is nearly the same: what tells them apart is each unit’s MAP, which levels its CHIRPS. The series are read only while **Settings & calibration → Flow calibration → Rain into GR4J → Rain for each unit** is on.',
+		long: 'Under **Settings & calibration → Data feeds → Attach a feed**, the **Area** **Each unit’s parcel** (**Rain for each unit**) proposes one CHIRPS feed for each hydrological unit with land and a parcel on the map (its delineated or drawn area, linked to the unit). Each feed averages the 0.05° CHIRPS cells the parcel covers, each weighted by the share of it inside and by its area, and writes into that unit’s own rain series.\n\nOne daily product serves every unit, end to end: **rnl** (from 1981, final days only) by default, or **sat** (from 1998, with preliminary days); a feed never splices one onto the other. Without a start date the feeds read from the product’s first day, so the MAP period has its years. Units without a parcel are listed, with a link to the map.\n\nNeighbouring small units often share cells, so their raw CHIRPS is nearly the same: what tells them apart is each unit’s MAP, which levels its CHIRPS. The series are read only under **Settings & calibration → Flow generation**, with Per unit chosen, where they fill a station’s gaps or, for a unit with no station, are its rain.',
 		aliases: ['per-unit CHIRPS', 'unit CHIRPS', 'CHIRPS per unit', 'from-units'],
 		related: ['unit-rain', 'unit-map', 'boundary-rain', 'chirps-version'],
 		source: 'docs/maps.md § Rain for each unit; issue #482'
@@ -348,7 +370,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		countries: ['ZA']
 	},
 	'data-freshness': {
-		long: '**Data up to** is the last day a series has a value, not the last day it stores: blank days after it (a dead logger’s) are no data. The series a run is driven by (recorded rainfall and daily A-pan evaporation) are **Behind** once that day is more than 7 days before today; they are listed first, and their count is the number beside Data in the workspace. A forecast runs ahead, and observed flow only scores a run, so neither is ever Behind.\n\n**Missing** is the share of days in the series’ own span with no value, and **Coverage by year** shows where the gaps fall. When a driver series has changed since the latest run, or reaches past its end, the Data and Runs tabs say the results are older than the data.',
+		long: '**Data up to** is the last day a series has a value, not the last day it stores: blank days after it (a dead logger’s) are no data. The series a run is driven by (recorded rainfall and daily A-pan evaporation) are **Behind** once that day is more than 7 days before today; they are listed first, and their count is the number beside Data in the workspace. A forecast runs ahead, and observed flow only scores a run, so neither is ever Behind.\n\n**Missing** is the share of days in the series’ own stored span with no value (a record can store blank days before its first reading, which **From**, the first day with a value, leaves out), and **Coverage by year** shows where the gaps fall. When a driver series has changed since the latest run, or reaches past its end, the Data and Runs tabs say the results are older than the data.',
 		aliases: ['behind', 'stale data', 'data up to', 'coverage', 'missing days'],
 		related: ['data-feeds', 'rain-catchment', 'evap-apan-daily'],
 		source: 'Not in the workbook; docs/ui.md (Data tab)'

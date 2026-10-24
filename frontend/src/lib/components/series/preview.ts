@@ -27,12 +27,14 @@ import {
 	type ProjectModel,
 	type ProjectSettings,
 	type SeriesKind,
-	type SeriesMeta
+	type SeriesMeta,
+	type StationRainDaySource
 } from '@water-management/engine';
-import { dayPrefix } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
-import { firstOutletSeries } from '$lib/series/pick';
+import { dayPrefix } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { firstOutletSeries } from '#lib/series/pick.js';
 import type { Daily } from './coverage';
+import type { AreaRainLines } from './derivedRain';
 
 export type PreviewFlag = 'missing' | 'negative' | 'outlier' | 'flatline';
 
@@ -75,9 +77,12 @@ export interface PreviewColumn {
 	id: string;
 	label: string;
 	unit: string;
-	group: 'series' | 'derived';
+	/** `area`: an area's rain under its station (issue #553), derived when viewed and never stored. */
+	group: 'series' | 'derived' | 'area';
 	/** Set for a `series` column and its `m3day:` companion — which series row it highlights. */
 	seriesId?: string;
+	/** Set for an `area` column: whose rain (null: the average catchment rainfall) and which line. */
+	area?: { nodeId: string | null; line: AreaLine };
 	/**
 	 * The header's HelpTip key ($lib/help/content): `series.<SeriesKind>` for a
 	 * raw series, `preview.<column>` for a derived one. The Date column's own
@@ -322,4 +327,59 @@ export function filterPreviewRows(rows: readonly PreviewRow[], { query, missingO
 		if (cmp) return visibleSeriesIds.some((id) => r.series[id] && r.series[id]!.value !== null && cmp(r.series[id]!.value!));
 		return r.date.startsWith(date);
 	});
+}
+
+// --- Each area's rain under its station (issue #553 round 5, docs/ui.md § Data) ---
+// The columns the Data tab's Full CSV has per area (groupedCsv.ts): station × ratio, corrected CHIRPS, rain used
+// and where each day's rain used came from. The lines are computed by SeriesTab (derivedRain.ts, the engine's
+// stationAreaRain over the model input a run reads) and handed in; nothing here runs the engine.
+
+export type AreaLine = 'stationScaled' | 'chirpsCorrected' | 'rainUsed' | 'source';
+
+/** One area as the dialog gets it: the catchment (nodeId null) or a land unit, its lines, or why they couldn't be computed. */
+export interface PreviewArea {
+	nodeId: string | null;
+	name: string;
+	lines: AreaRainLines | null;
+	error?: string | null;
+}
+
+export const areaColumnId = (nodeId: string | null, line: AreaLine): string => `area:${nodeId ?? 'catchment'}:${line}`;
+export const areaTitle = (a: Pick<PreviewArea, 'nodeId' | 'name'>): string => (a.nodeId === null ? 'Average catchment rainfall' : a.name);
+
+const AREA_LINES: readonly { line: AreaLine; what: string; unit: string; helpKey: string }[] = [
+	{ line: 'stationScaled', what: 'station × ratio', unit: 'mm', helpKey: 'preview.areaStationScaled' },
+	{ line: 'chirpsCorrected', what: 'CHIRPS corrected', unit: 'mm', helpKey: 'preview.areaChirpsCorrected' },
+	{ line: 'rainUsed', what: 'rain used', unit: 'mm', helpKey: 'preview.areaRainUsed' },
+	{ line: 'source', what: 'rain used from', unit: '', helpKey: 'preview.areaRainFrom' }
+];
+
+/** Each area's columns, in the Full CSV's order and words; an area without lines adds none, and one without CHIRPS no corrected column. */
+export function buildAreaColumns(areas: readonly PreviewArea[]): PreviewColumn[] {
+	const out: PreviewColumn[] = [];
+	for (const a of areas) {
+		if (!a.lines) continue;
+		for (const l of AREA_LINES) {
+			if (l.line === 'chirpsCorrected' && !a.lines.chirpsCorrected) continue;
+			out.push({ id: areaColumnId(a.nodeId, l.line), label: `${areaTitle(a)}: ${l.what}`, unit: l.unit, group: 'area', area: { nodeId: a.nodeId, line: l.line }, helpKey: l.helpKey });
+		}
+	}
+	return out;
+}
+
+/** The source of a day's rain used, in words (the CSV writes the engine's codes: station, chirps, fallback, none). */
+export const RAIN_FROM_LABEL: Record<StationRainDaySource, string> = {
+	station: 'station',
+	chirps: 'corrected CHIRPS',
+	fallback: 'next fallback',
+	none: 'no source (dry)'
+};
+
+/** The value of one area line on `date`: a number (mm), the source in words, or null outside the run window or with no value. */
+export function areaCell(lines: AreaRainLines, line: AreaLine, date: string): number | string | null {
+	const i = toEpochDay(date) - toEpochDay(lines.startDate);
+	if (i < 0 || i >= lines.rainUsed.length) return null;
+	if (line === 'source') return RAIN_FROM_LABEL[lines.source[i]!];
+	const v = line === 'rainUsed' ? lines.rainUsed[i] : line === 'stationScaled' ? lines.stationScaled[i] : lines.chirpsCorrected?.[i];
+	return v == null || !Number.isFinite(v) ? null : v;
 }

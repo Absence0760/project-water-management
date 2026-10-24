@@ -1,6 +1,7 @@
 <!-- i18n-section: auth -->
 <script lang="ts" module>
 	import { tick } from 'svelte';
+	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
 
 	/**
 	 * Focus the card's title once the page has swapped its content for another
@@ -20,9 +21,9 @@
 	// The language switch (WP-2.5) sits above the form: the sign-in pages are
 	// the first thing an invited farmer sees.
 	import type { Snippet } from 'svelte';
-	import { base } from '$app/paths';
-	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import BrandMark from './BrandMark.svelte';
 	import CatchmentScene from './CatchmentScene.svelte';
 
@@ -56,9 +57,9 @@
 		<div class="form-box">
 			<div class="top">
 				<!-- Home: the landing page signed out, the projects signed in. -->
-				<a class="lockup" href="{base}/" aria-label={t('Water Management, home')}>
+				<a class="lockup" href={resolve('')} aria-label={t('{app}, home', { app: APP_SHORT_NAME })}>
 					<BrandMark size={40} />
-					<span>Water Management</span>
+					<span>{APP_SHORT_NAME}</span>
 				</a>
 				<LanguageSwitch compact />
 			</div>
@@ -69,18 +70,18 @@
 			{#if footer}<div class="footer">{@render footer()}</div>{/if}
 			{#if legal}
 				<nav class="legal" aria-label={t('Legal')}>
-					<a href="{base}/privacy">{t('Privacy notice')}</a>
-					<a href="{base}/terms">{t('Terms of use')}</a>
+					<a href={resolve('privacy')}>{t('Privacy notice')}</a>
+					<a href={resolve('terms')}>{t('Terms of use')}</a>
 				</nav>
 			{/if}
 		</div>
 	</main>
 
 	<!-- After the form in the DOM so the page's h1 comes first; shown on the left. -->
-	<aside class="panel-brand" aria-label={t('About Water Management')}>
+	<aside class="panel-brand" aria-label={t('About {app}', { app: APP_SHORT_NAME })}>
 		<div class="art"><CatchmentScene /></div>
 		<div class="copy">
-			<p class="kicker">Water Management</p>
+			<p class="kicker">{APP_NAME}</p>
 			<h2>{t('Catchment water balance, from rainfall to river.')}</h2>
 			<ul>
 				<li>{t('Model hydrological units, dams and transfers on a river network.')}</li>

@@ -4,8 +4,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import type { ImportResult, Project, ProjectFile } from '$lib/api';
-import { ApiError } from '$lib/api/client';
+import type { ImportResult, Project, ProjectFile } from '#lib/api/index.js';
+import { ApiError } from '#lib/api/client.js';
 import { loadExample, startFromExample } from './example';
 
 const SRC = fileURLToPath(new URL('../../../', import.meta.url));

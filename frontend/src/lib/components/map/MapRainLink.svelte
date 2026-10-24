@@ -8,7 +8,7 @@
 	2026-10-02 this drew its own line above the map.
 -->
 <script lang="ts">
-	import { api, type MapFeature } from '$lib/api';
+	import { api, type MapFeature } from '#lib/api/index.js';
 	import { boundaryFeedState } from '../feeds/boundaryState';
 	import type { RainReads } from './mapSetup';
 

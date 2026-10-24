@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The Project page (`?tab=project`, issue #17 option A): what the project
 	// is and who can open it. The project's details, its import record, notes
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	// and the model's headline facts on the left; the team, members, farmers
 	// and share links on the right. Everything here sat below the
 	// Summary's first screen until 2026-09-27 and moved unchanged; the Summary
@@ -10,14 +10,14 @@
 	import { onDestroy, onMount } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { page } from '$app/state';
-	import type { Project, RunMeta } from '$lib/api';
-	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
-	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { downloads } from '$lib/export';
-	import { fmtNum } from '$lib/format/number';
-	import { holdAnchor } from '$lib/help/anchor';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import type { Project, RunMeta } from '#lib/api/index.js';
+	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
+	import RecentNotes from '#lib/components/notes/RecentNotes.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { downloads } from '#lib/export/index.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import type { ProjectDetailsDraft } from './detailsDraft.svelte';
 	import AuthorityPanel from './AuthorityPanel.svelte';
 	import AuthorityDelegatesPanel from './AuthorityDelegatesPanel.svelte';
@@ -95,7 +95,7 @@
 
 	// A link to one of the panels (`#members-h`, or an old Summary link sent here): the panels
 	// fill in as their data arrives, after the browser's own jump, so wait for the heading, then
-	// scroll there and hold it while the page settles (as River & reserve does), focusing it.
+	// scroll there and hold it while the page settles (as EWR does), focusing it.
 	let body: HTMLDivElement | undefined = $state();
 	// Bumped by Acts for the authority after each change, so the members list's authority lines follow it (229).
 	let authorityVersion = $state(0);
@@ -109,7 +109,7 @@
 			if (!heading) return false;
 			releaseAnchor = holdAnchor(heading);
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 			return true;
 		};
 		if (land()) return;

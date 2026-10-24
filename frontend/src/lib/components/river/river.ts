@@ -1,17 +1,18 @@
-// River & reserve (issue #17, option A · Outcomes): which run the page shows,
-// the run it is compared with, its two KPI tiles and the context line. The
+// EWR (River & reserve until issue #558; issue #17, option A · Outcomes): which
+// run the page shows, the run it is compared with, its two KPI tiles and the
+// context line. The
 // panels themselves are the ones that were Runs &
-// results' River & Reserve group, moved here unchanged (docs/ui.md § River &
-// reserve); their `#res-…` ids moved with them, so an old
+// results' River & Reserve group, moved here unchanged (docs/ui.md § EWR);
+// their `#res-…` ids moved with them, so an old
 // `?tab=runs&run=…#res-reserve` link is sent here (links.ts riverAnchor).
 import { metricDelta, type MetricDelta, type RunSummary } from '@water-management/engine';
-import type { EwrHeadline, RunMeta } from '$lib/api/types';
-import type { NavGroup } from '$lib/components/common/sectionNav';
-import type { MetricSpec } from '$lib/components/compare/delta';
-import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '$lib/components/ewr/notMet';
-import { headlines } from '$lib/components/overview/latestRun';
-import { flowHeading } from '$lib/components/overview/summaryChart';
-import { fmtNum } from '$lib/format/number';
+import type { EwrHeadline, RunMeta } from '#lib/api/types.js';
+import type { NavGroup } from '#lib/components/common/sectionNav.js';
+import type { MetricSpec } from '#lib/components/compare/delta.js';
+import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
+import { headlines } from '#lib/components/overview/latestRun.js';
+import { flowHeading } from '#lib/components/overview/summaryChart.js';
+import { fmtNum } from '#lib/format/number.js';
 import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
 
 const created = (r: RunMeta) => {
@@ -32,7 +33,7 @@ export function pickRiverRun(runs: readonly RunMeta[] | null, wanted: string | n
 	return { run: sorted[at]!, previous: sorted[at + 1] ?? null };
 }
 
-export type RiverKpiId = 'ewr' | 'outflow';
+export type RiverKpiId = 'reserve' | 'ewr' | 'outflow';
 
 export interface RiverKpi {
 	id: RiverKpiId;
@@ -60,18 +61,21 @@ function change(prev: number | null | undefined, cur: number | null | undefined)
 export const perYear = (daysNotMet: number, days: number) => (days > 0 ? (daysNotMet * YEAR) / days : 0);
 
 /**
- * The page's two tiles: EWR not met (share of days at the outflow gauge,
- * worded as the Summary's card, ewr/notMet.ts; its sub lines are the days
- * not met of the record and how many in an average year, both the same
- * pragmatic EWR test, then the rule-table months, labelled as such, when the
- * project judges by a rule table, `choice`: settings.ewrHeadline, issue #444)
- * and the mean simulated outflow (the Summary's figure,
- * overview/latestRun.ts). `days` is the run's length. A third tile, the days
- * below the reserve, repeated this tile's count, and its per-year figure is
- * the share × 365.25, so its change said what this tile's does; it became the
- * average-year sub line (issue #177). A fourth, the worst month, restated the
- * largest figure of the EWR by month grid's "All years" row and was removed
- * (2026-09-29, issue #175).
+ * The page's two tiles. The first is the EWR headline, the card that headed
+ * the Summary until issue #558 merged it with this page's EWR not met tile
+ * (both from ewr/notMet.ts): when the project judges by a Reserve rule table
+ * (`choice`: settings.ewrHeadline, issue #444; overview/latestRun.ts
+ * headlines) it is *Reserve rules met* (the share of months, at which site,
+ * the longest run not met), with the pragmatic EWR's days under it, labelled
+ * as such; otherwise *EWR not met* (share of days at the outflow gauge),
+ * with the days not met of the record and how many in an average year. The
+ * second is the mean simulated outflow (overview/latestRun.ts). `days` is
+ * the run's length. A third tile, the days below the reserve, repeated the
+ * EWR tile's count, and its per-year figure is the share × 365.25, so its
+ * change said what this tile's does; it became the average-year sub line
+ * (issue #177). A fourth, the worst month, restated the largest figure of
+ * the EWR by month grid's "All years" row and was removed (2026-09-29, issue
+ * #175).
  */
 export function riverKpis(s: RunSummary, days: number, previous: { summary: RunSummary; days: number } | null, choice?: EwrHeadline | null): RiverKpi[] {
 	const c = s.catchment;
@@ -79,24 +83,38 @@ export function riverKpis(s: RunSummary, days: number, previous: { summary: RunS
 	const ewr = ewrNotMet(c, days);
 	const year = perYear(c.ewrDaysNotMet, days);
 	const perYearText = fmtNum(year, year < 10 ? 1 : 0, true);
-	const ewrSub = [ewr.count, `${perYearText} ${perYearText === '1' ? 'day' : 'days'} in an average year`];
-	const reserve = headlines(s, days, null, choice).find((h) => h.id === 'reserve');
-	if (reserve) ewrSub.push(`Reserve rules: ${reserve.value} of months`);
+	const yearLine = `${perYearText} ${perYearText === '1' ? 'day' : 'days'} in an average year`;
+	const all = headlines(s, days, previous?.summary ?? null, choice);
+	const reserve = all.find((h) => h.id === 'reserve');
+	const outflow = all.find((h) => h.id === 'outflow')!;
 
-	const outflow = headlines(s, days, previous?.summary ?? null).find((h) => h.id === 'outflow')!;
+	const head: RiverKpi = reserve
+		? {
+				id: 'reserve',
+				term: reserve.term,
+				help: reserve.help,
+				value: reserve.value,
+				unit: reserve.unit,
+				// The rule table's months, then the pragmatic EWR the strip and the flow chart count, named as that test.
+				sub: [...reserve.sub, `${ewr.term} (pragmatic): ${ewr.value} of days, ${ewr.count}`, yearLine],
+				flagged: reserve.flagged,
+				delta: reserve.delta,
+				spec: reserve.spec
+			}
+		: {
+				id: 'ewr',
+				term: ewr.term,
+				help: ewr.help,
+				value: ewr.value,
+				unit: ewr.unit,
+				sub: [ewr.count, yearLine],
+				flagged: ewr.flagged,
+				delta: pc ? change(pc.ewrFractionDaysNotMet, c.ewrFractionDaysNotMet) : null,
+				spec: { format: 'fraction', better: 'lower' }
+			};
 
 	return [
-		{
-			id: 'ewr',
-			term: ewr.term,
-			help: ewr.help,
-			value: ewr.value,
-			unit: ewr.unit,
-			sub: ewrSub,
-			flagged: ewr.flagged,
-			delta: pc ? change(pc.ewrFractionDaysNotMet, c.ewrFractionDaysNotMet) : null,
-			spec: { format: 'fraction', better: 'lower' }
-		},
+		head,
 		{
 			id: 'outflow',
 			term: outflow.term,
@@ -152,7 +170,7 @@ export function reserveStubText(projectHasTable: boolean, canEdit: boolean): { l
 
 /**
  * The page's "On this page" menu (common/SectionNav): every panel in page
- * order, by its `#res-…` id (links.ts RIVER_ANCHORS), grouped by the question
+ * order (not the reserve strip beside the tiles: it is on the first screen), by its `#res-…` id (links.ts RIVER_ANCHORS), grouped by the question
  * it answers: the findings first (the reserve, then the water account), then
  * the run-it-yourself tools (issue #465). Reserve rules met is always listed:
  * without a rule table its panel says what it needs. Each link says its

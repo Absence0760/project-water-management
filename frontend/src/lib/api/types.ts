@@ -44,7 +44,7 @@ import type {
 	YearClassMethod,
 	YieldPoint
 } from '@water-management/engine';
-import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
+import type { ImportNote, UnmappedItem } from '#lib/spreadsheet/import/report.js';
 
 /**
  * Project roles, lowest first. `farmer` (WP-2.1) and `contributor` (WP-3.3, a
@@ -202,7 +202,7 @@ export interface OutcomeSettings {
 /**
  * settings.ewrHeadline (issue #444, backend projects/ewrHeadlineSettings.ts):
  * which EWR test the results are judged by on the headline card, the run
- * sentence, River & reserve's tiles and the "days below" wording. `auto`
+ * sentence, the EWR page's tiles and the "days below" wording. `auto`
  * (the default) is the outlet's Reserve rule table, else the first site's,
  * else the pragmatic EWR; `pragmatic` is always the pragmatic EWR at the
  * outflow gauge; `ruleTable` is one site's rule table (siteNodeId null = the
@@ -534,6 +534,20 @@ export interface PortfolioProject {
 		fraction30: number | null;
 		/** Why it is unknown (status 'unknown' only). */
 		reason?: 'no-figures' | 'no-ewr' | 'no-series';
+	};
+	/**
+	 * Irrigation supplied over the source run's whole record (issue #558, the project list's status):
+	 * green from 95 % of demand, amber from 80 %, red below (backend portfolio/status.ts).
+	 */
+	irrigation: {
+		status: PortfolioEwrStatus;
+		/** All units' supply over their demand, 0–1. */
+		fractionSupplied: number | null;
+		units: number | null;
+		/** Units below 95 % of their demand. */
+		unitsBelow: number | null;
+		/** Why it is unknown (status 'unknown' only). */
+		reason?: 'no-figures' | 'no-units' | 'no-demand';
 	};
 	/** null = unknown (not published, or published before the counts were stored). */
 	farmsShort7: number | null;

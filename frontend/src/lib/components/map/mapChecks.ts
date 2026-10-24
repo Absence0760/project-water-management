@@ -10,8 +10,8 @@
 // the features' mean latitude (accurate to well under 1 % over a catchment),
 // and the distances people read are haversine. Areas come from the
 // features' `areaM2` (the server's geodesic area) and the units' areaKm2.
-import type { MapFeature, MapGeometry, MapNodeArea, MapPosition } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { MapFeature, MapGeometry, MapNodeArea, MapPosition } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import { isPolygon, KIND_LABEL } from './mapData';
 
 /** One warning: what it says, and the features and nodes it is about. */

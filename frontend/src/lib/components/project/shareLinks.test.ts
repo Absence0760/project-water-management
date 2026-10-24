@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ShareLink } from '$lib/api/types';
+import type { ShareLink } from '#lib/api/types.js';
 import { EXPIRY_CHOICES, linkRow, linkState, linkTarget, revokeQuestion, sortLinks } from './shareLinks';
 
 const NOW = Date.parse('2026-09-25T12:00:00Z');

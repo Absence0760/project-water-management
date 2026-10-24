@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import type { CalibrationStats } from '@water-management/engine';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum } from '#lib/format/number.js';
 	import {
 		FLOW_KIND_LABEL,
 		SIMULATED_LABEL,
@@ -21,7 +21,7 @@
 	} from './metrics';
 	import { calibrationSample } from './sample';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 
 	let {
 		calibration,

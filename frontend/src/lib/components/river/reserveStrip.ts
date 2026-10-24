@@ -1,17 +1,18 @@
-// Summary → the reserve strip (issue #162, item 10): the days below the
-// pragmatic EWR at the outlet in each of the run's last twelve months, from
-// the run summary's monthly grid (RunSummary.ewrCompliance), so it needs no
-// daily series. The full flow chart is River & reserve's; the strip links there.
+// EWR → the reserve strip (issue #162, item 10; on the Summary until issue
+// #558 moved it to the top of the EWR page): the days below the pragmatic EWR
+// at the outlet in each of the run's last twelve months, from the run
+// summary's monthly grid (RunSummary.ewrCompliance), so it needs no daily
+// series. The flow chart under it has every day.
 //
 // It always counts the pragmatic EWR, the one daily test every run has. With a
 // Reserve rule table the headline card beside it judges the Reserve by the
-// table instead (whole months at a site, latestRun.ts headlines), so there the
+// table instead (whole months at a site, river.ts riverKpis), so there the
 // strip is named for what it counts, not "the reserve" (issue #177): the rule
 // table gives a verdict per month, not a count of days, so it can't be drawn
 // as days below.
 import { ewrBand, type EwrBand, type EwrCompliance } from '@water-management/engine';
-import { EWR_NOT_MET, dailyEwrName, daysBelowTest, type DailyEwrSource } from '$lib/components/ewr/notMet';
-import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
+import { EWR_NOT_MET, dailyEwrName, daysBelowTest, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
+import { WATER_YEAR_CALENDAR, monthName } from '#lib/format/months.js';
 
 export interface StripMonth {
 	/** Calendar year and month (1–12). */
@@ -85,7 +86,7 @@ export function stripWords(ruleTable: boolean, daily?: DailyEwrSource): StripWor
 	const heading = `Days below ${daysBelowTest(ruleTable, daily)}`;
 	const list = `${heading} by month`;
 	return ruleTable
-		? { heading, list, what, note: 'The Reserve rules card above judges whole months by the rule table instead.', test: dailyEwrName(daily) }
+		? { heading, list, what, note: 'The Reserve rules met tile judges whole months by the rule table instead.', test: dailyEwrName(daily) }
 		: { heading, list, what, note: '', test: 'the EWR' };
 }
 

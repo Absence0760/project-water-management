@@ -27,9 +27,9 @@ test.beforeAll(async () => {
 	test.skip(!(await mailpitUp()) && !process.env.CI, 'needs Mailpit: pnpm dev:mail:up');
 });
 
-const CONFIRM_SUBJECT = 'Confirm removing two-step sign-in — Water Management';
-const STARTED_SUBJECT = /^Two-step sign-in will be removed on \d{1,2} \w{3} \d{4} — Water Management$/;
-const DONE_SUBJECT = 'Two-step sign-in was removed — Water Management';
+const CONFIRM_SUBJECT = 'Confirm removing two-step sign-in — IC-WBT';
+const STARTED_SUBJECT = /^Two-step sign-in will be removed on \d{1,2} \w{3} \d{4} — IC-WBT$/;
+const DONE_SUBJECT = 'Two-step sign-in was removed — IC-WBT';
 
 /** An authenticator for the signed-in page's account, from the Account page; its codes come from `next()`, a later step each time. */
 async function enrol(page: Page) {
@@ -68,7 +68,7 @@ async function toCodeStep(page: Page, email: string) {
 
 /** The six-digit code in the newest code email to `to` that isn't among `seen` (206). */
 async function emailedCode(to: string, seen: readonly string[]): Promise<string> {
-	const m = await waitForEmail(to, 'Your sign-in code — Water Management', seen);
+	const m = await waitForEmail(to, 'Your sign-in code — IC-WBT', seen);
 	const code = m.text.match(/^(\d{6})$/m)?.[1];
 	expect(code, 'a six-digit code on its own line').toMatch(/^\d{6}$/);
 	return code!;
@@ -109,6 +109,7 @@ async function startReset(page: Page, email: string, factor: 'totp' | 'email' = 
 	expect(await mfaResetState(email)).toEqual({ waiting: false, endReason: null });
 	await page.goto(link.href);
 	await expect(page.getByRole('heading', { name: 'Remove two-step sign-in' })).toBeVisible();
+	await expect(page).toHaveURL('/mfa-reset');
 	expect(await mfaResetState(email)).toEqual({ waiting: false, endReason: null });
 	await page.getByRole('button', { name: 'Start the 3-day wait' }).click();
 	await expect(page.locator('[data-reset-started]')).toContainText('The 3-day wait has started.');
@@ -258,7 +259,7 @@ test('a team admin removes a member’s two-step sign-in: a fresh code, the conf
 	await dialog.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.locator('[data-reset-done]')).toHaveText('Two-step sign-in was removed from Phone Loser. They can sign in with their password and set it up again.');
 
-	const mail = await waitForEmail(member.user.email, 'Your two-step sign-in was removed — Water Management');
+	const mail = await waitForEmail(member.user.email, 'Your two-step sign-in was removed — IC-WBT');
 	expect(mail.to).toEqual([member.user.email]);
 	expect(mail.text).toContain('An admin of the team “Reset WUA” removed two-step sign-in');
 	expect(linkIn(mail, `${WEB_URL}/login`).pathname).toBe('/login');
@@ -325,6 +326,8 @@ test('dead links: the confirmation and cancel pages say so, and pass an a11y sca
 	const page = await stranger.newPage();
 	await page.goto('/mfa-reset?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
 	await expect(page.getByRole('heading', { name: 'Remove two-step sign-in' })).toBeVisible();
+	// The token is read, then taken out of the address bar (a shallow goto since SvelteKit 3).
+	await expect(page).toHaveURL('/mfa-reset');
 	await expectNoViolations(page);
 	await page.getByRole('button', { name: 'Start the 3-day wait' }).click();
 	await expect(page.getByRole('alert')).toHaveText('This link is invalid, already used, or older than 1 hour. Sign in again and ask for a new one.');
@@ -332,6 +335,7 @@ test('dead links: the confirmation and cancel pages say so, and pass an a11y sca
 
 	await page.goto('/mfa-reset/cancel?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
 	await expect(page.getByRole('heading', { name: 'Keep two-step sign-in' })).toBeVisible();
+	await expect(page).toHaveURL('/mfa-reset/cancel');
 	await expectNoViolations(page);
 	await page.getByRole('button', { name: 'Cancel the removal' }).click();
 	await expect(page.getByRole('alert')).toContainText('This link no longer works');

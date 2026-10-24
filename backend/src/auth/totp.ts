@@ -7,7 +7,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /** What every authenticator app reads by default (Google Authenticator ignores anything else). */
-export const TOTP = { algorithm: 'sha1', digits: 6, periodSeconds: 30, secretBytes: 20, issuer: 'Water Management' } as const;
+export const TOTP = { algorithm: 'sha1', digits: 6, periodSeconds: 30, secretBytes: 20, issuer: 'IC-WBT' } as const;
 /** Steps either side of now a code may come from: one, for a phone clock a few seconds off (RFC 6238 § 5.2). */
 export const TOTP_WINDOW = 1;
 

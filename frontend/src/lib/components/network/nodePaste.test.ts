@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode } from '@water-management/engine';
-import { newNode } from '$lib/model/editor.svelte';
-import { readPastedBlock } from '$lib/spreadsheet/paste/read';
+import { newNode } from '#lib/model/editor.svelte.js';
+import { readPastedBlock } from '#lib/spreadsheet/paste/read.js';
 import { applyNodePaste, NODE_TABLE_FORMAT, nodeTableCsv, planNodePaste } from './nodePaste';
 import { TABLE_FIELDS } from './fields';
 

@@ -11,11 +11,11 @@
 	has been left. Removing a period with something written in it asks first.
 -->
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { HEAVY_DAY_MM, QM_MIN_WET_DAYS, QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN, waterYearLabel, type RainSourcePeriod } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { newRainSourcePeriod, periodHasWork, rainSourceFormError, rainSourceProblems, withFactorMode, withFallback, withQuantileMap, type RainSourceField } from './rainSource';
 
 	let {

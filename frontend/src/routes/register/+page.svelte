@@ -2,18 +2,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError, type InviteInfo } from '$lib/api';
-	import { displayNameProblem, emailAuthApi, linkToken } from '$lib/api/emailAuth';
-	import { CONFIRM_EMAIL_KEY, safeNext } from '$lib/auth/redirect';
-	import { session } from '$lib/auth/session.svelte';
-	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
-	import { i18n, readStoredLocale, t, tRich } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import Rich from '$lib/i18n/Rich.svelte';
-	import TermsSummary from '$lib/components/legal/TermsSummary.svelte';
+	import { api, ApiError, type InviteInfo } from '#lib/api/index.js';
+	import { displayNameProblem, emailAuthApi, linkToken } from '#lib/api/emailAuth.js';
+	import { CONFIRM_EMAIL_KEY, safeNext } from '#lib/auth/redirect.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
+	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
+	import { i18n, readStoredLocale, t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import Rich from '#lib/i18n/Rich.svelte';
+	import TermsSummary from '#lib/components/legal/TermsSummary.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -93,7 +94,7 @@
 			? t('the project {name}', { name: invite.projectName })
 			: invite?.teamName
 				? t('the team {name}', { name: invite.teamName })
-				: 'Water Management'
+				: APP_SHORT_NAME
 	);
 
 	// The assent checkbox's words, "I have read the main points above and accept
@@ -105,7 +106,7 @@
 
 	// Keep ?next= across to sign-in, but not the invite token.
 	const next = page.url.searchParams.get('next');
-	const loginHref = `${base}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`;
+	const loginHref = resolve('login') + (next ? `?next=${encodeURIComponent(next)}` : '');
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -139,7 +140,7 @@
 				// Through a matching invite: confirmed and signed in, straight to it.
 				registered = true;
 				session.user = result.user;
-				await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
+				await goto(safeNext(page.url.searchParams.get('next'), resolve('')), { replace: true });
 				return;
 			}
 			// An ordinary sign-up: nobody is signed in until the address is
@@ -152,7 +153,7 @@
 			}
 			const login = new URLSearchParams({ confirm: 'sent' });
 			if (next) login.set('next', next);
-			await goto(`${base}/login?${login}`, { replaceState: true });
+			await goto(resolve(`login?${login}`), { replace: true });
 		} catch (err) {
 			error = errorText(err);
 		} finally {
@@ -162,7 +163,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Create account', {}, 'page title') })}</title>
+	<title>{t('{page} · {app}', { page: t('Create account', {}, 'page title'), app: APP_SHORT_NAME })}</title>
 	{#if hasInviteParam}<meta name="referrer" content="no-referrer" />{/if}
 </svelte:head>
 
@@ -188,9 +189,9 @@
 				<p class="status" role="status" aria-live="polite">{resendMsg ?? ''}</p>
 			{/if}
 			{#if signedInAs.emailVerified}
-				<a class="btn btn-primary act" href="{base}/account/invitations">{t('See your invitations')}</a>
+				<a class="btn btn-primary act" href={resolve('account/invitations')}>{t('See your invitations')}</a>
 			{:else}
-				<a class="btn btn-primary act" href="{base}/">{t('Go to your projects')}</a>
+				<a class="btn btn-primary act" href={resolve('')}>{t('Go to your projects')}</a>
 			{/if}
 		{:else if inviteState === 'ok' && invite}
 			<div class="alert alert-warning" role="alert">
@@ -200,13 +201,13 @@
 			<button type="button" class="btn btn-primary act" onclick={signOutToAccept} disabled={signingOut}>
 				{signingOut ? t('Signing out…') : t('Sign out and accept as {email}', { email: invite.email })}
 			</button>
-			<a class="btn act" href="{base}/">{t('Stay signed in and go to your projects')}</a>
+			<a class="btn act" href={resolve('')}>{t('Stay signed in and go to your projects')}</a>
 		{:else if inviteState === 'error'}
 			<div class="alert alert-warning" role="alert">{t('We couldn’t check this invitation right now. Try the link again later.')}</div>
-			<a class="btn btn-primary act" href="{base}/">{t('Go to your projects')}</a>
+			<a class="btn btn-primary act" href={resolve('')}>{t('Go to your projects')}</a>
 		{:else}
 			<div class="alert alert-warning" role="alert">{t('This invitation link is invalid, was revoked, or has expired (they last 7 days). Ask whoever invited you to send a new one.')}</div>
-			<a class="btn btn-primary act" href="{base}/">{t('Go to your projects')}</a>
+			<a class="btn btn-primary act" href={resolve('')}>{t('Go to your projects')}</a>
 		{/if}
 		{#snippet footer()}
 			{t('Not you?')} <button type="button" class="linkish" onclick={signOutToAccept} disabled={signingOut}>{t('Sign out')}</button>
@@ -290,11 +291,11 @@
 		     a laptop's window and the box, the tick and the button are on screen together: the heading and the
 		     first points always show, the whole list shows whenever the window has room, a fade says there is
 		     more, and the box scrolls with the keyboard. "Read the full terms" sits beside its heading. -->
-		<TermsSummary contained termsHref="{base}/terms" />
+		<TermsSummary contained termsHref={resolve('terms')} />
 		<div class="agree">
 			<input id="agree" type="checkbox" required bind:checked={agreed} />
 			<label for="agree">
-				{#each agreeParts as part, i (i)}{#if part === '{terms}'}<a href="{base}/terms">{t('Terms of use')}</a>{:else if part === '{privacy}'}<a href="{base}/privacy">{t('Privacy notice')}</a>{:else}{part}{/if}{/each}
+				{#each agreeParts as part, i (i)}{#if part === '{terms}'}<a href={resolve('terms')}>{t('Terms of use')}</a>{:else if part === '{privacy}'}<a href={resolve('privacy')}>{t('Privacy notice')}</a>{:else}{part}{/if}{/each}
 			</label>
 		</div>
 		<button class="btn btn-primary" type="submit" disabled={busy || inviteState === 'loading'}>

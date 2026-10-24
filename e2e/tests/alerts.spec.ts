@@ -487,7 +487,7 @@ test('an editor sets a staleness level for a series an API key sends, starting f
 	const put = await page.request.put(`${API_URL}/projects/${project.id}/series`, { data: { kind: 'flow_logger_m3s', name: 'Weir', unit: 'm³/s', startDate: day, values: [null] } });
 	expect(put.status(), await put.text()).toBe(200);
 	const seriesId = ((await put.json()) as { id: string }).id;
-	const key = await page.request.post(`${API_URL}/projects/${project.id}/api-keys`, { data: { name: 'Weir logger' } });
+	const key = await page.request.post(`${API_URL}/projects/${project.id}/api-keys`, { data: { name: 'Drift logger' } });
 	expect(key.status(), await key.text()).toBe(201);
 	const secret = ((await key.json()) as { secret: string }).secret;
 	const pushed = await page.request.post(`${API_URL}/ingest/v1/series/merge`, {

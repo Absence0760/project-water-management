@@ -240,7 +240,7 @@ async function contextLayout(page: Page) {
 
 test.describe('a long context line', () => {
 	// The title column used to shrink to 16rem whatever its context, so with the controls
-	// beside it a long context wrapped to 3 or 4 short lines (River & reserve for a viewer
+	// beside it a long context wrapped to 3 or 4 short lines (EWR for a viewer
 	// at 1440, Compare runs at 1024). The controls now go under the title once the context
 	// would wrap; a context that fits on one line keeps the controls beside it.
 	const WIDTHS = [
@@ -249,7 +249,7 @@ test.describe('a long context line', () => {
 		{ width: 1024, height: 768 }
 	];
 
-	test('River & reserve for a viewer: the context takes at most 2 lines, 1 beside the controls', async ({ page, owner, signIn }) => {
+	test('EWR for a viewer: the context takes at most 2 lines, 1 beside the controls', async ({ page, owner, signIn }) => {
 		void owner;
 		const id = await seedRiverProject(page.request, 'Header long river');
 		await createRun(page.request, id, 'Earlier run');

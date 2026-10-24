@@ -250,6 +250,18 @@ rows and columns don't break it.
   imported, because the app has no Pitman input (`docs/engine-audit.md` P1): a
   note gives how many days it held, and a workbook whose `rUseFlow` calibrates
   against it gets a `WARNING` and no `calibrationFlowKind`.
+- **Series names and sources** (issue #556). Each `[Flow data]` series keeps
+  its column heading as its name, except the logger, which is named after
+  where it is measured: "&lt;outlet&gt; logger" (the outflow gauge, else the one
+  element with nothing downstream; "Outlet logger" without one), since the
+  heading is the client's own code ("Logger Q7 (Curr. Day)"). Every series
+  records the column as its `source` ("Workbook column 'Logger Q7 (Curr.
+  Day)'", or "Workbook [Flow data] column J" for a column with no heading) and
+  the unit it was read in as `sourceUnit` (m³/s or mm, `sourceUnitFactor` 1),
+  so the Data tab's Source and Upload unit say where it came from
+  (`flow_data_origin`, `name_logger_after_outlet`; the browser importer's
+  `flowDataOrigin`, `nameLoggerAfterOutlet`). Editors can rename any series in
+  the app afterwards (Data → Series details → Name).
 
 ## The gauge column on another river (`--gauge-as-reference`)
 

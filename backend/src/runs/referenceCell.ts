@@ -52,11 +52,12 @@ export async function referenceCell(db: Db, projectId: string, unitRain: UnitRai
 }
 
 /**
- * The reference cell's daily CHIRPS from the cache, from the product's first
- * day to today (leading and trailing days the cache lacks left out); null
+ * The daily CHIRPS of the cell holding a point (the reference cell, or a
+ * rainfall station's own cell, runs/stationInput.ts) from the cache, from the
+ * product's first day to today (leading and trailing days the cache lacks left out); null
  * when the cache holds none of it, or the cell has no data (the sea).
  */
-export async function referenceCellSeries(db: Db, cell: ReferenceCell, today = new Date().toISOString().slice(0, 10)): Promise<DailySeries | null> {
+export async function referenceCellSeries(db: Db, cell: Pick<ReferenceCell, 'lat' | 'lon' | 'product'>, today = new Date().toISOString().slice(0, 10)): Promise<DailySeries | null> {
 	let grid;
 	try {
 		grid = chcCell(cell.lat, cell.lon);

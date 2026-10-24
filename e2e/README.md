@@ -41,7 +41,7 @@ pnpm -C e2e e2e:list      # list the tests without running them
    emailed code it knows (`support/db.ts` `plantEmailCode`). The frontend is a **production build**, not
    the Vite dev server: `support/build-site.ts` runs `vite build` with the
    checkout's API URL (`http://localhost:3101`) baked in as `PUBLIC_API_URL` (it
-   is `$env/static/public`), written to `frontend/build-e2e/` (with
+   is `$app/env/public`, declared in `frontend/src/env.ts`), written to `frontend/build-e2e/` (with
    `frontend/.svelte-kit-e2e/` as SvelteKit's working directory, both
    gitignored; any slot but 0 uses `build-e2e-<slot>/` and
    `.svelte-kit-e2e-<slot>/`) so the production output in `frontend/build/` is never touched,
@@ -263,6 +263,8 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `tests/auto-calibration.spec.ts` | Fitting GR4J fills the form and only Save stores it; turning on groundwater exchange offers X2 without resetting the other ticks; a fit can be cancelled; a viewer can fit but not apply; with a gauge and a logger record, the fit can be validated against the other one |
 | `tests/fit-provenance.spec.ts` | An applied fit is saved with its record, and the run shows which fit and validation produced its parameters; hand-editing a fitted parameter marks the fit record as edited (form, run, run comparison); a calibration exclusion needs a reason and shows in Inputs that differ and on the run |
 | `tests/series.spec.ts` | Upload rainfall + observed-flow CSVs, preview, chart; malformed CSV |
+| `tests/data-page.spec.ts` | The Data page: the series grouped, the ones behind first in their group and marked (the badge's count), a pick charted through the URL, each group folded under its own "Show all", no inner scroll, Add data refreshing the list, day-first dates |
+| `tests/data-tab-groups.spec.ts` | Issue #553 round 5: rainfall stations with their MAPs and where their rain goes, the average catchment rainfall and each unit as a derived row saying what its rain is made of, a unit opened to its series and its rain used (four lines, the source strip), a `series=` link opening its unit, and the grouped CSV, Compact and Full, with its `#` lines |
 | `tests/series-preview.spec.ts` | A row's Preview opens the daily table (search narrows it, Escape closes and returns focus); the card header's "Preview data" opens every column with a column picker to hide one; the preview fills the viewport and renders rows to the bottom of its taller scroll box; the column picker keeps each checkbox beside its label |
 | `tests/data-quality.spec.ts` | Gauge-vs-logger thresholds are a project setting the Time series tab applies; the tab flags zero-rain runs and water years far below CHIRPS; a flagged zero-rain run is shaded as missing until Settings keeps it as recorded |
 | `tests/escape.spec.ts` | The "Data up to" dropdown closes on Escape and on an outside click; Add data closes the same way, but asks first when a file has been read and not uploaded |
@@ -277,7 +279,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `tests/chirps-bias.spec.ts` | A run lists the CHIRPS bias-correction factors it applied, and Settings can turn the correction off |
 | `tests/self-checks.spec.ts` | A run shows its self-checks, its water balance and a traced day that closes |
 | `tests/wr2012.spec.ts` | Entering WR2012 reference data is checked for plausibility, saved, and every run reports against it; run comparison lists the WR2012 inputs that changed and compares the ratios |
-| `tests/overview.spec.ts` | Overview checklist and headline counts (fresh and complete projects), counts updating after "Add data" on the tab, a long member email wrapping at its break points on a phone |
+| `tests/overview.spec.ts` | Summary checklist and its irrigation KPI cards (Irrigation supplied, Shortfall, the curtailment card, Dams; no EWR since issue #558, whose card and reserve strip `river-page.spec.ts` checks on the EWR page) (fresh and complete projects), counts updating after "Add data" on the tab, a long member email wrapping at its break points on a phone |
 | `tests/auth-layout.spec.ts` | The split sign-in / register layout beside a classic 15 px scrollbar (`html { overflow-y: scroll }`), desktop and phone, light and dark: no sideways overflow, full-height brand panel, gutter in the form's colour; saves a screenshot of each |
 | `tests/examples.spec.ts` | Seeds the invented example catchments (`backend/scripts/seed-examples.ts`, once per run) and checks both demo users' lists and roles (owned, team-shared, directly shared) and a read-only shared example with its seeded run, and the seeded farmer reading their published farm and Sandspruit's advisory notice |
 | `tests/teams.spec.ts` | A team owns catchments together (add a colleague, create in the team, both lists, filters); the last admin can't leave; inviting an address with no account and revoking it |

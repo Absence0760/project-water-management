@@ -32,6 +32,32 @@ here that holds each item's detail. Tick an item in both places.
 | CI, tooling and dependency hygiene | #75 |
 | UI consistency and help text | #76 |
 
+## The rename and the new domain (issue #551)
+
+The app is Integrated Catchment - Water Balance Tool (IC-WBT) at
+`icwbt.jaredhoward.com`; the code, the Terraform and the operator's runbook
+([deployment.md § Moving the site to a new domain](./deployment.md#moving-the-site-to-a-new-domain))
+are in. Still open:
+
+- [ ] **Operator: the move itself.** The new child zone, its delegation from
+      `jaredhoward.com`, the tfvars, plan, apply, the export and the two
+      releases: the runbook's steps 1–17. Trigger: the issue #551 PR merged.
+- [ ] **Operator: the estate's own records.** The cross-repo estate map
+      (`templates` repo, `docs/estate-map.md`) and the `project-mgmt` repo
+      name the site's hostname; add `icwbt.jaredhoward.com` (and the old
+      one as a redirect) there after the apply. Not in this repo.
+- [ ] **Retire `water-management.jaredhoward.com`.** Set
+      `redirect_domains = {}`, apply, then delete the old zone's NS record in
+      the parent and the old zone (the runbook's last paragraph). Trigger:
+      three months with no page requests to the old hostname (CloudFront's
+      request metrics, or the access logs if turned on), and no later than
+      2027-04-30.
+- [ ] **The app's own domain** (`icwbt.co.za` recommended, `icwbt.com`
+      redirecting to it; issue #551's comment): the same runbook with an apex
+      zone (`create_subdomain = false`), `icwbt.jaredhoward.com` joining
+      `redirect_domains`. Trigger: the domain bought, in the client's name if
+      they will own the brand.
+
 ## Blocking releases (operator)
 
 The checklist for these is issue #62; the history scrub is #63.
@@ -105,7 +131,7 @@ The checklist for these is issue #62; the history scrub is #63.
       10 unreserved, so every reserved concurrency fails to apply until it is
       raised, and `-1` (unreserved) is now refused by the variables'
       validation. In af-south-1 request at least the sum of the reservations
-      + 10 (33 at the defaults; ask for 1000) and wait for the grant:
+      + 10 (48 at the defaults; ask for 1000) and wait for the grant:
       infra/README.md § Operator steps, step 3. Then run
       `infra/scripts/preapply-check.sh` (step 7a: the quota, the us-east-1
       state bucket and sops key, the SES endpoint service, the RDS class,
@@ -397,6 +423,17 @@ runs and accumulations are real) can't be decided without the client.
       1981) where that narrows it. Trigger:
       the client's first per-unit run, or the hydrologist's review of the
       unit MAPs.
+- [ ] **The EWR split's MAR period (engine 1.94.0, issue #553,
+      engine-audit.md ES1, model.md §2.5b).** The operator chose the option
+      (split the EWR by the flow share, or by each unit's natural MAR ÷ the
+      units' total); the period the MAR is taken over is provisional: the
+      run's complete water years, or every historical day when there are
+      none. To confirm: is the run's own water years the right period, or a
+      fixed reference period (as the unit MAP period, 1991–2020); and
+      should a run without a complete water year refuse the split rather
+      than take every day? Off by default (the flow share). Durable fix:
+      the hydrologist's answer, then change `ewrSplitDays` if it differs.
+      Trigger: the client's first per-unit run split by natural MAR.
 - [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
@@ -3608,7 +3645,12 @@ role and not before it.
       tests in `check_service_image_pins.test.mjs`) refuses a workflow
       service image without a digest, one docker-compose.yml doesn't run, or
       one whose digest differs from compose's, so a Dependabot compose bump
-      fails until ci.yml's services move with it.
+      fails until ci.yml's services move with it. **Superseded (2026-10-23,
+      #570):** ci.yml had already moved off `services:` (issue #521), but
+      coverage.yml's DB job still pulled Postgres through one and ECR Public
+      refused it on #545. It now starts compose's services through
+      `scripts/ci/service-image.sh` like ci.yml, and `serviceImageProblems`
+      refuses any `services:` image at all.
 
 ## Pipelines
 
@@ -4160,18 +4202,33 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `gauge-stations` kind on the production path (`geo/referenceLoad.ts`,
       `scripts/release/map-data-gates.mjs`, the workflow's choices), which
       refuses it until then.
-- [ ] **Decision: the MAP grids' licences** (operator; maps.md § MAP grid,
-      § Sources, decision D-B). The MAP grid layer shows a mean annual
-      precipitation grid the operator loads (`pnpm import:map-grid`): the
-      Lynch (2004) national grid from the WRC's Atlas of Climatology and
-      Agrohydrology (its portal lists CC BY-SA 4.0 and "No License Provided"
-      at once; share-alike may reach a map of it), or a provincial ~100 m
-      surface whose terms are its owner's. Ask the WRC (and each surface's
-      owner) in writing whether the grid may be shown in a commercial
-      service; until then they are loaded locally only and production loads
-      refuse the `map-grid` kind (`geo/referenceLoad.ts`). On a yes: record
-      it in the sources table and allow the kind (with an `--out` file form
-      for the reference bucket, as the evaporation grid has).
+- [ ] **Decision: the Lynch (2004) MAP grid's licence** (operator; maps.md §
+      MAP grid, § Sources, decision D-B). The Lynch (2004) national grid
+      from the WRC's Atlas of Climatology and Agrohydrology: its portal
+      lists CC BY-SA 4.0 and "No License Provided" at once, and share-alike
+      may reach a map of it. Ask the WRC in writing whether the grid may be
+      shown in a commercial service; until then it is loaded locally only
+      and a production load naming `Lynch-2004` is refused
+      (`geo/referenceLoad.ts` `REFERENCE_KINDS['map-grid'].datasets`). On a
+      yes: record it in the sources table and in
+      legal/map-data-licences.md, set its entry to allowed with its source,
+      version and attribution, add the label to the release gate's
+      `DATASETS` (`scripts/release/map-data-gates.mjs`), and give it a credit
+      like the Southwestern Cape surface's. Any other provincial surface is
+      the same, with its own owner. The Southwestern Cape surface (WAAS,
+      2007) is decided: the operator's decision of 2026-10-23 (terms not
+      stated) allows it, issue #560, legal/map-data-licences.md § 3.3b.
+- [ ] **Load the Southwestern Cape MAP surface in production** (operator;
+      issue #560; deployment.md § Reference datasets). The code allows it
+      as dataset `WAAS-SWCape-2007`; nothing is loaded yet, so production's
+      MAP grid layer and *MAP from the grid* have no grid. Steps: cut the
+      grid to the client's area with `pnpm import:map-grid … --bbox … --out`,
+      upload it to the reference bucket, run `load-reference.yml` with
+      `kind=map-grid`. Then, in the app, check the typed unit MAPs against it
+      with *MAP from the grid*, and read it at the rain station for the gauge
+      MAP once the station's coordinates are known. Trigger: the first
+      backend release that carries migration 238 (the loader runs in the
+      migrate Lambda that release ships).
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
       on two conditions, both met. The HydroSHEDS Exhibit B statement
@@ -4856,6 +4913,20 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       source note from an entered MAP. Trigger: the hydrologist setting a
       correction by hand in the app.
 
+- [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
+      2026-10-24). Settings → Flow generation sets each land unit's station,
+      scaling, correcting station and a station's site
+      (`settings.rainStations.units`, `.sites`), but three parts round 2's
+      engine runs are API-only: `catchment` (Fragmentation's average catchment
+      rainfall from a station, the operator's decision of 2026-10-23),
+      `catchmentMapMm` / `catchmentMapSource`, and each station's
+      `unreliable` periods ([model.md §2.4i](./model.md)). Durable fix: a
+      "Catchment rainfall" station select with the catchment MAP under
+      Fragmentation, and the unreliable periods on the station's Series
+      details. Trigger: the operator assigns a catchment station, or a
+      station needs a period set aside. Remaining #553 rounds (4 EWR split, 5
+      Data tab) don't cover them.
+
 ## Notes (WP-2.7)
 
 - [x] **Notes in the project export and copy** (2026-09-26). The export
@@ -5521,7 +5592,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       brings it). Then decide whether the root layout's `onNavigate(() =>
       stylesheetsReady())` workaround stays (it is cheap and also guards a
       slow link) or goes, and update the upstream doc either way.
-- [ ] **Playwright 1.64 (Dependabot #529, left out of #537, 2026-10-12).**
+- [x] **Playwright 1.64 (Dependabot #529, left out of #537, 2026-10-12).**
       #529 moved only the renderer image (`backend/renderer.Dockerfile`, both
       FROM lines) to `v1.64.0-noble`. With the npm packages still on 1.63 the
       pins disagree (`pnpm check:pins`), and the image lacks the Chromium build
@@ -5540,7 +5611,10 @@ assume, the questions for counsel); these are the actions, with triggers.
 
       **Trigger:** on or after 2026-10-14, when 1.64.0 passes
       `minimumReleaseAge`, or when Dependabot next opens the image PR.
-- [ ] **SvelteKit 3 and adapter-static 4 (Dependabot #533, #535, left out of
+      **Done (2026-10-23, #570, from Dependabot #542 and #544):** all six pins
+      on 1.64.1, the image at its current digest, the apt snapshot moved with
+      `pnpm gen:renderer-apt`; `check:pins` and `check:renderer-image` pass.
+- [x] **SvelteKit 3 and adapter-static 4 (Dependabot #533, #535, left out of
       #537, 2026-10-12).** Kit 3 no longer reads `svelte.config.js`, so
       `svelte-kit sync` fails (#533's red). adapter-static 4 needs kit 3. The
       [migration guide](https://svelte.dev/docs/kit/migrating-to-sveltekit-3)
@@ -5569,6 +5643,19 @@ assume, the questions for counsel); these are the actions, with triggers.
       meta CSP behaving as they do now.
       **Trigger:** when someone takes it. There is no deadline, since kit 2 is
       still supported. Until then Dependabot keeps reopening #533 and #535.
+      **Done (2026-10-23, #570, from Dependabot #547):** kit 3.0.1 and
+      adapter-static 4.0.0. `sv migrate sveltekit-3` reprints every `.svelte`
+      script it touches and lost TypeScript types and comments doing it (a
+      component's props type, an `i18n-section` marker moved to the end), so
+      it was used only to read its mappings; the change is text-level
+      codemods and hand edits: `#lib/….js` imports, `$app/env(/public)` with
+      `src/env.ts`, `resolve()`/`asset()` for links and `basePath()`
+      (`lib/nav/base.ts`) where code needs the prefix, `goto`'s
+      `replace`/`reset`, shallow `goto` for `replaceState` (the leave guard
+      skips it), `ReadonlyURL` for helpers handed `page.url`, `src/params.ts`,
+      the config in `vite.config.ts` with `svelte-options.js`, and
+      `version.pollInterval: 0` (kit 2 never polled; it still checks on tab
+      focus). The cookie override is gone.
 - [ ] **Two sources no one could check (from #259; moved from issue #90,
       2026-10-11).** WR2012's own lake factors (the WR2012 resource centre
       needs a login; used by #256) and Linsley, Kohler & Paulhus (1982)

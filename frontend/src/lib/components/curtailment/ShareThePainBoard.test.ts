@@ -9,7 +9,7 @@ import ShareThePainBoard from './ShareThePainBoard.svelte';
 import CurtailmentTable from './CurtailmentTable.svelte';
 
 // The headings and column heads carry help tips, which link into /help under the app's base path.
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',

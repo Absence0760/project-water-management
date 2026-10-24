@@ -6,16 +6,16 @@
 	// isn't yours.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { portfolioListHref } from '$lib/components/projects/grouping';
+	import { portfolioListHref } from '#lib/components/projects/grouping.js';
 
 	onMount(() => {
 		const q = page.url.searchParams;
-		void goto(`${base}/${portfolioListHref(page.params.id ?? '', q.get('sort'), q.get('dir'))}`, { replaceState: true });
+		void goto(resolve('') + portfolioListHref(page.params.id ?? '', q.get('sort'), q.get('dir')), { replace: true });
 	});
 </script>
 
-<svelte:head><title>Projects · Water Management</title></svelte:head>
+<svelte:head><title>Projects · IC-WBT</title></svelte:head>
 
 <main class="page"><p class="muted">Opening the team's projects…</p></main>

@@ -83,15 +83,25 @@
 	/* More categorical colours (the Crops page's crop set, crops/cards.ts
 	   CROP_PALETTE). --series-4 is the line charts' own violet (LineChart), so
 	   the set skips it. Validated with --series-1…3 as an ordered set: every
-	   adjacent pair apart for colour-blind readers, in both themes. Yellow,
-	   pink and aqua sit under 3:1 on the light surface, so wherever they
-	   carry meaning a label or a table carries it too. */
+	   adjacent pair apart for colour-blind readers, in both themes. Yellow
+	   and pink sit under 3:1 on the light surface (aqua just over, 3.07), so
+	   wherever they carry meaning a label or a table carries it too. */
 	--series-5: #eda100;
 	--series-6: #e87ba4;
 	--series-7: #008300;
 	--series-8: #7a4fc4;
 	--series-9: #e34948;
 	--series-10: #00a0b8;
+	/* The flow-quality strips' double-line classes (calibration/flowFlags.ts):
+	   suspect, infilled and human use dominant. Their own colours, not the
+	   palette's: --series-1…4 are the line charts' lines, the light yellow and
+	   pink are under 3:1, and the light violet is --series-4's. Each ≥ 3:1 on
+	   --surface, ΔE00 ≥ 12 from the other two for every colour-vision
+	   deficiency, ≥ 20 from every line the flow charts draw (the test holds
+	   every strip to 13; flowFlagColours.test.ts computes them). */
+	--lane-suspect: #b28512;
+	--lane-infilled: #461a66;
+	--lane-human-use: #e65c83;
 	--chart-grid: #e4e6e3;
 	--chart-axis: #6c706c;
 
@@ -158,6 +168,9 @@
 		--series-8: #9085e9;
 		--series-9: #e66767;
 		--series-10: #00a6bd;
+		--lane-suspect: #cc8800;
+		--lane-infilled: #7f40ff;
+		--lane-human-use: #e6397b;
 		--chart-grid: #2c2f2c;
 		--chart-axis: #9a9e99;
 		--shadow: 0 1px 2px rgb(0 0 0 / 0.4);

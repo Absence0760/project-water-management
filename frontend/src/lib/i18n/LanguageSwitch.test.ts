@@ -7,8 +7,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { LANGUAGES } from '@water-management/engine/languages';
 import LanguageSwitch from './LanguageSwitch.svelte';
 
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$lib/auth/session.svelte', () => ({ session: { user: null } }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('#lib/auth/session.svelte.js', () => ({ session: { user: null } }));
 
 describe('LanguageSwitch with two languages', () => {
 	it('is a button per language, named in its own language and marked with its lang', () => {
@@ -27,7 +27,7 @@ describe('LanguageSwitch with two languages', () => {
 	it('with addressOf, is a link per language to its own address, the current one marked, not preloaded (issue #137)', () => {
 		const { body } = render(LanguageSwitch, { props: { compact: true, addressOf: (l: string) => `/welcome/${l}` } });
 		expect(body).not.toContain('<button');
-		expect(body).toMatch(/role="group"[^>]*data-sveltekit-preload-data="off"/);
+		expect(body).toMatch(/role="group"[^>]*data-sveltekit-preload-data="false"/);
 		const links = [...body.matchAll(/<a href="([^"]+)" hreflang="(\w+)" lang="(\w+)"[^>]*aria-label="([^"]+)"[^>]*>\s*([^<]*?)\s*<\/a>/g)].map((m) => m.slice(1));
 		expect(links).toEqual(LANGUAGES.map((l) => [`/welcome/${l.code}`, l.code, l.code, l.name, l.code.toUpperCase()]));
 		expect(body).toMatch(/<a href="\/welcome\/en"[^>]*aria-current="true"/);

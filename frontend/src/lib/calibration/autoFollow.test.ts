@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AutoCalibration } from '$lib/api/types';
+import type { AutoCalibration } from '#lib/api/types.js';
 import { AutoCalibrationFollower, POLL_MS, type AutoCalibrationApi } from './autoFollow.svelte';
 
 /** A run of the rules: two cases planned, `done` of them fitted. */

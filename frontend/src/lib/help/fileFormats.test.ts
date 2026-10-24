@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { formatPlain } from '$lib/components/common/formatHelp';
+import { formatPlain } from '#lib/components/common/formatHelp.js';
 import { FILE_FORMATS, FORMAT_GROUPS } from './fileFormats';
 
 function svelteFiles(dir: string): string[] {

@@ -10,12 +10,12 @@
 // keys, and the farm view's for what the two pages say alike (the notice
 // card, the level words, counted nouns). Call these where they render, so a
 // language switch re-words them.
-import type { SharedCatchmentView, ShareView } from '$lib/api/types';
-import { count, DAYS, daysBetween, FARMS, fmtDay, fmtPct, fmtStampDay } from '$lib/components/farm/format';
-import { STALE_DAYS } from '$lib/format/age';
-import { localIsoDate } from '$lib/format/number';
-import { languageName, LEVEL_WORDS, pickNotice, splitNotice, WRITTEN_ONLY_IN, type NoticeVm } from '$lib/components/farm/notice';
-import { i18n, t } from '$lib/i18n/locale.svelte';
+import type { SharedCatchmentView, ShareView } from '#lib/api/types.js';
+import { count, DAYS, daysBetween, FARMS, fmtDay, fmtPct, fmtStampDay } from '#lib/components/farm/format.js';
+import { STALE_DAYS } from '#lib/format/age.js';
+import { localIsoDate } from '#lib/format/number.js';
+import { languageName, LEVEL_WORDS, pickNotice, splitNotice, WRITTEN_ONLY_IN, type NoticeVm } from '#lib/components/farm/notice.js';
+import { i18n, t } from '#lib/i18n/locale.svelte.js';
 
 /** A share token as we issue it: 32 bytes, base64url (backend auth/tokens.ts). */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;

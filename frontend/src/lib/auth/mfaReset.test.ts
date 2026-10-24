@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { afterResetAskFailed, FEW_RECOVERY_CODES, fewRecoveryCodes, RECOVERY_CODES_FILE, recoveryCodesText, resetAsked } from './mfaReset';
 
 describe('fewRecoveryCodes', () => {
@@ -14,7 +14,7 @@ describe('fewRecoveryCodes', () => {
 
 describe('recoveryCodesText', () => {
 	it('is saved as a plain text file', () => {
-		expect(RECOVERY_CODES_FILE).toBe('water-management-recovery-codes.txt');
+		expect(RECOVERY_CODES_FILE).toBe('icwbt-recovery-codes.txt');
 	});
 
 	it('puts one code a line between the heading and the closing line', () => {

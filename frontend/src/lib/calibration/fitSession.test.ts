@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CalibrationReport } from '@water-management/engine';
+import { DEFAULT_STARTS, type CalibrationReport } from '@water-management/engine';
 // runner.ts imports the worker's URL from a virtual module only the app build provides.
 vi.mock('virtual:autocal-worker-url', () => ({ default: '' }));
 
@@ -114,5 +114,45 @@ describe('FitSession', () => {
 		expect(s.projectId).toBe('p2');
 		expect(s.starts).toBe(5);
 		expect(s.picked).toEqual({});
+	});
+
+	describe('searchFrom (issue #554)', () => {
+		const record = { bounds: 'typical', budget: 800, starts: 3, seed: 42 } as const;
+
+		it('starts the Search choices from the project’s fit record', () => {
+			const s = new FitSession();
+			s.reset('p1');
+			s.searchFrom(record);
+			expect([s.bounds, s.budget, s.starts, s.seed]).toEqual(['typical', 800, 3, 42]);
+		});
+
+		it('keeps the defaults without a record, and applies one a later load brings', () => {
+			const s = new FitSession();
+			s.reset('p1');
+			s.searchFrom(null);
+			expect([s.bounds, s.budget, s.starts, s.seed]).toEqual(['wide', 1500, DEFAULT_STARTS, 1]);
+			s.searchFrom(record);
+			expect(s.seed).toBe(42);
+		});
+
+		it('a reload of the same project keeps a choice made since; another project starts from its own record', () => {
+			const s = new FitSession();
+			s.reset('p1');
+			s.searchFrom(record);
+			s.seed = 7;
+			s.searchFrom(record);
+			expect(s.seed).toBe(7);
+			s.reset('p2');
+			expect(s.seed).toBe(1);
+			s.searchFrom({ ...record, seed: 9 });
+			expect(s.seed).toBe(9);
+		});
+
+		it('reads a record from before starts were recorded as one start', () => {
+			const s = new FitSession();
+			s.reset('p1');
+			s.searchFrom({ bounds: 'wide', budget: 1500, seed: 1 });
+			expect(s.starts).toBe(1);
+		});
 	});
 });

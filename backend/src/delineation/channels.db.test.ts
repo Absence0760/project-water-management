@@ -2,7 +2,8 @@
 // #374), against Postgres and the committed synthetic DEM: off without a DEM;
 // editors only (a viewer 403, a stranger 404); a bad tile 400; a tile outside
 // the DEM 422; a tile computed once and then served from the cache, and only
-// the computed one counting against the per-account elevation-model cap.
+// the computed one counting against the per-account elevation-model cap, and
+// finished by the time the response is back (issue #541).
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
@@ -20,6 +21,8 @@ let stranger: User;
 let projectId: string;
 const at = (q: string) => `/projects/${projectId}/map/channels?${q}`;
 const attempts = async (u: User) => (await asOwner(`SELECT count(*)::int AS n FROM dem_attempt WHERE user_id = $1`, [u.id]))[0]!.n as number;
+/** The attempts not yet finished: none once a response is back (the route awaits the finish, issue #541). */
+const unfinished = async (u: User) => (await asOwner(`SELECT count(*)::int AS n FROM dem_attempt WHERE user_id = $1 AND finished_at IS NULL`, [u.id]))[0]!.n as number;
 
 beforeAll(async () => {
 	[editor, viewer, stranger] = (await Promise.all(['Cheditor', 'Chviewer', 'Chstranger'].map((n) => signUp(n)))) as [User, User, User];
@@ -50,6 +53,7 @@ describe('the elevation model’s channels', () => {
 		expect(first.body.lines.length).toBeGreaterThan(5);
 		expect(Math.max(...first.body.lines.map((l: { km2: number }) => l.km2))).toBeGreaterThan(100);
 		expect(await attempts(editor)).toBe(n0 + 1);
+		expect(await unfinished(editor)).toBe(0);
 		const again = await editor.call('GET', at(`tile=${TILE}`));
 		expect(again.body.cached).toBe(true);
 		expect(again.body.lines).toEqual(first.body.lines);
@@ -65,5 +69,6 @@ describe('the elevation model’s channels', () => {
 		const out = await editor.call('GET', at('tile=125,-150'));
 		expect(out.status).toBe(422);
 		expect(out.body.error).toMatch(/outside the elevation model/);
+		expect(await unfinished(editor)).toBe(0);
 	});
 });

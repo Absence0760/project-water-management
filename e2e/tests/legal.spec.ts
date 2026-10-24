@@ -31,11 +31,11 @@ for (const p of PAGES) {
 // the legal and methods pages run no script to correct it, so app.html's
 // fallback must come after the page's own.
 const TITLED = [
-	{ path: '/privacy', title: 'Privacy notice · Water Management' },
-	{ path: '/terms', title: 'Terms of use · Water Management' },
-	{ path: '/methods', title: 'How the model is checked · Water Management' },
-	{ path: '/data-sources', title: 'Data sources and credits · Water Management' },
-	{ path: '/welcome', title: 'Water Management: daily water balance for a catchment' }
+	{ path: '/privacy', title: 'Privacy notice · IC-WBT' },
+	{ path: '/terms', title: 'Terms of use · IC-WBT' },
+	{ path: '/methods', title: 'How the model is checked · IC-WBT' },
+	{ path: '/data-sources', title: 'Data sources and credits · IC-WBT' },
+	{ path: '/welcome', title: 'IC-WBT: daily water balance for a catchment' }
 ];
 test('every prerendered page names itself, before and without any script', async ({ request, page }) => {
 	for (const p of TITLED) {
@@ -135,7 +135,7 @@ test('the header has only the logo, and the footer’s Contact opens the terms�
 	await page.goto('/privacy');
 	const banner = page.getByRole('banner');
 	await expect(banner.getByRole('link')).toHaveCount(1);
-	const home = banner.getByRole('link', { name: 'Water Management, home' });
+	const home = banner.getByRole('link', { name: 'Integrated Catchment - Water Balance Tool, home' });
 	expect((await home.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 	const contact = page.getByRole('contentinfo').getByRole('link', { name: 'Contact' });
 	await expect(contact).toHaveAttribute('href', /\/terms#contact$/);
@@ -154,7 +154,7 @@ test('the landing footer, the sign-in pages and the sign-up form link both pages
 	await expect(footer.getByRole('link', { name: 'Data sources' })).toHaveAttribute('href', '/data-sources');
 	await footer.getByRole('link', { name: 'Privacy notice' }).click();
 	await expect(page).toHaveURL('/privacy');
-	await page.getByRole('link', { name: 'Water Management, home' }).click();
+	await page.getByRole('link', { name: 'Integrated Catchment - Water Balance Tool, home' }).click();
 	await expect(page).toHaveURL('/');
 
 	await page.goto('/login');
@@ -228,12 +228,14 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 	const html = await res.text();
 	expect(html).toMatch(/<h1[^>]*>Data sources and credits<\/h1>/);
 	for (const text of [
-		'This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022)',
+		'This product [Integrated Catchment - Water Balance Tool] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022)',
 		'The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30',
 		'© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium',
 		'© Protomaps © OpenStreetMap contributors',
 		'Source: EC JRC/Google',
-		'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0.'
+		'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0.',
+		// The Southwestern Cape MAP surface's credit line (issue #560; HTML-escaped as prerendered).
+		'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke &amp; Associates. March 2007, Version 1.1.'
 	])
 		expect(html, text).toContain(text);
 	await page.goto('/terms');
@@ -244,6 +246,10 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 	await expect(page.locator('#third-party ~ p').filter({ hasText: 'Map data licensed to us.' }).getByRole('link', { name: 'data sources' })).toHaveAttribute('href', /^(\.)?\/data-sources$/);
 	await page.locator('#third-party + p').getByRole('link', { name: 'data sources' }).click();
 	await expect(page).toHaveURL('/data-sources');
+	// A dataset whose copy came with no licence terms names that, with no link (issue #560).
+	const waasLicence = page.locator('#waas-map ~ p').filter({ hasText: 'Licence:' }).first();
+	await expect(waasLicence).toContainText('No licence terms came with the copy used');
+	await expect(waasLicence.getByRole('link')).toHaveCount(0);
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
 		for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {

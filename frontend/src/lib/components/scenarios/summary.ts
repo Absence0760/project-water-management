@@ -2,7 +2,7 @@
 // scenarios, how many in each status (drafts first, the order they move
 // through), and how many have results, so the header says what the list
 // holds before anyone reads it. Zero counts are left out.
-import type { Scenario, ScenarioStatus } from '$lib/api';
+import type { Scenario, ScenarioStatus } from '#lib/api/index.js';
 
 const ORDER: { status: ScenarioStatus; one: string; many: string }[] = [
 	{ status: 'draft', one: 'draft', many: 'drafts' },

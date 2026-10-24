@@ -1,4 +1,4 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type UnitRainSummary, type UnitRainUnit, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RainStationSummary, type RunSummary, type RunVerification, type StationAreaForcing, type UnitRainSummary, type UnitRainUnit, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { splitCsv } from '../allocations/parse.js';
 import {
@@ -82,9 +82,9 @@ describe('summary sheet', () => {
 		const farmHeader = lines.findIndex((l) => l.startsWith('Farm,'));
 		expect(lines[farmHeader]).toContain('Average crop water requirement (m³/day),Average abstraction demand (m³/day)');
 		expect(lines[farmHeader]).toContain('Demand supplied (%)');
-		// The fixture is a run before engine 0.27.0: no flow share, so that cell is empty.
-		expect(lines[farmHeader]).toMatch(/^Farm,Flow share \(%\),Average crop water requirement/);
-		expect(lines[farmHeader + 1]).toBe('"Farm, upper",,90,100,80,20,80,-5,3');
+		// The fixture is a run before engine 0.27.0: no flow share or EWR share, so those cells are empty.
+		expect(lines[farmHeader]).toMatch(/^Farm,Flow share \(%\),EWR share \(%\),Average crop water requirement/);
+		expect(lines[farmHeader + 1]).toBe('"Farm, upper",,,90,100,80,20,80,-5,3');
 		expect(lines).toContain('Mean natural flow (m³/day),1000');
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
@@ -95,6 +95,76 @@ describe('summary sheet', () => {
 		// double-mass check, plausibility checks, calibration, WR2012 check, column guide, warnings)
 		expect(lines.filter((l) => l === '').length).toBe(20);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day charged),Days charged for the EWR');
+	});
+
+	it('writes each farm’s EWR share beside its flow share (engine ≥ 1.94.0), an older run’s as its flow share, and the split when it isn’t the flow share', () => {
+		const farm = summary.farms[0]!;
+		const rowOf = (s: RunSummary) => {
+			const lines = [...summaryCsvLines(meta, s)];
+			return { lines, row: lines[lines.findIndex((l) => l.startsWith('Farm,')) + 1] };
+		};
+		// A run before 1.94.0: the flow share split the EWR.
+		expect(rowOf({ ...summary, farms: [{ ...farm, flowShare: 0.25 }] }).row).toBe('"Farm, upper",25,25,90,100,80,20,80,-5,3');
+		const mar = rowOf({
+			...summary,
+			farms: [{ ...farm, flowShare: 0.25, ewrShare: 0.4 }],
+			ewrSplit: { method: 'naturalMar', applied: 'naturalMar', period: { start: '2000-10-01', end: '2005-09-30', waterYears: 5 } }
+		});
+		expect(mar.row).toBe('"Farm, upper",25,40,90,100,80,20,80,-5,3');
+		expect(mar.lines).toContain('EWR split between units by,each unit’s natural MAR,2000-10-01 – 2005-09-30 (5 complete water years)');
+		const frag = rowOf({ ...summary, farms: [{ ...farm, flowShare: 0.25, ewrShare: 0.25 }], ewrSplit: { method: 'naturalMar', applied: 'flowShare', why: 'catchmentRain' } });
+		expect(frag.lines).toContain('EWR split between units by,the flow share,the flow share: GR4J ran once on the catchment rain');
+		// The default writes no line.
+		expect(rowOf({ ...summary, ewrSplit: { method: 'flowShare', applied: 'flowShare' } }).lines.some((l) => l.startsWith('EWR split'))).toBe(false);
+	});
+
+	it('writes the rainfall stations block (engine ≥ 1.91.0, issue #553) only when the run had it: each area, then each pairing', () => {
+		expect([...summaryCsvLines(meta, summary)].some((l) => l.startsWith('Rain from rainfall stations'))).toBe(false);
+		const area = (over: Partial<StationAreaForcing> = {}): StationAreaForcing => ({
+			nodeId: 'u1',
+			name: 'Upper unit',
+			stationId: 's1',
+			stationName: 'Hill station',
+			areaMapMm: 860,
+			areaMapSource: 'invented isohyet',
+			stationMapMm: 745,
+			stationMapSource: 'station record',
+			ownRatio: 1.154,
+			ratio: 1.154,
+			clamped: false,
+			scaleToMap: true,
+			correctedBy: 's1',
+			days: { station: 3000, chirps: 150, fallback: 0, none: 2 },
+			setAside: { checks: 14, unreliable: 30 },
+			...over
+		});
+		const stations: RainStationSummary = {
+			pairings: [
+				{ stationId: 's1', stationName: 'Hill station', chirpsAt: { cell: true }, refused: null, fitFrom: '1995-01-01', fitTo: '2020-12-31', commonYears: 26, days: 9400, pinned: false, months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, sharedDays: 300, gaugeMm: 1, chirpsMm: 1, ownFactor: 1 + i / 100, factor: 1 + i / 100, clamped: false, fitted: true, outsideBand: false })) },
+				{ stationId: 's2', stationName: 'Short station', chirpsAt: { unitId: 'u2', unitName: 'Lower unit' }, refused: 'only 3 complete years in common (5 needed)', fitFrom: null, fitTo: null, commonYears: 3, days: 1000, pinned: false, months: [] }
+			],
+			catchment: area({ nodeId: null, name: 'Synthetic catchment', areaMapMm: 800, areaMapSource: null, ownRatio: 1.074, ratio: 1.074 }),
+			units: [area(), area({ nodeId: 'u2', name: 'Lower unit', stationId: 's2', stationName: 'Short station', ownRatio: 5, ratio: 4, clamped: true, correctedBy: null, days: { station: 2000, chirps: 0, fallback: 80, none: 0 }, setAside: { checks: 0, unreliable: 0 } })],
+			catchmentMapMm: 800,
+			catchmentMapFromUnits: true
+		};
+		const s = structuredClone(summary);
+		s.stations = stations;
+		const lines = [...summaryCsvLines(meta, s)];
+		const at = lines.indexOf('Rain from rainfall stations (docs/model.md §2.4i)');
+		expect(at).toBeGreaterThan(0);
+		expect(lines.slice(at + 1, at + 6)).toEqual([
+			"Catchment MAP (mm),800,the units' area-weighted mean",
+			'Area,Station,Area MAP (mm),Area MAP source,Station MAP (mm),Station MAP source,Scaled to MAP,Own ratio,Ratio applied,Clamped,CHIRPS corrected against,Days: station,Days: corrected CHIRPS,Days: fallback,Days: none,Set aside: checks,Set aside: unreliable',
+			'Synthetic catchment (catchment),Hill station,800,,745,station record,yes,1.074,1.074,no,Hill station,3000,150,0,2,14,30',
+			'Upper unit,Hill station,860,invented isohyet,745,station record,yes,1.154,1.154,no,Hill station,3000,150,0,2,14,30',
+			'Lower unit,Short station,860,invented isohyet,745,station record,yes,5,4,yes,none (the next fallback),2000,0,80,0,0,0'
+		]);
+		expect(lines[at + 6]).toMatch(/^Station CHIRPS pairings/);
+		expect(lines[at + 7]).toBe('Station,CHIRPS at,Refused,Fit from,Fit to,Common years,Shared days,Pinned,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec');
+		expect(lines[at + 8]).toBe("Hill station,the station's own CHIRPS cell,,1995-01-01,2020-12-31,26,9400,no,1,1.01,1.02,1.03,1.04,1.05,1.06,1.07,1.08,1.09,1.1,1.11");
+		expect(lines[at + 9]).toBe('Short station,the CHIRPS of Lower unit,only 3 complete years in common (5 needed),,,3,1000,no,,,,,,,,,,,,');
+		expect(lines[at + 10]).toBe('');
 	});
 
 	it('writes the per-unit rain block (engine ≥ 1.78.0) only when the run had it', () => {
@@ -136,6 +206,9 @@ describe('summary sheet', () => {
 		expect(lines[at + 3]).toMatch(/^Unit,Area \(km²\),MAP \(mm\),MAP source,Rain from,Record,Factor,/);
 		expect(lines[at + 4]).toBe("Upper unit,10,800,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.6,unit MAP ÷ its CHIRPS mean annual rain,no,no,500,1991–2020 (2),0,0,360,6,0,0,700,600,70,700000,0.1");
 		expect(lines[at + 5]).toMatch(/^Lower unit,10,,,the catchment rain \(no rain of its own\),,,as the catchment forcing,no,no,/);
+		// A unit on its rainfall station (engine ≥ 1.91.0, issue #553): its factor is the MAP ratio, held like rule 2's.
+		s.unitRain.units.push({ ...unit, nodeId: 'u3', name: 'Station unit', mapMm: 860, rule: 'station', rainKey: 'rain_station_mm#s1', factor: 1.154, factorSource: 'gaugeMap', gaugeMapFactor: 1.154, gaugeMapOwnFactor: 1.154, gaugeMapClamped: true, chirps: null });
+		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('Station unit,'))).toMatch(/^Station unit,10,860,invented isohyet,its rainfall station × unit MAP ÷ station MAP,rain_station_mm#s1,1\.154,unit MAP ÷ station MAP,yes,no,/);
 		expect(lines.filter((l) => l === '').length).toBe(21);
 	});
 
@@ -262,7 +335,7 @@ describe('summary sheet', () => {
 		s.farms[0]!.fractionSupplied = 0.07;
 		s.catchment.ewrFractionDaysNotMet = 1 / 3;
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",,90,100,80,20,7,-5,3');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",,,90,100,80,20,7,-5,3');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),33.3333333333');
 	});
 
@@ -270,9 +343,9 @@ describe('summary sheet', () => {
 		const s = structuredClone(summary);
 		s.farms[0]!.flowShare = 0.07;
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",7,90,100,80,20,80,-5,3');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",7,7,90,100,80,20,80,-5,3');
 		s.farms[0]!.flowShare = 0;
-		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",0,90,100,80,20,80,-5,3');
+		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",0,0,90,100,80,20,80,-5,3');
 	});
 
 	it('keeps fields the engine adds later and says when calibration is missing', () => {
@@ -1630,6 +1703,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		simulatedM3Day: new Array(days).fill(6_000),
 		observed: { flow_observed_m3s: new Array(days).fill(0.08) },
 		calibrationKind: 'flow_observed_m3s',
+		scoredKind: 'flow_observed_m3s',
 		excluded: new Uint8Array(days),
 		damsM3Day: new Array(days).fill(1_000),
 		landCoverM3Day: [],
@@ -1707,6 +1781,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 			simulatedM3Day: new Array(days).fill(6_000),
 			observed: { flow_observed_m3s: obs },
 			calibrationKind: 'flow_observed_m3s',
+			scoredKind: 'flow_observed_m3s',
 			excluded: new Uint8Array(days),
 			damsM3Day: new Array(days).fill(1_000),
 			landCoverM3Day: [],
@@ -1781,6 +1856,19 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(tail).toContain('Natural flow vs observed flow + net abstraction');
 		expect(tail).toContain('Water years judged,2,failed,2');
 		expect(tail).toContain('Not computed: no dry season');
+		// No fit on a run made before engine 1.90.0.
+		expect(tail).toContain('Fit check (out of sample),Run made before engine 1.90.0: not computed');
+	});
+
+	it('writes each gauge record’s fit check (engine ≥ 1.90.0), never as the calibration score', () => {
+		const gauge = { nodeId: 'g1', name: 'Upper weir', flowKind: 'flow_logger_m3s' as const, naturalShare: 0.25, naturalised: checks.naturalised, lowFlow: null };
+		const lines = [...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: { days: 120, nse: 0.62, kge: null, pbias: -4.5 } }] })];
+		expect(lines).toContain('Fit check (out of sample),Record,logger,Days,120,NSE,0.62,KGE,,PBIAS (%),-4.5');
+		expect([...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: null }] })]).toContain('Fit check (out of sample),Not computed: no day of the record outside the excluded periods');
+		// At the calibration site the run is fitted to the record: in sample, and said so.
+		const atSite = [...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: { days: 120, nse: 0.9, kge: 0.8, pbias: 1 } }] }, 'g1')];
+		expect(atSite).toContain('Fit check (in sample at the calibration site),Record,logger,Days,120,NSE,0.9,KGE,0.8,PBIAS (%),1');
+		expect(atSite.some((l) => l.startsWith('Fit check (out of sample)'))).toBe(false);
 	});
 
 	it('says what is missing, and is part of the summary sheet', () => {

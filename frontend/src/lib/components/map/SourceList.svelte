@@ -5,8 +5,8 @@
 	a phone. In the upload sheet, and for everyone in Every feature.
 -->
 <script lang="ts">
-	import type { MapSource } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import type { MapSource } from '#lib/api/index.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { shortHash } from './mapList';
 
 	let { sources }: { sources: MapSource[] } = $props();

@@ -1,6 +1,6 @@
 import { SERIES_KINDS, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { gaugeRecordsInUse, KIND_ROLES, newSeriesEffect, rainSourceKinds, roleBadge, seriesInUse } from './roles';
+import { gaugeRecordsInUse, KIND_ROLES, newSeriesEffect, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse } from './roles';
 
 const meta = (id: string, kind: string, name = ''): SeriesMeta => ({ id, kind, name, unit: '', startDate: '2020-01-01', length: 1 });
 
@@ -135,5 +135,81 @@ describe('roleBadge', () => {
 		expect(roleBadge(g, ctx([g], { calibrationSite: 'n1' }))?.label).toBe('Gauge record (calibration site)');
 		const gone = { ...g, siteNodeId: 'n9' };
 		expect(roleBadge(gone, ctx([gone]))?.label).toBe('Not used: its gauge is no longer in the model');
+	});
+
+	it('a unit’s own rain is its unit’s, not a gauge record; an assigned station is a rainfall station (issue #553)', () => {
+		const own = { ...meta('u', 'rain_chirps_mm', 'CHIRPS Upper'), siteNodeId: 'u1' };
+		const units = new Map([['u1', 'Upper unit']]);
+		expect(roleBadge(own, ctx([own], { units, unitRainOn: true }))).toEqual({ label: 'Upper unit’s own rain', unused: false, why: null });
+		expect(roleBadge(own, ctx([own], { units, unitRainOn: false }))).toEqual({ label: 'Not used: per-unit rain is off', unused: true, why: null });
+		// Without the units known it reads as before (a record at a node that isn't a gauge).
+		expect(roleBadge(own, ctx([own]))?.label).toBe('Not used: its gauge is no longer in the model');
+		const a = meta('a', 'rain_catchment_mm', 'A');
+		const b = meta('b', 'rain_catchment_mm', 'Kloof');
+		expect(roleBadge(b, ctx([a, b], { assignedStations: new Set(['b']) }))).toEqual({ label: 'Rainfall station', unused: false, why: null });
+		// The catchment rain read by name keeps its role; an unassigned station is still not used.
+		expect(roleBadge(a, ctx([a, b], { assignedStations: new Set(['a', 'b']) }))?.label).toBe('Main rainfall');
+		expect(roleBadge(b, ctx([a, b], { assignedStations: new Set() }))?.label).toBe('Not used (another series of this kind is)');
+	});
+});
+
+describe('renameEffect (issue #556)', () => {
+	const rain = [meta('a', 'rain_catchment_mm', 'Average'), meta('b', 'rain_catchment_mm', 'Bergwater gauge'), meta('f', 'flow_observed_m3s', 'Zulu weir')];
+	const at = (m: SeriesMeta, siteNodeId: string): SeriesMeta => ({ ...m, siteNodeId });
+
+	it('says which series runs read instead when the new name sorts another to the front', () => {
+		// The read series renamed behind the other, another renamed in front of it.
+		expect(renameEffect(rain, 'a', 'Rain average')).toEqual({ before: rain[0], after: rain[1] });
+		expect(renameEffect(rain, 'b', 'AAA gauge')).toEqual({ before: rain[0], after: rain[1] });
+		// By bytes: a digit before a letter, a capital before lower case ("Average" stays ahead of "average").
+		expect(renameEffect(rain, 'b', '1 gauge')).toEqual({ before: rain[0], after: rain[1] });
+		expect(renameEffect(rain, 'b', 'average')).toBeNull();
+	});
+
+	it('is null when the same series is still read, the name is taken, or the id is unknown', () => {
+		expect(renameEffect(rain, 'a', 'Alpha average')).toBeNull();
+		expect(renameEffect(rain, 'b', 'Zebra gauge')).toBeNull();
+		expect(renameEffect(rain, 'f', 'A weir')).toBeNull();
+		expect(renameEffect(rain, 'missing', 'x')).toBeNull();
+		// Taken: the server refuses it, so there is nothing to ask, whatever the list's order.
+		expect(renameEffect(rain, 'b', 'Average')).toBeNull();
+		expect(renameEffect([rain[1]!, rain[0]!], 'b', 'Average')).toBeNull();
+	});
+
+	it('asks nothing for a series no run reads: a reference gauge, a logger beside a gauge, an unnamed period kind', () => {
+		expect(renameEffect([meta('r1', 'flow_reference_m3s', 'Ref one'), meta('r2', 'flow_reference_m3s', 'Ref two')], 'r2', 'AAA ref')).toBeNull();
+		const flows = [meta('o', 'flow_observed_m3s', 'Weir'), meta('l1', 'flow_logger_m3s', 'Logger B'), meta('l2', 'flow_logger_m3s', 'Logger C')];
+		expect(renameEffect(flows, 'l2', 'A logger')).toBeNull();
+		// Without the observed gauge the logger is read, so the question comes back.
+		expect(renameEffect(flows.slice(1), 'l2', 'A logger')).toEqual({ before: flows[1], after: flows[2] });
+		const alt = [meta('x', 'rain_catchment_alt_mm', 'B'), meta('y', 'rain_catchment_alt_mm', 'C')];
+		expect(renameEffect(alt, 'y', 'A')).toBeNull();
+		expect(renameEffect(alt, 'y', 'A', new Set(['rain_catchment_alt_mm']))).toEqual({ before: alt[0], after: alt[1] });
+	});
+
+	it('compares records at one gauge, and only at a gauge still in the model', () => {
+		const list = [meta('o', 'flow_observed_m3s', 'Outlet weir'), at(meta('g1', 'flow_observed_m3s', 'Middle'), 'n1'), at(meta('g2', 'flow_observed_m3s', 'Upper'), 'n1')];
+		expect(renameEffect(list, 'g2', 'A upper', new Set(), [{ id: 'n1' }])).toEqual({ before: list[1], after: list[2] });
+		expect(renameEffect(list, 'g2', 'A upper', new Set(), [])).toBeNull();
+		expect(renameEffect(list, 'o', 'Zulu outlet', new Set(), [{ id: 'n1' }])).toBeNull();
+	});
+});
+
+describe('renameEffectText (issue #556)', () => {
+	const label = (k: string) => (k === 'rain_catchment_mm' ? 'Rainfall — catchment' : k);
+	const rain = [meta('a', 'rain_catchment_mm', 'Average'), meta('b', 'rain_catchment_mm', 'Bergwater gauge')];
+
+	it('names the series read before by its stored name, the one read after by its new name', () => {
+		expect(renameEffectText(renameEffect(rain, 'a', 'Rain average')!, 'a', 'Rain average', label)).toBe(
+			'Runs will read “Bergwater gauge” instead of “Average” for Rainfall — catchment: they read the first series of each kind by name.'
+		);
+		expect(renameEffectText(renameEffect(rain, 'b', '1 gauge')!, 'b', '1 gauge', label)).toMatch(/^Runs will read “1 gauge” instead of “Average” for/);
+	});
+
+	it('names an unnamed series by its kind, and says where for a record at a gauge', () => {
+		const list = [meta('u', 'rain_catchment_mm', ''), meta('b', 'rain_catchment_mm', 'Bergwater gauge')];
+		expect(renameEffectText(renameEffect(list, 'u', 'Zulu')!, 'u', 'Zulu', label, 'at gauge Middle weir')).toBe(
+			'Runs will read “Bergwater gauge” instead of “Rainfall — catchment” for Rainfall — catchment at gauge Middle weir: they read the first series of each kind by name.'
+		);
 	});
 });

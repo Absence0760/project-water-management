@@ -6,10 +6,10 @@
 	// edits land in the model directly.
 	import { tick } from 'svelte';
 	import { LAND_COVER_CLASSES, LAND_COVER_DEFAULTS_SOURCE, type LandCoverClass, type LandCoverPatch, type NetworkNode } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { classDefaults, coverShare } from './landcover';
 	import { focusAfter, patchQuestion } from './removeQuestions';
 

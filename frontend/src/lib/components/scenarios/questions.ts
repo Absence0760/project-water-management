@@ -1,7 +1,7 @@
 // "Ask the assessors why" (164_applicant_visibility, docs/ui.md
 // § Applications): which of an application's problem lines a rule hidden
 // from its applicant broke, in words, and whether they have asked about it.
-import type { ApplicationQuestion, MaskedRuleRef } from '$lib/api';
+import type { ApplicationQuestion, MaskedRuleRef } from '#lib/api/index.js';
 
 /** A rule's kind (the check's `maskedRules[].rules`) in words: what it is about, never which unit. */
 export function ruleLabel(kind: string): string {

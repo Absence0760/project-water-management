@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
 	import type { CalibrationExclusion } from '@water-management/engine';
-	import PeriodList from '$lib/components/common/PeriodList.svelte';
+	import PeriodList from '#lib/components/common/PeriodList.svelte';
 
 	let {
 		list = $bindable([]),

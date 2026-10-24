@@ -1,7 +1,7 @@
 // The Map tab's list, header line and URL pick (issue #326 E3–E6; docs/ui.md
 // § Map). Pure, so the list, the card, the grid modal and the header agree
 // and vitest covers them (mapList.test.ts).
-import type { MapFeature, MapFeatureKind, MapNodeArea } from '$lib/api/types';
+import type { MapFeature, MapFeatureKind, MapNodeArea } from '#lib/api/types.js';
 import { alreadyAccepted, areaTargets, areaText, KIND_LABEL, takesArea } from './mapData';
 
 /** The list's groups, in order: the parcels first (what the model's units are), the boundary last (one feature, framed by Show everything). */

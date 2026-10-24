@@ -3,18 +3,34 @@
 	#326 B-rain, issue #521; docs/ui.md § Data feeds, docs/maps.md § Rain from
 	the boundary): the CHIRPS cells the map's catchment boundary covers, each
 	weighted by the share of it inside, shown as a proposal with its source, and
-	applied only on Apply (owners; editors see the proposal). Drawn inside the
+	applied only on Apply (owners; editors see the proposal). Where runs read a
+	CHIRPS record already, it names that record, keeps it for runs (the new
+	series sorts after it) or, when the owner chooses, replaces it with a staged
+	full backfill; the product and first day default to the record's (issue
+	#561). Drawn inside the
 	attach card while that area is chosen, so it asks for the proposal when it
 	mounts; DataFeedsPanel opens it from the Map tab's link (?rain=boundary) with
 	`focus`, which puts the focus on its heading once loaded. Close closes the
 	card (`onclose`). Helpers in ./feeds.ts.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, tick } from 'svelte';
-	import { api } from '$lib/api';
-	import { fmtDay, fmtNum } from '$lib/format/number';
-	import { applyWords, type BoundaryProposal, errorText, feedsApi, type FeedMeta } from './feeds';
+	import { api } from '#lib/api/index.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
+	import {
+		applyWords,
+		boundaryApplyBody,
+		boundaryChoice,
+		type BoundaryChoice,
+		type BoundaryProposal,
+		CHIRPS_PRODUCT_FIRST_DAY,
+		errorText,
+		feedsApi,
+		type FeedMeta,
+		runSeriesText
+	} from './feeds';
 
 	let {
 		projectId,
@@ -41,6 +57,9 @@
 	let error = $state<string | null>(null);
 	let done = $state<string | null>(null);
 	let heading = $state<HTMLElement>();
+	/** Keep the record runs read or replace it, and the product and first day; set from each proposal. */
+	let choice = $state<BoundaryChoice>({ replace: false, product: 'sat', startDate: '' });
+	let startError = $state<string | null>(null);
 
 	async function show() {
 		loading = true;
@@ -48,6 +67,8 @@
 		proposal = null;
 		try {
 			proposal = await calls.boundaryProposal();
+			choice = boundaryChoice(proposal);
+			startError = null;
 		} catch (e) {
 			error = errorText(e);
 		}
@@ -57,13 +78,36 @@
 		heading?.focus();
 	}
 
+	/** Keep or replace: replacing reads the product the proposal named for it. */
+	function pickReplace(replace: boolean) {
+		if (!proposal) return;
+		const base = boundaryChoice(proposal);
+		choice = replace && proposal.replace?.available ? { replace: true, product: proposal.replace.product, startDate: '' } : { ...base, replace: false };
+		startError = null;
+	}
+
 	async function apply() {
 		if (!proposal || applying) return;
+		// Text the start date field can't read as a day: it says so under itself (DayInput); go there.
+		const box = document.getElementById(`${uid}-start`) as HTMLInputElement | null;
+		if (box?.validity.customError) {
+			box.focus();
+			return;
+		}
+		const parsed = boundaryApplyBody(proposal, choice);
+		if ('error' in parsed) {
+			startError = parsed.error;
+			await tick();
+			document.getElementById(`${uid}-start`)?.focus();
+			return;
+		}
 		applying = true;
-		error = null;
+		error = startError = null;
 		try {
-			const feed = await calls.applyBoundary(proposal);
-			done = `Applied: the CHIRPS feed now reads ${proposal.cells.length} cells of “${proposal.boundary.name || 'the catchment boundary'}”. It runs on the next schedule, or now with “Run now”.`;
+			const feed = await calls.applyBoundary(parsed.body);
+			done = choice.replace
+				? `Applied: a CHIRPS feed reads ${proposal.cells.length} cells of “${proposal.boundary.name || 'the catchment boundary'}” to replace “${proposal.replace?.targetName ?? ''}”. Runs keep reading its old values until the new record is complete.`
+				: `Applied: the CHIRPS feed now reads ${proposal.cells.length} cells of “${proposal.boundary.name || 'the catchment boundary'}”. It runs on the next schedule, or now with “Run now”.`;
 			proposal = null;
 			await onapplied(feed);
 		} catch (e) {
@@ -94,8 +138,62 @@
 			</dd>
 			<dt>Method</dt>
 			<dd>Rainfall {p.method}. Source: CHIRPS v3 daily, Climate Hazards Center, UC Santa Barbara.</dd>
+			{#if p.runSeries}
+				<dt>Runs read</dt>
+				<dd data-testid="boundary-rain-run-series">{runSeriesText(p.runSeries)}</dd>
+			{/if}
 		</dl>
-		<p data-testid="boundary-rain-apply-words">{applyWords(p, feeds)}</p>
+		{#if p.canApply && p.apply.action !== 'none'}
+			{#if p.replace}
+				<fieldset class="mode" data-testid="boundary-rain-keep">
+					<legend>The CHIRPS series runs read</legend>
+					<label class="check"
+						><input type="radio" name="{uid}-keep" checked={!choice.replace} disabled={applying} onchange={() => pickReplace(false)} /> Keep “{p.replace.targetName}” for runs, and
+						put the boundary’s rain beside it to compare</label
+					>
+					<label class="check"
+						><input
+							type="radio"
+							name="{uid}-keep"
+							checked={choice.replace}
+							disabled={applying || !p.replace.available}
+							aria-describedby={p.replace.available ? undefined : `${uid}-no-replace`}
+							onchange={() => pickReplace(true)}
+						/> Replace “{p.replace.targetName}” with the boundary’s rain, once its whole record is read</label
+					>
+					{#if !p.replace.available}<span class="hint muted" id="{uid}-no-replace" data-testid="boundary-rain-no-replace">Can’t replace it: {p.replace.reason}.</span>{/if}
+				</fieldset>
+			{/if}
+			{#if !choice.replace}
+				<div class="form-row">
+					<div class="field">
+						<label for="{uid}-product">Daily product <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
+						<select id="{uid}-product" bind:value={choice.product} disabled={applying} aria-describedby="{uid}-product-h" onchange={() => (startError = null)}>
+							<option value="rnl">rnl: from 1981, final days only</option>
+							<option value="sat">sat: from 1998, with preliminary days</option>
+						</select>
+					</div>
+					<div class="field">
+						<label for="{uid}-start">Start date <span class="muted">(optional)</span></label>
+						<DayInput
+							id="{uid}-start"
+							bind:value={choice.startDate}
+							onchange={() => (startError = null)}
+							aria-invalid={startError ? true : undefined}
+							aria-describedby="{uid}-product-h{startError ? ` ${uid}-start-err` : ''}"
+						/>
+					</div>
+				</div>
+				<p class="hint explain" id="{uid}-product-h">
+					{p.runSeries?.firstDay
+						? `Proposed from the first day of “${p.runSeries.name}”, so the two series cover the same years.`
+						: 'Without a start date the feed reads the last 60 days at its first fetch.'}
+					The {choice.product} product begins on {fmtDay(CHIRPS_PRODUCT_FIRST_DAY[choice.product])}.
+				</p>
+				{#if startError}<p class="err" id="{uid}-start-err" role="alert">{startError}</p>{/if}
+			{/if}
+		{/if}
+		<p data-testid="boundary-rain-apply-words">{applyWords(p, feeds, choice)}</p>
 		<details>
 			<summary>The cells</summary>
 			<div class="table-wrap">
@@ -164,6 +262,24 @@
 		padding: 0.2rem 0.6rem;
 		text-align: right;
 		border-bottom: 1px solid var(--border);
+	}
+	.mode {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.5rem 0.75rem;
+		margin: 0 0 0.75rem;
+		display: grid;
+		gap: 0.35rem;
+		min-width: 0;
+		max-width: 75ch;
+	}
+	.mode legend {
+		font-weight: 600;
+		padding: 0 0.25rem;
+	}
+	.err {
+		color: var(--danger);
+		font-size: 0.85rem;
 	}
 	.btn[aria-disabled='true'] {
 		opacity: 0.55;

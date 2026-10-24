@@ -6,8 +6,8 @@
 	// moves to its heading, so a screen reader reads why it is there and the
 	// next Tab reaches the puzzle, whose audio button plays a spoken version.
 	import { onMount, tick } from 'svelte';
-	import { loadCaptchaSdk, type CaptchaConfig } from '$lib/auth/wafCaptcha';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { loadCaptchaSdk, type CaptchaConfig } from '#lib/auth/wafCaptcha.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 
 	let {
 		config,

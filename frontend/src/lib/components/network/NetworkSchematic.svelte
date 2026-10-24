@@ -5,11 +5,11 @@
 	// edit it, or (editors) drag it onto another node to change what it drains
 	// into. The "Drains into" selects are the keyboard path to the same edit;
 	// the list below the drawing is its text equivalent.
-	import { onFontsLoaded } from '$lib/components/common/fontsLoaded';
+	import { onFontsLoaded } from '#lib/components/common/fontsLoaded.js';
 	import { MediaQuery } from 'svelte/reactivity';
 	import type { NetworkNode, Transfer } from '@water-management/engine';
-	import { fmtNum } from '$lib/format/number';
-	import { drainageTree } from '$lib/model/tree';
+	import { fmtNum } from '#lib/format/number.js';
+	import { drainageTree } from '#lib/model/tree.js';
 	import { fmtVolume, hasDam, KIND_WORD } from './fields';
 	import { keepInView } from './scroll';
 	import { canDrainInto, validDropTargets } from './reorder';

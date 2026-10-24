@@ -110,16 +110,24 @@ resource "aws_s3_bucket_policy" "frontend" {
 
 # ----------------------------------------------------------------------------
 # ACM certificate (must live in us-east-1 for CloudFront), DNS-validated in
-# the delegated child zone. The zone's NS delegation from jaredhoward.com
-# (bootstrap stage 3) must be live before the first apply, or validation
-# hangs until it times out.
+# the delegated child zones: the site's (var.domain_name) and each former
+# hostname's that still redirects (var.redirect_domains, issue #551). A zone's
+# NS delegation from jaredhoward.com must be live before the apply that first
+# names it, or validation hangs until it times out (docs/deployment.md
+# § Moving the site to a new domain).
 # ----------------------------------------------------------------------------
+
+locals {
+  # Every hostname CloudFront answers for → the Route 53 zone that holds it.
+  site_zones = merge(var.redirect_domains, { (var.domain_name) = var.route53_zone_id })
+}
 
 resource "aws_acm_certificate" "frontend" {
   provider = aws.us_east_1
 
-  domain_name       = var.domain_name
-  validation_method = "DNS"
+  domain_name               = var.domain_name
+  subject_alternative_names = sort(keys(var.redirect_domains))
+  validation_method         = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -140,7 +148,7 @@ resource "aws_route53_record" "cert_validation" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = var.route53_zone_id
+  zone_id         = local.site_zones[each.key]
 }
 
 resource "aws_acm_certificate_validation" "frontend" {
@@ -175,6 +183,14 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   its 404 (ListBucket, above). infra/scripts/cloudfront-functions.test.mjs
 #   runs this code and checks both lists against frontend/static and the
 #   prerendered routes, so a new static file can't silently 404.
+#   It first sends a request for any other host than var.domain_name (a
+#   former hostname in var.redirect_domains, or the distribution's own
+#   *.cloudfront.net name) a 301 to the same path and query on the site's
+#   host (issue #551), so an old link or email lands on the new address. Only
+#   pages redirect: /api/*, /reports/*, /packs/* and /tiles/* have their own
+#   behaviours and keep answering on a former hostname (variables.tf
+#   redirect_domains says why). A request with no Host header (the e2e site
+#   server, which runs this code) is served as before.
 #
 # api_strip_prefix — /api/* behaviour. The browser calls same-origin
 #   /api/auth/login; the Hono app routes /auth/login (dev hits it directly on
@@ -211,9 +227,10 @@ resource "aws_acm_certificate_validation" "frontend" {
 resource "aws_cloudfront_function" "spa_rewrite" {
   name    = "${local.project}-spa-rewrite"
   runtime = "cloudfront-js-2.0"
-  comment = "Serve /index.html for extension-less SPA routes, 404 for files the build doesn't have"
+  comment = "301 other hosts to the site's; serve /index.html for extension-less SPA routes, 404 for files the build doesn't have"
   publish = true
   code    = <<-EOT
+    var SITE_HOST = '${var.domain_name}';
     var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods', '/data-sources'];
     var STATIC_DIRS = ['_app', 'fonts', 'help', 'landing'];
     var STATIC_FILES = [
@@ -240,8 +257,36 @@ resource "aws_cloudfront_function" "spa_rewrite" {
       };
     }
 
+    // Query values go back out as they arrive, taken to be as the viewer sent
+    // them (still encoded; AWS's own redirect samples do the same). The docs
+    // don't say, so postapply-check.sh --redirect-from checks it on the live
+    // distribution with an encoded '&' and space.
+    function query(qs) {
+      var parts = [];
+      for (var name in qs) {
+        var values = qs[name].multiValue ? qs[name].multiValue : [qs[name]];
+        for (var i = 0; i < values.length; i++) {
+          parts.push(values[i].value === '' ? name : name + '=' + values[i].value);
+        }
+      }
+      return parts.length ? '?' + parts.join('&') : '';
+    }
+
+    function moved(request) {
+      return {
+        statusCode: 301,
+        statusDescription: 'Moved Permanently',
+        headers: {
+          location: { value: 'https://' + SITE_HOST + request.uri + query(request.querystring) },
+          'cache-control': { value: 'max-age=3600' }
+        }
+      };
+    }
+
     function handler(event) {
       var request = event.request;
+      var host = request.headers.host ? request.headers.host.value.toLowerCase() : '';
+      if (host && host !== SITE_HOST) return moved(request);
       var uri = request.uri;
       if (PRERENDERED.indexOf(uri) !== -1) {
         request.uri = uri + '.html';
@@ -330,7 +375,9 @@ resource "aws_cloudfront_function" "tiles_range" {
 # ----------------------------------------------------------------------------
 # CloudFront Origin Access Control + distribution
 #
-# One origin for the browser: water-management.jaredhoward.com.
+# One origin for the browser: var.domain_name (icwbt.jaredhoward.com). Its
+# former hostnames (var.redirect_domains) are aliases too, whose pages
+# spa_rewrite redirects to it.
 #   - default    → S3 frontend bucket via OAC (signed sigv4)
 #   - /api/*     → Lambda Function URL (custom origin + shared secret header)
 #   - /reports/* → S3 reports bucket via its own OAC, CloudFront signed URLs
@@ -379,7 +426,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   price_class         = var.cloudfront_price_class # PriceClass_All: the only class with South African edges
   web_acl_id          = aws_wafv2_web_acl.frontend.arn
 
-  aliases = [var.domain_name]
+  aliases = concat([var.domain_name], sort(keys(var.redirect_domains)))
 
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
@@ -555,13 +602,29 @@ resource "aws_cloudfront_distribution" "frontend" {
 }
 
 # ----------------------------------------------------------------------------
-# Route 53 alias records in the child zone
+# Route 53 alias records: the site's hostname in its child zone, and each
+# former hostname (var.redirect_domains) in its own, all to the distribution.
 # ----------------------------------------------------------------------------
 
+# Before issue #551 these were single records for the old hostname. Moving
+# them into its key keeps the old hostname's records in place (an update, no
+# delete-then-create gap); with the old hostname left out of redirect_domains
+# they are deleted instead.
+moved {
+  from = aws_route53_record.site_a
+  to   = aws_route53_record.site_a["water-management.jaredhoward.com"]
+}
+
+moved {
+  from = aws_route53_record.site_aaaa
+  to   = aws_route53_record.site_aaaa["water-management.jaredhoward.com"]
+}
+
 resource "aws_route53_record" "site_a" {
-  zone_id = var.route53_zone_id
-  name    = var.domain_name
-  type    = "A"
+  for_each = local.site_zones
+  zone_id  = each.value
+  name     = each.key
+  type     = "A"
 
   alias {
     name                   = aws_cloudfront_distribution.frontend.domain_name
@@ -571,9 +634,10 @@ resource "aws_route53_record" "site_a" {
 }
 
 resource "aws_route53_record" "site_aaaa" {
-  zone_id = var.route53_zone_id
-  name    = var.domain_name
-  type    = "AAAA"
+  for_each = local.site_zones
+  zone_id  = each.value
+  name     = each.key
+  type     = "AAAA"
 
   alias {
     name                   = aws_cloudfront_distribution.frontend.domain_name

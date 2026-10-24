@@ -4,8 +4,8 @@
 // docs/api.md § Bulk run series), reporting progress per node. `fetchFn` is
 // injected so collect.test.ts runs without a server.
 import type { RunSummary } from '@water-management/engine';
-import { DownloadError } from '$lib/export/download';
-import { exportUrls, filenameFromDisposition, type WorkbookRequest } from '$lib/export/urls';
+import { DownloadError } from '#lib/export/download.js';
+import { exportUrls, filenameFromDisposition, type WorkbookRequest } from '#lib/export/urls.js';
 import type { DailyTable, WorkbookInput } from './workbook';
 
 export interface ExportProgress {

@@ -4,7 +4,7 @@
 // by: Supply" (network/supplyColour.ts), so the two never disagree. Farms
 // without demand go last: 100 % of nothing isn't a result.
 import type { FarmSummary } from '@water-management/engine';
-import { farmSupply, type SupplyBand } from '$lib/components/network/supplyColour';
+import { farmSupply, type SupplyBand } from '#lib/components/network/supplyColour.js';
 
 export interface SupplyBar {
 	nodeId: string;

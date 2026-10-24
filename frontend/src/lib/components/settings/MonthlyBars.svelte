@@ -5,8 +5,8 @@
 	// parts' sum. `width`/`height` draw it at a caller's measured size (the
 	// Crops page's chart card), so it fills the card without scaling its text;
 	// the default is a small fixed figure.
-	import { fmtNum } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import { fmtNum } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 
 	type Stack = { id: string; name: string; values: number[]; color: string };
 	let {

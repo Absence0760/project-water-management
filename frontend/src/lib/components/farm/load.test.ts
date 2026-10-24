@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { classify, farmHref, farmReturn, pickNode, wordsHref, worstFirst } from './load';
 
 describe('what a failed request means', () => {

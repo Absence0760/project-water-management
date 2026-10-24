@@ -3,8 +3,8 @@
 // a project or the only admin of a team with 409 `account_sole_holder`,
 // naming them in `details`; this reads that list, and nothing else, so a
 // malformed or foreign body shows the generic message instead.
-import { ApiError } from '$lib/api/client';
-import type { SoleHoldings } from '$lib/api/types';
+import { ApiError } from '#lib/api/client.js';
+import type { SoleHoldings } from '#lib/api/types.js';
 
 const holdings = (v: unknown): { id: string; name: string }[] | null =>
 	Array.isArray(v) && v.every((h) => h && typeof h === 'object' && typeof (h as { id?: unknown }).id === 'string' && typeof (h as { name?: unknown }).name === 'string')

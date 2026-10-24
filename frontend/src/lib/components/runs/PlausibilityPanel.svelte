@@ -9,10 +9,10 @@
 -->
 <script lang="ts">
 	import type { LowFlowCurve, PlausibilityChecks } from '@water-management/engine';
-	import { api, type RunMeta } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtPct, fmtStamp } from '$lib/format/number';
+	import { api, type RunMeta } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum, fmtPct, fmtStamp } from '#lib/format/number.js';
 	import { detailCache } from './cache';
 	import RecessionDiagnostics from './RecessionDiagnostics.svelte';
 	import ValidationSignatures from './ValidationSignatures.svelte';

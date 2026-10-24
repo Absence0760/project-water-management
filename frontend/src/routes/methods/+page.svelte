@@ -11,8 +11,8 @@
 	// like the other reference pages in this frame.
 	import { KNOWN_LIMITATIONS } from '@water-management/engine/limitations';
 	import { ENGINE_VERSION } from '@water-management/engine/version';
-	import LegalPage from '$lib/components/legal/LegalPage.svelte';
-	import { DEPARTURES, openIds } from '$lib/methods/departures';
+	import LegalPage from '#lib/components/legal/LegalPage.svelte';
+	import { DEPARTURES, openIds } from '#lib/methods/departures.js';
 
 	const sections = [
 		{ id: 'model', label: '1. What the model does' },
@@ -29,12 +29,12 @@
 
 <LegalPage
 	title="How the model is checked"
-	description="How Water Management's catchment model is checked: the standard it is held to, the checks on every run, where it departs from the spreadsheet it replaced and why, and its known limitations."
+	description="How the catchment model of Integrated Catchment - Water Balance Tool (IC-WBT) is checked: the standard it is held to, the checks on every run, where it departs from the spreadsheet it replaced and why, and its known limitations."
 	effective="Engine version {ENGINE_VERSION}"
 	{sections}
 >
 	<p>
-		Water Management turns a catchment’s rainfall, dams, hydrological units and river into a daily water balance, and people make decisions with
+		Integrated Catchment - Water Balance Tool (IC-WBT) turns a catchment’s rainfall, dams, hydrological units and river into a daily water balance, and people make decisions with
 		it: how much a hydrological unit can irrigate, whether the river keeps its Ecological Reserve, whether a licence application holds up. This
 		page says how the model behind those figures is checked, where it deliberately differs from the spreadsheet model it replaced,
 		and what is still open.

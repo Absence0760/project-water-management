@@ -1,8 +1,8 @@
 import type { FarmSummary, RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { navText } from '$lib/components/common/sectionNav';
-import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '$lib/components/river/links';
-import { supplyAnchor } from '$lib/components/supply/links';
+import { navText } from '#lib/components/common/sectionNav.js';
+import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '#lib/components/river/links.js';
+import { supplyAnchor } from '#lib/components/supply/links.js';
 import { movedHref, otherPageGroups, resultGroups, resultSections } from './sections';
 
 describe('resultGroups', () => {
@@ -53,11 +53,33 @@ describe('resultGroups', () => {
 		expect(ids.indexOf('res-unit-rain')).toBe(ids.indexOf('res-runoff') + 1);
 	});
 
+	it('lists the same panel as Rain from rainfall stations for a run whose catchment ran on a station, without rain for each unit (issue #553)', () => {
+		const sections = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections;
+		const runoff = { model: 'gr4j' } as RunSummary['runoff'];
+		const catchment = { nodeId: null, name: 'Synthetic catchment' } as NonNullable<RunSummary['stations']>['catchment'];
+		const s = sections({ farms: [], runoff, stations: { pairings: [], catchment, units: [], catchmentMapMm: null, catchmentMapFromUnits: true } });
+		expect(s.find((x) => x.id === 'res-unit-rain')?.label).toBe('Rain from rainfall stations');
+		expect(sections({ farms: [], runoff, stations: { pairings: [], catchment: null, units: [], catchmentMapMm: null, catchmentMapFromUnits: true } }).map((x) => x.id)).not.toContain('res-unit-rain');
+	});
+
 	it('puts the flow-duration curve with the hydrograph', () => {
 		const groups = resultGroups({ farms: [] });
 		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
 		expect(model.slice(0, 2)).toEqual(['res-hydrograph', 'res-fdc']);
 		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Run notes & evidence');
+	});
+
+	it('lists the checks-only gauges after the flow-duration curve: a line on the side index, under Flow duration on the bar (issue #554)', () => {
+		const model = (summary: Parameters<typeof resultGroups>[0], rail = false) => resultGroups(summary, rail).find((g) => g.label === 'Model quality')!.sections;
+		const gauge = (nodeId: string) => ({ nodeId }) as NonNullable<NonNullable<RunSummary['plausibility']>['gauges']>[number];
+		const checked = { farms: [], plausibility: { gauges: [gauge('a')] } as RunSummary['plausibility'] };
+		expect(model(checked, true).map((s) => s.id).slice(0, 3)).toEqual(['res-hydrograph', 'res-fdc', 'res-gauges']);
+		expect(model(checked).find((s) => s.id === 'res-fdc')?.covers).toEqual(['res-gauges']);
+		expect(model(checked).map((s) => s.id)).not.toContain('res-gauges');
+		// The calibration site's gauge alone has its chart under the outlet's hydrograph, not here.
+		const siteOnly = { ...checked, calibration: { siteNodeId: 'a' } };
+		expect(model(siteOnly, true).map((s) => s.id)).not.toContain('res-gauges');
+		expect(model(siteOnly).find((s) => s.id === 'res-fdc')?.covers).toBeUndefined();
 	});
 
 	it('lists a forecast run’s forecast panel right after the summary, and only for a forecast run (WP-2.12)', () => {
@@ -115,11 +137,11 @@ describe('resultGroups', () => {
 describe('otherPageGroups', () => {
 	it('lists the main moved panels under their pages, by those pages’ headings, linked with the run (issue #462)', () => {
 		const groups = otherPageGroups('r 1');
-		expect(groups.map((g) => g.label)).toEqual(['On River & reserve', 'On Hydrological units']);
+		expect(groups.map((g) => g.label)).toEqual(['On EWR', 'On Hydrological units']);
 		expect(groups.flatMap((g) => g.sections.map((s) => [s.label, s.href, s.page]))).toEqual([
-			[RESERVE_MONTHS_HEADING, '?tab=river&run=r%201#res-reserve', 'River & reserve'],
-			[EWR_MONTHS_HEADING, '?tab=river&run=r%201#res-ewr-grid', 'River & reserve'],
-			['Water account', '?tab=river&run=r%201#res-water-account', 'River & reserve'],
+			[RESERVE_MONTHS_HEADING, '?tab=river&run=r%201#res-reserve', 'EWR'],
+			[EWR_MONTHS_HEADING, '?tab=river&run=r%201#res-ewr-grid', 'EWR'],
+			['Water account', '?tab=river&run=r%201#res-water-account', 'EWR'],
 			['Curtailment targets', '?tab=supply&run=r+1#res-curtailment', 'Hydrological units'],
 			['Assurance of supply', '?tab=supply&run=r+1#res-assurance', 'Hydrological units']
 		]);

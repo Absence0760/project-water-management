@@ -3,8 +3,8 @@
 // GET …/runs/:runId/day with the engine's column catalogue (letters and
 // formulas), so the UI and the CSV column guide say the same thing.
 import { FARM_COLUMNS, GAUGE_COLUMNS, GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS, USER_COLUMNS, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
-import type { RunCatchmentDay, RunDay } from '$lib/api';
-import { fmtNum } from '$lib/format/number';
+import type { RunCatchmentDay, RunDay } from '#lib/api/index.js';
+import { fmtNum } from '#lib/format/number.js';
 
 export type Tone = 'ok' | 'bad' | 'none';
 

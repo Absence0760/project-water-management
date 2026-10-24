@@ -10,12 +10,12 @@
 	// (the notice changed meanwhile) brings the notice back.
 	import { untrack, type Snippet } from 'svelte';
 	import { FARMER_NOTICE_VERSION } from '@water-management/engine/legal';
-	import { base } from '$app/paths';
-	import { focusPageStart } from '$lib/a11y/focusPage';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import { focusPageStart } from '#lib/a11y/focusPage.js';
+	import { api } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { farmNoticeButton, farmNoticePoints, farmNoticeTitle } from './farmNotice';
 	import { classify } from './load';
 	import { clearPendingAck, flushOutcome, hasPendingAck, savePendingAck } from './noticeAck';
@@ -90,7 +90,7 @@
 		<ul>
 			{#each farmNoticePoints() as point, i (i)}
 				<li>
-					{#each point.split(/(\{terms\})/) as part, j (j)}{#if part === '{terms}'}<a href="{base}/terms#liability">{t('Terms of use')}</a>{:else}{part}{/if}{/each}
+					{#each point.split(/(\{terms\})/) as part, j (j)}{#if part === '{terms}'}<a href={resolve('terms#liability')}>{t('Terms of use')}</a>{:else}{part}{/if}{/each}
 				</li>
 			{/each}
 		</ul>

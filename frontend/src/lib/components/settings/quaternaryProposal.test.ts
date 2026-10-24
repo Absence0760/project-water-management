@@ -1,7 +1,7 @@
 // The quaternary lookup's proposal (quaternaryProposal.ts): what each row
 // shows beside the form, and that "Use" changes only the value asked for.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, QuaternaryProposal } from '$lib/api/types';
+import type { MapFeature, QuaternaryProposal } from '#lib/api/types.js';
 import { blankReference } from './wr2012';
 import { lookupPoints, proposalRows, proposedSource, useValue } from './quaternaryProposal';
 

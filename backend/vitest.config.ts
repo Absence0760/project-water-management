@@ -14,8 +14,15 @@ import { defineConfig } from 'vitest/config';
 //          db project's setup and global setup (a fresh water_test…), serial
 //          (`pnpm test:perf:db`, root `pnpm test:backend:perf:db`). It rebuilds
 //          the same test database as `db`, so never run the two at once.
+// v8 coverage slows CPU-bound code several times over (the examples' GR4J fit
+// took ~100 s of its 120 s hang guard in CI's Coverage job, then over it on a
+// slower runner). The unit timeouts only catch a hang, so a coverage run scales
+// them, and tests with their own guard read COVERAGE_SLOWDOWN the same way.
+const coverageSlowdown = process.argv.includes('--coverage') ? 4 : 1;
+
 export default defineConfig({
 	test: {
+		env: { COVERAGE_SLOWDOWN: String(coverageSlowdown) },
 		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
 		// gate. No thresholds, on purpose: a number to hit invites tests written
 		// for the number. Read it for what no test reaches (docs/testing.md
@@ -49,7 +56,7 @@ export default defineConfig({
 					// test; vitest 4+ fails one that returns after the timeout, and the
 					// engine-backed ones (examples.invariants, ~2 s alone) pass the
 					// default 5 s with every file in parallel on a loaded machine.
-					testTimeout: 60_000
+					testTimeout: 60_000 * coverageSlowdown
 				}
 			},
 			{

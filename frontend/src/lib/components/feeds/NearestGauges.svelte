@@ -7,10 +7,10 @@
 	(`onuse`); the owner still attaches the feed. Reads GET …/map/stations.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
-	import { api } from '$lib/api';
-	import type { GaugeStationLookup } from '$lib/api/types';
+	import { api } from '#lib/api/index.js';
+	import type { GaugeStationLookup } from '#lib/api/types.js';
 	import { errorText } from './feeds';
 	import { distanceText, emptyLine, pointLine, recordText } from './nearestGauges';
 

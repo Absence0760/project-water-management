@@ -1,14 +1,14 @@
 // The one way the app words the pragmatic EWR test at the outflow gauge
 // (issue #162, item 18): "EWR not met", the share of days and "X of N days".
-// The Summary's KPI card (overview/latestRun.ts), River & reserve's tile
+// The Summary's KPI card (overview/latestRun.ts), the EWR page's tile
 // (river/river.ts) and the Summary's reserve strip all build their words
 // here, so the same figure is never framed as "met" on one page and "not
 // met" on another. "Not met" is the framing the flow chart's shading, the
 // EWR by month grid and the projects list already use.
 import type { RunSummary } from '@water-management/engine';
-import { fmtNum, fmtPct } from '$lib/format/number';
-import { headlineSite } from '$lib/components/runs/ewrAssurance';
-import type { EwrHeadline } from '$lib/api/types';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
+import { headlineSite } from '#lib/components/runs/ewrAssurance.js';
+import type { EwrHeadline } from '#lib/api/types.js';
 
 /** The term, on every card, tile and label that counts days below the pragmatic EWR. */
 export const EWR_NOT_MET = 'EWR not met';
@@ -47,7 +47,7 @@ export function ewrNotMet(c: Pick<RunSummary['catchment'], 'ewrDaysNotMet' | 'ew
 }
 
 /** The outlet's daily EWR, as settings.ewrDailySource or a run's summary.catchment.outletEwr has it (engine ≥ 1.77.0). */
-export type DailyEwrSource = { method: 'pragmatic' | 'tab' | 'percentile' } | null | undefined;
+export type DailyEwrSource = { method: 'pragmatic' | 'tab' | 'percentile'; reserveTable?: 'total' | 'withoutHighFlows' } | null | undefined;
 
 /**
  * What the outlet's daily EWR test is called (engine ≥ 1.77.0, issue #455):
@@ -57,7 +57,9 @@ export type DailyEwrSource = { method: 'pragmatic' | 'tab' | 'percentile' } | nu
  */
 export function dailyEwrName(daily: DailyEwrSource): string {
 	if (!daily || daily.method === 'pragmatic') return 'the pragmatic EWR';
-	return daily.method === 'tab' ? 'the daily EWR from the DRM TAB file' : 'the daily EWR from the DRM percentile tables';
+	if (daily.method === 'tab') return 'the daily EWR from the DRM TAB file';
+	// The Reserve flows without high flows, by choice (engine ≥ 1.90.0, issue #552).
+	return daily.reserveTable === 'withoutHighFlows' ? 'the daily EWR from the DRM percentile tables without high flows' : 'the daily EWR from the DRM percentile tables';
 }
 
 /**
@@ -66,9 +68,9 @@ export function dailyEwrName(daily: DailyEwrSource): string {
  * headlineSite is not null), the daily test's own name (dailyEwrName: "the
  * pragmatic EWR", or the DRM table it comes from). With a table the Reserve is
  * judged by the table, whole months at a site, so calling the daily pragmatic
- * count "the reserve" would name a different test (issue #177). The Summary's
- * strip (overview/reserveStrip.ts) and River & reserve's water-year panel
- * (river/river.ts) name their counts here.
+ * count "the reserve" would name a different test (issue #177). The EWR
+ * page's strip (river/reserveStrip.ts) and water-year panel (river/river.ts)
+ * name their counts here.
  */
 export function daysBelowTest(ruleTable: boolean, daily?: DailyEwrSource): string {
 	return ruleTable ? dailyEwrName(daily) : 'the reserve';

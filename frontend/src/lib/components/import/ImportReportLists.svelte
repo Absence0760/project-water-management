@@ -6,8 +6,8 @@
 	// reviewer reads later is what the importer showed. Everything here comes
 	// from the file (farm names, formula text), so it is rendered as text only:
 	// plain interpolation, never {@html}.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { ImportNote, UnmappedItem } from '#lib/spreadsheet/import/report.js';
 	import { location } from './workbookFile';
 
 	let {

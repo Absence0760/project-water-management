@@ -3,7 +3,7 @@
 // picked feature's colour so it reads as "this one, not saved yet". Pure (no
 // MapLibre), so vitest checks it (drawLayers.test.ts); CatchmentMap adds
 // them after every style load (a theme switch replaces the style).
-import type { MapGeometry, MapPosition } from '$lib/api/types';
+import type { MapGeometry, MapPosition } from '#lib/api/types.js';
 import { overlayColours, withAlpha } from '../mapStyle';
 import { midpoints, type DraftShape } from './shape';
 

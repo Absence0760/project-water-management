@@ -1,8 +1,8 @@
 // Numbers and dates for the farmer view: the pure rules (./numbers.ts, which
 // the /share page uses on its own) plus the few that need words from the
 // message catalogue ($lib/i18n, WP-2.5). Every farm module imports from here.
-import { ageSpan } from '$lib/format/age';
-import { joinAnd as joinWords, plural, t, tn, type Plural } from '$lib/i18n/locale.svelte';
+import { ageSpan } from '#lib/format/age.js';
+import { joinAnd as joinWords, plural, t, tn, type Plural } from '#lib/i18n/locale.svelte.js';
 import { dateLocale, fmtNumber, fmtStampDay, NBSP } from './numbers';
 
 export * from './numbers';

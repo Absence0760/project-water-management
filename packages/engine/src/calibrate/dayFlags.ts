@@ -3,10 +3,16 @@
 // (CR-19). docs/model.md §2.10h.
 //
 // Flow: each day of a calibration record gets one class, the strongest that
-// applies, in FLOW_DAY_FLAGS order from the end (missing wins):
+// applies, in FLOW_FLAG_PRECEDENCE order (missing wins):
 // - missing: no reading (blank, NaN or negative, as alignFlow reads it);
 // - infilled: a gap-filled value, not a reading (observedInfillMask, from
 //   settings.flowGapFill's fill, engine ≥ 1.23.0, docs/model.md §2.10i);
+// - periodHigh: inside one of the record's low-flow periods
+//   (settings.qualityFlags.lowFlowPeriods, engine ≥ 1.90.0, issue #557), a
+//   reading above its threshold: only the low flows are valid there, so the
+//   day is always left out, never censored. It outranks suspect: a wrong
+//   high reading is what trips the outlier check, and 'include' for suspect
+//   days must not score it;
 // - suspect: an outlier or a non-zero flat stretch by the Data checks
 //   (quality.ts seriesRowFlags, under the project's settings.dataQuality
 //   limits, the same the run warnings use), or a zero-flow stretch the
@@ -46,14 +52,21 @@ import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../p
 import { seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
 import type { CalibrationExclusion } from './provenance';
-import { ratingOf, ZERO_FLOW_TRUST_MAX_DAYS, zeroFlowMonthsText, type AboveRatingUse, type GaugeRating, type QualityFlagSettings } from './qualityFlagSettings';
+import { lowFlowThresholds, ratingOf, ZERO_FLOW_TRUST_MAX_DAYS, zeroFlowMonthsText, type AboveRatingUse, type GaugeRating, type LowFlowPeriod, type QualityFlagSettings } from './qualityFlagSettings';
 
 export * from './qualityFlagSettings';
 
-/** Flow classes, weakest first: a day that qualifies for several takes the last. The index is the day's code. */
-export const FLOW_DAY_FLAGS = ['inRange', 'humanUse', 'belowRating', 'aboveRating', 'suspect', 'infilled', 'missing'] as const;
+/**
+ * Flow classes. The index is the day's code, stored in a run's
+ * `observed_flow_quality` column, so a class is only ever appended: periodHigh
+ * (engine ≥ 1.90.0) is code 7 although it ranks below infilled. The first seven
+ * are weakest first; FLOW_FLAG_PRECEDENCE is the order a day's class is chosen in.
+ */
+export const FLOW_DAY_FLAGS = ['inRange', 'humanUse', 'belowRating', 'aboveRating', 'suspect', 'infilled', 'missing', 'periodHigh'] as const;
 export type FlowDayFlag = (typeof FLOW_DAY_FLAGS)[number];
 export const FLOW_FLAG_CODE = Object.fromEntries(FLOW_DAY_FLAGS.map((f, i) => [f, i])) as Record<FlowDayFlag, number>;
+/** Flow classes, weakest first: a day that qualifies for several takes the last (flowDayFlags). */
+export const FLOW_FLAG_PRECEDENCE: readonly FlowDayFlag[] = ['inRange', 'humanUse', 'belowRating', 'aboveRating', 'suspect', 'periodHigh', 'infilled', 'missing'];
 
 export const FLOW_FLAG_LABEL: Record<FlowDayFlag, string> = {
 	inRange: 'In the gauged range',
@@ -62,7 +75,8 @@ export const FLOW_FLAG_LABEL: Record<FlowDayFlag, string> = {
 	aboveRating: 'Above the highest gauging',
 	suspect: 'Suspect (outlier, flat stretch or doubtful zero flow)',
 	infilled: 'Infilled',
-	missing: 'Missing'
+	missing: 'Missing',
+	periodHigh: 'Above a low-flow period’s threshold'
 };
 
 /** Rain classes: the index is the day's code. */
@@ -104,6 +118,8 @@ export interface FlowFlagInput {
 	suspect?: boolean;
 	/** settings.qualityFlags.zeroFlowMonths: the months the river is known to stop (engine ≥ 1.81.0). Absent = none. */
 	zeroFlowMonths?: readonly number[];
+	/** settings.qualityFlags.lowFlowPeriods (engine ≥ 1.90.0, issue #557): only this record's periods apply. Absent = none. */
+	lowFlowPeriods?: readonly LowFlowPeriod[];
 }
 
 /**
@@ -173,17 +189,22 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 	const zeroSuspect = x.suspect === false ? null : zeroFlowSuspect(s, x.zeroFlowMonths);
 	const hi = x.rating?.gaugedMaxM3s ?? null;
 	const lo = x.rating?.gaugedMinM3s ?? null;
+	const thr = lowFlowThresholds(x.lowFlowPeriods, x.kind, x.start, x.days);
 	const from = Math.max(0, -offset);
 	const to = Math.min(s.values.length, x.days - offset);
 	for (let i = from; i < to; i++) {
 		const t = i + offset;
 		const v = s.values[i];
 		if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
+		// A reading above a low-flow period's threshold is wrong whatever the data checks say of it, so periodHigh
+		// outranks suspect (a wrong high reading is just what trips the outlier check): it is always left out.
 		out[t] = x.infilled?.[t]
 			? FLOW_FLAG_CODE.infilled
-			: (rows && (rows.outlier[i] || (rows.flatline[i] && v !== 0))) || zeroSuspect?.[i]
-				? FLOW_FLAG_CODE.suspect
-				: hi !== null && v > hi
+			: thr && v > thr[t]!
+				? FLOW_FLAG_CODE.periodHigh
+				: (rows && (rows.outlier[i] || (rows.flatline[i] && v !== 0))) || zeroSuspect?.[i]
+					? FLOW_FLAG_CODE.suspect
+					: hi !== null && v > hi
 					? FLOW_FLAG_CODE.aboveRating
 					: lo !== null && v > 0 && v < lo
 						? FLOW_FLAG_CODE.belowRating
@@ -201,7 +222,12 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
  * gauge's record inside the network has none and no day of it can be
  * flagged as extrapolated. The treatments stay the project's.
  */
-export const siteQualityFlags = (q: QualityFlagSettings, siteNodeId: string | null): QualityFlagSettings => (siteNodeId === null ? q : { ...q, ratings: {} });
+export const siteQualityFlags = (q: QualityFlagSettings, siteNodeId: string | null): QualityFlagSettings => {
+	if (siteNodeId === null) return q;
+	// The low-flow periods (engine ≥ 1.90.0) are the outlet records' too.
+	const { lowFlowPeriods: _p, ...rest } = q;
+	return { ...rest, ratings: {} };
+};
 
 export interface RecordFlowFlagInput {
 	kind: CalibrationFlowKind;
@@ -234,6 +260,7 @@ export function recordFlowFlags(x: RecordFlowFlagInput): Uint8Array {
 		rating: ratingOf(q, x.kind),
 		infilled: x.siteNodeId === null ? observedInfillMask(x.flowFill?.[x.kind]) : null,
 		zeroFlowMonths: q.zeroFlowMonths ?? [],
+		...(q.lowFlowPeriods?.length ? { lowFlowPeriods: q.lowFlowPeriods } : {}),
 		...(x.settings.dataQuality ? { dataQuality: x.settings.dataQuality } : {}),
 		...(x.suspect === false ? { suspect: false } : {})
 	});
@@ -295,7 +322,8 @@ export function scoringDays(candidates: ArrayLike<number>, flags: Uint8Array, q:
 	for (let i = 0; i < candidates.length; i++) {
 		const t = candidates[i]!;
 		const f = FLOW_DAY_FLAGS[flags[t]!]!;
-		if (f === 'missing') continue;
+		// periodHigh (engine ≥ 1.90.0): a wrong high reading, always left out.
+		if (f === 'missing' || f === 'periodHigh') continue;
 		if (f === 'infilled' && q.infilled === 'exclude') continue;
 		if (f === 'suspect' && q.suspect === 'exclude') continue;
 		if (f === 'belowRating' && q.belowRating === 'exclude') continue;
@@ -341,13 +369,13 @@ export interface DayQuality {
 	/** Its gauged range, when one is recorded. */
 	rating: GaugeRating | null;
 	/** How each class was treated. */
-	use: Omit<QualityFlagSettings, 'ratings' | 'zeroFlowMonths'>;
+	use: Omit<QualityFlagSettings, 'ratings' | 'zeroFlowMonths' | 'lowFlowPeriods'>;
 	/** The months the river is known to stop, as the flags read them (settings.qualityFlags.zeroFlowMonths, engine ≥ 1.81.0). Absent on an older report. */
 	zeroFlowMonths?: number[];
 	/** Days in the calibration window outside the exclusion periods. */
 	windowDays: number;
-	/** Those days by flow class. */
-	flow: Record<FlowDayFlag, number>;
+	/** Those days by flow class (periodHigh absent on a report from before engine 1.90.0). */
+	flow: Record<Exclude<FlowDayFlag, 'periodHigh'>, number> & { periodHigh?: number };
 	/** Days the objective scored (censored ones included). */
 	scoredDays: number;
 	/** Scored days censored at the highest gauging. */
@@ -433,7 +461,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 			if (x.zeroRunMask?.[t]) rain.zeroRunDays++;
 		}
 	}
-	const { ratings: _r, zeroFlowMonths: _z, ...use } = x.settings;
+	const { ratings: _r, zeroFlowMonths: _z, lowFlowPeriods: _p, ...use } = x.settings;
 	const notes: string[] = [];
 	const rec = RECORD[x.flowKind];
 	if (!rating?.gaugedMaxM3s) {
@@ -482,6 +510,12 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 			`${days(longZeroDays)} ${longZeroDays === 1 ? 'is' : 'are'} zero flow held for more than ${ZERO_FLOW_TRUST_MAX_DAYS} days in stretches over the months the river is known to stop (${zeroFlowMonthsText(x.settings.zeroFlowMonths)}), running at most ${ZERO_FLOW_TRUST_MAX_DAYS} days beyond them. They are scored as a river that stopped flowing. If the logger or gauge failed instead, leave those dates out with an exclusion period.`
 		);
 	}
+	if (flow.periodHigh) {
+		const periods = (x.settings.lowFlowPeriods ?? []).filter((p) => p.kind === x.flowKind);
+		notes.push(
+			`${days(flow.periodHigh)} read above the threshold of a period in which only the ${rec}’s low flows are valid (${periods.map((p) => `${p.start} – ${p.end}, ${m3s(p.maxM3s)}`).join('; ')}), so they are left out: the fit says nothing about high flows in ${periods.length === 1 ? 'that period' : 'those periods'}.`
+		);
+	}
 	if (flow.infilled) {
 		notes.push(
 			use.infilled === 'exclude'
@@ -518,7 +552,8 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 }
 
 /**
- * 1 on days flagged extrapolated, suspect or infilled (not on missing days,
+ * 1 on days flagged extrapolated, suspect, infilled or above a low-flow
+ * period's threshold (not on missing days,
  * which have no value, nor on human-use days): the days a diagnostic on the
  * record's own shape, such as the recession segments (../recession), leaves
  * out whatever the fit's settings say.
@@ -527,7 +562,7 @@ export function flaggedDayMask(flags: Uint8Array): Uint8Array {
 	const out = new Uint8Array(flags.length);
 	for (let t = 0; t < flags.length; t++) {
 		const f = FLOW_DAY_FLAGS[flags[t]!];
-		out[t] = f === 'aboveRating' || f === 'belowRating' || f === 'suspect' || f === 'infilled' ? 1 : 0;
+		out[t] = f === 'aboveRating' || f === 'belowRating' || f === 'suspect' || f === 'infilled' || f === 'periodHigh' ? 1 : 0;
 	}
 	return out;
 }
@@ -568,11 +603,12 @@ export function flaggedYearExclusions(
 	for (let i = 0; i < windowDays.length; i++) {
 		const t = windowDays[i]!;
 		const f = FLOW_DAY_FLAGS[flags[t]!];
-		if (f === 'missing') continue;
+		// A periodHigh day is a person's choice, like a stored exclusion (outside windowDays): the rule doesn't count it.
+		if (f === 'missing' || f === 'periodHigh') continue;
 		const wy = waterYearOf(d0 + t);
 		const y = byYear.get(wy) ?? { observed: 0, flagged: 0 };
 		y.observed++;
-		if (f === 'aboveRating' || f === 'belowRating' || f === 'suspect' || f === 'infilled') y.flagged++; // flaggedDayMask's days
+		if (f === 'aboveRating' || f === 'belowRating' || f === 'suspect' || f === 'infilled') y.flagged++; // flaggedDayMask's days but periodHigh
 		byYear.set(wy, y);
 	}
 	const years = [...byYear.entries()]

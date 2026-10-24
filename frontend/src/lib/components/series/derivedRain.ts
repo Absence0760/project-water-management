@@ -1,0 +1,110 @@
+// An area's rain under its rainfall station, for the Data tab (issue #553
+// round 5, docs/ui.md § Data, docs/model.md §2.4i): the lines behind the rain
+// a run reads for the catchment (Fragmentation's average catchment rainfall)
+// or a land unit (per-unit rain): the station as recorded, the station × the
+// MAP ratio, the area's CHIRPS as stored and corrected by the pairing's
+// monthly factors, and the rain used with each day's source.
+//
+// Computed when viewed, never stored, from the engine's own code over the
+// input a run would read (GET /projects/:id/model-input): the rain used and
+// its sources are the engine's stationAreaRain (the run's rain_unit /
+// rain_used, to the bit), the factors are the pairing the run fits
+// (prepareRun's station context), the ratio the run's forcing records. The
+// only arithmetic here is the two products a run makes the same way: station
+// × ratio and CHIRPS × the factor of the day's month. Pure: no Svelte, no DOM.
+import {
+	monthOfEpochDay,
+	prepareRun,
+	stationAreaRain,
+	stationSeriesKey,
+	toEpochDay,
+	unitRainSeriesKey,
+	type DailySeries,
+	type ModelInput,
+	type PreparedRun,
+	type StationAreaForcing,
+	type StationRainDaySource
+} from '@water-management/engine';
+
+export interface AreaRainLines {
+	/** The run window's first day; every line below covers the window, one value a day. */
+	startDate: string;
+	/** The rain the run reads (mm; 0 on a dry day). */
+	rainUsed: number[];
+	source: StationRainDaySource[];
+	/** The station's record as stored (null: no reading). */
+	stationRaw: (number | null)[];
+	/** The stored record × the ratio the run applies (null: no reading). */
+	stationScaled: (number | null)[];
+	/** The area's CHIRPS as stored (`rain_chirps_mm` for the catchment, `rain_chirps_mm@<unit>` for a unit); null when it has none. */
+	chirpsRaw: (number | null)[] | null;
+	/** That CHIRPS × the pairing's factor of the day's month; null when it has none or the pairing is refused. */
+	chirpsCorrected: (number | null)[] | null;
+	/** The pairing's 12 factors (January first), null when refused or not fitted. */
+	factors: number[] | null;
+	/** Why the pairing was refused (the engine's words), or null. */
+	refused: string | null;
+	/** The station the area's CHIRPS is corrected against (its id). */
+	correctAgainst: string;
+	forcing: StationAreaForcing;
+	warnings: string[];
+}
+
+const reading = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+
+/** `s` over start … start + days − 1, a non-reading as null. */
+function align(s: DailySeries | null | undefined, start: number, days: number): (number | null)[] {
+	const out = new Array<number | null>(days).fill(null);
+	if (!s) return out;
+	const off = toEpochDay(s.startDate) - start;
+	for (let i = Math.max(0, -off); i < Math.min(s.values.length, days - off); i++) {
+		const v = s.values[i];
+		out[i + off] = reading(v) ? v : null;
+	}
+	return out;
+}
+
+/** The run preparation the pairings are read from: one per input, shared by every area of it (prepareRun is the costly part). */
+export const prepareFor = (input: ModelInput): PreparedRun => prepareRun(input);
+
+/**
+ * The lines of the catchment (`nodeId` null) or a land unit under its station,
+ * over the run window; null when the area has no station in this input (no
+ * assignment, its station has no record, or, for a unit, per-unit rain off).
+ * `prep` is prepareFor(input), passed in when several areas are read from one
+ * input.
+ */
+export function areaRainLines(input: ModelInput, nodeId: string | null, prep: PreparedRun = prepareFor(input)): AreaRainLines | null {
+	const r = stationAreaRain(input, nodeId);
+	if (!r) return null;
+	const start = toEpochDay(r.startDate);
+	const days = r.rainMm.length;
+	const series = input.series as Record<string, DailySeries | undefined>;
+	const stationRaw = align(series[stationSeriesKey(r.forcing.stationId)], start, days);
+	const stationScaled = stationRaw.map((v) => (v === null ? null : v * r.forcing.ratio));
+	const chirpsSeries = nodeId === null ? series.rain_chirps_mm : series[unitRainSeriesKey('rain_chirps_mm', nodeId)];
+	const chirpsRaw = chirpsSeries ? align(chirpsSeries, start, days) : null;
+	const rs = input.settings.rainStations;
+	const a = nodeId === null ? rs?.catchment : rs?.units?.[nodeId];
+	const correctAgainst = a?.correctAgainst ?? r.forcing.stationId;
+	// The pairing the run fits for this area (prepareRun's station context, the same fit stationAreaRain's run reads).
+	// A run pins a unit's factors only from settings.unitRain.pinned / rainStations.pinnedFactors, which are the
+	// engine's own (an outlook member, a resumed run) and never stored, so the model input a view reads has none.
+	const pairing = prep.stations?.context.pairing(correctAgainst) ?? null;
+	const factors = pairing && pairing.refused === null && pairing.months.length === 12 ? pairing.months.map((m) => m.factor) : null;
+	const chirpsCorrected = chirpsRaw && factors ? chirpsRaw.map((v, t) => (v === null ? null : v * factors[monthOfEpochDay(start + t) - 1]!)) : null;
+	return {
+		startDate: r.startDate,
+		rainUsed: r.rainMm,
+		source: r.source,
+		stationRaw,
+		stationScaled,
+		chirpsRaw,
+		chirpsCorrected,
+		factors,
+		refused: pairing?.refused ?? null,
+		correctAgainst,
+		forcing: r.forcing,
+		warnings: r.warnings
+	};
+}

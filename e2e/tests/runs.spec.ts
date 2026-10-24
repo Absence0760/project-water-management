@@ -199,7 +199,7 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 });
 
 test('every daily results chart moves through the record like the hydrograph, and the flow charts share the m³/s ↔ m³/day switch', async ({ page, owner }) => {
-	// EWR vs outflow moved to River & reserve (river-page.spec.ts), and a unit's supply vs demand to Hydrological units
+	// EWR vs outflow moved to EWR (river-page.spec.ts), and a unit's supply vs demand to Hydrological units
 	// (supply-page.spec.ts), both with the Summary's time windows.
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Chart parity');

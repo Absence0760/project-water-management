@@ -14,7 +14,8 @@ import { test } from 'node:test';
 import { functionCode, loadFunction } from './cloudfront-functions.mjs';
 
 const root = new URL('../..', import.meta.url).pathname;
-const spa = loadFunction('spa_rewrite', ['PRERENDERED', 'STATIC_DIRS', 'STATIC_FILES']);
+const SITE = 'icwbt.jaredhoward.com';
+const spa = loadFunction('spa_rewrite', ['PRERENDERED', 'STATIC_DIRS', 'STATIC_FILES', 'SITE_HOST'], { 'var.domain_name': SITE });
 const viewerRequest = (uri) => ({ request: { method: 'GET', uri, querystring: {}, headers: {}, cookies: {} }, viewer: { ip: '198.51.100.7' } });
 /** What the viewer gets: the URI sent to S3, or the function's own status. */
 const outcome = (uri) => {
@@ -114,6 +115,49 @@ test('no stale entries: each listed location is something the build writes', () 
 	for (const f of spa.STATIC_FILES) {
 		assert.ok(f === 'index.html' || staticFiles.includes(f) || prerendered.includes(f.replace(/\.html$/, '')), `STATIC_FILES has ${f}, which the build doesn't write`);
 	}
+});
+
+// --- A former hostname redirects (issue #551) --------------------------------
+
+/** A viewer request with a Host header and a query string as CloudFront gives it. */
+const hostRequest = (host, uri, querystring = {}) => ({ request: { method: 'GET', uri, querystring, headers: { host: { value: host } }, cookies: {} }, viewer: { ip: '198.51.100.7' } });
+
+test('the site host is filled from var.domain_name, the one interpolation in the code', () => {
+	assert.equal(spa.SITE_HOST, SITE);
+	assert.equal(functionCode('spa_rewrite').match(/\$\{/g).length, 1);
+	assert.match(functionCode('spa_rewrite'), /var SITE_HOST = '\$\{var\.domain_name\}';/);
+});
+
+test("the site's own host is served as before, whatever its case", () => {
+	for (const host of [SITE, 'ICWBT.jaredhoward.com']) {
+		assert.equal(spa.handler(hostRequest(host, '/projects/abc')).uri, '/index.html', host);
+		assert.equal(spa.handler(hostRequest(host, '/welcome/af')).uri, '/welcome/af.html', host);
+		assert.equal(spa.handler(hostRequest(host, '/report.pdf')).statusCode, 404, host);
+	}
+});
+
+test('any other host gets a 301 to the same path and query on the site host', () => {
+	for (const host of ['water-management.jaredhoward.com', 'd111111abcdef8.cloudfront.net', 'evil.example', `${SITE}.`]) {
+		const r = spa.handler(hostRequest(host, '/reset-password', { token: { value: 'abc-DEF_123' } }));
+		assert.equal(r.statusCode, 301, host);
+		assert.equal(r.statusDescription, 'Moved Permanently');
+		// Never the request's own host: no open redirect.
+		assert.equal(r.headers.location.value, `https://${SITE}/reset-password?token=abc-DEF_123`, host);
+		assert.equal(r.headers['cache-control'].value, 'max-age=3600');
+		assert.equal(r.body, undefined);
+	}
+	const old = 'water-management.jaredhoward.com';
+	const location = (uri, qs) => spa.handler(hostRequest(old, uri, qs)).headers.location.value;
+	assert.equal(location('/'), `https://${SITE}/`);
+	assert.equal(location('/projects/abc/runs'), `https://${SITE}/projects/abc/runs`);
+	// Every path redirects, even one the site would 404: the new host answers it.
+	assert.equal(location('/wp-login.php'), `https://${SITE}/wp-login.php`);
+	// Query strings as CloudFront passes them (values as sent, still encoded): repeats and bare names kept.
+	assert.equal(location('/share', { a: { value: '1', multiValue: [{ value: '1' }, { value: '2' }] }, flag: { value: '' }, q: { value: 'a%20b' } }), `https://${SITE}/share?a=1&a=2&flag&q=a%20b`);
+});
+
+test('a request without a Host header (the e2e site server) is served, not redirected', () => {
+	assert.equal(outcome('/projects/abc'), '/index.html');
 });
 
 // --- api_strip_prefix ---------------------------------------------------------

@@ -9,25 +9,26 @@
 	// Rows can be pasted instead of a file (issue #477 (b), "Paste rows"): the
 	// same reader ($lib/series/paste.ts), note, preview and requests.
 	import { tick, untrack } from 'svelte';
-	import { fromEpochDay, toEpochDay, unitOptions, type DayBoundary, type SeriesMeta } from '@water-management/engine';
-	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '$lib/series/provenance';
-	import { api } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
-	import { CsvError, type ParsedSeries } from '$lib/series/csv';
-	import { parseSeriesFile } from '$lib/series/file';
-	import { parsePastedSeries } from '$lib/series/paste';
-	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
+	import { fromEpochDay, PE_SOURCE_MAX, toEpochDay, unitOptions, type DayBoundary, type SeriesMeta } from '@water-management/engine';
+	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '#lib/series/provenance.js';
+	import { api } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
+	import { CsvError, type ParsedSeries } from '#lib/series/csv.js';
+	import { parseSeriesFile } from '#lib/series/file.js';
+	import { parsePastedSeries } from '#lib/series/paste.js';
+	import { defaultUnit, KIND_OPTIONS, kindLabel } from '#lib/series/kinds.js';
 	import { holeBefore, mergePreview, type Daily } from './coverage';
 	import { dataEnd, guessSeries, headerLine, seriesEnd } from './freshness';
-	import { latestFileText } from '$lib/files/latest';
+	import { latestFileText } from '#lib/files/latest.js';
 	import { inStoredUnit, type UploadResult, type UploadSubmit } from './upload';
-	import type { SeriesWriteResult } from '$lib/api/types';
+	import type { SeriesWriteResult } from '#lib/api/types.js';
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 	import { newSeriesEffect } from './roles';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import { SERIES_FILE_FORMAT, SERIES_PASTE_FORMAT } from '$lib/series/example';
+	import { emptyStation, STATION_KIND, STATION_LABEL, STATION_OPTION, stationBody, stationNames, stationProblem, type StationField, type StationInput } from './stationInput';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
+	import { SERIES_FILE_FORMAT, SERIES_PASTE_FORMAT } from '#lib/series/example.js';
 
 	let {
 		projectId,
@@ -54,6 +55,11 @@
 	} = $props();
 
 	let kind = $state<string>(KIND_OPTIONS[0]!.value);
+	// "Rainfall — station" (issue #553): the kind is catchment rain, with a station's MAP and place sent with a new series.
+	let station = $state(false);
+	let stationIn = $state<StationInput>(emptyStation());
+	// The station fields left at least once: their problem shows from then (and once the days are read).
+	let stationLeft = $state<Partial<Record<StationField, true>>>({});
 	let name = $state('');
 	let unit = $state(defaultUnit(KIND_OPTIONS[0]!.value));
 	let unitTouched = $state(false);
@@ -133,7 +139,15 @@
 	// One of the free pair filled and not the other: the server refuses a half label, so the form asks for both or neither.
 	const halfLabel = $derived(askFree && !freeProvenanceFields(freeProduct, freeVersion) && !!(freeProduct.trim() || freeVersion.trim()));
 	const boundaryFields = $derived(subDailyText !== null ? { dayBoundary } : {});
-	const namesForKind = $derived(list.filter((s) => s.kind === kind).map((s) => s.name));
+	const namesForKind = $derived(station ? stationNames(list) : list.filter((s) => s.kind === kind).map((s) => s.name));
+	// A new station: its details go with the series it creates. Days for an existing series of that name are added to it as for catchment rain.
+	const newStation = $derived(station && !target);
+	const stationIssue = $derived(newStation ? stationProblem(name, stationIn) : null);
+	const stationErr = (f: StationField) => (stationIssue?.field === f && (stationLeft[f] || parsed !== null) ? stationIssue.message : null);
+	const leave = (f: StationField) => (stationLeft = { ...stationLeft, [f]: true });
+	const kindOptions = $derived(
+		KIND_OPTIONS.flatMap((o) => (o.value === STATION_KIND ? [o, { value: STATION_OPTION, label: STATION_LABEL }] : [o]))
+	);
 	// A new series of a kind that has some: whether runs will read it, and the name it was probably meant to be.
 	const newEffect = $derived(target ? null : newSeriesEffect(list, kind, name));
 	// The file in the stored unit, so the preview compares like with like.
@@ -168,7 +182,7 @@
 		return target && mode === 'merge' ? `${verb} and merge` : target ? `${verb} and replace` : verb;
 	});
 	const submitDisabled = $derived(
-		asking ? uploading : !parsed || uploading || !unit.trim() || halfLabel || (!!target && mode === 'merge' && !preview)
+		asking ? uploading : !parsed || uploading || !unit.trim() || halfLabel || !!stationIssue || (!!target && mode === 'merge' && !preview)
 	);
 	$effect(() => {
 		submit = { label: submitLabel, disabled: submitDisabled, confirming: asking, uploading, input };
@@ -214,15 +228,21 @@
 	});
 	// A refused upload's reason is about that file, series, mode and unit: another choice clears it.
 	$effect(() => {
-		void [kind, name, mode, unit];
+		void [kind, station, name, mode, unit];
 		untrack(() => (error = null));
 	});
 
 	function onKind(k: string) {
 		error = null;
-		kind = k;
+		station = k === STATION_OPTION;
+		kind = station ? STATION_KIND : k;
 		// Keep a chosen unit while it still fits the kind (l/s for another flow); else the kind's own.
-		if (!unitTouched || !unitOptions(k).includes(unit)) unit = defaultUnit(k);
+		if (!unitTouched || !unitOptions(kind).includes(unit)) unit = defaultUnit(kind);
+		// A station is named by hand: a new one, or one of the stations already there.
+		if (station) {
+			if (!stationNames(list).includes(name.trim())) name = '';
+			return;
+		}
 		const same = list.filter((s) => s.kind === k);
 		if (same.length === 1) name = same[0]!.name;
 		else if (!same.some((s) => s.name === name.trim())) name = '';
@@ -356,6 +376,7 @@
 					message: `Updated “${meta.name || kindLabel(meta.kind)}”: ${fmtNum(p.added)} new day${p.added === 1 ? '' : 's'}, ${fmtNum(p.changed)} changed. Data now runs to ${fmtDay(dataEnd(meta))}.`
 				};
 			} else {
+				const details = newStation ? stationBody(name, stationIn) : null;
 				const meta = await api.series.put(projectId, {
 					kind,
 					name: name.trim() || undefined,
@@ -365,7 +386,9 @@
 					...(askProvenance ? provenanceFields(provenanceKey) : (labelFields ?? {})),
 					...boundaryFields,
 					// A replace records what the file is, or clears it.
-					source: source.trim() || null
+					source: source.trim() || null,
+					// A new station's MAP, its source and its place (issue #553).
+					...(details ? { station: details } : {})
 				});
 				result = { meta, added: parsed.rowCount, changed: 0, message: `Uploaded ${plural(meta.length, 'day')} to “${meta.name || label}”.` };
 			}
@@ -376,6 +399,8 @@
 			fileName = '';
 			pasteText = '';
 			guessed = null;
+			stationIn = emptyStation();
+			stationLeft = {};
 			if (fileInput) fileInput.value = '';
 			await onuploaded?.(result);
 		} catch (err) {
@@ -422,15 +447,44 @@
 	{#if guessed}<p class="hint muted guess">Looks like <strong>{guessed}</strong> — change below if not.</p>{/if}
 	<div class="field">
 		<span class="label-row"><label for={id('kind')}>Kind</label><HelpTip key={`series.${kind}`} /></span>
-		<select id={id('kind')} value={kind} onchange={(e) => ((kindTouched = true), onKind(e.currentTarget.value))}>
-			{#each KIND_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+		<select
+			id={id('kind')}
+			value={station ? STATION_OPTION : kind}
+			onchange={(e) => ((kindTouched = true), onKind(e.currentTarget.value))}
+			aria-describedby={station || kind === STATION_KIND ? id('kind-h') : undefined}
+		>
+			{#each kindOptions as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
+		{#if station}
+			<span class="hint muted" id={id('kind-h')} data-testid="station-kind-hint">
+				A rainfall station is one rain gauge’s daily record, with its own MAP and, if known, where it stands. A catchment can have several, and each can
+				serve one or more hydrological units. Until Settings has a Flow generation section, runs read catchment rainfall as they do today: the first
+				catchment rain series by name, which may be a station.
+			</span>
+		{:else if kind === STATION_KIND}
+			<span class="hint muted" id={id('kind-h')}>The catchment’s average daily rain. For one gauge’s record with its own MAP, pick {STATION_LABEL}.</span>
+		{/if}
 	</div>
 	<div class="form-row">
 		<div class="field grow">
-			<label for={id('name')}>Name <span class="muted">(optional)</span></label>
-			<input id={id('name')} maxlength="100" placeholder="e.g. Station 0021" list={id('names')} bind:value={name} />
+			{#if station}
+				<label for={id('name')}>Station name</label>
+			{:else}
+				<label for={id('name')}>Name <span class="muted">(optional)</span></label>
+			{/if}
+			<input
+				id={id('name')}
+				maxlength="100"
+				placeholder={station ? 'e.g. Bergwater' : 'e.g. Station 0021'}
+				list={id('names')}
+				required={station}
+				bind:value={name}
+				onblur={() => station && leave('name')}
+				aria-invalid={stationErr('name') ? 'true' : undefined}
+				aria-describedby={stationErr('name') ? id('station-name-err') : undefined}
+			/>
 			<datalist id={id('names')}>{#each namesForKind as n (n)}<option value={n}></option>{/each}</datalist>
+			{#if stationErr('name')}<span class="hint problem num-err" id={id('station-name-err')}>{stationErr('name')}</span>{/if}
 		</div>
 		<div class="field unit">
 			<label for={id('unit')}>Unit</label>
@@ -439,6 +493,82 @@
 			</select>
 		</div>
 	</div>
+	{#if newStation}
+		<fieldset class="pair" data-testid="station-fields">
+			<legend>The station</legend>
+			<div class="form-row">
+				<div class="field map">
+					<label for={id('station-map')}>MAP <span class="muted">(mm)</span></label>
+					<input
+						id={id('station-map')}
+						inputmode="decimal"
+						autocomplete="off"
+						placeholder="e.g. 745"
+						bind:value={stationIn.mapMm}
+						onblur={() => leave('mapMm')}
+						aria-invalid={stationErr('mapMm') ? 'true' : undefined}
+						aria-describedby="{id('station-map-h')}{stationErr('mapMm') ? ` ${id('station-map-err')}` : ''}"
+					/>
+				</div>
+				<div class="field grow">
+					<label for={id('station-map-source')}>Source of the MAP</label>
+					<input
+						id={id('station-map-source')}
+						maxlength={PE_SOURCE_MAX}
+						placeholder="e.g. the station’s record, 1991–2020"
+						bind:value={stationIn.mapSource}
+						onblur={() => leave('mapSource')}
+						aria-invalid={stationErr('mapSource') ? 'true' : undefined}
+						aria-describedby="{id('station-map-h')}{stationErr('mapSource') ? ` ${id('station-map-err')}` : ''}"
+					/>
+				</div>
+			</div>
+			<span class="hint muted" id={id('station-map-h')}
+				>Required: the station’s mean annual rain and where it comes from (the dataset or study, and its years). A unit’s rain from this station is scaled by
+				the unit’s MAP over this one.</span
+			>
+			{#if stationErr('mapMm') || stationErr('mapSource')}<span class="hint problem" id={id('station-map-err')}>{stationErr('mapMm') ?? stationErr('mapSource')}</span>{/if}
+			<div class="form-row">
+				<div class="field grow">
+					<label for={id('station-lat')}>Latitude <span class="muted">(optional)</span></label>
+					<input
+						id={id('station-lat')}
+						inputmode="decimal"
+						autocomplete="off"
+						placeholder="e.g. -33.92"
+						bind:value={stationIn.lat}
+						onblur={() => leave('lat')}
+						aria-invalid={stationErr('lat') ? 'true' : undefined}
+						aria-describedby="{id('station-place-h')}{stationErr('lat') || stationErr('lon') ? ` ${id('station-place-err')}` : ''}"
+					/>
+				</div>
+				<div class="field grow">
+					<label for={id('station-lon')}>Longitude <span class="muted">(optional)</span></label>
+					<input
+						id={id('station-lon')}
+						inputmode="decimal"
+						autocomplete="off"
+						placeholder="e.g. 18.86"
+						bind:value={stationIn.lon}
+						onblur={() => leave('lon')}
+						aria-invalid={stationErr('lon') ? 'true' : undefined}
+						aria-describedby="{id('station-place-h')}{stationErr('lat') || stationErr('lon') ? ` ${id('station-place-err')}` : ''}"
+					/>
+				</div>
+			</div>
+			<span class="hint muted" id={id('station-place-h')}>Decimal degrees (WGS84), south and west negative. Give both or leave both blank.</span>
+			{#if stationErr('lat') || stationErr('lon')}<span class="hint problem" id={id('station-place-err')}>{stationErr('lat') ?? stationErr('lon')}</span>{/if}
+		</fieldset>
+	{:else if station && target}
+		<p class="hint muted" data-testid="station-existing">
+			{#if target.station?.mapMm != null}
+				“{target.name}” is a station: MAP {fmtNum(target.station.mapMm)} mm ({target.station.mapSource}). The days are added to it.
+			{:else}
+				“{target.name || kindLabel(target.kind)}” is a catchment rain series with no station MAP. The days are added to it; to add a new station, give it
+				another name.
+			{/if}
+		</p>
+	{/if}
 	<div class="field">
 		<label for={id('source')}>Source <span class="muted">(optional)</span></label>
 		<input
@@ -711,6 +841,13 @@
 	}
 	.grow {
 		flex: 1;
+	}
+	.map {
+		width: 8rem;
+	}
+	.problem {
+		display: block;
+		color: var(--danger);
 	}
 	.unit {
 		width: 90px;

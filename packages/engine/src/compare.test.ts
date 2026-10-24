@@ -390,6 +390,24 @@ describe('diffInputs', () => {
 		expect(diffInputs(s, copyWithFreshIds(s))).toEqual([]);
 	});
 
+	it('names a rainfall station’s record and cell CHIRPS, and lists a change of its place (issue #553)', () => {
+		const id = 'b1c3e1f0-0000-4000-8000-000000000001';
+		const a = snapshot();
+		a.stations = { [id]: { name: 'Gauge A', mapMm: 745, mapSource: 'study', lat: null, lon: null } };
+		a.series[`rain_station_mm#${id}`] = { startDate: '2020-01-01', length: 10, valuesSha256: 'x' };
+		const b = structuredClone(a);
+		b.stations![id] = { ...b.stations![id]!, mapMm: 760, lat: -33.9, lon: 18.8 };
+		b.series[`rain_station_mm#${id}`] = { startDate: '2020-01-01', length: 12, valuesSha256: 'y' };
+		b.series[`rain_chirps_station_mm#${id}`] = { startDate: '2020-01-01', length: 12, valuesSha256: 'z' };
+		const t = texts(a, b);
+		expect(t).toContain('Rainfall station Gauge A: no place → at -33.9, 18.8');
+		expect(t.some((x) => x.startsWith('CHIRPS at the rainfall station Gauge A series added'))).toBe(true);
+		expect(t.some((x) => x.startsWith('Rainfall station Gauge A') && x.includes('series'))).toBe(true);
+		// The same stations: nothing; a run without stations recorded none to compare.
+		expect(diffInputs(a, structuredClone(a))).toEqual([]);
+		expect(texts({ ...a, stations: undefined }, b).filter((x) => x.includes('no place'))).toEqual([]);
+	});
+
 	it('does not flag settings stored sparsely vs merged over the defaults', () => {
 		const a = snapshot({ settings: {} as RunInputsSnapshot['settings'] });
 		// Except the runoff model: a run stored without one predates it and ran legacy.
@@ -605,6 +623,15 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual([]);
 		d.settings = { ...d.settings, allocationMode: 'cap', allocationTolerance: 0.15 };
 		expect(texts(a, d)).toEqual(['Allocation mode: Compare only → Cap use at the registered volume', 'Allocation comparison band: ±10% → ±15%']);
+	});
+
+	it('lists a change of the EWR split (engine 1.94.0), and none for a snapshot without it against the flow share', () => {
+		const a = snapshot();
+		const d = copyWithFreshIds(a);
+		d.settings = { ...d.settings, ewrSplit: 'flowShare' };
+		expect(texts(a, d)).toEqual([]);
+		d.settings = { ...d.settings, ewrSplit: 'naturalMar' };
+		expect(texts(a, d)).toEqual(['EWR split between units by: the flow share → each unit’s natural MAR']);
 	});
 
 	it('lists demand objects added, changed and removed, matched across a copy by unit and object name (engine 1.7.0)', () => {
@@ -1694,6 +1721,51 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		d.settings.ewrRules![0]!.lowFlow = null;
 		d.settings.ewrRules![0]!.highFlows = [];
 		expect(texts(a, d)).toEqual([]);
+	});
+});
+
+describe('diffInputs: rainfall stations (issue #553)', () => {
+	const station = (name: string, mapMm: number | null) => ({ name, mapMm, mapSource: mapMm === null ? null : 'station record', lat: null, lon: null });
+	const stations = { s1: station('Hill station', 745), s2: station('Low station', 610) };
+	const texts = (a: RunInputsSnapshot, b: RunInputsSnapshot) => diffInputs(a, b).filter((c) => c.subject === 'Rainfall stations').map((c) => c.text);
+
+	it('says nothing when neither run has stations, or both have the same', () => {
+		expect(texts(snapshot(), snapshot())).toEqual([]);
+		const a = snapshot({ stations });
+		a.settings.rainStations = { catchment: { stationId: 's1' }, units: { f1: { stationId: 's2' } } };
+		expect(texts(a, structuredClone(a))).toEqual([]);
+	});
+
+	it('words each assignment, the catchment MAP, a station’s CHIRPS site, its unreliable periods and its MAP, by name', () => {
+		const a = snapshot({ stations });
+		a.settings.rainStations = { catchment: { stationId: 's1' }, units: { f1: { stationId: 's1' } }, unreliable: { s1: [['2001-01-01', '2001-03-31']] } };
+		const b = snapshot({ stations: { ...stations, s1: station('Hill station', 760) } });
+		b.settings.rainStations = {
+			catchment: { stationId: 's1', correctAgainst: 's2' },
+			units: { f1: { stationId: 's2', scaleToMap: false }, f2: { stationId: 's1' } },
+			catchmentMapMm: 780,
+			catchmentMapSource: 'isohyets',
+			sites: { s2: { unitId: 'f2' } },
+			unreliable: { s1: [['2001-01-01', '2001-03-31'], ['2005-06-01', '2005-06-30']] }
+		};
+		expect(texts(a, b)).toEqual([
+			"Rainfall stations: the catchment's station: Hill station → Hill station, gaps corrected against Low station",
+			"Rainfall stations: Bergwater's station: none → Hill station",
+			"Rainfall stations: Rooikloof's station: Hill station → Low station, not scaled to MAP",
+			"Rainfall stations: catchment MAP: the units' area-weighted mean → 780 mm (isohyets)",
+			"Rainfall stations: Low station's CHIRPS: its own cell, if any → the CHIRPS of Bergwater",
+			"Rainfall stations: Hill station's unreliable periods: 2001-01-01 to 2001-03-31 → 2001-01-01 to 2001-03-31, 2005-06-01 to 2005-06-30",
+			"Rainfall stations: Hill station's MAP: 745 mm (station record) → 760 mm (station record)"
+		]);
+		// Not again as a bare "Setting changed".
+		expect(diffInputs(a, b).some((c) => c.text === 'Setting "rainStations" changed')).toBe(false);
+		expect(new Map(settingsChangePaths()).get('Rainfall stations')).toBe('rainStations');
+	});
+
+	it('reads a run without the setting as no station, and names a station by id when the snapshot lacks its name', () => {
+		const b = snapshot();
+		b.settings.rainStations = { catchment: { stationId: 'series-9' } };
+		expect(texts(snapshot(), b)).toEqual(["Rainfall stations: the catchment's station: none → series-9"]);
 	});
 });
 

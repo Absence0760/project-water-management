@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findElsewhere } from '$lib/components/common/sectionNav';
+import { findElsewhere } from '#lib/components/common/sectionNav.js';
 import { AUTOMATION_LABEL, saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
@@ -11,9 +11,10 @@ describe('SETTINGS_SECTIONS', () => {
 			'set-rain',
 			'set-quality',
 			'set-demand',
-			'set-share',
 			'set-restrict',
 			'set-reporting',
+			// Flow generation (issue #553 round 3) keeps the Flow share panel's id and leads Runoff & calibration.
+			'set-share',
 			'set-flow',
 			'set-record',
 			'set-fit',

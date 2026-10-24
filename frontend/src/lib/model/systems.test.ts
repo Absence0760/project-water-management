@@ -7,7 +7,7 @@ import { DEFAULT_IRRIGATION_SYSTEMS, newNetworkNode, type ProjectModel } from '@
 import { ModelEditor } from './editor.svelte';
 import { findSystem, ownEfficiencyUsed, plantingSystemsLine, sabiRange, systemLabel, systemsOf, systemUse, unitEfficiency } from './systems';
 import { validateModel } from './validate';
-import { returnFlowHint } from '$lib/components/network/fields';
+import { returnFlowHint } from '#lib/components/network/fields.js';
 
 function model(): ProjectModel {
 	const g = { ...newNetworkNode('g', 0, null), name: 'Gauge' };

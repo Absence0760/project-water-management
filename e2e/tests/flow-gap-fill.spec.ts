@@ -31,7 +31,8 @@ test('a flow record uploaded in l/s says so, and an editor records where it came
 	await expect(source).toHaveValue('DWS X1H001');
 	await source.fill('DWS X1H001 (daily means)');
 	await source.press('Enter');
-	await expect(details.getByTestId('save-status')).toHaveText('Saved');
+	// The Source's own status (its description): the Name beside it has one too (issue #556).
+	await expect(source).toHaveAccessibleDescription('Saved');
 	await page.reload();
 	await expect(page.getByRole('group', { name: 'Series details' }).getByRole('textbox', { name: 'Source' })).toHaveValue('DWS X1H001 (daily means)');
 });

@@ -1,14 +1,17 @@
 # Infrastructure
 
-Terraform for the production stack at **https://water-management.jaredhoward.com**.
+Terraform for the production stack at **https://icwbt.jaredhoward.com** (since
+issue #551; the former `water-management.jaredhoward.com` redirects there:
+[docs/deployment.md § Moving the site to a new domain](../docs/deployment.md#moving-the-site-to-a-new-domain)).
 One root module, flat files, state in the estate bootstrap's S3 bucket. Nothing
 here has been applied yet; see [Operator steps](#operator-steps) for the order.
 
 ## Architecture
 
 ```
-browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-management.jaredhoward.com
+browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredhoward.com (+ redirect_domains)
                     ├─ /*         → CF Function spa_rewrite → S3 (private, OAC)     SPA build
+                    │              (another host: 301 to the same path on domain_name)
                     ├─ /reports/* → signed URLs only (key group) → S3 reports (OAC) report PDFs
                     ├─ /packs/*   → signed URLs only (key group) → S3 packs (OAC)   evidence pack PDFs
                     ├─ /tiles/*   → CF Function tiles_range (≤ 2 MiB ranges) → S3 tiles (OAC)  basemap, relief, glyphs
@@ -120,8 +123,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   and configuration set only, and only with `From = no-reply@<domain>`.
   Leaving the SES sandbox is a manual step ([Operator steps](#operator-steps)).
 - **Five Lambdas.** `water-management-backend` is the API. It connects as the
-  RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout and reserved
-  concurrency 10. `water-management-migrate` (`backend/src/lambda-migrate.ts`)
+  RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout, reserved
+  concurrency 25 and a pool of 2 connections (§ Connections). `water-management-migrate` (`backend/src/lambda-migrate.ts`)
   reads the owner credentials at run time, creates or re-passwords
   `water_app`, and applies `backend/migrations/*.sql`; `load-reference.yml`
   invokes it for a reference dataset load too. It has `migrate_memory_mb`
@@ -196,7 +199,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | File | What |
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
-| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `github_repo`, `budget_alert_email`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
+| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint (`secretsmanager_endpoint_az_count`) and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
@@ -220,7 +223,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist, and a logging CloudTrail trail (this account's or the Organization's) records KMS write management events in the region (the database key alarm's source). PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
-| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
+| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) `--redirect-from <host>` (each former hostname in `redirect_domains`, issue #551) also checks that its pages 301 to the site and its `/api/health` still answers |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
@@ -279,10 +282,19 @@ Multi-AZ (`db_multi_az`) doubles the instance cost. Single-AZ recovery after
 an AZ failure means a restore (minutes to about an hour), which is acceptable
 here.
 
-**Connections.** max_connections on t4g.micro is ~80. The API is capped at
-10 concurrent containers × a `pg` pool of 5 = 50, the worker at 8 × a pool of
-2 = 16, plus the migrator: 67 at the very worst, under the limit with room for
-RDS's own. Raising a reserved concurrency means redoing this sum. RDS
+**Connections.** RDS sets max_connections from the instance's memory
+(`DBInstanceClassMemory / 9531392`): ~80 on the default `db.t4g.micro`, ~180
+on the `db.t4g.small` production runs (`prod.tfvars`); `SHOW max_connections`
+gives the exact figure. A Lambda container serves one request at a time, so
+every request path holds at most one pooled connection at a time (audited
+for issue #541; docs/architecture.md § Connections per request), and the
+second is headroom: the API is capped at 25 concurrent containers ×
+a `pg` pool of 2 (`DB_POOL_MAX`, `lambda.tf`) = 50, the worker at 8 × a pool
+of 2 = 16, plus the migrator's 2: 68 at the very worst, under the micro's
+limit with room for the operator and RDS's own, and a third of the small's.
+Before issue #541 the API was 10 × a pool of 5, the same 50, and a single
+cold load of the Project tab (about 10 panels at once) hit the cap of 10.
+Raising a reserved concurrency or a pool means redoing this sum. RDS
 Proxy isn't used: its minimum bill (~$22/month) is more than the DB at this
 scale. An alarm fires at 60 connections.
 
@@ -428,8 +440,14 @@ the us-east-1 one ([§ Budget alerts](#budget-alerts)).
 
 - **arm64 Lambdas**, ~20% cheaper per GB-s. The bundle is pure JS (`bcryptjs`,
   not native bcrypt).
-- **No www alias.** `www.water-management.jaredhoward.com` isn't worth a SAN,
+- **No www alias.** `www.icwbt.jaredhoward.com` isn't worth a SAN,
   records and a redirect.
+- **A former hostname is an alias of the same distribution**, not a second
+  distribution (`redirect_domains`): `spa_rewrite` 301s its pages, its
+  `/api/*` keeps answering (one-click unsubscribes, logger pushes), and the
+  certificate covers it as a SAN. A second distribution would have meant
+  moving the alias between distributions, which CloudFront only allows once
+  the first has let go of it: minutes with the old address down.
 - **Own response-headers policies** (`security_headers.tf`) instead of the
   managed SecurityHeadersPolicy: HSTS 2 years with subdomains (no preload —
   only a registrable domain can be preloaded), nosniff, `X-Frame-Options:
@@ -440,7 +458,7 @@ the us-east-1 one ([§ Budget alerts](#budget-alerts)).
   The CloudFront header carries everything build-independent (`default-src
   'self'`, `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors
   'none'`, `connect-src 'self'`) plus `script-src 'self' 'unsafe-inline'`;
-  SvelteKit's `<meta>` CSP (`kit.csp.mode = 'hash'`) adds `script-src 'self'
+  SvelteKit's `<meta>` CSP (`csp.mode = 'hash'` in `frontend/vite.config.ts`) adds `script-src 'self'
   'sha256-…'`. Browsers enforce both, so only the hashed bootstrap and
   same-origin files run. `scripts/check-csp.mjs` fails the frontend deploy if
   the meta policy is missing, so the header's `'unsafe-inline'` can never be
@@ -500,6 +518,15 @@ Idle to light use, on-demand, us-east-1:
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $63** (list prices checked 2026-10-04; the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
+
+**The API Lambda's ceiling.** Reserved concurrency (`lambda_reserved_concurrency`,
+25) bounds it: 25 containers × 1 GB busy all month is 64.8 M GB-s, ≈ $1,146 at
+af-south-1's arm price ($0.00001768/GB-s), plus up to ≈ $175 of request
+charges (Lambda's 10 requests a second per unit of concurrency, $0.27/M), so
+≈ $1,320 a month, ≈ $44 a day (≈ $530 at the old cap of 10; issue #541). One
+IP at the WAF's `/api/*` limit can keep all 25 busy only with requests of 7.5 s
+or more. `lambda-throttles` (essential tier) pages once the API is saturated;
+the daily budget reports the spend a day later.
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
@@ -613,7 +640,9 @@ Claude does not run any of these, and none of them print a secret. Replace
    default region us-east-1).
 
    Wait until the child zone's delegation resolves:
-   `dig +short NS water-management.jaredhoward.com`. ACM validation hangs
+   `dig +short NS water-management.jaredhoward.com` (and, since issue #551,
+   `icwbt.jaredhoward.com`, the zone made by hand: docs/deployment.md § Moving
+   the site to a new domain). ACM validation hangs
    until it does.
 2. **Region (af-south-1 only).**
    `aws account enable-region --region-name af-south-1 --profile water-management`,
@@ -622,9 +651,18 @@ Claude does not run any of these, and none of them print a secret. Replace
 3. **Lambda concurrency quota, before the first apply.** A new account's
    concurrent-executions quota is 10 and AWS keeps 10 unreserved, so any
    reservation fails until it is raised. The quota must cover the sum of the
-   reservations plus 10: at the defaults 10 (API) + 1 (migrate) + 8 (worker)
-   + 2 (fetcher) + 2 (renderer) + 10 = **33**. Ask for 1000 (the usual
+   reservations plus 10: at the defaults 25 (API) + 1 (migrate) + 8 (worker)
+   + 2 (fetcher) + 2 (renderer) + 10 = **48**. Ask for 1000 (the usual
    default) and wait for it to be granted before planning the first apply.
+   **Raising a reservation on a live account** (issue #541 took the API
+   from 10 to 25, so 33 → 48) needs the same check first: an apply asking
+   for more than the quota leaves unreserved fails, and the function keeps
+   its old cap. Read the quota and what is reserved now, before the plan:
+   `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`
+   and `aws lambda get-account-settings --region <region> --profile water-management --query AccountLimit.UnreservedConcurrentExecutions`
+   (the unreserved part must stay at least 10 after the raise, so it must
+   be at least 10 + the increase now; `scripts/preapply-check.sh` does the
+   sum).
    `-1` (unreserved) is refused by the variables' validation: it would lift
    the spend and DB-connection caps.
    `aws service-quotas request-service-quota-increase --service-code lambda --quota-code L-B99A9384 --desired-value 1000 --region <region> --profile water-management`
@@ -709,7 +747,9 @@ Claude does not run any of these, and none of them print a secret. Replace
    topic (the us-east-1 one carries every budget and cost-anomaly alert).
    Then run the post-apply check (read-only):
    `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
-   It FAILS while a subscription is still `PendingConfirmation`, and checks
+   (add `--redirect-from <host>` for each former hostname while
+   `redirect_domains` holds one: `--redirect-from water-management.jaredhoward.com`
+   since issue #551). It FAILS while a subscription is still `PendingConfirmation`, and checks
    the RDS event subscription is `active`, the renderer's ECR policy (10a),
    SES production access (a WARN until step 8a is granted) and the edge: a
    missing `/x.pdf` and a missing file under `/_app/` answer 404, no
@@ -725,11 +765,11 @@ Claude does not run any of these, and none of them print a secret. Replace
 8a. **SES: verify, then leave the sandbox.** The DKIM, MAIL FROM and DMARC
    records are created by the apply; the identity turns `SUCCESS` once DNS
    propagates (minutes to an hour):
-   `aws sesv2 get-email-identity --email-identity water-management.jaredhoward.com --region <region> --profile water-management --query '{dkim:DkimAttributes.Status,mailFrom:MailFromAttributes.MailFromDomainStatus,verified:VerifiedForSendingStatus}'`.
+   `aws sesv2 get-email-identity --email-identity icwbt.jaredhoward.com --region <region> --profile water-management --query '{dkim:DkimAttributes.Status,mailFrom:MailFromAttributes.MailFromDomainStatus,verified:VerifiedForSendingStatus}'`.
    A new account is in the **SES sandbox** (200 emails/day, 1/s, and only to
    *verified* addresses), which Terraform can't change. Request production
    access — it is a human review by AWS, usually within a day:
-   `aws sesv2 put-account-details --production-access-enabled --mail-type TRANSACTIONAL --website-url https://water-management.jaredhoward.com --use-case-description "Transactional account email only (email verification, password reset, project invitations) for a low-volume B2B water-modelling tool; no marketing. Bounces and complaints go to the SES suppression list and CloudWatch alarms." --contact-language EN --region <region> --profile water-management`.
+   `aws sesv2 put-account-details --production-access-enabled --mail-type TRANSACTIONAL --website-url https://icwbt.jaredhoward.com --use-case-description "Transactional account email only (email verification, password reset, project invitations) for a low-volume B2B water-modelling tool; no marketing. Bounces and complaints go to the SES suppression list and CloudWatch alarms." --contact-language EN --region <region> --profile water-management`.
    Until it is granted, verify your own address to test
    (`aws sesv2 create-email-identity --email-identity you@example.com --region <region> --profile water-management`):
    mail to it goes through (the send policy allows the recipient's identity,
@@ -764,7 +804,7 @@ Claude does not run any of these, and none of them print a secret. Replace
 
     Approve each in the `production` environment. The backend deploy ends
     with a `/api/health` check through CloudFront; check the site by hand
-    too: `curl -s https://water-management.jaredhoward.com/api/health`.
+    too: `curl -s https://icwbt.jaredhoward.com/api/health`.
 
     **Expected alarm between the apply and this deploy:** the apply creates
     the worker and fetcher with Terraform's stub code, which throws on every
@@ -1086,7 +1126,9 @@ when set. A positive control (`accepts_real_alert_mailboxes`) accepts a
 domain that only contains "example". The suite's own address is at the
 site's domain, since the rule refuses every reserved one. Six more refuse an unreserved (`-1`) concurrency on each
 Lambda and a worker cap below the sum of its SQS triggers'
-`maximum_concurrency`; `worker_sqs_triggers` pins that sum against the planned
+`maximum_concurrency`; two refuse an API or worker cap whose cap × pool sum
+passes 70 database connections (§ Connections), with 26 accepted as the
+positive control; `worker_sqs_triggers` pins that sum against the planned
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker
 throttles alarm; and `waf_auth_rule_matches_decoded_path` pins the auth rate
 limit's `URL_DECODE` → `NORMALIZE_PATH` → `LOWERCASE` transformations (so

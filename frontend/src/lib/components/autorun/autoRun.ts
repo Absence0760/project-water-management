@@ -1,7 +1,7 @@
 // Automatic runs after new data (WP-2.11; backend runs/autoRun.ts,
 // docs/ui.md § Automatic runs): the setting over its defaults, the header's
 // "re-run queued for 14:05", and the Overview's "New auto run: publish?".
-import type { AutoRunSettings, RunMeta } from '$lib/api/types';
+import type { AutoRunSettings, RunMeta } from '#lib/api/types.js';
 
 /** The backend's defaults (runs/autoRun.ts AUTO_RUN_DEFAULTS). */
 export const AUTO_RUN_DEFAULTS: Readonly<AutoRunSettings> = Object.freeze({ enabled: false, debounceMinutes: 15, publish: 'never' });

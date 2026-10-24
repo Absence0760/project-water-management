@@ -16,7 +16,7 @@ flowchart LR
   end
 
   subgraph AWS["AWS (Phase 6: deployed, minimal tier)"]
-    CF[CloudFront + WAF<br/>water-management.jaredhoward.com]
+    CF[CloudFront + WAF<br/>icwbt.jaredhoward.com]
     S3[(S3<br/>static build)]
     L[Lambda · Hono<br/>Function URL]
     EL[engine<br/>stored runs]
@@ -66,7 +66,7 @@ origin**, so the session cookie is first-party.
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. Subpath exports: `/calendar` (only the pure date helpers, `src/calendar.ts`, for code that must not pull in the model, such as the fetcher Lambda) and `/testing`. |
 | `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner, and loads the map's allowed reference datasets from the private reference bucket (`geo/referenceLoad.ts`, `load-reference.yml`, [deployment.md § Reference datasets](./deployment.md#reference-datasets)), and runs the fixed, named read-only production checks (`checks/readOnlyChecks.ts`, a `{ check }` event, [deployment.md § Read-only production checks](./deployment.md#read-only-production-checks)). `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). In Lambda, the API, worker and migrate entry points first read their secrets (session key, `DATABASE_URL`, …) from their own Secrets Manager secret, once per cold start, never from environment variables (`src/config/runtimeSecrets.ts`, [security.md § Runtime secrets](./security.md#runtime-secrets)); locally they come from `.env.development`. |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
-| `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront serves `index.html` for extension-less paths so deep links work (`spa_rewrite`; a missing file gets a 404 page, infra/README.md). A client navigation commits only once the new page's stylesheets have loaded (root layout `onNavigate`, `lib/nav/stylesheets.ts`), since SvelteKit + Vite can otherwise render it before its CSS. The root layout frames a signed-in person's pages in `lib/components/layout/AppShell.svelte` (a sidebar from 900 px, a slim bar on phones; a page adds its own navigation through `layout/sidebar.svelte.ts`); the farmer view and the sign-in pages have their own frames ([ui.md § App shell](./ui.md#app-shell-and-account-menu)). |
+| `frontend` | `@water-management/frontend` | SvelteKit 3 (Svelte 5) as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront serves `index.html` for extension-less paths so deep links work (`spa_rewrite`; a missing file gets a 404 page, infra/README.md). A client navigation commits only once the new page's stylesheets have loaded (root layout `onNavigate`, `lib/nav/stylesheets.ts`), since SvelteKit + Vite can otherwise render it before its CSS. Back and Forward return the window to where it was on that entry, held while the page builds again (`lib/nav/backScroll.ts` on `lib/nav/scrollHold.ts`, the one scroll hold the `#anchor` landings share and yield to it), since SvelteKit 3 skips that for `reset: false` steps. The root layout frames a signed-in person's pages in `lib/components/layout/AppShell.svelte` (a sidebar from 900 px, a slim bar on phones; a page adds its own navigation through `layout/sidebar.svelte.ts`); the farmer view and the sign-in pages have their own frames ([ui.md § App shell](./ui.md#app-shell-and-account-menu)). |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801` (a worktree gets its own slot: `e2e/support/env.ts`); CI runs them as 14 shards. |
 | `scripts/wbt-import` | none (Python 3.14 + openpyxl) | Reads a b023 `.xlsm` into `project.json` and regression fixtures, written under `data/` (gitignored). |
 | `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL, the migrate Lambda and the job worker Lambda (all in a VPC; the worker's SQS queue, DLQ and 5-minute schedule in `jobs.tf`), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, the map's tiles bucket (served at `/tiles/*`) and private reference bucket (`map_data.tf`), budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
@@ -81,7 +81,10 @@ The same `runModel` runs:
   (`frontend/src/lib/calibration/autocal.worker.ts`): about a minute of model
   runs on the input from `GET /projects/:id/model-input`, with the unsaved
   Settings form in place of the saved settings. It fills the form and never
-  saves. The uncertainty ensemble (issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9))
+  saves. The Data tab reads the same input, on demand, for each area's rain
+  used under its rainfall station (issue #553, `series/derivedRain.ts`, the
+  engine's `stationAreaRain`, a chunk of its own loaded when a row opens, a
+  grouped CSV is built or Preview all data opens). The uncertainty ensemble (issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9))
   runs in the same worker: hundreds of full `runModel`s on a run's own input
   (`GET …/runs/:runId/model-input`), with options the server resolved and a
   seed the database drew; the server re-runs a few members before storing
@@ -117,10 +120,10 @@ SvelteKit already gives every route its own chunk. The catchment workspace
 (`routes/projects/[id]`) is split further, because it carries most of the app:
 only the Overview tab (the default view) ships in the route's chunk, and each
 other tab (Network, Crops & demand, Transfers, Data, Settings & calibration,
-River & reserve, Hydrological units, Runs & results, Scenarios, History, Map) is a dynamic `import()` of its component, as are the two
+EWR, Hydrological units, Runs & results, Scenarios, History, Map) is a dynamic `import()` of its component, as are the two
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
-the project has a table, and River & reserve's compliance panel, loaded for a
+the project has a table, and the EWR page's compliance panel, loaded for a
 run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
 `runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
 water users). The Map tab loads its map component as one more chunk, and its Start from the map and Upload GeoJSON sheets each as one when opened; the map component loads MapLibre (and the PMTiles reader, with a basemap) only when the map is drawn, measured against a ceiling of their own (issue #288, [maps.md § CSP and bundle](./maps.md#csp-and-bundle)). Inside the Overview, the flow chart,
@@ -249,7 +252,7 @@ nothing loads later or in a different order. −2.3 KB gzip across the bundle;
 `src/lib/preloadDedupe.test.ts` pins the rule.
 
 Svelte scopes each component's styles with a class on its elements. The
-default is `svelte-<hash>`; `frontend/svelte.config.js` sets `cssHash` to
+default is `svelte-<hash>`; `frontend/svelte-options.js` sets `cssHash` to
 `s<hash>` (the same hash of the file name), which appears thousands of times
 in the compiled templates and CSS: −2.6 KB gzip across the bundle and a little
 off every first load. `src/lib/cssHash.test.ts` computes every component's
@@ -308,7 +311,7 @@ worker both use carries everything either of them calls, with its imports, so
 the small things pages read must not live beside the run, fit or ensemble code.
 They have modules of their own: `version.ts` (`ENGINE_VERSION`), `prepare.ts`
 (`prepareRun`: settings, run window and aligned inputs, for the Data tab's
-series preview), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
+series preview and, with `runoff/stationAreaRain.ts`, its derived rain rows, both loaded only when used), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
 `calibrate/objectives.ts` (objective ids and labels), `runoff/params.ts` (the
 GR4J parameter table; the legacy one went with that model in engine 1.0.0), `runoff/pet.ts`
 (`hasPotentialEvaporation`), `reference/wr2012Settings.ts` (the WR2012
@@ -470,7 +473,7 @@ must not inherit the last page's language. CloudFront's `spa_rewrite` function s
 `guardrails.tftest.hcl`, and `infra/scripts/cloudfront-functions.test.mjs`
 checks `PRERENDERED` against the routes and the language table, so a new
 language can't 404 in production only; the e2e static server mirrors it). The absolute URLs in
-its tags come from `kit.prerender.origin`: the build's `SITE_ORIGIN` (the
+its tags come from `paths.origin` (SvelteKit's config in `frontend/vite.config.ts`): the build's `SITE_ORIGIN` (the
 deploy passes `PUBLIC_SITE_URL`), else `http://localhost:7777`.
 
 A signed-out `/` shows the same component client-side: the root layout renders
@@ -648,6 +651,34 @@ store) and storing an uncertainty ensemble (`POST
 stores while the ensemble is still `started`, so of two posts only one
 stores). `connection.db.test.ts` pins it with a pool of **one** connection
 and an injected engine: another query succeeds while a run computes.
+
+### Connections per request
+
+A Lambda container serves one request at a time, so the API's pool is small:
+`DB_POOL_MAX=2` (`infra/lambda.tf`, read by `db/pool.ts` `poolMax`, which
+refuses anything but a whole number of at least 1; the production config
+check requires it on the API and the worker). Production's database
+connections are sized on the API's reserved concurrency × that pool (25 × 2
+= 50; [infra/README.md § Connections](../infra/README.md#database-rds-postgresql-17-not-aurora-serverless-v2)). That
+holds because **a request holds at most one connection at a time**: the
+routes run their transactions one after another (a model run's read, then
+the engine with none, then the store), no transaction callback opens
+another (`withUser`, `withoutUser`, `queryWithoutUser`), the auth middleware
+releases its session check before the handler runs, and a `Promise.all`
+inside a transaction (the split shape's `loadFeature`s) queues on its one
+client. Nothing may outlive the response either: Lambda freezes the
+container with it, still holding a connection, into the next request. The
+channels route awaits finishing its elevation-model attempt before it
+answers for that reason (`delineation/channelRoutes.ts`). The second
+connection is headroom, not a budget: a route that nested a transaction, or
+ran two in parallel, would need it, and a third would wait. In Lambda that
+wait fails after 10 s (`db/pool.ts` `acquireTimeoutMs`, an error the
+`lambda-errors` alarm counts) rather than holding the container until its
+30 s timeout; off Lambda the pool waits, since many requests share it.
+
+The worker does nest: a job's transaction stays open while its progress
+(`jobs/runner.ts` `reportProgress`, a `withoutUser`) or a render handler's
+`withUser` runs, so a job holds two at once, which its pool of 2 allows.
 
 **Jobs keep the engine inside their transaction.** The `rerun`, `yield`,
 `sweep` and `outlook` handlers run in the job's `withUser` transaction (`executeRun`, one
@@ -1314,6 +1345,15 @@ merges into:
     the stage waits. Withdrawing the confirmation (`replaceSeries: false`),
     a new one, re-targeting or a new config discards the stage
     (`data_feed_stamp`); removing the feed takes it with it.
+  - **A new series never takes over unseen** (issue #561). A run reads the
+    first series of each kind by name, so attaching or re-targeting a feed
+    into a new series that would sort ahead of one holding a record answers
+    **409** (`series_takes_over`, `feeds/routes.ts refuseTakeOver`): name it
+    to sort after, or replace that record as above. The boundary's feed
+    names its series that way itself and offers the replacement as a choice
+    ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)),
+    and a run warns when another series of its CHIRPS kind spans more of it
+    than the one it read.
   - The replacement changes the forcing: the next run's CHIRPS factors are
     fitted on the new values, the fit record flags "forcing changed since
     fit" (its `forcing.chirpsSource` no longer matches, model.md §2.10b), and

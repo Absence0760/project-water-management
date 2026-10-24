@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Invite } from '$lib/api/types';
+import type { Invite } from '#lib/api/types.js';
 import { daysLeft, expiryText, resendWasMailed, upsertInvite } from './invites';
 
 const inv = (id: string, email: string, extra: Partial<Invite> = {}): Invite => ({

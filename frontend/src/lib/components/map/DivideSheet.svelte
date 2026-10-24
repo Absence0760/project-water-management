@@ -13,13 +13,13 @@
 	elevation model on the server; without one the sheet says so.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { tick } from 'svelte';
 	import type { NetworkNode } from '@water-management/engine';
-	import { api, type DivideProposal, type DivideTicks, type MapFeature, type StartState } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { api, type DivideProposal, type DivideTicks, type MapFeature, type StartState } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import {
 		defaultDivideChoice,
 		divideBody,

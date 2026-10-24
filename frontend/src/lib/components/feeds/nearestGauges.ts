@@ -1,8 +1,8 @@
 // Words for the nearest-gauging-stations proposal in Settings → Data feeds
 // (issue #326 Part B "B-gauge"; docs/ui.md § Data feeds, docs/maps.md §
 // Gauging stations). Pure, so the rule each sentence states is unit-tested.
-import type { GaugeStationLookup, GaugeStationProposal } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { GaugeStationLookup, GaugeStationProposal } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** Which point the stations are measured from, as one sentence (the rule: the outlet gauge on the map, else the boundary's centre). */
 export function pointLine(l: GaugeStationLookup): string {

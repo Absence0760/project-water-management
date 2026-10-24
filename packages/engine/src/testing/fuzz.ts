@@ -393,6 +393,17 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			reservePctM3s: natural.map((r) => r.map((v) => v * dsr.float(0.05, 1.2)))
 		};
 	}
+	// The Reserve flows without high flows, chosen (engine ≥ 1.90.0, issue #552), from its own stream so earlier seeds don't move.
+	const lfr = new Rng(seed ^ 0x5e9b2c47);
+	const daily = settings.ewrDailySource;
+	if (daily && lfr.bool(0.5)) {
+		daily.lowFlowPctM3s = daily.naturalPctM3s!.map((r) => r.map((v) => v * lfr.float(0.05, 1)));
+		daily.reserveTable = lfr.pick(['total', 'withoutHighFlows'] as const);
+	}
+
+	// The EWR split by natural MAR (engine ≥ 1.94.0, ../network/ewrSplit.ts), from its own stream so earlier seeds don't
+	// move: under catchment rain it falls back to the flow share; withUnitRain below applies it.
+	if (new Rng(seed ^ 0x2d4f8a61).bool(0.2)) settings.ewrSplit = 'naturalMar';
 
 	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
 	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);
@@ -1341,6 +1352,15 @@ export function shrink(input: ModelInput, fails: (x: ModelInput) => boolean, max
 		cur = next;
 	}
 	return cur;
+}
+
+/**
+ * The EWR split by each unit's natural MAR (engine ≥ 1.94.0, settings.ewrSplit, ../network/ewrSplit.ts) on about
+ * half the seeds, from its own stream; for withUnitRain's inputs, where it differs from the flow share.
+ */
+export function withEwrSplit(input: ModelInput, seed: number): ModelInput {
+	if (new Rng(seed ^ 0x2d4f8a62).bool(0.5)) input.settings.ewrSplit = 'naturalMar';
+	return input;
 }
 
 /**

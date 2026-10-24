@@ -6,7 +6,7 @@
 // stops its own polling. Without that, a request in flight when the person
 // opened another project landed in the new project's panel, and the poll it
 // scheduled ran on after the panel was gone.
-import type { AutoCalibration } from '$lib/api/types';
+import type { AutoCalibration } from '#lib/api/types.js';
 import { autoState } from './autoFit';
 
 export const POLL_MS = 1500;

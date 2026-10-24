@@ -2,7 +2,7 @@
 // (GR4J_COLUMNS; LEGACY_RUNOFF_COLUMNS only reads runs saved before engine 1.0.0), and the GR4J formulas they print redo a
 // day from the stored numbers (docs/ui.md § Self-checks, the catchment trace).
 import { describe, expect, it } from 'vitest';
-import type { ModelInput, ModelOutput } from '../project';
+import { CHECK_GAUGE_FLOW_KEY, gaugeSeriesKey, type ModelInput, type ModelOutput } from '../project';
 import { runModel } from '../run';
 import { FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { FLOW_FILL_COLUMNS } from '../flowGapFill';
@@ -104,17 +104,24 @@ describe('OBSERVED_FLOW_COLUMNS', () => {
 		const base = input({ runoffModel: 'gr4j', gr4j: { x1: 250, x2: 0, x3: 70, x4: 2.2, warmupDays: 365 } });
 		const plain = runModel({ ...base, series: { ...base.series, flow_observed_m3s: flow(1) } });
 		for (const c of OBSERVED_FLOW_COLUMNS) expect(cat(plain, c.key) !== undefined, c.key).toBe(!c.optional);
-		// Both records, a gap fill and a gauged range: every one of them.
+		// Both records, a gap fill and a gauged range, and a weir with its own record above the outlet: every one of them.
+		const withWeir = {
+			...base.model,
+			nodes: [...base.model.nodes.map((n) => (n.id === 'F' ? { ...n, downstreamNodeId: 'W' } : n)), { ...base.model.nodes[0]!, id: 'W', name: 'Weir', downstreamNodeId: 'G', sortOrder: 2 }]
+		};
 		const full = runModel({
 			...base,
+			model: withWeir,
 			settings: {
 				...base.settings,
 				flowGapFill: { flow_observed_m3s: { interpolateMaxDays: 2, donor: null, donorMaxDays: 60, donorMinOverlapDays: 365 }, flow_logger_m3s: null },
 				qualityFlags: { ratings: { flow_observed_m3s: { gaugedMaxM3s: 3, gaugedMinM3s: null, source: 'Synthetic' } } } as never
 			},
-			series: { ...base.series, flow_observed_m3s: flow(1), flow_logger_m3s: flow(1.1) }
+			series: { ...base.series, flow_observed_m3s: flow(1), flow_logger_m3s: flow(1.1), [gaugeSeriesKey('flow_observed_m3s', 'W')]: flow(0.8) }
 		});
-		for (const c of OBSERVED_FLOW_COLUMNS) expect(cat(full, c.key), c.key).toHaveLength(full.days);
+		// The checks-only record is the weir's node series; the rest are the catchment's.
+		const stored = (key: string) => (key === CHECK_GAUGE_FLOW_KEY ? full.series.find((s) => s.nodeId === 'W' && s.key === key)?.values : cat(full, key));
+		for (const c of OBSERVED_FLOW_COLUMNS) expect(stored(c.key), c.key).toHaveLength(full.days);
 		expect(OBSERVED_FLOW_COLUMNS.map((c) => c.key)).toEqual(
 			expect.arrayContaining([FLOW_QUALITY_COLUMN.key, FLOW_FILL_COLUMNS.observed_flow.code.key, FLOW_FILL_COLUMNS.observed_flow.values.key])
 		);

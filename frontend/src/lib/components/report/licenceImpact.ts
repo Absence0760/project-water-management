@@ -27,10 +27,10 @@ import {
 	type RunSeries,
 	type YearClassMethod
 } from '@water-management/engine';
-import type { RunCompareResponse } from '$lib/api/types';
-import { boundsText, OUTLET_SITE, type MatrixSite } from '$lib/components/outcomes/matrix';
-import { fmtNum } from '$lib/format/number';
-import { dailyEwrNameOf } from '$lib/components/ewr/notMet';
+import type { RunCompareResponse } from '#lib/api/types.js';
+import { boundsText, OUTLET_SITE, type MatrixSite } from '#lib/components/outcomes/matrix.js';
+import { fmtNum } from '#lib/format/number.js';
+import { dailyEwrNameOf } from '#lib/components/ewr/notMet.js';
 import type { ImpactSeries } from './impactSeries';
 
 /**

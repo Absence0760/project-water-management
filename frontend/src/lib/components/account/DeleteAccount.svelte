@@ -9,14 +9,14 @@
 	// the account is gone this browser forgets it, as signing out does, and
 	// the sign-in page says it was deleted (?deleted=1). docs/ui.md § Account.
 	import { tick } from 'svelte';
-	import { base } from '$app/paths';
-	import { api } from '$lib/api';
-	import type { SoleHoldings } from '$lib/api/types';
-	import { forgetSession } from '$lib/auth/signOut';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import { api } from '#lib/api/index.js';
+	import type { SoleHoldings } from '#lib/api/types.js';
+	import { forgetSession } from '#lib/auth/signOut.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { soleHoldingsOf } from './deleteAccount';
 
 	let open = $state(false);
@@ -57,7 +57,7 @@
 		// Gone: forget it here as signing out does (lib/auth/signOut.ts), then say so on the sign-in page.
 		password = '';
 		open = false;
-		await forgetSession('/login?deleted=1', { replaceState: true });
+		await forgetSession('/login?deleted=1', { replace: true });
 	}
 </script>
 
@@ -97,7 +97,7 @@
 	</div>
 	<p class="muted small">
 		{t('If you are the only owner of a project or the only admin of a team, hand it to someone else first. We email you what was deleted and what was kept. Copies in our backups are deleted as the backups expire, within 35 days.')}
-		<a href="{base}/privacy#retention">{t('Privacy notice')}</a>
+		<a href={resolve('privacy#retention')}>{t('Privacy notice')}</a>
 	</p>
 
 	{#if held}
@@ -107,7 +107,7 @@
 				<p>{t('You are the only owner of these projects. Make someone else an owner, or delete the project:')}</p>
 				<ul>
 					{#each held.projects as p (p.id)}
-						<li><a href="{base}/projects/{p.id}">{p.name}</a></li>
+						<li><a href={resolve(`projects/${p.id}`)}>{p.name}</a></li>
 					{/each}
 				</ul>
 			{/if}
@@ -115,7 +115,7 @@
 				<p>{t('You are the only admin of these teams. Make someone else an admin, or delete the team:')}</p>
 				<ul>
 					{#each held.teams as team (team.id)}
-						<li><a href="{base}/teams/{team.id}">{team.name}</a></li>
+						<li><a href={resolve(`teams/${team.id}`)}>{team.name}</a></li>
 					{/each}
 				</ul>
 			{/if}

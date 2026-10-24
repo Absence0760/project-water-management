@@ -9,12 +9,12 @@
 -->
 <script lang="ts">
 	import type { DataQualitySettings } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import { settingTarget } from '$lib/components/notes/notes';
-	import Fold from '$lib/components/common/Fold.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '#lib/components/notes/notes.js';
+	import Fold from '#lib/components/common/Fold.svelte';
 	import { dataQualityAtDefaults, dataQualityLine, LOW_VS_CHIRPS_BASELINE_OPTIONS, LOW_VS_CHIRPS_MINIMUM_OPTIONS, ZERO_RUN_RULE_OPTIONS } from './dataQuality';
 
 	let {

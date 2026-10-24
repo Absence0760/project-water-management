@@ -44,7 +44,7 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 		(await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.3, -33.7, 0.1)] } } })).status()
 	).toBe(201);
 
-	// The ensemble the pack cites, run to the declared rule on River & reserve.
+	// The ensemble the pack cites, run to the declared rule on EWR.
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	await panel.getByRole('button', { name: 'Run…' }).click();

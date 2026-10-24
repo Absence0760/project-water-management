@@ -1420,6 +1420,60 @@ changed. The model itself never reads the label, so this needs no
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep linear scaling per calendar month as the default, with the 90-day / 50 mm sample and the 0.25–4 clamp; the quantile map stays opt-in, recommended where a month has ≥ 30 wet days on both sides. This run-time correction is also D7's CHIRPS scale factor: a feed stores CHIRPS as published.
 
+#### Which CHIRPS series the run reads (engine ≥ 1.90.0, issue #561)
+
+A project may hold several CHIRPS series; a run reads the first by name
+([data-model.md § Which series a run reads](./data-model.md#which-series-a-run-reads)),
+and only that one wherever it reads CHIRPS, this gap fill included. A new
+series that sorts first takes over without anyone choosing it: a boundary
+feed's "CHIRPS boundary", 60 days long, once sorted before a workbook's
+16-year "Rainfall CHIRPS satelite (mm)", and the gap fill shrank to two
+months with no word. The feeds no longer do that
+([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), and
+the run says when it happens anyway (`seriesChoice.ts`):
+
+- the backend passes the CHIRPS series the run read and the others it could
+  have read in its place, each with its first and last day with a value:
+  the outlet's (`seriesChoice.rain_chirps_mm`) and each land unit's own
+  (§2.4h; `seriesChoice.unitChirps`, by node id, among the series sited at
+  that unit), only where there are two or more. The run's stored input keeps
+  it, so a reproduction and an evidence pack's re-run give the same warning;
+- each series' **span in the run** is the run's days between its first and
+  last reading (the series read: from its own values; blanks inside count,
+  as the others' are known only by their ends);
+- when another series spans more of the run than the one read, the run warns:
+  "the run read the CHIRPS series “CHIRPS boundary” (2025-08-24 to
+  2025-10-22), which spans 60 of its 6139 days, but “Rainfall CHIRPS
+  satelite (mm)” (2009-01-01 to 2025-10-22) spans 6139: a run reads the
+  first CHIRPS series by name and uses only that one wherever it reads
+  CHIRPS (the fill of catchment rain’s blank days included). Rename or
+  remove one of them so the run reads the record you mean". A tie goes to
+  the series read; the widest other is named (the first by name among
+  equals);
+- a land unit's own CHIRPS gets the same check, its warning naming the unit:
+  "for the unit “Upper”, the run read the CHIRPS series “CHIRPS v3 (rnl)
+  Upper” (…), which spans 30 of its 6139 days, but “Upper record” (…) spans
+  6139: a run reads a unit’s first CHIRPS series by name and uses only that
+  one for the unit’s own rain. Rename or remove one …". Only under per-unit
+  rain (`settings.unitRain.mode` `perUnit`), the only time a run reads a
+  unit's own CHIRPS, and only for units the model has (a scenario that
+  removes a unit drops its warning). The outlet's comes first, then the
+  units' in the model's node order. (The rain-for-each-unit feed itself
+  never writes a new series ahead of a unit's record.)
+
+Values the run treats as blank (negative, not finite) don't count toward a
+span. A scenario run carries its base input's `seriesChoice`, and its
+`forecastRainSource` (§2.4h): from engine 1.90.0 `applyScenario` keeps every
+field of the input beside settings, model and series. Before, it rebuilt the
+input from those three alone, so a scenario on a forecast input lost its
+CHIRPS-GEFS credit and each unit's forecast days fell back to the gauge MAP
+ratio. No scenario is based on a forecast run today (the routes refuse one),
+so no stored run changes.
+
+Only the warning reads `seriesChoice`: every number the run computes is the
+same with or without it (`seriesChoice.test.ts`). It is a new warning, and a
+run's warnings are in its results digest, so `ENGINE_VERSION` went to 1.90.0.
+
 ### 2.4c Zero-rain runs treated as missing
 
 Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20
@@ -2249,6 +2303,19 @@ every example catchment and random networks both ways, unit records in the
 input or not, and compares the output to the bit. An unusable setting
 (`unitRainError`) runs the catchment rain with a warning.
 
+**In Settings** (issue #553 round 3, [ui.md § Settings &
+calibration](./ui.md)) this is the **Flow generation** method:
+**Fragmentation** is `unitRain` absent, null or `catchment`; **Per unit** is
+`perUnit`. The radio writes the same setting the earlier "Runoff from each
+unit's own rain" checkbox did, so the move changed no stored project and no
+run. Under Per unit each land unit takes its rainfall station if
+`settings.rainStations.units` assigns one (§2.4i), else the chain below
+(*Units without a station* in Settings). A fit records the method it ran
+under (its forcing has `unitRain` only under Per unit), and a fit made under
+the other method reads "Parameters not fitted for this method" in Settings
+and on the fit record (`fitFlowMethod`, `FitRecordStatus.methodChanged`):
+GR4J's parameters were fitted to other rain, so refit.
+
 **Why.** The glossary has always given a hydrological unit "its own area,
 MAP and rain gauge" (§7), but GR4J ran once for the catchment and split the
 flow by area or the Hi/Lo MAP shares. With a rain record per unit (its own
@@ -2261,7 +2328,14 @@ and a refit.
 **The setting.** `{ mode: 'perUnit', gaugeMapMm?, gaugeMapSource?,
 mapPeriod?, reference? }` (`reference` from engine 1.80.0,
 [below](#reference-gauge-engine--1800-issue-500)). `gaugeMapMm` is the catchment rain gauge's own MAP (mm, with
-its source), `mapPeriod` the years a unit's CHIRPS MAP factor compares over
+its source). Since issue #553 that MAP belongs to the gauge: it is the
+**station MAP** of the catchment rain series the run reads
+(`SeriesMeta.station`, a rainfall station, set in the Data tab's Series
+details), which the backend's run builder writes into `gaugeMapMm` /
+`gaugeMapSource` before the engine sees the input (the station wins;
+migration 239 copied each project's `gaugeMapMm` onto its station, so runs
+are bit-identical across it). A project whose station has no MAP still runs
+on, and Settings still shows, the stored `gaugeMapMm`. `mapPeriod` the years a unit's CHIRPS MAP factor compares over
 (ISO dates; absent = `DEFAULT_UNIT_MAP_PERIOD`, 1991-01-01 to 2020-12-31).
 Each unit's MAP is `node.mapMm` with `node.mapSource` (`mapMmError`: 1–12 000
 mm, a MAP needs its source), typed in the unit's form or proposed from a
@@ -2601,9 +2675,11 @@ place of natural × share; a farm with no area has none. Natural flow at the
 outlet is the units' runoff summed in node-id order (the network routes
 within the day, so the sum is the routed flow; with bed losses on, the
 WR2012 check and a Reserve rule table read it routed down the reaches net
-of the natural losses, §2.6b). The EWR split (`ewr × share`) and the land
-cover's low-flow threshold (`Q75 × share`, §2.5a) still use the flow
-shares. The catchment area is the land units' areas summed:
+of the natural losses, §2.6b). The land cover's low-flow threshold
+(`Q75 × share`, §2.5a) still uses the flow shares, and so does the EWR
+split (`ewr × share`) unless `settings.ewrSplit` is `'naturalMar'`, which
+splits it by each unit's own natural runoff instead (§2.5b, engine ≥
+1.94.0). The catchment area is the land units' areas summed:
 `calibration.catchmentAreaKm2` is ignored, with a warning when it differs
 by more than 1 % (`resolveCatchmentAreaKm2`). With no land unit at all (no
 farm has an area), the setting can't apply: GR4J runs on the catchment rain
@@ -2733,13 +2809,225 @@ for each unit](./maps.md#map-for-each-unit).
   CHIRPS, not on the unit's cells;
 - the run window still follows the catchment's rain series (§2.1), so a
   project needs a catchment series or a set simulation period;
-- the EWR split and the land cover's low-flow threshold stay on the flow
-  shares, while each unit's runoff is its own (engine-audit.md U1);
+- the land cover's low-flow threshold stays on the flow shares, while each
+  unit's runoff is its own (engine-audit.md U1); the EWR split does too
+  unless `settings.ewrSplit` is `'naturalMar'` (§2.5b, engine ≥ 1.94.0,
+  its period provisional, engine-audit.md ES1);
 - the reference fit reads the checked catchment rain over its whole record,
   including the days a §2.4e rain-source period sets from an alternate
   series or the reanalysis fallback: the fit then compares that series, not
   the gauge, with the cell on those days. Whether to leave them out is the
   hydrologist's call ([followups.md § Hydrologist](./followups.md#hydrologist)).
+
+### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553)
+
+`settings.rainStations` (`RainStationSettings` in
+`packages/engine/src/project.ts`; the forcing in
+`packages/engine/src/runoff/stationForcing.ts`, the record checks in
+`runoff/stationRecord.ts`, the pairing fit in `runoff/stationPairing.ts`).
+Absent or null, and for every area without an assignment: the rain as
+before (§2.4, §2.4h), to the bit (`runoff/stationForcing.test.ts`; the
+§2.4h golden cases in `runoff/unitRain.golden.test.ts` are unchanged). No
+migration assigns a station for an existing project: a project keeps
+today's path until someone assigns one.
+
+**A station.** A catchment rain series (`rain_catchment_mm`, no site) with a
+name, a MAP and its source, and optionally coordinates (`SeriesMeta.station`,
+the Data tab). A project may have several, and several areas may share one.
+The run's input holds each station's record as
+`series[stationSeriesKey(id)]` (`rain_station_mm#<series id>`, not a stored
+kind) and its details as `ModelInput.stations[id]`
+(`{ name, mapMm, mapSource, lat, lon, isCatchmentGauge? }`). The CHIRPS at
+the station's own 0.05° cell, when the backend has it, is
+`series[stationChirpsSeriesKey(id)]` (`rain_chirps_station_mm#<id>`).
+
+**The setting.**
+
+- `catchment`: `{ stationId, scaleToMap?, correctAgainst? }` or null, the
+  station of Fragmentation's average catchment rainfall (the one GR4J run,
+  §2.4a, §2.5);
+- `units`: land unit id → the same assignment, read only under per-unit
+  rain (`settings.unitRain` `perUnit`, §2.4h);
+- `scaleToMap` defaults to true; `correctAgainst` (the station whose
+  pairing corrects the area's CHIRPS) defaults to the area's own station;
+- `catchmentMapMm` / `catchmentMapSource`: the catchment's MAP for its
+  ratio; absent = the **land units' area-weighted mean MAP** (Σ MAP × area ÷
+  Σ area over every farm with an area, node-id order). If any land unit has
+  no MAP, there is no catchment MAP: the ratio is 1, with a warning naming
+  the units;
+- `sites`: station id → `{ unitId }`, the land unit a station stands in,
+  whose CHIRPS (`rain_chirps_mm@<unit>`) its pairing reads when it has no
+  cell series of its own;
+- `unreliable`: station id → inclusive `[from, to]` ISO date ranges the user
+  marks unreliable;
+- `pinnedFactors` (engine-only, never stored by the API): station id → 12
+  factors used instead of fitting the pairing (a resumed run, an outlook
+  member, the ensemble's CHIRPS-only member).
+
+An assignment without a station id is dropped with a warning
+(`resolveRainStations`); so is an unusable catchment MAP (outside
+`MAP_MM_MIN`–`MAP_MM_MAX`), which falls back to the units' mean.
+
+**Where it is set** (issue #553 round 3, [ui.md § Settings &
+calibration](./ui.md)): Settings → Flow generation, with Per unit chosen,
+lists every land unit with its **Station** (the project's stations, or *No
+station*, which keeps the unit on §2.4h's chain; satellite rain is never an
+option, CHIRPS only fills gaps), **Scale to unit MAP** (`scaleToMap`) with
+the ratio it gives, and **Gaps: CHIRPS corrected against**
+(`correctAgainst`), then each station in use once with its MAP and, for a
+station without coordinates, the unit it **Stands in** (`sites`). The form
+stores defaults as none (scaling on, the unit's own station), and an
+emptied setting as null, so assigning a station and taking it away again
+stores what was there. `units` stays stored under Fragmentation, unused.
+`catchment`, `catchmentMapMm` and `unreliable` have no field yet (the API
+takes them). A fit's forcing records each unit's station, so the form says
+"forcing changed since the fit" when a unit is given another station, none,
+or another correcting station (`unitRainSettingChanged`); scaling and the
+ratio are compared against a run's summary.
+
+**The rule.** One rule for the catchment and for a unit; only the area
+differs. On run day *t* of calendar month *m*:
+
+| Day | Rain on the area |
+| --- | --- |
+| The station has a reading in its checked record | station(*t*) × *r*, *r* = clamp(area MAP ÷ station MAP, 0.25, 4); *r* = 1 with `scaleToMap` false or either MAP missing (warns) |
+| Otherwise, the area has CHIRPS on *t* and the pairing of `correctAgainst` isn't refused | CHIRPS_area(*t*) × f(*m*), **as is**: no MAP ratio on top |
+| Otherwise | the area's next fallback: the catchment → the forecast (`rain_forecast_mm`); a unit → its own forecast (`rain_forecast_mm@<unit>`, outlook members only), then the catchment forcing (catchment ?? CHIRPS ?? forecast, × 1); else dry (0 mm, counted) |
+
+CHIRPS_area is the catchment's `rain_chirps_mm` for the catchment and the
+unit's `rain_chirps_mm@<unit>` for a unit. In a station's record and in
+an area's CHIRPS, a value below 0 is not a reading: the day is a gap (the
+station's) or has no CHIRPS (the area's), and takes the next link. The ratio is clamped and banded as every
+unit factor (§2.4h): a ratio past 0.25–4 is clamped and warns; one outside
+0.5–2 warns and is used as it is.
+
+**Why the gaps take the corrected CHIRPS as is** (the operator, 2026-10-23,
+issue #553). The area's own CHIRPS already carries its location, and the
+pairing's factors carry the station's level; × the MAP ratio as well would
+count the spatial difference twice. For a unit this is decided; for the
+catchment it is the same call, provisional ([engine-audit.md § Rainfall
+stations](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
+A station's days and its gaps therefore sit at different levels when the
+area's MAP differs from the station's: station × *r* is at the area's MAP,
+the corrected CHIRPS at the CHIRPS-over-the-area's level brought to the
+station's season and bias. Satellite rain is never the primary source of an
+area with a station.
+
+**The checked record** (`checkedStationRecord`). The station's stored
+record goes through the catchment's §2.4c zero-run and §2.4d accumulation
+checks with the catchment's settings (modes, fill threshold,
+`settings.dataQuality`'s limits), as a unit's own gauge does (§2.4h rule 1),
+compared against the CHIRPS at the station (its cell, else the unit it
+stands in, else the catchment's CHIRPS). The catchment gauge's dated lists
+(missing, keep dry, keep readings, add accumulations), its §2.4e rain-source
+periods and the quantile map name days of the catchment gauge's record, so
+they don't apply, except to the station that **is** the catchment gauge
+(`ModelInput.stations[id].isCatchmentGauge`, set by the backend): it gets
+the catchment's full checks, periods included, compared against the
+catchment's `rain_chirps_mm` as today's run checks that record (not the
+CHIRPS at the station), so its record can reach days a period writes in
+past the stored series. Then the user's unreliable
+periods are blanked. A day either sets aside is a gap. The checks run on the
+whole stored record, so a day's value doesn't depend on the window.
+
+**The pairing** (`fitStationPairing`). For each calendar month *m*,
+f(*m*) = Σ station ÷ Σ CHIRPS over the days of *m* where both the checked
+station record (accumulation windows left out, as §2.4b's fit leaves them
+out) and the CHIRPS at the station have a reading, over their whole
+records. The CHIRPS at the station is its own cell when the input has it,
+else the CHIRPS of the unit it stands in (`sites`). A month needs §2.4b's 90
+shared days and 50 mm of CHIRPS, else its factor is 1, with a warning;
+factors are clamped to 0.25–4 and banded at 0.5–2. **Refused** (no factors,
+a reason in `refused`, a warning) when the station has no record, there is
+no CHIRPS at it, or the two have fewer than `STATION_PAIRING_MIN_YEARS` = 5
+complete calendar years in common (a year every day of which both have a
+reading; not necessarily consecutive). A refused pairing corrects nothing:
+its areas' gap days take the next fallback. Each pairing is fitted once per
+run, however many areas use it, and its factors are what a snapshot pins.
+
+**Which station is missing.** An assignment naming a station with no
+record in the input warns, and the area runs as without it: the catchment
+rain as before, or the unit's §2.4h rule.
+
+**The catchment under its station.** The catchment rain every reader sees
+(`aligned('rain_catchment_mm')`: GR4J, demand's effective rain, the WR2012
+check, a rule-4 unit, `rain_final`) is station × *r* on the station's days,
+and `aligned('rain_chirps_mm')` the catchment CHIRPS × f on the others (null
+where the pairing can't correct, so the forecast fills). The stored
+`rain_catchment_mm` is not read: not for the forcing, not for §2.4b's fit,
+§2.4c–§2.4e or the double-mass check (`summary.chirpsCorrection` is mode
+`none`, and the rain-source periods warn that they are not read unless the
+station is the catchment gauge). The run window (§2.1) takes the station's
+record in the gauge's place: an unset start or end runs from the first to
+the last day the catchment rain has a value (a checked station day, not a
+blank, set-aside or unreliable one; a corrected CHIRPS day, none when the
+pairing is refused; or a forecast day), not the stored records' spans.
+A §2.4h reference gauge of `rain_catchment_mm` is fitted on that catchment
+rain too: station × *r* on the station's checked days (accumulation windows
+left out), not the stored gauge (`referenceGaugeRecord`); rule 2's gauge
+rain is the same station × *r*. **Rule 2's MAP ratio** divides by the MAP
+level that rain is at: station MAP × *r* (the catchment MAP when scaled and
+unclamped, the station's MAP with `scaleToMap` false, the station's MAP ×
+the clamped *r* when clamped), not `settings.unitRain.gaugeMapMm`, which
+still switches rule 2 on. So a rule-2 unit's station days read station ×
+unit MAP ÷ station MAP, with no double division, and the same ratio fills
+a unit's gaps and scales its forecast days (§2.4h). Without the station's
+MAP the level is unknown and rule 2 doesn't apply. Without a catchment
+station, rule 2 divides by `gaugeMapMm` as before, to the bit. The areal correction (§2.4g) is off, with a warning:
+× catchment MAP ÷ station MAP already takes the point rain to the
+catchment's level. **Switching the catchment to a station replaces the
+§2.4b factors with the pairing's**, even when the station is today's
+catchment gauge, so results change and a refit is due.
+
+**Per-unit rain.** A land unit with a station takes rule `'station'`
+(`UNIT_RAIN_RULES`), recorded in `summary.unitRain.units[]` as `rainKey:
+'rain_station_mm#<id>'`, `factor` = *r*, `factorSource: 'gaugeMap'` (a gauge
+× a MAP ratio, as rule 2), its station days counted under `days.gaugeMap`
+and its corrected CHIRPS days under `days.unitChirps`. No areal correction
+(the station sets the level). A unit without a station keeps its §2.4h
+chain, which reads "the catchment's rain" as the catchment forcing, the
+station's when the catchment has one.
+
+**Fit provenance** (§2.10b). A fit records the catchment's station
+(`FitRecord.forcing.catchmentStation`, `CatchmentStationFingerprint`: the
+station, `scaleToMap`, the correcting station, the catchment MAP, the ratio
+and the pairing's 12 factors, null when refused; absent without one) and,
+in the per-unit fingerprint, each station unit's correcting station and 12
+factors. A station assigned to or removed from the catchment, another
+station, scaling or correcting station (read from the settings alone), or,
+against a run, the ratio, the catchment MAP or a factor moving by more than
+2 % is its own "Forcing changed since fit" reason
+(`FitRecordStatus.catchmentStationChanged`, its own caveat), never a CHIRPS
+factor drift. A screen with a run builds the comparison with
+`runForcingOfSummary(summary)` (the per-unit fingerprint with
+`summary.stations`, and the catchment station's), so a pairing's drift
+isn't missed.
+
+**What the run records.** `summary.stations` (`RainStationSummary`, only
+when some area has a station): `pairings` (each station used, station-id
+order: `StationPairingFit`, its CHIRPS source, fit period, complete years,
+shared days, pinned, the 12 months as the reference gauge's, or `refused`
+with its reason), `catchment` and `units` (`StationAreaForcing`: the
+station, both MAPs and sources, `ownRatio` and `ratio`, `clamped`,
+`scaleToMap`, `correctedBy`, the run days by source `{ station, chirps,
+fallback, none }`, and the station days set aside inside the run window
+`{ checks, unreliable }`; a day both set aside counts under the checks),
+`catchmentMapMm` and `catchmentMapFromUnits`. Warnings start "station:" or
+"station pairing:".
+
+**Copies of the input.** A snapshot pins every pairing's factors
+(`PreparedFits.stationFactors`) and each unit's station recipe, so a resumed
+run is the uninterrupted one to the bit. A scenario keeps the input's
+`stations`. A seasonal outlook member keeps them and pins the base input's
+pairing factors (`pinnedFactors`), so a history cut at the decision date
+isn't refitted on a shorter record or refused for one. The uncertainty
+ensemble's CHIRPS-only member blanks every station's record (the rule still
+applies, with no station day) and pins the base's factors, so every area
+reads its CHIRPS × f on every day.
+
+**The Data tab** reads an area's rain used and each day's source from the
+same code (`stationAreaRain(input, nodeId | null)`), so the view and a run
+of the same input can't disagree.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -2769,8 +3057,12 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`); under
   runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0) a land unit's runoff
-  is its own GR4J runoff instead, and the share still splits the EWR
-- Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
+  is its own GR4J runoff instead, and the share still splits the EWR (and
+  the land cover's low-flow threshold, §2.5a): Settings → Flow generation
+  says which, by the method chosen (Fragmentation or Per unit, issue #553)
+- Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`);
+  from engine 1.94.0 `frag[f]` here is the unit's EWR share, which is its flow
+  share unless `settings.ewrSplit` asks for each unit's natural MAR (§2.5b)
 
 Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
 all farms** downloads (`export/farms.csv?key=runoff|ewr`, [api.md § Export](./api.md#export)).
@@ -2868,6 +3160,74 @@ close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
 - **Checks** (`checkLandCover`): runoff + reduction = natural × share,
   0 ≤ reduction ≤ that, the reduction follows the formula from the run's own
   natural flow, and the catchment series and summary add up.
+
+### 2.5b The EWR split between units (engine ≥ 1.94.0, issue #553)
+
+Each unit's EWR requirement `Y` is the outlet's EWR (the pragmatic EWR, or
+the daily EWR of §2.9f) × the unit's **EWR share**; an EWR site's requirement
+`Z` adds up the shares above it (§2.7). `settings.ewrSplit` chooses the
+share (Settings → Flow share → *Split the EWR between units by*; operator
+decision 2026-10-23):
+
+| `ewrSplit` | A unit's EWR share |
+| --- | --- |
+| `'flowShare'` (the default; absent means it) | its flow share `frag[f]` (§2.5), by the flow-share method: area, Hi/Lo MAP or specific. Every run before engine 1.94.0 did this, and a run with the default is the same to the bit |
+| `'naturalMar'` | `MAR_f ÷ Σ MAR_u`, its natural MAR over the units' total, where `MAR_f` is the unit's natural runoff summed over the **MAR period** |
+
+- **Natural runoff.** Under runoff from each unit's own rain (§2.4h) a land
+  unit's natural runoff is its own GR4J runoff from its own rain (the
+  `runoff_natural` column), before land cover (§2.5a) and base flow (§2.6b)
+  touch it; a farm with no area has none and an EWR share of 0. Each day
+  counts its runoff when it is above 0. The units are summed in node-id
+  order, so the shares are the same to the bit however the network is
+  listed. Under fragmentation (catchment rain) a unit's natural runoff is
+  `naturalFlow × frag[f]`, so the natural MAR shares are the flow shares:
+  the run applies the flow shares and says so (`why: 'catchmentRain'`), and
+  the option matters only under Per unit flow generation, which Settings says.
+- **The MAR period** (provisional, engine-audit.md ES1): the run's complete
+  water years (1 October to 30 September, every day inside the run),
+  historical days only, never a forecast tail's (§2.4f); a run without one
+  complete water year takes every historical day instead. With no runoff
+  from any unit over the period there is nothing to split by, and the run
+  keeps the flow shares (`why: 'noRunoff'`).
+- **The shares add up to 1** under `'naturalMar'`, the whole EWR asked of
+  the units, where flow shares that add up to less leave the rest of the EWR
+  to no unit (§2.5).
+- **What follows the split.** Only `Y` changes, so `Z` at every unit and
+  gauge, every EWR site's shortfall, the attribution and charge (§2.7b; at a
+  site whose charge follows its rule table, `ewrChargeSource: 'ruleTable'`,
+  the table instead), the curtailment (§2.11), the hands-off EWR flows
+  (§2.7h, `handsOffEwr`) and the drought restriction's EWR trigger at a
+  gauge (§2.7i) all read the split EWR. At the outlet the trigger reads the
+  whole EWR, and the outlet's own `Z` is the shares' sum × the EWR: the
+  whole EWR under `'naturalMar'`, but only Σ flow shares × the EWR when
+  the flow shares add up to less than 1, so switching such a project to the
+  natural MAR raises the outlet's requirement too. The flow itself (`I`)
+  and the land cover's low-flow threshold stay on the flow shares.
+- **Resumed runs and calibration.** A run resumed from a snapshot (a
+  seasonal outlook's members, §2.15) takes the capture run's period and
+  shares, so it splits its EWR as the uninterrupted run did; one whose
+  capture run pinned none (it fell back to the flow share) keeps the flow
+  share rather than work shares out on its own days (`why: 'resumed'`; a
+  snapshot refuses a resume under other settings, so this is the fallback
+  case, or a seasonal outlook member's). Calibration
+  refills each candidate's shares from that candidate's own unit runoff,
+  over the same period, so a scored day is the run's to the bit (§2.10).
+- **The record.** `RunSummary.ewrSplit` holds the method asked for, the one
+  applied, why they differ and the period (`{ start, end, waterYears }`,
+  `waterYears` 0 for the whole run); each `FarmSummary.ewrShare` is the
+  share applied, beside its `flowShare`. A split other than the default is a
+  run warning (its note), the summary CSV's `EWR share (%)` column sits
+  beside `Flow share (%)` (an older run's is its flow share), the report's
+  Inputs table names it, a scenario can set it (`settings.set`
+  `ewrSplit`, [scenarios.md](./scenarios.md)) and the run comparison lists
+  a change ([run-comparison.md](./run-comparison.md)).
+- **Checks** (`checkEwrSplit`, in the invariant tests): every unit's `Y` is
+  the outlet EWR × its recorded share every day; under the flow share the
+  share is the flow share; under the natural MAR the shares add up to 1 and
+  each is recomputed from the run's own `runoff_natural` columns over the
+  recorded period. `verify/` writes the split from this section
+  (`model.py`, probes `ewr-split-station-units` and `ewr-split-short-run`).
 
 ### 2.6 Transfers (`[Transfers]`)
 
@@ -6906,22 +7266,41 @@ settings.ewrDailySource = null (absent: the pragmatic EWR, every run before 1.77
   tableMarMm3:   number | null,   // the tables' natural MAR, Mm³/a (the TAB header's "MAR =")
   tableAreaKm2:  number | null,   // the tables' catchment area, km²
   tabM3s:        number[12] | null,          // TAB "Total Flows, Maint.", m³/s, Oct … Sep
-  naturalPctM3s: number[12][10] | null,      // RUL "Natural Flow Percentile Table", m³/s
-  reservePctM3s: number[12][10] | null       // RUL "Total Reserve Flow Percentile Table", m³/s
+  naturalPctM3s: number[12][10] | null,      // RUL "Natural Duration curves", m³/s
+  reservePctM3s: number[12][10] | null,      // RUL total Reserve flows (the first, unheaded table, with high flows), m³/s
+  lowFlowPctM3s?: number[12][10] | null,     // RUL "Reserve Flows without High Flows", m³/s (engine ≥ 1.90.0; absent = null)
+  reserveTable?: 'total' | 'withoutHighFlows' // the Reserve table 'percentile' reads (engine ≥ 1.90.0; absent = 'total')
 }
 ```
+
+**The Reserve table (engine ≥ 1.90.0, issue #552).** A DRM `.rul` holds three
+percentile tables: the total Reserve flows (its first table, with high flows),
+the Reserve flows without high flows, and the natural duration curves. Loading
+a `.rul` on Settings fills all three (`lowFlowPctM3s` is null when the file has
+no such block, so no table from an older file is left beside the new ones).
+Under `percentile` the user picks which Reserve table is the daily
+requirement: the total Reserve flows (`'total'`, the default and every earlier
+run) or the Reserve flows without high flows (`'withoutHighFlows'`). The chosen
+table is read exactly as the total always was (below), × s; the other is kept
+and shown × s beside it as the EWR at the outlet (the drift logger), and drives
+nothing. Both new fields are optional, so a source saved before 1.90.0, and one
+that reads the total with or without the third table, runs bit-identically
+(guarded by a test); the version moves because a source can now read a table
+it couldn't. `'withoutHighFlows'` needs `lowFlowPctM3s` and not
+`reservePctM3s`; `'total'` the reverse.
 
 The tables' columns are the DRM's ten points, 0.1 0.2 … 0.9 0.99
 (`EWR_PERCENTILE_POINTS`); a natural row falls with the point. Values are
 ≥ 0 and at most 10⁶ m³/s; the MAR and area are above 0. A method needs its
-tables (`tab`: `tabM3s`; `percentile`: both grids) and its scaling's divisor
+tables (`tab`: `tabM3s`; `percentile`: the natural grid and the chosen Reserve grid) and its scaling's divisor
 (`mar`: `tableMarMm3`; `area`: `tableAreaKm2`); the settings API refuses a
 source that lacks them (`ewrDailySourceIssues`, shared by the API, the form
 and the engine), and the engine runs the pragmatic EWR with a warning if one
 reaches it anyway. `method: 'pragmatic'` keeps tables half entered, so
 switching back loses nothing; it runs exactly as `null`. A run comparison
-lists a change of source, scaling, divisor or table values only when the
-source isn't the pragmatic EWR on both sides.
+lists a change of source, Reserve table, scaling, divisor or table values only
+when the source isn't the pragmatic EWR on both sides; the values of a Reserve
+table the newer source doesn't read aren't listed.
 
 **The three methods**, on day t of water-year month m (Oct = 0):
 
@@ -6931,7 +7310,8 @@ source isn't the pragmatic EWR on both sides.
 3. **Percentile tables**: with q = the day's natural flow at the outlet in m³/s
    (m³/day ÷ 86 400; a negative one reads as 0) and the month's rows scaled,
    N'_k = N_k × s (each natural row's running minimum first, since a duration
-   curve can't rise; the run notes a row that rises) and R'_k = R_k × s:
+   curve can't rise; the run notes a row that rises) and R'_k = R_k × s, R
+   the chosen Reserve table (the total, or the flows without high flows):
 
    ```
    q ≥ N'_1:   R = R'_1                                        (at or above the wettest point)
@@ -6991,9 +7371,13 @@ its own EWR (and s): the ensemble's EWR line (`ewrByMonthM3Day`) is member
 
 **What a run says.** With a source other than the pragmatic EWR the run
 carries `summary.catchment.outletEwr` = `{ method, scaling, scale,
-modelMarMm3 + tableMarMm3 | modelAreaKm2 + tableAreaKm2, pinned? }`, the
-`ewr` series is labelled `EWR from the DRM TAB file (scaled)` or `… DRM
-percentile tables (scaled)`, and a warning names the source and s, e.g. *the
+modelMarMm3 + tableMarMm3 | modelAreaKm2 + tableAreaKm2, pinned?,
+reserveTable? }` (`reserveTable: 'withoutHighFlows'` only when that table was
+read, so a run on the total carries what it always did; a resumed run names
+its own table, beside the capture run's s), the `ewr` series is labelled
+`EWR from the DRM TAB file (scaled)`, `… DRM percentile tables (scaled)` or
+`… DRM percentile tables, without high flows (scaled)`, and a warning names
+the source and s, e.g. *the
 daily EWR at the outlet comes from the DRM TAB file (total flows,
 maintenance), scaled by s = 0.4123 (the model's natural MAR at the outlet,
 31.6 Mm³/a, ÷ the table's 92.4 Mm³/a)*. s = 0 (no natural flow, or no area)
@@ -8228,10 +8612,13 @@ the run then has it as `series['<kind>@<node id>']` (`GaugeSeriesKey`), and
 the outlet's records stay the series with no site. Checks **1 and 4** run
 again at each such gauge (node-id order) and are reported per site in
 `RunSummary.plausibility.gauges`: `{ nodeId, name, flowKind, naturalShare,
-naturalised, lowFlow }`. At the gauge:
+naturalised, lowFlow, fit }` (`fit`, engine ≥ 1.90.0: the record's NSE, KGE
+and PBIAS as a check, §2.10k). At the gauge:
 
 - **O** is the gauge's record: of the run's calibration kind when it has one,
-  else its other record (`flowKind`);
+  else its other record (`flowKind`; from engine 1.90.0 the kind the run's
+  calibration statistics score, the calibration site's when it scores one,
+  `gaugeCheckKind`, engine-audit.md **G2**);
 - **S** is the simulated flow at the gauge, its outflow U;
 - **N** is the catchment's natural flow × `naturalShare`, the flow shares
   (§2.5) of the gauge and every node above it, which is what the network
@@ -8842,6 +9229,7 @@ applies, in this order:
 | --- | --- | --- |
 | missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10) | never scored |
 | infilled | a gap-filled value, not a reading (`observedInfillMask`) | left out |
+| periodHigh | inside one of the record's low-flow periods, above its threshold (engine ≥ 1.90.0, below) | always left out |
 | suspect | an outlier or inside a non-zero flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a), or inside a zero-flow stretch the river-stops rule doesn't trust (engine ≥ 1.81.0, below) | left out |
 | aboveRating | above the record's highest field gauging | censored |
 | belowRating | above zero but below its lowest gauging | left out |
@@ -8903,8 +9291,10 @@ class is treated: `aboveRating` `'censor'` (default) | `'exclude'` |
   the calibration window's.
 - **The run's calibration statistics** (§2.10) still score every observed
   day: they describe the record as it is, and a run doesn't fit anything.
-  The exception is an infilled day (engine ≥ 1.23.0, §2.10i): it is not a
-  reading, so it counts only when the infilled treatment scores it.
+  The exceptions are an infilled day (engine ≥ 1.23.0, §2.10i): it is not a
+  reading, so it counts only when the infilled treatment scores it; and a
+  reading above a low-flow period's threshold (engine ≥ 1.90.0, below),
+  which is wrong, not uncertain.
   So a run's in-sample scores (`fitStatus` `fitted`) include the days the
   fit left out; the fit panel's "all days" column is the comparable figure.
 - **The recession diagnostics** (§2.10d, CR-13) leave out every day flagged
@@ -8923,6 +9313,65 @@ filled-in gap?". Censoring rather than dropping flood days keeps the
 information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
 steering the low-flow parameters.
+
+**Low flows only in a date range (engine ≥ 1.90.0, issue #557).** A logger
+can have periods in which only its low flows are valid: the high flows are
+wrong there, in either direction. An exclusion period drops whole days, and
+the gauged range is one range for the whole record whose days above it are
+censored, which is wrong here: a wrong high reading doesn't say the flow was
+at least that much. `settings.qualityFlags.lowFlowPeriods` lists periods,
+each `{ kind, start, end, maxM3s, reason, source }`: the record
+(`flow_observed_m3s` or `flow_logger_m3s`), the inclusive dates, the
+threshold in m³/s (> 0) and a required reason and source (Settings →
+*Calibration record* → *Low flows only*). Inside a period, a reading of
+that record above the threshold is flagged `periodHigh`; a reading at or
+below it is classed as usual. Where periods of one record overlap, the
+lowest threshold applies (`lowFlowThresholds`).
+- `periodHigh` ranks above the gauged-range classes and `suspect`, and
+  below `infilled` and `missing` (`FLOW_FLAG_PRECEDENCE`): a wrong high
+  reading is just what trips the outlier check, and with suspect days
+  scored (`suspect: 'include'`) it must still be left out. It is stored as code 7
+  in `observed_flow_quality`: the codes are stored in runs, so a class is
+  only appended, and the order of `FLOW_DAY_FLAGS` is no longer the
+  precedence.
+- It is **always left out**, never censored, whatever the treatments say
+  (`scoringDays`): so every score of the fit, the split-sample and dry →
+  wet tests, the benchmarks and the WR2012 window read only the other days
+  (`calibration.dataquality.e2e.test.ts` pins that two
+  records differing only above the threshold inside the period give the
+  same parameters). The run's calibration statistics, the EWR test on the
+  observed record and the plausibility checks leave out every reading above
+  the threshold in the period (`withoutPeriodHighs`), and
+  `flaggedDayMask` marks the days for the recession segments.
+- Automated calibration's flagged-share rule (issue #153) counts a
+  `periodHigh` day as neither observed nor flagged, as it does a day in a
+  stored exclusion: it is a person's choice, and counting it could drop the
+  whole year, low flows and all.
+- Like the gauged ranges, the periods are the outlet records': a fit or run
+  scored at an inner gauge ignores them (`siteQualityFlags`), and Settings
+  says so under the list.
+- The fit record compares periods by record, dates and threshold only: a
+  reworded reason or source, or another order, doesn't mark the fit stale.
+- **Gap filling reads past them** (§2.10i, issue #567, from engine 1.90.0
+  too): a reading above the threshold anchors no interpolation, is in
+  neither side of the donor ratio (as the filled record or as the donor),
+  and is not the clamp. It is not a gap either: it stays as stored, is
+  never filled, and stays `periodHigh`. The other way round, a filled day
+  is no reading, so a period never leaves it out even where the filled
+  value is above the threshold: the infilled treatment decides it, in the
+  fit (where `infilled` outranks `periodHigh`) and in the run's statistics,
+  EWR test and plausibility checks alike (`withoutPeriodHighs` skips the
+  fill's days).
+- The threshold is in m³/s only. A percentile of the period's flows was
+  considered and left out of this first cut: it would move with the record
+  it is meant to judge.
+- Settings JSON only, no migration. A project without periods resolves
+  without the key, so its runs are bit-identical (guard test). The periods
+  are part of the quality-flag settings, so a fit made under others is
+  flagged "Quality flags changed since fit", run comparison lists each
+  period added or removed ("Low flows only: added logger record 2019-01-01
+  – 2019-06-30 at or below 0.8 m³/s"), and the data-quality panel counts
+  the days and names the periods in a note.
 
 **Zero flow: the river-stops rule (engine ≥ 1.81.0, issue #507 item 2;
 revised engine 1.84.0, issue #523 A1; engine-audit C3, QF-3).** A zero-flow reading is either the river stopping
@@ -9109,12 +9558,13 @@ lead-in and tail are never filled; nothing bounds them. Per record:
    for the gauge, or the reverse) or the reference gauge on a neighbouring
    river (`flow_reference_m3s`, otherwise never read by a run), × the ratio
    Σ record / Σ donor over every day both have a reading in the whole stored
-   records. The donor is **refused**, and the summary and warning say why,
+   records (less a low-flow period's high readings, below). The donor is **refused**, and the summary and warning say why,
    when the two share fewer than `donorMinOverlapDays` (default **365**, so
    the ratio spans the seasons) or their daily flows correlate below
    `DONOR_MIN_CORRELATION` = **0.5** (Pearson r on the shared days: the donor
    doesn't rise and fall with the river). A filled day is **clamped** to the
-   record's own highest reading: a donor's flood scaled past anything the
+   record's own highest reading (again less a low-flow period's high
+   readings): a donor's flood scaled past anything the
    gauge measured lies outside its rating. A gap day the donor has no
    reading for stays open. One ratio over the whole record, not per month
    or per flow class: see the questions below.
@@ -9122,6 +9572,41 @@ lead-in and tail are never filled; nothing bounds them. Per record:
 Interpolation runs first, on the gaps short enough for it; the donor then
 fills only the longer ones. Everything is fitted and counted over the whole
 stored record, so the Data tab shows exactly what a run would fill.
+
+**A low-flow period's high readings (engine ≥ 1.90.0, issue #567).** A
+reading above a low-flow period's threshold (`settings.qualityFlags
+.lowFlowPeriods`, §2.10h) is wrong, so the fill reads past it
+(`gapFillLowFlow` passes each record's per-day thresholds,
+`lowFlowThresholds`, into `fillFlowGaps`):
+
+- It is **no anchor**: a gap beside one is not interpolated, however short,
+  since the log-linear line would run from a value known to be wrong. The
+  donor may fill such a gap (up to `donorMaxDays`), as it fills a long one;
+  without a donor it stays open.
+- It is **out of the donor's fit**: the ratio Σ record / Σ donor, its
+  correlation and the shared-day count read only days where neither
+  record's reading is above its own period's threshold. A wrong high would
+  otherwise inflate every donor-filled value, inside the period or not, and
+  the same when this record is the donor (a reading of the gauge or logger
+  record above one of its periods is never scaled into the other's gap
+  either; that day stays open). The reference gauge has no periods.
+- It is **not the clamp**: a filled day is clamped to the record's highest
+  reading that isn't above its threshold.
+- It is **not a gap**: the reading stays in the filled record as stored,
+  is never filled, and its day stays flagged `periodHigh` and left out of
+  every score (§2.10h). Only the readings either side of real gaps change
+  role.
+- A **filled day above the threshold** is not a period high: the fill's
+  value is an estimate, not the instrument's reading, so whether it is
+  scored is the infilled treatment's call alone, in the fit and in the
+  run's statistics, EWR test and plausibility checks alike (before this
+  the run left such a day out under `'include'` while the fit scored it).
+
+A project without low-flow periods (or with periods that no reading
+exceeds, or only on a record the fill doesn't read) fills to the bit as
+before (`flowGapFill.test.ts` guards each, and checks every role above over 200 seeded records). Before this the fill read the
+record as stored; with `infilled: 'exclude'` (the default) no filled day is
+scored, so that only reached the scores under `'include'`.
 
 **A resumed run (§2.16, engine ≥ 1.48.0).** The fill reads the whole record:
 a gap's bounding readings, the highest reading it clamps to and the donor's
@@ -9401,6 +9886,41 @@ The outlet's own record, when it has one, is still the catchment series
 `observed_flow`: the outlet hydrograph, the recession diagnostics, the
 plausibility checks and the gauge-vs-logger agreement read it as before.
 
+**Checks-only gauges** (engine ≥ 1.90.0, issue #554). Every *other* gauge
+inside the network with a record of its own (not the outlet, not the
+calibration site) has that record stored at its node as
+`observed_flow_check` (`CHECK_GAUGE_FLOW_KEY`), m³/day with a blank (NaN)
+on a day without a reading, beside the node's `outflow`. It is the record
+the plausibility checks read there (`RunSummary.plausibility.gauges[].flowKind`:
+the kind the run's calibration statistics score when the gauge has it, else
+its gauge record, else its logger; one rule, `gaugeCheckKind`, for these,
+the plausibility checks and the EWR test at a gauge, engine-audit.md **G2**,
+provisional), labelled by instrument with "(checks only)" after it
+(`checkGaugeFlowLabel`). Nothing scores it: the run's statistics, the fit
+and every other output are as before, and Runs & results draws it as that
+gauge's hydrograph and flow-duration curve (ui.md § Runs & results).
+
+The record's fit there is in the run summary, at every gauge the
+plausibility checks reach (the calibration site included):
+`RunSummary.plausibility.gauges[].fit` `{ days, nse, kge, pbias }`
+(`plausibility/index.ts` `gaugeFitCheck`), `calibrationStats`' formulas on
+every day with a reading outside the run's calibration exclusions (as the
+plausibility checks and the EWR test at the gauge leave them out), no
+calibration window, and none of a forecast run's forecast days; null when
+no day is read. At every other gauge it is a check out of sample, never the
+calibration score; at the calibration site it is in sample (the run is
+fitted to that record, and `RunSummary.calibration` is the score, on its
+window), and the summary CSV labels it so. Being in the summary, it is in the run's results
+digest, so an evidence pack carries it and `reproduce:pack` re-derives it;
+the summary CSV writes it under each gauge's plausibility block
+(*Fit check (out of sample)*, or *(in sample at the calibration site)*). A record
+that implies far more flow than the model has above the gauge (a unit
+error at upload, say) shows at a glance there. The bump to 1.90.0 adds the
+series and `fit`, and changes the EWR test at a gauge site only where G2
+picks a different record than before; a run made before has neither, and the
+page says to re-run. The page reads `fit` from the summary and computes
+none of its own.
+
 **The EWR test against observed flow.** The outlet's test (§2.9b) is
 unchanged: the outlet's record against the simulated outflow and the outlet's
 pragmatic EWR, whatever the calibration site; moving it with the site would
@@ -9408,8 +9928,10 @@ judge a gauge's flow against the outlet's requirement. Instead, every gauge
 EWR site (§2.7b: a gauge whose `ewrSite` isn't false) with a record of its
 own gets the same test at its own point of the river
 (`RunSummary.catchment.ewrAgreementSites`, `{ nodeId, name, flowKind,
-agreement }` in node-id order): its record (of the calibration kind when it
-has one, else its other record) against its simulated outflow and its own
+agreement }` in node-id order): its record (from engine 1.90.0 the one its
+plausibility checks read, `gaugeCheckKind`, engine-audit.md **G2**,
+provisional; before, the kind asked for in Settings when it had one, else its
+first record) against its simulated outflow and its own
 pragmatic requirement (`ewr_cumulative` at the node, the requirement its EWR
 charge follows under the default `ewrChargeSource`), on every observed day
 outside the calibration exclusions, whatever the calibration site. A rule

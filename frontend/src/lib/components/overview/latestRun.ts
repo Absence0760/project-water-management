@@ -4,14 +4,14 @@
 // never disagree; the change against the previous run is formatted the way
 // the compare page does it (compare/delta.ts).
 import { fromEpochDay, metricDelta, toEpochDay, type MetricDelta, type RunSummary } from '@water-management/engine';
-import type { EwrHeadline, RunMeta } from '$lib/api/types';
-import type { MetricSpec } from '$lib/components/compare/delta';
-import { headlineSite } from '$lib/components/runs/ewrAssurance';
-import { m3DayToM3s, SUPPLY_TARGET } from '$lib/components/runs/results';
-import { agoText, daysBetween, windowText, type DataEnd } from '$lib/format/age';
-import { fmtDay, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
-import { calibrationSample } from '$lib/components/calibration/sample';
-import { ewrNotMet } from '$lib/components/ewr/notMet';
+import type { EwrHeadline, RunMeta } from '#lib/api/types.js';
+import type { MetricSpec } from '#lib/components/compare/delta.js';
+import { headlineSite } from '#lib/components/runs/ewrAssurance.js';
+import { m3DayToM3s, SUPPLY_TARGET } from '#lib/components/runs/results.js';
+import { agoText, daysBetween, windowText, type DataEnd } from '#lib/format/age.js';
+import { fmtDay, fmtNum, fmtPct, fmtQty, localIsoDate } from '#lib/format/number.js';
+import { calibrationSample } from '#lib/components/calibration/sample.js';
+import { ewrNotMet } from '#lib/components/ewr/notMet.js';
 import { AGO_DAYS, LOW_PCT, type DamsToday } from './damLevels';
 
 export interface RunPick {
@@ -73,7 +73,7 @@ export const historyDays = (r: Pick<RunMeta, 'startDate' | 'endDate' | 'forecast
 /** The last day of the record a run's summary covers: its end date, or on a forecast run the day before the forecast. */
 export const historyEnd = (r: Pick<RunMeta, 'startDate' | 'endDate' | 'forecastFrom'>) => fromEpochDay(toEpochDay(r.startDate) + historyDays(r) - 1);
 
-export type HeadlineId = 'reserve' | 'ewr' | 'supply' | 'nse' | 'outflow' | 'dams';
+export type HeadlineId = 'reserve' | 'ewr' | 'supply' | 'shortfall' | 'curtailed' | 'nse' | 'outflow' | 'dams';
 
 export interface Headline {
 	id: HeadlineId;
@@ -162,27 +162,7 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 		});
 	}
 
-	const farms = s.farms ?? [];
-	const short = farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length;
-	const supplied = supplyFraction(s);
-	const target = fmtPct(SUPPLY_TARGET, 0);
-	out.push({
-		id: 'supply',
-		term: 'Irrigation supplied',
-		help: 'summary.fractionSupplied',
-		value: supplied === null ? '–' : fmtPct(supplied),
-		unit: 'of demand',
-		sub: [
-			!farms.length
-				? 'no hydrological units in the run'
-				: short
-					? `${fmtNum(short)} of ${fmtNum(farms.length)} hydrological units below ${target}`
-					: `all hydrological units ≥ ${target}`
-		],
-		flagged: short > 0,
-		delta: previous ? change(supplyFraction(previous), supplied) : null,
-		spec: { format: 'fraction', better: 'higher' }
-	});
+	out.push(supplyHeadline(s, previous));
 
 	const cal = s.calibration;
 	if (cal && hasCalibration(s)) {
@@ -221,6 +201,135 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 		spec: { format: 'ratio', better: 'neutral', digits: 3 }
 	});
 	return out;
+}
+
+/** Irrigation supplied: all units' supply over their demand (supplyFraction), and how many fell below SUPPLY_TARGET. */
+export function supplyHeadline(s: RunSummary, previous: RunSummary | null): Headline {
+	const farms = s.farms ?? [];
+	const short = farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length;
+	const supplied = supplyFraction(s);
+	const target = fmtPct(SUPPLY_TARGET, 0);
+	return {
+		id: 'supply',
+		term: 'Irrigation supplied',
+		help: 'summary.fractionSupplied',
+		value: supplied === null ? '–' : fmtPct(supplied),
+		unit: 'of demand',
+		sub: [
+			!farms.length
+				? 'no hydrological units in the run'
+				: short
+					? `${fmtNum(short)} of ${fmtNum(farms.length)} hydrological units below ${target}`
+					: `all hydrological units ≥ ${target}`
+		],
+		flagged: short > 0,
+		delta: previous ? change(supplyFraction(previous), supplied) : null,
+		spec: { format: 'fraction', better: 'higher' }
+	};
+}
+
+const YEAR_DAYS = 365.25;
+const MM3 = 1e-6;
+
+/** All units' mean daily deficit (demand not supplied), m³/day; null without units. */
+export function deficitM3Day(s: Pick<RunSummary, 'farms'>): number | null {
+	const farms = s.farms ?? [];
+	return farms.length ? farms.reduce((a, f) => a + f.avgDeficitM3Day, 0) : null;
+}
+
+/** "1.23", "0.045": a volume in Mm³ to three significant figures where it is small. */
+const mm3 = (v: number) => fmtQty(v, 2, false, 2);
+
+/**
+ * The Summary's Shortfall card (issue #558): the volume of demand the units
+ * didn't get over the run (Σ each unit's mean deficit × the run's `days`, in
+ * Mm³), and in an average year (× 365.25). The change from the previous run
+ * is the average-year figure, since two runs rarely cover the same days.
+ */
+export function shortfallHeadline(s: RunSummary, days: number, previous: RunSummary | null): Headline {
+	const deficit = deficitM3Day(s);
+	const base = { id: 'shortfall' as const, term: 'Shortfall', help: 'summary.avgDeficitM3Day', spec: { format: 'ratio', better: 'lower', digits: 3 } as MetricSpec };
+	if (deficit === null) return { ...base, value: '–', unit: '', sub: ['no hydrological units in the run'], flagged: false, delta: null };
+	const demand = (s.farms ?? []).reduce((a, f) => a + f.avgDemandM3Day, 0);
+	const year = deficit * YEAR_DAYS * MM3;
+	const prev = previous ? deficitM3Day(previous) : null;
+	return {
+		...base,
+		value: mm3(deficit * days * MM3),
+		unit: 'Mm³',
+		sub: [
+			`demand not supplied over the run’s ${fmtNum(days)} days`,
+			deficit > 0 ? `${mm3(year)} Mm³ in an average year${demand > 0 ? `, ${fmtPct(deficit / demand)} of demand` : ''}` : 'every unit got its whole demand'
+		],
+		flagged: false,
+		delta: prev === null ? null : change(prev * YEAR_DAYS * MM3, year),
+		deltaLabel: 'Mm³ a year, vs previous run'
+	};
+}
+
+/** Days a drought restriction level was in force over the run (droughtRestriction.daysByLevel past index 0); null when the rule is off. */
+export function restrictedDays(s: Pick<RunSummary, 'droughtRestriction'>): number | null {
+	const by = s.droughtRestriction?.daysByLevel;
+	return by ? by.slice(1).reduce((a, n) => a + n, 0) : null;
+}
+
+/** "level 2 at worst": the deepest restriction level the run reached. */
+function deepest(s: Pick<RunSummary, 'droughtRestriction'>): string {
+	const by = s.droughtRestriction?.daysByLevel ?? [];
+	let top = 0;
+	by.forEach((n, i) => {
+		if (n > 0) top = i;
+	});
+	return `level ${fmtNum(top)} at worst`;
+}
+
+/**
+ * The Summary's curtailment card (issue #558): the days the drought
+ * restriction rule cut the units' demand, when the run has any; else the
+ * worst-supplied unit and its share of demand supplied, with a line saying
+ * the rule never restricted when it is on.
+ */
+export function curtailedHeadline(s: RunSummary, days: number, previous: RunSummary | null): Headline {
+	const restricted = restrictedDays(s);
+	const spec: MetricSpec = { format: 'fraction', better: 'higher' };
+	if (restricted) {
+		const prevDays = previous ? restrictedDays(previous) : null;
+		return {
+			id: 'curtailed',
+			term: 'Units curtailed',
+			help: 'drought-restriction',
+			value: fmtNum(restricted),
+			unit: restricted === 1 ? 'day' : 'days',
+			sub: [`under a drought restriction, of ${fmtNum(days)} days`, `${fmtPct(restricted / days)} of the run, ${deepest(s)}`],
+			flagged: true,
+			delta: prevDays === null ? null : change(prevDays, restricted),
+			deltaLabel: 'days, vs previous run',
+			spec: { format: 'ratio', better: 'lower', digits: 0 }
+		};
+	}
+	const farms = s.farms ?? [];
+	const base = { id: 'curtailed' as const, term: 'Worst-supplied unit', help: 'summary.fractionSupplied', unit: '', flagged: false, delta: null, spec };
+	const note = restricted === 0 ? ['no drought restriction days in the run'] : [];
+	if (!farms.length) return { ...base, value: '–', sub: ['no hydrological units in the run', ...note] };
+	// The lowest; on a tie, the first in the run's order (as the run sentence picks it).
+	const worst = farms.reduce((a, b) => (b.fractionSupplied < a.fractionSupplied ? b : a));
+	return {
+		...base,
+		value: fmtPct(worst.fractionSupplied),
+		unit: 'supplied',
+		sub: [worst.name || 'Unnamed hydrological unit', ...note],
+		flagged: worst.fractionSupplied < SUPPLY_TARGET
+	};
+}
+
+/**
+ * The Summary's KPI row (issue #558): irrigation first. Irrigation supplied,
+ * the Shortfall and the curtailment card; the Dams card (damsHeadline) joins
+ * them once the dams are in. The EWR's headline card and the calibration NSE
+ * are on the EWR page and Runs & results.
+ */
+export function summaryHeadlines(s: RunSummary, days: number, previous: RunSummary | null): Headline[] {
+	return [supplyHeadline(s, previous), shortfallHeadline(s, days, previous), curtailedHeadline(s, days, previous)];
 }
 
 /** Where the dam figures are: still loading, failed, the run has no dams, or all dams together (damLevels.ts damsToday). */

@@ -125,7 +125,7 @@ test('a .rul under the TAB file fills the percentile tables and keeps the TAB fi
 	await loadFile.setInputFiles(RUL);
 	const fileResult = daily.getByRole('status', { name: 'File result' });
 	await expect(fileResult).toHaveText(
-		'Read drm-synthetic.rul (DRM rule curves, m³/s): filled the two percentile tables (the total Reserve and the natural duration curve). The daily EWR still comes from the DRM TAB file; the tables are used only once you pick them.'
+		'Read drm-synthetic.rul (DRM rule curves, m³/s): the natural duration curves, the total Reserve and the Reserve flows without high flows fill the three tables. The daily EWR still comes from the DRM TAB file; the tables are used only once you pick them.'
 	);
 	await expect(daily.getByLabel('Daily EWR from')).toHaveValue('tab');
 	await expect(daily.getByLabel('TAB flow, Oct, m³/s')).toHaveValue(/^0\.470/);
@@ -163,6 +163,62 @@ test('a .rul under the TAB file fills the percentile tables and keeps the TAB fi
 	await page.setViewportSize({ width: 390, height: 844 });
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
+});
+
+// Issue #552: a .rul fills all three tables (natural duration curves, total Reserve, Reserve flows without high flows),
+// shown × s as the EWR at the outlet (the client's drift logger), and the person picks which Reserve table is the daily
+// EWR; the one it doesn't read folds into its line.
+// The units are 20 km², the table's 40 km², so s = 0.5.
+test('a .rul fills three tables, shown scaled as the EWR at the outlet, and the Reserve table the daily EWR reads is a choice the run follows', async ({ page, owner }) => {
+	void owner;
+	const id = await seed(page.request, 'Daily EWR, Reserve table choice');
+	await updateSettings(page.request, id, {
+		ewrDailySource: { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 40, tabM3s: TAB_M3S, naturalPctM3s: null, reservePctM3s: null }
+	});
+	await page.goto(`/projects/${id}?tab=settings`);
+	const daily = page.getByRole('group', { name: /^The daily EWR at the outlet/ });
+	await daily.getByLabel('Load a DRM file (.rul / .tab)').setInputFiles(RUL);
+	await daily.getByRole('button', { name: 'Use the percentile tables' }).click();
+	const choice = daily.getByLabel('The EWR is the Reserve table');
+	await expect(choice).toHaveValue('total');
+	// The choice sits above the grids it picks between; the unused one is folded, its line saying it's entered.
+	const choiceBox = (await choice.boundingBox())!;
+	const naturalBox = (await daily.getByRole('table', { name: /^Natural flow percentile table \(m³\/s, before scaling\)/ }).boundingBox())!;
+	expect(choiceBox.y + choiceBox.height).toBeLessThan(naturalBox.y);
+	const unused = daily.getByTestId('ewr-unused-reserve');
+	await expect(unused).toContainText('Reserve flow without high flows percentile table: not used by the daily EWR · entered');
+	await expect(daily.getByLabel('Reserve flow without high flows percentile table, Jul, 10 %, m³/s')).toBeHidden();
+	await expect(daily.getByRole('table', { name: /^Total Reserve flow percentile table \(m³\/s, before scaling, the daily EWR\)/ })).toBeVisible();
+
+	// The three tables × 0.5, the total marked as the daily EWR.
+	const scaled = daily.getByTestId('ewr-scaled');
+	await expect(scaled.getByTestId('ewr-scaled-lead')).toHaveText('The EWR at the outlet: the .rul’s tables × s. The daily EWR reads the total Reserve flow.');
+	const total = scaled.getByRole('table', { name: /^Total Reserve flow percentile table scaled to the model/ });
+	const without = scaled.getByRole('table', { name: /^Reserve flow without high flows percentile table scaled to the model/ });
+	await expect(scaled.getByRole('table', { name: /^Natural flow percentile table scaled to the model/ }).getByRole('row', { name: /^Jul/ }).getByRole('cell').first()).toHaveText('2.030');
+	await expect(total).toHaveAccessibleName(/, the daily EWR\)$/);
+	await expect(without).toHaveAccessibleName(/, not used by the daily EWR\)$/);
+	await expect(total.getByRole('row', { name: /^Jul/ }).getByRole('cell').first()).toHaveText('1.214');
+	await expect(without.getByRole('row', { name: /^Jul/ }).getByRole('cell').first()).toHaveText('0.934');
+
+	await choice.selectOption('withoutHighFlows');
+	await expect(scaled.getByTestId('ewr-scaled-lead')).toContainText('The daily EWR reads the Reserve flow without high flows.');
+	await expect(without).toHaveAccessibleName(/, the daily EWR\)$/);
+	await expect(total).toHaveAccessibleName(/, not used by the daily EWR\)$/);
+	// Now the without-high-flows grid is open, and the total folds.
+	await expect(daily.getByLabel('Reserve flow without high flows percentile table, Jul, 10 %, m³/s')).toHaveValue('1.868');
+	await expect(unused).toContainText('Total Reserve flow percentile table: not used by the daily EWR · entered');
+	await expectNoViolations(page);
+	await saveSettings(page);
+
+	// The run reads the chosen table and says so, with the tables as it read them.
+	await createRun(page.request, id, 'Without high flows');
+	await page.goto(`/projects/${id}?tab=runs`);
+	await expect(page.getByTestId('outlet-ewr-source').first()).toHaveText('EWR: the DRM percentile tables (Reserve flows without high flows) × 0.5 (area 20 ÷ 40 km²)');
+	const runScaled = page.getByTestId('run-ewr-scaled');
+	await runScaled.getByText(/^The daily EWR’s tables as this run read them/).click();
+	await expect(runScaled.getByTestId('ewr-scaled-lead')).toContainText('The daily EWR reads the Reserve flow without high flows.');
+	await expect(runScaled.getByRole('table', { name: /^Reserve flow without high flows percentile table scaled to the model/ }).getByRole('row', { name: /^Jul/ }).getByRole('cell').first()).toHaveText('0.934');
 });
 
 test('a Reserve rule table is filled from a .rul (grids, unit, REC, source) and a .tab (natural MAR); a bad file names its line', async ({ page, owner }) => {
@@ -224,7 +280,7 @@ test('Compare runs names each run’s daily EWR on the water-year bars when a pr
 	await expect(years.getByTestId('reserve-years-daily')).toHaveText([' (the pragmatic EWR)', ' (the daily EWR from the DRM TAB file)']);
 	await expectNoViolations(page);
 
-	// River & reserve and the printed report draw the TAB run's EWR line by its source, and the caption counts days below it.
+	// EWR and the printed report draw the TAB run's EWR line by its source, and the caption counts days below it.
 	await page.goto(`/projects/${id}?tab=river&run=${whatIf}`);
 	const flow = page.getByRole('region', { name: /^Flow vs/ });
 	await expect(flow.getByText('EWR from the DRM TAB file (scaled)').first()).toBeVisible();

@@ -251,7 +251,10 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 			aligned: ctx.aligned,
 			chirpsCorrection: ctx.chirpsCorrection,
 			...(ctx.historyDays !== undefined ? { historyDays: ctx.historyDays } : {}),
-			...(input.forecastRainSource ? { forecastRainSource: input.forecastRainSource } : {})
+			...(input.forecastRainSource ? { forecastRainSource: input.forecastRainSource } : {}),
+			// Rainfall stations (engine ≥ 1.91.0, §2.4i): the run's records and pairings, shared with the catchment's.
+			stations: ctx.stations ?? null,
+			stationInputs: input.stations ?? null
 		},
 		warnings,
 		// A snapshot's pinned recipes, else the settings' (a seasonal outlook's re-run member).
@@ -333,6 +336,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 		unitRunoff,
 		unitRain: unitRainSummary(ctx.settings.unitRain!, units, traces, petMm, built.reference),
 		unitRecipes: recipes,
+		...(built.stations.length ? { stationUnits: built.stations } : {}),
 		balance: {
 			model: 'gr4j',
 			params: { ...p },

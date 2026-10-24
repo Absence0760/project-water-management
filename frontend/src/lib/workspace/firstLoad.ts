@@ -8,7 +8,7 @@
 // the page that reads them mounts only for a signed-in user, and a signed-out
 // visitor's requests just answer 401 into a promise nobody reads.
 import type { ProjectModel, SeriesMeta } from '@water-management/engine';
-import { api, type Project, type RunMeta } from '$lib/api';
+import { api, type Project, type RunMeta } from '#lib/api/index.js';
 
 export type ProjectPageData = [Project, ProjectModel, SeriesMeta[] | null, RunMeta[] | null];
 

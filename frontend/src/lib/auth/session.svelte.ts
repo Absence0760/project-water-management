@@ -1,6 +1,7 @@
 // The signed-in user, resolved once by the root layout via GET /auth/me.
-import type { User } from '$lib/api/types';
+import type { User } from '#lib/api/types.js';
 import { DEFAULT_LOCALE } from '@water-management/engine/languages';
+import type { ReadonlyURLSearchParams } from '$app/state';
 
 export const session = $state<{ user: User | null; checked: boolean }>({ user: null, checked: false });
 
@@ -97,7 +98,7 @@ export function routeAccess(
 	pathname: string,
 	base: string,
 	signedIn: boolean,
-	search?: URLSearchParams
+	search?: ReadonlyURLSearchParams
 ): 'show' | 'login' | 'leave' {
 	if (!signedIn) return isPublicPath(pathname, base) || isLandingRoot(pathname, base, false) ? 'show' : 'login';
 	if (strip(pathname, base) === '/register' && search?.has('invite')) return 'show';

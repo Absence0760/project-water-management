@@ -33,14 +33,14 @@
 		type DemandObjectSource,
 		type NetworkNode
 	} from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { hasDam } from './fields';
 	import { demandObjectQuestion, focusAfter, itemName } from './removeQuestions';
 	import DemandScheduleFields from './DemandScheduleFields.svelte';
 	import WaterSourceFields from './WaterSourceFields.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import MonthFields from './MonthFields.svelte';
 	import { floorLine, peopleHint } from './demandObjectFloor';
 	import { givenAsOf, setGivenAs, setSource, sizingFixedBy, SOURCE_OPTION_LABEL, type GivenAs } from './demandObjectSource';

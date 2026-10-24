@@ -1,7 +1,7 @@
 import type { FarmSummary, NetworkNode } from '@water-management/engine';
 import { afterEach, describe, expect, it } from 'vitest';
-import { newNode } from '$lib/model/editor.svelte';
-import { SUPPLY_TARGET } from '$lib/components/runs/results';
+import { newNode } from '#lib/model/editor.svelte.js';
+import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
 import { BAND_LABEL, bandsPresent, farmSupply, LOW_SUPPLY, ranAgo, supplyBand, supplyByNode } from './supplyColour';
 
 const farm = (nodeId: string, fractionSupplied: number, avgDemandM3Day = 100): FarmSummary => ({

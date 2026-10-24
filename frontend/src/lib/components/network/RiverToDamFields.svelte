@@ -5,8 +5,8 @@
 	// the summer months fills the dam in winter only. Unticked is null: the one
 	// value all year, as on a model from before 1.32.0.
 	import type { NetworkNode } from '@water-management/engine';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import MonthFields from './MonthFields.svelte';
 	import { riverToDamUnit } from './flowUnit.svelte';
 	import { divertMonthsPreview, divertMonthsTicked } from './supply';

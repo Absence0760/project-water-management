@@ -10,11 +10,11 @@
 	// closes the menu and opens the in-page table (export/DailyTableDialog).
 	// Focus moves to the Download button first, so closing the dialog returns
 	// focus there rather than to a button inside the now-hidden list.
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import { fetchDownload, saveBlob } from '$lib/export/download';
-	import { menuPlacement, placementStyle } from '$lib/export/menuPosition';
-	import type { DownloadItem, WorkbookRequest } from '$lib/export/urls';
-	import type { ExportProgress } from '$lib/spreadsheet/export/collect';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import { fetchDownload, saveBlob } from '#lib/export/download.js';
+	import { menuPlacement, placementStyle, triggerMoved, type Box } from '#lib/export/menuPosition.js';
+	import type { DownloadItem, WorkbookRequest } from '#lib/export/urls.js';
+	import type { ExportProgress } from '#lib/spreadsheet/export/collect.js';
 
 	let {
 		items,
@@ -33,6 +33,8 @@
 	let list: HTMLUListElement | undefined = $state();
 	// Fixed to the viewport while open, so a scrolling table can't clip it (./menuPosition.ts).
 	let listStyle = $state('');
+	/** The trigger's box when the list was placed by it. */
+	let placedAt: Box | null = null;
 	const listId = `dl-${Math.random().toString(36).slice(2, 9)}`;
 
 	function close(focusTrigger = false) {
@@ -54,9 +56,9 @@
 	async function buildWorkbook(request: WorkbookRequest) {
 		close(true);
 		progress = { phase: 'fetch', done: 0, total: 1, label: 'the run' };
-		let runner: typeof import('$lib/spreadsheet/export/runner');
+		let runner: typeof import('#lib/spreadsheet/export/runner.js');
 		try {
-			runner = await import('$lib/spreadsheet/export/runner');
+			runner = await import('#lib/spreadsheet/export/runner.js');
 		} catch {
 			progress = null;
 			writerFailed = true;
@@ -96,7 +98,8 @@
 			return;
 		}
 		try {
-			const { blob, filename } = await fetchDownload(item.url);
+			// A file the page builds itself (the Data tab's grouped CSV, whose derived columns are never stored), else the server's.
+			const { blob, filename } = item.build ? await item.build() : await fetchDownload(item.url);
 			saveBlob(blob, filename);
 			done = `Downloaded ${filename}`;
 			close(true);
@@ -123,10 +126,12 @@
 		const onDoc = (e: PointerEvent) => {
 			if (root && !root.contains(e.target as Node)) open = false;
 		};
-		// A fixed list would drift from its button on scroll or resize: close it, as native menus do.
-		// Scrolling the list itself is fine.
+		// A fixed list would drift from its button on scroll or resize: close it, as native menus do. Scrolling the
+		// list itself is fine, and so is a scroll that leaves the button where it was: the browser's scroll anchoring
+		// fires one when content above changes size (the Data tab's area panel), which closed the menu as it opened.
 		const onScroll = (e: Event) => {
-			if (!list?.contains(e.target as Node)) open = false;
+			if (list?.contains(e.target as Node)) return;
+			if (!placedAt || !trigger || triggerMoved(placedAt, trigger.getBoundingClientRect())) open = false;
 		};
 		const onResize = () => (open = false);
 		document.addEventListener('pointerdown', onDoc);
@@ -142,6 +147,7 @@
 	function toggle() {
 		if (!open && trigger) {
 			const r = trigger.getBoundingClientRect();
+			placedAt = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
 			listStyle = placementStyle(menuPlacement(r, { width: document.documentElement.clientWidth, height: window.innerHeight }, align));
 		}
 		open = !open;

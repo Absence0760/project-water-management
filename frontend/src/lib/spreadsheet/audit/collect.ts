@@ -5,8 +5,8 @@
 // can't recompute is an error naming why. `fetchFn` is injected so the test
 // runs without a server.
 import { farmAuditPlan, type FarmAuditPlan, type ModelInput, type RunSummary } from '@water-management/engine';
-import { DownloadError } from '$lib/export/download';
-import { exportUrls, type WorkbookRequest } from '$lib/export/urls';
+import { DownloadError } from '#lib/export/download.js';
+import { exportUrls, type WorkbookRequest } from '#lib/export/urls.js';
 import { fetchTable, get, type ExportProgress } from '../export/collect';
 import type { DailyTable } from '../export/workbook';
 import { auditFilename } from './auditWorkbook';

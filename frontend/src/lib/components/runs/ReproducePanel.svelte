@@ -5,7 +5,7 @@
 	group, with the run's "Changes since this run" under it.
 -->
 <script lang="ts">
-	import { api, type Reproduction, type RunMeta } from '$lib/api';
+	import { api, type Reproduction, type RunMeta } from '#lib/api/index.js';
 	import { differenceText, reproductionHeadline } from './reproduce';
 
 	let { projectId, run, nodeName }: { projectId: string; run: RunMeta; nodeName: (id: string) => string | undefined } = $props();

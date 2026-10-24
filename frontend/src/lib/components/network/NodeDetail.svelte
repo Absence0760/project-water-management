@@ -12,11 +12,11 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, MAP_MM_MAX, MAP_MM_MIN, onRiverDam, PE_SOURCE_MAX, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { pctText } from '$lib/model/systems';
-	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
+	import { pctText } from '#lib/model/systems.js';
+	import type { FarmPlanting } from '#lib/components/crops/farmDrawer.js';
 	import { damHints, fieldScale, hasDam, hiLoHint, isPct, NODE_FIELDS, returnFlowHint, setNodeField, splitFields, unusedLine, type NodeField } from './fields';
 	import { fieldsLine, sectionSummary } from './nodeSummary';
 	import { sheetFolds } from './sheetFolds.svelte';
@@ -29,11 +29,11 @@
 	import DemandObjectFields from './DemandObjectFields.svelte';
 	import SupplyFields from './SupplyFields.svelte';
 	import RiverToDamFields from './RiverToDamFields.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import { explainSwitch } from '$lib/components/common/explain.svelte';
-	import { ewrSiteIssue, unitMapProblem, withUnitMap } from '$lib/model/validate';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import ExplainSwitch from '#lib/components/common/ExplainSwitch.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { explainSwitch } from '#lib/components/common/explain.svelte.js';
+	import { ewrSiteIssue, unitMapProblem, withUnitMap } from '#lib/model/validate.js';
 
 	let {
 		node,
@@ -424,7 +424,7 @@
 									value={node.mapMm ?? null}
 									onchange={(v) => withUnitMap(node, v)}
 								/>
-								<span class="hint explain" id="{id('mapMm')}-h">The unit’s own mean annual rain. Used only while Settings → Flow calibration → Rain into GR4J → Rain for each unit is on, where it sets the level of the unit’s rain. Empty: none.</span>
+								<span class="hint explain" id="{id('mapMm')}-h">The unit’s own mean annual rain. Used only under Settings → Flow generation, with Per unit chosen, where it sets the level of the unit’s rain. Empty: none.</span>
 								{#if mapProblem && !mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
 								<FieldHistoryLine field="node:{node.id}:mapMm" {unit} />
 							</div>

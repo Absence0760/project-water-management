@@ -13,12 +13,17 @@ import {
 	type ModelInput,
 	type ModelOutput,
 	type OpClass,
+	type RainStationInputs,
+	stationSeriesKey,
 	type RunVerification,
 	type ScenarioOp,
+	type SeriesChoice,
+	type SeriesPick,
 	type SeriesKind,
 	seriesOrigin,
 	type SeriesOrigin,
 	type SeriesProvenance,
+	type SeriesSpan,
 	type UnitRainKind,
 	type UnitRainSettings,
 	unitRainSeriesKey,
@@ -27,6 +32,7 @@ import {
 } from '@water-management/engine';
 import { isUnitRainKind } from '../series/site.js';
 import { referenceCellInput } from './referenceCell.js';
+import { stationInputs } from './stationInput.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -71,6 +77,8 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		source_unit: string | null;
 		source_unit_factor: number | null;
 		dws_station: string | null;
+		station_map_mm: number | null;
+		station_map_source: string | null;
 	}>(
 		// The outlet's: the first of each kind among the series with no site. A gauge node's own
 		// flow records (084_gauge_records): the first of each kind per site, keyed `<kind>@<node id>`
@@ -78,7 +86,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		// dws_station: an outlet flow record whose every reading a DWS feed wrote, read in the same statement as the
 		// values (#523 G8, runs/publishedRecords.ts): the station, else null.
 		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id,
-			source, source_unit, source_unit_factor,
+			source, source_unit, source_unit_factor, station_map_mm, station_map_source,
 			CASE WHEN site_node_id IS NULL AND kind IN ('flow_observed_m3s', 'flow_logger_m3s') AND feed_days IS NOT NULL THEN (
 				SELECT f.config->>'station' FROM data_feed f
 				WHERE f.project_id = t.project_id AND f.id = t.feed_id AND f.source = 'dws'
@@ -120,6 +128,11 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ewrHeadline: _headline, ...settings } = mergeSettings(
 		p[0]?.settings
 	) as unknown as Record<string, unknown>;
+	// A rainfall station's MAP (239_rain_stations.sql, issue #553) is the catchment gauge's: the catchment rain
+	// series the run reads (the first rain_catchment_mm with no site, above) gives settings.unitRain its gauge MAP.
+	const read = s.find((r) => r.site_node_id === null && r.kind === 'rain_catchment_mm');
+	const unitRain = stationGaugeMap(settings.unitRain, read ? { mapMm: read.station_map_mm, mapSource: read.station_map_source } : null);
+	if (unitRain !== settings.unitRain) settings.unitRain = unitRain;
 	// Registered volumes (engine ≥ 1.18.0, issue #72): what settings.allocationMode caps or scales the run
 	// to, and what its summary compares with. Only when the project has any, so a project without them
 	// runs on the same input as before.
@@ -128,11 +141,69 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// stored series, so it has no series id; only when settings.unitRain names a reference, so other inputs are as before.
 	const cell = await referenceCellInput(db, projectId, (settings as { unitRain?: UnitRainSettings | null }).unitRain);
 	if (cell) (series as Record<string, DailySeries>)[cell.key] = cell.series;
+	// The rainfall stations (engine ≥ 1.91.0, issue #553, runs/stationInput.ts): each station's record, the CHIRPS at its
+	// own cell where the cache holds it, and its details; only when settings.rainStations assigns one, so other inputs are
+	// as before. A station's record names its series (241_station_input_series), so a manual run counts as a person
+	// accepting it (series/hold.ts) and its download shows the run; the cell's CHIRPS is no series and names none.
+	const stationed = await stationInputs(db, projectId, settings.rainStations, read?.id ?? null);
+	if (stationed) {
+		Object.assign(series, stationed.series);
+		for (const id of Object.keys(stationed.stations)) (seriesIds as Record<string, string>)[stationSeriesKey(id)] = id;
+	}
 	// The EWR is assessed and reported in the baseline, never applied (issue #523 B4, projects/ewrRules.ts): the
 	// rules that keep water for it are a scenario's, so whatever the store holds, the baseline runs without them.
 	// A save refuses them and 220 switched the stored ones off, so this normally changes nothing.
 	const baseline = withoutEwrKeepingRules({ settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model }).project;
-	return { input: { settings: baseline.settings, model: baseline.model, series }, seriesIds, publishedRecords };
+	const seriesChoice = await chirpsSeriesChoice(db, projectId);
+	return {
+		input: { settings: baseline.settings, model: baseline.model, series, ...(seriesChoice ? { seriesChoice } : {}), ...(stationed ? { stations: stationed.stations } : {}) },
+		seriesIds,
+		publishedRecords
+	};
+}
+
+/**
+ * settings.unitRain with the catchment rain station's MAP and its source as
+ * its gauge MAP (issue #553): the station wins over the settings, so a run
+ * reads the MAP stored with the series it reads. 239 copied each project's
+ * gaugeMapMm / gaugeMapSource onto that series, so a run is bit-identical
+ * across it. Only a stored unitRain object takes it (absent or null is
+ * catchment rain, where no gauge MAP plays a part, and the input stays as it
+ * was); without a station MAP the setting is returned as it is (the same
+ * object).
+ */
+export function stationGaugeMap(unitRain: unknown, station: { mapMm: number | null; mapSource: string | null } | null): unknown {
+	if (!station || station.mapMm === null || unitRain === null || typeof unitRain !== 'object' || Array.isArray(unitRain)) return unitRain;
+	return { ...(unitRain as Record<string, unknown>), gaugeMapMm: station.mapMm, gaugeMapSource: station.mapSource };
+}
+
+/**
+ * The CHIRPS series a run reads and the others it could have read in their
+ * place, each with the first and last day it holds a value (engine
+ * ModelInput.seriesChoice, ≥ 1.90.0, issue #561): the outlet's and each land
+ * unit's own, sited at it. The run warns when another spans more of it than
+ * the one it reads. Only where there are two or more, so another
+ * project's input is as before; null when there are none.
+ */
+export async function chirpsSeriesChoice(db: Db, projectId: string): Promise<SeriesChoice | null> {
+	const { rows } = await db.query<SeriesSpan & { siteNodeId: string | null }>(
+		`SELECT name, site_node_id AS "siteNodeId",
+			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay",
+			to_char(start_date + (SELECT max(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "lastDay"
+		 FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm'
+		 ORDER BY site_node_id NULLS FIRST, name COLLATE "C"`,
+		[projectId]
+	);
+	// By site, each in the order a run picks (the first is the one it reads, as loadLiveInput's DISTINCT ON).
+	const bySite = new Map<string | null, SeriesSpan[]>();
+	for (const { siteNodeId, ...span } of rows) bySite.set(siteNodeId, [...(bySite.get(siteNodeId) ?? []), span]);
+	const pick = (spans: SeriesSpan[]): SeriesPick => ({ name: spans[0]!.name, others: spans.slice(1) });
+	const choice: SeriesChoice = {};
+	const outlet = bySite.get(null);
+	if (outlet && outlet.length > 1) choice.rain_chirps_mm = pick(outlet);
+	const units = [...bySite].filter((e): e is [string, SeriesSpan[]] => e[0] !== null && e[1].length > 1);
+	if (units.length) choice.unitChirps = Object.fromEntries(units.map(([id, spans]) => [id, pick(spans)]));
+	return choice.rain_chirps_mm || choice.unitChirps ? choice : null;
 }
 
 /**
@@ -576,7 +647,11 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		),
 		...(scenario ? { scenario } : {}),
 		// A forecast run: where its forecast rain came from (the report credits CHIRPS-GEFS only on 'chirps_gefs').
-		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {})
+		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {}),
+		// The CHIRPS series the run read and the others (engine ≥ 1.90.0, issue #561): its warning reads them, so a reproduction needs them.
+		...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {}),
+		// The rainfall stations' names and details (engine ≥ 1.91.0, issue #553): the forcing reads their MAPs, so a reproduction needs them.
+		...(input.stations ? { stations: input.stations } : {})
 	};
 	// The id is made here, not RETURNING'd: RETURNING needs the new row to pass
 	// a SELECT policy, and a contributor running their application reads no
@@ -741,7 +816,14 @@ interface StoredRun {
 	created_at: Date;
 	/** The project's (058): the run's date in a message is the day there. */
 	time_zone: string | null;
-	inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries>; forecastRainSource?: ForecastRainSource };
+	inputs: {
+		settings: ModelInput['settings'];
+		model: ModelInput['model'];
+		series?: Record<string, SnapshotSeries>;
+		forecastRainSource?: ForecastRainSource;
+		seriesChoice?: SeriesChoice | null;
+		stations?: RainStationInputs | null;
+	};
 }
 interface StoredRef {
 	kind: string;
@@ -781,5 +863,16 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 	if (extra) throw new RunInputError('inconsistent', `the run stored a ${extra.kind} series its snapshot doesn't list`);
 	// A forecast run's rain source, which the engine reads (engine ≥ 1.85.0, per-unit rain on CHIRPS-GEFS days).
 	const source = r.inputs.forecastRainSource;
-	return { settings: r.inputs.settings, model: r.inputs.model, series, ...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}) };
+	// The CHIRPS series it read and the others (engine ≥ 1.90.0, issue #561), which its warning reads.
+	const choice = r.inputs.seriesChoice;
+	// The rainfall stations' details (engine ≥ 1.91.0, issue #553), which the station forcing reads.
+	const stations = r.inputs.stations;
+	return {
+		settings: r.inputs.settings,
+		model: r.inputs.model,
+		series,
+		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}),
+		...(choice ? { seriesChoice: choice } : {}),
+		...(stations ? { stations } : {})
+	};
 }

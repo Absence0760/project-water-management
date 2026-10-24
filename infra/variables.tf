@@ -27,19 +27,49 @@ variable "data_outside_south_africa" {
 }
 
 variable "domain_name" {
-  description = "Site hostname — the delegated child zone the bootstrap created, e.g. water-management.jaredhoward.com. No www alias is created."
+  description = "Site hostname, the delegated child zone route53_zone_id names (icwbt.jaredhoward.com since issue #551; it was water-management.jaredhoward.com, now in redirect_domains). The site, the API, the sender address (no-reply@) and every emailed link use it. No www alias is created."
   type        = string
-  default     = "water-management.jaredhoward.com"
+  default     = "icwbt.jaredhoward.com"
 }
 
 variable "route53_zone_id" {
   description = <<-EOT
-    ID of the Route 53 child zone for var.domain_name, created by the estate
-    bootstrap (create_subdomain = true). Terraform adds records to it but never
-    creates or destroys it. Look it up with:
-    aws route53 list-hosted-zones-by-name --dns-name water-management.jaredhoward.com --profile water-management
+    ID of the Route 53 child zone for var.domain_name, created outside
+    Terraform and delegated from the jaredhoward.com parent zone (the estate
+    bootstrap made the first one; docs/deployment.md § Moving the site to a new
+    domain makes a later one). Terraform adds records to it but never creates
+    or destroys it. Look it up with:
+    aws route53 list-hosted-zones-by-name --dns-name icwbt.jaredhoward.com --profile water-management
   EOT
   type        = string
+}
+
+variable "redirect_domains" {
+  description = <<-EOT
+    Former site hostnames that answer with a 301 to the same path on
+    var.domain_name, so old links and emails keep working: hostname → the ID
+    of the Route 53 zone that holds it (the zone stays outside Terraform, as
+    route53_zone_id does). Each is a CloudFront alias, on the certificate, with
+    an A/AAAA alias record in its zone; pages redirect (spa_rewrite), while
+    /api/*, /reports/*, /packs/* and /tiles/* keep answering there, so a mail
+    client's one-click unsubscribe, a data logger pushing to /api/ingest and
+    a signed download link minted before the move still work. Since issue
+    #551: { "water-management.jaredhoward.com" = "<its zone ID>" }. Set {} to
+    retire every old hostname (docs/deployment.md § Moving the site to a new
+    domain). Required, so leaving an old hostname out is a decision.
+  EOT
+  type        = map(string)
+
+  validation {
+    condition     = !contains(keys(var.redirect_domains), var.domain_name)
+    error_message = "redirect_domains must not include domain_name: the site can't redirect to itself."
+  }
+  validation {
+    condition = alltrue([for host, zone in var.redirect_domains :
+      can(regex("^([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,}$", host)) && can(regex("^Z[A-Z0-9]{5,31}$", zone))
+    ])
+    error_message = "Each redirect_domains entry is a lowercase hostname (no scheme, path or trailing dot) mapped to a Route 53 hosted zone ID (Z…)."
+  }
 }
 
 variable "github_repo" {
@@ -420,16 +450,23 @@ variable "dam_trace_water" {
 variable "lambda_reserved_concurrency" {
   description = <<-EOT
     Max concurrent API Lambda executions. Bounds worst-case spend during an
-    attack AND the number of DB connections (each container holds a pg pool of
-    up to 5; 10 x 5 = 50 stays under db.t4g.micro's ~80 max_connections).
-    AWS keeps >= 10 executions unreserved, so the account's Lambda
-    concurrent-executions quota must cover the sum of every reservation + 10
-    before the first apply (a new account's quota is 10, which rejects any
-    reservation): infra/README.md § Operator steps. Never -1 (unreserved):
-    that removes the cap on spend and on DB connections.
+    attack AND the number of DB connections: each container serves one
+    request at a time and holds a pg pool of DB_POOL_MAX = 2 (lambda.tf), so
+    25 x 2 = 50 connections at most. Sized against the database: with the
+    worker's 8 x 2 = 16 and the migrate Lambda's 2 that is 68 at the very
+    worst, under db.t4g.micro's ~80 max_connections (the default class) and
+    well under db.t4g.small's ~180 (production's, prod.tfvars), with room
+    left for the operator and RDS's own (infra/README.md § Connections).
+    Raising it, or the pool, means redoing that sum. The Project tab loads
+    about 10 panels at once, so the old cap of 10 throttled a single cold
+    load (issue #541). AWS keeps >= 10 executions unreserved, so the
+    account's Lambda concurrent-executions quota must cover the sum of every
+    reservation + 10 (48 at the defaults) before the apply: infra/README.md
+    § Operator steps. Never -1 (unreserved): that removes the cap on spend
+    and on DB connections.
   EOT
   type        = number
-  default     = 10
+  default     = 25
   validation {
     condition     = var.lambda_reserved_concurrency >= 1
     error_message = "Must be at least 1: -1 (unreserved) removes the spend and DB-connection cap. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
@@ -593,7 +630,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 12 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors, unhandled API errors and failed mail sends. \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends. \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 
@@ -628,9 +665,9 @@ variable "mail_from_local_part" {
 }
 
 variable "mail_from_display_name" {
-  description = "Display name in the From header (MAIL_FROM)."
+  description = "Display name in the From header (MAIL_FROM): the app's short name, IC-WBT (issue #551), since an inbox's sender column is narrow."
   type        = string
-  default     = "Water Management"
+  default     = "IC-WBT"
 }
 
 variable "mail_from_subdomain" {

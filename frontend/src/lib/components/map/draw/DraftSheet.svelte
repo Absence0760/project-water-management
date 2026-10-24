@@ -9,8 +9,8 @@
 -->
 <script lang="ts">
 	import { oneLineName } from '@water-management/engine';
-	import { api, type MapFeature, type MapFeatureInput, type MapFeatureKind, type MapGeometry, type MapNodeArea } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { api, type MapFeature, type MapFeatureInput, type MapFeatureKind, type MapGeometry, type MapNodeArea } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { KIND_LABEL, KIND_NODES } from '../mapData';
 	import { KINDS_FOR_SHAPE, shapeOf } from './shape';
 

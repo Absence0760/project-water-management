@@ -1,6 +1,6 @@
-// Settings → Flow calibration → Rain into GR4J → Rain for each unit (settings.unitRain, issue
+// Settings → Flow generation → Per unit → Units without a station (settings.unitRain, issue
 // #482, docs/model.md §2.4h, docs/ui.md § Settings & calibration): the switch,
-// the catchment gauge's MAP and its source, the MAP period in whole years, the
+// the catchment gauge's MAP as a read-out (the station's since issue #553), the MAP period in whole years, the
 // reference gauge and unit (issue #500), and the check that blocks Save. The engine's unitRainError is the API's rule;
 // this says the same problems in the form's words.
 import {
@@ -11,6 +11,7 @@ import {
 	UNIT_MAP_MIN_YEARS,
 	unitRainError,
 	type NetworkNode,
+	type SeriesMeta,
 	type UnitRainReference,
 	type UnitRainSettings
 } from '@water-management/engine';
@@ -77,14 +78,28 @@ export function withMapPeriodYears(v: UnitRainSettings, from: number, to: number
 	return { ...rest, mapPeriod: { start, end } };
 }
 
-/** The gauge MAP set (a number, or null to clear it); clearing it clears its source too. */
-export function withGaugeMap(v: UnitRainSettings, mm: number | null): UnitRainSettings {
-	if (mm === null) {
-		const { gaugeMapMm: _m, gaugeMapSource: _s, ...rest } = v;
-		return rest;
-	}
-	return { ...v, gaugeMapMm: mm, gaugeMapSource: v.gaugeMapSource ?? '' };
+/** The catchment rain series a run reads (series/pick.ts firstOutletSeries), as the gauge MAP's read-out needs it. */
+export type CatchmentStation = Pick<SeriesMeta, 'id' | 'name' | 'station'>;
+
+/**
+ * The rain gauge's MAP the run scales a unit's rain by (issue #553): the
+ * station MAP of the catchment rain series the run reads, which wins; else
+ * the older settings.unitRain.gaugeMapMm, so a project from before stations
+ * still shows its value; else none. `series` undefined = the series list
+ * hasn't loaded, null = the project has no catchment rain series.
+ */
+export function gaugeMapReadout(
+	v: Pick<UnitRainSettings, 'gaugeMapMm' | 'gaugeMapSource'> | null | undefined,
+	series: CatchmentStation | null | undefined
+): { from: 'station' | 'settings' | null; mm: number | null; source: string | null } {
+	const st = series?.station;
+	if (st?.mapMm !== null && st?.mapMm !== undefined) return { from: 'station', mm: st.mapMm, source: st.mapSource ?? null };
+	if (v?.gaugeMapMm !== null && v?.gaugeMapMm !== undefined) return { from: 'settings', mm: v.gaugeMapMm, source: v.gaugeMapSource ?? null };
+	return { from: null, mm: null, source: null };
 }
+
+/** The link to the catchment rain station in the Data tab's Series details, where its MAP is edited. */
+export const stationHref = (series: Pick<SeriesMeta, 'id'>) => `?tab=series&series=${encodeURIComponent(series.id)}#data-chart`;
 
 /** The first problem, as the form shows it (and blocks Save on), and the field it is in; null when it can be saved. */
 export function unitRainProblem(v: UnitRainSettings | null | undefined): { field: 'gaugeMap' | 'gaugeSource' | 'period' | 'reference'; message: string } | null {

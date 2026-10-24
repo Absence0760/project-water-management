@@ -80,7 +80,7 @@ test('an editor shares an issued pack; an NGO reads it signed out and comments; 
 	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the pack share test');
 	// Not a member of the project: they comment through the link alone (166_public_participation).
 
-	// The ensemble the pack cites, run to the declared rule on River & reserve.
+	// The ensemble the pack cites, run to the declared rule on EWR.
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	await panel.getByRole('button', { name: 'Run…' }).click();

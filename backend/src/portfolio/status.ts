@@ -1,5 +1,5 @@
 // The portfolio dashboard's rules (roadmap WP-2.14, docs/api.md § Portfolio):
-// the EWR traffic light and how old a figure is. Pure, so they're unit-tested
+// the EWR and irrigation traffic lights and how old a figure is. Pure, so they're unit-tested
 // apart from the query.
 import { EWR_TRAFFIC_LIGHT, ewrBand, FARM_VIEW_STALE_DAYS, type EwrTrafficLight } from '@water-management/engine';
 import { toEpochDay } from '@water-management/engine/calendar';
@@ -59,6 +59,63 @@ export function ewrFigure(
 	const status = ewrStatus(input.daysNotMet, input.days, thresholds);
 	if (!status) return unknown('no-series');
 	return { status, daysNotMet30: input.daysNotMet, days30: input.days, fraction30: input.daysNotMet / input.days };
+}
+
+/**
+ * The irrigation traffic light (issue #558: the project list's status column
+ * shows irrigation supply instead of the EWR), in percent of the units' demand
+ * supplied over the source run: green from `green`, amber from `amber`, red
+ * below. Provisional defaults (green ≥ 95 %, the app's supply target; amber
+ * ≥ 80 %); there is no team setting for them yet, as there is for the EWR's.
+ */
+export interface IrrigationThresholds {
+	green: number;
+	amber: number;
+}
+export const IRRIGATION_THRESHOLDS: Readonly<IrrigationThresholds> = { green: 95, amber: 80 };
+
+/** A unit below this share of its demand counts as short (the workspace's SUPPLY_TARGET, 95 %). */
+export const UNIT_SUPPLY_TARGET = 0.95;
+
+/**
+ * Why the irrigation status is unknown:
+ *   no-figures  nothing to read: no run
+ *   no-units    the source run has no hydrological units
+ *   no-demand   its units asked for no water (nothing planted), so a share supplied means nothing
+ */
+export type IrrigationUnknownReason = 'no-figures' | 'no-units' | 'no-demand';
+
+export interface IrrigationFigure {
+	status: EwrStatus;
+	/** All units' supply over their demand, over the whole source run (0–1); null when unknown. */
+	fractionSupplied: number | null;
+	/** The units in the run, and those below UNIT_SUPPLY_TARGET of their demand; null when unknown. */
+	units: number | null;
+	unitsBelow: number | null;
+	/** Set only when status is 'unknown'. */
+	reason?: IrrigationUnknownReason;
+}
+
+/**
+ * The band for a share supplied (0–1). The cut-off is divided, not the share multiplied, so a
+ * boundary is exact: 0.95 is green at 95 % (0.95 × 100 is 94.999…).
+ */
+export function irrigationStatus(fraction: number, t: IrrigationThresholds = IRRIGATION_THRESHOLDS): Exclude<EwrStatus, 'unknown'> | null {
+	if (!Number.isFinite(fraction) || fraction < 0) return null;
+	return fraction >= t.green / 100 ? 'green' : fraction >= t.amber / 100 ? 'amber' : 'red';
+}
+
+/** The irrigation figure from what the query read: the source run's units, their summed mean demand and supply, and how many fell short. */
+export function irrigationFigure(
+	input: { hasFigures: boolean; units: number; demandM3Day: number; suppliedM3Day: number; unitsBelow: number },
+	thresholds: IrrigationThresholds = IRRIGATION_THRESHOLDS
+): IrrigationFigure {
+	const unknown = (reason: IrrigationUnknownReason): IrrigationFigure => ({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason });
+	if (!input.hasFigures) return unknown('no-figures');
+	if (!input.units) return unknown('no-units');
+	if (!(input.demandM3Day > 0)) return unknown('no-demand');
+	const fractionSupplied = Math.min(1, Math.max(0, input.suppliedM3Day / input.demandM3Day));
+	return { status: irrigationStatus(fractionSupplied, thresholds)!, fractionSupplied, units: input.units, unitsBelow: input.unitsBelow };
 }
 
 /** Whole calendar days from `iso` (YYYY-MM-DD) to `today` (YYYY-MM-DD). */

@@ -8,10 +8,10 @@
 -->
 <script lang="ts">
 	import { EWR_ASSURANCE_MIN_YEARS, type EwrAssuranceSite } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { describeMonths, monthName, WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { waterYearLabel } from '$lib/components/calibration/metrics';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
+	import { describeMonths, monthName, WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
 	import {
 		conditionText,
 		describeMethod,
@@ -41,7 +41,7 @@
 		sites: EwrAssuranceSite[];
 		/** The printable report: Month by month opens (the report shows each site in its own panel). */
 		print?: boolean;
-		/** The heading. River & reserve calls it "Reserve rules met, by month", apart from its EWR grid (issue #465). */
+		/** The heading. EWR calls it "Reserve rules met, by month", apart from its EWR grid (issue #465). */
 		title?: string;
 	} = $props();
 

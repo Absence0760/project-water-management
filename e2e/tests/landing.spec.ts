@@ -35,7 +35,7 @@ test('a signed-out visitor to / sees the landing page, and its buttons lead to s
 	await page.goto('/');
 	await expect(headline(page)).toBeVisible();
 	await expect(page).toHaveURL('/');
-	await expect(page).toHaveTitle('Water Management: daily water balance for a catchment');
+	await expect(page).toHaveTitle('IC-WBT: daily water balance for a catchment');
 
 	await page.getByRole('link', { name: 'Create an account' }).first().click();
 	await expect(page).toHaveURL('/register');
@@ -73,7 +73,7 @@ test('/welcome is prerendered HTML with its link-preview tags, before any script
 	expect(html).not.toMatch(/<[a-z][^>]*\son[a-z]+\s*=/i);
 	expect(html).toContain('From rainfall to river');
 	expect(html).toMatch(/<meta name="description" content="Model a catchment day by day/);
-	expect(html).toMatch(/<meta property="og:title" content="Water Management: daily water balance for a catchment"/);
+	expect(html).toMatch(/<meta property="og:title" content="IC-WBT: daily water balance for a catchment"/);
 	expect(html).toMatch(/<meta name="twitter:card" content="summary_large_image"/);
 	const image = /<meta property="og:image" content="([^"]+)"/.exec(html)?.[1];
 	expect(image, 'og:image').toMatch(/^https?:\/\/[^/]+\/landing\/og\.jpg$/);

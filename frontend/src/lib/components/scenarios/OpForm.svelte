@@ -5,19 +5,19 @@
 	// changed next), shows the value a field has now, and builds the op with
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, resolveCatchmentAreaKm2 } from '@water-management/engine';
-	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { guardUnsaved } from '#lib/nav/unsaved.js';
 	import { leavesScenario } from './leaves';
-	import { siteOptions } from '$lib/components/settings/ewrRules';
-	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
-	import { kindLabel } from '$lib/series/kinds';
-	import DemandScheduleFields from '$lib/components/network/DemandScheduleFields.svelte';
+	import { siteOptions } from '#lib/components/settings/ewrRules.js';
+	import { PE_KIND_OPTIONS } from '#lib/components/settings/peInput.js';
+	import { kindLabel } from '#lib/series/kinds.js';
+	import DemandScheduleFields from '#lib/components/network/DemandScheduleFields.svelte';
 	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, rescaleText, settingsValue, valueText, type ValueSpec } from './fields';
-	import FlowUnitSelect from '$lib/components/network/FlowUnitSelect.svelte';
-	import { fmtDay, tidyDay } from '$lib/format/number';
+	import FlowUnitSelect from '#lib/components/network/FlowUnitSelect.svelte';
+	import { fmtDay, tidyDay } from '#lib/format/number.js';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
 
 	let {
@@ -48,11 +48,11 @@
 	const demandNodes = $derived(nodes.filter((n) => n.kind === d.demandCategory));
 	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? (findSystem(input.model, id) ? systemLabel(findSystem(input.model, id)!) : id);
 	// ewrRule.set (engine ≥ 1.6.0): the outlet and every gauge still marked as an EWR site; the table itself is the Settings tab's editor.
-	const loadRuleEditor = () => import('$lib/components/settings/EwrRuleTablesEditor.svelte');
+	const loadRuleEditor = () => import('#lib/components/settings/EwrRuleTablesEditor.svelte');
 	// settings.set droughtRestriction (engine ≥ 1.54.0, WP-3.8): the rule, in the Settings tab's own editor.
-	const loadRestrictionEditor = () => import('$lib/components/settings/DroughtRestrictionFields.svelte');
+	const loadRestrictionEditor = () => import('#lib/components/settings/DroughtRestrictionFields.svelte');
 	// settings.set ewrDailySource (engine ≥ 1.77.0, issue #460): the daily outlet EWR's source, in the Settings tab's own editor.
-	const loadEwrDailyEditor = () => import('$lib/components/settings/EwrDailySourceFields.svelte');
+	const loadEwrDailyEditor = () => import('#lib/components/settings/EwrDailySourceFields.svelte');
 	// The area ratio's numerator, as the run works it out and the Settings form shows it: the area the natural flow is
 	// made on (after the ops listed): the calibration override, else the units' areas summed.
 	const ewrModelAreaKm2 = $derived(resolveCatchmentAreaKm2({ catchmentAreaKm2: input.settings.calibration?.catchmentAreaKm2 ?? null }, input));

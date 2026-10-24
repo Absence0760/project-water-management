@@ -5,7 +5,7 @@
 // (aria-hidden); the summary sentence and the "Show the numbers" table carry
 // the content, and both come from here too, in the active language ($lib/i18n).
 import { STRESS_THRESHOLDS, stressClassOf, type MonthTotals, type StressClass } from '@water-management/engine';
-import { msg, plural, t, tn, type Msg } from '$lib/i18n/locale.svelte';
+import { msg, plural, t, tn, type Msg } from '#lib/i18n/locale.svelte.js';
 import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd, type VolumeUnit } from './format';
 
 import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, CHART_TOP, CHART_TOP_INSIDE, MIN_MONTH_PX, niceMax } from './chartGeometry';

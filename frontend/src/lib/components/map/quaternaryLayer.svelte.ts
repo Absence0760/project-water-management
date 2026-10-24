@@ -7,7 +7,7 @@
 // module never imports the app-wide API client and its SvelteKit $env, and
 // the tests can drive it.
 import { untrack } from 'svelte';
-import type { MapFeature, QuaternaryLayer as Answer } from '$lib/api/types';
+import type { MapFeature, QuaternaryLayer as Answer } from '#lib/api/types.js';
 import { quaternaryBbox } from './mapLayers';
 import type { QuaternaryOutline } from './mapStyle';
 

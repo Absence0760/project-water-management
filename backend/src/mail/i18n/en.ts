@@ -32,7 +32,7 @@ export const en = {
 	// Someone signed up with an address that already has an account (auth/routes.ts /register).
 	'mail.exists.subject': 'You already have an account — {product}',
 	'mail.exists.heading': 'You already have an account',
-	'mail.exists.body': 'Someone tried to create a {product} account for {email}, but this address already has one.',
+	'mail.exists.body': 'Someone tried to create an {product} account for {email}, but this address already has one.',
 	'mail.exists.signIn': 'If it was you, sign in with your password. If you’ve forgotten it, choose a new one:',
 	'mail.exists.action': 'Choose a new password',
 	'mail.exists.ignore': "If it wasn't you, you can ignore this email — nothing has changed on your account.",
@@ -55,13 +55,13 @@ export const en = {
 	'mail.invite.privacy': 'How we handle your information: {url}',
 	'mail.invite.contact': '{organisation} decides about your information in this catchment. Questions about it: {name}, {email}.',
 	'mail.invite.contactPost': 'Or write to {name} at: {postal}',
-	'mail.invite.confirm': 'There is already a {product} account for {email}. Confirm that this is your email address to accept.',
+	'mail.invite.confirm': 'There is already an {product} account for {email}. Confirm that this is your email address to accept.',
 	'mail.invite.confirmAction': 'Confirm email and accept',
 	'mail.invite.confirmExpires': 'This link expires in 48 hours.',
 	'mail.invite.accept': "Sign in to {product} as {email} to accept or decline. You won't join until you accept.",
 	'mail.invite.acceptAction': 'See the invitation',
 	'mail.invite.confirmTakeOver':
-		"If you never created a {product} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.",
+		"If you never created an {product} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.",
 
 	// Alert emails (WP-2.13): the frame shared by every alert and the digest.
 	'mail.alert.subject': '{what} — {project}',

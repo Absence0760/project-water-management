@@ -53,19 +53,19 @@ function site(share: (t: number) => number, over: Partial<EwrAssuranceSite> = {}
 	return { ...assessSite('2000-10-01', days, { table, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report, ...over };
 }
 
-describe('runSentence: the river', () => {
+describe('runSentence: the river (the last sentence)', () => {
 	it('uses the pragmatic EWR at the outflow gauge when the project has no rule table (and on legacy runs)', () => {
-		expect(runSentences(base())[0]).toBe('Flow at the outflow gauge was below the EWR on 10.0% of days (73 days).');
-		expect(runSentences(base({ catchment: catchment(0, 0) }))[0]).toBe('Flow at the outflow gauge met the EWR on every day of the run.');
+		expect(runSentences(base()).at(-1)).toBe('Flow at the outflow gauge was below the EWR on 10.0% of days (73 days).');
+		expect(runSentences(base({ catchment: catchment(0, 0) })).at(-1)).toBe('Flow at the outflow gauge met the EWR on every day of the run.');
 	});
 
-	it('leads with the Reserve rules at the headline site when there is a rule table, as the cards do', () => {
+	it('names the Reserve rules at the headline site when there is a rule table, as the EWR headline does', () => {
 		// The first 100 days at a tenth of natural: the first months fail.
 		const s = site((t) => (t < 100 ? 0.1 : 1));
 		const o = s.overall;
 		expect(o.met).toBeGreaterThan(0);
 		expect(o.met).toBeLessThan(o.months);
-		const first = runSentences(base({ ewrAssurance: [s] }))[0];
+		const first = runSentences(base({ ewrAssurance: [s] })).at(-1);
 		expect(first).toBe(`The Reserve rules were met in ${((o.met / o.months) * 100).toFixed(1)}% of months at the outlet (${o.met} of ${o.months}).`);
 		// The pragmatic EWR stays on its card, not in the sentence.
 		expect(runSentence(base({ ewrAssurance: [s] }))).not.toMatch(/of days/);
@@ -73,41 +73,41 @@ describe('runSentence: the river', () => {
 
 	it('names a non-outlet site, says "every month" when all are met, and says why when nothing can be assessed', () => {
 		const gauge = site(() => 1, { nodeId: 'g', name: 'Upper weir', isOutlet: false });
-		expect(runSentences(base({ ewrAssurance: [gauge] }))[0]).toBe('The Reserve rules were met in every month at Upper weir.');
+		expect(runSentences(base({ ewrAssurance: [gauge] })).at(-1)).toBe('The Reserve rules were met in every month at Upper weir.');
 		const none = { ...gauge, overall: { ...gauge.overall, months: 0, met: 0, rate: null } };
-		expect(runSentences(base({ ewrAssurance: [none] }))[0]).toBe(
+		expect(runSentences(base({ ewrAssurance: [none] })).at(-1)).toBe(
 			'The Reserve rules at Upper weir could not be assessed: the run has no complete calendar month.'
 		);
 	});
 });
 
 describe('runSentence: the project’s choice of EWR (issue #444)', () => {
-	it('leads with the pragmatic EWR when the project judges by it, even with a rule table', () => {
+	it('names the pragmatic EWR when the project judges by it, even with a rule table', () => {
 		const s = site((t) => (t < 100 ? 0.1 : 1));
-		expect(runSentences(base({ ewrAssurance: [s] }), { source: 'pragmatic' })[0]).toBe('Flow at the outflow gauge was below the EWR on 10.0% of days (73 days).');
-		expect(runSentence(base({ ewrAssurance: [s] }), { source: 'auto' })).toMatch(/^The Reserve rules were met/);
+		expect(runSentences(base({ ewrAssurance: [s] }), { source: 'pragmatic' }).at(-1)).toBe('Flow at the outflow gauge was below the EWR on 10.0% of days (73 days).');
+		expect(runSentences(base({ ewrAssurance: [s] }), { source: 'auto' }).at(-1)).toMatch(/^The Reserve rules were met/);
 	});
 });
 
-describe('runSentence: the farms', () => {
+describe('runSentence: the farms (the first sentence)', () => {
 	it('says every farm got at least the target when all are fine', () => {
-		expect(runSentences(base())[1]).toBe('Every hydrological unit got at least 95% of its demand.');
-		expect(runSentences(base({ farms: [farm('Ridge farm', 0.99)] }))[1]).toBe('Ridge farm got at least 95% of its demand.');
+		expect(runSentences(base())[0]).toBe('Every hydrological unit got at least 95% of its demand.');
+		expect(runSentences(base({ farms: [farm('Ridge farm', 0.99)] }))[0]).toBe('Ridge farm got at least 95% of its demand.');
 	});
 
 	it('counts the short farms and names the lowest, at the table’s precision', () => {
 		const farms = [farm('Farm 1', 1), farm('Farm 2', 0.8), farm('Farm 7', 0.62), farm('Farm 9', 0.949)];
-		expect(runSentences(base({ farms }))[1]).toBe('3 of 4 hydrological units got less than 95% of their demand; the lowest was Farm 7 at 62.0%.');
-		expect(runSentences(base({ farms: [farm('A', 1), farm('B', 0.5)] }))[1]).toBe('1 of 2 hydrological units got less than 95% of its demand: B at 50.0%.');
-		expect(runSentences(base({ farms: [farm('A', 0.5), farm('B', 0.7)] }))[1]).toBe(
+		expect(runSentences(base({ farms }))[0]).toBe('3 of 4 hydrological units got less than 95% of their demand; the lowest was Farm 7 at 62.0%.');
+		expect(runSentences(base({ farms: [farm('A', 1), farm('B', 0.5)] }))[0]).toBe('1 of 2 hydrological units got less than 95% of its demand: B at 50.0%.');
+		expect(runSentences(base({ farms: [farm('A', 0.5), farm('B', 0.7)] }))[0]).toBe(
 			'All 2 hydrological units got less than 95% of their demand; the lowest was A at 50.0%.'
 		);
-		expect(runSentences(base({ farms: [farm('Solo', 0.5)] }))[1]).toBe('Solo got 50.0% of its demand, less than 95%.');
+		expect(runSentences(base({ farms: [farm('Solo', 0.5)] }))[0]).toBe('Solo got 50.0% of its demand, less than 95%.');
 	});
 
 	it('picks the first farm on a tie for lowest', () => {
 		const farms = [farm('B', 0.5), farm('A', 0.5), farm('C', 0.9)];
-		expect(runSentences(base({ farms }))[1]).toMatch(/the lowest was B at 50\.0%\.$/);
+		expect(runSentences(base({ farms }))[0]).toMatch(/the lowest was B at 50\.0%\.$/);
 	});
 
 	it('leaves the farms out when the run has none (or a legacy run has no farm list)', () => {
@@ -128,9 +128,11 @@ describe('runSentence: calibration', () => {
 });
 
 describe('runSentence', () => {
-	it('joins the sentences in order: river, farms', () => {
+	it('joins the sentences in order: irrigation supply first, then the river (issue #558)', () => {
 		expect(runSentence(base({ farms: [farm('A', 1), farm('B', 0.5)] }))).toBe(
-			'Flow at the outflow gauge was below the EWR on 10.0% of days (73 days). 1 of 2 hydrological units got less than 95% of its demand: B at 50.0%.'
+			'1 of 2 hydrological units got less than 95% of its demand: B at 50.0%. Flow at the outflow gauge was below the EWR on 10.0% of days (73 days).'
 		);
+		// No units: the river alone.
+		expect(runSentences(base({ farms: [] }))).toEqual(['Flow at the outflow gauge was below the EWR on 10.0% of days (73 days).']);
 	});
 });

@@ -3,11 +3,11 @@
 // entries into the viewer's calendar days. No DOM, no fetch.
 import { ALLOCATION_MODE_LABEL, registrationLine, type AllocationMode } from '@water-management/engine';
 import { language, LOCALES } from '@water-management/engine/languages';
-import { roleLabel } from '$lib/api/roleLabels';
-import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
-import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
-import { KIND_NAME } from '$lib/components/alerts/alerts';
+import { roleLabel } from '#lib/api/roleLabels.js';
+import type { HistoryEvent, HistoryItem, HistoryRevision } from '#lib/api/types.js';
+import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { KIND_NAME } from '#lib/components/alerts/alerts.js';
 
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
 export const KIND_FILTERS: { value: string; label: string }[] = [
@@ -282,6 +282,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				const o = s.origin as Record<string, unknown>;
 				return `Recorded the source of ${seriesName(s)}: ${str(o.to)} (was ${str(o.from)})`;
 			}
+			// A rainfall station's details (issue #553, series/station.ts): each side as the backend's stationLabel says it.
+			if (s.station && typeof s.station === 'object' && !s.provenance) {
+				const st = s.station as Record<string, unknown>;
+				if (str(st.to) === 'not a station') return `Cleared the rainfall station details of ${seriesName(s)} (was ${str(st.from)})`;
+				if (str(st.from) === 'not a station') return `Recorded ${seriesName(s)} as a rainfall station: ${str(st.to)}`;
+				return `Changed the rainfall station details of ${seriesName(s)}: ${str(st.to)} (was ${str(st.from)})`;
+			}
 			const p = (s.provenance ?? {}) as Record<string, unknown>;
 			return `Marked ${seriesName(s)} as ${str(p.to)} (was ${str(p.from)})`;
 		}
@@ -290,6 +297,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const p = (s.site ?? {}) as Record<string, unknown>;
 			const at = (v: unknown) => (str(v) === 'the outlet' ? 'the outlet' : `gauge ${str(v)}`);
 			return `Moved ${seriesName(s)} to ${at(p.to)} (was ${at(p.from)})`;
+		}
+		case 'series.renamed': {
+			// A series renamed in Series details (issue #556); `name` is the new name.
+			const r = (s.rename ?? {}) as Record<string, unknown>;
+			// A series uploaded with no name (the kind's own) is named, not renamed.
+			if (!str(r.from)) return `Named the ${kindLabel(str(s.kind))} series “${str(r.to)}”`;
+			return `Renamed the ${kindLabel(str(s.kind))} series “${str(r.from)}” → “${str(r.to)}”`;
 		}
 		case 'restore':
 			return s.target === 'series' ? `Restored earlier values of ${seriesName(s)}${range(s)}` : 'Restored an earlier version';

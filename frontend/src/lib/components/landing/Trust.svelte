@@ -10,8 +10,8 @@
 	// calibration NSE, from the engine: backend/scripts/landing-data.ts). The first statement is backed by
 	// the engine audit's public summary, /methods, linked under the list.
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { DATA } from './data.generated';
 	import { fmt } from './format';
 
@@ -58,7 +58,7 @@
 		<li>{t('Each project is private to its members, enforced by the database itself (row-level security).')}</li>
 		<li>{t('Daily data from CHIRPS rainfall and the DWS gauges.')}</li>
 	</ul>
-	<p class="methods"><a href="{base}/methods">{t('How the model is checked')}</a></p>
+	<p class="methods"><a href={resolve('methods')}>{t('How the model is checked')}</a></p>
 	<p class="figures-head">{t('From {name}, an invented example catchment:', { name: EXAMPLE })}</p>
 	<dl class="figures" bind:this={el}>
 		{#each FIGURES as f, i (i)}

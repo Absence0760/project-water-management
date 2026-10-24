@@ -79,10 +79,15 @@ override_resource {
   values = {
     arn = "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
     domain_validation_options = [{
-      domain_name           = "water-management.jaredhoward.com"
-      resource_record_name  = "_0123abcd.water-management.jaredhoward.com."
+      domain_name           = "icwbt.jaredhoward.com"
+      resource_record_name  = "_0123abcd.icwbt.jaredhoward.com."
       resource_record_type  = "CNAME"
       resource_record_value = "_4567efab.acm-validations.aws."
+      }, {
+      domain_name           = "water-management.jaredhoward.com"
+      resource_record_name  = "_89abcdef.water-management.jaredhoward.com."
+      resource_record_type  = "CNAME"
+      resource_record_value = "_0123cdef.acm-validations.aws."
     }]
   }
 }
@@ -92,7 +97,7 @@ override_resource {
   target          = aws_sesv2_email_identity.domain
   override_during = plan
   values = {
-    arn = "arn:aws:ses:af-south-1:000000000000:identity/water-management.jaredhoward.com"
+    arn = "arn:aws:ses:af-south-1:000000000000:identity/icwbt.jaredhoward.com"
     dkim_signing_attributes = {
       next_signing_key_length = "RSA_2048_BIT"
       tokens                  = ["tok1", "tok2", "tok3"]
@@ -635,7 +640,9 @@ override_resource {
 variables {
   aws_region      = "af-south-1"
   route53_zone_id = "Z0000000000000000000"
-  github_repo     = "Absence0760/project-water-management"
+  # The hostname before issue #551, kept as a redirect, in its own zone.
+  redirect_domains = { "water-management.jaredhoward.com" = "Z1111111111111111111" }
+  github_repo      = "Absence0760/project-water-management"
   # Synthetic runtime secrets (ephemeral variables, secrets.tf).
   auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
   db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
@@ -662,7 +669,7 @@ variables {
   # Required and validated. Not an example.* (or other RFC 2606) address,
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
-  budget_alert_email = "ops@water-management.jaredhoward.com"
+  budget_alert_email = "ops@icwbt.jaredhoward.com"
 }
 
 run "production_guardrails" {
@@ -678,15 +685,30 @@ run "production_guardrails" {
     error_message = "API Lambda must default to 1024 MB / 30 s for model runs."
   }
   assert {
-    condition     = aws_lambda_function.backend.reserved_concurrent_executions == 10
-    error_message = "API Lambda concurrency must be capped by default (spend + DB connections)."
+    condition     = aws_lambda_function.backend.reserved_concurrent_executions == 25
+    error_message = "API Lambda concurrency must be capped at 25 by default (spend + DB connections; issue #541: the Project tab's ~10 panels throttled at 10)."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["DB_POOL_MAX"] == "2" && aws_lambda_function.worker.environment[0].variables["DB_POOL_MAX"] == "2"
+    error_message = "The API and the worker each hold a pg pool of DB_POOL_MAX = 2: a container serves one request or job at a time, and the cap x pool sums are sized on it (infra/README.md § Connections)."
+  }
+  assert {
+    # The worst case every DB-connected Lambda can open at once: each cap x its
+    # pool, plus the migrator's 2. It must leave db.t4g.micro (~80
+    # max_connections, the default class) room for the operator and RDS's own.
+    condition = (
+      aws_lambda_function.backend.reserved_concurrent_executions * tonumber(aws_lambda_function.backend.environment[0].variables["DB_POOL_MAX"]) +
+      aws_lambda_function.worker.reserved_concurrent_executions * tonumber(aws_lambda_function.worker.environment[0].variables["DB_POOL_MAX"]) +
+      aws_lambda_function.migrate.reserved_concurrent_executions * 2
+    ) <= 70
+    error_message = "API cap x pool + worker cap x pool + the migrator must stay <= 70 connections (db.t4g.micro's ~80 less headroom). Redo infra/README.md § Connections before raising a cap or a pool."
   }
   assert {
     condition     = startswith(local.runtime_secrets.api.DATABASE_URL, "postgresql://water_app:") && endswith(local.runtime_secrets.api.DATABASE_URL, "@water-management.abc123.af-south-1.rds.amazonaws.com:5432/water?sslmode=verify-full")
     error_message = "DATABASE_URL (in the API's runtime secret) must connect as water_app to the RDS endpoint with sslmode=verify-full."
   }
   assert {
-    condition     = aws_lambda_function.backend.environment[0].variables["ALLOWED_ORIGINS"] == "https://water-management.jaredhoward.com"
+    condition     = aws_lambda_function.backend.environment[0].variables["ALLOWED_ORIGINS"] == "https://icwbt.jaredhoward.com"
     error_message = "ALLOWED_ORIGINS must be exactly the site origin."
   }
   assert {
@@ -773,8 +795,8 @@ run "production_guardrails" {
 
   # --- Edge ----------------------------------------------------------------
   assert {
-    condition     = aws_cloudfront_distribution.frontend.aliases == toset(["water-management.jaredhoward.com"])
-    error_message = "CloudFront must serve exactly the child-zone hostname."
+    condition     = aws_cloudfront_distribution.frontend.aliases == toset(["icwbt.jaredhoward.com", "water-management.jaredhoward.com"])
+    error_message = "CloudFront must serve exactly the site's hostname and its former ones (redirect_domains)."
   }
   assert {
     condition     = length(aws_cloudfront_distribution.frontend.custom_error_response) == 0
@@ -785,9 +807,98 @@ run "production_guardrails" {
     error_message = "The prerendered pages (/welcome, /welcome/af, /privacy, /terms, /methods, /data-sources) must be served from their .html, not the SPA fallback."
   }
   assert {
-    condition     = aws_acm_certificate.frontend.domain_name == "water-management.jaredhoward.com"
-    error_message = "Certificate must cover the child-zone hostname."
+    condition     = aws_acm_certificate.frontend.domain_name == "icwbt.jaredhoward.com" && toset(aws_acm_certificate.frontend.subject_alternative_names) == toset(["water-management.jaredhoward.com"])
+    error_message = "Certificate must be for the site's hostname, with each former hostname (redirect_domains) as a SAN."
   }
+
+  # The former hostname (issue #551): validated and aliased in its own zone,
+  # the site's in the site's.
+  assert {
+    condition = (
+      aws_route53_record.cert_validation["icwbt.jaredhoward.com"].zone_id == "Z0000000000000000000" &&
+      aws_route53_record.cert_validation["water-management.jaredhoward.com"].zone_id == "Z1111111111111111111" &&
+      aws_route53_record.cert_validation["water-management.jaredhoward.com"].name == "_89abcdef.water-management.jaredhoward.com."
+    )
+    error_message = "Each certificate name is validated in the zone that holds it."
+  }
+  assert {
+    condition = alltrue([for r in [aws_route53_record.site_a, aws_route53_record.site_aaaa] :
+      keys(r) == ["icwbt.jaredhoward.com", "water-management.jaredhoward.com"] &&
+      r["icwbt.jaredhoward.com"].zone_id == "Z0000000000000000000" && r["icwbt.jaredhoward.com"].name == "icwbt.jaredhoward.com" &&
+      r["water-management.jaredhoward.com"].zone_id == "Z1111111111111111111" && r["water-management.jaredhoward.com"].name == "water-management.jaredhoward.com"
+    ])
+    error_message = "Both hostnames need A and AAAA aliases, each in its own zone."
+  }
+  assert {
+    condition = alltrue([for s in [
+      "var SITE_HOST = 'icwbt.jaredhoward.com';",
+      "if (host && host !== SITE_HOST) return moved(request);",
+      "statusCode: 301",
+      "location: { value: 'https://' + SITE_HOST + request.uri + query(request.querystring) }",
+    ] : strcontains(aws_cloudfront_function.spa_rewrite.code, s)])
+    error_message = "spa_rewrite must 301 any other host to the same path on the site's hostname (infra/scripts/cloudfront-functions.test.mjs runs it)."
+  }
+  assert {
+    condition     = alltrue([for f in [aws_cloudfront_function.api_strip_prefix, aws_cloudfront_function.tiles_range] : !strcontains(f.code, "SITE_HOST")])
+    error_message = "Only pages redirect: /api/* (one-click unsubscribe, logger pushes) and /tiles/* keep answering on a former hostname."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["ALLOWED_ORIGINS"] == "https://icwbt.jaredhoward.com"
+    error_message = "A former hostname is never an allowed origin: its pages redirect, so no page there calls the API."
+  }
+}
+
+# With every former hostname retired: the site's hostname alone.
+run "no_redirect_domains" {
+  command = plan
+
+  variables {
+    redirect_domains = {}
+  }
+
+  # ACM returns a validation option per name on the certificate: here, one.
+  override_resource {
+    target          = aws_acm_certificate.frontend
+    override_during = plan
+    values = {
+      arn = "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
+      domain_validation_options = [{
+        domain_name           = "icwbt.jaredhoward.com"
+        resource_record_name  = "_0123abcd.icwbt.jaredhoward.com."
+        resource_record_type  = "CNAME"
+        resource_record_value = "_4567efab.acm-validations.aws."
+      }]
+    }
+  }
+
+  assert {
+    condition     = aws_cloudfront_distribution.frontend.aliases == toset(["icwbt.jaredhoward.com"]) && length(aws_acm_certificate.frontend.subject_alternative_names) == 0
+    error_message = "With redirect_domains = {}, CloudFront and the certificate cover the site's hostname only."
+  }
+  assert {
+    condition     = keys(aws_route53_record.site_a) == ["icwbt.jaredhoward.com"] && keys(aws_route53_record.site_aaaa) == ["icwbt.jaredhoward.com"]
+    error_message = "With redirect_domains = {}, only the site's hostname has alias records."
+  }
+}
+
+run "redirect_domains_cannot_name_the_site" {
+  command = plan
+
+  variables {
+    redirect_domains = { "icwbt.jaredhoward.com" = "Z1111111111111111111" }
+  }
+
+  expect_failures = [var.redirect_domains]
+}
+
+run "redirect_domains_need_hostnames_and_zone_ids" {
+  command = plan
+
+  variables {
+    redirect_domains = { "https://water-management.jaredhoward.com/" = "not-a-zone" }
+  }
+
+  expect_failures = [var.redirect_domains]
 }
 
 # ---------------------------------------------------------------------------
@@ -1212,11 +1323,11 @@ run "email_ses" {
   command = plan
 
   assert {
-    condition     = aws_sesv2_email_identity.domain.email_identity == "water-management.jaredhoward.com" && aws_sesv2_email_identity.domain.dkim_signing_attributes[0].next_signing_key_length == "RSA_2048_BIT"
+    condition     = aws_sesv2_email_identity.domain.email_identity == "icwbt.jaredhoward.com" && aws_sesv2_email_identity.domain.dkim_signing_attributes[0].next_signing_key_length == "RSA_2048_BIT"
     error_message = "The domain identity must use Easy DKIM with 2048-bit keys."
   }
   assert {
-    condition     = length(aws_route53_record.ses_dkim) == 3 && aws_route53_record.ses_dkim[0].name == "tok1._domainkey.water-management.jaredhoward.com"
+    condition     = length(aws_route53_record.ses_dkim) == 3 && aws_route53_record.ses_dkim[0].name == "tok1._domainkey.icwbt.jaredhoward.com"
     error_message = "Three DKIM CNAMEs, one per token, under _domainkey."
   }
   assert {
@@ -1225,7 +1336,7 @@ run "email_ses" {
     error_message = "DKIM CNAMEs in af-south-1 must point at dkim.af-south-1.amazonses.com."
   }
   assert {
-    condition     = aws_sesv2_email_identity_mail_from_attributes.domain.mail_from_domain == "mail.water-management.jaredhoward.com" && tolist(aws_route53_record.ses_mail_from_mx.records)[0] == "10 feedback-smtp.af-south-1.amazonses.com"
+    condition     = aws_sesv2_email_identity_mail_from_attributes.domain.mail_from_domain == "mail.icwbt.jaredhoward.com" && tolist(aws_route53_record.ses_mail_from_mx.records)[0] == "10 feedback-smtp.af-south-1.amazonses.com"
     error_message = "Custom MAIL FROM must be mail.<domain> with the regional feedback MX."
   }
   assert {
@@ -1233,7 +1344,7 @@ run "email_ses" {
     error_message = "MAIL FROM SPF must authorise only SES."
   }
   assert {
-    condition     = aws_route53_record.dmarc.name == "_dmarc.water-management.jaredhoward.com" && startswith(tolist(aws_route53_record.dmarc.records)[0], "v=DMARC1; p=none")
+    condition     = aws_route53_record.dmarc.name == "_dmarc.icwbt.jaredhoward.com" && startswith(tolist(aws_route53_record.dmarc.records)[0], "v=DMARC1; p=none")
     error_message = "DMARC must start at p=none."
   }
   assert {
@@ -1256,7 +1367,7 @@ run "email_ses" {
     error_message = "The identity/* grant is safe only with the ses:FromAddress condition on the same, single statement."
   }
   assert {
-    condition     = one(data.aws_iam_policy_document.lambda_ses.statement[0].condition).variable == "ses:FromAddress" && one(data.aws_iam_policy_document.lambda_ses.statement[0].condition).values == tolist(["no-reply@water-management.jaredhoward.com"])
+    condition     = one(data.aws_iam_policy_document.lambda_ses.statement[0].condition).variable == "ses:FromAddress" && one(data.aws_iam_policy_document.lambda_ses.statement[0].condition).values == tolist(["no-reply@icwbt.jaredhoward.com"])
     error_message = "ses:SendEmail must be conditioned on From = no-reply@<domain>."
   }
   assert {
@@ -1293,7 +1404,7 @@ run "email_ses" {
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.ses_endpoint.statement :
       toset(s.resources) == toset(["arn:aws:ses:af-south-1:000000000000:identity/*", aws_sesv2_configuration_set.main.arn]) &&
-      length(s.condition) == 1 && one(s.condition).variable == "ses:FromAddress" && one(s.condition).values == tolist(["no-reply@water-management.jaredhoward.com"])
+      length(s.condition) == 1 && one(s.condition).variable == "ses:FromAddress" && one(s.condition).values == tolist(["no-reply@icwbt.jaredhoward.com"])
       if contains(s.actions, "ses:SendEmail")
     ])
     error_message = "A send through the SES endpoint must be pinned like the IAM policy: this account's identities and configuration set, From = no-reply@<domain>."
@@ -1305,8 +1416,8 @@ run "email_ses" {
   assert {
     condition = (
       aws_lambda_function.backend.environment[0].variables["MAIL_TRANSPORT"] == "ses" &&
-      aws_lambda_function.backend.environment[0].variables["MAIL_FROM"] == "Water Management <no-reply@water-management.jaredhoward.com>" &&
-      aws_lambda_function.backend.environment[0].variables["SITE_URL"] == "https://water-management.jaredhoward.com" &&
+      aws_lambda_function.backend.environment[0].variables["MAIL_FROM"] == "IC-WBT <no-reply@icwbt.jaredhoward.com>" &&
+      aws_lambda_function.backend.environment[0].variables["SITE_URL"] == "https://icwbt.jaredhoward.com" &&
       aws_lambda_function.backend.environment[0].variables["SES_CONFIGURATION_SET"] == "water-management"
     )
     error_message = "The API Lambda must be configured to send through SES as no-reply@ with SITE_URL = the site origin."
@@ -1374,7 +1485,7 @@ run "rejects_empty_budget_alert_email" {
 run "rejects_malformed_budget_alert_email" {
   command = plan
   variables {
-    budget_alert_email = "ops at water-management.jaredhoward.com"
+    budget_alert_email = "ops at icwbt.jaredhoward.com"
   }
   expect_failures = [var.budget_alert_email]
 }
@@ -1417,7 +1528,7 @@ run "accepts_real_alert_mailboxes" {
   command = plan
   variables {
     budget_alert_email = "Ops+AWS@counterexample.com"
-    dmarc_report_email = "dmarc@water-management.jaredhoward.com"
+    dmarc_report_email = "dmarc@icwbt.jaredhoward.com"
   }
   assert {
     condition     = aws_sns_topic_subscription.alerts_email.endpoint == "Ops+AWS@counterexample.com"
@@ -1622,7 +1733,7 @@ run "alarms" {
     error_message = "One service per statement, publish only, so each keeps its own conditions."
   }
   assert {
-    condition     = aws_sns_topic_subscription.alerts_email.endpoint == "ops@water-management.jaredhoward.com" && aws_sns_topic_subscription.alerts_us_east_1_email.endpoint == "ops@water-management.jaredhoward.com"
+    condition     = aws_sns_topic_subscription.alerts_email.endpoint == "ops@icwbt.jaredhoward.com" && aws_sns_topic_subscription.alerts_us_east_1_email.endpoint == "ops@icwbt.jaredhoward.com"
     error_message = "Both SNS topics (regional + us-east-1) must email budget_alert_email."
   }
 
@@ -3359,6 +3470,43 @@ run "rejects_unreserved_api_concurrency" {
   }
 
   expect_failures = [var.lambda_reserved_concurrency]
+}
+
+# Issue #541: the cap x pool sums must fit the database on every tfvars, not
+# only at the defaults (the precondition on aws_lambda_function.backend). 30 x 2
+# + 8 x 2 + 2 = 78 > 70; 26 is the most at the default worker cap (26 x 2 + 16
+# + 2 = 70), and a worker cap of 12 is past it too (50 + 24 + 2 = 76).
+run "rejects_api_concurrency_past_the_database_connections" {
+  command = plan
+
+  variables {
+    lambda_reserved_concurrency = 30
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
+run "rejects_worker_concurrency_past_the_database_connections" {
+  command = plan
+
+  variables {
+    worker_reserved_concurrency = 12
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
+run "accepts_api_concurrency_at_the_database_connections" {
+  command = plan
+
+  variables {
+    lambda_reserved_concurrency = 26
+  }
+
+  assert {
+    condition     = aws_lambda_function.backend.reserved_concurrent_executions == 26
+    error_message = "26 x 2 + 8 x 2 + 2 = 70 connections is within the precondition (positive control)."
+  }
 }
 
 run "rejects_unreserved_migrate_concurrency" {

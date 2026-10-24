@@ -14,16 +14,17 @@
 	// Language). Everything shown is text (Svelte escapes it); the register
 	// links are the engine's fixed URLs, never the database's.
 	import { untrack } from 'svelte';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { packShortCode, parsePackCode, registrationBody, registrationLine } from '@water-management/engine';
-	import { api, ApiError, type PackVerification } from '$lib/api';
-	import BrandMark from '$lib/components/layout/BrandMark.svelte';
-	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, latestOnly, lookUpCode, type FileCheck } from '$lib/components/packs/pack';
-	import { registrationHeading, SIGNOFF_KIND_LABEL } from '$lib/components/liability/signoffForm';
-	import { fmtDate } from '$lib/format/number';
+	import { api, ApiError, type PackVerification } from '#lib/api/index.js';
+	import BrandMark from '#lib/components/layout/BrandMark.svelte';
+	import PackBadge from '#lib/components/packs/PackBadge.svelte';
+	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, latestOnly, lookUpCode, type FileCheck } from '#lib/components/packs/pack.js';
+	import { registrationHeading, SIGNOFF_KIND_LABEL } from '#lib/components/liability/signoffForm.js';
+	import { fmtDate } from '#lib/format/number.js';
 
 	const code = $derived(page.params.code ?? '');
 	let v = $state.raw<PackVerification | null>(null);
@@ -53,7 +54,7 @@
 	const typedOk = $derived(parsePackCode(typed) !== null);
 	function lookUp(e: SubmitEvent) {
 		e.preventDefault();
-		if (typedOk) goto(`${base}/verify/${encodeURIComponent(typed.trim())}`);
+		if (typedOk) goto(resolve(`verify/${encodeURIComponent(typed.trim())}`));
 	}
 
 	// --- check a file, in the browser ---
@@ -88,14 +89,14 @@
 </script>
 
 <svelte:head>
-	<title>{v ? `Evidence pack ${v.shortCode} · ${v.catchment} · ` : 'Verify an evidence pack · '}Water Management</title>
+	<title>{v ? `Evidence pack ${v.shortCode} · ${v.catchment} · ` : 'Verify an evidence pack · '}IC-WBT</title>
 	<meta name="robots" content="noindex, nofollow" />
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
 <div class="verify">
 	<header class="verify-header">
-		<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">Water Management</span><span class="tag">Evidence pack verification</span></span></span>
+		<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">{APP_SHORT_NAME}</span><span class="tag">Evidence pack verification</span></span></span>
 	</header>
 
 	<main class="verify-main" data-verify-state={status} aria-busy={status === 'loading'}>
@@ -134,7 +135,7 @@
 				{:else if v.status === 'superseded'}
 					<p class="verdict amber" data-testid="verify-verdict">
 						<strong>Superseded.</strong> Version {v.version} was issued on {fmtDate(v.issuedAt, true)}, and a newer version replaces it.
-						{#if successorCode}<a href="{base}/verify/{successorCode}">Verify the newer version ({successorCode})</a>.{/if}
+						{#if successorCode}<a href={resolve(`verify/${successorCode}`)}>Verify the newer version ({successorCode})</a>.{/if}
 					</p>
 				{:else}
 					<p class="verdict bad" data-testid="verify-verdict">
@@ -205,7 +206,7 @@
 				{:else}
 					<p class="muted">None: no known bug was recorded for this engine when the pack was drafted.</p>
 				{/if}
-				<p class="small muted">The errata the pack recorded when it was drafted. The methods and their known limitations are on the <a href="{base}/methods">methods page</a>.</p>
+				<p class="small muted">The errata the pack recorded when it was drafted. The methods and their known limitations are on the <a href={resolve('methods')}>methods page</a>.</p>
 				<div data-testid="verify-errata-since">
 					<h3>{since?.heading}</h3>
 					{#if v.errataFoundSince.length}
@@ -263,7 +264,7 @@
 				<button type="submit" class="btn" disabled={!typedOk}>Verify</button>
 			</div>
 		</form>
-		<p class="small muted legal"><a href="{base}/terms">Terms of use</a> · <a href="{base}/privacy">Privacy notice</a></p>
+		<p class="small muted legal"><a href={resolve('terms')}>Terms of use</a> · <a href={resolve('privacy')}>Privacy notice</a></p>
 	</main>
 </div>
 

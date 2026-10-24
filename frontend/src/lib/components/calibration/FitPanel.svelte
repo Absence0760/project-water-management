@@ -21,8 +21,8 @@
 		type ProjectSettings
 	} from '@water-management/engine';
 	import { untrack, type Snippet } from 'svelte';
-	import { apanDailyOfValues, chirpsSourceOfInput } from '$lib/series/provenance';
-	import { api } from '$lib/api';
+	import { apanDailyOfValues, chirpsSourceOfInput } from '#lib/series/provenance.js';
+	import { api } from '#lib/api/index.js';
 	import {
 		benchmarkColumns,
 		benchmarkRows,
@@ -47,19 +47,19 @@
 		stageText,
 		totalRuns,
 		validationRecordOptions
-	} from '$lib/calibration/fit';
-	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
+	} from '#lib/calibration/fit.js';
+	import { FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
 	import MarPenaltyResult from './MarPenaltyResult.svelte';
 	import DataQualityPanel from './DataQualityPanel.svelte';
 	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
-	import { wr2012FitPeriods } from '$lib/calibration/wr2012Fit';
-	import { startFit } from '$lib/calibration/runner';
-	import type { FitSession } from '$lib/calibration/fitSession.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { wr2012FitPeriods } from '#lib/calibration/wr2012Fit.js';
+	import { startFit } from '#lib/calibration/runner.js';
+	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 
 	let {
 		projectId,

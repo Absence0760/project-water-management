@@ -3,7 +3,7 @@
 	// repeating it (never the colour alone). The Applications list, the
 	// Application panel, the evidence report's pack list, the pack view and
 	// the verify page use it.
-	import type { PackStatus } from '$lib/api';
+	import type { PackStatus } from '#lib/api/index.js';
 	import { PACK_STATUS_LABEL, PACK_STATUS_TONE } from './pack';
 
 	let { status, version = null }: { status: PackStatus; version?: number | null } = $props();

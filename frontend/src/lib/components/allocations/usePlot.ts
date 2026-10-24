@@ -5,7 +5,7 @@
 // unit-tested in usePlot.test.ts. The words describe arithmetic against a
 // registered volume, never a finding on lawfulness.
 import type { AllocationComparison } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { SOURCE_LABEL, type UnitRow } from './allocations';
 
 /** The chart's axis runs to at least this share of the registered volume, and at most USE_AXIS_MAX; a year past the cap is drawn at the edge. */

@@ -4,8 +4,8 @@
 	// legacy run and a GR4J run of the same catchment can be judged on whether
 	// their EWR failures match the river's.
 	import type { MetricDelta } from '@water-management/engine';
-	import type { RunCompareResponse } from '$lib/api';
-	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
+	import type { RunCompareResponse } from '#lib/api/index.js';
+	import EwrAgreementTable from '#lib/components/ewr/EwrAgreementTable.svelte';
 	import Delta from './Delta.svelte';
 	import { fmtMetric, type MetricSpec } from './delta';
 

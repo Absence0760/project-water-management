@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 import { dotAt, extremeIndex, keyStep, markText, nearestPoint, readout, sparkDescription, sparkPaths, sparkPoints, SPARK_H, SPARK_W } from './sparkline';
 
 const f2 = (v: number) => v.toFixed(2);

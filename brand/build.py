@@ -52,7 +52,8 @@ CYAN = "#1E9BB8"
 MIST = "#D9E6F2"
 CYAN_BRIGHT = "#36C6E0"
 PAPER = "#F5F7FB"
-NAME = "Water Management"
+NAME = "Integrated Catchment - Water Balance Tool"
+SHORT_NAME = "IC-WBT"
 
 # Display settings for the wordmark and the web font.
 AXES = {"wght": 600}
@@ -222,7 +223,7 @@ def main() -> None:
     shutil.copy(SRC / "mark.svg", DIST / "mark.svg")
 
     font = static_font()
-    d, w, cap = wordmark_path(font, NAME, 64)
+    d, w, cap = wordmark_path(font, SHORT_NAME, 64)
     (DIST / "logo.svg").write_text(lockup(inner(mark_src), d, w, cap, NAVY))
     # Reversed: mist nodes and lines, bright cyan outlet, mist wordmark.
     (DIST / "logo-reversed.svg").write_text(
@@ -262,7 +263,7 @@ def main() -> None:
         json.dumps(
             {
                 "name": NAME,
-                "short_name": "Water Mgmt",
+                "short_name": SHORT_NAME,
                 "icons": [
                     {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
                     {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},

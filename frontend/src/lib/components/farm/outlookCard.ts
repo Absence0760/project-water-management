@@ -6,7 +6,7 @@
 // as what happened in past years, never as what will happen, and the level
 // as the WUA's decision. Words from the message catalogue ($lib/i18n, WP-2.5).
 import type { FarmView } from '@water-management/engine';
-import { t } from '$lib/i18n/locale.svelte';
+import { t } from '#lib/i18n/locale.svelte.js';
 import { fmtDayMonth, fmtPct } from './format';
 
 export interface OutlookVm {

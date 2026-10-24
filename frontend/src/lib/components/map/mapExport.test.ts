@@ -2,8 +2,8 @@
 // Feature with its name, kind, node and area (and a licensed source's credit), nothing else, and a file name
 // from the project's name and the day.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature } from '$lib/api/types';
-import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
+import type { MapFeature } from '#lib/api/types.js';
+import { HYDRORIVERS_MAP_ATTRIBUTION } from '#lib/components/legal/dataCredits.js';
 import { exportFileName, featuresGeoJson, geoJsonText } from './mapExport';
 
 const base = { nodeId: null, nodeName: null, damPosition: null, properties: { description: 'kept out' }, center: [0, 0] as [number, number], sourceId: 'src-1', nonContributingM2: null, createdBy: 'user-1', createdAt: '2026-10-01', updatedAt: '2026-10-01' };

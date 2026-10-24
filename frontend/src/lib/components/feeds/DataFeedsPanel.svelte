@@ -9,15 +9,15 @@
 	from the head's "Rain from the map" to read. Helpers in ./feeds.ts.
 -->
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
-	import { fmtNum } from '$lib/format/number';
+	import { api } from '#lib/api/index.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import NearestGauges from './NearestGauges.svelte';
-	import { kindLabel } from '$lib/series/kinds';
+	import { kindLabel } from '#lib/series/kinds.js';
 	import BoundaryRain from './BoundaryRain.svelte';
 	import UnitRain from './UnitRain.svelte';
 	import {

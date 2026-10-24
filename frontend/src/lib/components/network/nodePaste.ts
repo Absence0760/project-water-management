@@ -5,7 +5,7 @@
 // stored 0–1, River to dam in m³/s and stored in m³/day, and a field a node
 // doesn't use is left out.
 import type { NetworkNode } from '@water-management/engine';
-import { mapPaste, sameValue, toCsv, type GridColumn, type GridFormat, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+import { mapPaste, sameValue, toCsv, type GridColumn, type GridFormat, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 import { cardLabel, fieldScale, fieldUnused, isPct, setNodeField, TABLE_FIELDS, type NodeField, type NodeNumberKey } from './fields';
 import { divertMonthsCell } from './supply';
 

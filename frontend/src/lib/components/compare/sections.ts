@@ -5,7 +5,7 @@
 // the bar a shorter name where the heading is long. Panels drawn only for
 // some pairs (a scenario's overrides, reserve compliance, plausibility,
 // assurance of supply) are listed only when drawn.
-import type { NavGroup, NavSection } from '$lib/components/common/sectionNav';
+import type { NavGroup, NavSection } from '#lib/components/common/sectionNav.js';
 
 export interface CompareNavInput {
 	/** The summary is drawn (a what-if's comparison has loaded); its days-below chart's heading. */

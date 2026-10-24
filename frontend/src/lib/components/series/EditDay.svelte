@@ -6,12 +6,12 @@
 	// the details and the chart show. Days outside the series come from Add
 	// data (a file or pasted rows).
 	import type { SeriesMeta } from '@water-management/engine';
-	import { api } from '$lib/api';
-	import type { SeriesWriteResult } from '$lib/api/types';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtDay, fmtNum, parseDay } from '$lib/format/number';
-	import { feedMark } from '$lib/series/provenance';
-	import { isHandDay, lastDay, readTypedValue, valueOn, type DailyValues } from '$lib/series/editDay';
+	import { api } from '#lib/api/index.js';
+	import type { SeriesWriteResult } from '#lib/api/types.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtDay, fmtNum, parseDay } from '#lib/format/number.js';
+	import { feedMark } from '#lib/series/provenance.js';
+	import { isHandDay, lastDay, readTypedValue, valueOn, type DailyValues } from '#lib/series/editDay.js';
 	import { forgetValues } from './valuesCache';
 
 	let {

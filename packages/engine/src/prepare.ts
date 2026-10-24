@@ -48,6 +48,7 @@ import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calen
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
+import { resolveEwrSplit } from './network/ewrSplit';
 import { resolveEwrDailySource } from './reserve/dailySource';
 import { RUNOFF_MODELS } from './runoff/types';
 import {
@@ -73,6 +74,7 @@ import {
 import { resolveWr2012 } from './reference/wr2012Resolve';
 import {
 	fillFlowGaps,
+	gapFillLowFlow,
 	fillSummaryInWindow,
 	flowFillWarning,
 	GAP_FILL_KINDS,
@@ -85,6 +87,17 @@ import {
 } from './flowGapFill';
 import { resolveQualityFlags } from './calibrate/qualityFlagSettings';
 import { clonePlain, stableStringify } from './warmstart/plain';
+import {
+	catchmentStationForcing,
+	catchmentStationPlan,
+	pairingFactors,
+	resolveRainStations,
+	stationContext,
+	withPinnedStationFactors,
+	type CatchmentStationPlan,
+	type StationContext
+} from './runoff/stationForcing';
+import type { StationAreaForcing } from './project';
 
 /** One rain-source period's fitted factors (rainSourceFactors), keyed by the period's stable JSON. */
 export type RainSourceFactorsOf = ReturnType<typeof rainSourceFactors>[number];
@@ -98,6 +111,13 @@ export type RainSourceFactorsOf = ReturnType<typeof rainSourceFactors>[number];
 export interface PreparedFits {
 	chirpsCorrection: ChirpsCorrection | null;
 	rainSourceFactors: { key: string; factors: RainSourceFactorsOf }[];
+	/**
+	 * The rainfall stations' pairing factors (engine ≥ 1.91.0, issue #553,
+	 * docs/model.md §2.4i): station id → 12 monthly factors, for every pairing
+	 * the run used and didn't refuse. Absent on a snapshot from before, and
+	 * without settings.rainStations.
+	 */
+	stationFactors?: Record<string, number[]>;
 }
 
 export interface PrepareOptions {
@@ -167,30 +187,51 @@ export interface PreparedRun {
 	flowFill: Partial<Record<GapFillKind, WindowFill>> | null;
 	/** The fits, with PrepareOptions.captureFits. */
 	fits?: PreparedFits;
+	/**
+	 * The rainfall stations (engine ≥ 1.91.0, issue #553, docs/model.md
+	 * §2.4i): the run's station records and pairings (shared with the units'
+	 * forcing), and the catchment's station forcing when
+	 * settings.rainStations.catchment applies (then `aligned` reads it as the
+	 * catchment rain). Null without settings.rainStations.
+	 */
+	stations: { context: StationContext; catchment: StationAreaForcing | null; plan: CatchmentStationPlan | null } | null;
 }
 
 /** Merge the settings, work out the run window and align the input series to it. */
 export function prepareRun(input: ModelInput, options: PrepareOptions = {}): PreparedRun {
 	const warnings: string[] = [];
-	const settings = mergeSettings(input.settings, warnings);
+	// A resumed run's pairing factors (engine ≥ 1.91.0) stand in for a fit, as its CHIRPS factors do.
+	let settings = withPinnedStationFactors(mergeSettings(input.settings, warnings), options.pinned?.stationFactors);
 	const series = input.series ?? {};
+	// Rainfall stations (engine ≥ 1.91.0, issue #553, docs/model.md §2.4i): with a station for the catchment, its rule
+	// is the catchment rain. The catchment gauge's own handling (§2.4b's fit, §2.4c–§2.4e) then reads no gauge: the
+	// station's record went through its checks in ./runoff/stationRecord.ts. Without settings.rainStations: as before.
+	const stationCtx = settings.rainStations ? stationContext({ settings, series, stations: input.stations, nodes: input.model?.nodes ?? [] }, warnings) : null;
+	const plan = stationCtx ? catchmentStationPlan(stationCtx, warnings) : null;
+	// The station × catchment MAP ÷ station MAP already takes the point rain to the catchment's level: the areal
+	// correction (§2.4g) on top would count that twice, so it is off under a catchment station.
+	if (plan && settings.arealRain) {
+		warnings.push(`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}" × the catchment MAP ÷ its MAP, so the areal rainfall correction (Settings → Flow calibration → Rain into GR4J → Areal rainfall correction) is not applied (docs/model.md §2.4i)`);
+		settings = { ...settings, arealRain: null };
+	}
+	const work = plan ? stationWork(settings, series, plan, input, warnings) : { settings, series };
 
 	// --- run window ---------------------------------------------------------
 	// First the span of every rain series that can drive the run (catchment,
 	// CHIRPS, forecast, a rain-source period's series inside its period), as
 	// before engine 0.45.0; an explicit simulationStart / End replaces its end.
-	const drivers: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
+	// The catchment's station drives it in the catchment gauge's place (engine ≥ 1.91.0).
+	const drivers: (DailySeries | undefined)[] = [plan ? plan.record : series.rain_catchment_mm, series.rain_chirps_mm, series.rain_forecast_mm];
 	let first = Infinity;
 	let last = -Infinity;
-	for (const k of drivers) {
-		const s = series[k];
+	for (const s of drivers) {
 		if (!s || s.values.length === 0) continue;
 		const d0 = toEpochDay(s.startDate);
 		first = Math.min(first, d0);
 		last = Math.max(last, d0 + s.values.length - 1);
 	}
 	// A rain-source period's series drives the run too, inside its period (engine ≥ 0.30.0).
-	for (const p of settings.rainSource) {
+	for (const p of work.settings.rainSource) {
 		const s = series[p.series];
 		if (!s || s.values.length === 0) continue;
 		const d0 = toEpochDay(s.startDate);
@@ -206,7 +247,7 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 		throw new Error('no rainfall series: cannot work out the simulation period');
 	}
 	if (end < start) throw new Error(`simulation end ${fromEpochDay(end)} is before start ${fromEpochDay(start)}`);
-	let prep = alignToWindow(settings, series, start, end, options);
+	let prep = alignToWindow(work.settings, work.series, start, end, options, plan);
 	// Then (engine ≥ 0.45.0, issue #54) an end left unset moves in to the
 	// first / last day whose final rain (catchment, a rain-source period's
 	// series, bias-corrected CHIRPS or the forecast, after the zero-run and
@@ -221,13 +262,34 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 		if (s !== start || e !== end) {
 			start = s;
 			end = e;
-			prep = alignToWindow(settings, series, start, end, options);
+			prep = alignToWindow(work.settings, work.series, start, end, options, plan);
 		}
 		const note = defaultWindowWarning(series, settings, start, end);
 		if (note) warnings.push(note);
 	}
 	warnings.push(...prep.warnings);
-	return { ...prep, warnings, settings, series };
+	const stations = stationCtx ? { context: stationCtx, catchment: prep.stationForcing, plan } : null;
+	const { stationForcing: _f, ...rest } = prep;
+	if (rest.fits && stationCtx) rest.fits = { ...rest.fits, stationFactors: pairingFactors(stationCtx) };
+	return { ...rest, warnings, settings, series, stations };
+}
+
+/**
+ * The settings and series the catchment rain handling reads under a catchment
+ * station: no catchment gauge (its rain is the station's), so no §2.4b fit
+ * against it (the station's pairing corrects the CHIRPS), no §2.4c/§2.4d on
+ * it and no §2.4e periods (they name the gauge's days; a station that is the
+ * catchment gauge, RainStationInput.isCatchmentGauge, gets them through its
+ * own checks).
+ */
+function stationWork(settings: ProjectSettings, series: ModelInput['series'], plan: CatchmentStationPlan, input: ModelInput, warnings: string[]): { settings: ProjectSettings; series: ModelInput['series'] } {
+	const gauge = (input.stations?.[plan.assignment.stationId] as { isCatchmentGauge?: boolean } | undefined)?.isCatchmentGauge === true;
+	if (settings.rainSource.length && !gauge)
+		warnings.push(
+			`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}", so the rain-source periods (Settings → Rain gaps), which name days of the catchment rain series, are not read (docs/model.md §2.4i)`
+		);
+	const { rain_catchment_mm: _gauge, ...rest } = series;
+	return { settings: { ...settings, rainSource: [], chirpsBiasCorrection: 'none', chirpsQuantileMap: null }, series: rest };
 }
 
 /**
@@ -294,7 +356,14 @@ export function defaultWindowWarning(series: ModelInput['series'], settings: Pic
 }
 
 /** Everything prepareRun does once the window is fixed: align the series to it and apply the rain handling. */
-function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], start: number, end: number, options: PrepareOptions = {}): Omit<PreparedRun, 'settings' | 'series'> {
+function alignToWindow(
+	settings: ProjectSettings,
+	series: ModelInput['series'],
+	start: number,
+	end: number,
+	options: PrepareOptions = {},
+	plan: CatchmentStationPlan | null = null
+): Omit<PreparedRun, 'settings' | 'series' | 'stations'> & { stationForcing: StationAreaForcing | null } {
 	const warnings: string[] = [];
 	const days = end - start + 1;
 	const startDate = fromEpochDay(start);
@@ -323,7 +392,12 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const chirpsClean = alignSeries(series.rain_chirps_mm, start, days).map((v) => (v !== null && !(v >= 0) ? null : v));
 	const chirpsRaw = chirpsClean.slice();
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
-	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start, series.rain_chirps_mm) : null;
+	const chirpsCorrected = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start, series.rain_chirps_mm) : null;
+	// The catchment's station (engine ≥ 1.91.0, §2.4i): its days × the MAP ratio are the catchment rain, and the CHIRPS
+	// × its pairing's factors fills the others (null where it can't, so the forecast does).
+	const station = plan ? catchmentStationForcing(plan, start, days, chirpsClean, alignSeries(series.rain_forecast_mm, start, days)) : null;
+	if (station) for (let t = 0; t < days; t++) catchment[t] = station.catchment[t]!;
+	const chirpsUsed = station ? station.chirps : chirpsCorrected;
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only when settings.qualityFlags.infilled scores infilled days.
 	const flowFill = flowFillsFor(settings, series, start, days, warnings, options.resumedFill);
 	// One control for scoring filled days (engine ≥ 1.23.0): the quality flags' infilled treatment.
@@ -375,7 +449,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	// Daily A-pan (issue #45): every consumer reads it through `aligned`; this only counts and warns.
 	const apanDaily = apanDailyInfo(series.evap_apan_mm, alignSeries(series.evap_apan_mm, start, days), start, settings.apanMm.every((v) => v === 0), warnings);
 
-	if (!hasRainInput(series, settings.rainSource)) {
+	if (!plan && !hasRainInput(series, settings.rainSource)) {
 		warnings.push('no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain');
 	}
 
@@ -394,6 +468,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 		rainSource: rainSource ? { info: rainSource.info, column: rainSourceColumn! } : null,
 		apanDaily,
 		flowFill,
+		stationForcing: station?.forcing ?? null,
 		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit } } : {})
 	};
 }
@@ -528,7 +603,8 @@ function flowFillsFor(
 			);
 			continue;
 		}
-		const f = fillFlowGaps(kind, record, spec, donor);
+		// A reading above a low-flow period's threshold anchors nothing and is out of the ratio and the clamp (issue #567).
+		const f = fillFlowGaps(kind, record, spec, donor, gapFillLowFlow(settings.qualityFlags.lowFlowPeriods, kind, record, spec.donor, donor));
 		const summary = fillSummaryInWindow(f, start, days);
 		const code = new Uint8Array(days);
 		const offset = toEpochDay(f.startDate) - start;
@@ -720,6 +796,8 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	s.arealRain = resolveArealRain(raw?.arealRain, warnings);
 	// Per-unit rain (engine ≥ 1.78.0, §2.4h): only when stored, so settings without it normalise as before.
 	if (raw?.unitRain !== undefined) s.unitRain = resolveUnitRain(raw.unitRain, warnings);
+	// Rainfall stations (engine ≥ 1.91.0, §2.4i): only when stored, likewise.
+	if (raw?.rainStations !== undefined) s.rainStations = resolveRainStations(raw.rainStations, warnings);
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
@@ -770,5 +848,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);
 		s.flowShareMethod = 'area';
 	}
+	// How the EWR is split between the units (engine ≥ 1.94.0, issue #553): an unknown value splits by the flow share.
+	s.ewrSplit = resolveEwrSplit(s.ewrSplit, warnings);
 	return s;
 }

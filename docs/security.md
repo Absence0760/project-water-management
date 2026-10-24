@@ -1,6 +1,7 @@
 # Security
 
-The security model for the water-management app. The data it holds is
+The security model for the IC-WBT app (Integrated Catchment - Water Balance
+Tool; repo slug water-management). The data it holds is
 catchment configuration and farm-level water use for named farms. It is not
 financial data, but it is commercially sensitive to the client and may be
 personal information under POPIA (see [plan.md questions](./plan.md#questions-for-the-client)).
@@ -875,7 +876,7 @@ and goes on. Below the threshold nobody sees a puzzle.
   (`<id>.edge.sdk.awswaf.com`, which `jsapi.js` loads; without it no token is
   issued), and `media-src` allows `data:` for the audio. SvelteKit's meta CSP
   adds the same two to `script-src` from the build's script URL
-  (`frontend/svelte.config.js` refuses any other shape). No `'unsafe-eval'`,
+  (`frontend/svelte-options.js` `wafCaptchaOrigins` refuses any other shape). No `'unsafe-eval'`,
   no `blob:`, no wildcard: loading AWS's SDK (2026-09) under exactly this
   policy in Chromium drew no violation beyond its web-font stylesheet on
   `static.captcha.awswaf.com`, left blocked (the puzzle uses the system font).
@@ -1133,8 +1134,8 @@ result without signing in, until it expires or its owner revokes it.
 - **In the fragment.** The URL is `/share#t=<token>`. A browser never sends
   the fragment to a server, so the token doesn't reach CloudFront, WAF or
   Lambda access logs, or a `Referer`. The `/share` page reads it, strips it
-  from the address bar with `history.replaceState` (as the reset pages strip
-  `?token=`), and POSTs it in a JSON body. The page sets `noindex` and
+  from the address bar with a shallow `goto` that replaces the history entry
+  (as the reset pages strip `?token=`; e2e checks each page's address after load), and POSTs it in a JSON body. The page sets `noindex` and
   `no-referrer`. A link pasted into a chat app is still readable by whoever
   sees the message: that is what a link is.
 - **Owner-only for a baseline link.** `share_link` RLS: SELECT, INSERT (as
@@ -1511,6 +1512,15 @@ and nothing else.
   key, history or feed (`ingest.db.test.ts` checks each, with its own series
   as the positive control). It can't write a series revision either, so a
   key's merge keeps none (like a data feed's).
+- **An editor learns one bit about keys** (240_series_name_key_listed). The
+  series rename (`PATCH …/series/:id { name }`, issue #556) must refuse a
+  name a key's `allowed_series` holds, but `api_key` stays owner-only. So
+  `app_series_name_key_listed(project, kind, name)` (`SECURITY DEFINER`,
+  pinned `search_path`, `EXECUTE` to `water_app` only) answers just whether a
+  live key of the project lists that `{ kind, name }`: false unless the
+  caller is an editor of the project, false in a key's transaction, and no
+  key id, name or list comes out (`series/rename.db.test.ts`, a stranger's
+  call as the negative).
 - **Automatic re-runs from a key** (042_auto_rerun). A key's ingest that
   changes days queues the project's automatic re-run (when it has them on)
   as the key's **creator** (`api_key.created_by`), through `SECURITY DEFINER
@@ -2844,8 +2854,14 @@ In short:
   `frontend/src/lib/urlAttributes.security.test.ts` scans every component's
   URL attributes (`href`, `src`, `srcset`, `action`, `formaction`, …, and
   `{href}` shorthand). A value that starts with literal text (`/…`, `?tab=…`,
-  `#…`, `{base}/…`) sets its own scheme, and that scheme must be http(s),
-  mailto or tel, never protocol-relative. A value that starts with an
+  `#…`, `{basePath()}/…`) sets its own scheme, and that scheme must be http(s),
+  mailto or tel, never protocol-relative. SvelteKit's `resolve()`/`asset()`
+  put the base and a `/` first, so one whole `resolve('<literal>')` or
+  `asset('<literal>')` whose path starts with a literal segment passes without
+  review, with only `+` terms after it (names, member access, calls, strings,
+  templates); any looser operator at its top level (`||`, `??`, `?:`, a comma,
+  `&&`), a non-literal argument, or `resolve('') + x` (which could make
+  `//host`) stays an expression. Any other value that starts with an
   expression must be a *reviewed* head, listed with where its value comes
   from and the components it was reviewed in (the same name in another
   component is a new one). A new one fails until someone reviews it, and a
@@ -3363,7 +3379,11 @@ placed points. The server never trusts the browser with geometry:
   schema owner). The gazetteer's read policy is `FOR SELECT USING (true)`
   with `SELECT` granted to `water_app` and no write policy or grant; it is
   written only by the operator's load (`pnpm import:gazetteer`, or
-  `load-reference.yml` in production). 225 also creates the `pg_trgm`
+  `load-reference.yml` in production). The MAP grid is loaded the same way
+  in production since issue #560, for its one allowed dataset
+  (`WAAS-SWCape-2007`; any other label refused, and a `source` too, so the
+  stored credit is the recorded one), and migration 238 adds `map-grid` to
+  `reference_load`'s kinds. 225 also creates the `pg_trgm`
   extension (trusted, as the schema owner) for its trigram index. The
   Map's search, `GET /projects/:id/map/search?q=` (issue #523 C5), is
   viewer-gated (`requireRole … 'viewer'` under `withUser`), validates `q`
@@ -3970,7 +3990,10 @@ key there would let any read-only principal forge any user's session.
   start on a missing or local-default setting, a `dev-only-`/`test-only-`
   placeholder anywhere (the committed dev JWT secret), a non-https or localhost
   URL, a `DATABASE_URL` without `sslmode=verify-full` or with a short (dev)
-  password, `VITEST`, or no explicit `ALERTS_ENABLED` on the worker. The error
+  password, `VITEST`, no explicit `ALERTS_ENABLED` on the worker, or a
+  `DB_POOL_MAX` on the API or the worker that is missing or not a whole
+  number of at least 1 (the database's connections are sized on it,
+  infra/README.md § Connections). The error
   names settings, never values. `config/production.security.test.ts` bundles
   each entry point and fails on any `process.env` read that `SETTINGS` doesn't
   classify, checks each Lambda's Terraform environment block (or, for a secret,
@@ -4049,7 +4072,9 @@ key there would let any read-only principal forge any user's session.
   now" is a token bucket per feed (6, then one every 10 minutes;
   111_feed_daily_only, `app_feed_take_run_now`), so an editor can't turn a
   feed into a request loop.
-- **Blast radius:** Lambda reserved concurrency is capped. There are monthly
+- **Blast radius:** Lambda reserved concurrency is capped (the API at 25,
+  which with its pool of 2 also caps its database connections at 50;
+  infra/README.md § Connections), and `-1` (unreserved) is refused. There are monthly
   and daily budgets and Cost Anomaly Detection (off until the operator turns
   it on after the first apply; deployment.md § Budget alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
   (`unhandled_error`) and CloudFront 5xx. Both alert topics admit only this
@@ -4471,8 +4496,8 @@ nothing else.
   `<meta>` CSP to `'self'` plus the hash of its one inline bootstrap script
   (and the sign-in CAPTCHA SDK's two origins once configured, § Sign-in CAPTCHA),
   and the frontend deploy refuses a build without that meta policy
-  (`infra/scripts/check-csp.mjs`). This needs `kit.csp.mode = 'hash'` in
-  `frontend/svelte.config.js`. Styles keep `'unsafe-inline'`, because Svelte
+  (`infra/scripts/check-csp.mjs`). This needs `csp.mode = 'hash'` in
+  `frontend/vite.config.ts`'s `sveltekit({…})`. Styles keep `'unsafe-inline'`, because Svelte
   templates and uPlot set inline `style` attributes. CSS injection can't run
   script; Svelte's escaping and the ban on `{@html}` with user data remain the
   first XSS defence.

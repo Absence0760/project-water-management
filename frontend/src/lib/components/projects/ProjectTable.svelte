@@ -1,7 +1,8 @@
 <script lang="ts">
 	// One group of projects as a compact table (issue #17, docs/ui.md § Project
 	// list): each row says how the catchment is doing, from the portfolio's
-	// figures (GET /projects/outcomes): the EWR status, units short in the figures' last week,
+	// figures (GET /projects/outcomes): irrigation supplied (the status since issue #558; the EWR's
+	// is the teams pages' and the workspace's EWR page's), units short in the figures' last week,
 	// the lowest dam and the published restriction, data freshness, the last run
 	// and the alerts firing (the team portfolio's columns, folded in by issue #176).
 	// A click anywhere on a row opens the project (the name link stretches over
@@ -9,23 +10,25 @@
 	// sit in a ⋯ menu. The table answers to its own width: Lowest dam, Last run
 	// and Alerts fold into the line under the name at 1100 px, every outcome
 	// column at 730 px.
-	import { base } from '$app/paths';
-	import { hasRole, roleLabel, type PortfolioProject, type ProjectSummary } from '$lib/api';
-	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import { hasRole, roleLabel, type PortfolioProject, type ProjectSummary } from '#lib/api/index.js';
+	import StatusPill from '#lib/components/portfolio/StatusPill.svelte';
 	import {
 		ageText,
 		alertsText,
 		curtailmentHref,
 		damText,
-		ewrWindowLabel,
 		farmsShortText,
+		IRRIGATION_LABEL,
+		irrigationUnitsText,
 		feedsText,
 		last30Text,
 		restrictionText,
 		type SortDir
-	} from '$lib/components/portfolio/portfolio';
-	import { agoText } from '$lib/format/age';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	} from '#lib/components/portfolio/portfolio.js';
+	import { agoText } from '#lib/format/age.js';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
 	import { dataFreshness, daysSince } from './freshness';
 	import type { SortKey } from './grouping';
 	import type { Outcomes } from './outcomes';
@@ -63,7 +66,7 @@
 		p.team ? (p.team.name ?? 'Another team') : p.role === 'owner' ? 'Personal' : 'Shared directly';
 
 	// Opens the workspace with the upload dialog (the workspace reads ?add=data).
-	const addDataHref = (p: ProjectSummary) => `${base}/projects/${p.id}?add=data`;
+	const addDataHref = (p: ProjectSummary) => resolve(`projects/${p.id}?add=data`);
 	const now = new Date();
 
 	/** "today", "yesterday", "3 days ago", "5 months ago": the one age wording ($lib/format/age). */
@@ -134,15 +137,14 @@
 		if (menuFor && !menuEl?.contains(to) && !trigger?.contains(to)) closeMenu();
 	}
 
-	// "EWR, last 30 days" only while the rows' figures are current: once stale, the date they end on.
-	const ewrLabel = $derived(ewrWindowLabel(projects.flatMap((p) => outcomes?.get(p.id) ?? [])));
-	const SORTABLE = $derived<{ key: SortKey; label: string; cls: string; col: string }[]>([
-		{ key: 'status', label: ewrLabel, cls: 'wide', col: 'c-ewr' },
+	const SORTABLE: { key: SortKey; label: string; cls: string; col: string }[] = [
+		// Irrigation supplied over the run the figures come from (issue #558), in place of the EWR's 30 days.
+		{ key: 'status', label: IRRIGATION_LABEL, cls: 'wide', col: 'c-status' },
 		{ key: 'farms', label: 'Hydrological units short', cls: 'wide', col: 'c-units' },
 		{ key: 'dam', label: 'Lowest dam', cls: 'wide xwide', col: 'c-dam' },
 		// The Data column sorts by how old the figures are, as the portfolio's did.
 		{ key: 'age', label: 'Data', cls: 'wide', col: 'c-data' }
-	]);
+	];
 	// Each key's own order is worst (or newest) first; Last run's is newest first, so it reads "descending".
 	const ariaSort = (key: SortKey) => {
 		if (sort !== key) return undefined;
@@ -173,7 +175,7 @@
 {#snippet units(o: PortfolioProject)}
 	{@const t = farmsShortText(o)}
 	{#if t}
-		{#if o.farmsShort7 && o.sourceRunId}<a class="lift short" href={curtailmentHref(o, base)}>{t}</a>{:else}{t}{/if}
+		{#if o.farmsShort7 && o.sourceRunId}<a class="lift short" href={curtailmentHref(o, basePath())}>{t}</a>{:else}{t}{/if}
 		{#if o.farmsShort30 != null && o.farmCount}<span class="sub">{o.farmsShort30} {last30Text(o)}</span>{/if}
 	{:else}
 		<span class="muted">{o.source === 'published' ? 'Unknown' : 'Not published'}</span>
@@ -219,10 +221,10 @@
 				<tr>
 					<!-- Named by the project name alone, not the lines under it. -->
 					<th scope="row" aria-label={p.name}>
-						<a class="name" href="{base}/projects/{p.id}">{p.name}</a>
+						<a class="name" href={resolve(`projects/${p.id}`)}>{p.name}</a>
 						<span class="meta meta-who">
 							{#if showTeam}
-								{#if p.team?.name}<a class="lift team" href="{base}/teams/{p.team.id}">{p.team.name}</a>{:else}<span>{teamLabel(p)}</span>{/if}
+								{#if p.team?.name}<a class="lift team" href={resolve(`teams/${p.team.id}`)}>{p.team.name}</a>{:else}<span>{teamLabel(p)}</span>{/if}
 								<span aria-hidden="true">·</span>
 							{/if}
 							<span class="role" data-testid="project-role">{roleLabel(p.role)}</span>
@@ -233,7 +235,7 @@
 						{#if p.description}<span class="desc">{p.description}</span>{/if}
 						<!-- Narrow tables: the columns that fold away, as lines under the name. -->
 						<span class="meta meta-narrow">
-							{#if o}<StatusPill p={o} />{:else}<span class="muted">{noFigures(p)}</span>{/if}
+							{#if o}<StatusPill p={o} kind="irrigation" />{:else}<span class="muted">{noFigures(p)}</span>{/if}
 							{#if o}<span class="line">{#if !farmsShortText(o)}Hydrological units short:{' '}{/if}{@render units(o)}</span>{/if}
 						</span>
 						<span class="meta meta-narrow">
@@ -246,9 +248,11 @@
 							{#if o && o.alertsFiring > 0}<span class="badge badge-warn alerts-badge">{o.alertsFiring} alert{o.alertsFiring === 1 ? '' : 's'} firing</span>{/if}
 						</span>
 					</th>
-					<td class="wide c-ewr">
+					<td class="wide c-status">
 						{#if o}
-							<StatusPill p={o} />
+							<StatusPill p={o} kind="irrigation" />
+							<!-- Over the whole run, as the pill: not the week the next column counts. -->
+							{#if irrigationUnitsText(o)}<span class="sub">{irrigationUnitsText(o)} over the run</span>{/if}
 							{#if sourceShort(o)}<span class="sub">{sourceShort(o)}{#if ageText(o)}{' '}· {ageText(o)}{/if}</span>{/if}
 						{:else}<span class="muted">{noFigures(p)}</span>{/if}
 					</td>
@@ -319,7 +323,7 @@
 	.projects {
 		table-layout: fixed;
 	}
-	.c-ewr {
+	.c-status {
 		width: 205px;
 	}
 	.c-units {

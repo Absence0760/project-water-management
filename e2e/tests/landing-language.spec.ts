@@ -12,7 +12,7 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const HEADLINE = 'Every drop in the catchment, accounted for.';
-const TITLE = 'Water Management: daily water balance for a catchment';
+const TITLE = 'IC-WBT: daily water balance for a catchment';
 const OTHER = (await languages()).filter((l) => l.code !== 'en');
 
 const h1 = (page: Page, name: string) => page.getByRole('heading', { level: 1, name });
@@ -39,7 +39,8 @@ for (const l of OTHER) {
 		expect(html).toContain(w(HEADLINE));
 		expect(html).toContain(w('From rainfall to river'));
 		expect(html).not.toContain(HEADLINE);
-		expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe(w(TITLE));
+		// The name is a proper noun in every language (issue #551): the message carries it as {app}.
+		expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe(w('{app}: daily water balance for a catchment').replace('{app}', 'IC-WBT'));
 		expect(html).toMatch(new RegExp(`<link rel="canonical" href="https?://[^/"]+/welcome/${l.code}"`));
 		expect(html).toMatch(/<link rel="alternate" hreflang="x-default" href="https?:\/\/[^/"]+\/welcome"/);
 		expect(html).toMatch(new RegExp(`<meta property="og:url" content="https?://[^/"]+/welcome/${l.code}"`));

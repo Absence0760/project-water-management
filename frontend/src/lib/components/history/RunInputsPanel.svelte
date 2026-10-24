@@ -5,12 +5,12 @@
 	run's settings and model back as a new change (docs/ui.md § Runs).
 -->
 <script lang="ts">
-	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import type { InputChange } from '@water-management/engine';
-	import { api, type HistoryRevision, type Relink, type RunMeta } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import ChangesList from '$lib/components/compare/ChangesList.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { api, type HistoryRevision, type Relink, type RunMeta } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import ChangesList from '#lib/components/compare/ChangesList.svelte';
+	import { fmtDate } from '#lib/format/number.js';
 	import { revisionLines, revisionTitle } from './timeline';
 
 	let {

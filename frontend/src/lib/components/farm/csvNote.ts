@@ -10,7 +10,7 @@
 // for the spreadsheet a farmer in that language opens it in: a language
 // written with a decimal comma (af-ZA) gets `;` between cells, since Excel in
 // that locale splits a comma-separated file into one column.
-import { msg, type Msg } from '$lib/i18n/msg';
+import { msg, type Msg } from '#lib/i18n/msg.js';
 
 /** `csv` (with or without its UTF-8 BOM) with `# <note>` as its first line; the BOM stays first. */
 export function withNoteLine(csv: string, note: string): string {

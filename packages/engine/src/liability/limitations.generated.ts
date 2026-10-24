@@ -99,7 +99,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (projects with runoff from each unit's own rain, settings.unitRain perUnit)",
 		"title": "Each unit's rain level rested on provisional calls",
-		"status": "Pending the hydrologist on the MAP period, the reference cell, rain-source days in the fit, and the EWR split and land-cover threshold on flow shares; the decided rules are built in engine 1.85.0 (issue #500)"
+		"status": "Pending the hydrologist on the MAP period, the reference cell, rain-source days in the fit, and the land-cover threshold on flow shares; the decided rules are built in engine 1.85.0 (issue #500). From engine 1.94.0 the EWR can be split by each unit's natural MAR instead of the flow shares (the operator's option, its MAR period provisional, ES1)"
 	},
 	{
 		"id": "L1",
@@ -128,6 +128,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"severity": "Low (units with a crop supply table, engine 1.73.0)",
 		"title": "A unit's crop demand split by share between its dam, the river and another unit's dam runs on choices the hydrologist hasn't confirmed",
 		"status": "Needs hydrologist (engine 1.73.0, issue #408)"
+	},
+	{
+		"id": "G2",
+		"source": "finding",
+		"severity": "Low (gauges inside the network with both a gauge and a logger record)",
+		"title": "Which of a gauge's two records its checks read was a choice, and the readers didn't agree",
+		"status": "Built (engine 1.90.0), provisionally decided 2026-10-23, pending the client's hydrologist"
 	},
 	{
 		"id": "Q3",

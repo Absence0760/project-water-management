@@ -1,7 +1,7 @@
 import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, rainCheckLimits, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { tipFor } from '$lib/help/tips';
-import { fmtNum } from '$lib/format/number';
+import { tipFor } from '#lib/help/tips.js';
+import { fmtNum } from '#lib/format/number.js';
 import {
 	applyReport,
 	benchmarkRows,

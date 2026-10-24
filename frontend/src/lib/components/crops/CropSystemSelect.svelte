@@ -5,7 +5,7 @@
 	// the dialog passes the crop, the project's table, the current choice and a
 	// typical SABI system to hint, and takes the chosen row id.
 	import type { CropDef, IrrigationSystemDef, IrrigationSystemId } from '@water-management/engine';
-	import { findSystem, systemLabel } from '$lib/model/systems';
+	import { findSystem, systemLabel } from '#lib/model/systems.js';
 
 	let {
 		crop,

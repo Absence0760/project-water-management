@@ -6,7 +6,7 @@
 	// control labelled "Password". Only the translated pages use it (sign-in,
 	// register, reset, account), so its words go through t().
 	import type { HTMLInputAttributes } from 'svelte/elements';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 
 	let {
 		value = $bindable(''),

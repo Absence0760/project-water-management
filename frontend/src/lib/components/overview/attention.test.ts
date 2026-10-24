@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FarmSummary, NetworkNode, ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { attention, nameList, runHref, type AttentionInput } from './attention';
 
 const node = (id: string, kind: NetworkNode['kind'] = 'farm', name = id): NetworkNode =>
@@ -63,6 +63,17 @@ describe('attention', () => {
 		expect(attention(base({ summary: summary([farm('Upper', 1), farm('Lower', 0.1)]) }))).toEqual([]);
 		// Positive control: the same short run's warning is still a card.
 		expect(attention(base({ summary: summary([farm('Upper', 1), farm('Lower', 0.1)], ['w']) })).map((i) => i.id)).toEqual(['run-warnings']);
+	});
+
+	it('raises no EWR card, however badly the reserve fared: the EWR has its own page (issue #558)', () => {
+		const failing = {
+			...summary([farm('Upper', 1), farm('Lower', 1)]),
+			catchment: { meanNaturalFlowM3Day: 1, meanSimulatedOutflowM3Day: 0, ewrDaysNotMet: 112, ewrFractionDaysNotMet: 1 },
+			ewrAssurance: [{ nodeId: null, name: 'Outlet', isOutlet: true, overall: { months: 4, met: 0, rate: 0, longestNotMetRun: 4 } }]
+		} as unknown as RunSummary;
+		expect(attention(base({ summary: failing }))).toEqual([]);
+		// Positive control: the same run's warning is still a card.
+		expect(attention(base({ summary: { ...failing, warnings: ['w'] } })).map((i) => i.id)).toEqual(['run-warnings']);
 	});
 
 	it('flags the latest run’s warnings', () => {

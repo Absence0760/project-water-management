@@ -1,11 +1,14 @@
 <script lang="ts">
-	import { dailyEwrName } from '$lib/components/ewr/notMet';
-	// River & reserve (issue #17, option A · Outcomes): one run's river, for
-	// the run the URL names (`run=`) or else the newest (river.ts pickRiverRun).
-	// The page header and run picker, two KPI tiles (river.ts riverKpis), then
+	import { dailyEwrName } from '#lib/components/ewr/notMet.js';
+	// EWR (River & reserve until issue #558, which made it the one EWR results
+	// page; issue #17, option A · Outcomes): one run's river, for the run the
+	// URL names (`run=`) or else the newest (river.ts pickRiverRun). The page
+	// header and run picker, two KPI tiles (river.ts riverKpis: the EWR
+	// headline card, the Summary's until issue #558, merged with the EWR not met
+	// tile, and the mean outflow), the days below the reserve in each of the
+	// last twelve months (ReserveStrip, the Summary's until issue #558), then
 	// the flow against the EWR (the app's one flow vs reserve chart, with its
-	// 30 days / 1 year / All switch and the days below the reserve shaded; the
-	// Summary shows the days below by month and links here, issue #162) beside
+	// 30 days / 1 year / All switch and the days below the reserve shaded) beside
 	// the days below the reserve per water year. The page flows in the window's
 	// one scroll (nothing is sized to the window, and no card or table scrolls
 	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
@@ -15,42 +18,43 @@
 	// what if", the run-it-yourself tools, each one row until it has run (common/ToolRow): the
 	// uncertainty bands, the sensitivity runs, the outcome matrix and the seasonal outlook.
 	import { onDestroy, tick, untrack } from 'svelte';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import Delta from '$lib/components/compare/Delta.svelte';
-	import { runOptionLabel } from '$lib/components/compare/picker';
-	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
-	import EwrRequiredMet from '$lib/components/ewr/EwrRequiredMet.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { runHref } from '$lib/components/overview/attention';
-	import { historyDays } from '$lib/components/overview/latestRun';
-	import { hasRuleLine } from '$lib/components/overview/summaryChart';
-	import { resolveHeadline } from '$lib/components/runs/ewrAssurance';
-	import { heatmapHeadlineNote, judgedByText } from '$lib/components/ewr/headline';
-	import { detailCache } from '$lib/components/runs/cache';
-	import { fmtDate, fmtDay } from '$lib/format/number';
-	import { holdAnchor } from '$lib/help/anchor';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import UncertaintyPanel from '$lib/components/uncertainty/UncertaintyPanel.svelte';
-	import SensitivityPanel from '$lib/components/uncertainty/SensitivityPanel.svelte';
-	import OutcomeMatrixPanel from '$lib/components/outcomes/OutcomeMatrixPanel.svelte';
-	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
-	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
-	import { riverAnchor } from './links';
+	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import Delta from '#lib/components/compare/Delta.svelte';
+	import { runOptionLabel } from '#lib/components/compare/picker.js';
+	import EwrHeatmap from '#lib/components/ewr/EwrHeatmap.svelte';
+	import EwrRequiredMet from '#lib/components/ewr/EwrRequiredMet.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { runHref } from '#lib/components/overview/attention.js';
+	import { historyDays } from '#lib/components/overview/latestRun.js';
+	import { hasRuleLine } from '#lib/components/overview/summaryChart.js';
+	import { resolveHeadline } from '#lib/components/runs/ewrAssurance.js';
+	import { heatmapHeadlineNote, judgedByText } from '#lib/components/ewr/headline.js';
+	import { detailCache } from '#lib/components/runs/cache.js';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { holdAnchor } from '#lib/help/anchor.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import UncertaintyPanel from '#lib/components/uncertainty/UncertaintyPanel.svelte';
+	import SensitivityPanel from '#lib/components/uncertainty/SensitivityPanel.svelte';
+	import OutcomeMatrixPanel from '#lib/components/outcomes/OutcomeMatrixPanel.svelte';
+	import OutlookPanel from '#lib/components/outlook/OutlookPanel.svelte';
+	import WaterAccountPanel from '#lib/components/reliability/WaterAccountPanel.svelte';
+	import { RIVER_STRIP_ANCHOR, riverAnchor } from './links';
+	import ReserveStrip from './ReserveStrip.svelte';
 	import { EWR_MONTHS_HEADING, ewrRuleText, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups } from './river';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
 	// water account) are in this tab's chunk: only this tab uses them, and as chunks of their own they
 	// loaded on every visit anyway, paying split overhead (issue #9). The flow chart (uPlot), the
 	// water-year bars (shared with Compare runs) and Reserve compliance (only with a rule table) stay lazy.
-	const loadFlowVsReserve = () => import('$lib/components/overview/FlowVsReserve.svelte');
-	const loadReserveYears = () => import('$lib/components/compare/ReserveYearsChart.svelte');
-	const loadAssurancePanel = () => import('$lib/components/runs/EwrAssurancePanel.svelte');
+	const loadFlowVsReserve = () => import('#lib/components/overview/FlowVsReserve.svelte');
+	const loadReserveYears = () => import('#lib/components/compare/ReserveYearsChart.svelte');
+	const loadAssurancePanel = () => import('#lib/components/runs/EwrAssurancePanel.svelte');
 
 	let {
 		projectId,
@@ -77,10 +81,10 @@
 
 	// A run picked is a new history entry, so Back returns to the run before.
 	function choose(id: string) {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		url.searchParams.set('run', id);
 		url.hash = '';
-		goto(url, { noScroll: true, keepFocus: true });
+		goto(url, { reset: false });
 	}
 
 	// --- the run's record and the one before it, through the Runs tab's cache ---
@@ -251,7 +255,7 @@
 	     under its first screen. From 80rem of page a side index on the left, every group named over
 	     its links; narrower a bar under the header, its links evenly spaced (issue #162, #462). The
 	     page's own widths are read from river-body, the column beside the index. -->
-	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="River sections" railFrom={RIVER_RAIL_FROM_REM}>
+	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="EWR sections" railFrom={RIVER_RAIL_FROM_REM}>
 	<div class="river-body">
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
@@ -264,9 +268,13 @@
 		</p>
 	{/if}
 	<div class="first" bind:clientWidth={firstW}>
-		<div class="top">
+		<!-- The tiles, and beside them where the column is wide enough (under them on a phone) the days below the
+		     reserve in each of the last twelve months: the Summary's strip until issue #558. Side by side, so the
+		     flow chart and the next panel's top still show in a 1440 × 960 window. -->
+		<div class="top" class:with-strip={!!shown}>
+		<div class="tiles">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>
-			<dl class="stats kpis" aria-label="River and reserve figures">
+			<dl class="stats kpis" aria-label="EWR figures">
 				{#each kpis as k (k.id)}
 					<div class="stat" class:flagged={k.flagged} data-kpi={k.id}>
 						<dt>{k.term}{#if k.help} <HelpTip key={k.help} />{/if}</dt>
@@ -286,6 +294,16 @@
 				</p>
 			{/if}
 		</LoadState>
+		</div>
+		{#if shown}
+			<ReserveStrip
+				id={RIVER_STRIP_ANCHOR}
+				compliance={shown.run.summary.ewrCompliance}
+				forecastFrom={shown.run.summary.forecast?.from ?? null}
+				{ruleTable}
+				daily={shown.run.summary.catchment.outletEwr}
+			/>
+		{/if}
 		</div>
 		{#if shown}
 			<div class="cols">
@@ -421,6 +439,15 @@
 		gap: 1rem;
 		margin-bottom: 1rem;
 	}
+	.top {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+		align-items: start;
+	}
+	.tiles {
+		min-width: 0;
+	}
 	/* Two tiles side by side, at every width. */
 	.kpis {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -494,6 +521,11 @@
 	/* From the column's width, not the window's: beside the side index the column is 13rem narrower (issue #462).
 	   56rem is the column a 1100 px window gave it before (240 px sidebar, gutters, scrollbar). */
 	@container river-body (min-width: 56rem) {
+		/* The tiles beside the reserve strip, half the column each, both as tall as the taller. */
+		.top.with-strip {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			align-items: stretch;
+		}
 		.cols {
 			grid-template-columns: minmax(0, 1fr) clamp(300px, 36cqi, 400px);
 			align-items: stretch;

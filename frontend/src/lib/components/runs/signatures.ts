@@ -2,7 +2,7 @@
 // signatures, engine ≥ 1.55.0; docs/model.md §2.10d "Validation signatures",
 // docs/ui.md). Pure, unit-tested.
 import { BFI_WARN_DIFF, FDC_LOW_WARN_PCT, HOLDOUT_SKILL_WARN, RECESSION_MIN_SEGMENTS, type ValidationSignatures } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 const RECORD: Record<string, string> = { flow_observed_m3s: 'gauge', flow_logger_m3s: 'logger' };
 

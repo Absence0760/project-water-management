@@ -9,7 +9,7 @@
 	help page shows too.
 -->
 <script lang="ts">
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
 	import { drmFormat, type DrmTarget } from './drmFormat';
 
 	let { target, context }: { target: DrmTarget; context: string } = $props();

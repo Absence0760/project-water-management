@@ -171,7 +171,8 @@ test('a new user builds a catchment through the UI, runs it and reads the result
 	await upload.getByLabel('CSV file').setInputFiles(fixture('apan-2y.csv'));
 	await upload.getByRole('button', { name: 'Upload' }).click();
 	await expect(uploadedNote(page)).toHaveText('Uploaded 730 days to “Evaporation — A-pan, daily”.');
-	await expect(page.getByRole('region', { name: 'Input time series' }).getByRole('row')).toHaveCount(4);
+	// Three series rows (the table also has its header and a heading row per group, issue #553).
+	await expect(page.getByRole('region', { name: 'Input time series' }).locator('tr[data-series]')).toHaveCount(3);
 
 	// --- run the model ---------------------------------------------------------------
 	await tab(page, 'Runs & results').click();
@@ -267,10 +268,10 @@ test('A-pan and EWR, entered in Settings, feed the run’s summary, and the run 
 
 	const summary = runSummary(page);
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
-	// The plain-words summary above the cards: no rule table, so the pragmatic EWR at the gauge, then the farms. The fit is
-	// left to the NSE and PBIAS cards below it (issue #177).
-	const lede = summary.getByText(/^Flow at the outflow gauge (was below the EWR on [\d.]+% of days|met the EWR on every day)/);
-	await expect(lede).toHaveText(/^Flow at the outflow gauge (was below the EWR on [\d.]+% of days \([\d\s]+ days\)|met the EWR on every day of the run)\. .*hydrological units? got .*\.$/);
+	// The plain-words summary above the cards: the units' supply first (issue #558), then, with no rule table, the pragmatic
+	// EWR at the gauge. The fit is left to the NSE and PBIAS cards below it (issue #177).
+	const lede = summary.getByText(/Flow at the outflow gauge (was below the EWR on [\d.]+% of days|met the EWR on every day)/);
+	await expect(lede).toHaveText(/^.*hydrological units? got .*\. Flow at the outflow gauge (was below the EWR on [\d.]+% of days \([\d\s]+ days\)|met the EWR on every day of the run)\.$/);
 	await expect(lede).not.toContainText('Calibration');
 	await expect(summary.getByText('Calibration NSE', { exact: true })).toBeVisible();
 

@@ -4,8 +4,8 @@
 // discarded by the page's one sticky "Save changes / Discard" bar with the
 // model edits, and the leave guard counts them. Every other card on the
 // Project page (move, members, farmers, links) still acts at once.
-import type { api, Project } from '$lib/api';
-import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
+import type { api, Project } from '#lib/api/index.js';
+import { cleanName, workspaceNameProblem } from '#lib/format/visibleName.js';
 import { DEFAULT_TIME_ZONE } from './project';
 
 type ProjectUpdate = Parameters<typeof api.projects.update>[1];

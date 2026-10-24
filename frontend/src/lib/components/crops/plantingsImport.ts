@@ -11,10 +11,10 @@
 // (ImportPlantingsDialog) and applied through the model editor, unsaved,
 // like any other edit. Pure: tested in plantingsImport.test.ts.
 import { NEW_FARM_IRRIGATION_SYSTEM, type ProjectModel } from '@water-management/engine';
-import type { FileFormat } from '$lib/components/common/formatHelp';
-import { systemLabel, systemsOf } from '$lib/model/systems';
-import { headingKeys, normalName, toCsv } from '$lib/spreadsheet/paste/grid';
-import { blockCommas, DECIMAL_COMMA_NOTE, GROUPING_COMMA_NOTE, numberReader, readPastedBlock, splitCsvRow } from '$lib/spreadsheet/paste/read';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
+import { systemLabel, systemsOf } from '#lib/model/systems.js';
+import { headingKeys, normalName, toCsv } from '#lib/spreadsheet/paste/grid.js';
+import { blockCommas, DECIMAL_COMMA_NOTE, GROUPING_COMMA_NOTE, numberReader, readPastedBlock, splitCsvRow } from '#lib/spreadsheet/paste/read.js';
 
 const M2_PER_HA = 10_000;
 /** The most data lines a list may have (a large scheme's plantings fit many times over). */

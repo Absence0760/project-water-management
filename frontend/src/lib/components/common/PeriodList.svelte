@@ -6,13 +6,14 @@
 	parent form can block saving. The list's name and its two add buttons share its
 	head row, so the buttons sit with the list they fill (a group named by the
 	head, as a fieldset by its legend; ui-playbook.md § 2).
+	calibration/LowFlowPeriods.svelte mirrors this layout with more fields.
 -->
 <script lang="ts">
-	import { localIsoDate } from '$lib/format/number';
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import { localIsoDate } from '#lib/format/number.js';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { exclusionsError, exclusionRange, waterYearLabel, type CalibrationExclusion } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 
 	let {
 		list = $bindable([]),

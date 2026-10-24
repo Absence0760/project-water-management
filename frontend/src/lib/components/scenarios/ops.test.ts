@@ -1,6 +1,6 @@
 import { applyScenario, blankEwrRuleTable, classifyOp, classifyScenario, type EwrRuleTable, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { newNode } from '$lib/model/editor.svelte';
+import { newNode } from '#lib/model/editor.svelte.js';
 import { NEW_ALLOCATION, OUTLET_SITE, allocationDraft, buildOp, checkOp, describeOp, draftSpec, draftStarted, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, volumeText, type OpDraft } from './ops';
 
 // Synthetic ids (UUID-shaped, as the backend requires) and invented names.

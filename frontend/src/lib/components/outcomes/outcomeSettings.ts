@@ -3,7 +3,7 @@
 // year-class method and the risk cut-offs per metric. Small on purpose: the
 // Settings tab imports it to block Save, and its section is a lazy chunk.
 import { DEFAULT_OUTCOME_RISK_CUTOFFS, validateOutcomeCutoffs, type OutcomeRiskCutoffs } from '@water-management/engine';
-import type { OutcomeSettings } from '$lib/api/types';
+import type { OutcomeSettings } from '#lib/api/types.js';
 
 /** The backend's defaults (outcomeSettings.ts OUTCOME_DEFAULTS): `auto`, and the engine's cut-offs (null). */
 export const OUTCOME_DEFAULTS: Readonly<OutcomeSettings> = Object.freeze({

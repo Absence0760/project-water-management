@@ -8,13 +8,13 @@
 	model only; bands of two models are never pooled.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onDestroy } from 'svelte';
 	import { diffEnsembleOptions, type EnsembleSummary, type PairedResult, type PairedSummary } from '@water-management/engine';
-	import { api, type Ensemble, type EnsembleDetail } from '$lib/api';
-	import { FitCancelled, startEnsemble, type EnsembleHandle } from '$lib/calibration/runner';
-	import { fmtNum } from '$lib/format/number';
-	import { monthName } from '$lib/format/months';
+	import { api, type Ensemble, type EnsembleDetail } from '#lib/api/index.js';
+	import { FitCancelled, startEnsemble, type EnsembleHandle } from '#lib/calibration/runner.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { monthName } from '#lib/format/months.js';
 	import { bandCells, pct, rangeText, shownEnsemble, sig, withheldNote } from './bands';
 
 	let {

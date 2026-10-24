@@ -946,7 +946,7 @@ reads `bundle-1` and `bundle-2`):
 | --- | --- |
 | `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, the headline pair's two results digests (`headline`, `bundle-2`; null without a recorded pair), and the SHA-256 of every other entry |
 | `manifest.json` | the manifest as its RFC 8785 text: its SHA-256 *is* the manifest hash |
-| `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash), `<run>` `baseline` and, for an application, `application` |
+| `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash, and, when the run had them, `seriesChoice`, the CHIRPS series it read and the others at the outlet and at each land unit, a forecast run's `forecastRainSource`, and under `settings.rainStations` the rainfall stations' details, `stations`, engine ≥ 1.91.0: the re-run passes them back to the engine, which reads them, `bundleRunInput`; a station's record and the CHIRPS at its cell are input series like any other, `rain_station_mm#<id>` and `rain_chirps_station_mm#<id>`), `<run>` `baseline` and, for an application, `application` |
 | `runs/<run>/results.json` | the run's stored summary and the SHA-256 of each daily output (results `results-1`) |
 | `series/<sha256>.csv` | each input series' values, `date,value` one row a day, a missing day empty, named by the SHA-256 of the values (runs that share a series share its file) |
 | `scenario.json` | the application's scenario as its run recorded it: the ops, their hash, the base run (application packs only) |
@@ -956,7 +956,11 @@ The **results digest** of a run is the SHA-256 of `runResultsText`: RFC 8785
 JSON of the first day, the summary as JSON stores it, and each daily output's
 node, key and values hash, sorted (labels aren't in it). Two runs with the
 same digest have the same summary and the same value on every day of every
-output. The bundle is deterministic: entries sorted, fixed timestamps, so the
+output. Everything the engine scores is in the summary and so in the digest:
+the calibration statistics and, from engine 1.90.0, each gauge record's fit
+check inside the network (`plausibility.gauges[].fit`, NSE, KGE and PBIAS,
+model.md §2.10k), so a pack carries them and `reproduce:pack` re-derives
+them with the run. The bundle is deterministic: entries sorted, fixed timestamps, so the
 same pack gives the same bytes on the same zlib.
 
 **Built at issue.** The issue route (`backend/src/evidence/bundle.ts`) reads

@@ -68,6 +68,16 @@ describe('parseRulFile', () => {
 		expect(percentileTablesFromRul(r)).toEqual({ error: expect.stringMatching(/no “Natural Duration curves” block/) });
 	});
 
+	it('a file with the natural block but no low-flow block gives the daily EWR two tables, the third null (issue #552)', () => {
+		const l = lines(exampleRulFile());
+		const at = l.indexOf('Reserve Flows without High Flows');
+		const text = [...l.slice(0, at), ...l.slice(at + 14)].join('\r\n');
+		const p = ok(percentileTablesFromRul(ok(parseRulFile(text))));
+		expect(p.lowFlowPctM3s).toBeNull();
+		expect(p.naturalPctM3s).toHaveLength(12);
+		expect(p.reservePctM3s).toHaveLength(12);
+	});
+
 	it('names the line that didn’t parse', () => {
 		const l = lines(exampleRulFile());
 		const bad = [...l];
@@ -104,6 +114,8 @@ describe('parseRulFile', () => {
 		const p = ok(percentileTablesFromRul(r));
 		expect(p.naturalPctM3s![4]![0]).toBeCloseTo(mcmMonthToM3s(r.natural![4]![0]!, 4), 12);
 		expect(p.reservePctM3s![0]![9]).toBeCloseTo(mcmMonthToM3s(r.total[0]![9]!, 0), 12);
+		// The third table (issue #552): the Reserve flows without high flows, converted the same way.
+		expect(p.lowFlowPctM3s![8]![3]).toBeCloseTo(mcmMonthToM3s(r.lowFlow![8]![3]!, 8), 12);
 		// A new source scales by area (issue #90 B2), so it needs the table's area.
 		const src = { ...blankEwrDailySource(), method: 'percentile' as const, tableAreaKm2: 50, ...p };
 		expect(ewrDailySourceIssues(src)).toEqual([]);

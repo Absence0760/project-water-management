@@ -1,6 +1,6 @@
 import type { DemandObject, NetworkNode, ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { PastePlan } from '$lib/spreadsheet/paste/grid';
+import type { PastePlan } from '#lib/spreadsheet/paste/grid.js';
 import { demandRows } from './demands';
 import { applyDemandPaste, demandsCsv, demandsFormat, pasteNames, planDemandPaste } from './demandsPaste';
 

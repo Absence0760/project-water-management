@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode, ProjectModel, SeriesMeta } from '@water-management/engine';
 import { lakeFactorPresetFill, withMonthlyRates } from '@water-management/engine';
-import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from './inputs';
+import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, settingsRows, STATION_HEAD, stationPairingRows, stationRows, transferRows } from './inputs';
+import type { RainStationSummary, StationAreaForcing } from '@water-management/engine';
+import { fmtNum } from '#lib/format/number.js';
 
 const node = (id: string, name: string, over: Partial<NetworkNode> = {}) =>
 	({ id, name, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 1, damCapacityM3: 0, irrigationEfficiency: 0.8, ...over }) as NetworkNode;
@@ -55,6 +57,42 @@ describe('settingsRows', () => {
 		expect(
 			Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', unitRain: { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'gauge record', mapPeriod: { start: '2001-01-01', end: '2020-12-31' } } }), run))[key]
 		).toBe('on: GR4J ran once per unit with land on its own rain; MAP period 2001–2020; rain gauge’s MAP 640 mm (gauge record)');
+	});
+
+	it('lists the rainfall stations only on a run that assigned one (issue #553)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const key = 'Rainfall stations (GR4J rain)';
+		const row = (rainStations: unknown) => Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', rainStations } as never), run))[key];
+		expect(row(undefined)).toBeUndefined();
+		expect(row({ catchment: null, units: {} })).toBeUndefined();
+		expect(row({ catchment: { stationId: 's1' } })).toBe('the catchment from a station; catchment MAP: the units’ area-weighted mean; the station rule’s choices are provisional, pending the hydrologist’s review');
+		expect(row({ units: { u1: { stationId: 's1' }, u2: { stationId: 's2' } }, catchmentMapMm: 780, catchmentMapSource: 'isohyets', unreliable: { s1: [['2001-01-01', '2001-02-01']] } })).toBe(
+			'the catchment rain as before; 2 land units from their stations; catchment MAP 780 mm (isohyets); 1 unreliable period set aside; the station rule’s choices are provisional, pending the hydrologist’s review'
+		);
+	});
+
+	it('names the daily EWR source and its Reserve table only on a run that had one (issues #455, #552)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const key = 'Daily EWR at the outlet';
+		const twelve = (row: number[]) => Array.from({ length: 12 }, () => [...row]);
+		const row = [10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.5];
+		const pct = { method: 'percentile' as const, scaling: 'area' as const, tableMarMm3: null, tableAreaKm2: 450, tabM3s: null, naturalPctM3s: twelve(row), reservePctM3s: twelve(row.map((v) => v / 2)) };
+		const at = (ewrDailySource: unknown) => Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', ewrDailySource } as never), run))[key];
+		expect(at(undefined)).toBeUndefined();
+		expect(at(pct)).toBe('the DRM percentile tables, scaled by area (table 450 km²)');
+		expect(at({ ...pct, reserveTable: 'withoutHighFlows', lowFlowPctM3s: twelve(row.map((v) => v / 4)) })).toBe('the DRM percentile tables (Reserve flows without high flows), scaled by area (table 450 km²)');
+	});
+
+	it('names the EWR split only on a run that asked for the natural MAR (issue #553)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const key = 'EWR split between units';
+		const at = (over: Record<string, unknown>) => Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', ...over } as never), run))[key];
+		expect(at({})).toBeUndefined();
+		expect(at({ ewrSplit: 'flowShare', unitRain: { mode: 'perUnit' } })).toBeUndefined();
+		expect(at({ ewrSplit: 'naturalMar', unitRain: { mode: 'perUnit' } })).toBe(
+			'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review'
+		);
+		expect(at({ ewrSplit: 'naturalMar' })).toBe('the flow share: natural MAR was asked for, but GR4J ran once on the catchment rain, so each unit’s natural MAR share is its flow share');
 	});
 
 	it('names the runoff model and lists GR4J parameters only for a GR4J run', () => {
@@ -219,5 +257,59 @@ describe('coverageRows', () => {
 	it('ends each series on its last value: blank days stored after it are no data', () => {
 		const logger: SeriesMeta = { id: '1', kind: 'rain_catchment_mm', name: 'Logger', unit: 'mm', startDate: '2026-09-01', length: 27, lastValueDate: '2026-09-25' };
 		expect(coverageRows([logger], { startDate: '2026-09-01', endDate: '2026-09-27' })).toEqual([['Rainfall — catchment · Logger', '2026-09-01', '2026-09-25', '27', '27']]);
+	});
+});
+
+describe('stationRows and stationPairingRows (issue #553)', () => {
+	const area = (over: Partial<StationAreaForcing> = {}): StationAreaForcing => ({
+		nodeId: 'a',
+		name: 'Upper farm',
+		stationId: 's1',
+		stationName: 'Hill station',
+		areaMapMm: 860,
+		areaMapSource: 'synthetic grid',
+		stationMapMm: 745,
+		stationMapSource: null,
+		ownRatio: 1.154,
+		ratio: 1.154,
+		clamped: false,
+		scaleToMap: true,
+		correctedBy: 's1',
+		days: { station: 3000, chirps: 150, fallback: 0, none: 0 },
+		setAside: { checks: 0, unreliable: 0 },
+		...over
+	});
+	const stations: RainStationSummary = {
+		pairings: [
+			{ stationId: 's1', stationName: 'Hill station', chirpsAt: { cell: true }, refused: null, fitFrom: '1995-01-01', fitTo: '2020-12-31', commonYears: 26, days: 9400, pinned: false, months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, sharedDays: 300, gaugeMm: 1, chirpsMm: 1, ownFactor: 1.1, factor: 1.1, clamped: false, fitted: true, outsideBand: false })) },
+			{ stationId: 's2', stationName: 'Short station', chirpsAt: { unitId: 'b', unitName: 'Lower farm' }, refused: 'only 3 complete years in common (5 needed)', fitFrom: null, fitTo: null, commonYears: 3, days: 1000, pinned: false, months: [] }
+		],
+		catchment: area({ nodeId: null, name: 'Synthetic catchment', areaMapMm: 800, areaMapSource: null, ownRatio: 1.074, ratio: 1.074 }),
+		units: [area({ nodeId: 'b', name: 'Lower farm', stationId: 's2', stationName: 'Short station', correctedBy: null, days: { station: 2000, chirps: 0, fallback: 80, none: 0 } }), area({ ownRatio: 5, ratio: 4, clamped: true })],
+		catchmentMapMm: 800,
+		catchmentMapFromUnits: true
+	};
+
+	it('lists each area’s station, MAPs, ratio, days filled from CHIRPS and its pairing, the catchment first, then network order', () => {
+		const rows = stationRows({ stations }, ['a', 'b']);
+		expect(rows.every((r) => r.length === STATION_HEAD.length)).toBe(true);
+		expect(rows.map((r) => r[0])).toEqual(['Synthetic catchment (catchment)', 'Upper farm', 'Lower farm']);
+		expect(rows[0]).toEqual(['Synthetic catchment (catchment)', 'Hill station', '800', '745', '× 1.07 (800 ÷ 745 mm)', fmtNum(3_000), '150', '0', 'Hill station']);
+		expect(rows[1]![2]).toBe('860 (synthetic grid)');
+		expect(rows[1]![4]).toBe('× 4 (860 ÷ 745 mm), held at the bound');
+		expect(rows[2]!.slice(5)).toEqual([fmtNum(2_000), '0', '80', 'none (gaps from the fallback)']);
+	});
+
+	it('lists each pairing’s CHIRPS, fit period, days and factors, or why it was refused', () => {
+		const rows = stationPairingRows({ stations });
+		expect(rows.every((r) => r.length === PAIRING_HEAD.length)).toBe(true);
+		expect(rows[0]!.slice(0, 4)).toEqual(['Hill station', 'its own CHIRPS cell', '1995-01-01 to 2020-12-31 (26 complete years)', fmtNum(9_400)]);
+		expect(rows[0]![4]).toMatch(/^Jan 1\.1, Feb 1\.1, .*Dec 1\.1$/);
+		expect(rows[1]).toEqual(['Short station', 'the CHIRPS of Lower farm', '–', fmtNum(1_000), 'refused: only 3 complete years in common (5 needed)']);
+	});
+
+	it('is empty on a run without stations', () => {
+		expect(stationRows({ farms: [] })).toEqual([]);
+		expect(stationPairingRows(null)).toEqual([]);
 	});
 });

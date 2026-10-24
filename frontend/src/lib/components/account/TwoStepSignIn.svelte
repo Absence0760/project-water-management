@@ -17,20 +17,22 @@
 	// works" goes to the farmer words (farm-two-step, translated) in the farm
 	// frame, else to the workspace's guide.
 	import { onDestroy, onMount, tick } from 'svelte';
-	import { base } from '$app/paths';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api, ApiError, type MfaMethod, type MfaStatus } from '$lib/api';
-	import { farmFrameReader } from '$lib/auth/frame';
-	import { mfaStatusSeen } from '$lib/auth/mfaPrompt.svelte';
-	import { resendTimer } from '$lib/auth/resendTimer.svelte';
-	import { session } from '$lib/auth/session.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import { t, tn, plural } from '$lib/i18n/locale.svelte';
-	import { fewRecoveryCodes, RECOVERY_CODES_FILE, recoveryCodesText } from '$lib/auth/mfaReset';
-	import { fmtStampTime } from '$lib/components/farm/format';
-	import { wordsHref } from '$lib/components/farm/load';
+	import { api, ApiError, type MfaMethod, type MfaStatus } from '#lib/api/index.js';
+	import { farmFrameReader } from '#lib/auth/frame.js';
+	import { mfaStatusSeen } from '#lib/auth/mfaPrompt.svelte.js';
+	import { resendTimer } from '#lib/auth/resendTimer.svelte.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import { t, tn, plural } from '#lib/i18n/locale.svelte.js';
+	import { fewRecoveryCodes, RECOVERY_CODES_FILE, recoveryCodesText } from '#lib/auth/mfaReset.js';
+	import { fmtStampTime } from '#lib/components/farm/format.js';
+	import { wordsHref } from '#lib/components/farm/load.js';
 	import type { QrDrawing } from './qr';
 
 	// i18n-section: account.two-step.counts
@@ -266,15 +268,15 @@
 	const codesText = (list: string[]) =>
 		recoveryCodesText(
 			list,
-			t('Water Management recovery codes for {email}', { email: session.user?.email ?? '' }),
+			t('{app} recovery codes for {email}', { app: APP_SHORT_NAME, email: session.user?.email ?? '' }),
 			t('Each code works once, in place of a code from your authenticator app or your email.')
 		);
 	async function downloadCodes() {
 		if (!codes) return;
 		const text = codesText(codes);
-		let download: typeof import('$lib/export/download');
+		let download: typeof import('#lib/export/download.js');
 		try {
-			download = await import('$lib/export/download');
+			download = await import('#lib/export/download.js');
 		} catch {
 			downloadFailed = true;
 			return;
@@ -335,7 +337,7 @@
 			</div>
 		{/if}
 
-		<p class="muted intro">{t('A 6-digit code after your password. Turn on one or both.')} {#if inFarmFrame()}<a href={wordsHref(base, page.url, 'farm-two-step')}>{t('How two-step sign-in works')}</a>{:else}<a href="{base}/help/guides/two-step-sign-in">{t('How two-step sign-in works')}</a>{/if}</p>
+		<p class="muted intro">{t('A 6-digit code after your password. Turn on one or both.')} {#if inFarmFrame()}<a href={wordsHref(basePath(), page.url, 'farm-two-step')}>{t('How two-step sign-in works')}</a>{:else}<a href={resolve('help/guides/two-step-sign-in')}>{t('How two-step sign-in works')}</a>{/if}</p>
 		{#if status.pendingReset}
 			<div class="alert alert-warning" role="alert" data-pending-reset>
 				<p>

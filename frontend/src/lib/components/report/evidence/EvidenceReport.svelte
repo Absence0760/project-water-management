@@ -18,27 +18,28 @@
 		type ModelInput,
 		type RunSummary
 	} from '@water-management/engine';
-	import type { PackSignoffList, SignoffList } from '$lib/api';
-	import { dailyEwrName, dailyEwrNameOf } from '$lib/components/ewr/notMet';
-	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
-	import { packVerifyLine, type VerifyRef } from '$lib/components/packs/pack';
+	import type { PackSignoffList, SignoffList } from '#lib/api/index.js';
+	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
+	import { dailyEwrName, dailyEwrNameOf } from '#lib/components/ewr/notMet.js';
+	import type { SignoffTarget } from '#lib/components/liability/signoffForm.js';
+	import { packVerifyLine, type VerifyRef } from '#lib/components/packs/pack.js';
 	import { evidenceBoard } from '../licenceImpact';
-	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
-	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
-	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
-	import { effectiveSettings, monthlyRows, settingsRows, type RunSettings } from '$lib/components/report/inputs';
-	import { CLASS_LABEL, describeOp, namesOf, snapshotInput, stepInputs } from '$lib/components/scenarios/ops';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '$lib/series/provenance';
-	import { WATER_YEAR_MONTHS, monthName } from '$lib/format/months';
-	import { fmtDate, fmtNum } from '$lib/format/number';
+	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
+	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
+	import Disclaimer from '#lib/components/liability/Disclaimer.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import SignoffSection from '#lib/components/liability/SignoffSection.svelte';
+	import ValidationStatement from '#lib/components/liability/ValidationStatement.svelte';
+	import { effectiveSettings, monthlyRows, settingsRows, type RunSettings } from '#lib/components/report/inputs.js';
+	import { CLASS_LABEL, describeOp, namesOf, snapshotInput, stepInputs } from '#lib/components/scenarios/ops.js';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '#lib/series/provenance.js';
+	import { WATER_YEAR_MONTHS, monthName } from '#lib/format/months.js';
+	import { fmtDate, fmtNum } from '#lib/format/number.js';
 	import EvidenceSummary from './EvidenceSummary.svelte';
 	import FdcPlot from './FdcPlot.svelte';
 	import IntervalPlot from './IntervalPlot.svelte';
-	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
-	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
+	import UsePlot from '#lib/components/allocations/UsePlot.svelte';
+	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '#lib/components/allocations/allocations.js';
 	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, registeredText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import LocalityMap from './LocalityMap.svelte';
@@ -46,8 +47,8 @@
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
 	import { CHANGE_LABEL, sizingText } from './demandObjects';
-	import { sourceLabel, sourceLine } from '$lib/components/runs/demandSources';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { sourceLabel, sourceLine } from '#lib/components/runs/demandSources.js';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 
 	let {
 		report,
@@ -177,6 +178,7 @@
 			<div class="run-head">
 				{#if s.id === 'summary'}
 					<div>
+						<p class="product" data-testid="evidence-product">{APP_NAME} ({APP_SHORT_NAME})</p>
 						<p class="eyebrow">Licensing evidence report · surface-water hydrology</p>
 						<h1 id="ev-summary-h">{id.title}</h1>
 						<p class="muted">{id.project.name}{app ? ' · an application on the nominated baseline' : ' · the nominated baseline on its own'}</p>
@@ -974,6 +976,13 @@
 	.run-head h1,
 	.run-head h2 {
 		margin: 0.1rem 0;
+	}
+	/* The app's full name on the cover (issue #551), above what the report is. */
+	.product {
+		margin: 0 0 0.25rem;
+		font-family: var(--font-display);
+		font-weight: 600;
+		color: var(--text-muted);
 	}
 	.eyebrow {
 		margin: 0;

@@ -9,8 +9,8 @@
 -->
 <script lang="ts">
 	import { DEFAULT_FLOW_GAP_SPEC, donorOptions, GAP_FILL_KINDS, GAP_FILL_LIMITS, gapFillRecordLabel, type FlowGapFillSettings, type GapFillDonor, type GapFillKind } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { keptOr } from './kept';
 
 	let {

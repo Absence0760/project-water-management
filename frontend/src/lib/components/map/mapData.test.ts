@@ -1,7 +1,7 @@
 // The catchment map's helpers (mapData.ts): labels, bounds, the coordinates
 // form's parsing and an import refusal's problems.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature, MapNodeArea } from '$lib/api/types';
+import type { MapFeature, MapNodeArea } from '#lib/api/types.js';
 import { alreadyAccepted, areaTargets, areaText, boundsOf, boundsOfAll, featureSummary, importProblems, parseDegrees, positionText, problemText, takesArea, takesDamPosition } from './mapData';
 
 const feature = (over: Partial<MapFeature>): MapFeature => ({

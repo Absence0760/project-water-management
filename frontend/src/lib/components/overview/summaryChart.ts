@@ -1,7 +1,7 @@
-// River & reserve → the flow vs reserve chart (FlowVsReserve.svelte): the days the outflow was below the
+// EWR → the flow vs reserve chart (FlowVsReserve.svelte): the days the outflow was below the
 // reserve, as date ranges to shade, and the chart's time windows.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
-import type { DailyEwrSource } from '$lib/components/ewr/notMet';
+import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';
 
 /** The chart's time windows (LineChart `windows`); `days: null` is the whole run. It opens on a year. */
 export const FLOW_WINDOWS = [
@@ -44,7 +44,7 @@ export function hasRuleLine(refs: readonly { key: string; nodeId: string | null 
 }
 
 /**
- * The flow chart's heading (and River & reserve's menu entry for it). It is
+ * The flow chart's heading (and the EWR page's menu entry for it). It is
  * "Flow vs reserve" when the reserve it names is on the chart: the pragmatic
  * EWR without a rule table, or the rule requirement line when the outlet has
  * the table. With rule tables only at other sites (`ruleTable` without

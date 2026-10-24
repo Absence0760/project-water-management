@@ -2,7 +2,7 @@
 // own (headerSlot.svelte.ts): a count of what the section holds, so a
 // section's header says something under its title. Network, Crops, Summary,
 // Project and History fill their own.
-import type { TabId } from '$lib/workspace/tabs';
+import type { TabId } from '#lib/workspace/tabs.js';
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 

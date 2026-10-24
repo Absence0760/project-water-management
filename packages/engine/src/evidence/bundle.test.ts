@@ -14,6 +14,7 @@ import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
 	BUNDLE_ZIP_LIMITS,
 	buildPackBundle,
+	bundleRunInput,
 	checkPackBundle,
 	HEADLINE_NOT_INCLUDED,
 	PACK_BUNDLE_VERSION,
@@ -102,6 +103,36 @@ describe('buildPackBundle + checkPackBundle', () => {
 		const r = await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash, rerun: false });
 		expect(r.ok).toBe(true);
 		expect(r.checks.some((c) => c.id.startsWith('reproduce:'))).toBe(false);
+	});
+
+	it('re-runs a run with its CHIRPS series choice from input.json, whose warning is in its results (issue #561)', async () => {
+		const withChoice = packBundleFixture(hash, { application: false, seriesChoice: true });
+		expect((withChoice.baseline.summary as { warnings: string[] }).warnings.some((w) => w.startsWith('the run read the CHIRPS series “CHIRPS boundary”'))).toBe(true);
+		const built = await buildPackBundle(withChoice, hash);
+		const r = await checkPackBundle(built.bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		// Without it the re-run has no warning, so its results differ: the re-run read it.
+		const stripped = await rezip(built.bytes, (f) => {
+			const inp = JSON.parse(f.get('runs/baseline/input.json')!) as RunInputsSnapshot;
+			delete inp.seriesChoice;
+			f.set('runs/baseline/input.json', canonicalJson(inp));
+		});
+		expect(failing(await checkPackBundle(stripped, { hash }))).toEqual(['reproduce:baseline']);
+	});
+
+	it('rebuilds a run’s input with what the engine reads beside settings and model: seriesChoice, and a forecast run’s source (issue #561)', () => {
+		const snap = { settings: {}, model: { nodes: [], crops: [], cropAreas: [], transfers: [] } } as unknown as RunInputsSnapshot;
+		const series = { rain_catchment_mm: { startDate: '2020-01-01', values: [1] } };
+		const choice = { rain_chirps_mm: { name: 'A', others: [] } };
+		expect(bundleRunInput(snap, series)).toEqual({ settings: {}, model: snap.model, series });
+		expect(bundleRunInput({ ...snap, seriesChoice: choice, forecastRainSource: 'chirps_gefs' }, series)).toEqual({ settings: {}, model: snap.model, series, seriesChoice: choice, forecastRainSource: 'chirps_gefs' });
+		expect(bundleRunInput({ ...snap, forecastRainSource: 'other' }, series).forecastRainSource).toBe('other');
+		// The rainfall stations' details (issue #553), which the station forcing reads.
+		const stations = { 'b1c3e1f0-0000-4000-8000-000000000001': { name: 'Gauge A', mapMm: 745, mapSource: 'study', lat: -33.9, lon: 18.8, isCatchmentGauge: true } };
+		expect(bundleRunInput({ ...snap, stations }, series)).toEqual({ settings: {}, model: snap.model, series, stations });
+		for (const bad of [null, [], 'x']) expect(bundleRunInput({ ...snap, stations: bad as never }, series)).not.toHaveProperty('stations');
+		// Anything else from an input.json no hash covers is left out.
+		for (const bad of [null, 'gefs', 3]) expect(bundleRunInput({ ...snap, forecastRainSource: bad as never }, series)).not.toHaveProperty('forecastRainSource');
 	});
 
 	it('refuses to build from input values that fail their SHA-256', async () => {

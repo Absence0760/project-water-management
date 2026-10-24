@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NOTE_MAX, type NoteCounts, type NoteVisibility } from '$lib/api/types';
+import { NOTE_MAX, type NoteCounts, type NoteVisibility } from '#lib/api/types.js';
 import {
 	AUDIENCE_BADGE,
 	AUDIENCE_LABEL,
@@ -19,7 +19,7 @@ import {
 	targetTitle,
 	type NoteTarget
 } from './notes';
-import { SETTINGS_SECTIONS } from '$lib/components/settings/sections';
+import { SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
 
 const farm: NoteTarget = { kind: 'node', nodeId: 'n1', name: 'Farm A', isFarm: true };
 const gauge: NoteTarget = { kind: 'node', nodeId: 'g1', name: 'Weir', isFarm: false };

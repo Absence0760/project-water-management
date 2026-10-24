@@ -73,8 +73,8 @@ override_resource {
   values = {
     arn = "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
     domain_validation_options = [{
-      domain_name           = "water-management.jaredhoward.com"
-      resource_record_name  = "_0123abcd.water-management.jaredhoward.com."
+      domain_name           = "icwbt.jaredhoward.com"
+      resource_record_name  = "_0123abcd.icwbt.jaredhoward.com."
       resource_record_type  = "CNAME"
       resource_record_value = "_4567efab.acm-validations.aws."
     }]
@@ -86,7 +86,7 @@ override_resource {
   target          = aws_sesv2_email_identity.domain
   override_during = plan
   values = {
-    arn = "arn:aws:ses:af-south-1:000000000000:identity/water-management.jaredhoward.com"
+    arn = "arn:aws:ses:af-south-1:000000000000:identity/icwbt.jaredhoward.com"
     dkim_signing_attributes = {
       next_signing_key_length = "RSA_2048_BIT"
       tokens                  = ["tok1", "tok2", "tok3"]
@@ -629,7 +629,9 @@ override_resource {
 variables {
   aws_region      = "af-south-1"
   route53_zone_id = "Z0000000000000000000"
-  github_repo     = "Absence0760/project-water-management"
+  # The hostname before issue #551, kept as a redirect, in its own zone.
+  redirect_domains = { "water-management.jaredhoward.com" = "Z1111111111111111111" }
+  github_repo      = "Absence0760/project-water-management"
   # Synthetic runtime secrets (ephemeral variables, secrets.tf).
   auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
   db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
@@ -656,7 +658,7 @@ variables {
   # Required and validated. Not an example.* (or other RFC 2606) address,
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
-  budget_alert_email = "ops@water-management.jaredhoward.com"
+  budget_alert_email = "ops@icwbt.jaredhoward.com"
 }
 
 run "dlq_alarms_fire_on_new_arrivals" {
@@ -795,7 +797,7 @@ run "renderer_throttles_alarm_once_it_exists" {
 }
 
 # alarm_tier "essential" is what production runs (alarms.tf § Alarm tier): the
-# 12 alarm metrics below and nothing else, so the estate stays inside the
+# 13 alarm metrics below and nothing else, so the estate stays inside the
 # organization's shared CloudWatch free tier. A dropped alarm's log metric
 # filter goes with it.
 run "essential_alarm_tier" {
@@ -817,11 +819,12 @@ run "essential_alarm_tier" {
       length(aws_cloudwatch_metric_alarm.rds_free_storage),
       length(aws_cloudwatch_metric_alarm.cloudfront_5xx),
       length(aws_cloudwatch_metric_alarm.lambda_errors),
+      length(aws_cloudwatch_metric_alarm.lambda_throttles),
       length(aws_cloudwatch_metric_alarm.unhandled_error),
       length(aws_cloudwatch_metric_alarm.mail_send_failed),
       length(aws_cloudwatch_log_metric_filter.unhandled_error),
     ] : n == 1]) && length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 2
-    error_message = "alarm_tier = \"essential\" must keep the 12 essential alarms and the filters that feed them."
+    error_message = "alarm_tier = \"essential\" must keep the 13 essential alarms and the filters that feed them."
   }
 
   assert {

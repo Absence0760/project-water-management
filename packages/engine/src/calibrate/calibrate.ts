@@ -27,6 +27,7 @@ import { simulateNetwork } from '../network/simulate';
 import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
+import { fillPlanEwrShares } from '../network/ewrSplit';
 import { calibrationSiteIndex } from './site';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
@@ -36,6 +37,8 @@ import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
+import { rainStationSummary } from '../runoff/stationForcing';
+import { catchmentStationFingerprint, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
@@ -261,6 +264,8 @@ export interface CalibrationReport {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing the fit ran under (engine ≥ 1.78.0, docs/model.md §2.4h); absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
+	/** The catchment's rainfall station the fit's rain read (engine ≥ 1.91.0, docs/model.md §2.4i); absent without one. */
+	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
 	 * The per-day quality flags of the fitted record and its rain (engine ≥
 	 * 1.22.0, calibration research CR-18/22, ./dayFlags.ts): days by class,
@@ -361,6 +366,8 @@ export interface CalibrationProblem {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing (engine ≥ 1.78.0, settings.unitRain `perUnit`), for fit provenance; absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
+	/** The catchment's rainfall station (engine ≥ 1.91.0, §2.4i), for fit provenance; absent without one. */
+	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
 	 * The run's daily rain over the whole run as calibration reads it (catchment,
 	 * else bias-corrected CHIRPS, else forecast, × the areal factor; null =
@@ -406,12 +413,12 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): each evaluation runs GR4J once per land
 	// unit, into buffers the plan reads as the units' local inflow, and natural flow is their sum, as runModel's.
 	const perUnit = unitRainForcing(
-		{ settings, series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays, forecastRainSource: input.forecastRainSource ?? null },
+		{ settings, series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays, forecastRainSource: input.forecastRainSource ?? null, stations: run.stations?.context ?? null, stationInputs: input.stations ?? null },
 		warnings,
 		settings.unitRain?.pinned ?? undefined
 	);
 	const unitBuffers = perUnit ? perUnit.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
-	const { plan, topo, outletEwr } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, unitBuffers ? { unitRunoff: unitBuffers } : {}, historyDays);
+	const { plan, topo, outletEwr, ewrSplit } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, unitBuffers ? { unitRunoff: unitBuffers } : {}, historyDays);
 
 	// The site (engine ≥ 1.41.0, ./site.ts): the outlet's records and outflow, or an inner gauge's.
 	const siteNodeId = settings.calibrationSiteNodeId ?? null;
@@ -463,7 +470,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// score, so each evaluation stops there (a full run is tens of ms on a
 	// multi-decade record; a record that ends early saves the rest).
 	const toM3 = area * 1000;
-	const hasRain = hasRainInput(input.series, settings.rainSource);
+	const hasRain = hasRainInput(input.series, settings.rainSource, settings.rainStations);
 	const areal = arealRainFactors(settings.arealRain);
 	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(settings, { startDate, days, aligned });
@@ -496,14 +503,20 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// with land cover can't stop at the last scored day.
 	// A daily outlet EWR scaled by natural MAR (engine ≥ 1.77.0, §2.9f) reads every historical day's natural flow too.
 	const wholeRun = plan.nodes.some((nd) => nd.landCover) || outletEwr?.source.scaling === 'mar';
+	// An EWR split by each unit's natural MAR (engine ≥ 1.94.0, §2.5b) reads the units' runoff over its period, the
+	// complete water years: the runoff runs to the period's end, the network still stops at the last scored day.
+	const splitRefill = ewrSplit.refill;
 	const areaKm2 = outletEwr?.info.modelAreaKm2 ?? 0;
 	const simulator = (scoredTo: number) => {
 		const n = wholeRun ? days : scoredTo;
 		const shortPlan = { ...plan, days: n };
+		const runoffTo = splitRefill ? Math.max(n, splitRefill.days.to) : n;
 		return (p: ParamSet): Float64Array => {
-			runoff(p, n);
+			runoff(p, runoffTo);
 			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would.
 			if (outletEwr) fillPlanOutletEwr(plan, topo.outflow, natural, outletEwr.source, areaKm2, historyDays, n);
+			// The EWR split by natural MAR follows each candidate's units' runoff, as a run on it would.
+			if (splitRefill) fillPlanEwrShares(plan.nodes, splitRefill);
 			if (siteIndex < 0) return new Float64Array(days);
 			return simulateNetwork(shortPlan).nodes[siteIndex]!.outflow;
 		};
@@ -556,6 +569,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
 		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : {}),
+		...(run.stations?.catchment ? { catchmentStation: catchmentStationFingerprint(rainStationSummary(run.stations.context, run.stations.catchment, [], run.stations.plan?.map ?? null)) } : {}),
 		rain: arealRainOn(usedRain, areal, month),
 		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
 		simulate: simulator(Math.max(idx[idx.length - 1]!, lastAll) + 1),
@@ -1063,6 +1077,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
 		...(pb.unitRain ? { unitRain: pb.unitRain } : {}),
+		...(pb.catchmentStation ? { catchmentStation: pb.catchmentStation } : {}),
 		dayQuality: pb.dayQuality ?? null,
 		fitAllDays,
 		evaluations,

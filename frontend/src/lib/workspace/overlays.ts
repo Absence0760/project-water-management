@@ -1,3 +1,4 @@
+import type { ReadonlyURL } from '$app/state';
 // Overlays opened over any workspace tab from a URL parameter, so they can
 // be linked and Back closes them (issue #17): the farm drawer (`farm=<nodeId>`,
 // crops/farmDrawer.ts) and the grid modal (`grid=<id>`): an existing grid,
@@ -52,7 +53,7 @@ export const DEMAND_TABLE_ID = 'crop-demand-table';
  * demand page shows in place, so it was removed (issue #174); an old link
  * (a bookmark, over any tab) opens that page with the table shown.
  */
-export function movedGridHref(url: URL): string | null {
+export function movedGridHref(url: ReadonlyURL): string | null {
 	const grid = url.searchParams.get('grid');
 	if (grid === 'demand') return `${url.pathname}?tab=crops#${DEMAND_TABLE_ID}`;
 	// A tab's own grid over another tab opens on its tab, every other parameter kept.
@@ -97,14 +98,14 @@ export const gridHref = (tab: string | null, grid: GridId) => overlayHref(tab, '
  * parameter kept (the tab's own state, e.g. the Network's `view`), so closing
  * it comes back to exactly where it was opened.
  */
-export function withParam(url: URL, name: string, value: string): string {
+export function withParam(url: ReadonlyURL, name: string, value: string): string {
 	const q = new URLSearchParams(url.search);
 	q.set(name, value);
 	return `?${q}`;
 }
 
 /** The URL with one overlay closed: `name` dropped, everything else kept. */
-export function withoutParam(url: URL, name: string): string {
+export function withoutParam(url: ReadonlyURL, name: string): string {
 	const q = new URLSearchParams(url.search);
 	q.delete(name);
 	const s = q.toString();

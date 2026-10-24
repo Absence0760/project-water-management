@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PortfolioProject, ProjectSummary } from '$lib/api/types';
+import type { PortfolioProject, ProjectSummary } from '#lib/api/types.js';
 import { parseSort, sortProjects } from './grouping';
 import { attention, needsAttention, sortByOutcome } from './outcomes';
 
@@ -18,6 +18,9 @@ const summary = (id: string, name: string, over: Partial<ProjectSummary> = {}): 
 	...over
 });
 
+/** An irrigation figure (issue #558): the list's status. */
+const irr = (status: PortfolioProject['irrigation']['status'], fractionSupplied: number, unitsBelow = 0, units = 4): PortfolioProject['irrigation'] => ({ status, fractionSupplied, units, unitsBelow });
+
 const outcome = (id: string, over: Partial<PortfolioProject> = {}): PortfolioProject => ({
 	id,
 	name: id,
@@ -35,6 +38,7 @@ const outcome = (id: string, over: Partial<PortfolioProject> = {}): PortfolioPro
 	behindData: false,
 	newerRun: false,
 	ewr: { status: 'green', daysNotMet30: 0, days30: 30, fraction30: 0 },
+	irrigation: irr('green', 0.99),
 	farmsShort7: null,
 	farmsShort30: null,
 	farmCount: 4,
@@ -51,13 +55,28 @@ describe('attention', () => {
 		expect(attention(outcome('a'))).toEqual({ score: 0, reasons: [] });
 		expect(attention(undefined)).toEqual({ score: 0, reasons: [] });
 		// Not run yet: unknown is not an alarm.
-		expect(attention(outcome('a', { source: null, sourceRunId: null, ewr: { status: 'unknown', daysNotMet30: null, days30: null, fraction30: null, reason: 'no-figures' } })).score).toBe(0);
+		expect(
+			attention(
+				outcome('a', {
+					source: null,
+					sourceRunId: null,
+					ewr: { status: 'unknown', daysNotMet30: null, days30: null, fraction30: null, reason: 'no-figures' },
+					irrigation: { status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'no-figures' }
+				})
+			).score
+		).toBe(0);
+	});
+
+	it('flags irrigation supply, the list’s status, not the EWR: that is the teams pages’ and the EWR page’s (issue #558)', () => {
+		expect(attention(outcome('e', { ewr: { status: 'red', daysNotMet30: 30, days30: 30, fraction30: 1 } }))).toEqual({ score: 0, reasons: [] });
+		// Positive control: red irrigation supply is a reason.
+		expect(attention(outcome('i', { irrigation: irr('red', 0.5, 3) })).reasons).toEqual([{ text: 'Red: 50.0% supplied, 3 of 4 units below 95%', tone: 'danger' }]);
 	});
 
 	it('says every reason in words, worst first, and links hydrological units short to the curtailment', () => {
 		const a = attention(
 			outcome('p1', {
-				ewr: { status: 'red', daysNotMet30: 9, days30: 30, fraction30: 0.3 },
+				irrigation: irr('red', 0.7, 2),
 				farmsShort7: 2,
 				alertsFiring: 1,
 				feeds: { total: 3, ok: 2, failing: 1 },
@@ -69,7 +88,7 @@ describe('attention', () => {
 			'/base'
 		);
 		expect(a.reasons).toEqual([
-			{ text: 'Red: EWR not met 9 of 30 days', tone: 'danger' },
+			{ text: 'Red: 70.0% supplied, 2 of 4 units below 95%', tone: 'danger' },
 			// Stale figures: the week is the figures' last one, by its date, not "this week".
 			{ text: '2 of 4 hydrological units short in the week to 15 Sep 2026', tone: 'danger', href: '/base/projects/p1?tab=supply&run=run-1&window=last7#res-curtailment' },
 			{ text: '1 alert firing', tone: 'warn' },
@@ -80,19 +99,17 @@ describe('attention', () => {
 	});
 
 	it('ranks red above hydrological units short above alerts above amber above stale', () => {
-		const red = attention(outcome('r', { ewr: { status: 'red', daysNotMet30: 7, days30: 30, fraction30: 0.23 } })).score;
+		const red = attention(outcome('r', { irrigation: irr('red', 0.77, 1) })).score;
 		const short = attention(outcome('s', { farmsShort7: 1 })).score;
 		const alerts = attention(outcome('al', { alertsFiring: 3 })).score;
-		const amber = attention(outcome('am', { ewr: { status: 'amber', daysNotMet30: 3, days30: 30, fraction30: 0.1 } })).score;
+		const amber = attention(outcome('am', { irrigation: irr('amber', 0.9, 1) })).score;
 		const stale = attention(outcome('st', { stale: true, figuresAgeDays: 40 })).score;
 		expect(red).toBeGreaterThan(short);
 		expect(short).toBeGreaterThan(alerts);
 		expect(alerts).toBeGreaterThan(amber);
 		expect(amber).toBeGreaterThan(stale);
 		expect(stale).toBeGreaterThan(0);
-		expect(attention(outcome('am', { ewr: { status: 'amber', daysNotMet30: 3, days30: 30, fraction30: 0.1 } })).reasons).toEqual([
-			{ text: 'Amber: EWR not met 3 of 30 days', tone: 'warn' }
-		]);
+		expect(attention(outcome('am', { irrigation: irr('amber', 0.9, 1) })).reasons).toEqual([{ text: 'Amber: 90.0% supplied, 1 of 4 units below 95%', tone: 'warn' }]);
 	});
 });
 
@@ -103,7 +120,7 @@ describe('needsAttention', () => {
 			['g', outcome('g')],
 			['b', outcome('b', { stale: true, figuresAgeDays: 9 })],
 			['a', outcome('a', { stale: true, figuresAgeDays: 9 })],
-			['r', outcome('r', { ewr: { status: 'red', daysNotMet30: 20, days30: 30, fraction30: 0.67 } })]
+			['r', outcome('r', { irrigation: irr('red', 0.33, 4) })]
 		]);
 		expect(needsAttention(projects, outcomes).map((f) => f.project.name)).toEqual(['Red one', 'Alpha stale', 'Bravo stale']);
 	});
@@ -117,13 +134,14 @@ describe('sorting by an outcome', () => {
 		summary('d', 'Delta', { lastRunAt: '2026-09-10T00:00:00Z' })
 	];
 	const outcomes = new Map([
-		['a', outcome('a', { ewr: { status: 'amber', daysNotMet30: 3, days30: 30, fraction30: 0.1 }, farmsShort7: 1, lowestDamPct: { nodeName: 'X', pct: 0.5 } })],
-		['b', outcome('b', { ewr: { status: 'red', daysNotMet30: 12, days30: 30, fraction30: 0.4 }, farmsShort7: 0, lowestDamPct: { nodeName: 'Y', pct: 0.2 } })],
+		// Alpha's EWR is green and Bravo's is red the other way round: the list's status sorts by irrigation (issue #558).
+		['a', outcome('a', { irrigation: irr('amber', 0.9, 1), ewr: { status: 'red', daysNotMet30: 20, days30: 30, fraction30: 0.67 }, farmsShort7: 1, lowestDamPct: { nodeName: 'X', pct: 0.5 } })],
+		['b', outcome('b', { irrigation: irr('red', 0.6, 2), farmsShort7: 0, lowestDamPct: { nodeName: 'Y', pct: 0.2 } })],
 		['d', outcome('d', { farmsShort7: 3 })]
 	]);
 	const names = (rows: ProjectSummary[]) => rows.map((p) => p.name);
 
-	it('by EWR status, hydrological units short and lowest dam: worst first, the portfolio’s rule; rows without figures last', () => {
+	it('by irrigation status, hydrological units short and lowest dam: worst first, the portfolio’s rule; rows without figures last', () => {
 		expect(names(sortByOutcome(projects, 'status', outcomes))).toEqual(['Bravo', 'Alpha', 'Delta', 'Charlie']);
 		expect(names(sortByOutcome(projects, 'farms', outcomes))).toEqual(['Delta', 'Alpha', 'Bravo', 'Charlie']);
 		// Delta has no dam figure: unknowns sort after the known ones, before a row with no figures at all.

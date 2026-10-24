@@ -20,15 +20,15 @@
 	// reserveDaysByWaterYear, the same test as the summary's EWR days not met.
 	// Its own chunk (CompareView loads it lazily); series come through the
 	// Runs tab's cache. `below` names the test in its labels: "the reserve", or
-	// "the pragmatic EWR" on River & reserve beside a rule table (river.ts
+	// "the pragmatic EWR" on EWR beside a rule table (river.ts
 	// reserveYearsWords, issue #177); Compare passes daysBelowTestOf, and each
 	// run its own daily test (`daily` on ChartRun), named when they differ.
 	import { reserveDaysByWaterYear, waterYearLabel, type ReserveYear } from '@water-management/engine';
-	import { api, ApiError } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { cachedSeries } from '$lib/components/runs/cache';
+	import { api, ApiError } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { cachedSeries } from '#lib/components/runs/cache.js';
 	import { labelX, yearLabelIndices } from './yearAxis';
-	import { EACH_RUNS_DAILY_EWR } from '$lib/components/ewr/notMet';
+	import { EACH_RUNS_DAILY_EWR } from '#lib/components/ewr/notMet.js';
 
 	// The chart fills the height its box gives it (a flex column), at least `minHeight` px.
 	// `daily`: the outlet's daily test the bars count, by name (ewr/notMet.ts dailyEwrName; engine ≥ 1.77.0 it can be a DRM table).

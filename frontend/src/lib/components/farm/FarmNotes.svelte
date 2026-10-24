@@ -7,8 +7,8 @@
 	is the workspace's NotesList, worded from the catalogue (./notesWords.ts).
 -->
 <script lang="ts">
-	import NotesList from '$lib/components/notes/NotesList.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import NotesList from '#lib/components/notes/NotesList.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { farmNotesWords } from './notesWords';
 
 	let { projectId, nodeId, farmName, preview }: { projectId: string; nodeId: string; farmName: string; preview: boolean } = $props();

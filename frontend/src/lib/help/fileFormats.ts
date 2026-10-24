@@ -4,23 +4,23 @@
 // through it; the note beside the box (common/FormatHelp.svelte) and this
 // page show the same object, so the two can't differ. A guard
 // (fileFormats.test.ts) keeps every note on a format listed here.
-import { INGEST_FORMAT } from '$lib/components/apiKeys/apiKeys';
-import { ALLOCATIONS_FORMAT } from '$lib/components/allocations/allocations';
-import type { FileFormat } from '$lib/components/common/formatHelp';
-import { CROP_FACTORS_FORMAT, PLANTED_AREAS_FORMAT } from '$lib/components/crops/areaPaste';
-import { B023_FACTORS_FORMAT, NODE_FACTORS_FORMAT } from '$lib/components/crops/loadFactors';
-import { PLANTINGS_FORMAT } from '$lib/components/crops/plantingsImport';
-import { SYSTEMS_FORMAT } from '$lib/components/crops/systemsPaste';
-import { B023_WORKBOOK_FORMAT, PROJECT_FILE_FORMAT } from '$lib/components/import/importFormats';
-import { GEOJSON_FORMAT } from '$lib/components/map/uploadFormat';
-import { demandsFormat } from '$lib/components/network/demandsPaste';
-import { NODE_TABLE_FORMAT } from '$lib/components/network/nodePaste';
-import { inviteFormat } from '$lib/components/project/farmers';
-import { drmFormat } from '$lib/components/settings/drmFormat';
-import { MONTHLY_SETTINGS_FORMAT } from '$lib/components/settings/monthlyPaste';
-import { TRANSFERS_FORMAT } from '$lib/components/transfers/transfersPaste';
-import { SERIES_FILE_FORMAT, SERIES_PASTE_FORMAT } from '$lib/series/example';
-import { gridFileFormat } from '$lib/spreadsheet/paste/grid';
+import { INGEST_FORMAT } from '#lib/components/apiKeys/apiKeys.js';
+import { ALLOCATIONS_FORMAT } from '#lib/components/allocations/allocations.js';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
+import { CROP_FACTORS_FORMAT, PLANTED_AREAS_FORMAT } from '#lib/components/crops/areaPaste.js';
+import { B023_FACTORS_FORMAT, NODE_FACTORS_FORMAT } from '#lib/components/crops/loadFactors.js';
+import { PLANTINGS_FORMAT } from '#lib/components/crops/plantingsImport.js';
+import { SYSTEMS_FORMAT } from '#lib/components/crops/systemsPaste.js';
+import { B023_WORKBOOK_FORMAT, PROJECT_FILE_FORMAT } from '#lib/components/import/importFormats.js';
+import { GEOJSON_FORMAT } from '#lib/components/map/uploadFormat.js';
+import { demandsFormat } from '#lib/components/network/demandsPaste.js';
+import { NODE_TABLE_FORMAT } from '#lib/components/network/nodePaste.js';
+import { inviteFormat } from '#lib/components/project/farmers.js';
+import { drmFormat } from '#lib/components/settings/drmFormat.js';
+import { MONTHLY_SETTINGS_FORMAT } from '#lib/components/settings/monthlyPaste.js';
+import { TRANSFERS_FORMAT } from '#lib/components/transfers/transfersPaste.js';
+import { SERIES_FILE_FORMAT, SERIES_PASTE_FORMAT } from '#lib/series/example.js';
+import { gridFileFormat } from '#lib/spreadsheet/paste/grid.js';
 
 /** A group of formats on the page, by where in the app their boxes are. */
 export interface FormatGroup {

@@ -15,10 +15,10 @@
 	audience, and "edited" opens the note's earlier texts (note_revision).
 -->
 <script lang="ts">
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
-	import { api, NOTE_MAX, type Note, type NoteRevision, type NoteVisibility } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
+	import { api, NOTE_MAX, type Note, type NoteRevision, type NoteVisibility } from '#lib/api/index.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import {
 		AUDIENCE_BADGE,
 		AUDIENCE_LABEL,

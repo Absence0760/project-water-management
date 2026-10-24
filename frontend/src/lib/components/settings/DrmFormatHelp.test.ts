@@ -13,8 +13,8 @@ import { drmExampleFiles, exampleRulFile, exampleTabFile, parseDrmFile } from '.
 import { parseGrid } from './ewrRules';
 
 // The daily EWR's fields read the last run through the API only once the MAR ratio is in use in a browser; nothing here runs effects.
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const decoded = (href: string) => decodeURIComponent(href.slice(href.indexOf(',') + 1));
 /** Each example link's download name and data URL, in page order. */
@@ -50,7 +50,7 @@ describe('DrmFormatHelp builds on the shared Expected format', () => {
 
 	it('says what each file fills for its form: the daily EWR keeps its method', () => {
 		const daily = render(DrmFormatHelp, { props: { target: 'dailyEwr', context: 'x' } }).body;
-		expect(daily).toContain('The method you picked stays as it is.');
+		expect(daily).toContain('The method you picked, and which Reserve table is the EWR, stay as they are.');
 		expect(daily).toContain('A CSV isn’t loaded here');
 		const rule = render(DrmFormatHelp, { props: { target: 'ruleTable', context: 'x' } }).body;
 		expect(rule).toContain('It fills the determination’s natural MAR and the REC.');

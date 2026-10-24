@@ -2,9 +2,9 @@
 // latest run supplied. Pure: the banding, the per-node lookup and the words
 // that go with each colour (so the drawing is never colour-only).
 import type { FarmSummary, NetworkNode, RunSummary } from '@water-management/engine';
-import { fmtPct, localIsoDate } from '$lib/format/number';
-import { daysSince } from '$lib/components/projects/freshness';
-import { SUPPLY_TARGET } from '$lib/components/runs/results';
+import { fmtPct, localIsoDate } from '#lib/format/number.js';
+import { daysSince } from '#lib/components/projects/freshness.js';
+import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
 
 /** Below this share of demand supplied a farm is in the lowest band. */
 export const LOW_SUPPLY = 0.7;
@@ -75,4 +75,3 @@ export function ranAgo(createdAt: string, now: Date = new Date()): string {
 	if (days === 1) return 'yesterday';
 	return `${days} days ago`;
 }
-

@@ -6,17 +6,17 @@
 	// `units`, in their old place.
 	import type { Snippet } from 'svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import type { EwrHeadline } from '$lib/api/types';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import type { EwrHeadline } from '#lib/api/types.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import WithheldUnitsNote from './WithheldUnitsNote.svelte';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, outletEwrLine, SUPPLY_TARGET } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
 	import { otherUsesLink } from './humanImpacts';
-	import { calibrationSample } from '$lib/components/calibration/sample';
+	import { calibrationSample } from '#lib/components/calibration/sample.js';
 
 	let {
 		summary,
@@ -32,7 +32,7 @@
 		days: number;
 		/** Drawn after the catchment cards: the printable report's unit table. */
 		units?: Snippet;
-		/** Where "by month of the year" goes: the Reserve compliance panel, on River & reserve in the workspace (issue #17). */
+		/** Where "by month of the year" goes: the Reserve compliance panel, on EWR in the workspace (issue #17). */
 		reserveHref?: string;
 		/** A link to a panel of Hydrological units by its anchor: where the land-cover, groundwater, demand-object and other-user tables are in the workspace (issue #137). */
 		otherUsesHref?: (hash: string) => string;

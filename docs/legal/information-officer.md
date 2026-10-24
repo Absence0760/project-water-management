@@ -1,7 +1,8 @@
 # Registering the information officer: pack for the operator
 
 > **Research notes, not legal advice** (2026-09-27). What Jared Howard would
-> do to register as the information officer of Water Management with South
+> do to register as the information officer of Integrated Catchment - Water Balance Tool (IC-WBT; it was
+> Water Management until issue #551) with South
 > Africa's Information Regulator, and the open question of whether he has to.
 > He files it himself; nothing here is filed by the app. Sources are cited
 > inline and were checked on the date above; the Regulator's pages move, so
@@ -70,7 +71,7 @@ previous routes; use the portal.
 
 | Field | Value (from the privacy notice and legal-status.md) |
 | --- | --- |
-| Body name | Jared Howard, trading as Water Management *(confirm the trading name to register)* |
+| Body name | Jared Howard, trading as Integrated Catchment - Water Balance Tool (IC-WBT) *(confirm the trading name to register; the app was renamed from Water Management in issue #551)* |
 | Type of body | Private body: sole proprietor (natural person carrying on a business) |
 | Registration number | None (not a South African company; no CIPC number). US: none for a Virginia sole proprietor unless a trade name (fictitious name) certificate or EIN is used *(confirm what to enter)* |
 | Country | United States of America |

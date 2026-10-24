@@ -10,15 +10,15 @@ import { readFileSync } from 'node:fs';
 import { compile, preprocess } from 'svelte/compiler';
 import { parseAst } from 'vite';
 import { describe, expect, it } from 'vitest';
-import svelteConfig from '../../../../svelte.config.js';
+import { preprocess as buildPreprocess } from '../../../../svelte-options.js';
 
 const file = new URL('./TsSyntax.svelte', import.meta.url);
 
 describe('TypeScript syntax in .svelte compiles to parseable JS', () => {
 	it.each(['client', 'server'] as const)('%s output parses', async (generate) => {
 		const source = readFileSync(file, 'utf8');
-		// The same preprocess chain the builds use (svelte.config.js).
-		const { code } = await preprocess(source, svelteConfig.preprocess ?? [], { filename: file.pathname });
+		// The same preprocess chain the builds use (svelte-options.js, which vite.config.ts hands to sveltekit()).
+		const { code } = await preprocess(source, buildPreprocess, { filename: file.pathname });
 		const { js } = compile(code, { generate, filename: file.pathname, runes: true });
 		expect(() => parseAst(js.code)).not.toThrow();
 	});

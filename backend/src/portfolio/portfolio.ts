@@ -12,6 +12,10 @@
 //              run). Only the outlet EWR, counted in SQL from that run's one
 //              outlet series over the same 30-day window; farm figures stay
 //              unknown until a run is published.
+// Either way the irrigation figure (issue #558, the project list's status) is
+// the source run's whole record, from its summary's units (model_run.summary
+// farms): their summed mean supply over their summed mean demand, and how many
+// fell below 95 % of theirs, as the workspace's Summary counts them.
 //   null       no run at all: every figure is unknown.
 //
 // Ages and feed health count to each project's own today: the calendar day in
@@ -24,7 +28,7 @@ import { localDate } from '../projects/timeZone.js';
 import { feedHealth, type HealthInput } from '../feeds/health.js';
 import type { FeedConfig, FeedSource } from '../feeds/config.js';
 import type { RecentShortfall } from '../publish/recent.js';
-import { ageDays, EWR_THRESHOLDS, ewrFigure, isStale, type EwrFigure, type EwrThresholds } from './status.js';
+import { ageDays, EWR_THRESHOLDS, ewrFigure, irrigationFigure, isStale, UNIT_SUPPLY_TARGET, type EwrFigure, type EwrThresholds, type IrrigationFigure } from './status.js';
 import { recordedRainUntilSql } from '../series/lastDay.js';
 
 export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
@@ -56,6 +60,8 @@ export interface PortfolioProject {
 	/** A baseline run newer than the published one exists (not published yet). */
 	newerRun: boolean;
 	ewr: EwrFigure;
+	/** Irrigation supplied over the source run, judged by status.ts IRRIGATION_THRESHOLDS (issue #558). */
+	irrigation: IrrigationFigure;
 	/** Farms short at least one day in the 7 / 30 days to figuresUntil; null when unknown (not published, or published before the counts existed). */
 	farmsShort7: number | null;
 	farmsShort30: number | null;
@@ -101,6 +107,11 @@ export interface PortfolioRow {
 	run_days30: number | null;
 	run_not_met30: number | null;
 	live_farm_count: number;
+	/** The source run's units, their summed mean demand and supply (m³/day) and those below UNIT_SUPPLY_TARGET; 0 without a run. */
+	irr_units: number;
+	irr_demand: number;
+	irr_supplied: number;
+	irr_below: number;
 	alerts_firing: number;
 	feeds: (Omit<HealthInput, 'config'> & { config: FeedConfig; source: FeedSource })[];
 }
@@ -145,6 +156,7 @@ const portfolioSql = (projects: string) => `
 		to_char(lr.until, 'YYYY-MM-DD') AS run_until, lr.ewr_set AS run_ewr_set,
 		rew.days AS run_days30, rew.not_met AS run_not_met30,
 		(SELECT count(*)::int FROM node n WHERE n.project_id = pr.id AND n.kind = 'farm') AS live_farm_count,
+		irr.units AS irr_units, irr.demand AS irr_demand, irr.supplied AS irr_supplied, irr.below AS irr_below,
 		-- Firing alerts (051_alerts; alert_event_project_idx covers it).
 		(SELECT count(*)::int FROM alert_event e WHERE e.project_id = pr.id AND e.state = 'firing') AS alerts_firing,
 		fd.feeds
@@ -160,6 +172,16 @@ const portfolioSql = (projects: string) => `
 		FROM model_run r WHERE r.project_id = pr.id AND NOT r.from_scenario AND r.trigger <> 'forecast'
 		ORDER BY r.created_at DESC LIMIT 1
 	) lr ON true
+	-- The source run's units (the published run's, else the newest's): its summary's farms.
+	LEFT JOIN LATERAL (
+		SELECT count(f)::int AS units,
+			COALESCE(sum((f->>'avgDemandM3Day')::float8), 0) AS demand,
+			COALESCE(sum((f->>'avgSuppliedM3Day')::float8), 0) AS supplied,
+			(count(*) FILTER (WHERE (f->>'fractionSupplied')::float8 < ${UNIT_SUPPLY_TARGET}))::int AS below
+		FROM model_run r
+		CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(r.summary->'farms') = 'array' THEN r.summary->'farms' ELSE '[]'::jsonb END) f
+		WHERE r.id = COALESCE(pub.run_id, lr.id)
+	) irr ON true
 	LEFT JOIN LATERAL (
 		SELECT f.view->>'name' AS name, (f.view->'dam'->>'pct')::float8 AS pct
 		FROM publication_farm f WHERE f.publication_id = pub.id AND jsonb_typeof(f.view->'dam') = 'object'
@@ -208,6 +230,13 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 			: source === 'run'
 				? ewrFigure({ hasFigures: true, ewrSet: r.run_ewr_set ?? false, daysNotMet: r.run_days30 ? r.run_not_met30 : null, days: r.run_days30 || null }, thresholds)
 				: ewrFigure({ hasFigures: false, ewrSet: false, daysNotMet: null, days: null }, thresholds);
+	const irrigation = irrigationFigure({
+		hasFigures: source !== null,
+		units: r.irr_units ?? 0,
+		demandM3Day: Number(r.irr_demand ?? 0),
+		suppliedM3Day: Number(r.irr_supplied ?? 0),
+		unitsBelow: r.irr_below ?? 0
+	});
 	let ok = 0;
 	let failing = 0;
 	for (const f of r.feeds) {
@@ -232,6 +261,7 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 		behindData: figuresUntil !== null && r.data_until !== null && r.data_until > figuresUntil,
 		newerRun: published && r.newer_run,
 		ewr,
+		irrigation,
 		farmsShort7: published ? (r.pub_recent?.farmsShort7 ?? null) : null,
 		farmsShort30: published ? (r.pub_recent?.farmsShort30 ?? null) : null,
 		farmCount: published ? (r.pub_farm_count ?? 0) : r.live_farm_count,

@@ -3,8 +3,8 @@
 // area-weighted MAP from one MAP grid, beside what its form holds. One grid
 // for the whole project, never a mix; a unit the grid doesn't cover is listed,
 // not filled from another grid.
-import type { UnitMapApplied, UnitMapCandidate, UnitMapProposal } from '$lib/api';
-import { fmtNum } from '$lib/format/number';
+import type { UnitMapApplied, UnitMapCandidate, UnitMapProposal } from '#lib/api/index.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** What the panel can show: why there is nothing to use, or the rows. */
 export type UnitMapView =
@@ -70,7 +70,7 @@ export function useMessage(p: UnitMapProposal): string {
 	return [
 		`${units(n)} ${n === 1 ? 'gets its' : 'get their'} MAP and source from ${d.label} ${d.version}, replacing what ${n === 1 ? 'its form holds' : 'their forms hold'}, saved straight to the model as one change in History.`,
 		left ? `${units(left)} without a MAP from this grid keep${left === 1 ? 's' : ''} what ${left === 1 ? 'it has' : 'they have'}.` : '',
-		'The MAP sets the level of each unit’s rain while Rain for each unit is on: run and refit afterwards.'
+		'The MAP sets the level of each unit’s rain while flow generation is Per unit: run and refit afterwards.'
 	]
 		.filter(Boolean)
 		.join(' ');

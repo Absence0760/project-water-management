@@ -2,14 +2,14 @@
 	The water balance of a run per water year (engine ≥ 0.12.0): the table a
 	hydrologist hands a client first. Its own section in Model quality on Runs &
 	results (issue #137), and inside the self-checks in the printable report
-	(docs/ui.md § Self-checks). River & reserve's Water account is the
+	(docs/ui.md § Self-checks). The EWR page's Water account is the
 	catchment's balance for the same years; each links to the other rather than
 	copying it (accountHref).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import { fmtNum, fmtQty, MINUS } from '$lib/format/number';
+	import { fmtNum, fmtQty, MINUS } from '#lib/format/number.js';
 	import { balanceColumns, balanceEquation, balanceTableRows, residualIsNoise, waterYearLabel } from './checks';
 
 	let {
@@ -17,7 +17,7 @@
 		accountHref
 	}: {
 		summary: Pick<RunSummary, 'waterBalance'>;
-		/** River & reserve's Water account for the same run (the workspace); none in the printable report. */
+		/** the EWR page's Water account for the same run (the workspace); none in the printable report. */
 		accountHref?: string;
 	} = $props();
 
@@ -47,7 +47,7 @@
 		{#if accountHref}
 			<p class="muted small" data-testid="balance-account-link">
 				The catchment’s own account, from natural flow before land cover and flow shares, in m³ with a chart of in and out:
-				<a href={accountHref}>Water account</a> on River &amp; reserve.
+				<a href={accountHref}>Water account</a> on EWR.
 			</p>
 		{/if}
 		<div class="table-wrap">

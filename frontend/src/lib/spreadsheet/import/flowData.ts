@@ -13,6 +13,40 @@ export interface ImportedSeries {
 	unit: string;
 	startDate: string;
 	values: (number | null)[];
+	/** The workbook column it came from (issue #556, flowDataOrigin). */
+	source: string;
+	/** The unit the column was read in, as the Data tab's Upload unit shows it; factor 1 (read as it stands). */
+	sourceUnit: string;
+	sourceUnitFactor: number;
+}
+
+/** The unit each [Flow data] column is read in, as the Data tab's Upload unit shows it (extract_project.py _SOURCE_UNITS). */
+const SOURCE_UNITS: Record<string, string> = { 'm3/s': 'm³/s', mm: 'mm' };
+
+/**
+ * flow_data_origin(): where a [Flow data] series came from (issue #556). The
+ * column's heading is its source ("Workbook column 'Logger Q7 (Curr. Day)'"),
+ * or its letter when it has none; the unit it was read in is the column's own.
+ */
+export function flowDataOrigin(heading: string, column: string, unit: string): Pick<ImportedSeries, 'source' | 'sourceUnit' | 'sourceUnitFactor'> {
+	const source = heading ? `Workbook column '${heading}'` : `Workbook [Flow data] column ${column}`;
+	return { source: source.slice(0, 200), sourceUnit: SOURCE_UNITS[unit] ?? unit, sourceUnitFactor: 1 };
+}
+
+/** outlet_name(): the outflow gauge when it is an element, else the one element with nothing downstream. */
+export function outletName(elements: readonly { name: string }[], outflow: string, downstream: ReadonlyMap<string, string | null>): string | null {
+	if (outflow && elements.some((e) => e.name === outflow)) return outflow;
+	const roots = [...downstream].filter(([, d]) => d === null).map(([n]) => n);
+	return roots.length === 1 ? roots[0]! : null;
+}
+
+/**
+ * name_logger_after_outlet(): the logger series named after where it is
+ * measured, in place (issue #556): "<outlet> logger", else "Outlet logger".
+ * The workbook heading (the client's own code) stays in its source.
+ */
+export function nameLoggerAfterOutlet(series: ImportedSeries[], outlet: string | null): void {
+	for (const s of series) if (s.kind === 'flow_logger_m3s') s.name = (outlet ? `${outlet} logger` : 'Outlet logger').slice(0, 100).trim();
 }
 
 /** [Flow data] hydrology columns F..K, in order; null = Pitman flow, not imported. */
@@ -84,7 +118,8 @@ export function readFlowData(wb: B023Workbook, report: Report): FlowData {
 			return;
 		}
 		if (values.every((v) => v === null)) return;
-		const name = clean(wb.cell(sheet, h1 + 1 + i, hr)) || kind;
+		const heading = clean(wb.cell(sheet, h1 + 1 + i, hr));
+		const name = heading || kind;
 		const bad = nonNumeric[i]!;
 		if (bad.count) {
 			report.unmap({
@@ -94,7 +129,7 @@ export function readFlowData(wb: B023Workbook, report: Report): FlowData {
 				cell: bad.first
 			});
 		}
-		series.push({ kind, name, unit, startDate: dates[0]!, values });
+		series.push({ kind, name, unit, startDate: dates[0]!, values, ...flowDataOrigin(heading, columnLetter(h1 + 1 + i), unit) });
 	});
 	return { dates, series, pitmanDays };
 }

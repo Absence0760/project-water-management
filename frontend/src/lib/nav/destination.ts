@@ -2,13 +2,14 @@
 // ("Leave and go to All projects?", leaveGuard.ts): the sidebar's names for
 // the app's pages, and a workspace section's own label within a project
 // ("the Network page").
-import { TAB_LABELS, type TabId } from '$lib/workspace/tabs';
+import { TAB_LABELS, type TabId } from '#lib/workspace/tabs.js';
+import type { ReadonlyURL } from '$app/state';
 
 // The workspace page's friendlier ?tab= spellings (routes/projects/[id]/+page.svelte TAB_ALIASES) that matter here.
-const TAB_ALIASES: Record<string, TabId> = { summary: 'overview', data: 'series', results: 'runs', reserve: 'river', details: 'project' };
+const TAB_ALIASES: Record<string, TabId> = { summary: 'overview', data: 'series', results: 'runs', reserve: 'river', ewr: 'river', details: 'project' };
 
 /** The destination's name, as the question words it ("All projects", "the Network page"). */
-export function destinationName(from: URL, to: URL, base = ''): string {
+export function destinationName(from: ReadonlyURL, to: ReadonlyURL, base = ''): string {
 	const path = to.pathname.startsWith(base) ? to.pathname.slice(base.length) || '/' : to.pathname;
 	const project = /^\/projects\/([^/]+)\/?$/.exec(path);
 	if (project) {

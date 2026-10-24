@@ -261,7 +261,20 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_baseflow(random.Random(seed * 2750159 + 7), doc, dense)
     add_unit_rain_decisions(random.Random(seed * 32452843 + 7), doc)
     add_external_transfers(random.Random(seed * 49979687 + 13), doc, dense)
+    add_rain_stations(random.Random(seed * 67867967 + 5), doc, start, days, dense)
+    add_ewr_split(random.Random(seed * 86028121 + 3), doc)
     return doc
+
+
+def add_ewr_split(rng: random.Random, doc: dict) -> None:
+    """The EWR split by each unit's natural MAR (§2.5b, engine >= 1.94.0),
+    from its own stream so the rest of a network is unchanged: on half the
+    per-unit networks, and now and then under catchment rain, where it is the
+    flow share."""
+    s = doc["settings"]
+    per_unit = (s.get("unitRain") or {}).get("mode") == "perUnit"
+    if rng.random() < (0.5 if per_unit else 0.1):
+        s["ewrSplit"] = "naturalMar"
 
 
 def _unit_series(rng: random.Random, start: dt.date, days: int, scale: float, chirps: bool) -> dict:
@@ -395,6 +408,128 @@ def add_unit_rain_decisions(rng: random.Random, doc: dict) -> None:
                 for j in range(r - rng.randint(3, 10), r):
                     vals[j] = None
                 vals[r] = round(rng.uniform(20, 90), 1)
+
+
+def _station_record(rng: random.Random, start: dt.date, days: int) -> dict:
+    """A station's record: its own synthetic rain from up to six years
+    before the network's start (so a pairing may have five complete years)
+    or a little after it, to about its end, with gaps, now and then a
+    no-data code, a long run of zeros (§2.4c) or a big reading after a few
+    blank days (§2.4d)."""
+    off = -rng.choice([0, 0, rng.randint(1, 6) * 365 + rng.randint(-20, 20), rng.randint(0, 120)])
+    if rng.random() < 0.2:
+        off = rng.randint(30, 500)
+    s0 = start + dt.timedelta(days=off)
+    n = max(30, days - off + rng.randint(-200, 60))
+    vals: list = [round(v * rng.uniform(0.6, 1.6), 1) for v in _rain(rng, s0, n, rng.random() < 0.5)]
+    for _ in range(rng.choice([0, 0, 1, 2, 4])):
+        a = rng.randrange(n)
+        for j in range(a, min(n, a + rng.randint(1, 50))):
+            vals[j] = None
+    if rng.random() < 0.15:
+        vals[rng.randrange(n)] = -9999.0
+    if rng.random() < 0.3 and n > 400:
+        a = rng.randrange(n - 200)
+        for j in range(a, a + rng.randint(70, 180)):
+            vals[j] = 0.0
+    if rng.random() < 0.3 and n > 60:
+        for _ in range(rng.randint(1, 3)):
+            r = rng.randrange(20, n)
+            for j in range(r - rng.randint(3, 10), r):
+                vals[j] = None
+            vals[r] = round(rng.uniform(20, 90), 1)
+    return {"startDate": s0.isoformat(), "values": vals}
+
+
+def add_rain_stations(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """Rainfall stations (§2.4i, engine >= 1.91.0), from their own stream so
+    the rest of a network is unchanged: in 30 % of networks (65 % dense), one
+    to three stations (records from _station_record; a MAP or, now and
+    then, none; now and then the one that is the catchment gauge), each with
+    a CHIRPS cell, a site in a farm (whose CHIRPS may not exist) or neither,
+    and now and then unreliable periods. Half the time the catchment has a
+    station (sometimes unscaled, corrected against another, with a
+    catchment MAP, one out of range, or the farms' mean, which needs every
+    land unit's MAP); under per-unit rain each land unit has one 60 % of the
+    time, often with CHIRPS of its own for the gaps. Now and then an
+    assignment names a station with no record, or has no station id."""
+    if rng.random() >= (0.65 if dense else 0.3):
+        return
+    s = doc["settings"]
+    series = doc["series"]
+    farms = [x for x in doc["model"]["nodes"] if x["kind"] == "farm"]
+    per_unit = (s.get("unitRain") or {}).get("mode") == "perUnit"
+    ids = [f"st{k}" for k in range(rng.randint(1, 3))]
+    stations: dict = {}
+    rs: dict = {}
+    for sid in ids:
+        series[f"rain_station_mm#{sid}"] = _station_record(rng, start, days)
+        mp = None if rng.random() < 0.1 else rng.choice([round(rng.uniform(300, 1200)), round(rng.uniform(300, 1200)), round(rng.uniform(20, 120))])
+        stations[sid] = {"name": f"Station {sid}", "mapMm": mp, "mapSource": None if mp is None else "synthetic", "lat": None, "lon": None}
+        where = rng.random()
+        if where < 0.5:
+            rec = series[f"rain_station_mm#{sid}"]
+            bias = [None] + [rng.choice([rng.uniform(0.5, 1.6), rng.uniform(0.5, 1.6), rng.uniform(0.1, 0.2), rng.uniform(5, 8)]) for _ in range(12)]
+            s0 = dt.date.fromisoformat(rec["startDate"])
+            cell = [None if (v is None or v < 0) else round(v * bias[(s0 + dt.timedelta(days=i)).month] * rng.uniform(0.6, 1.4), 2) for i, v in enumerate(rec["values"])]
+            # Where the station has no reading the cell still rains, now and then with a gap of its own.
+            for i, v in enumerate(cell):
+                if v is None and rng.random() < 0.9:
+                    cell[i] = round(rng.gammavariate(0.4, 6), 2)
+            if rng.random() < 0.3:
+                a = rng.randrange(len(cell))
+                for j in range(a, min(len(cell), a + rng.randint(1, 40))):
+                    cell[j] = None
+            series[f"rain_chirps_station_mm#{sid}"] = {"startDate": rec["startDate"], "values": cell}
+        elif where < 0.85 and farms:
+            rs.setdefault("sites", {})[sid] = {"unitId": rng.choice(farms)["id"]}
+        if rng.random() < 0.3:
+            rec = series[f"rain_station_mm#{sid}"]
+            s0 = dt.date.fromisoformat(rec["startDate"])
+            periods = []
+            for _ in range(rng.randint(1, 2)):
+                a = s0 + dt.timedelta(days=rng.randrange(len(rec["values"])))
+                periods.append([a.isoformat(), (a + dt.timedelta(days=rng.randint(0, 60))).isoformat()])
+            rs.setdefault("unreliable", {})[sid] = periods
+    if rng.random() < 0.3:
+        stations[rng.choice(ids)]["isCatchmentGauge"] = True
+
+    def assignment() -> dict:
+        if rng.random() < 0.04:
+            return {"stationId": "no-such-station"}
+        a: dict = {"stationId": rng.choice(ids)}
+        if rng.random() < 0.15:
+            a["scaleToMap"] = False
+        if rng.random() < 0.2:
+            a["correctAgainst"] = rng.choice(ids)
+        return a
+
+    if rng.random() < 0.5:
+        rs["catchment"] = assignment() if rng.random() > 0.03 else {"stationId": ""}
+        if rng.random() < 0.3:
+            rs["catchmentMapMm"] = rng.choice([round(rng.uniform(300, 1500)), round(rng.uniform(300, 1500)), 20000])
+            rs["catchmentMapSource"] = "synthetic"
+        # Fragmentation's catchment MAP is the farms' mean: give them MAPs, now and then not all of them.
+        if not per_unit:
+            every = rng.random() < 0.8
+            for f in farms:
+                if every or rng.random() < 0.5:
+                    f["mapMm"] = round(rng.uniform(250, 1500))
+                    f["mapSource"] = "synthetic"
+    if per_unit:
+        units: dict = {}
+        for f in farms:
+            if (f.get("areaKm2") or 0) > 0 and rng.random() < 0.6:
+                units[f["id"]] = assignment()
+                key = f"rain_chirps_mm@{f['id']}"
+                if key not in series and rng.random() < 0.6:
+                    series[key] = _unit_series(rng, start, days, rng.uniform(0.4, 1.5), True)
+        if units:
+            rs["units"] = units
+    if not rs.get("catchment") and not rs.get("units"):
+        return
+    s["rainStations"] = rs
+    doc["stations"] = stations
 
 
 SABI_SYSTEMS = [("drip", "Drip", 0.9), ("micro", "Micro-sprinkler", 0.82), ("pivot", "Centre pivot / linear move", 0.85), ("sprinkler", "Sprinkler (permanent)", 0.8), ("movable", "Sprinkler (movable)", 0.75), ("surface", "Flood / furrow", 0.7)]

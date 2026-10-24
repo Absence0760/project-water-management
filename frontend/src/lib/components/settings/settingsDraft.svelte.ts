@@ -7,11 +7,11 @@
 // reports what blocks the save (`blockers`, with where each is fixed); the
 // page saves `snapshot()`.
 import type { CalibrationParams, ChirpsQuantileMap, ProjectSettings } from '@water-management/engine';
-import type { AutoRunSettings, EwrHeadline, OutcomeSettings, OutlookSettings } from '$lib/api/types';
-import { resolveAutoRun } from '$lib/components/autorun/autoRun';
-import { resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
-import { resolveOutlook } from '$lib/components/outlook/settings';
-import { resolveEwrHeadline } from '$lib/components/ewr/headline';
+import type { AutoRunSettings, EwrHeadline, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
+import { resolveAutoRun } from '#lib/components/autorun/autoRun.js';
+import { resolveOutcomes } from '#lib/components/outcomes/outcomeSettings.js';
+import { resolveOutlook } from '#lib/components/outlook/settings.js';
+import { resolveEwrHeadline } from '#lib/components/ewr/headline.js';
 import type { EditableArealRain } from './arealRain';
 import type { EditablePe } from './peInput';
 import type { SaveBlocker } from './sections';
@@ -80,6 +80,7 @@ export function rebaseSettings(draft: EditableSettings, before: EditableSettings
 export const CHILD_ERRORS = [
 	'calWindow',
 	'exclusions',
+	'lowFlow',
 	'qualityFlags',
 	'rules',
 	'zeroRain',

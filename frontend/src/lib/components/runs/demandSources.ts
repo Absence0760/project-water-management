@@ -4,7 +4,7 @@
 // § 6 shares too), in words. Pure, so it is unit-tested without Svelte; the
 // demand-objects table and the evidence report draw it.
 import { DEMAND_OBJECT_SOURCE_LABEL, type DemandObjectSource, type DemandSourceShare } from '@water-management/engine';
-import { fmtPct } from '$lib/format/number';
+import { fmtPct } from '#lib/format/number.js';
 
 export { demandBySource } from '@water-management/engine';
 export type SourceShare = DemandSourceShare;

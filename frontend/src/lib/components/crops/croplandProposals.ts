@@ -5,8 +5,8 @@
 // from, and whether the chosen area is already what it holds. The land cover
 // says where land is cultivated, never what grows there: the modeller picks
 // the crop, one value at a time.
-import type { CropAreaFromLandCover, CroplandProposals } from '$lib/api';
-import { fmtDate, fmtNum } from '$lib/format/number';
+import type { CropAreaFromLandCover, CroplandProposals } from '#lib/api/index.js';
+import { fmtDate, fmtNum } from '#lib/format/number.js';
 
 /** An area in hectares, as the Crops page writes planted areas. */
 export const fmtHa = (m2: number) => `${fmtNum(m2 / 10_000, 2, true)} ha`;

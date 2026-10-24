@@ -1,8 +1,8 @@
 // Display helpers for the EWR agreement table (engine ewrAgreement, issue #4):
 // does the model fail the EWR on the days the observed river did?
 import { waterYearLabel, type EwrAgreement, type EwrAgreementScores, type RunSummary } from '@water-management/engine';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { fmtNum, fmtPct } from '$lib/format/number';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
 
 /** Frequency bias within this of 1 reads as "about as often". */
 export const BIAS_TOLERANCE = 0.1;

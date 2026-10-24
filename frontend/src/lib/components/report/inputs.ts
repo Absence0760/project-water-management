@@ -2,14 +2,15 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { arealRainText, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
-import { findSystem, systemLabel } from '$lib/model/systems';
-import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
-import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
-import { fmtNum, fmtPct } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
-import { peText } from '$lib/components/settings/peInput';
-import { dataEnd } from '$lib/components/series/freshness';
+import { arealRainText, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, describeEwrDailySource, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
+import { findSystem, systemLabel } from '#lib/model/systems.js';
+import { describeWindow, FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
+import { describeMonths, WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { peText } from '#lib/components/settings/peInput.js';
+import { dataEnd } from '#lib/components/series/freshness.js';
+import { chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, ratioText, stationAreas, stationsOf } from '#lib/components/runs/stationRain.js';
 
 type RawSettings = Partial<Omit<ProjectSettings, 'runoffModel'>> & { runoffModel?: StoredRunoffModelId } & Record<string, unknown>;
 
@@ -53,6 +54,19 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 			const gauge = u.gaugeMapMm != null ? `; rain gauge’s MAP ${fmtNum(u.gaugeMapMm)} mm${u.gaugeMapSource ? ` (${u.gaugeMapSource})` : ''}` : '; no rain gauge MAP';
 			rows.push(['Rain for each unit (GR4J rain)', `on: GR4J ran once per unit with land on its own rain; MAP period ${p.start.slice(0, 4)}–${p.end.slice(0, 4)}${gauge}`]);
 		}
+		// Rainfall stations (issue #553, docs/model.md §2.4i): only on a run that assigned one; the stations tables below name them.
+		const st = s.rainStations;
+		const units = Object.keys(st?.units ?? {}).length;
+		if (st && (st.catchment || units)) {
+			const parts = [st.catchment ? 'the catchment from a station' : 'the catchment rain as before'];
+			if (units) parts.push(`${units === 1 ? '1 land unit' : `${fmtNum(units)} land units`} from ${units === 1 ? 'its' : 'their'} stations`);
+			parts.push(st.catchmentMapMm != null ? `catchment MAP ${fmtNum(st.catchmentMapMm)} mm${st.catchmentMapSource ? ` (${st.catchmentMapSource})` : ''}` : 'catchment MAP: the units’ area-weighted mean');
+			const periods = Object.values(st.unreliable ?? {}).reduce((n, r) => n + r.length, 0);
+			if (periods) parts.push(`${periods === 1 ? '1 unreliable period' : `${fmtNum(periods)} unreliable periods`} set aside`);
+			// The station rule's own calls are provisional (engine-audit.md RS1–RS4), so a report that used them says so.
+			parts.push('the station rule’s choices are provisional, pending the hydrologist’s review');
+			rows.push(['Rainfall stations (GR4J rain)', parts.join('; ')]);
+		}
 	}
 	rows.push(
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],
@@ -68,6 +82,10 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
+		// Engine ≥ 1.94.0 (issue #553): only on a run that asked for the natural MAR, so older reports and the default read as before.
+		...(s.ewrSplit === 'naturalMar' ? [['EWR split between units', ewrSplitText(s)] as [string, string]] : []),
+		// Engine ≥ 1.77.0; the Reserve table it reads, engine ≥ 1.90.0 (issue #552). Only on a run that had one, so older reports read as before.
+		...(s.ewrDailySource ? [['Daily EWR at the outlet', describeEwrDailySource(s.ewrDailySource)] as [string, string]] : []),
 		// Monthly factors (engine ≥ 0.35.0, WP-3.5) are listed with the monthly rows; engine ≥ 1.49.0 adds where
 		// the factors came from (a lake-factor preset's note), when noted.
 		[
@@ -77,6 +95,13 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		]
 	);
 	return rows;
+}
+
+/** How the EWR was split between the units under settings.ewrSplit 'naturalMar' (engine ≥ 1.94.0), in words. */
+function ewrSplitText(s: RunSettings): string {
+	if (s.runoffModel === 'gr4j' && s.unitRain?.mode === 'perUnit')
+		return 'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review';
+	return 'the flow share: natural MAR was asked for, but GR4J ran once on the catchment rain, so each unit’s natural MAR share is its flow share';
 }
 
 /** Monthly settings in water-year order (Oct … Sep). */
@@ -190,4 +215,40 @@ export function coverageRows(series: readonly SeriesMeta[], run: { startDate: st
 			const inRun = Math.max(0, Math.min(s1, r1) - Math.max(s0, r0) + 1);
 			return [kindLabel(s.kind) + (s.name ? ` · ${s.name}` : ''), s.startDate, dataEnd(s), fmtNum(s.length), fmtNum(inRun)];
 		});
+}
+
+/** The report's Rainfall stations table (issue #553): its header and which of its columns are numbers. */
+export const STATION_HEAD = ['Area', 'Station', 'Area MAP (mm)', 'Station MAP (mm)', 'Ratio', 'Days from the station', 'Days from corrected CHIRPS', 'Days from the fallback', 'CHIRPS corrected against'];
+export const STATION_NUMS = [2, 3, 5, 6, 7];
+
+/**
+ * Each area the run forced from a rainfall station (summary.stations, engine
+ * ≥ 1.91.0): the catchment first, then the units in network order; its
+ * station, both MAPs with their sources, the ratio, the days by source and
+ * the pairing correcting its CHIRPS. Empty on a run without stations.
+ */
+export function stationRows(summary: unknown, order: readonly string[] = []): string[][] {
+	const s = stationsOf(summary);
+	if (!s) return [];
+	const src = (mm: number | null, source: string | null) => (mm === null ? '–' : `${fmtNum(mm)}${source ? ` (${source})` : ''}`);
+	return stationAreas(s, order).map((a) => [
+		a.nodeId === null ? `${a.name} (catchment)` : a.name,
+		a.stationName,
+		src(a.areaMapMm, a.areaMapSource),
+		src(a.stationMapMm, a.stationMapSource),
+		ratioText(a) + (a.clamped ? ', held at the bound' : ''),
+		fmtNum(a.days.station),
+		fmtNum(a.days.chirps),
+		fmtNum(a.days.fallback),
+		correctedByName(s, a) ?? 'none (gaps from the fallback)'
+	]);
+}
+
+/** The report's Station CHIRPS pairings table (issue #553): its header and number columns. */
+export const PAIRING_HEAD = ['Station', 'CHIRPS at', 'Fit period', 'Shared days', 'Monthly factors'];
+export const PAIRING_NUMS = [3];
+
+/** Each station's CHIRPS pairing: where its CHIRPS came from, the fit period, the shared days, the 12 factors or why it was refused. */
+export function stationPairingRows(summary: unknown): string[][] {
+	return (stationsOf(summary)?.pairings ?? []).map((p) => [p.stationName, chirpsAtText(p), pairingPeriodText(p), fmtNum(p.days), pairingFactorsText(p) + (p.pinned ? ' (pinned)' : '')]);
 }

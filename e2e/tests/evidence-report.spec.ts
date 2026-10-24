@@ -63,7 +63,7 @@ test('an application on the nominated run gives the full evidence report, draft 
 	void owner;
 	const { project, baseline, upper } = await seed(page, 'Evidence report');
 
-	// The ensemble, run to the declared rule on River & reserve (the server draws the seed and checks it).
+	// The ensemble, run to the declared rule on EWR (the server draws the seed and checks it).
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	await panel.getByRole('button', { name: 'Run…' }).click();
@@ -101,6 +101,8 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await ready(page);
 	const report = page.getByTestId('evidence-report');
 	await expect(report).toHaveAttribute('data-evidence-mode', 'application');
+	// The app's full name on the cover (issue #551).
+	await expect(report.getByTestId('evidence-product')).toHaveText('Integrated Catchment - Water Balance Tool (IC-WBT)');
 
 	// § 1's locality map (evidence-12): the applicant's unit named, the neighbour's parcel drawn but never named, read as text.
 	const locality = page.getByTestId('evidence-locality');

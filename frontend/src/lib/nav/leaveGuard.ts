@@ -5,9 +5,9 @@
 // Reload and tab close get the browser's own prompt (no page can restyle it).
 import { onMount } from 'svelte';
 import { beforeNavigate, goto } from '$app/navigation';
-import { base } from '$app/paths';
+import { basePath } from '#lib/nav/base.js';
 import { page } from '$app/state';
-import { confirmDialog } from '$lib/components/common/confirm.svelte';
+import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 import { destinationName } from './destination';
 import { anyUnsaved, leaveQuestion, unsavedDroppedBy, whatOf } from './unsaved';
 
@@ -30,6 +30,9 @@ export function installLeaveGuard(): void {
 	beforeNavigate((nav) => {
 		const to = nav.to?.url ?? null;
 		if (nav.willUnload) return;
+		// A shallow goto (SvelteKit 3's form of pushState/replaceState, which never
+		// came through here) only rewrites the address: the page and its work stay.
+		if (nav.shallow) return;
 		if (to && agreedHref === to.href) {
 			agreedHref = null;
 			return;
@@ -40,7 +43,7 @@ export function installLeaveGuard(): void {
 		nav.cancel();
 		if (asking) return;
 		asking = true;
-		const q = leaveQuestion(dropped.map(whatOf), to ? destinationName(page.url, to, base) : null);
+		const q = leaveQuestion(dropped.map(whatOf), to ? destinationName(page.url, to, basePath()) : null);
 		void confirmDialog({ ...q, confirmLabel: 'Leave without saving', cancelLabel: 'Stay', danger: true }).then((ok) => {
 			asking = false;
 			if (!ok || !to) return;

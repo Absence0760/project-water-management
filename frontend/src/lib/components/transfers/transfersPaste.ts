@@ -6,8 +6,8 @@
 // month as it is; 0 turns it off. The block is mapped by
 // $lib/spreadsheet/paste/monthlyRows.ts.
 import { transferRatesM3s, withMonthlyRates, type Transfer } from '@water-management/engine';
-import type { GridFormat, PasteAnchor, PastePlan } from '$lib/spreadsheet/paste/grid';
-import { applyMonthlyPaste, monthlyRowsCsv, planMonthlyPaste, type MonthlyRow } from '$lib/spreadsheet/paste/monthlyRows';
+import type { GridFormat, PasteAnchor, PastePlan } from '#lib/spreadsheet/paste/grid.js';
+import { applyMonthlyPaste, monthlyRowsCsv, planMonthlyPaste, type MonthlyRow } from '#lib/spreadsheet/paste/monthlyRows.js';
 
 /** Headings the first column goes by. */
 const NAME_HEADINGS = ['Transfer', 'Rule', 'Name'];

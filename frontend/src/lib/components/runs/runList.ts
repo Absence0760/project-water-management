@@ -1,8 +1,8 @@
 // The Runs rail's compact rows: a short period and the filter over labels.
 // The full dates, author and engine live in the results header, so a row
 // only needs enough to tell runs apart.
-import { ApiError } from '$lib/api/client';
-import { hasRole, type Role } from '$lib/api/types';
+import { ApiError } from '#lib/api/client.js';
+import { hasRole, type Role } from '#lib/api/types.js';
 
 /** A run's period as years: "1979–2024", or "2021" when it starts and ends in one year. */
 export function runYears(startDate: string, endDate: string): string {

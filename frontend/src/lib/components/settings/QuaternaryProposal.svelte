@@ -7,11 +7,11 @@
 	only; Save keeps it, as for any typed value. Never fills anything by itself.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
-	import { api, type QuaternaryLookup } from '$lib/api';
-	import { parseDegrees } from '$lib/components/map/mapData';
-	import { fmtNum } from '$lib/format/number';
+	import { api, type QuaternaryLookup } from '#lib/api/index.js';
+	import { parseDegrees } from '#lib/components/map/mapData.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import type { Wr2012Draft } from './wr2012';
 	import { lookupPoints, proposalRows, useValue, type LookupPoint, type ProposalKey } from './quaternaryProposal';
 

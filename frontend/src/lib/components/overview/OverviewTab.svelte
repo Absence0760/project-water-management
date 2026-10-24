@@ -1,30 +1,28 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
-	import { api, type Project, type Run, type RunMeta } from '$lib/api';
-	import AlertsPanel from '$lib/components/alerts/AlertsPanel.svelte';
-	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
+	import { api, type Project, type Run, type RunMeta } from '#lib/api/index.js';
+	import AlertsPanel from '#lib/components/alerts/AlertsPanel.svelte';
+	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { fmtDay } from '$lib/format/number';
-	import { projectToday } from '$lib/components/projects/freshness';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { loadOnce, peek } from '$lib/components/common/lazy';
+	import { fmtDay } from '#lib/format/number.js';
+	import { projectToday } from '#lib/components/projects/freshness.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { loadOnce, peek } from '#lib/components/common/lazy.js';
 	import { attention, runHref } from './attention';
-	import { riverHref } from '$lib/components/river/links';
-	import { supplyHref } from '$lib/components/supply/links';
-	import { allocationsHref } from '$lib/components/allocations/links';
+	import { riverHref, summaryToRiverAnchor } from '#lib/components/river/links.js';
+	import { supplyHref } from '#lib/components/supply/links.js';
+	import { allocationsHref } from '#lib/components/allocations/links.js';
 	import { checklist, checklistMode } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
-	import { headlineSite } from '$lib/components/runs/ewrAssurance';
 	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
-	import { projectAnchor, projectHref } from '$lib/components/project/links';
+	import { projectAnchor, projectHref } from '#lib/components/project/links.js';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
-	import ReserveStrip from './ReserveStrip.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
 	import SetupPill from './SetupPill.svelte';
 
@@ -53,9 +51,16 @@
 	// The model's facts, the project's details, import record and notes, and who has access moved to
 	// the Project page (issue #17): an old link to one of their panels (`#members-h`) goes there,
 	// replacing this entry so Back skips it.
+	// The EWR's pieces moved to the EWR page (issue #558): an old link to the reserve strip or a
+	// `#res-…` EWR panel goes there the same way.
 	onMount(() => {
 		const hash = page.url.hash.slice(1);
-		if (projectAnchor(hash)) goto(projectHref(hash), { replaceState: true, noScroll: true });
+		if (projectAnchor(hash)) goto(projectHref(hash), { replace: true, reset: false });
+		else {
+			const ewr = summaryToRiverAnchor(hash);
+			// For the run the Summary shows, as the strip was.
+			if (ewr) goto(riverHref(pick?.latest.id ?? null, ewr), { replace: true, reset: false });
+		}
 	});
 
 	// The series and runs lists come from the page, which loads them before any
@@ -200,8 +205,8 @@
 		return today ? { state: 'ready', today } : { state: 'none' };
 	});
 
-	// --- the first screen (issue #17 A1, issue #162): the KPIs, the reserve strip under them (the
-	// flow chart itself is River & reserve's), then Needs attention and the active alerts beside
+	// --- the first screen (issue #17 A1, issue #162): the KPIs (irrigation first, issue #558: the
+	// EWR's card and reserve strip are the EWR page's), then Needs attention and the active alerts beside
 	// Supply by farm. It flows with the page (one scroll, the window's): it used to be sized to the
 	// window with the cards scrolling inside themselves, which hid everything below it with no cue
 	// that it was there. Supply by farm shows its emptiest units and a "Show all" instead.
@@ -268,10 +273,13 @@
 	     (issue #17). Each dam's level is on the Dams page, which the Dams today card and the sidebar
 	     open (its link here went in issue #177). -->
 	<ul class="more" aria-label="More about this project">
+		<!-- The EWR's results are a page of their own (issue #558): the Summary is about irrigation supply. -->
+		<!-- The run picked (its id is known before its record loads), so the link is right on the first frame. -->
+		{#if pick && visibleTabs.includes('river')}<li><a href={riverHref(pick.latest.id)}>Reserve and EWR results <span aria-hidden="true">→</span> EWR</a></li>{/if}
 		<li><a href={projectHref()}>Model facts, details, team and sharing <span aria-hidden="true">→</span> Project</a></li>
 		<!-- A way into Allocations from the Summary, for the run it shows (issue #444); it is in the sidebar too unless the person hid it. -->
 		{#if visibleTabs.includes('allocations')}
-			<li><a href={allocationsHref(shown?.id)}>Registered vs modelled use <span aria-hidden="true">→</span> Allocations</a></li>
+			<li><a href={allocationsHref(pick?.latest.id)}>Registered vs modelled use <span aria-hidden="true">→</span> Allocations</a></li>
 		{/if}
 	</ul>
 {/snippet}
@@ -302,17 +310,7 @@
 			{previousError}
 			retry={retryRuns}
 			dams={damsState}
-			headline={project.settings.ewrHeadline ?? null}
 		/>
-		{#if shown}
-			<ReserveStrip
-				compliance={shown.summary.ewrCompliance}
-				forecastFrom={shown.summary.forecast?.from ?? null}
-				ruleTable={headlineSite(shown.summary, project.settings.ewrHeadline) !== null}
-				daily={shown.summary.catchment.outletEwr}
-				more={{ href: riverHref(shown.id), label: 'More on River & reserve' }}
-			/>
-		{/if}
 		<!-- What to act on (Needs attention, then the alerts firing now) beside Supply by farm, with
 		     the published baseline and the links under it: that column is usually the shorter, so
 		     the whole Summary fits a 1440 × 960 window with the example catchments. -->

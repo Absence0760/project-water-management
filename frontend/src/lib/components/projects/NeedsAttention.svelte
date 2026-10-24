@@ -4,8 +4,8 @@
 	// with its reasons in words (outcomes.ts `attention`). Up to four cards
 	// (fewer on a narrow page); the rest are a sort away. Colour repeats the
 	// words, never replaces them.
-	import { base } from '$app/paths';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { resolve } from '$app/paths';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { Flagged } from './outcomes';
 
 	let {
@@ -53,7 +53,7 @@
 			{#each cards as f (f.project.id)}
 				{@const top = f.attention.reasons[0]!}
 				<li class="card tone-{top.tone}">
-					<a class="name" href="{base}/projects/{f.project.id}">{f.project.name}</a>
+					<a class="name" href={resolve(`projects/${f.project.id}`)}>{f.project.name}</a>
 					<ul class="reasons">
 						{#each f.attention.reasons.slice(0, 3) as r (r.text)}
 							<li class="reason r-{r.tone}">{#if r.href}<a href={r.href}>{r.text}</a>{:else}{r.text}{/if}</li>

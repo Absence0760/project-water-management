@@ -15,7 +15,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
+import { buildAreaColumns, buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
 import { ARTICLES } from './articles';
 import { DATA_ARTICLES } from './articles-data';
 import { EWR_ARTICLES } from './articles-ewr';
@@ -55,7 +55,7 @@ const TRANSFER: Record<keyof Transfer, true> = {
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
 	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
-	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, avgGroundwaterToDamM3Day: true, flowShare: true,
+	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, avgGroundwaterToDamM3Day: true, flowShare: true, ewrShare: true,
 	avgRiverAbstractionM3Day: true, damEndM3: true, damAgoM3: true, damLowM3: true, damLowDate: true, damDaysAtMin: true,
 	demandObjects: true, riverTakes: true
 };
@@ -130,12 +130,14 @@ const PREVIEW_KEYS = [
 	PREVIEW_DATE_HELP_KEY,
 	...buildPreviewColumns(SERIES_KINDS.map((kind, i) => ({ id: `s${i}`, kind, name: '', unit: '', startDate: '2020-01-01', length: 1 })))
 		.map((c) => c.helpKey)
-		.filter((k) => k.startsWith('preview.'))
+		.filter((k) => k.startsWith('preview.')),
+	// Each area's derived rain (issue #553), every line present.
+	...buildAreaColumns([{ nodeId: null, name: '', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationScaled: [], chirpsCorrected: [] } as never }]).map((c) => c.helpKey)
 ];
 
 const settings = defaultProjectSettings();
 // Settings with no default (absent until someone sets them): typed, so each is a real field.
-const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule', 'droughtRestriction', 'unitRain'];
+const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule', 'droughtRestriction', 'unitRain', 'rainStations'];
 const VALID: Record<string, Set<string>> = {
 	node: new Set(Object.keys(NODE)),
 	crop: new Set(Object.keys(CROP)),
@@ -366,7 +368,7 @@ describe('the help text split', () => {
 
 	it('has HelpTip load only the tips, never the glossary text', () => {
 		const from = imports(read('../components/help/HelpTip.svelte')).map((i) => i.from);
-		expect(from).toContain('$lib/help/tips');
+		expect(from).toContain('#lib/help/tips.js');
 		expect(from.filter((f) => /^\$lib\/help\/(content|articles|articles-data|articles-ewr|articles-licensing|articles-results|articles-fit|farmer)\b/.test(f))).toEqual([]);
 	});
 

@@ -2,7 +2,7 @@
 // 1.19.0): the fit report's record-representativeness block, as table rows
 // and words. Pure, so it is unit-tested; FitPanel.svelte renders it.
 import { waterYearLabel, type RecordRepresentativeness, type YearClass } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 export const YEAR_CLASS_TEXT: Record<YearClass, string> = { dry: 'Dry', normal: 'Near normal', wet: 'Wet' };
 

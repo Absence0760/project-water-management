@@ -6,8 +6,8 @@
 // a band and the words for its label line, the legend entries and a caption,
 // so the drawing is never colour-only.
 import type { NetworkNode, RunSummary } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
-import { LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
+import { fmtNum } from '#lib/format/number.js';
+import { LOW_PCT, type DamLevel } from '#lib/components/overview/damLevels.js';
 import { BAND_LABEL, bandsPresent, supplyByNode, type SupplyBand } from './supplyColour';
 
 export type ColourMode = 'supply' | 'dam';

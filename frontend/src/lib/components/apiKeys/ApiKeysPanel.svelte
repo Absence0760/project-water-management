@@ -6,14 +6,14 @@
 	// API answers anyone else 403. "Make a key" in the panel's head opens the
 	// make form as a card with its own action row (issue #521: it was always
 	// open above the list); the words under the heading are the (i)'s.
-	import { localIsoDate } from '$lib/format/number';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { localIsoDate } from '#lib/format/number.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, tick } from 'svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
-	import { api, API_KEY_NAME_MAX, type ApiKey, type ApiKeySeries } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import { PUBLIC_API_URL } from '$app/env/public';
+	import { api, API_KEY_NAME_MAX, type ApiKey, type ApiKeySeries } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
 	import { apiBase, curlExample, INGEST_FORMAT, DEFAULT_KEY_EXPIRY_DAYS, KEY_EXPIRY_CHOICES, KEY_STATE_WORD, keyRow, revokeKeyQuestion, seriesText, sortKeys } from './apiKeys';
 
 	let { projectId }: { projectId: string } = $props();
@@ -144,7 +144,7 @@
 			<div class="row">
 				<div class="field grow">
 					<label for="key-name">Name</label>
-					<input id="key-name" required maxlength={API_KEY_NAME_MAX} placeholder="Weir logger gateway" bind:value={name} />
+					<input id="key-name" required maxlength={API_KEY_NAME_MAX} placeholder="Drift logger gateway" bind:value={name} />
 				</div>
 				<div class="field">
 					<label for="key-days">Works for</label>

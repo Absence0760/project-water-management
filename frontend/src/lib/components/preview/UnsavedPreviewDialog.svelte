@@ -7,18 +7,18 @@
 	// page compares runs. Nothing is stored and no run slot is used. The
 	// dialog is modal, so the edits can't change under an answer: each opening
 	// works the preview out again.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onDestroy, untrack } from 'svelte';
 	import type { MetricDelta } from '@water-management/engine';
-	import { api, type RunMeta } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import Delta from '$lib/components/compare/Delta.svelte';
-	import { fmtMetric, type MetricSpec } from '$lib/components/compare/delta';
-	import { fmtDate, fmtDay } from '$lib/format/number';
-	import { runInputFor } from '$lib/preview/inputs';
-	import type { PreviewEffect } from '$lib/preview/messages';
-	import { overlayUnsaved, previewBaseRun, type UnsavedEdits } from '$lib/preview/overlay';
-	import type { PreviewEngine } from '$lib/preview/runner';
+	import { api, type RunMeta } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import Delta from '#lib/components/compare/Delta.svelte';
+	import { fmtMetric, type MetricSpec } from '#lib/components/compare/delta.js';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { runInputFor } from '#lib/preview/inputs.js';
+	import type { PreviewEffect } from '#lib/preview/messages.js';
+	import { overlayUnsaved, previewBaseRun, type UnsavedEdits } from '#lib/preview/overlay.js';
+	import type { PreviewEngine } from '#lib/preview/runner.js';
 
 	let {
 		open = $bindable(false),
@@ -70,7 +70,7 @@
 			const input = await runInputFor(projectId, run.id, api.uncertainty.runInput);
 			if (id !== seq) return;
 			const { input: edited, problems } = overlayUnsaved(input, unsaved);
-			engine ??= (await import('$lib/preview/runner')).createPreviewEngine();
+			engine ??= (await import('#lib/preview/runner.js')).createPreviewEngine();
 			if (id !== seq) return;
 			const effect = await engine.effect({ baseKey: `${projectId}/${run.id}`, base: input, edited });
 			if (id === seq) result = { state: 'done', effect, problems: [...left, ...problems] };

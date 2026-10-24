@@ -106,8 +106,15 @@ const KIND_NAME: Record<string, string> = {
  * missing-rain warning, calibration) asks this, so a project whose only rain
  * is a period's series isn't treated as rainless.
  */
-export function hasRainInput(series: ModelInput['series'] | undefined, periods: readonly RainSourcePeriod[] | undefined): boolean {
+export function hasRainInput(
+	series: ModelInput['series'] | undefined,
+	periods: readonly RainSourcePeriod[] | undefined,
+	/** settings.rainStations (engine ≥ 1.91.0, §2.4i): the catchment's station's record is the catchment rain. */
+	stations?: { catchment?: { stationId: string } | null } | null
+): boolean {
 	if (series?.rain_catchment_mm || series?.rain_chirps_mm || series?.rain_forecast_mm) return true;
+	const id = stations?.catchment?.stationId;
+	if (id && (series as Record<string, unknown> | undefined)?.[`rain_station_mm#${id}`]) return true;
 	return (periods ?? []).some((p) => !!series?.[p.series] || (!!p.fallback && !!series?.[p.fallback.series]));
 }
 

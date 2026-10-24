@@ -5,12 +5,12 @@
 -->
 <script lang="ts">
 	import type { DailySeries, RunoffBalance } from '@water-management/engine';
-	import { api, type RunSeriesRef } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import type { ChartSeries } from '$lib/components/charts/series';
-	import { forecastBand } from '$lib/components/forecast/forecast';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { api, type RunSeriesRef } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import type { ChartSeries } from '#lib/components/charts/series.js';
+	import { forecastBand } from '#lib/components/forecast/forecast.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { cachedSeries } from './cache';
 	import { balanceRows, describeParams, runoffModelName } from './runoff';
 

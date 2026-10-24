@@ -173,7 +173,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'needs-attention',
 		term: 'Needs attention',
-		short: 'The catchments in view to look at first, most urgent first: a red EWR, units short, alerts firing, failing feeds or old figures.',
+		short: 'The catchments in view to look at first, most urgent first: red irrigation supply, units short, alerts firing, failing feeds or old figures.',
 		category: 'basics'
 	},
 	{
@@ -723,7 +723,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'unit-map',
 		term: 'Unit rainfall level',
-		short: 'The unit’s own MAP in mm and its source: with rain for each unit, it sets the level of the unit’s CHIRPS rain.',
+		short: 'The unit’s own MAP in mm and its source: under Per unit flow generation, it sets the level of the unit’s rain.',
 		units: 'mm/year',
 		category: 'farm',
 		fields: ['node.mapMm', 'node.mapSource']
@@ -1141,11 +1141,19 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'unit-rain',
-		term: 'Runoff from each unit’s own rain',
-		short: 'GR4J runs once per unit with land on that unit’s own rain (its gauge, the catchment gauge × MAP ratio, or its CHIRPS) and sums the flow.',
+		term: 'Flow generation: fragmentation or per unit',
+		short: 'Fragmentation runs GR4J once on the catchment rain; Per unit runs it on each unit’s rain (its station × MAP ratio) and sums the flow.',
 		units: 'mm/day',
 		category: 'flow',
 		fields: ['settings.unitRain']
+	},
+	{
+		id: 'rain-stations',
+		term: 'A unit’s rainfall station',
+		short: 'Per unit, a unit runs on its station’s rain × unit MAP ÷ station MAP; on the station’s gaps its CHIRPS, corrected against a station.',
+		units: 'mm/day',
+		category: 'flow',
+		fields: ['settings.rainStations']
 	},
 	{
 		id: 'actual-evaporation',
@@ -1248,7 +1256,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'quality-flags',
 		term: 'Quality flags (per-day)',
-		short: 'Each observed day is in the gauged range, above or below it, suspect, infilled or missing. Fit automatically sets flagged days aside.',
+		short: 'Each observed day is in the gauged range, above or below it, over a low-flow threshold, suspect, infilled or missing. Fits set flags aside.',
 		category: 'fit',
 		fields: ['settings.qualityFlags', 'run.observed_flow_quality']
 	},
@@ -1458,6 +1466,14 @@ export const TIPS: HelpTipText[] = [
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['settings.ewrChargeSource', 'run.ewr_charge_shortfall']
+	},
+	{
+		id: 'ewr-split',
+		term: 'Split the EWR between units by',
+		short: 'Each unit’s EWR share: its flow share (default) or its natural MAR ÷ the units’ total, which differs only with rain for each unit.',
+		units: 'fraction 0–1 (shown as %)',
+		category: 'ewr',
+		fields: ['settings.ewrSplit', 'summary.ewrShare']
 	},
 	{
 		id: 'ewr-daily-source',
@@ -1723,6 +1739,37 @@ export const TIPS: HelpTipText[] = [
 		short: 'Marks days inside a calibration exclusion from Settings: they don’t count in Fit automatically or in a run’s calibration scores.',
 		category: 'data',
 		fields: ['preview.excluded']
+	},
+	{
+		id: 'preview-area-station-scaled',
+		term: 'Station × ratio (daily preview)',
+		short: 'An area’s rainfall station as recorded × the ratio of the area’s MAP to the station’s: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaStationScaled']
+	},
+	{
+		id: 'preview-area-chirps-corrected',
+		term: 'Area CHIRPS corrected (daily preview)',
+		short: 'The area’s own CHIRPS × its month’s factor from the pairing with its correcting station: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaChirpsCorrected']
+	},
+	{
+		id: 'preview-area-rain-used',
+		term: 'Area rain used (daily preview)',
+		short: 'The rain a run reads for the catchment or a land unit under its station, gaps filled: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaRainUsed']
+	},
+	{
+		id: 'preview-area-rain-from',
+		term: 'Rain used from (daily preview)',
+		short: 'Where each day of an area’s rain used came from: the station, corrected CHIRPS, the next fallback or no source.',
+		category: 'data',
+		fields: ['preview.areaRainFrom']
 	},
 	{
 		id: 'wr90',

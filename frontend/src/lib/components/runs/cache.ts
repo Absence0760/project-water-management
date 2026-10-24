@@ -3,7 +3,7 @@
 // has. Series are fetched one at a time on demand: a run stores ~170 daily
 // series of ~16 000 values, far too many to load up front.
 import type { DailySeries } from '@water-management/engine';
-import type { Run, RunSeriesRef } from '$lib/api/types';
+import type { Run, RunSeriesRef } from '#lib/api/types.js';
 
 export const detailCache = new Map<string, { run: Run; series: RunSeriesRef[] }>();
 

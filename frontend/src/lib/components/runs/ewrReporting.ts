@@ -5,8 +5,8 @@
 // EWR curve. Pure helpers for EwrDailyCompliance.svelte, EwrFdcOverlay.svelte
 // and EwrAssurancePanel.svelte.
 import type { EwrAssuranceSite } from '@water-management/engine';
-import { fmtNum, fmtPct } from '$lib/format/number';
-import { monthName } from '$lib/format/months';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
+import { monthName } from '#lib/format/months.js';
 import { fmtFlow } from './ewrAssurance';
 
 export interface EwrDailyRow {

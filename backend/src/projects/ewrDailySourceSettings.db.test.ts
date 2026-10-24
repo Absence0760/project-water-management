@@ -54,6 +54,28 @@ describe('settings.ewrDailySource', () => {
 		expect(info.scale).toBeCloseTo(info.modelAreaKm2 / 40, 12);
 	});
 
+	it('saves the Reserve table choice with the third table, and a run reads it and says so (issue #552)', async () => {
+		const owner = await signUp('DailyEwrReserveTable');
+		const id = await project(owner);
+		const grid = (f: number) => Array.from({ length: 12 }, () => [10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.5].map((v) => v * f));
+		const pct = { ...tab, method: 'percentile', tabM3s: null, naturalPctM3s: grid(1), reservePctM3s: grid(0.6), lowFlowPctM3s: grid(0.3), reserveTable: 'withoutHighFlows' };
+		const refused = await owner.call('PATCH', `/projects/${id}`, { settings: { ewrDailySource: { ...pct, lowFlowPctM3s: null } } });
+		expect(refused.status).toBe(400);
+		expect(JSON.stringify(refused.body)).toContain('daily EWR source: lowFlowPctM3s:');
+		const set = await owner.call('PATCH', `/projects/${id}`, { settings: { ewrDailySource: pct } });
+		expect(set.status, JSON.stringify(set.body)).toBe(200);
+		expect(set.body.project.settings.ewrDailySource).toEqual(pct);
+		const run = await owner.call('POST', `/projects/${id}/runs`, { label: 'Without high flows' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		expect(run.body.run.summary.catchment.outletEwr).toMatchObject({ method: 'percentile', reserveTable: 'withoutHighFlows' });
+		// Positive control: the total, chosen, carries no reserveTable.
+		expect((await owner.call('PATCH', `/projects/${id}`, { settings: { ewrDailySource: { ...pct, reserveTable: 'total' } } })).status).toBe(200);
+		const total = await owner.call('POST', `/projects/${id}/runs`, { label: 'Total' });
+		expect(total.status).toBe(201);
+		expect(total.body.run.summary.catchment.outletEwr.method).toBe('percentile');
+		expect(total.body.run.summary.catchment.outletEwr.reserveTable).toBeUndefined();
+	});
+
 	it('refuses an unusable source with the field named, and a patch replaces the source whole', async () => {
 		const owner = await signUp('DailyEwrChecks');
 		const id = await project(owner);

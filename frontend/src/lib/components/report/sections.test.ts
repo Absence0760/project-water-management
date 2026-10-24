@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Run } from '$lib/api/types';
+import type { Run } from '#lib/api/types.js';
 import { FORECAST_RAIN_NOTE, REPORT_NOT_EVIDENCE, REPORT_NOT_SIGNED } from '@water-management/engine';
 import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from './sections';
 

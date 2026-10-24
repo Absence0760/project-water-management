@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
-import { headlines } from '$lib/components/overview/latestRun';
-import { riverKpis } from '$lib/components/river/river';
+import { headlines } from '#lib/components/overview/latestRun.js';
+import { riverKpis } from '#lib/components/river/river.js';
 import { EACH_RUNS_DAILY_EWR, EWR_NOT_MET, dailyEwrName, dailyEwrNameOf, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
 
 describe('ewrNotMet', () => {
@@ -23,9 +23,9 @@ describe('ewrNotMet', () => {
 	});
 });
 
-// Issue #162, item 18: the Summary said "EWR not met 78.8%" while River & reserve said "Reserve met 21.2%"
+// Issue #162, item 18: the Summary said "EWR not met 78.8%" while EWR said "Reserve met 21.2%"
 // for the same run. Both now take their words from ewrNotMet, so they can't drift apart again.
-describe('the Summary and River & reserve frame the figure the same way', () => {
+describe('the Summary and EWR frame the figure the same way', () => {
 	const s = {
 		catchment: { meanNaturalFlowM3Day: 86_400, meanSimulatedOutflowM3Day: 43_200, ewrDaysNotMet: 4316, ewrFractionDaysNotMet: 4316 / 5479 },
 		farms: []
@@ -85,5 +85,8 @@ describe('dailyEwrName (engine ≥ 1.77.0, issue #455)', () => {
 		expect(dailyEwrName({ method: 'tab' })).toBe('the daily EWR from the DRM TAB file');
 		expect(daysBelowTest(true, { method: 'percentile' })).toBe('the daily EWR from the DRM percentile tables');
 		expect(daysBelowTest(false, { method: 'percentile' })).toBe('the reserve');
+		// The Reserve table it reads (issue #552): named when it isn't the total.
+		expect(dailyEwrName({ method: 'percentile', reserveTable: 'withoutHighFlows' })).toBe('the daily EWR from the DRM percentile tables without high flows');
+		expect(dailyEwrName({ method: 'percentile', reserveTable: 'total' })).toBe('the daily EWR from the DRM percentile tables');
 	});
 });

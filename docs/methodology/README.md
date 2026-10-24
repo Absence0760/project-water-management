@@ -26,7 +26,9 @@ Anyone holding a pack can hash the file at the engine's tag and compare.
 | [v6](./v6.md) | 2026-10-12 | 1.85.0 | §2: the reference factors fitted on the checked gauge rain, then each unit rescaled to its own MAP (k_unit); 10-year means, the 0.5–2 warning band, unusable all-zero CHIRPS, a unit's gauge checked, CHIRPS-GEFS levelled per unit (issue #500) |
 | [v7](./v7.md) | 2026-10-12 | 1.86.0 | §3, §4, §8: a unit's base-flow loss and gain; a dam's transfer out of the catchment; river abstraction pools storage only; a Priority user's fixed restriction % (issue #523) |
 | [v8](./v8.md) | 2026-10-12 | 1.87.0 | §5: low flows judged on base flow (an option) use one pass of the filter, as Hughes, Hannart & Watkins (2003) (issue #523 D3) |
-| [v9](./v9.md) | 2026-10-12 | ≥ 1.88.0 | §4: a transfer out of the catchment counts as its source unit's use in the allocations comparison and under a cap; a Priority user's fixed % applies only at a drought restriction level that cuts some unit's demand (issue #523, X1 and P2) |
+| [v9](./v9.md) | 2026-10-12 | 1.88.0 – 1.89.0 | §4: a transfer out of the catchment counts as its source unit's use in the allocations comparison and under a cap; a Priority user's fixed % applies only at a drought restriction level that cuts some unit's demand (issue #523, X1 and P2) |
+| [v10](./v10.md) | 2026-10-23 | 1.90.0 – 1.93.0 | §5: the DRM percentile tables read the total Reserve flow or, by the project's choice, the Reserve flow without high flows (issue #552) |
+| [v11](./v11.md) | 2026-10-24 | ≥ 1.94.0 | §3, §5: the EWR may be split between the units by each unit's natural MAR under per-unit rain, its period provisional (issue #553) |
 
 The highest version is the current one: new sign-offs and packs cite it.
 

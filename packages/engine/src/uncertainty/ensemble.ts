@@ -28,13 +28,13 @@ import { prepareCalibration } from '../calibrate/calibrate';
 import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
 import { fitScores } from '../calibrate/objective';
-import { calibrationRecordsAt, parseUnitRainSeriesKey, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
+import { calibrationRecordsAt, parseUnitRainSeriesKey, type CalibrationFlowKind, type DailySeries, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
 import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
-import { referenceFit } from '../runoff/unitRain';
-import { checkedReferenceGauge } from '../runoff/unitGaugeChecks';
+import { referenceFit, referenceGaugeRecord } from '../runoff/unitRain';
+import { pairingFactors } from '../runoff/stationForcing';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';
@@ -195,7 +195,8 @@ const r6 = (v: number): number => (Number.isFinite(v) && v !== 0 ? Number(v.toPr
 function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | null; reason: string | null } {
 	const chirps = input.series?.rain_chirps_mm;
 	if (!chirps) return { input: null, reason: 'the project has no CHIRPS series' };
-	if (!input.series?.rain_catchment_mm) return { input: null, reason: 'the project has no station rain, so CHIRPS is already the only source' };
+	const stationKeys = Object.keys(input.series ?? {}).filter((k) => k.startsWith('rain_station_mm#'));
+	if (!input.series?.rain_catchment_mm && !(run.stations && stationKeys.length)) return { input: null, reason: 'the project has no station rain, so CHIRPS is already the only source' };
 	const cols = chirpsColumns(chirps, run.chirpsCorrection, run.start, run.days, run.month);
 	const col = cols.find((c) => c.key === 'rain_chirps_mapped') ?? cols.find((c) => c.key === 'rain_chirps_corrected') ?? cols[0]!;
 	const values = col.values.map((v) => (Number.isFinite(v) ? v : null));
@@ -208,13 +209,27 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	// member's catchment CHIRPS is). A filtered copy, never a delete by an input's key.
 	const kept = Object.entries(input.series).filter(([k]) => k !== 'rain_catchment_mm' && parseUnitRainSeriesKey(k)?.kind !== 'rain_catchment_mm');
 	const series = { ...Object.fromEntries(kept), rain_chirps_mm: { startDate: run.startDate, values } } as ModelInput['series'];
+	// Rainfall stations (engine ≥ 1.91.0, §2.4i): each station's record blanked (kept, so the station rule still applies),
+	// so every area reads its CHIRPS × the base input's pairing factors on every day, pinned since the member has no
+	// station reading to fit them on, as the reference gauge's are.
+	let rainStations = input.settings.rainStations ?? null;
+	if (run.stations && run.settings.rainStations) {
+		const as = run.settings.rainStations;
+		const used = new Set<string>();
+		if (as.catchment) used.add(as.catchment.correctAgainst ?? as.catchment.stationId);
+		for (const a of Object.values(as.units ?? {})) used.add(a.correctAgainst ?? a.stationId);
+		for (const id of [...used].sort()) run.stations.context.pairing(id);
+		const all = series as Record<string, DailySeries | undefined>;
+		for (const k of stationKeys) all[k] = { startDate: all[k]!.startDate, values: all[k]!.values.map(() => null) };
+		rainStations = { ...(rainStations ?? {}), pinnedFactors: { ...(rainStations?.pinnedFactors ?? {}), ...pairingFactors(run.stations.context) } };
+	}
 	// The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h): the member has no gauge to fit them on, so it pins the
 	// base input's, as its catchment CHIRPS carries the base's §2.4b factors.
 	const refGauge = run.settings.unitRain?.mode === 'perUnit' ? run.settings.unitRain.reference?.gauge : undefined;
-	const ref = referenceFit(run.settings.unitRain, input.series, input.model.nodes, [], refGauge ? checkedReferenceGauge(run.settings, input.series, refGauge) : undefined);
+	const ref = referenceFit(run.settings.unitRain, input.series, input.model.nodes, [], refGauge ? referenceGaugeRecord(run.settings, input.series, refGauge, run.stations?.plan ? run.stations.context : null) : undefined);
 	const unitRain = ref && run.settings.unitRain?.reference ? { ...run.settings.unitRain, reference: { ...run.settings.unitRain.reference, pinnedFactors: ref.months.map((m) => m.factor) } } : null;
 	return {
-		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, ...(unitRain ? { unitRain } : {}) }, series },
+		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, ...(unitRain ? { unitRain } : {}), ...(rainStations ? { rainStations } : {}) }, series },
 		reason: null
 	};
 }
@@ -480,7 +495,11 @@ export function memberInput(ctx: EnsembleContext, m: EnsembleMember): ModelInput
 	if (ctx.options.model === 'gr4j') settings.gr4j = { ...((s.gr4j as object) ?? {}), ...m.params };
 	else settings.calibration = { ...((s.calibration as object) ?? {}), ...m.params };
 	if (m.panOffset !== 0) settings.panCoefficient = shiftPan(ctx.panRow, m.panOffset);
-	return { settings: settings as ModelInput['settings'], model: src.model, series: src.series };
+	// Settings, model and series only, on purpose: a member runs on history (no forecast days, so no forecastRainSource to
+	// carry) and its warnings aren't shown, so seriesChoice has nothing to do. A forecast ensemble would have to carry them.
+	// The rainfall stations' details do force the rain (engine ≥ 1.91.0, issue #553): a member keeps them, or a station-forced
+	// project's members would lose their stations' MAPs and run on another rain than the base.
+	return { settings: settings as ModelInput['settings'], model: src.model, series: src.series, ...(src.stations ? { stations: src.stations } : {}) };
 }
 
 // ---------------------------------------------------------------------------

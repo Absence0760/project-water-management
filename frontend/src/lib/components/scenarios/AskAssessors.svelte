@@ -9,8 +9,8 @@
 	// this is the app's check, not a refusal under s42 of the National Water
 	// Act, and that they can still apply through DWS (issue #523 G7).
 	import { untrack } from 'svelte';
-	import { api, type ApplicationQuestion, type MaskedRuleRef } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import { api, type ApplicationQuestion, type MaskedRuleRef } from '#lib/api/index.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { askables, opsText, rulesText } from './questions';
 
 	let {

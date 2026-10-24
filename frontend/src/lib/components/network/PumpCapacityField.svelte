@@ -7,9 +7,9 @@
 	// abstraction's (WaterSourceFields, engine ≥ 1.65.0). Its fields sit in the
 	// caller's grid (display: contents).
 	import type { Snippet } from 'svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { pumpM3Day } from './supply';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import { pumpUnit } from './flowUnit.svelte';

@@ -32,6 +32,7 @@ import { fromEpochDay, toEpochDay, isIsoDate as isRealDate } from '../calendar';
 import type { ModelInput } from '../project';
 import type { GapFillKind } from '../flowGapFill';
 import type { OutletEwrInfo } from '../reserve/dailySource';
+import type { PinnedEwrSplit } from '../network/ewrSplit';
 import type { PreparedFits } from '../prepare';
 import type { UnitRainRecipe } from '../runoff/unitRain';
 import { ENGINE_VERSION } from '../version';
@@ -95,6 +96,14 @@ export interface PinnedStatistics {
 	 * pragmatic EWR.
 	 */
 	outletEwr?: OutletEwrInfo;
+	/**
+	 * A natural MAR EWR split's period and each farm's share (engine ≥
+	 * 1.94.0, settings.ewrSplit 'naturalMar', ../network/ewrSplit.ts): the
+	 * capture run's, so a resumed run splits its EWR as the uninterrupted run
+	 * did; no shares when the capture run had no runoff to split by (the flow
+	 * share). Absent with the flow share asked for, or under catchment rain.
+	 */
+	ewrSplit?: PinnedEwrSplit;
 }
 
 /** The decoded state (plain numbers). */

@@ -1,5 +1,5 @@
 // View helpers for the Project page (ProjectTab.svelte, issue #17).
-import { fmtDate, fmtDay } from '$lib/format/number';
+import { fmtDate, fmtDay } from '#lib/format/number.js';
 
 /** The zone a project dates its downloads by when the API sends none (issue #45). */
 export const DEFAULT_TIME_ZONE = 'Africa/Johannesburg';

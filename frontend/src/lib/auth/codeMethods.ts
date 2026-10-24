@@ -4,7 +4,7 @@
 // start from the account's factors, the app first. Pure, so it is unit-tested
 // without a DOM; the pages word the choices themselves (the sign-in page is
 // translated, the dialog is the workspace's English).
-import type { MfaMethod } from '$lib/api/types';
+import type { MfaMethod } from '#lib/api/types.js';
 
 export type CodeMode = MfaMethod | 'recovery';
 

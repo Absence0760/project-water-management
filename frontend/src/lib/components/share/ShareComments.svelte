@@ -13,12 +13,12 @@
 	// receives the comment (POPIA s18) and, if ticked, the commenter's name and
 	// email for the applicant's register (GN R267 reg 18).
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
-	import { api, ApiError } from '$lib/api';
-	import type { SharedComment, ShareObjection } from '$lib/api/types';
-	import { fmtStampDay } from '$lib/components/farm/format';
-	import { errorText } from '$lib/i18n/apiError';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import { api, ApiError } from '#lib/api/index.js';
+	import type { SharedComment, ShareObjection } from '#lib/api/types.js';
+	import { fmtStampDay } from '#lib/components/farm/format.js';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { SHARE_RETURN_KEY, SHARE_RETURN_MS } from './scenario';
 
 	let {
@@ -147,7 +147,7 @@
 			<button type="submit" class="btn btn-primary" disabled={busy || !draft.trim()}>{busy ? t('Posting…') : t('Post comment')}</button>
 		</form>
 	{:else if signedIn === false}
-		<p><a href="{base}/login?next={encodeURIComponent(`${base}/share`)}" onclick={keepForSignIn} data-testid="share-sign-in">{t('Sign in to comment')}</a></p>
+		<p><a href={resolve(`login?next=${encodeURIComponent(resolve('share'))}`)} onclick={keepForSignIn} data-testid="share-sign-in">{t('Sign in to comment')}</a></p>
 		<p class="fine">{t('Commenting needs an account, so every comment has a name. You don’t need to be a member of the project: the account reads only what this link shows.')}</p>
 	{/if}
 	{#if error}<p class="alert alert-error" role="alert">{error}</p>{/if}

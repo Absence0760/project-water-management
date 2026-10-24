@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FarmSummary } from '@water-management/engine';
-import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
-import { SUPPLY_TARGET } from '$lib/components/runs/results';
+import { LOW_SUPPLY } from '#lib/components/network/supplyColour.js';
+import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
 import { supplyBars } from './supplyBars';
 
 const farm = (nodeId: string, fraction: number, demand = 100, name = nodeId): FarmSummary => ({

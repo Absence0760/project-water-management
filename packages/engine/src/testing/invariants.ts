@@ -2,7 +2,7 @@
 // determinism). The per-run checks live in ../verify/checks.ts, which runModel
 // itself runs; they are re-exported here for the tests. See docs/model.md §6
 // "Verification".
-import type { ModelInput, ModelOutput } from '../project';
+import { CHECK_GAUGE_FLOW_KEY, checkGaugeFlowLabel, type ModelInput, type ModelOutput } from '../project';
 import { runModel } from '../run';
 import { checkInvariants } from '../verify/checks';
 import { stressClassOf } from '../network/reliability';
@@ -319,10 +319,38 @@ export function checkAll(input: ModelInput, seed = 1): string | null {
 	} catch (e) {
 		return `threw: ${(e as Error).message}`;
 	}
-	const bad = checkInvariants(input, out) ?? checkReliability(out) ?? checkWaterAccount(out);
+	const bad = checkInvariants(input, out) ?? checkReliability(out) ?? checkWaterAccount(out) ?? checkGaugeRecords(out);
 	if (bad) return bad;
 	if (!sameOutput(runModel(input), out)) return 'not deterministic';
 	return checkOrderInvariance(input, out, seed) ?? checkDoubledCropAreas(droughtBoreholesAsSupplemental(input));
+}
+
+/**
+ * One record per gauge inside the network (engine ≥ 1.90.0, engine-audit.md
+ * G2): every reader at a gauge judges the record its plausibility checks
+ * read. The EWR test against observed flow there names the same kind; the
+ * checks-only series (any gauge but the calibration site) is labelled by it;
+ * and its fit reads no more days than that series has readings before a
+ * forecast. A run without inner gauge records passes trivially.
+ */
+export function checkGaugeRecords(out: ModelOutput): string | null {
+	const site = out.summary.calibration?.siteNodeId ?? null;
+	const ewr = new Map((out.summary.catchment.ewrAgreementSites ?? []).map((s) => [s.nodeId, s.flowKind]));
+	const history = out.summary.historyDays ?? out.days;
+	for (const g of out.summary.plausibility?.gauges ?? []) {
+		if (ewr.has(g.nodeId) && ewr.get(g.nodeId) !== g.flowKind) return `gauge ${g.nodeId}: EWR test reads ${ewr.get(g.nodeId)}, plausibility ${g.flowKind}`;
+		const check = out.series.find((s) => s.nodeId === g.nodeId && s.key === CHECK_GAUGE_FLOW_KEY);
+		if (g.nodeId === site) {
+			if (check) return `gauge ${g.nodeId}: the calibration site has a checks-only series`;
+			continue;
+		}
+		if (!check) return `gauge ${g.nodeId}: no checks-only series`;
+		if (check.label !== checkGaugeFlowLabel(g.flowKind)) return `gauge ${g.nodeId}: checks-only series is "${check.label}", plausibility reads ${g.flowKind}`;
+		let read = 0;
+		for (let t = 0; t < Math.min(history, check.values.length); t++) if (!Number.isNaN(check.values[t]!)) read++;
+		if (g.fit && g.fit.days > read) return `gauge ${g.nodeId}: fit over ${g.fit.days} days, the record has ${read} before the forecast`;
+	}
+	return null;
 }
 
 /**

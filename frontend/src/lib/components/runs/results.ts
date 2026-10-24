@@ -1,7 +1,7 @@
 // Pure helpers for the run results dashboard: the farm table's sorting and
 // flags, grouping of output series for the pickers, and unit conversion.
 import type { FarmSummary, OutletEwrInfo } from '@water-management/engine';
-import type { RunSeriesRef } from '$lib/api/types';
+import type { RunSeriesRef } from '#lib/api/types.js';
 
 export const SUPPLY_TARGET = 0.95;
 export const SEC_PER_DAY = 86_400;
@@ -16,7 +16,7 @@ export const m3DayToM3s = (v: number) => v / SEC_PER_DAY;
  */
 export function outletEwrLine(info: OutletEwrInfo | undefined): string {
 	if (!info) return 'EWR: the pragmatic EWR';
-	const what = info.method === 'tab' ? 'the DRM TAB file' : 'the DRM percentile tables';
+	const what = info.method === 'tab' ? 'the DRM TAB file' : info.reserveTable === 'withoutHighFlows' ? 'the DRM percentile tables (Reserve flows without high flows)' : 'the DRM percentile tables';
 	const sig = (v: number) => String(Number(v.toPrecision(4)));
 	const how =
 		info.scaling === 'mar'

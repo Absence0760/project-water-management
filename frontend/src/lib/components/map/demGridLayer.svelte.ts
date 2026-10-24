@@ -8,7 +8,7 @@
 // the tests can drive it. The MAP grid layer's twin (mapGridLayer.svelte.ts),
 // without its dataset choice: the server has one DEM.
 import { untrack } from 'svelte';
-import type { DemGridLayer as Answer } from '$lib/api/types';
+import type { DemGridLayer as Answer } from '#lib/api/types.js';
 import { demGridViewBbox as viewBbox } from './mapLayers';
 
 export interface DemGridLayerDeps {

@@ -9,9 +9,9 @@ import { describe, expect, it, vi } from 'vitest';
 import NotesList from './NotesList.svelte';
 import { OBJECTION_WARNING, PUBLIC_COMMENT_RECIPIENTS, REGISTER_CONSENT_LABEL, packAudiences, scenarioAudiences, type NoteTarget } from './notes';
 
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 // NotesList imports the app's API instance (nothing is fetched: the server renderer runs no onMount).
-vi.mock('$env/static/public', () => ({ PUBLIC_API_URL: 'http://localhost:3001' }));
+vi.mock('$app/env/public', () => ({ PUBLIC_API_URL: 'http://localhost:3001' }));
 
 const html = (target: NoteTarget, canWrite = true) => render(NotesList, { props: { projectId: 'p1', target, canWrite } }).body;
 const scenario = (who: { assessor: boolean; party: boolean }): Extract<NoteTarget, { kind: 'scenario' }> => ({ kind: 'scenario', scenarioId: 's1', name: 'Raise the weir dam', audiences: scenarioAudiences(who) });

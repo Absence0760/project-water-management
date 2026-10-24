@@ -7,11 +7,11 @@
 	under the heading are the (i)'s. Its own chunk. Helpers in ./serverPdf.ts.
 -->
 <script lang="ts">
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick } from 'svelte';
-	import { api, type Member } from '$lib/api';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { session } from '$lib/auth/session.svelte';
+	import { api, type Member } from '#lib/api/index.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { session } from '#lib/auth/session.svelte.js';
 	import {
 		describeSchedule,
 		emptyScheduleDraft,

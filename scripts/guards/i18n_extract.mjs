@@ -8,7 +8,7 @@
 //   plural({ one: '…', other: '…' })     a counted word's forms (tn() takes it)
 //   tn({ one: '…', other: '…' }, n)      the same, written at the call
 //
-// Only files that import $lib/i18n/locale.svelte or $lib/i18n/msg are read,
+// Only files that import #lib/i18n/locale.svelte.js or #lib/i18n/msg.js are read,
 // and only their code: comments, and the text of a Svelte component's markup,
 // are skipped (a `{…}` expression in the markup is code).
 //
@@ -32,7 +32,7 @@ const { messageId, pluralId, PLURAL_CATEGORIES } = await import(pathToFileURL(pa
 export { messageId, pluralId, PLURAL_CATEGORIES };
 
 /** A file whose code can hold messages: it imports the message functions or msg(). */
-const USES_I18N = /\bfrom\s+['"](?:\$lib\/i18n|\.{1,2}(?:\/[\w.-]+)*)\/(?:locale\.svelte|msg)['"]/;
+const USES_I18N = /\bfrom\s+['"](?:#lib\/i18n|\.{1,2}(?:\/[\w.-]+)*)\/(?:locale\.svelte|msg)(?:\.js)?['"]/;
 const MARKER = /i18n-section:\s*([\w.-]+)/;
 
 // ---- Lexing: code only, with every position kept ------------------------------

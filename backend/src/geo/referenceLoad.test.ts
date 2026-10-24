@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { loadFailureSummary } from '../lambda-migrate.js';
-import { limitsFor, LoadError, MAX_OBJECT_BYTES, parseLoadRequest, readReferenceText, REFERENCE_KINDS, type ReadObject } from './referenceLoad.js';
+import { limitsFor, LoadError, MAX_OBJECT_BYTES, parseLoadRequest, readReferenceText, REFERENCE_KINDS, type ReadObject, type ReferenceKind } from './referenceLoad.js';
 
 const MAPS_MD = fileURLToPath(new URL('../../../docs/maps.md', import.meta.url));
 const GATES = new URL('../../../scripts/release/map-data-gates.mjs', import.meta.url).href;
@@ -53,6 +53,65 @@ describe('which kinds load', () => {
 		expect(parseLoadRequest(evaporation)).toEqual({ ...evaporation, source: null, minOrder: 1 });
 		const gazetteer = { kind: 'gazetteer', key: 'reference/gazetteer/za-2026-10.txt.gz', sha256: 'd'.repeat(64), dataset: 'GeoNames-ZA-2026-10' };
 		expect(parseLoadRequest(gazetteer)).toEqual({ ...gazetteer, source: null, minOrder: 1 });
+		const mapGrid = { kind: 'map-grid', key: 'reference/map-grid/waas-swcape.json.gz', sha256: 'e'.repeat(64), dataset: 'WAAS-SWCape-2007' };
+		expect(parseLoadRequest(mapGrid)).toEqual({ ...mapGrid, source: null, minOrder: 1 });
+	});
+
+	describe('MAP grids load dataset by dataset', () => {
+		const mapGrid = { kind: 'map-grid', key: 'reference/map-grid/grid.json.gz', sha256: 'e'.repeat(64), dataset: 'WAAS-SWCape-2007' };
+
+		it('the Southwestern Cape surface is allowed, stored with its recorded credit line', () => {
+			expect(parseLoadRequest(mapGrid).dataset).toBe('WAAS-SWCape-2007');
+			const spec = REFERENCE_KINDS['map-grid'];
+			expect(spec.datasets['WAAS-SWCape-2007']).toMatchObject({
+				status: 'allowed',
+				attribution: 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.'
+			});
+		});
+
+		it('the Lynch (2004) grid is refused, naming its decision', () => {
+			const e = thrown(() => parseLoadRequest({ ...mapGrid, dataset: 'Lynch-2004' }));
+			expect(e.code).toBe('refused');
+			expect(e.publicReason).toMatch(/^map-grid dataset Lynch-2004 is blocked in production: .*Decision: the Lynch \(2004\) MAP grid's licence/);
+			expect(e.publicReason).toMatch(/maps\.md § Sources/);
+		});
+
+		it('an unknown dataset is refused with the allowed list, not the input', () => {
+			for (const dataset of ['Other-surface', 'toString', 'constructor', 'hasOwnProperty']) {
+				const e = thrown(() => parseLoadRequest({ ...mapGrid, dataset }));
+				expect(e.code, dataset).toBe('refused');
+				expect(e.publicReason, dataset).toBe('map-grid loads only the datasets whose licence is recorded: WAAS-SWCape-2007 (docs/maps.md § Sources)');
+			}
+		});
+
+		it('takes no source: the credit is the recorded one', () => {
+			expect(thrown(() => parseLoadRequest({ ...mapGrid, source: 'My own credit' })).publicReason).toMatch(/takes no source/);
+		});
+
+		it('takes only the JSON form `--out` writes, never the ASCII grid itself', () => {
+			for (const key of ['reference/map-grid/grid.asc', 'reference/map-grid/grid.asc.gz', 'reference/map-grid/grid.tif']) {
+				expect(thrown(() => parseLoadRequest({ ...mapGrid, key })).publicReason, key).toMatch(/--out <file>/);
+			}
+		});
+
+		it('the release gate lists the same allowed datasets (map-data-gates.mjs DATASETS)', async () => {
+			const { DATASETS } = (await import(GATES)) as { DATASETS: Record<string, string[]> };
+			const fromTable = Object.fromEntries(
+				Object.entries(REFERENCE_KINDS).flatMap(([kind, spec]: [string, ReferenceKind]) =>
+					spec.status === 'allowed' && spec.datasets
+						? [
+								[
+									kind,
+									Object.entries(spec.datasets)
+										.filter(([, d]) => d.status === 'allowed')
+										.map(([label]) => label)
+								]
+							]
+						: []
+				)
+			);
+			expect(DATASETS).toEqual(fromTable);
+		});
 	});
 
 	it('the gazetteer takes a GeoNames dump (.txt) only, under its own caps', () => {
@@ -103,11 +162,20 @@ describe('which kinds load', () => {
 		const rows = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Dataset') && !l.startsWith('| ---'));
 		expect(rows.length).toBeGreaterThan(5);
 		const status = (row: string) => row.split(' | ').at(-1)!.replace(/[|*]/g, '').trim().toLowerCase();
-		for (const [kind, spec] of Object.entries(REFERENCE_KINDS)) {
+		const rowOf = (what: string, name: string) => {
+			const matched = rows.filter((r) => r.slice(2).startsWith(name));
+			expect(matched, `${what}: no Sources row starts with "${name}"`).toHaveLength(1);
+			return matched[0]!;
+		};
+		for (const [kind, spec] of Object.entries(REFERENCE_KINDS) as [string, ReferenceKind][]) {
 			for (const name of spec.sourcesRows) {
-				const matched = rows.filter((r) => r.slice(2).startsWith(name));
-				expect(matched, `${kind}: no Sources row starts with "${name}"`).toHaveLength(1);
-				expect(status(matched[0]!), `${kind}: ${name}`).toMatch(spec.status === 'allowed' ? /^allowed/ : /^blocked/);
+				expect(status(rowOf(kind, name)), `${kind}: ${name}`).toMatch(spec.status === 'allowed' ? /^allowed/ : /^blocked/);
+			}
+			// A kind allowed dataset by dataset: each listed dataset's own row says the same as it does.
+			if (spec.status === 'allowed' && spec.datasets) {
+				for (const [label, d] of Object.entries(spec.datasets)) {
+					expect(status(rowOf(`${kind} ${label}`, d.sourcesRow)), `${kind} ${label}`).toMatch(d.status === 'allowed' ? /^allowed/ : /^blocked/);
+				}
 			}
 		}
 	});

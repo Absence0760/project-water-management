@@ -10,7 +10,7 @@
 // locally and in tests, so nothing here runs without a WAF in front. The
 // script loads only when a sign-in actually got the CAPTCHA answer, never on
 // page load, and the site's CSP allows exactly its origin (infra/
-// security_headers.tf, frontend/svelte.config.js).
+// security_headers.tf, frontend/svelte-options.js).
 
 /** What `renderCaptcha` takes (AWS WAF CAPTCHA JavaScript API specification). */
 export type CaptchaRenderOptions = {

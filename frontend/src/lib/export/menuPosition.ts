@@ -40,3 +40,12 @@ export function placementStyle(p: MenuPlacement): string {
 	const px = (k: string, v: number | undefined) => (v === undefined ? '' : `${k}: ${v}px; `);
 	return `${px('top', p.top)}${px('bottom', p.bottom)}${px('left', p.left)}${px('right', p.right)}max-height: ${p.maxHeight}px;`;
 }
+
+/**
+ * Whether the trigger moved since the list was placed, so the fixed list no longer sits by it. A scroll that
+ * leaves the trigger where it was (the browser's scroll anchoring holding it still while content above it
+ * changes size) keeps the menu open; under a pixel counts as still.
+ */
+export function triggerMoved(placed: Box, now: Box): boolean {
+	return Math.abs(placed.top - now.top) >= 1 || Math.abs(placed.left - now.left) >= 1;
+}

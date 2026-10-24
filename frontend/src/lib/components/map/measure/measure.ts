@@ -11,8 +11,8 @@
 // area. The few lines are repeated rather than shared: the backend's file
 // can't be imported by the frontend, and measure.test.ts pins both to the
 // same reference squares.
-import type { MapPosition } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { MapPosition } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import { haversineM } from '../mapChecks';
 
 const A = 6_378_137;

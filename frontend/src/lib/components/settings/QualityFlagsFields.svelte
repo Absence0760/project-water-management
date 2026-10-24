@@ -9,11 +9,11 @@
 -->
 <script lang="ts">
 	import { RATING_SOURCE_MAX, type CalibrationFlowKind, type GaugeRating, type QualityFlagSettings } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import { ABOVE_OPTIONS, FLAG_OPTIONS, qualityFlagsError, ratedKinds, ratingField, ratingProblem, RECORD_NAME, withRating } from './qualityFlags';
 	import { ZERO_FLOW_TRUST_MAX_DAYS, zeroFlowMonthsText } from '@water-management/engine';
-	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
+	import MonthPicker from '#lib/components/common/MonthPicker.svelte';
 
 	let {
 		value = $bindable(),

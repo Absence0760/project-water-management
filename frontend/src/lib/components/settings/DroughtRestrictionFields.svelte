@@ -35,13 +35,13 @@
 		type DemandPart,
 		type DroughtRestrictionRule
 	} from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import { api } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { monthName } from '$lib/format/months';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { api } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { monthName } from '#lib/format/months.js';
 	import { monthDayText } from '@water-management/engine';
-	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from '$lib/components/network/ewrScenarioOnly';
+	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from '#lib/components/network/ewrScenarioOnly.js';
 	import { EWR_TRIGGER_BASELINE_ERROR, joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, restrictionShortSummary, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 	let {

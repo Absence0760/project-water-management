@@ -6,9 +6,9 @@
 -->
 <script lang="ts">
 	import type { Wr2012Report } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtQty } from '$lib/format/number';
-	import { monthName } from '$lib/format/months';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum, fmtQty } from '#lib/format/number.js';
+	import { monthName } from '#lib/format/months.js';
 	import { describeScaling, FLAG_LABEL, monthsText, ratioText, waterYear, yearsText } from './wr2012';
 
 	let { report }: { report: Wr2012Report } = $props();

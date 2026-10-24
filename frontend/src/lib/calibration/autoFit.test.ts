@@ -1,6 +1,6 @@
 import { defaultCalibrationRules } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { AutoCalibration, AutoCalibrationCase } from '$lib/api/types';
+import type { AutoCalibration, AutoCalibrationCase } from '#lib/api/types.js';
 import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from './autoFit';
 
 const kase = (over: Partial<AutoCalibrationCase> = {}): AutoCalibrationCase => ({

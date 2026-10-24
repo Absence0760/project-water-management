@@ -6,8 +6,8 @@
 // means beyond its range (a rate in the picked unit, m³/s stored) is the
 // caller's business: components/transfers/transfersPaste.ts and
 // components/settings/monthlyPaste.ts.
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { fmtNum } from '$lib/format/number';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { fmtNum } from '#lib/format/number.js';
 import { mapPaste, sameValue, toCsv, type GridColumn, type PasteAnchor, type PastePlan } from './grid';
 
 export const LONG_MONTHS = ['October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September'];

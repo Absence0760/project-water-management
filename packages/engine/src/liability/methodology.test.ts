@@ -29,7 +29,9 @@ const PUBLISHED: Record<string, string> = {
 	'methodology-6': '2dba41ed710964c35cfad1157e05b560763fc04bb48d519deb472685029d1046',
 	'methodology-7': '4d5e43d4be2cf01f05d1a7d188f0f87c46922fe7f997fee117c3316de3706f4a',
 	'methodology-8': '24d3a0e6a0a6c9ba59157083c25b7d8a572092c43578276a53b2133d0468a3c0',
-	'methodology-9': 'a9fb0e5af39ae9ca02e6de2b868eaaf74e4fb37bcb03562bf9e5f1c1cd1a818e'
+	'methodology-9': 'a9fb0e5af39ae9ca02e6de2b868eaaf74e4fb37bcb03562bf9e5f1c1cd1a818e',
+	'methodology-10': 'a5aefa72de72037f3483aa631b50efd1526d3e3a51b791e7635d1463f560f021',
+	'methodology-11': '7a458617797c09d0a57da182d758714ed79d6d0626f7dbb25fe5ca08547c6351'
 };
 
 describe('methodology statement (generated from docs/methodology)', () => {

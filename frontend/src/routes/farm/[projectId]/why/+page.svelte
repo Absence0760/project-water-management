@@ -3,25 +3,25 @@
 	// "Why about 83 %?" (docs/design/farmer-view.md §5, §6.4, board 4): the
 	// model's look back in three steps a farmer can check by hand. Each step is
 	// a section with an h2, so a screen-reader user can jump by heading.
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import DatesLine from '$lib/components/farm/DatesLine.svelte';
-	import { farmToday } from '$lib/components/farm/numbers';
-	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
-	import FarmPage from '$lib/components/farm/FarmPage.svelte';
-	import Rich from '$lib/i18n/Rich.svelte';
-	import { datesLine } from '$lib/components/farm/cards';
-	import { FarmState } from '$lib/components/farm/farmState.svelte';
-	import { farmHref, wordsHref } from '$lib/components/farm/load';
-	import { step1, step2, step3, whatThisIsNot, whyIntro, whyTitle, wuaDecided } from '$lib/components/farm/why';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { api } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import DatesLine from '#lib/components/farm/DatesLine.svelte';
+	import { farmToday } from '#lib/components/farm/numbers.js';
+	import EstimateNote from '#lib/components/farm/EstimateNote.svelte';
+	import FarmPage from '#lib/components/farm/FarmPage.svelte';
+	import Rich from '#lib/i18n/Rich.svelte';
+	import { datesLine } from '#lib/components/farm/cards.js';
+	import { FarmState } from '#lib/components/farm/farmState.svelte.js';
+	import { farmHref, wordsHref } from '#lib/components/farm/load.js';
+	import { step1, step2, step3, whatThisIsNot, whyIntro, whyTitle, wuaDecided } from '#lib/components/farm/why.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 
 	const projectId = $derived(page.params.projectId ?? '');
 	const asked = $derived(page.url.searchParams.get('node'));
 	const farm = new FarmState(api, () => session.user?.id ?? null);
-	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
+	const main = $derived(farmHref(basePath(), projectId, farm.nodeId, !!asked));
 </script>
 
 <svelte:head><title>{t('{page} · My hydrological unit', { page: farm.view ? whyTitle(farm.view.farm) : t('Why?') })}</title></svelte:head>
@@ -104,7 +104,7 @@
 			<ul class="not">
 				{#each whatThisIsNot(view.farm) as line (line)}<li>{line}</li>{/each}
 			</ul>
-			<a class="link" href={wordsHref(base, page.url, 'farm-reserve')}>{t('What is the river’s reserve?')}</a>
+			<a class="link" href={wordsHref(basePath(), page.url, 'farm-reserve')}>{t('What is the river’s reserve?')}</a>
 		</section>
 	{/snippet}
 </FarmPage>

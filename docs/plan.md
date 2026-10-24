@@ -52,9 +52,12 @@ and [data-model.md](./data-model.md)):
   values. All production secrets are SOPS-encrypted in the private
   `Absence0760/infra-secrets` repo under `water-management/`
   ([security.md § Public repo hygiene](./security.md#public-repo-hygiene)).
-- **Production URL: `water-management.jaredhoward.com`.** The slug is
-  `water-management`, and the URL is a delegated child zone of `jaredhoward.com`
-  ([Phase 6](#phase-6-deploy-to-aws)).
+- **Production URL: `icwbt.jaredhoward.com`** since issue #551 (the app is
+  Integrated Catchment - Water Balance Tool, IC-WBT); it was
+  `water-management.jaredhoward.com`, which redirects there. The slug stays
+  `water-management`, and both URLs are delegated child zones of
+  `jaredhoward.com` ([Phase 6](#phase-6-deploy-to-aws),
+  [deployment.md § Moving the site to a new domain](./deployment.md#moving-the-site-to-a-new-domain)).
 
 Status key: ✅ done · 🚧 in progress · ⬜ not started.
 
@@ -394,6 +397,11 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, 
   in the child zone) and the CloudFront alias and Route 53 A/AAAA records for
   `water-management.jaredhoward.com`. `domain_name` and `route53_zone_id` in
   `terraform.tfvars` point at the child zone (applied 2026-10-04).
+- ⬜ Issue #551: the app is renamed IC-WBT and moves to
+  `icwbt.jaredhoward.com`, a second child zone made by hand; the old
+  hostname redirects (`redirect_domains`). The Terraform is in; the zone, its
+  delegation and the apply are the operator's
+  ([deployment.md § Moving the site to a new domain](./deployment.md#moving-the-site-to-a-new-domain)).
 - ✅ Secrets (2026-10-04): `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`,
   then `sops water-management/prod.sops.yaml` with the keys in
   `infra/prod.sops.yaml.example` (the owner/migration password is RDS-managed,
@@ -820,6 +828,14 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     the app shows senior / junior as **Priority / Non-priority** (stored
     values unchanged; "Non-priority" pending the hydrologist's confirmation,
     model.md §2.7c).*
+21. **The EWR split's MAR period (issue #553, engine 1.94.0).** A project
+    can split the EWR between its units by each unit's natural MAR instead
+    of its flow share (the operator's option, model.md §2.5b). *Provisional
+    2026-10-24, to be confirmed by the client's hydrologist
+    (engine-audit.md ES1):* the MAR is taken over the run's complete water
+    years, or the whole run when it has none. Should it be a fixed reference
+    period instead, and should a run without a complete water year refuse
+    the split?
 
 ### Product
 
@@ -899,7 +915,10 @@ From the client's four sketched outputs; research and recommendations in
     part is still open.*
 16. **Domain (for information).** The app will live at
     `water-management.jaredhoward.com`. Tell the client this, and flag it early
-    if they need a branded domain.
+    if they need a branded domain. *Answered 2026-10-23 (issue #551): the app
+    is Integrated Catchment - Water Balance Tool (IC-WBT) at
+    `icwbt.jaredhoward.com`, and later its own domain (`icwbt.co.za` or
+    `icwbt.com`, not bought yet).*
 17. **Budget and support.** What is the expected monthly hosting budget, and
     who pays? Who supports the users? *Expected: ≈ $58–63/month on the
     minimal tier in af-south-1, ≈ $135–150 on the full (highly available)

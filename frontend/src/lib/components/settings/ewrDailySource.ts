@@ -1,7 +1,7 @@
 // Settings → the daily EWR at the outlet (engine ≥ 1.77.0, issue #455): pure
 // helpers for EwrDailySourceFields.svelte. The checks are the engine's own
 // (ewrDailySourceIssues), so the form, the save and the run agree.
-import { DEFAULT_ASSURANCE_POINTS, ewrDailySourceIssues, type EwrDailySource, type OutletEwrInfo } from '@water-management/engine';
+import { DEFAULT_ASSURANCE_POINTS, ewrDailySourceIssues, reserveTableOf, type EwrDailySource, type EwrReserveTable, type OutletEwrInfo } from '@water-management/engine';
 
 /** What blocks Save, or null: the first of the engine's issues (a pragmatic source with tables half entered saves). */
 export function dailySourceError(v: EwrDailySource | null | undefined): string | null {
@@ -56,6 +56,19 @@ export function knownScale(src: EwrDailySource, modelAreaKm2: number, lastRun: L
 	return src.tableMarMm3 && src.tableMarMm3 > 0 && lastRun ? lastRun.modelMarMm3 / src.tableMarMm3 : null;
 }
 
+/** The percentile tables' one set of names (issue #552): the form's captions and paste choices, and the scaled view. */
+export const DAILY_TABLE_LABELS = {
+	naturalPctM3s: 'Natural flow percentile table',
+	reservePctM3s: 'Total Reserve flow percentile table',
+	lowFlowPctM3s: 'Reserve flow without high flows percentile table'
+} as const;
+
+/** What the form says of a Reserve grid: the one the daily EWR reads, or one shown only; null for the natural table. */
+export function reserveGridRole(which: keyof typeof DAILY_TABLE_LABELS, reserveTable: EwrReserveTable): 'the daily EWR' | 'not used by the daily EWR' | null {
+	if (which === 'naturalPctM3s') return null;
+	return (which === 'lowFlowPctM3s') === (reserveTable === 'withoutHighFlows') ? 'the daily EWR' : 'not used by the daily EWR';
+}
+
 /** A source's tables as the run reads them: each value × s (issue #90 B1 gap a); a blank stays blank. */
 export interface ScaledEwrTables {
 	method: 'tab' | 'percentile';
@@ -66,6 +79,10 @@ export interface ScaledEwrTables {
 	naturalPctM3s: (number | null)[][] | null;
 	/** The total Reserve flow percentile table × s ('percentile'). */
 	reservePctM3s: (number | null)[][] | null;
+	/** The Reserve flows without high flows × s ('percentile', issue #552); null when not entered. */
+	lowFlowPctM3s: (number | null)[][] | null;
+	/** Which Reserve table is the daily EWR ('percentile'; 'total' under 'tab'). */
+	reserveTable: EwrReserveTable;
 }
 
 const times = (v: number | null | undefined, s: number): number | null => (typeof v === 'number' && Number.isFinite(v) ? v * s : null);
@@ -75,16 +92,18 @@ const times = (v: number | null | undefined, s: number): number | null => (typeo
  * and with a run (its own settings snapshot and summary s). Null for the
  * pragmatic EWR, an unknown or non-finite s, or a method whose tables
  * haven't been entered. Only the tables the method reads: the TAB flows
- * under 'tab', the two percentile tables under 'percentile'. The natural
+ * under 'tab'; under 'percentile' the natural flow and both Reserve tables
+ * (the total and the flows without high flows, issue #552), `reserveTable`
+ * saying which one is the EWR. The natural
  * rows are the entered values × s; a rising row the run reads as its
  * running minimum, which the run's warnings say (ewrDailySourceNotes).
  */
 export function scaledEwrTables(src: EwrDailySource | null | undefined, scale: number | null | undefined): ScaledEwrTables | null {
 	if (!src || src.method === 'pragmatic' || typeof scale !== 'number' || !Number.isFinite(scale)) return null;
 	const grid = (g: number[][] | null) => (g ? g.map((row) => row.map((v) => times(v, scale))) : null);
-	if (src.method === 'tab') return src.tabM3s ? { method: 'tab', scale, tabM3s: src.tabM3s.map((v) => times(v, scale)), naturalPctM3s: null, reservePctM3s: null } : null;
-	if (!src.naturalPctM3s && !src.reservePctM3s) return null;
-	return { method: 'percentile', scale, tabM3s: null, naturalPctM3s: grid(src.naturalPctM3s), reservePctM3s: grid(src.reservePctM3s) };
+	if (src.method === 'tab') return src.tabM3s ? { method: 'tab', scale, tabM3s: src.tabM3s.map((v) => times(v, scale)), naturalPctM3s: null, reservePctM3s: null, lowFlowPctM3s: null, reserveTable: 'total' } : null;
+	if (!src.naturalPctM3s && !src.reservePctM3s && !src.lowFlowPctM3s) return null;
+	return { method: 'percentile', scale, tabM3s: null, naturalPctM3s: grid(src.naturalPctM3s), reservePctM3s: grid(src.reservePctM3s), lowFlowPctM3s: grid(src.lowFlowPctM3s ?? null), reserveTable: reserveTableOf(src) };
 }
 
 /**
@@ -120,23 +139,31 @@ const METHOD_NAME: Record<EwrDailySource['method'], string> = {
 };
 
 /**
- * What a .rul loaded into the daily EWR does (issue #455): it fills the two
- * percentile tables and nothing else. The method the person picked stays: a
- * .rul loaded under the TAB file fills the tables for later, says the TAB file
- * is still in use, and offers the switch (`offerPercentile`) as a choice.
+ * What a .rul loaded into the daily EWR does (issues #455, #552): it fills the
+ * three percentile tables (the natural duration curves, the total Reserve and
+ * the Reserve flows without high flows; a file without the last block clears
+ * it, so no table from an older file is left beside the new ones) and nothing
+ * else. The method and the Reserve table the person picked stay: a .rul
+ * loaded under the TAB file fills the tables for later, says the TAB file is
+ * still in use, and offers the switch (`offerPercentile`) as a choice. A file
+ * without the block the chosen Reserve table needs says so.
  */
 export function rulLoad(
 	method: EwrDailySource['method'],
-	tables: Pick<EwrDailySource, 'naturalPctM3s' | 'reservePctM3s'>,
+	tables: Pick<EwrDailySource, 'naturalPctM3s' | 'reservePctM3s' | 'lowFlowPctM3s'>,
 	fileName: string,
-	unit: 'm3s' | 'mcm'
-): { patch: Pick<EwrDailySource, 'naturalPctM3s' | 'reservePctM3s'>; text: string; offerPercentile: boolean } {
+	unit: 'm3s' | 'mcm',
+	reserveTable: EwrReserveTable = 'total'
+): { patch: Pick<EwrDailySource, 'naturalPctM3s' | 'reservePctM3s' | 'lowFlowPctM3s'>; text: string; offerPercentile: boolean } {
 	const read = `Read ${fileName} (DRM rule curves${unit === 'mcm' ? ', converted from Mm³ a month to m³/s, February 28 days' : ', m³/s'})`;
-	const patch = { naturalPctM3s: tables.naturalPctM3s, reservePctM3s: tables.reservePctM3s };
-	if (method === 'percentile') return { patch, text: `${read}: the total Reserve and the natural duration curve fill the two tables.`, offerPercentile: false };
+	const lowFlowPctM3s = tables.lowFlowPctM3s ?? null;
+	const patch = { naturalPctM3s: tables.naturalPctM3s, reservePctM3s: tables.reservePctM3s, lowFlowPctM3s };
+	const filled = lowFlowPctM3s ? 'the natural duration curves, the total Reserve and the Reserve flows without high flows fill the three tables' : 'the natural duration curves and the total Reserve fill two tables; the file has no Reserve Flows without High Flows block, so that table is empty';
+	const missing = !lowFlowPctM3s && reserveTable === 'withoutHighFlows' ? ' The daily EWR reads the Reserve flows without high flows, which this file lacks: pick the total Reserve flows, or load a file with that block.' : '';
+	if (method === 'percentile') return { patch, text: `${read}: ${filled}.${missing}`, offerPercentile: false };
 	return {
 		patch,
-		text: `${read}: filled the two percentile tables (the total Reserve and the natural duration curve). The daily EWR still comes from ${METHOD_NAME[method]}; the tables are used only once you pick them.`,
+		text: `${read}: ${filled}. The daily EWR still comes from ${METHOD_NAME[method]}; the tables are used only once you pick them.`,
 		offerPercentile: true
 	};
 }

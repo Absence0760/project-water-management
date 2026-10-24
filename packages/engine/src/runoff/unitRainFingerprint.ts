@@ -1,7 +1,7 @@
 // What a fit records of the per-unit rain (engine ≥ 1.78.0, docs/model.md
 // §2.4h, §2.10b), apart from ./unitRain.ts so the fit-provenance code the
 // Settings forms load doesn't pull in the runoff model (issue #9).
-import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, unitRainSeriesKey, type UnitRainRule, type UnitRainSettings, type UnitRainSummary, type UnitChirpsLevel, type UnitRainUnit } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, stationSeriesKey, unitRainSeriesKey, type RainStationSummary, type UnitRainRule, type UnitRainSettings, type UnitRainSummary, type UnitChirpsLevel, type UnitRainUnit } from '../project';
 import type { UnitRainRecipe } from './unitRain';
 
 /** A unit's CHIRPS level as the fingerprint records it. */
@@ -49,6 +49,9 @@ export interface UnitRainFingerprint {
 		chirpsFactors?: number[];
 		/** A unitGauge unit's own gauge was read after the catchment's checks (engine ≥ 1.85.0); absent before, and on other rules. */
 		gaugeChecked?: true;
+		/** Rule 'station' (engine ≥ 1.91.0, §2.4i): the station correcting its CHIRPS and that pairing's 12 factors (null: refused); compared only when both sides have it. */
+		stationCorrectAgainst?: string;
+		stationFactors?: number[] | null;
 	}[];
 }
 
@@ -59,6 +62,8 @@ export function recipeLevel(r: UnitRainRecipe): Pick<UnitRainUnit, 'rainKey' | '
 			return { rainKey: unitRainSeriesKey('rain_catchment_mm', r.nodeId), factor: 1, factorSource: 'gauge' };
 		case 'gaugeMap':
 			return { rainKey: 'rain_catchment_mm', factor: r.gaugeMapFactor, factorSource: 'gaugeMap' };
+		case 'station':
+			return { rainKey: stationSeriesKey(r.station?.stationId ?? ''), factor: r.station?.ratio ?? 1, factorSource: 'gaugeMap' };
 		case 'unitChirps': {
 			const c = r.chirps;
 			const rainKey = unitRainSeriesKey('rain_chirps_mm', r.nodeId);
@@ -80,20 +85,50 @@ export function unitRainFingerprint(u: UnitRainSettings | null | undefined, reci
 		gaugeMapMm: usableMap(u.gaugeMapMm),
 		mapPeriod: { ...(u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD) },
 		...(u.reference ? { reference: { gauge: u.reference.gauge, unitId: u.reference.unitId } } : {}),
-		units: recipes.map((r) => ({ nodeId: r.nodeId, rule: r.rule, ...recipeLevel(r), gaugeMapFactor: r.gaugeMapFactor, ...chirpsLevel(r.chirps), ...gaugeChecked(r.rule) }))
+		units: recipes.map((r) => ({
+			nodeId: r.nodeId,
+			rule: r.rule,
+			...recipeLevel(r),
+			gaugeMapFactor: r.gaugeMapFactor,
+			...chirpsLevel(r.chirps),
+			...gaugeChecked(r.rule),
+			...(r.station ? { stationCorrectAgainst: r.station.correctAgainst, stationFactors: r.station.factors ? [...r.station.factors] : null } : {})
+		}))
 	};
 }
 
-/** The fingerprint of a run's summary.unitRain (as unitRainFingerprint gives it at the fit); null for catchment rain. */
-export function unitRainFingerprintOfSummary(s: UnitRainSummary | null | undefined): UnitRainFingerprint | null {
+/**
+ * The fingerprint of a run's summary.unitRain (as unitRainFingerprint gives it at the fit); null for catchment rain.
+ * With the run's summary.stations (engine ≥ 1.91.0) a station unit's pairing factors are recorded too.
+ */
+export function unitRainFingerprintOfSummary(s: UnitRainSummary | null | undefined, stations?: RainStationSummary | null): UnitRainFingerprint | null {
 	if (!s) return null;
 	return {
 		mode: 'perUnit',
 		gaugeMapMm: s.gaugeMapMm,
 		mapPeriod: { ...s.mapPeriod },
 		...(s.reference ? { reference: { gauge: s.reference.gauge, unitId: s.reference.unitId } } : {}),
-		units: s.units.map((x) => ({ nodeId: x.nodeId, rule: x.rule, rainKey: x.rainKey, factor: x.factor, factorSource: x.factorSource, gaugeMapFactor: x.gaugeMapFactor, ...chirpsLevel(x.chirps), ...gaugeChecked(x.rule) }))
+		units: s.units.map((x) => ({
+			nodeId: x.nodeId,
+			rule: x.rule,
+			rainKey: x.rainKey,
+			factor: x.factor,
+			factorSource: x.factorSource,
+			gaugeMapFactor: x.gaugeMapFactor,
+			...chirpsLevel(x.chirps),
+			...gaugeChecked(x.rule),
+			...stationOfSummary(x.nodeId, stations)
+		}))
 	};
+}
+
+/** A station unit's pairing as summary.stations recorded it (the fingerprint's stationCorrectAgainst / stationFactors); {} when it has none. */
+function stationOfSummary(nodeId: string, stations: RainStationSummary | null | undefined): { stationCorrectAgainst?: string; stationFactors?: number[] | null } {
+	const u = stations?.units.find((x) => x.nodeId === nodeId);
+	if (!u || !stations) return {};
+	const against = u.correctedBy;
+	const p = against ? stations.pairings.find((x) => x.stationId === against) : null;
+	return against && p && p.refused === null ? { stationCorrectAgainst: against, stationFactors: p.months.map((m) => m.factor) } : {};
 }
 
 /** Relative tolerance two fingerprints' factors may differ by and still count as the same forcing (the CHIRPS factor drift's). */
@@ -115,7 +150,12 @@ export function unitRainFingerprintChanged(a: UnitRainFingerprint | null | undef
 			(x.chirpsSource !== y.chirpsSource || !near(x.chirpsFactor ?? null, y.chirpsFactor ?? null) || months(x.chirpsFactors, y.chirpsFactors));
 		// The gauge checks' marker: present on one side only is a change (a fit from before the checks, issue #500 decision 6).
 		const checks = (x.gaugeChecked === true) !== (y.gaugeChecked === true);
-		return x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps || checks;
+		// A station unit's pairing (engine ≥ 1.91.0), when both sides recorded one.
+		const pairing =
+			x.stationFactors !== undefined &&
+			y.stationFactors !== undefined &&
+			(x.stationCorrectAgainst !== y.stationCorrectAgainst || !x.stationFactors !== !y.stationFactors || (!!x.stationFactors && months(x.stationFactors, y.stationFactors ?? undefined)));
+		return x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps || checks || pairing;
 	});
 }
 
@@ -129,7 +169,7 @@ export function unitRainFingerprintError(raw: unknown): string | null {
 	if (!num(r.gaugeMapMm)) return 'gaugeMapMm must be a number or null';
 	if (!r.mapPeriod || typeof r.mapPeriod.start !== 'string' || typeof r.mapPeriod.end !== 'string') return 'mapPeriod needs a start and an end';
 	if (!Array.isArray(r.units) || r.units.length > 2000) return 'units must be a list';
-	const rules = ['unitGauge', 'gaugeMap', 'unitChirps', 'catchment'];
+	const rules = ['unitGauge', 'gaugeMap', 'unitChirps', 'catchment', 'station'];
 	const sources = ['gauge', 'gaugeMap', 'chirpsMap', 'chirpsBias', 'chirpsRaw', 'chirpsReference', 'catchment'];
 	if (r.reference !== undefined && (!r.reference || typeof r.reference.gauge !== 'string' || typeof r.reference.unitId !== 'string' || r.reference.gauge.length > 250 || r.reference.unitId.length > 200))
 		return 'the reference needs a gauge and a unit';
@@ -142,6 +182,9 @@ export function unitRainFingerprintError(raw: unknown): string | null {
 		if (x.chirpsFactors !== undefined && !(Array.isArray(x.chirpsFactors) && x.chirpsFactors.length === 12 && x.chirpsFactors.every((k) => typeof k === 'number' && Number.isFinite(k))))
 			return 'a unit has bad reference factors';
 		if (x.gaugeChecked !== undefined && x.gaugeChecked !== true) return 'a unit has a bad gauge checks marker';
+		if (x.stationCorrectAgainst !== undefined && !(typeof x.stationCorrectAgainst === 'string' && x.stationCorrectAgainst.length <= 200)) return 'a unit has a bad correcting station';
+		if (x.stationFactors !== undefined && !(x.stationFactors === null || (Array.isArray(x.stationFactors) && x.stationFactors.length === 12 && x.stationFactors.every((k) => typeof k === 'number' && Number.isFinite(k)))))
+			return 'a unit has bad station pairing factors';
 	}
 	return null;
 }

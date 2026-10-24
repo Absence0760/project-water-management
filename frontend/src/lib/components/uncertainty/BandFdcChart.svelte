@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import type { EnsembleBands } from '@water-management/engine';
-	import { monthName } from '$lib/format/months';
+	import { monthName } from '#lib/format/months.js';
 	import { fdcChart, pointsBelowEwr, sig } from './bands';
 
 	let { fdc, points: exceedance }: { fdc: EnsembleBands['fdc']; points: number[] } = $props();

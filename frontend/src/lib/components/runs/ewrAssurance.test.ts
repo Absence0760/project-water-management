@@ -158,7 +158,7 @@ describe('formatting', () => {
 });
 
 describe('resultSections', () => {
-	it('no longer lists Reserve compliance on Runs & results: it moved to River & reserve (issue #17)', () => {
+	it('no longer lists Reserve compliance on Runs & results: it moved to EWR (issue #17)', () => {
 		const base = { farms: [], runoff: undefined, wr2012: undefined };
 		expect(resultSections(base).map((s) => s.id)).not.toContain('res-reserve');
 		expect(resultSections({ ...base, ewrAssurance: [site(() => 1)] } as typeof base).map((s) => s.id)).not.toContain('res-reserve');

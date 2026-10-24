@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseNum } from '$lib/format/number';
+import { parseNum } from '#lib/format/number.js';
 import { groupedText, plainText } from './numberText';
 
 describe('groupedText', () => {

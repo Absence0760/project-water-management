@@ -9,12 +9,12 @@
 	Input: RunSummary.ewrCompliance (engine 0.3.0+).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
 	import type { EwrCompliance } from '@water-management/engine';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtNum } from '$lib/format/number';
-	import { waterYearLabel } from '$lib/components/calibration/metrics';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
 	import {
 		bandPct,
 		binVolume,
@@ -47,7 +47,7 @@
 		headlineNote?: string;
 		/** The outlet's daily test by name (ewr/notMet.ts dailyEwrName; engine ≥ 1.77.0 it can be a DRM table). */
 		daily?: string;
-		/** The heading. River & reserve calls it "Days below the EWR, by month", apart from Reserve compliance (issue #465). */
+		/** The heading. EWR calls it "Days below the EWR, by month", apart from Reserve compliance (issue #465). */
 		title?: string;
 	} = $props();
 

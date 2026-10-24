@@ -1,10 +1,10 @@
 import type { CurtailmentFarm, FarmSummary, RunSummary, SupplyReliability } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { RunMeta } from '$lib/api/types';
-import { navText } from '$lib/components/common/sectionNav';
-import { supplyBars } from '$lib/components/overview/supplyBars';
-import { SUPPLY_TARGET } from '$lib/components/runs/results';
-import { fmtPct } from '$lib/format/number';
+import type { RunMeta } from '#lib/api/types.js';
+import { navText } from '#lib/components/common/sectionNav.js';
+import { supplyBars } from '#lib/components/overview/supplyBars.js';
+import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
+import { fmtPct } from '#lib/format/number.js';
 import { SUPPLY_ANCHORS, supplyAnchor, supplyHref } from './links';
 import { cardFacts, daysShort, foldCards, foldNote, needsLook, pickUnit, previousRunOf, shortRanges, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
 

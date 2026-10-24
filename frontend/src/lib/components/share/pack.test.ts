@@ -1,6 +1,6 @@
 // The words of the /share page's evidence pack view (./pack.ts, 128_pack_share_notes).
 import { describe, expect, it } from 'vitest';
-import type { SharePack, SharedPackSite } from '$lib/api/types';
+import type { SharePack, SharedPackSite } from '#lib/api/types.js';
 import { bandLine, monthRows, packSiteRows, packStatusLine, rowChange, rowLabel, rowValue, signerLine, standingNote, successorCode } from './pack';
 
 const sp = (s: string) => s.replace(/ /g, ' ');

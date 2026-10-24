@@ -14,7 +14,7 @@ test('an ensemble is stored with its rule, reproduces, and pairs with another ru
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	const baseline = await createRun(page.request, project.id, 'Baseline');
 
-	// The bands sit on River & reserve with the findings they qualify (issue #17).
+	// The bands sit on EWR with the findings they qualify (issue #17).
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	// Not run: one row (name, purpose, ⓘ, Run…) until the editor opens the form, which takes focus (issue #465).

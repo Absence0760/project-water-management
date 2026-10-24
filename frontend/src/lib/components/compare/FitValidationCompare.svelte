@@ -2,7 +2,7 @@
 	// Each run's fit record side by side (issue #4): which fit produced its
 	// parameters, its in-sample score and its validation scores.
 	import { fitValidationRows, type FitValidationRow } from './fit';
-	import type { ApanDailyFingerprint, ChirpsFactorSet, FitRecord, ProjectSettings, SeriesProvenance } from '@water-management/engine';
+	import type { ApanDailyFingerprint, ChirpsFactorSet, FitForcingNow, FitRecord, ProjectSettings, SeriesProvenance } from '@water-management/engine';
 
 	let {
 		a,
@@ -14,7 +14,9 @@
 		apanA,
 		apanB,
 		factorsA,
-		factorsB
+		factorsB,
+		forcingA,
+		forcingB
 	}: {
 		a: FitRecord | null;
 		b: FitRecord | null;
@@ -30,8 +32,11 @@
 		/** Each run's applied CHIRPS factor sets (issue #51); undefined when not known. */
 		factorsA?: ChirpsFactorSet[] | null;
 		factorsB?: ChirpsFactorSet[] | null;
+		/** Each run's per-unit and catchment-station forcing (runForcingOfSummary, engine ≥ 1.91.0); undefined when not known. */
+		forcingA?: Pick<FitForcingNow, 'unitRain' | 'catchmentStation'>;
+		forcingB?: Pick<FitForcingNow, 'unitRain' | 'catchmentStation'>;
 	} = $props();
-	const rows = $derived<FitValidationRow[] | null>(fitValidationRows(a, b, settingsA, settingsB, { a: chirpsA, b: chirpsB }, { a: apanA, b: apanB }, { a: factorsA, b: factorsB }));
+	const rows = $derived<FitValidationRow[] | null>(fitValidationRows(a, b, settingsA, settingsB, { a: chirpsA, b: chirpsB }, { a: apanA, b: apanB }, { a: factorsA, b: factorsB }, { a: forcingA, b: forcingB }));
 </script>
 
 <h3>Fit and validation</h3>

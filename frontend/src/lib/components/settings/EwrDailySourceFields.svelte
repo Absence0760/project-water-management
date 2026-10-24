@@ -2,8 +2,10 @@
 	Settings → EWR → the daily EWR at the outlet (engine ≥ 1.77.0, issue #455,
 	docs/model.md §2.9f, docs/ui.md § The daily EWR at the outlet): where the
 	outlet's daily EWR comes from, the pragmatic EWR above, the Desktop Reserve
-	Model's TAB file (12 monthly flows) or its percentile tables (natural and
-	total Reserve flow, read at each day's natural flow), and how the tables are
+	Model's TAB file (12 monthly flows) or its percentile tables (the natural
+	flow and a Reserve table, read at each day's natural flow: the total Reserve
+	flows or, by choice, the Reserve flows without high flows, issue #552; a
+	.rul fills all three), and how the tables are
 	scaled to the modelled catchment (by MAR or by area), with the factor. The
 	tables are typed, pasted (Paste…, the shared paste dialog with its preview,
 	issue #521), or loaded from the DRM's .tab / .rul files (both on the source
@@ -18,22 +20,22 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { blankEwrDailySource, EWR_PERCENTILE_POINTS, type EwrDailySource } from '@water-management/engine';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { latestFileText } from '$lib/files/latest';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtNum } from '$lib/format/number';
+	import { blankEwrDailySource, EWR_PERCENTILE_POINTS, reserveTableOf, type EwrDailySource, type EwrReserveTable } from '@water-management/engine';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { latestFileText } from '#lib/files/latest.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import DrmFormatHelp from './DrmFormatHelp.svelte';
 	import { parseDrmFile, percentileTablesFromRul, type TabFile } from './drmFiles';
-	import { api } from '$lib/api';
-	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+	import { api } from '#lib/api/index.js';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import ScaledEwrTablesView from './ScaledEwrTablesView.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
 	import { dailyCsv, planDailyPaste, type DailyTable } from './ewrPaste';
-	import { dailySourceError, knownScale, lastRunScale, rulLoad, scaledEwrTables, scaleFactor, type LastRunScale } from './ewrDailySource';
+	import { DAILY_TABLE_LABELS, dailySourceError, knownScale, lastRunScale, reserveGridRole, rulLoad, scaledEwrTables, scaleFactor, type LastRunScale } from './ewrDailySource';
 
 	let {
 		value = $bindable(),
@@ -58,6 +60,9 @@
 	const src = $derived(value ?? blankEwrDailySource());
 	const method = $derived(src.method);
 	const POINT_LABELS = EWR_PERCENTILE_POINTS.map((p) => `${Math.round(p * 100)} %`);
+	/** The three percentile tables a .rul fills. */
+	type GridKey = 'naturalPctM3s' | 'reservePctM3s' | 'lowFlowPctM3s';
+	const reserveTable = $derived(reserveTableOf(src));
 	// The newest baseline run's natural MAR, read once per visit of the tab once the MAR ratio is in use (the run works
 	// out its own s and reports it; this only shows it).
 	let lastRun = $state<LastRunScale | null>(null);
@@ -98,10 +103,10 @@
 	// A .rul loaded under another method filled the percentile tables without switching to them: offer the switch.
 	let offerPercentile = $state(false);
 	let tabPreview = $state<{ file: string; tab: TabFile } | null>(null);
-	// The paste dialog: its text, and which table it fills (the TAB flows, or one of the two percentile tables).
+	// The paste dialog: its text, and which table it fills (the TAB flows, or one of the three percentile tables).
 	let pasteOpen = $state(false);
 	let pasteText = $state('');
-	let pasteGridTarget = $state<'naturalPctM3s' | 'reservePctM3s'>('naturalPctM3s');
+	let pasteGridTarget = $state<GridKey>('naturalPctM3s');
 	const pasteTarget = $derived<DailyTable>(method === 'tab' ? 'tabM3s' : pasteGridTarget);
 	const read = latestFileText();
 
@@ -138,9 +143,9 @@
 			note = { ok: false, text: `${f.name}: ${tables.error}` };
 			return;
 		}
-		if ((src.naturalPctM3s || src.reservePctM3s) && !(await confirmDialog({ title: `Replace the percentile tables with ${f.name}?`, message: 'Both tables will be replaced by the file’s.', confirmLabel: 'Replace the tables' }))) return;
-		// A .rul fills the percentile tables and nothing else: the method stays as picked, and the switch is offered.
-		const out = rulLoad(method, tables, f.name, drm.unit);
+		if ((src.naturalPctM3s || src.reservePctM3s || src.lowFlowPctM3s) && !(await confirmDialog({ title: `Replace the percentile tables with ${f.name}?`, message: 'All three tables will be replaced by the file’s.', confirmLabel: 'Replace the tables' }))) return;
+		// A .rul fills the percentile tables and nothing else: the method and the Reserve table stay as picked, and the switch is offered.
+		const out = rulLoad(method, tables, f.name, drm.unit, reserveTableOf(src));
 		edit(out.patch);
 		note = { ok: true, text: out.text };
 		offerPercentile = out.offerPercentile;
@@ -180,7 +185,7 @@
 		pasteNote = { ok: true, text: r.message };
 	}
 
-	function setCell(which: 'naturalPctM3s' | 'reservePctM3s', r: number, c: number, v: number | null) {
+	function setCell(which: GridKey, r: number, c: number, v: number | null) {
 		const grid = (untrack(() => $state.snapshot(src[which])) as number[][] | null) ?? WATER_YEAR_MONTHS.map(() => EWR_PERCENTILE_POINTS.map(() => null as unknown as number));
 		grid[r]![c] = v as number;
 		edit({ [which]: grid });
@@ -221,13 +226,13 @@
 	</div>
 	<p class="hint explain" id="{uid}-method-h">
 		The outlet’s daily EWR, which is split between the units and judged every day: shortfalls, the charge, curtailment and the compliance grid all follow it.
-		{#if method === 'tab'}Each month’s TAB flow × the scale factor, every day of the month.{:else if method === 'percentile'}Each day, the Reserve flow at the point the day’s natural flow at the outlet sits at in that month’s natural flows, interpolated between points, × the scale factor.{/if}
+		{#if method === 'tab'}Each month’s TAB flow × the scale factor, every day of the month.{:else if method === 'percentile'}Each day, the Reserve flow ({reserveTable === 'withoutHighFlows' ? 'without high flows' : 'the total, with high flows'}) at the point the day’s natural flow at the outlet sits at in that month’s natural flows, interpolated between points, × the scale factor.{/if}
 	</p>
 
 	{#if method !== 'pragmatic'}
 		{#if !readonly}
 			<div class="load" data-testid="ewr-daily-load">
-				<p class="hint explain" id="{uid}-load-h">A .tab gives the TAB flows and the table MAR, a .rul the two percentile tables. A file never changes the choice in Daily EWR from.</p>
+				<p class="hint explain" id="{uid}-load-h">A .tab gives the TAB flows and the table MAR, a .rul the three percentile tables (natural flow, total Reserve flow, Reserve flow without high flows). A file never changes the choice in Daily EWR from.</p>
 				<p class="small" class:err={note && !note.ok} role="status" aria-label="File result">{note?.text ?? ''}</p>
 				<p class="small" id="{uid}-paste-s" class:err={pasteNote && !pasteNote.ok} role="status" aria-label="Paste result">{pasteNote?.text ?? ''}</p>
 				{#if offerPercentile && method !== 'percentile'}
@@ -282,20 +287,31 @@
 				}}
 				onapply={applyPaste}
 				csv={() => dailyCsv(src, pasteTarget)}
-				csvName={method === 'tab' ? 'tab-flows.csv' : pasteTarget === 'naturalPctM3s' ? 'natural-flow-percentiles.csv' : 'total-reserve-percentiles.csv'}
+				csvName={method === 'tab' ? 'tab-flows.csv' : pasteTarget === 'naturalPctM3s' ? 'natural-flow-percentiles.csv' : pasteTarget === 'lowFlowPctM3s' ? 'reserve-without-high-flows-percentiles.csv' : 'total-reserve-percentiles.csv'}
 			>
 				{#snippet target()}
 					{#if method === 'percentile'}
 						<fieldset class="plain target">
 							<legend>Fill</legend>
-							<label class="check"><input type="radio" name="{uid}-pt" value="naturalPctM3s" bind:group={pasteGridTarget} /> The natural flow table</label>
-							<label class="check"><input type="radio" name="{uid}-pt" value="reservePctM3s" bind:group={pasteGridTarget} /> The total Reserve table</label>
+							{#each ['naturalPctM3s', 'reservePctM3s', 'lowFlowPctM3s'] as const as k (k)}
+								<label class="check"><input type="radio" name="{uid}-pt" value={k} bind:group={pasteGridTarget} /> {DAILY_TABLE_LABELS[k]}</label>
+							{/each}
 						</fieldset>
 					{/if}
 				{/snippet}
 			</GridPasteDialog>
 		{/if}
 		<div class="fields">
+			{#if method === 'percentile'}
+				<div class="field">
+					<label for="{uid}-reserve">The EWR is the Reserve table</label>
+					<select id="{uid}-reserve" disabled={readonly} value={reserveTable} onchange={(e) => edit({ reserveTable: e.currentTarget.value as EwrReserveTable })} aria-describedby="{uid}-reserve-h" data-testid="ewr-reserve-table">
+						<option value="total">Total Reserve flow (with high flows; the default)</option>
+						<option value="withoutHighFlows">Reserve flow without high flows</option>
+					</select>
+					<span class="hint explain" id="{uid}-reserve-h">Which of the .rul’s two Reserve tables is read at each day’s natural flow. The other is kept and shown, and drives nothing.</span>
+				</div>
+			{/if}
 			<div class="field">
 				<label for="{uid}-scaling">Scale the tables by</label>
 				<select id="{uid}-scaling" disabled={readonly} value={src.scaling} onchange={(e) => edit({ scaling: e.currentTarget.value as EwrDailySource['scaling'] })} aria-describedby="{uid}-s-h">
@@ -337,10 +353,12 @@
 				</table>
 			</div>
 		{:else}
-			{#snippet grid(which: 'naturalPctM3s' | 'reservePctM3s', label: string)}
+			{#snippet grid(which: GridKey)}
+				{@const label = DAILY_TABLE_LABELS[which]}
+				{@const role = reserveGridRole(which, reserveTable)}
 				<div class="table-wrap">
 					<table class="data compact rulegrid">
-						<caption>{label} <span class="u">(m³/s, before scaling)</span></caption>
+						<caption>{label} <span class="u">(m³/s, before scaling{role ? `, ${role}` : ''})</span></caption>
 						<thead>
 							<tr>
 								<th scope="col" class="sticky">Month</th>
@@ -360,8 +378,14 @@
 					</table>
 				</div>
 			{/snippet}
-			{@render grid('naturalPctM3s', 'Natural flow percentile table')}
-			{@render grid('reservePctM3s', 'Total Reserve flow percentile table')}
+			{@render grid('naturalPctM3s')}
+			<!-- The Reserve table the daily EWR reads, open; the other folds into its line, since it drives nothing (issue #552). -->
+			{@const used = reserveTable === 'withoutHighFlows' ? 'lowFlowPctM3s' : 'reservePctM3s'}
+			{@const unused = used === 'lowFlowPctM3s' ? 'reservePctM3s' : 'lowFlowPctM3s'}
+			{@render grid(used)}
+			<Fold name="{DAILY_TABLE_LABELS[unused]}:" line="not used by the daily EWR · {src[unused] ? 'entered' : 'empty'}" open={false} body="none" spaced testid="ewr-unused-reserve">
+				{@render grid(unused)}
+			</Fold>
 		{/if}
 
 		<!-- A statement, not fields: open to start with, its line saying whether the tables are there yet (common/Fold). -->

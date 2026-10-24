@@ -1,7 +1,7 @@
 // The water-year axis of "Days below the reserve, each water year"
 // (ReserveYearsChart.svelte): which years get a label, and where, so the
 // last one is never cut off at the plot's right edge (issue #162: it read
-// "2024/2…" on River & reserve's narrow column).
+// "2024/2…" on the EWR page's narrow column).
 
 /** Rough width of one character of the 11 px axis text, in px ("2024/25" ≈ 46 px). */
 export const LABEL_CHAR_PX = 6.5;

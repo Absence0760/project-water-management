@@ -3,8 +3,8 @@
 // adviser reviews the words a farmer actually sees.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { messageId } from '$lib/i18n/msg';
-import { af } from '$lib/i18n/messages/af';
+import { messageId } from '#lib/i18n/msg.js';
+import { af } from '#lib/i18n/messages/af.js';
 import { disclaimer } from './cards';
 
 const PACK = readFileSync(new URL('../../../../../docs/legal/disclaimer-review.md', import.meta.url), 'utf8');

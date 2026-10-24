@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DividePlan, DivideUnit, MapFeature } from '$lib/api';
+import type { DividePlan, DivideUnit, MapFeature } from '#lib/api/index.js';
 import {
 	defaultDivideChoice,
 	divideBody,

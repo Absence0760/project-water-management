@@ -1,7 +1,7 @@
 <!--
 	Sensitivity runs: EWR compliance as a range (calibration research CR-21,
 	docs/ui.md § Sensitivity runs, docs/model.md §2.10g). Beside the
-	uncertainty bands on River & reserve.
+	uncertainty bands on EWR.
 
 	Run fetches the run's own inputs and runs the central case and each
 	factor's low and high (rain, pan coefficient, dam evaporation,
@@ -13,13 +13,13 @@
 	(common/ToolRow, issue #465) whose button runs it.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import ToolRow from '$lib/components/common/ToolRow.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import ToolRow from '#lib/components/common/ToolRow.svelte';
 	import { onDestroy } from 'svelte';
 	import { SENSITIVITY_THRESHOLDS, type SensitivityResult } from '@water-management/engine';
-	import { api } from '$lib/api';
-	import { FitCancelled, startSensitivity, type EnsembleHandle } from '$lib/calibration/runner';
-	import { fmtDay, fmtNum } from '$lib/format/number';
+	import { api } from '#lib/api/index.js';
+	import { FitCancelled, startSensitivity, type EnsembleHandle } from '#lib/calibration/runner.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import TornadoChart from './TornadoChart.svelte';
 	import { factorsLine, metricsFor, thresholdOn, tornadoRows, TORNADO_METRICS, VERDICT_LABELS, verdictsAt, type TornadoMetric } from './sensitivity';
 

@@ -24,6 +24,22 @@ export {
 	type UnitRainFingerprint,
 	type UnitRainRecipe
 } from './unitRain';
+export {
+	catchmentStationFingerprint,
+	catchmentStationFingerprintChanged,
+	catchmentStationFingerprintError,
+	catchmentStationSettingChanged,
+	type CatchmentStationFingerprint
+} from './stationFingerprint';
+export { stationAreaRain, type StationAreaRain, type StationRainDaySource } from './stationAreaRain';
+export {
+	catchmentMapOf,
+	resolveRainStations,
+	stationAreaDays,
+	stationRatio,
+	STATION_DAY_SOURCE,
+	type UnitStationRecipe
+} from './stationForcing';
 
 /** The natural-flow generator for settings.runoffModel. */
 export const NATURAL_FLOW: Record<RunoffModelId, NaturalFlowGenerator> = {

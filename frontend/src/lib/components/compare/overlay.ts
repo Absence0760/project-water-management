@@ -14,7 +14,7 @@ import {
 	type FarmColumn,
 	type NodeKind
 } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** One stored output series of a run (GET …/runs/:runId `series`). */
 export interface SeriesRefLike {

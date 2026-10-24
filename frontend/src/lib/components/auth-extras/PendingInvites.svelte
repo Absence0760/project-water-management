@@ -3,14 +3,14 @@
 	// § Invites), under a project's or a team's member list. Owners/admins only:
 	// the list endpoint is theirs alone. The parent's add form puts new invites
 	// in via `bind:invites`; this lists, re-sends and revokes them.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount } from 'svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
-	import type { Invite } from '$lib/api/types';
-	import { roleLabel } from '$lib/api/roleLabels';
-	import { fmtDate } from '$lib/format/number';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
+	import type { Invite } from '#lib/api/types.js';
+	import { roleLabel } from '#lib/api/roleLabels.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { expiryText, resendWasMailed, upsertInvite } from './invites';
-	import EmailText from '$lib/components/common/EmailText.svelte';
+	import EmailText from '#lib/components/common/EmailText.svelte';
 
 	let {
 		invites = $bindable([]),

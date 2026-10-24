@@ -2,7 +2,7 @@
 // settings.calibrationSiteNodeId, docs/model.md §2.10k).
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
-import { gaugeSeriesKey, type ModelInput, type NetworkNode } from '../project';
+import { CHECK_GAUGE_FLOW_KEY, gaugeSeriesKey, type ModelInput, type NetworkNode } from '../project';
 import { mergeSettings } from '../prepare';
 import { Rng } from '../random';
 import { runModel, runModelWithoutChecks } from '../run';
@@ -244,7 +244,8 @@ describe('a run at the calibration site (engine ≥ 1.41.0)', () => {
 		const b = truthRun(atSite(input, null));
 		expect(b.summary.calibration).toEqual(a.summary.calibration);
 		expect(a.summary.calibration!.siteNodeId).toBeUndefined();
-		expect(a.series.filter((s) => s.nodeId !== null && s.key.startsWith('observed_flow'))).toEqual([]);
+		// No node is scored: H's logger record is stored only as its checks-only series (engine ≥ 1.90.0, issue #554).
+		expect(a.series.filter((s) => s.nodeId !== null && s.key.startsWith('observed_flow')).map((s) => [s.nodeId, s.key])).toEqual([['H', CHECK_GAUGE_FLOW_KEY]]);
 	});
 
 	it('a fit at the gauge is in-sample for a run that scores the gauge', { timeout: 60_000 }, () => {

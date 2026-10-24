@@ -3,14 +3,14 @@
 // The figures are the portfolio's (GET /projects/outcomes), worded by the
 // portfolio's own helpers, so a catchment reads the same on both pages.
 // Pure, so it is unit-tested apart from the page.
-import type { PortfolioProject, ProjectSummary } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
-import { ageText, comparePortfolio, type SortDir, curtailmentHref, ewrText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
+import type { PortfolioProject, ProjectSummary } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
+import { ageText, comparePortfolio, type SortDir, curtailmentHref, farmsShortText, feedsText, irrigationText } from '#lib/components/portfolio/portfolio.js';
 
 export type Outcomes = ReadonlyMap<string, PortfolioProject>;
 
 export interface Reason {
-	/** What is wrong, in words ("Red: EWR not met 9 of 30 days"). */
+	/** What is wrong, in words ("Red: 72.0% supplied, 3 of 5 units below 95%"). */
 	text: string;
 	tone: 'danger' | 'warn';
 	/** Where to look into it, when there is one place. */
@@ -27,19 +27,22 @@ export interface Attention {
 const NONE: Attention = { score: 0, reasons: [] };
 
 /**
- * What needs attention in one catchment, worst first: a red EWR, units short
- * in the figures' last week, alerts firing, an amber EWR, failing feeds, newer
+ * What needs attention in one catchment, worst first: red irrigation supply,
+ * units short in the figures' last week, alerts firing, amber irrigation
+ * supply (the list's status, issue #558: the EWR's is the teams pages' and the
+ * workspace's EWR page's), failing feeds, newer
  * rain than the figures, figures over STALE_DAYS ($lib/format/age) old (the portfolio's "stale"). A catchment
  * without figures (not run, or a role that gets none) needs nothing here.
  */
 export function attention(o: PortfolioProject | undefined, base = ''): Attention {
 	if (!o) return NONE;
 	const out: (Reason & { score: number })[] = [];
-	if (o.ewr.status === 'red') out.push({ score: 100 + (o.ewr.fraction30 ?? 0) * 10, text: ewrText(o), tone: 'danger' });
+	const short = 1 - (o.irrigation.fractionSupplied ?? 1);
+	if (o.irrigation.status === 'red') out.push({ score: 100 + short * 10, text: irrigationText(o), tone: 'danger' });
 	if (o.farmsShort7 && o.sourceRunId)
 		out.push({ score: 50 + Math.min(o.farmsShort7, 40), text: farmsShortText(o)!, tone: 'danger', href: curtailmentHref(o, base) });
 	if (o.alertsFiring > 0) out.push({ score: 40, text: `${fmtNum(o.alertsFiring)} alert${o.alertsFiring === 1 ? '' : 's'} firing`, tone: 'warn' });
-	if (o.ewr.status === 'amber') out.push({ score: 30 + (o.ewr.fraction30 ?? 0) * 10, text: ewrText(o), tone: 'warn' });
+	if (o.irrigation.status === 'amber') out.push({ score: 30 + short * 10, text: irrigationText(o), tone: 'warn' });
 	if (o.feeds.failing > 0) out.push({ score: 20, text: feedsText(o), tone: 'warn' });
 	if (o.behindData) out.push({ score: 10, text: 'Newer rain not in the figures', tone: 'warn' });
 	if (o.stale && o.figuresUntil && o.figuresAgeDays != null)
@@ -90,7 +93,8 @@ export function sortByOutcome(projects: readonly ProjectSummary[], key: OutcomeS
 		const has = (p: ProjectSummary) => (outcomes.has(p.id) ? 0 : 1);
 		return out.sort((a, b) => has(a) - has(b) || sign * (s(b) - s(a)) || byName(a, b));
 	}
-	const cmp = comparePortfolio({ key, dir });
+	// The list's status is irrigation supply (issue #558); its URL key stays `status`.
+	const cmp = comparePortfolio({ key: key === 'status' ? 'supply' : key, dir });
 	return out.sort((a, b) => {
 		const oa = outcomes.get(a.id);
 		const ob = outcomes.get(b.id);

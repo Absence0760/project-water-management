@@ -16,7 +16,7 @@ import { parseCsv } from './csv';
 import { cellFormat, DATE_FORMAT, numberFormat, unitOf } from './formats';
 import { defuse, sheetNamer } from './names';
 import { splitSummary, type SummarySheet } from './summary';
-import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
+import { dailyEwrName, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
 import { XlsxWorkbook, type XlsxCell } from './writer';
 
 /** One daily column: the daily CSV's header and the series' unit and values. */

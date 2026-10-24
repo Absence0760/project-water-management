@@ -2,8 +2,8 @@
 // evidence-14; engine evidence/authorised.ts; docs/ui.md § Evidence report):
 // the words for its fixed row and the authorised volume's mix.
 import { isMixShares, type AuthorisedMix, type AuthorisedMixShares, type EvidenceAuthorisedImpact } from '@water-management/engine';
-import { AUTHORISATION_LABEL } from '$lib/components/allocations/allocations';
-import { fmtNum } from '$lib/format/number';
+import { AUTHORISATION_LABEL } from '#lib/components/allocations/allocations.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** The headline board's heading, and the modelled-use board's when both show. */
 export const AUTHORISED_HEADING = 'Against full authorised use';

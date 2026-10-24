@@ -7,8 +7,8 @@
 	noteCounts, refreshed after any change.
 -->
 <script lang="ts">
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { noteCounts } from './counts.svelte';
 	import NotesList from './NotesList.svelte';
 	import { countFor, notesButtonLabel, targetTitle, type NoteTarget } from './notes';

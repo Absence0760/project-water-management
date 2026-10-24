@@ -5,9 +5,9 @@
 // from other values) is left out and said so. Values are in the grid's display
 // unit: `scale` is display units per m³/day (1 for m³/day), the one place a
 // unit picker converts.
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { MONTH_COLS } from '$lib/components/crops/areaPaste';
-import { mapPaste, sameValue, toCsv, type GridFormat, type GridRow, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+import { MONTH_COLS } from '#lib/components/crops/areaPaste.js';
+import { mapPaste, sameValue, toCsv, type GridFormat, type GridRow, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 import type { DemandRow } from './demands';
 
 /** Headings the first column goes by. */

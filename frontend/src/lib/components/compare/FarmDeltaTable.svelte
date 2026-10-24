@@ -5,9 +5,9 @@
 	// runs' farm summaries, a feature column (river pumping, groundwater) joins
 	// when either run has it, a farm without the feature reading as 0
 	// (delta.ts farmFeatureMetrics).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { FarmSummary, RunComparison } from '@water-management/engine';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import Delta from './Delta.svelte';
 	import { FARM_COLUMNS, farmFeatureMetrics, fmtMetric, nextSort, sortFarms, type SortDir, type SortKey } from './delta';
 

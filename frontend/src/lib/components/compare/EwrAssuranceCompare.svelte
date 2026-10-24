@@ -4,7 +4,7 @@
 	// deficit, the longest run not met and the FDC check with the change B − A,
 	// then the share of months met per month of the year.
 	import type { EwrAssuranceDelta, MetricDelta } from '@water-management/engine';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import Delta from './Delta.svelte';
 	import { fmtMetric, type MetricSpec } from './delta';
 

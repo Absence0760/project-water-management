@@ -9,10 +9,10 @@
 -->
 <script lang="ts">
 	import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure, NetworkNode } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import { settingTarget } from '$lib/components/notes/notes';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '#lib/components/notes/notes.js';
 	import { newTable, rulesError, siteOptions } from './ewrRules';
 
 	let {

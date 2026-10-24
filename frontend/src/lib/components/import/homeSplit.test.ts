@@ -27,15 +27,16 @@ function staticImports(code: string): string[] {
 	return out;
 }
 
-/** A frontend source file for an import specifier, or null for a package ($app, svelte, the engine). */
+/** A frontend source file for an import specifier (#lib/… or relative), or null for a package ($app, svelte, the engine). */
 function resolve(from: string, spec: string): string | null {
 	let base: string;
-	if (spec.startsWith('$lib/')) base = join(SRC, 'lib', spec.slice(5));
-	else if (spec === '$lib') base = join(SRC, 'lib');
+	if (spec.startsWith('#lib/')) base = join(SRC, 'lib', spec.slice(5));
+	else if (spec === '#lib') base = join(SRC, 'lib');
 	else if (spec.startsWith('.')) base = join(dirname(from), spec);
 	else return null;
 	if (/\.(css|json|svg|png)$/.test(base)) return null;
-	for (const c of [base, `${base}.ts`, `${base}.js`, join(base, 'index.ts')]) {
+	// `#lib/x.js` names x.ts (TypeScript's extension rule, as Vite resolves it).
+	for (const c of [base, base.replace(/\.js$/, '.ts'), `${base}.ts`, `${base}.js`, join(base, 'index.ts')]) {
 		if (existsSync(c) && !c.endsWith('/') && /\.(ts|js|svelte)$/.test(c)) return c;
 	}
 	throw new Error(`${relative(SRC, from)}: cannot resolve ${spec}`);
@@ -60,7 +61,7 @@ function reachable(entry: string): Map<string, string> {
 
 describe('the project list loads the import dialog on demand', () => {
 	it('imports the dialog dynamically', () => {
-		expect(readFileSync(HOME, 'utf8')).toContain("import('$lib/components/import/ImportProjectDialog.svelte')");
+		expect(readFileSync(HOME, 'utf8')).toContain("import('#lib/components/import/ImportProjectDialog.svelte')");
 	});
 
 	it('reaches no import component or spreadsheet code through a static import', () => {

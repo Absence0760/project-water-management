@@ -25,11 +25,11 @@ running or building the app needs none of it. `bin/gen-landing-art.sh` runs:
 | render | Blender 5 (Cycles) | `scripts/landing-art/diorama.py`, which runs the help pictures' scene (`scripts/help-art/catchment.py`) and lights it with that scene's `light()` (the help pictures' dusk rig, which renders their dark-mode set too; the hero hides its cut-face fill and turns the sun into a pale moon) | the hero for day (light mode) and dusk (dark mode); the social card's backdrop; `overlay.json`, where the rivers, dams, clouds, gauge and farms fall in the hero (projected through its camera); `heights.json`, the terrain |
 | render | python3 (stdlib) | `scripts/landing-art/contours.py` | `static/landing/contours.svg`, marching-squares contours of the same terrain |
 | render | ImageMagick 7, avifenc | the renders | `hero-{day,dusk}-{800,1200,1600}.{avif,webp}` (the hero is never wider than ~800 CSS px, so 1600 covers 2× screens and keeps each file under the 100 KB asset ceiling), 24 px blur-up placeholders (inlined) |
-| render | FontForge, ImageMagick | `static/fonts/outfit-600.woff2` | `og.jpg`: the dusk backdrop with the headline set in the display font (FontForge makes the TTF ImageMagick needs) |
+| card | FontForge, ImageMagick | the render's social-card backdrop (`og-dusk.png` in the work folder), `static/fonts/outfit-600.woff2` | `og.jpg`: the dusk backdrop with the app's name (IC-WBT's full name, issue #551) and the headline set in the display font (FontForge makes the TTF ImageMagick needs). Its own step so the words can change without a render: `LANDING_ART_ONLY=card` |
 | vector | Inkscape 1.4 | `scripts/landing-art/vector/*.svg` | the four audience icons and the river divider as plain SVG, every shape a path (their path data goes into the module); the laptop and phone frames at 1× |
-| screens | Playwright | `e2e/art/landing-screens.spec.ts` on the e2e servers, `pnpm seed:examples` data | the Summary (1440 × 900), Network and River & reserve (1280 × 800) as the demo hydrologist, the farm view (390 × 844) as the demo farmer, light and dark, on a pinned day (below); ImageMagick frames them (the frames' screens are transparent holes, so the screenshot goes under the frame; the phone's camera sits in the bezel, not over the screen, where it covered the farm view's EN button) |
+| screens | Playwright | `e2e/art/landing-screens.spec.ts` on the e2e servers, `pnpm seed:examples` data | the Summary (1440 × 900), Network and EWR (River & reserve until issue #558; 1280 × 800) as the demo hydrologist, the farm view (390 × 844) as the demo farmer, light and dark, on a pinned day (below); ImageMagick frames them (the frames' screens are transparent holes, so the screenshot goes under the frame; the phone's camera sits in the bezel, not over the screen, where it covered the farm view's EN button) |
 | data | the engine | `backend/scripts/landing-data.ts` on the Kleinberg example | `data.generated.ts`: the story's charts (one water year by week), the what-if grid (7 orchard sizes × 5 dam sizes, 35 runs) and the example run's calibration NSE |
-| (always) | node | `scripts/landing-art/modules.mjs` | `art.generated.ts`: the hero's size and placeholders, the overlay, the framed screens' sizes, the icons' and divider's path data; it **fails the run if the hero's outermost rows or columns hold anything** (the block ran off the camera's frame) |
+| (after render, vector or screens) | node | `scripts/landing-art/modules.mjs` | `art.generated.ts`: the hero's size and placeholders, the overlay, the framed screens' sizes, the icons' and divider's path data; it **fails the run if the hero's outermost rows or columns hold anything** (the block ran off the camera's frame) |
 
 The screens step needs `pnpm dev:db:up` (it runs on the e2e database, which it
 rebuilds, and seeds the examples there). Working files go to
@@ -104,7 +104,7 @@ that contradicts itself.
   bars and a takeaway in Compare runs' words. The figures are a polite live
   region; the sliders have value texts.
 - **What you get** (`Screens.svelte`, `Shot.svelte`): the laptop (Summary) with
-  the phone (farm view) overlapping it, then Network and River & reserve. They
+  the phone (farm view) overlapping it, then Network and EWR. They
   rise 24 px into view once, the phone 150 ms after; a ≤ 12 px parallax on the
   phone where scroll-driven animations exist.
 - **Who it's for** (`Audiences.svelte`, `DrawnIcon.svelte`): the four roadmap

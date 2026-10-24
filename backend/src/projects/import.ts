@@ -8,6 +8,7 @@
 // Reached from lambda.ts through the routes: never import dotenv (or a module
 // that does) here, so esbuild keeps it out of the deployment bundle.
 import { isFlowSiteKind, isUnitRainKind, siteProblem } from '../series/site.js';
+import { stationProblem } from '../series/station.js';
 import { resolveFitRecord, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
@@ -20,6 +21,7 @@ import { runLiveModel } from '../runs/execute.js';
 import { requireTeamRole } from '../teams/access.js';
 import { ProjectFile } from './document.js';
 import { normaliseBaselineEwrRules } from './ewrRules.js';
+import { remapRainStations } from './rainStationSettings.js';
 import { importedAutoFitError, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds } from './settings.js';
 
 /**
@@ -59,6 +61,7 @@ export function projectFileProblems(data: ProjectFile): string[] {
 	const problems = modelProblems(data.model as ProjectModel);
 	// The database keeps one series per kind and name (UNIQUE (project_id, kind, name)).
 	const seen = new Set<string>();
+	const ids = new Set<string>();
 	for (const s of data.series) {
 		const key = `${s.kind}/${s.name}`;
 		if (seen.has(key)) problems.push(`duplicate series ${s.kind}${s.name ? ` "${s.name}"` : ''}`);
@@ -76,6 +79,18 @@ export function projectFileProblems(data: ProjectFile): string[] {
 				const problem = siteProblem(s.kind, site);
 				if (problem) problems.push(`${what}: its site "${site.name}": ${problem}`);
 			}
+		}
+		// A rainfall station's details (239_rain_stations.sql, issue #553): only a catchment rain series with no site.
+		if (s.station) {
+			const problem = stationProblem(s.kind, s.siteNodeId ?? null);
+			if (problem) problems.push(`series ${s.kind}${s.name ? ` "${s.name}"` : ''}: station: ${problem}`);
+		}
+		// Its id in the file, which settings.rainStations names it by: only a station's, and each once.
+		if (s.id !== undefined) {
+			const problem = stationProblem(s.kind, s.siteNodeId ?? null);
+			if (problem) problems.push(`series ${s.kind}${s.name ? ` "${s.name}"` : ''}: id: ${problem}`);
+			if (ids.has(s.id)) problems.push(`series ${s.kind}${s.name ? ` "${s.name}"` : ''}: its id is another series’ too`);
+			ids.add(s.id);
 		}
 	}
 	return problems;
@@ -100,7 +115,9 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	if (opts.teamId) await requireTeamRole(db, opts.teamId, 'member', 'team not found');
 	const { model: fresh, ids } = freshIds(data.model as ProjectModel);
 	const id = crypto.randomUUID();
-	const settings = importedSettings(data.settings, ids);
+	// A rainfall station's fresh id (issue #553): settings.rainStations follows it from the file's.
+	const seriesIds = new Map(data.series.flatMap((s) => (s.id !== undefined ? [[s.id, crypto.randomUUID()] as const] : [])));
+	const settings = importedSettings(data.settings, ids, seriesIds);
 	// Licence data never drives the baseline (issue #507): a file that caps or fully allocates it imports comparing only, and the import's revision says so.
 	const allocNote = normaliseBaselineAllocationMode(settings);
 	// Nor is the EWR applied in it (issue #523 B4): a file's rules that keep the EWR import switched off, and the revision says which.
@@ -116,10 +133,10 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	await saveModel(db, id, model);
 	for (const s of data.series) {
 		await db.query(
-			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
-				source, source_unit, source_unit_factor, hand_days)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-				(SELECT range_agg(daterange(d0::date, d1::date, '[]')) FROM unnest($14::text[], $15::text[]) AS t(d0, d1)))`,
+			`INSERT INTO time_series (id, project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
+				source, source_unit, source_unit_factor, hand_days, station_map_mm, station_map_source, station_lat, station_lon)
+			 VALUES (COALESCE($20::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+				(SELECT range_agg(daterange(d0::date, d1::date, '[]')) FROM unnest($14::text[], $15::text[]) AS t(d0, d1)), $16, $17, $18, $19)`,
 			[
 				id,
 				s.kind,
@@ -140,7 +157,13 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 				s.sourceUnitFactor ?? null,
 				// The days edited by hand (212): marked in the import as in the file, so an edited record stays marked.
 				(s.handDays ?? []).map((r) => r[0]),
-				(s.handDays ?? []).map((r) => r[1])
+				(s.handDays ?? []).map((r) => r[1]),
+				// A rainfall station's details (239): as the file records them.
+				s.station?.mapMm ?? null,
+				s.station?.mapSource ?? null,
+				s.station?.lat ?? null,
+				s.station?.lon ?? null,
+				s.id !== undefined ? seriesIds.get(s.id)! : null
 			]
 		);
 	}
@@ -155,8 +178,10 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
  * node references following the fresh ids and the fit record's hand-edit list
  * recomputed, as PATCH does, so a file can't hide or invent an edit.
  */
-function importedSettings(settings: ProjectFile['settings'], ids: ReadonlyMap<string, string>) {
+function importedSettings(settings: ProjectFile['settings'], ids: ReadonlyMap<string, string>, seriesIds: ReadonlyMap<string, string>) {
 	const out = remapSettingNodeIds(settings, ids);
+	// The rainfall stations the setting names follow their series to the fresh ids (issue #553); one the file doesn't carry stays, and the run warns.
+	if (out.rainStations !== null && typeof out.rainStations === 'object') out.rainStations = remapRainStations(out.rainStations, new Map(), seriesIds);
 	if (out.fitRecord !== undefined) out.fitRecord = resolveFitRecord(mergeSettings(out) as unknown as Parameters<typeof resolveFitRecord>[0]);
 	return out;
 }

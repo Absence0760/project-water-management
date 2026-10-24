@@ -13,7 +13,12 @@ import type { Mail, MailKind } from './transport.js';
 // (project/team invites, report ready) stay English, as the workspace does.
 export { LOCALES, type Locale };
 
-export const PRODUCT = 'Water Management';
+// The app's name (issue #551; the frontend's pair is in frontend/src/lib/brand.ts):
+// a proper noun, never translated. The abbreviation goes in subjects and
+// sentences, the full name in the sign-off under every email.
+export const PRODUCT = 'IC-WBT';
+export const PRODUCT_FULL = 'Integrated Catchment - Water Balance Tool';
+const SIGN_OFF = `— ${PRODUCT_FULL} (${PRODUCT})`;
 
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => ESC[ch]!);
@@ -66,7 +71,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 		...(b.ask ? [b.ask.question, ...b.ask.answers.map((a) => `${a.label}: ${a.url}`), ''] : []),
 		...b.footer.flatMap((p) => [p, '']),
 		...links.flatMap((l) => [`${l.label}: ${l.url}`, '']),
-		`— ${PRODUCT}`
+		SIGN_OFF
 	].join('\n');
 	const p = (s: Para) => `<p style="margin:0 0 16px">${paraHtml(s)}</p>`;
 	const url = b.action ? escapeHtml(b.action.url) : '';
@@ -79,7 +84,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 ${b.paragraphs.map(p).join('\n')}
 ${b.code ? `<p style="margin:24px 0;font-size:32px;font-weight:700;letter-spacing:0.2em;font-family:ui-monospace,Menlo,Consolas,monospace">${escapeHtml(b.code)}</p>\n` : ''}${b.action ? `<p style="margin:24px 0"><a href="${url}" style="display:inline-block;padding:10px 18px;background:#1d4e89;color:#ffffff;border-radius:6px;text-decoration:underline;font-weight:600">${escapeHtml(b.action.label)}</a></p>
 <p style="margin:0 0 16px;font-size:14px">${escapeHtml(fallbackLine)}<br><a href="${url}" style="color:#1d4e89;word-break:break-all">${url}</a></p>\n` : ''}${b.ask ? `<p style="margin:0 0 16px">${escapeHtml(b.ask.question)} ${b.ask.answers.map((a) => `<a href="${escapeHtml(a.url)}" style="color:#1d4e89;font-weight:600">${escapeHtml(a.label)}</a>`).join(' · ')}</p>\n` : ''}${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
-<p style="margin:24px 0 0;font-size:14px;color:#4a4a4a">— ${PRODUCT}</p>
+<p style="margin:24px 0 0;font-size:14px;color:#4a4a4a">${escapeHtml(SIGN_OFF)}</p>
 </main>
 </body>
 </html>`;
@@ -196,7 +201,7 @@ export function inviteMail(
 	return render('invite', to, `${inviterName} invited you to ${PRODUCT}`, {
 		heading: `You're invited to ${PRODUCT}`,
 		paragraphs: confirm
-			? [invited, `There is already a ${PRODUCT} account for ${to}. Confirm that this is your email address to accept.`]
+			? [invited, `There is already an ${PRODUCT} account for ${to}. Confirm that this is your email address to accept.`]
 			: mode === 'accept'
 				? [invited, `Sign in to ${PRODUCT} as ${to} to accept or decline. You won't join until you accept.`]
 				: [invited, `Create your ${PRODUCT} account with this email address (${to}) to accept.`],
@@ -209,7 +214,7 @@ export function inviteMail(
 		footer: (confirm
 			? [
 					'This link expires in 48 hours.',
-					`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
+					`If you never created an ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
 				]
 			: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
 		)

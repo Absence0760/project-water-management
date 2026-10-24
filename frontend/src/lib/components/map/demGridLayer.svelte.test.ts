@@ -4,7 +4,7 @@
 // for a view the server calls too dense; an error kept until Retry.
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DemGridLayer as Answer } from '$lib/api/types';
+import type { DemGridLayer as Answer } from '#lib/api/types.js';
 import { DemGridLayer } from './demGridLayer.svelte';
 import { demGridViewBbox } from './mapLayers';
 

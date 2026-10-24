@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import {
 	dismissMfaPrompt,
 	loadMfaPrompt,

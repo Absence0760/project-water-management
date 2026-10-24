@@ -1189,6 +1189,413 @@ def pool_storage_only() -> dict:
             "series": {"rain_catchment_mm": {"startDate": "2020-01-01", "values": rain}}}
 
 
+# --------------------------------------------------------------------------
+# Rainfall stations (issue #553, engine >= 1.91.0, docs/model.md §2.4i).
+# --------------------------------------------------------------------------
+
+
+def _station(name: str, map_mm) -> dict:
+    return {"name": name, "mapMm": map_mm, "mapSource": None if map_mm is None else "invented", "lat": None, "lon": None}
+
+
+def station_units() -> dict:
+    """Stations under per-unit rain (§2.4i), twelve years (2006–2017). Station
+    A (MAP 600) stands in u1 (its pairing reads u1's CHIRPS), with gaps
+    (July 2009, February 2013), an unreliable period (March 2015), a flagged
+    wet-season zero run (late 2016), an accumulation after five blank days
+    (June 2012) and a no-data code (−9999, January 2011, a gap), so five
+    complete years in common (2006–2008, 2010, 2014) and a fitted pairing,
+    its July factor 1 (u1's CHIRPS has under 50 mm in July); station B (MAP
+    900) has a CHIRPS cell of its own, its May factor clamped to 4, and gaps
+    (May 2011, September 2014). The
+    units: u1 (MAP 720, ratio 1.2) and u2 (MAP 420, 0.7) share A; u3 on B at
+    MAP 9 000 (ratio 10, clamped to 4); u4 on A at MAP 100 (1/6, clamped to
+    0.25); u5 on A with scaleToMap false (× 1) and its CHIRPS corrected
+    against B; u7 on B with no CHIRPS of its own (its gaps fall to the
+    catchment forcing); u8 on A without a MAP (× 1); u6 has no station (the
+    §2.4h chain, bit for bit). Every unit's CHIRPS reads a different level,
+    so the pairing factors (A's against u1's CHIRPS, B's against its cell)
+    show on every gap day."""
+    start = dt.date(2006, 1, 1)
+    n = (dt.date(2017, 12, 31) - start).days + 1
+    a: list = _season(start, n, 0, 1.1)
+    for j in list(range(_idx(start, 2013, 2, 1), _idx(start, 2013, 2, 21))) + list(range(_idx(start, 2009, 7, 5), _idx(start, 2009, 7, 15))):
+        a[j] = None
+    for j in range(_idx(start, 2016, 11, 1), _idx(start, 2017, 2, 15)):
+        a[j] = 0.0
+    r = _idx(start, 2012, 6, 20)
+    for j in range(r - 5, r):
+        a[j] = None
+    a[r] = 64.0
+    # A no-data code on a day u1's CHIRPS rains: a gap, so the corrected CHIRPS fills it.
+    neg = _idx(start, 2011, 1, 3)
+    a[neg] = -9999.0
+    b: list = _season(start, n, 3, 1.6)
+    for j in list(range(_idx(start, 2014, 9, 1), _idx(start, 2014, 10, 1))) + list(range(_idx(start, 2011, 5, 3), _idx(start, 2011, 5, 13))):
+        b[j] = None
+    # u1's CHIRPS, where A's pairing reads, × 0.05 in July (under 50 mm in twelve Julys: factor 1).
+    ch_u1 = [round(v * (0.04 if (start + dt.timedelta(days=i)).month == 7 else 0.8), 2) for i, v in enumerate(_season(start, n, 1))]
+    # CHIRPS rains on A's accumulation blanks and not on the reading's days, so §2.4d finds the window.
+    for j in range(r - 5, r):
+        ch_u1[j] = 9.0
+    for j in (r - 1, r, r + 1):
+        ch_u1[j] = 0.0
+    ch_u1[neg] = 14.0
+    iso = start.isoformat()
+    series: dict = {
+        "rain_catchment_mm": {"startDate": iso, "values": _season(start, n, 5)},
+        "rain_chirps_mm": {"startDate": iso, "values": [round(v * 0.7, 2) for v in _season(start, n, 6)]},
+        "rain_station_mm#A": {"startDate": iso, "values": a},
+        "rain_station_mm#B": {"startDate": iso, "values": b},
+        # B's cell × 0.25 in May: a factor past 4, clamped.
+        "rain_chirps_station_mm#B": {"startDate": iso, "values": [round(v * (0.25 if (start + dt.timedelta(days=i)).month == 5 else 1.3), 2) for i, v in enumerate(_season(start, n, 4))]},
+        "rain_chirps_mm@u1": {"startDate": iso, "values": ch_u1},
+        "rain_chirps_mm@u2": {"startDate": iso, "values": [round(v * 0.5, 2) for v in _season(start, n, 7)]},
+        "rain_chirps_mm@u3": {"startDate": iso, "values": [round(v * 1.4, 2) for v in _season(start, n, 8)]},
+        "rain_chirps_mm@u4": {"startDate": iso, "values": [round(v * 0.9, 2) for v in _season(start, n, 9)]},
+        "rain_chirps_mm@u5": {"startDate": iso, "values": [round(v * 1.1, 2) for v in _season(start, n, 10)]},
+        "rain_chirps_mm@u6": {"startDate": iso, "values": [round(v * 0.6, 2) for v in _season(start, n, 2)]},
+        "rain_chirps_mm@u8": {"startDate": iso, "values": [round(v * 0.75, 2) for v in _season(start, n, 11)]},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("u1", "farm", "o", areaKm2=3, mapMm=720, **src),
+        _node("u2", "farm", "u1", areaKm2=2, mapMm=420, **src),
+        _node("u3", "farm", "o", areaKm2=1.5, mapMm=9000, **src),
+        _node("u4", "farm", "o", areaKm2=1, mapMm=100, **src),
+        _node("u5", "farm", "o", areaKm2=2.5, mapMm=1500, **src),
+        _node("u6", "farm", "o", areaKm2=1.2, mapMm=650, **src),
+        _node("u7", "farm", "o", areaKm2=0.8, mapMm=800, **src),
+        _node("u8", "farm", "o", areaKm2=0.6),
+    ]
+    stations = {
+        "A": {"stationId": "A"},
+        "B": {"stationId": "B"},
+    }
+    rs = {
+        "units": {
+            "u1": stations["A"], "u2": stations["A"], "u3": stations["B"], "u4": stations["A"],
+            "u5": {"stationId": "A", "scaleToMap": False, "correctAgainst": "B"}, "u7": stations["B"], "u8": stations["A"],
+        },
+        "sites": {"A": {"unitId": "u1"}},
+        "unreliable": {"A": [["2015-03-01", "2015-03-31"]]},
+    }
+    # A listed missing period of the catchment gauge's: not A's or B's (§2.4i: neither is the catchment gauge).
+    zr = {"missing": [{"start": "2009-05-01", "end": "2009-05-20", "reason": "invented"}]}
+    doc = _net(
+        nodes, series,
+        zeroRainRuns=zr,
+        gr4j={"x1": 300, "x2": -0.3, "x3": 80, "x4": 1.8, "warmupDays": 200},
+        unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"},
+        rainStations=rs,
+    )
+    doc["stations"] = {"A": _station("A", 600), "B": _station("B", 900)}
+    return doc
+
+
+def ewr_split_station_units() -> dict:
+    """The EWR split by each unit's natural MAR (§2.5b, engine >= 1.94.0) on
+    station_units' network: u1 and u2 share station A, u2 drains into u1, so
+    u1's requirement adds both shares; the period is the complete water years
+    2006/07 … 2016/17 of the twelve calendar years."""
+    doc = station_units()
+    doc["settings"]["ewrSplit"] = "naturalMar"
+    doc["settings"]["ewrPragmaticM3PerDay"] = [4000, 4000, 5000, 6000, 6000, 5000, 4000, 3000, 2500, 2500, 3000, 3500]
+    return doc
+
+
+def ewr_split_short_run() -> dict:
+    """The same split on a run of 1 January – 31 August 2010, which holds no
+    complete water year: the units' natural MAR over the whole run (§2.5b)."""
+    doc = ewr_split_station_units()
+    doc["settings"]["simulationStart"] = "2010-01-01"
+    doc["settings"]["simulationEnd"] = "2010-08-31"
+    return doc
+
+
+def station_pairing_refused() -> dict:
+    """Pairings at the five-year minimum (§2.4i): station C (MAP 500) starts
+    on 1 March 2013, so 2014–2017 are its four complete calendar years in
+    common with the CHIRPS at it (refused); D (MAP 800) from 1 January 2013
+    has five (fitted). Unit p on C: C's days × 1.4, its gaps the catchment
+    forcing (no pairing to correct its CHIRPS with). Unit q on D with its
+    CHIRPS corrected against C: D's days × its ratio, its gaps the catchment
+    forcing too. Unit d on D: its gaps (before 2013) D's corrected CHIRPS.
+    Station E (MAP 700) is D's record with an accumulation in June 2014:
+    four blank days, then 60 mm. Spread, the blanks hold rain in the checked
+    record, but the pairing leaves the window out, so 2014 isn't complete:
+    four years, refused. Unit e on E: its gaps the catchment forcing.
+    Station F (MAP 450) has neither a cell nor a site, so no CHIRPS at it:
+    refused, though seven complete years (2011–2017) would fit it on the
+    catchment's CHIRPS; unit f on it fills its gaps (four days of 2010)
+    from the catchment forcing."""
+    start = dt.date(2010, 1, 1)
+    n = (dt.date(2017, 12, 31) - start).days + 1
+    c: list = _season(start, n, 0, 1.2)
+    d: list = _season(start, n, 2, 0.9)
+    for j in range(_idx(start, 2013, 3, 1)):
+        c[j] = None
+    for j in range(_idx(start, 2013, 1, 1)):
+        d[j] = None
+    for j in range(_idx(start, 2015, 8, 1), _idx(start, 2015, 8, 12)):
+        c[j] = None
+    e: list = list(d)
+    r = _idx(start, 2014, 6, 20)
+    for j in range(r - 4, r):
+        e[j] = None
+    e[r] = 60.0
+    ch_e = [round(v * 1.2, 2) for v in _season(start, n, 3)]
+    for j in range(r - 4, r):
+        ch_e[j] = 12.0
+    for j in (r - 1, r, r + 1):
+        ch_e[j] = 0.0
+    iso = start.isoformat()
+    series: dict = {
+        "rain_catchment_mm": {"startDate": iso, "values": _season(start, n, 5)},
+        "rain_chirps_mm": {"startDate": iso, "values": [round(v * 0.7, 2) for v in _season(start, n, 6)]},
+        "rain_station_mm#C": {"startDate": iso, "values": c},
+        "rain_station_mm#D": {"startDate": iso, "values": d},
+        "rain_chirps_station_mm#C": {"startDate": iso, "values": [round(v * 0.6, 2) for v in _season(start, n, 1)]},
+        "rain_chirps_station_mm#D": {"startDate": iso, "values": [round(v * 1.2, 2) for v in _season(start, n, 3)]},
+        "rain_chirps_mm@p": {"startDate": iso, "values": [round(v * 0.8, 2) for v in _season(start, n, 7)]},
+        "rain_chirps_mm@q": {"startDate": iso, "values": [round(v * 0.9, 2) for v in _season(start, n, 8)]},
+        "rain_chirps_mm@d": {"startDate": iso, "values": [round(v * 1.1, 2) for v in _season(start, n, 9)]},
+        "rain_station_mm#E": {"startDate": iso, "values": e},
+        "rain_station_mm#F": {"startDate": iso, "values": [None if j % 97 == 0 and j < 365 else v for j, v in enumerate(_season(start, n, 11))]},
+        "rain_chirps_mm@f": {"startDate": iso, "values": [round(v * 0.9, 2) for v in _season(start, n, 12)]},
+        "rain_chirps_station_mm#E": {"startDate": iso, "values": ch_e},
+        "rain_chirps_mm@e": {"startDate": iso, "values": [round(v * 0.7, 2) for v in _season(start, n, 10)]},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("p", "farm", "o", areaKm2=2, mapMm=700, **src),
+        _node("q", "farm", "o", areaKm2=1, mapMm=600, **src),
+        _node("d", "farm", "o", areaKm2=1.5, mapMm=880, **src),
+        _node("e", "farm", "o", areaKm2=0.5, mapMm=650, **src),
+        _node("f", "farm", "o", areaKm2=0.7, mapMm=500, **src),
+    ]
+    rs = {"units": {"p": {"stationId": "C"}, "q": {"stationId": "D", "correctAgainst": "C"}, "d": {"stationId": "D"}, "e": {"stationId": "E"}, "f": {"stationId": "F"}}}
+    doc = _net(nodes, series, unitRain={"mode": "perUnit", "gaugeMapMm": 640, "gaugeMapSource": "invented"}, rainStations=rs)
+    doc["stations"] = {"C": _station("C", 500), "D": _station("D", 800), "E": _station("E", 700), "F": _station("F", 450)}
+    return doc
+
+
+def station_catchment() -> dict:
+    """The catchment's station (§2.4i) under Fragmentation: station S (MAP
+    560) with gaps and an unreliable fortnight, its pairing on its CHIRPS
+    cell; no catchmentMapMm, so the catchment MAP is the farms' area-weighted
+    mean (3 × 800 + 1 × 400 + 2 × 650) / 6 = 683.3 and the ratio 1.22. Gap
+    days read the catchment CHIRPS (`rain_chirps_mm`) × S's factors, as is;
+    a forecast tail past both. The stored catchment gauge is ignored. S is
+    the catchment gauge (`isCatchmentGauge`), so the catchment's listed
+    missing period (March 2010) is a gap too, and its checks compare with the
+    catchment's CHIRPS: a wet-season zero run (November 2015 to January
+    2016) where its cell reads 0 too is set aside wherever the catchment
+    CHIRPS reads over 2 mm. S has four complete years in common with its
+    cell (2009, 2011, 2013, 2017: the gaps, the missing period, the
+    unreliable fortnight and the zero run make the others incomplete), so
+    its pairing is refused: gap days fall to the forecast, else dry."""
+    start = dt.date(2009, 1, 1)
+    n = (dt.date(2017, 12, 31) - start).days + 1
+    st: list = _season(start, n, 0, 1.3)
+    for j in range(_idx(start, 2012, 1, 10), _idx(start, 2012, 2, 10)):
+        st[j] = None
+    for j in range(_idx(start, 2016, 12, 1), _idx(start, 2016, 12, 6)):
+        st[j] = None
+    # A wet-season zero run (§2.4c flags it). S's cell reads 0 there too, the catchment CHIRPS rains: as the
+    # catchment gauge, S is checked against the catchment CHIRPS, so its days are set aside, not kept dry.
+    z0, z1 = _idx(start, 2015, 11, 1), _idx(start, 2016, 1, 31)
+    for j in range(z0, z1):
+        st[j] = 0.0
+    cell = [round(v * 0.9, 2) for v in _season(start, n, 1)]
+    ch = [round(v * 0.7, 2) for v in _season(start, n, 6)]
+    for j in range(z0, z1):
+        cell[j] = 0.0
+        ch[j] = max(ch[j], 3.0) if j % 2 else ch[j]
+    iso = start.isoformat()
+    series: dict = {
+        "rain_catchment_mm": {"startDate": iso, "values": [v * 3 for v in _season(start, n, 5)]},
+        "rain_chirps_mm": {"startDate": iso, "values": ch},
+        "rain_station_mm#S": {"startDate": iso, "values": st},
+        "rain_chirps_station_mm#S": {"startDate": iso, "values": cell},
+        "rain_forecast_mm": {"startDate": "2018-01-01", "values": [3.0, 0.0, 8.0, 1.5, 0.0, 12.0]},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f1", "farm", "o", areaKm2=3, mapMm=800, **src),
+        _node("f2", "farm", "f1", areaKm2=1, mapMm=400, **src),
+        _node("f3", "farm", "o", areaKm2=2, mapMm=650, **src),
+    ]
+    rs = {"catchment": {"stationId": "S"}, "unreliable": {"S": [["2014-02-01", "2014-02-14"]]}}
+    # S is the catchment gauge, so the catchment's listed missing period blanks its days (§2.4i).
+    zr = {"missing": [{"start": "2010-03-01", "end": "2010-03-25", "reason": "invented"}]}
+    doc = _net(nodes, series, rainStations=rs, zeroRainRuns=zr)
+    doc["stations"] = {"S": {**_station("S", 560), "isCatchmentGauge": True}}
+    return doc
+
+
+def station_catchment_map() -> dict:
+    """The catchment's station with a catchment MAP entered (§2.4i): 3 000 mm
+    over station T's 600 (ratio 5, clamped to 4), T's pairing on the CHIRPS
+    of unit t1, where it stands; under per-unit rain, so t1 (on station V,
+    whose pairing is refused, three years in common) takes the catchment
+    forcing on V's gaps, and t2 (no station) the §2.4h chain on the
+    catchment's rain. One farm has no MAP, which the entered MAP makes moot."""
+    start = dt.date(2011, 1, 1)
+    n = (dt.date(2017, 12, 31) - start).days + 1
+    t: list = _season(start, n, 0)
+    for j in range(_idx(start, 2013, 5, 1), _idx(start, 2013, 6, 15)):
+        t[j] = None
+    v: list = _season(start, n, 2, 1.4)
+    for j in range(_idx(start, 2015, 1, 1)):
+        v[j] = None
+    for j in range(_idx(start, 2016, 3, 1), _idx(start, 2016, 3, 20)):
+        v[j] = None
+    iso = start.isoformat()
+    series: dict = {
+        "rain_catchment_mm": {"startDate": iso, "values": _season(start, n, 5)},
+        "rain_chirps_mm": {"startDate": iso, "values": [round(x * 0.7, 2) for x in _season(start, n, 6)]},
+        "rain_station_mm#T": {"startDate": iso, "values": t},
+        "rain_station_mm#V": {"startDate": iso, "values": v},
+        "rain_chirps_mm@t1": {"startDate": iso, "values": [round(x * 1.2, 2) for x in _season(start, n, 1)]},
+        "rain_chirps_station_mm#V": {"startDate": iso, "values": [round(x * 0.8, 2) for x in _season(start, n, 3)]},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("t1", "farm", "o", areaKm2=3, mapMm=900, **src),
+        _node("t2", "farm", "o", areaKm2=2, mapMm=500, **src),
+        _node("t3", "farm", "t2", areaKm2=1),
+    ]
+    rs = {
+        "catchment": {"stationId": "T"}, "catchmentMapMm": 3000, "catchmentMapSource": "invented",
+        "units": {"t1": {"stationId": "V"}}, "sites": {"T": {"unitId": "t1"}},
+    }
+    doc = _net(nodes, series, unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"}, rainStations=rs)
+    doc["stations"] = {"T": _station("T", 600), "V": _station("V", 750)}
+    return doc
+
+
+def station_catchment_reference() -> dict:
+    """A §2.4h reference gauge on the catchment rain while the catchment
+    runs on its station (§2.4i): every reader of the catchment rain sees
+    station S × r (r = 900 ÷ 600 = 1.5) and "the stored rain_catchment_mm is
+    not read", so the reference factors are fitted on S × 1.5 against unit
+    r's CHIRPS cell. The stored gauge has another season (× 2 November to
+    April, × 0.5 the rest), so fitting on it gives other factors: unit a0
+    (no MAP: its CHIRPS × f alone) and a1 (MAP 700: f × k_unit, where only
+    the factors' shape shows) both see the difference. Engine 1.91.0 first
+    fitted on the stored gauge; fixed in the engine (86b2b80dc). S has an
+    accumulation (January 2015) whose window the fit leaves out, as the
+    pairing does."""
+    start = dt.date(2010, 1, 1)
+    n = (dt.date(2017, 12, 31) - start).days + 1
+    stn: list = _season(start, n, 0, 1.2)
+    for j in range(_idx(start, 2013, 3, 1), _idx(start, 2013, 3, 20)):
+        stn[j] = None
+    # An accumulation in S (January 2015, five blanks then 70 mm), which the reference fit leaves out.
+    acc = _idx(start, 2015, 1, 20)
+    for j in range(acc - 5, acc):
+        stn[j] = None
+    stn[acc] = 70.0
+    stored = [None if v is None else round(v * (2.5 if (start + dt.timedelta(days=i)).month in WET else 0.4), 1) for i, v in enumerate(_season(start, n, 3))]
+    iso = start.isoformat()
+    series: dict = {
+        "rain_catchment_mm": {"startDate": iso, "values": stored},
+        "rain_chirps_mm": {"startDate": iso, "values": [round(v * 0.7, 2) for v in _season(start, n, 6)]},
+        "rain_station_mm#S": {"startDate": iso, "values": stn},
+        "rain_chirps_station_mm#S": {"startDate": iso, "values": [9.0 if acc - 5 <= i < acc else (0.0 if acc - 1 <= i <= acc + 1 else round(v * 0.9, 2)) for i, v in enumerate(_season(start, n, 1))]},
+        "rain_chirps_cell_mm@r": {"startDate": iso, "values": [round(v * 0.8, 2) for v in _season(start, n, 2)]},
+        "rain_chirps_mm@a0": {"startDate": iso, "values": [round(v * 0.6, 2) for v in _season(start, n, 4)]},
+        "rain_chirps_mm@a1": {"startDate": iso, "values": [round(v * 1.1, 2) for v in _season(start, n, 5)]},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("r", "farm", "o", areaKm2=2, mapMm=650, **src),
+        _node("a0", "farm", "o", areaKm2=3),
+        _node("a1", "farm", "o", areaKm2=1.5, mapMm=700, **src),
+    ]
+    rs = {"catchment": {"stationId": "S"}, "catchmentMapMm": 900, "catchmentMapSource": "invented"}
+    doc = _net(nodes, series, unitRain={"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "r"}}, rainStations=rs)
+    doc["stations"] = {"S": _station("S", 600)}
+    return doc
+
+
+def station_catchment_window() -> dict:
+    """The run window under the catchment's station (§2.4i: it "follows the
+    station's record in the gauge's place"): the first and last day the
+    catchment rain has a value. Station Q's record runs 2015-01-01 to
+    2016-12-31, blank for its first ten days and unreliable for its last
+    fifteen, and has no CHIRPS at it (refused), so the catchment CHIRPS
+    (mid-2014 to mid-2017) corrects nothing and the window is Q's checked
+    days, 2015-01-11 to 2016-12-16, not the stored record's span or the
+    CHIRPS's. Random seeds 4, 5 and 12 first showed it."""
+    start = dt.date(2014, 6, 1)
+    n = (dt.date(2017, 6, 30) - start).days + 1
+    q0 = _idx(start, 2015, 1, 1)
+    qn = (dt.date(2016, 12, 31) - dt.date(2015, 1, 1)).days + 1
+    q: list = _season(dt.date(2015, 1, 1), qn, 0, 1.1)
+    for j in range(10):
+        q[j] = None
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": _season(start, n, 5)},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": [round(v * 0.7, 2) for v in _season(start, n, 6)]},
+        "rain_station_mm#Q": {"startDate": (start + dt.timedelta(days=q0)).isoformat(), "values": q},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [_node("o", "gauge", None), _node("g1", "farm", "o", areaKm2=2, mapMm=500, **src), _node("g2", "farm", "o", areaKm2=1, mapMm=800, **src)]
+    rs = {"catchment": {"stationId": "Q"}, "unreliable": {"Q": [["2016-12-17", "2016-12-31"]]}}
+    doc = _net(nodes, series, rainStations=rs)
+    doc["stations"] = {"Q": _station("Q", 550)}
+    return doc
+
+
+def station_catchment_rule2(station_map=600) -> dict:
+    """§2.4h rule 2 under the catchment's station (§2.4i "Rule 2's MAP
+    ratio"): the catchment rain is station S × r, r = 900 ÷ 600 = 1.5, at
+    the level S's MAP × r = 900 mm, so a rule-2 unit divides its MAP by 900,
+    not by `gaugeMapMm` (450, which still switches rule 2 on). b1 (MAP 720:
+    ratio 0.8, not 1.6) has nothing of its own; b2 (MAP 1 080: 1.2) has
+    CHIRPS, which fills S's gaps (its §2.4b factors are off under the
+    station, so raw × the ratio); both take the forecast tail × their ratio.
+    b3 has no MAP (rule 4)."""
+    start = dt.date(2011, 1, 1)
+    n = (dt.date(2016, 12, 31) - start).days + 1
+    stn: list = _season(start, n, 0, 1.2)
+    for j in range(_idx(start, 2013, 3, 1), _idx(start, 2013, 3, 25)):
+        stn[j] = None
+    iso = start.isoformat()
+    series: dict = {
+        "rain_catchment_mm": {"startDate": iso, "values": _season(start, n, 3, 2.0)},
+        "rain_chirps_mm": {"startDate": iso, "values": [round(v * 0.7, 2) for v in _season(start, n, 6)]},
+        "rain_station_mm#S": {"startDate": iso, "values": stn},
+        "rain_chirps_mm@b2": {"startDate": iso, "values": [round(v * 0.9, 2) for v in _season(start, n, 4)]},
+        "rain_forecast_mm": {"startDate": "2017-01-01", "values": [3.0, 0.0, 8.0, 1.5, 0.0, 12.0]},
+    }
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("b1", "farm", "o", areaKm2=2, mapMm=720, **src),
+        _node("b2", "farm", "o", areaKm2=1.5, mapMm=1080, **src),
+        _node("b3", "farm", "o", areaKm2=1),
+    ]
+    rs = {"catchment": {"stationId": "S"}, "catchmentMapMm": 900, "catchmentMapSource": "invented"}
+    doc = _net(nodes, series, unitRain={"mode": "perUnit", "gaugeMapMm": 450, "gaugeMapSource": "invented"}, rainStations=rs)
+    doc["stations"] = {"S": _station("S", station_map)}
+    return doc
+
+
+def station_catchment_rule2_no_map() -> dict:
+    """The same with no MAP on station S (§2.4i): the catchment rain's level
+    is unknown, so rule 2 doesn't apply (b1 takes the catchment forcing, b2
+    its CHIRPS), though `gaugeMapMm` is set; the catchment's own ratio is 1."""
+    return station_catchment_rule2(None)
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -1233,4 +1640,16 @@ PROBES = {
     "unit-rain-reference-checked": unit_rain_reference_checked(),
     "unit-rain-reference-unit-gauge-checked": unit_rain_reference_unit_gauge_checked(),
     "pool-storage-only": pool_storage_only(),
+    # Rainfall stations (issue #553).
+    "station-units": station_units(),
+    "station-pairing-refused": station_pairing_refused(),
+    "station-catchment": station_catchment(),
+    "station-catchment-map": station_catchment_map(),
+    "station-catchment-window": station_catchment_window(),
+    "station-catchment-reference": station_catchment_reference(),
+    "station-catchment-rule2": station_catchment_rule2(),
+    "station-catchment-rule2-no-map": station_catchment_rule2_no_map(),
+    # The EWR split (issue #553 round 4).
+    "ewr-split-station-units": ewr_split_station_units(),
+    "ewr-split-short-run": ewr_split_short_run(),
 }

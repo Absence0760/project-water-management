@@ -15,17 +15,17 @@
 	// project (importReport.ts; the Overview's Import record shows them).
 	// `source` only picks the wording and what the picker offers; the file's
 	// type decides how it is read, so either entry point takes either kind.
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { version } from '$app/environment';
-	import { base } from '$app/paths';
-	import { api, ApiError, type ImportResult, type Team } from '$lib/api';
-	import { workspaceNameProblem } from '$lib/format/visibleName';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { version } from '$app/env';
+	import { resolve } from '$app/paths';
+	import { api, ApiError, type ImportResult, type Team } from '#lib/api/index.js';
+	import { workspaceNameProblem } from '#lib/format/visibleName.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { B023_WORKBOOK_FORMAT, PROJECT_FILE_FORMAT } from './importFormats';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import type { WorkbookImportProgress } from '$lib/spreadsheet/import/messages';
-	import type { WorkbookImportSession } from '$lib/spreadsheet/import/runner';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
+	import type { WorkbookImportProgress } from '#lib/spreadsheet/import/messages.js';
+	import type { WorkbookImportSession } from '#lib/spreadsheet/import/runner.js';
 	import ImportPreview from './ImportPreview.svelte';
 	import { buildImportReport, importerVersion, projectFileNotes } from './importReport';
 	import { IMPORT_ACCEPT, importBody, importTooLarge, readImportFile, type ParsedImport } from './projectFile';
@@ -163,9 +163,9 @@
 	async function pickWorkbook(f: File) {
 		readingWorkbook = true;
 		const mine = ++attempt;
-		let runner: typeof import('$lib/spreadsheet/import/runner');
+		let runner: typeof import('#lib/spreadsheet/import/runner.js');
 		try {
-			runner = await import('$lib/spreadsheet/import/runner');
+			runner = await import('#lib/spreadsheet/import/runner.js');
 		} catch {
 			if (mine !== attempt) return;
 			readingWorkbook = false;
@@ -213,7 +213,7 @@
 		optionsError = null;
 		updating = true;
 		try {
-			const { WorkbookImportFailed } = await import('$lib/spreadsheet/import/runner');
+			const { WorkbookImportFailed } = await import('#lib/spreadsheet/import/runner.js');
 			try {
 				const out = fromResult(await s.extract(opts.options));
 				if (session !== s) return;
@@ -387,7 +387,7 @@
 	{#snippet actions()}
 		{#if step === 'done' && result}
 			<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
-			<a class="btn btn-primary" href="{base}/projects/{result.project.id}" {@attach focusOnMount}>Open project</a>
+			<a class="btn btn-primary" href={resolve(`projects/${result.project.id}`)} {@attach focusOnMount}>Open project</a>
 		{:else if step === 'failed'}
 			<!-- Close, not Cancel: there is nothing left to cancel. -->
 			{#if parsed}

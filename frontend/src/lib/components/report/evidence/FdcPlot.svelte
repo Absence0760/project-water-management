@@ -5,7 +5,7 @@
 	// differ in dash as well as weight (§8: colour is never the only cue).
 	// With the banded FDC check (ER5), each run's 5–95 % band is a shaded area
 	// behind its line: the baseline's solid, the application's hatched.
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum } from '#lib/format/number.js';
 
 	type Range = { lo: number; hi: number } | null;
 	type Point = { point: number; required: number; a: number | null; b: number | null; natural: number | null; bandA?: Range; bandB?: Range };

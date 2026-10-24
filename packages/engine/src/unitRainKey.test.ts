@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapMmError, parseGaugeSeriesKey, parseUnitRainSeriesKey, UNIT_RAIN_KINDS, unitRainError, unitRainSeriesKey } from './project';
+import { mapMmError, parseGaugeSeriesKey, rainStationError, parseUnitRainSeriesKey, UNIT_RAIN_KINDS, unitRainError, unitRainSeriesKey } from './project';
 
 describe('unit rain series keys (issue #482)', () => {
 	it('round-trips every unit rain kind', () => {
@@ -41,5 +41,40 @@ describe('unitRainError and mapMmError (issue #482)', () => {
 		expect(mapMmError(820, '  ')).toMatch(/source/);
 		expect(mapMmError(Number.NaN, 'x')).toMatch(/number/);
 		expect(mapMmError(20_000, 'x')).toMatch(/number/);
+	});
+});
+
+describe('rainStationError (issue #553)', () => {
+	const st = (o: Partial<Record<'mapMm' | 'mapSource' | 'lat' | 'lon', unknown>>) => ({ mapMm: null, mapSource: null, lat: null, lon: null, ...o }) as never;
+
+	it('accepts nothing recorded, a MAP with its source, and coordinates in range (edges included)', () => {
+		expect(rainStationError(st({}))).toBeNull();
+		expect(rainStationError(st({ mapMm: 745, mapSource: 'station record 1981–2020' }))).toBeNull();
+		expect(rainStationError(st({ lat: -33.9, lon: 18.9 }))).toBeNull();
+		expect(rainStationError(st({ mapMm: 745, mapSource: 'x', lat: 90, lon: -180 }))).toBeNull();
+		expect(rainStationError(st({ lat: -90, lon: 180 }))).toBeNull();
+		expect(rainStationError({ mapMm: 745, mapSource: 'x' } as never)).toBeNull();
+	});
+
+	it('refuses a MAP as mapMmError does', () => {
+		expect(rainStationError(st({ mapMm: 745 }))).toBe(mapMmError(745, null));
+		expect(rainStationError(st({ mapMm: 0, mapSource: 'x' }))).toMatch(/from 1/);
+		expect(rainStationError(st({ mapMm: Number.POSITIVE_INFINITY, mapSource: 'x' }))).toMatch(/number/);
+	});
+
+	it('refuses one coordinate without the other, out of range, or not a finite number', () => {
+		expect(rainStationError(st({ lat: -33.9 }))).toMatch(/both/);
+		expect(rainStationError(st({ lon: 18.9 }))).toMatch(/both/);
+		expect(rainStationError(st({ lat: 90.01, lon: 0 }))).toMatch(/latitude/);
+		expect(rainStationError(st({ lat: -91, lon: 0 }))).toMatch(/latitude/);
+		expect(rainStationError(st({ lat: 0, lon: 180.5 }))).toMatch(/longitude/);
+		expect(rainStationError(st({ lat: Number.NaN, lon: 0 }))).toMatch(/latitude/);
+		expect(rainStationError(st({ lat: 0, lon: Number.NEGATIVE_INFINITY }))).toMatch(/longitude/);
+		expect(rainStationError(st({ lat: '-33.9', lon: 18.9 }))).toMatch(/latitude/);
+	});
+
+	it('refuses something that is not a station', () => {
+		expect(rainStationError(null as never)).toMatch(/not a rainfall station/);
+		expect(rainStationError([] as never)).toMatch(/not a rainfall station/);
 	});
 });

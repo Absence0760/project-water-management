@@ -3,16 +3,17 @@
 	// Reached from the confirmation email. Works signed in or out (the token is
 	// the proof); signed in, the banner and session update straight away.
 	import { onMount } from 'svelte';
-	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
-	import { emailAuthApi, linkToken } from '$lib/api/emailAuth';
-	import { session } from '$lib/auth/session.svelte';
-	import AuthCard from '$lib/components/layout/AuthCard.svelte';
-	import { t, tRich } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import Rich from '$lib/i18n/Rich.svelte';
+	import { api } from '#lib/api/index.js';
+	import { emailAuthApi, linkToken } from '#lib/api/emailAuth.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import AuthCard from '#lib/components/layout/AuthCard.svelte';
+	import { t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import Rich from '#lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
 	const token = linkToken(page.url);
@@ -24,7 +25,7 @@
 	let otherAccount = $state<string | null>(null);
 
 	onMount(async () => {
-		if (page.url.searchParams.has('token')) replaceState(`${base}/verify-email`, {});
+		if (page.url.searchParams.has('token')) void goto(resolve('verify-email'), { shallow: true, replace: true });
 		if (!token) return;
 		// Whether the signed-in account still needed confirming when the link was opened.
 		const wasUnconfirmed = session.user?.emailVerified === false;
@@ -82,7 +83,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Confirm your email') })}</title>
+	<title>{t('{page} · {app}', { page: t('Confirm your email'), app: APP_SHORT_NAME })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
@@ -98,9 +99,9 @@
 			{/if}
 		</div>
 		{#if session.user}
-			<a class="btn btn-primary" href="{base}/">{t('Go to your projects')}</a>
+			<a class="btn btn-primary" href={resolve('')}>{t('Go to your projects')}</a>
 		{:else}
-			<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
+			<a class="btn btn-primary" href={resolve('login')}>{t('Sign in')}</a>
 		{/if}
 	{:else}
 		<div class="alert alert-error" role="alert">{t('This confirmation link is invalid, already used, or older than 48 hours.')}</div>
@@ -122,14 +123,14 @@
 				</button>
 			</form>
 			<p class="muted resend" role="status" aria-live="polite">{resendMsg ?? ''}</p>
-			<a class="btn" href="{base}/login">{t('Sign in')}</a>
+			<a class="btn" href={resolve('login')}>{t('Sign in')}</a>
 		{/if}
 	{/if}
 	{#snippet footer()}
 		{#if session.user}
-			<a href="{base}/">{t('Back to your projects')}</a>
+			<a href={resolve('')}>{t('Back to your projects')}</a>
 		{:else}
-			{t('No account yet?')} <a href="{base}/register">{t('Create one')}</a>
+			{t('No account yet?')} <a href={resolve('register')}>{t('Create one')}</a>
 		{/if}
 	{/snippet}
 </AuthCard>

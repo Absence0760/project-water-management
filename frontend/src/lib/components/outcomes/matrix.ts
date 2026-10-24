@@ -32,10 +32,10 @@ import {
 	type WaterYearClasses,
 	type YearClassBand
 } from '@water-management/engine';
-import type { OutcomeSettings, StoredRunSeries, Sweep, SweepMember, SweepRequest } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { OutcomeSettings, StoredRunSeries, Sweep, SweepMember, SweepRequest } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import { effectiveCutoffs } from './outcomeSettings';
-import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
+import { dailyEwrName, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
 
 /** The demand levels a new sweep starts with, % of today's demand (planning-outputs.md S2). */
 export const DEFAULT_DEMAND_LEVELS: readonly number[] = Object.freeze([100, 85, 70]);

@@ -2,8 +2,8 @@
 // engine's pickNotice, tested there), and how the "wrote this notice in …
 // only" line names the language.
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLocale } from '$lib/i18n/locale.svelte';
-import { MESSAGE_IDS } from '$lib/i18n/messages/ids.generated';
+import { setLocale } from '#lib/i18n/locale.svelte.js';
+import { MESSAGE_IDS } from '#lib/i18n/messages/ids.generated.js';
 import { languageName, pickNotice } from './notice';
 
 describe('pickNotice', () => {

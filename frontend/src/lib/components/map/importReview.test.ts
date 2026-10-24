@@ -2,7 +2,7 @@
 // row may take, "set every row's kind", the one-boundary rule, replacing the
 // current boundary only with the tick, and the body.
 import { describe, expect, it } from 'vitest';
-import type { MapImportPreview } from '$lib/api/types';
+import type { MapImportPreview } from '#lib/api/types.js';
 import { importBody, kindCounts, kindsFor, nodesFor, replaceBoundaryText, replacesBoundary, reviewedFeatures, reviewProblems, reviewRows, setEveryKind, withKind, type ReviewNode } from './importReview';
 
 const nodes: ReviewNode[] = [

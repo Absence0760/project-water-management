@@ -4,11 +4,11 @@
 // MapChecks.test.ts: mapChecks.test.ts differs from it only in case.)
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { MapFeature, MapNodeArea } from '$lib/api/types';
+import type { MapFeature, MapNodeArea } from '#lib/api/types.js';
 import MapChecks from './MapChecks.svelte';
 
 // HelpTip links to the glossary under the app's base path.
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 // Comments stripped until none are left, so one split by another can't survive
 // as a fresh '<!--' (CodeQL js/incomplete-multi-character-sanitization).

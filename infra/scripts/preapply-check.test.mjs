@@ -81,10 +81,10 @@ test('every check passes against a ready account, with read-only calls only', ()
 	for (const name of ['lambda-quota', 'state-bucket', 'sops-key', 'ses-endpoint', 'rds-orderable', 'cloudtrail']) {
 		assert.match(r.line(name), /^PASS/, `${name}:\n${r.stdout}`);
 	}
-	// The defaults in variables.tf: API 10 + migrate 1 + worker 8 + fetcher 2
-	// + renderer 2 = 23, + 10 unreserved = 33 (infra/README.md step 3 says 33).
-	assert.match(r.line('lambda-quota'), /quota 1000 >= 33 \(reservations 23 \+ 10 unreserved\)/);
-	assert.match(r.line('lambda-quota'), /lambda=10 migrate=1 worker=8 fetcher=2 renderer=2/);
+	// The defaults in variables.tf: API 25 + migrate 1 + worker 8 + fetcher 2
+	// + renderer 2 = 38, + 10 unreserved = 48 (infra/README.md step 3 says 48).
+	assert.match(r.line('lambda-quota'), /quota 1000 >= 48 \(reservations 38 \+ 10 unreserved\)/);
+	assert.match(r.line('lambda-quota'), /lambda=25 migrate=1 worker=8 fetcher=2 renderer=2/);
 	assert.match(r.line('rds-orderable'), /db\.t4g\.micro offers PostgreSQL 17 in af-south-1 \(17\.5 17\.6\)/);
 	assert.match(r.stdout, /All pre-apply checks passed/);
 
@@ -108,13 +108,13 @@ test('every check passes against a ready account, with read-only calls only', ()
 });
 
 test('a quota below the reservations + 10 fails; exactly enough passes', () => {
-	const low = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 32.0 } } } });
+	const low = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 47.0 } } } });
 	assert.equal(low.status, 1);
-	assert.match(low.line('lambda-quota'), /^FAIL .*quota 32 < 33/);
+	assert.match(low.line('lambda-quota'), /^FAIL .*quota 47 < 48/);
 	assert.match(low.stdout, /1 check\(s\) FAILED/);
 	// A new account's quota of 10.
 	assert.equal(run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 10.0 } } } }).status, 1);
-	const exact = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 33.0 } } } });
+	const exact = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 48.0 } } } });
 	assert.equal(exact.status, 0, exact.stdout);
 });
 

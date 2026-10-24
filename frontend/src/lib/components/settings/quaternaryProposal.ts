@@ -4,8 +4,8 @@
 // holds now. The hydrologist uses each value one by one, sees its source, and
 // saves the form as usual; nothing here writes to the model. Pure, so vitest
 // covers it (quaternaryProposal.test.ts).
-import type { MapFeature, MapPosition, QuaternaryProposal } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { MapFeature, MapPosition, QuaternaryProposal } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import type { Wr2012Draft } from './wr2012';
 
 export type ProposalKey = 'quaternary' | 'areaKm2' | 'mapMm' | 'marMm3' | 'period' | 'monthlyMm3' | 'source';

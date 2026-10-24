@@ -169,7 +169,7 @@ describe.skipIf(!minioUp)('report_render with local Chromium and MinIO', () => {
 		expect(await asOwner('SELECT id FROM render_token WHERE project_id = $1', [projectId])).toEqual([]);
 
 		const mail = lastMailTo(u.email);
-		expect(mail?.subject).toBe('Catchment report: Rendered catchment — Water Management');
+		expect(mail?.subject).toBe('Catchment report: Rendered catchment — IC-WBT');
 		expect(mail?.text).toContain(`/projects/${projectId}/reports/${jobId}`);
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 		vi.unstubAllEnvs();

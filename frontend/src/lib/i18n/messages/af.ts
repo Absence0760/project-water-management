@@ -135,8 +135,8 @@ export const af: Catalogue = {
 	'7067a2c9': 'Kodes per e-pos is af.',
 	// Two-step sign-in is off.
 	'7aa9d2cc': 'Tweestap-intekening is af.',
-	// Water Management recovery codes for {email}
-	'e65b3921': 'Water Management-herstelkodes vir {email}',
+	// {app} recovery codes for {email}
+	'dc6bee9c': '{app}-herstelkodes vir {email}',
 	// Each code works once, in place of a code from your authenticator app or your email.
 	'49c661fe': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app of jou e-pos.',
 	// Sending…
@@ -315,8 +315,8 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// {page} · Water Management
-	'96d7c65d': '{page} · Water Management',
+	// {page} · {app}
+	'f821269a': '{page} · {app}',
 	// Our terms have changed
 	'530477d8': 'Ons voorwaardes het verander',
 	// Read what changed, then accept the new Terms of use and Privacy notice to carry on.
@@ -1093,8 +1093,6 @@ export const af: Catalogue = {
 	'7b6ac5fa': 'Die water wat jou hidrologiese eenheid kry, jou dam en enige beperking, op jou foon, in Engels of Afrikaans.',
 	// An illustrated catchment: rain over the mountains, two farm dams, an orchard and a vineyard, and a river winding down to a gauging weir.
 	'eb2f0a73': '’n Tekening van ’n opvanggebied: reën oor die berge, twee plaasdamme, ’n boord en ’n wingerd, en ’n rivier wat afkronkel na ’n meetstuwal.',
-	// Catchment water balance
-	'2d2f00a3': 'Waterbalans van die opvanggebied',
 	// Every drop in the catchment, accounted for.
 	'633902ad': 'Elke druppel in die opvanggebied word verreken.',
 	// Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.
@@ -1123,12 +1121,12 @@ export const af: Catalogue = {
 	'26609b94': 'Laat loop en vergelyk',
 	// Run the model, then try a what-if and see what it changes for each hydrological unit and for the river, in plain words.
 	'59421acd': 'Laat die model loop, probeer dan ’n wat-as en sien in gewone woorde wat dit vir elke hidrologiese eenheid en vir die rivier verander.',
-	// Water Management: daily water balance for a catchment
-	'3dac521e': 'Water Management: daaglikse waterbalans vir ’n opvanggebied',
+	// {app}: daily water balance for a catchment
+	'059ed1b7': '{app}: daaglikse waterbalans vir ’n opvanggebied',
 	// An illustrated catchment at dusk, with the words: Every drop in the catchment, accounted for.
 	'2f037a30': '’n Tekening van ’n opvanggebied teen skemer, met die woorde: Elke druppel in die opvanggebied word verreken.',
-	// Water Management, home
-	'02a86054': 'Water Management, tuisblad',
+	// {app}, home
+	'f8bdaee7': '{app}, tuisblad',
 	// See your catchment day by day.
 	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
 	// Footer
@@ -1153,8 +1151,8 @@ export const af: Catalogue = {
 	'133225ef': 'Hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, van die oorsprong tot by die uitloop.',
 	// The river against its ecological reserve, day by day, with the days below it marked.
 	'a67f5236': 'Die rivier teenoor sy ekologiese reserwe, dag vir dag, met die dae daaronder gemerk.',
-	// River and reserve
-	'18beff9c': 'Rivier en reserwe',
+	// Ecological reserve (EWR)
+	'2f4d9410': 'Ekologiese reserwe (EWR)',
 	// Flow at every gauge against the reserve, and which hydrological units’ use it falls short by.
 	'1030414c': 'Vloei by elke meetstasie teenoor die reserwe, en aan watter hidrologiese eenhede se gebruik die tekort toegeskryf word.',
 	// From rainfall to river
@@ -1275,8 +1273,8 @@ export const af: Catalogue = {
 	'a3a08f59': 'Verandering teenoor vandag: lewering {supply} punte, rivier {days} dae per jaar.',
 	// Legal
 	'de7530aa': 'Regsinligting',
-	// About Water Management
-	'a156f424': 'Oor Water Management',
+	// About {app}
+	'bbbd35a1': 'Oor {app}',
 	// Catchment water balance, from rainfall to river.
 	'7b2abdbd': 'Waterbalans van die opvanggebied, van reën tot rivier.',
 	// Model hydrological units, dams and transfers on a river network.
@@ -2031,8 +2029,8 @@ export const af: Catalogue = {
 	'ea77aa7b': 'Een van die kodes wat jy gestoor het toe jy tweestap-intekening opgestel het. Elkeen werk een keer.',
 	// Code from your authenticator app
 	'8dcd2213': 'Kode van jou verifikasie-app',
-	// Open the app on your phone and enter the 6-digit code it shows for Water Management.
-	'fa62aa3c': 'Maak die app op jou foon oop en tik die 6-syferkode in wat dit vir Water Management wys.',
+	// Open the app on your phone and enter the 6-digit code it shows for {app}.
+	'41c919ef': 'Maak die app op jou foon oop en tik die 6-syferkode in wat dit vir {app} wys.',
 	// Email me a code instead
 	'09eeb9c3': 'E-pos eerder vir my ’n kode',
 	// Use a code from the app instead

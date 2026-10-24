@@ -1,7 +1,7 @@
 // What the model does with each series kind (see packages/engine run.ts /
 // flow.ts), for the Time series tab's explanation and per-series badges.
 import type { SeriesMeta } from '@water-management/engine';
-import { byKindThenName } from '$lib/series/pick';
+import { byKindThenName } from '#lib/series/pick.js';
 
 export interface KindRole {
 	/** Short badge text. */
@@ -157,6 +157,57 @@ export function newSeriesEffect(list: readonly SeriesMeta[], kind: string, name:
 }
 
 /**
+ * What renaming series `id` to `name` changes about the series a run reads
+ * (issue #556). Runs read the first series of each kind, at each site, by
+ * name, so a new name can move another series to the front or this one behind
+ * it. Judged by the same rules as the role badges (seriesInUse,
+ * gaugeRecordsInUse), on a renamed copy of the list: a reference gauge, a
+ * logger beside an observed gauge, a kind no rain-source period names and a
+ * record at a gauge no longer in the model are never read, so renaming them
+ * asks nothing. The series read before and after, or null when the same one
+ * is read (or none is), when another series of the kind has the name (the
+ * server refuses it), or when `id` isn't in the list.
+ */
+export function renameEffect(
+	list: readonly SeriesMeta[],
+	id: string,
+	name: string,
+	periodKinds: ReadonlySet<string> = new Set(),
+	gauges: readonly { id: string }[] = []
+): { before: SeriesMeta; after: SeriesMeta } | null {
+	const self = list.find((s) => s.id === id);
+	if (!self || self.name === name) return null;
+	if (list.some((s) => s.id !== id && s.kind === self.kind && s.name === name)) return null;
+	const site = self.siteNodeId ?? null;
+	const read = (l: SeriesMeta[]) => {
+		const ids = new Set([...seriesInUse(l, periodKinds), ...gaugeRecordsInUse(l, gauges)]);
+		return l.find((s) => ids.has(s.id) && s.kind === self.kind && (s.siteNodeId ?? null) === site) ?? null;
+	};
+	const before = read([...list]);
+	const after = read(list.map((s) => (s.id === id ? { ...s, name } : s)));
+	if (!before || !after || before.id === after.id) return null;
+	return { before, after: list.find((s) => s.id === after.id)! };
+}
+
+/**
+ * The rename question's sentence (issue #556): "Runs will read “B” instead of
+ * “A” for Rainfall — catchment: …", with `where` after the kind for a record
+ * at a gauge ("at gauge Middle weir"). The series read before goes by its
+ * stored name, the one read after by the new `name` when it is the renamed
+ * one; an unnamed series by its kind's label.
+ */
+export function renameEffectText(
+	change: { before: SeriesMeta; after: SeriesMeta },
+	id: string,
+	name: string,
+	kindLabel: (kind: string) => string,
+	where: string | null = null
+): string {
+	const shown = (x: SeriesMeta, renamed: boolean) => (renamed && x.id === id ? name : x.name || kindLabel(x.kind));
+	return `Runs will read “${shown(change.after, true)}” instead of “${shown(change.before, false)}” for ${kindLabel(change.before.kind)}${where ? ` ${where}` : ''}: they read the first series of each kind by name.`;
+}
+
+/**
  * A series row's role badge on the Data page, and the words that say why
  * when the badge alone doesn't (a gauge record: where it is checked and
  * scored). `why` shows on the page, not in a hover title, so keyboard, touch
@@ -171,12 +222,24 @@ export function roleBadge(
 		gaugeInUse: ReadonlySet<string>;
 		gaugeIds: ReadonlySet<string>;
 		calibrationSite: string | null;
+		/** The land units a rain series can be measured at (209_unit_rain_series): node id → name (issue #553). */
+		units?: ReadonlyMap<string, string>;
+		/** Per-unit rain is on (settings.unitRain `perUnit`): a unit's own rain is read for it. */
+		unitRainOn?: boolean;
+		/** The rainfall stations settings.rainStations assigns to an area or a pairing (issue #553). */
+		assignedStations?: ReadonlySet<string>;
 	}
 ): { label: string; unused: boolean; why: string | null } | null {
 	const role = KIND_ROLES[s.kind];
 	if (!role) return null;
 	const unused = !ctx.inUse.has(s.id) && !ctx.gaugeInUse.has(s.id);
 	const kindRead = (k: string) => ctx.list.some((x) => x.kind === k && ctx.inUse.has(x.id));
+	// A unit's own rain (its CHIRPS feed, a migration-209 gauge): read for that unit under per-unit rain, not a gauge record.
+	const unit = s.siteNodeId ? ctx.units?.get(s.siteNodeId) : undefined;
+	if (unit !== undefined)
+		return ctx.unitRainOn ? { label: `${unit}’s own rain`, unused: false, why: null } : { label: 'Not used: per-unit rain is off', unused: true, why: null };
+	// A station a run reads for an area, though not the catchment rain read by name: its row says which areas.
+	if (!s.siteNodeId && s.kind === 'rain_catchment_mm' && !ctx.inUse.has(s.id) && ctx.assignedStations?.has(s.id)) return { label: 'Rainfall station', unused: false, why: null };
 	if (s.siteNodeId) {
 		if (!ctx.gaugeInUse.has(s.id))
 			return ctx.gaugeIds.has(s.siteNodeId)

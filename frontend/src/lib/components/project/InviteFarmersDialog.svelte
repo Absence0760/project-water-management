@@ -8,11 +8,11 @@
 	// applicant with their farms (WP-3.3, 097_contributor_invite_farms): an
 	// irrigator applying to raise their own dam.
 	import { untrack } from 'svelte';
-	import { api, type BulkFarmerResult, type FarmerEntry, type FarmRole, type InviteLocale } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { latestFileText } from '$lib/files/latest';
-	import { LANGUAGES } from '$lib/i18n/state.svelte';
-	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import { api, type BulkFarmerResult, type FarmerEntry, type FarmRole, type InviteLocale } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { latestFileText } from '#lib/files/latest.js';
+	import { LANGUAGES } from '#lib/i18n/state.svelte.js';
+	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
 	import { bulkSummary, farmNames, inviteFormat, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
 
 	let {

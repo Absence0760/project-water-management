@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { fmtDay } from '#lib/format/number.js';
 import {
 	applyWords,
+	boundaryApplyBody,
+	boundaryChoice,
 	boundaryFeedState,
+	runSeriesText,
 	targetHint,
 	conflictMessage,
 	cellsUsedNote,
@@ -289,6 +294,17 @@ describe('taking over an existing series (issue #30)', () => {
 		expect(separateName({ ...chirps, source: 'chirps_gefs' }, [], [])).toBe('CHIRPS-GEFS');
 		expect(separateName({ source: 'dws', config: { station: 'A2H012' }, targetKind: 'flow_observed_m3s' }, [], [])).toBe('DWS A2H012');
 	});
+
+	it('never suggests a name that sorts ahead of the record runs read, which would take over from it (issue #561)', () => {
+		const chirps = { source: 'chirps' as const, config: { cells: [{ lat: 1, lon: 2 }] }, targetKind: 'rain_chirps_mm' };
+		// "CHIRPS" sorts before "Rainfall CHIRPS", the series runs read: the record's own name with the feed's after it.
+		expect(separateName(chirps, [s('rain_chirps_mm', 'Rainfall CHIRPS')], [])).toBe('Rainfall CHIRPS (CHIRPS)');
+		expect(separateName(chirps, [s('rain_chirps_mm', 'Rainfall CHIRPS'), s('rain_chirps_mm', 'Rainfall CHIRPS (CHIRPS)')], [])).toBe('Rainfall CHIRPS (CHIRPS 2)');
+		// Byte order: "CHIRPS" (0x43) sorts after "B record", so it is fine; an empty record or a unit's own doesn't count.
+		expect(separateName(chirps, [s('rain_chirps_mm', 'B record')], [])).toBe('CHIRPS');
+		expect(separateName(chirps, [s('rain_chirps_mm', 'Rainfall CHIRPS', 0)], [])).toBe('CHIRPS');
+		expect(separateName(chirps, [{ ...s('rain_chirps_mm', 'A unit'), siteNodeId: 'u1' }, s('rain_chirps_mm', 'Zed')], [])).toBe('Zed (CHIRPS)');
+	});
 });
 
 describe('feedsApi', () => {
@@ -330,22 +346,51 @@ describe('the rain feed from the catchment boundary (issue #326 B-rain)', () => 
 
 	it('says what Apply will do', () => {
 		const feeds = [{ id: 'f1', targetKind: 'rain_chirps_mm', targetName: '' }];
+		const fresh = { product: 'sat' as const, startDate: null };
 		expect(applyWords({ apply: { action: 'none', feedId: 'f1' } }, feeds)).toMatch(/already reads this boundary/);
-		expect(applyWords({ apply: { action: 'update', feedId: 'f1', targetKind: 'rain_chirps_mm', targetName: '' } }, feeds)).toMatch(/^Apply gives the CHIRPS feed into .* these cells in place of its own/);
-		expect(applyWords({ apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: '' } }, feeds)).toMatch(/^Apply attaches a new CHIRPS feed into .*\. It reads the last 60 days/);
-		expect(applyWords({ apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary' } }, feeds)).toMatch(/“?CHIRPS boundary.*A series of its own/);
+		expect(applyWords({ apply: { action: 'update', feedId: 'f1', targetKind: 'rain_chirps_mm', targetName: '', ...fresh } }, feeds)).toMatch(
+			/^Apply gives the CHIRPS feed into .* these cells in place of its own .* It reads the last 60 days/
+		);
+		expect(applyWords({ apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: '', ...fresh } }, feeds)).toMatch(/^Apply attaches a new CHIRPS feed into .*\. It reads the last 60 days/);
+		expect(applyWords({ apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary', ...fresh } }, feeds)).toMatch(/“?CHIRPS boundary.*A series of its own/);
 	});
 
-	it('calls the proposal and Apply, naming the boundary version and what to apply', async () => {
+	it('names the record runs read, keeps it beside the new series from its first day, or replaces it when chosen (issue #561)', () => {
+		const p = {
+			apply: { action: 'create' as const, targetKind: 'rain_chirps_mm', targetName: 'Rainfall CHIRPS (boundary)', product: 'rnl' as const, startDate: '1995-01-01' },
+			runSeries: { name: 'Rainfall CHIRPS', firstDay: '1995-01-01', lastDay: '2025-06-30' },
+			replace: { available: true as const, targetName: 'Rainfall CHIRPS', product: 'rnl' as const, startDate: '1995-01-01' }
+		};
+		expect(runSeriesText(p.runSeries)).toBe(`“Rainfall CHIRPS”, ${fmtDay('1995-01-01')} to ${fmtDay('2025-06-30')}`);
+		expect(runSeriesText({ name: '', firstDay: null, lastDay: null })).toBe('the series without a name, which holds no days yet');
+		expect(boundaryChoice(p)).toEqual({ replace: false, product: 'rnl', startDate: '1995-01-01' });
+		expect(applyWords(p, [])).toBe(
+			`Apply attaches a new CHIRPS feed into ${kindLabel('rain_chirps_mm')} · Rainfall CHIRPS (boundary). Runs keep reading “Rainfall CHIRPS”: the new series sorts after it, so the two sit side by side to compare. It reads the rnl product from ${fmtDay('1995-01-01')}, then keeps up daily.`
+		);
+		expect(applyWords(p, [], { replace: true, product: 'rnl', startDate: '' })).toMatch(
+			/^Apply attaches a CHIRPS feed \(rnl\) that replaces “Rainfall CHIRPS” with the boundary’s rain: it reads the whole record again from .+ into a stage, and runs keep reading the old values until the new record is complete/
+		);
+		const boundary2 = { featureId: 'b1', name: 'B', updatedAt: '2026-10-01T08:00:00.000Z', areaKm2: 1 };
+		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'rnl', startDate: ' 1995-01-01 ' })).toEqual({
+			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, targetName: 'Rainfall CHIRPS (boundary)', product: 'rnl', startDate: '1995-01-01' }
+		});
+		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: true, product: 'rnl', startDate: '1995-01-01' })).toEqual({
+			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, replace: true, product: 'rnl' }
+		});
+		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '1995-01-01' })).toEqual({ error: expect.stringMatching(/^The sat product begins on 1998-01-01/) });
+		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '' })).toEqual({
+			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, targetName: 'Rainfall CHIRPS (boundary)', product: 'sat' }
+		});
+	});
+
+	it('calls the proposal and Apply with the body it is given', async () => {
 		const request = vi.fn(async (..._a: unknown[]) => ({ feed: { id: 'f' } }) as never);
 		const f = feedsApi({ request } as never, 'p1');
 		await f.boundaryProposal();
-		await f.applyBoundary({ boundary, apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary' } });
-		await f.applyBoundary({ boundary, apply: { action: 'update', feedId: 'f1', targetKind: 'rain_chirps_mm', targetName: '' } });
+		await f.applyBoundary({ featureId: 'b1', updatedAt: boundary.updatedAt, targetName: 'CHIRPS boundary' });
 		expect(request.mock.calls).toEqual([
 			['GET', '/projects/p1/feeds/chirps/from-boundary'],
-			['POST', '/projects/p1/feeds/chirps/from-boundary', { featureId: 'b1', updatedAt: boundary.updatedAt, targetName: 'CHIRPS boundary' }],
-			['POST', '/projects/p1/feeds/chirps/from-boundary', { featureId: 'b1', updatedAt: boundary.updatedAt, feedId: 'f1' }]
+			['POST', '/projects/p1/feeds/chirps/from-boundary', { featureId: 'b1', updatedAt: boundary.updatedAt, targetName: 'CHIRPS boundary' }]
 		]);
 	});
 });

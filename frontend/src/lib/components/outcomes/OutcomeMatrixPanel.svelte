@@ -20,14 +20,14 @@
 	Run…, which opens the form with focus on the levels.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import ToolRow from '$lib/components/common/ToolRow.svelte';
-	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import ToolRow from '#lib/components/common/ToolRow.svelte';
+	import { isScenarioRun, type ScenarioRunFields } from '#lib/components/runs/scenarioRun.js';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import type { EwrRuleTable, NetworkNode, ProjectSettings } from '@water-management/engine';
-	import { api, type OutcomeSettings, type Project, type RunMeta, type Sweep } from '$lib/api';
-	import { cachedSeries } from '$lib/components/runs/cache';
-	import { fmtDate } from '$lib/format/number';
+	import { api, type OutcomeSettings, type Project, type RunMeta, type Sweep } from '#lib/api/index.js';
+	import { cachedSeries } from '#lib/components/runs/cache.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import {
 		buildMatrixView,
 		chooseSite,
@@ -41,7 +41,7 @@
 		type MatrixView
 	} from './matrix';
 	import { resolveOutcomes } from './outcomeSettings';
-	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
+	import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';
 
 	let {
 		projectId,

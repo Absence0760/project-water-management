@@ -6,18 +6,19 @@
 	// a user whose every membership is `farmer` here.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import type { FarmIndex, FarmView } from '@water-management/engine';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import FarmShell from '$lib/components/farm/FarmShell.svelte';
-	import FarmNoticeGate from '$lib/components/farm/FarmNoticeGate.svelte';
-	import FarmSkeleton from '$lib/components/farm/FarmSkeleton.svelte';
-	import FarmStatus from '$lib/components/farm/FarmStatus.svelte';
-	import { farmSummaryLine, farmsPrivacy, levelWord, stateText } from '$lib/components/farm/cards';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { classify, farmHref, worstFirst } from '$lib/components/farm/load';
-	import { readSaved } from '$lib/components/farm/savedCopy';
+	import { api } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import FarmShell from '#lib/components/farm/FarmShell.svelte';
+	import FarmNoticeGate from '#lib/components/farm/FarmNoticeGate.svelte';
+	import FarmSkeleton from '#lib/components/farm/FarmSkeleton.svelte';
+	import FarmStatus from '#lib/components/farm/FarmStatus.svelte';
+	import { farmSummaryLine, farmsPrivacy, levelWord, stateText } from '#lib/components/farm/cards.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { classify, farmHref, worstFirst } from '#lib/components/farm/load.js';
+	import { readSaved } from '#lib/components/farm/savedCopy.js';
 
 	interface Row {
 		projectId: string;
@@ -67,7 +68,7 @@
 			});
 			if (!list.length && failure) throw (failure as PromiseRejectedResult).reason;
 			if (list.length === 1) {
-				await goto(farmHref(base, list[0]!.projectId, list[0]!.nodeId, false), { replaceState: true });
+				await goto(farmHref(basePath(), list[0]!.projectId, list[0]!.nodeId, false), { replace: true });
 				return;
 			}
 			failures = 0;
@@ -105,7 +106,7 @@
 	{:else if rows.length === 0}
 		<h1>{t('Your hydrological units')}</h1>
 		<p>{t('No hydrological unit is linked to your account yet. Your WUA links your hydrological unit to your account.')}</p>
-		{#if hasOther}<a class="link" href="{base}/">{t('Your projects')}</a>{/if}
+		{#if hasOther}<a class="link" href={resolve('')}>{t('Your projects')}</a>{/if}
 	{:else}
 		<!-- "Before you look at your farm" first, until acknowledged: this list carries figures too. -->
 		<FarmNoticeGate>
@@ -113,7 +114,7 @@
 			<ul class="farms">
 				{#each rows as r (r.projectId + '/' + r.nodeId)}
 					<li>
-						<a href={farmHref(base, r.projectId, r.nodeId, r.several)}>
+						<a href={farmHref(basePath(), r.projectId, r.nodeId, r.several)}>
 							<span class="top">
 								<strong>{r.name}</strong>
 								{#if r.publication}<span class="level {r.publication.restriction.level}">{levelWord(r.publication.restriction.level)}</span>{/if}

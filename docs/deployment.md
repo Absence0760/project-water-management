@@ -1,7 +1,11 @@
 # Deployment
 
 > **Status:** deployed (2026-10-05) at `https://water-management.jaredhoward.com`,
-> minimal tier in `af-south-1`. The Terraform (VPC, RDS, the five Lambdas, the
+> minimal tier in `af-south-1`. Issue #551 renames the app Integrated
+> Catchment - Water Balance Tool (IC-WBT) and moves it to
+> `https://icwbt.jaredhoward.com`, the old hostname redirecting; the
+> Terraform for it is in, and the operator's steps are
+> [§ Moving the site to a new domain](#moving-the-site-to-a-new-domain). The Terraform (VPC, RDS, the five Lambdas, the
 > SQS queues, the S3 buckets, SES, CloudFront + WAF + security headers, alarms
 > and budgets) is applied, `backend@0.1.0` and `web@0.1.2` are released, the
 > report renderer is created, and `infra/scripts/postapply-check.sh` passes. The map
@@ -15,7 +19,8 @@
 ## Target setup
 
 ```
-browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-management.jaredhoward.com
+browser ──HTTPS──► CloudFront (+ WAF rate limit) ── icwbt.jaredhoward.com
+                     │                                 (water-management.jaredhoward.com: pages 301 here)
                      ├─ /*      → S3 (private, OAC)       static SvelteKit build
                      └─ /api/*  → Lambda Function URL      Hono backend
                                    (+ X-CloudFront-Shared-Secret header,
@@ -198,7 +203,10 @@ This creates, inside the org:
   parent zone, which lives in the `jaredhoward` account. This is the same
   pattern as `disag.jaredhoward.com`. The ACM certificate, the CloudFront alias
   and the A/AAAA records inside the child zone belong to *this* repo's
-  Terraform.
+  Terraform. Since issue #551 the site is at **`icwbt.jaredhoward.com`**, a
+  second child zone the operator made by hand
+  ([§ Moving the site to a new domain](#moving-the-site-to-a-new-domain));
+  the bootstrap's zone stays for the old hostname's redirect.
 
 It also turns on **required linear history** on `main`, so GitHub accepts
 only squash and rebase merges there.
@@ -356,17 +364,18 @@ The backend sends verification, password-reset and invitation emails
 is no SMTP password to store. Terraform provisions all of it in
 [`infra/ses.tf`](../infra/ses.tf), in the primary region (`aws_region`):
 
-- **Domain identity** for `water-management.jaredhoward.com` with **Easy
+- **Domain identity** for `domain_name` (`icwbt.jaredhoward.com` since
+  issue #551; it was `water-management.jaredhoward.com`) with **Easy
   DKIM** (RSA 2048). The three `<token>._domainkey` CNAMEs go into the child
   Route 53 zone. Their target is `<token>.dkim.amazonses.com`, or the regional
   `<token>.dkim.<region>.amazonses.com` in af-south-1 and the other newer
   regions; Terraform picks the right one.
-- **Custom MAIL FROM** `mail.water-management.jaredhoward.com`, with its MX
+- **Custom MAIL FROM** `mail.icwbt.jaredhoward.com`, with its MX
   (`10 feedback-smtp.<region>.amazonses.com`) and SPF TXT
   (`v=spf1 include:amazonses.com -all`), so SPF aligns for DMARC. If the MX
   ever goes missing, SES falls back to its own MAIL FROM instead of bouncing
   (DKIM still aligns).
-- **DMARC** TXT `_dmarc.water-management.jaredhoward.com`:
+- **DMARC** TXT `_dmarc.icwbt.jaredhoward.com`:
   `v=DMARC1; p=none; rua=mailto:<dmarc_report_email>; adkim=r; aspf=r`.
   Tighten `dmarc_policy` to `quarantine` once the reports are clean
   (infra/README.md operator step 8b).
@@ -381,7 +390,7 @@ is no SMTP password to store. Terraform provisions all of it in
 - **IAM:** the API and worker Lambda roles may call `ses:SendEmail` on this
   account's SES identities in its own region (`identity/*`) and the
   configuration set only, with the condition
-  `ses:FromAddress = no-reply@water-management.jaredhoward.com`. Nothing else.
+  `ses:FromAddress = no-reply@icwbt.jaredhoward.com`. Nothing else.
   The wildcard is for the sandbox, which also authorises each send against the
   **recipient's** verified identity (`identity/<address>`): naming only the
   domain identity denies every sandbox send, the operator's own test
@@ -421,8 +430,8 @@ Lambda environment (set by `infra/lambda.tf`):
 | Variable | Value |
 | --- | --- |
 | `MAIL_TRANSPORT` | `ses` (must be set: the default `log` sends nothing, and in Lambda doesn't print bodies) |
-| `MAIL_FROM` | `Water Management <no-reply@water-management.jaredhoward.com>` (`mail_from_display_name`, `mail_from_local_part`) |
-| `SITE_URL` | `https://water-management.jaredhoward.com` (the base of every emailed link) |
+| `MAIL_FROM` | `IC-WBT <no-reply@icwbt.jaredhoward.com>` (`mail_from_display_name`, `mail_from_local_part`) |
+| `SITE_URL` | `https://icwbt.jaredhoward.com` (the base of every emailed link) |
 | `SES_CONFIGURATION_SET` | `water-management` |
 | `SES_REGION` | unset: SES is in the Lambda's own region |
 | `RUNS_KEPT_PER_PROJECT` | not set by Terraform, so the backend default (20 runs per project) applies; see [data-model.md § Run output volume](./data-model.md#time-series-storage) |
@@ -432,7 +441,9 @@ The worker (`infra/jobs.tf`) also gets `OPERATOR_EMAIL`, set to
 ([evidence-pack.md § Retention](./evidence-pack.md#retention)).
 
 Besides the email settings, `lambda.tf` sets `ALLOWED_ORIGINS` (the site
-origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle) and
+origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle),
+`DB_POOL_MAX=2` (the `pg` pool per container; the config check refuses a
+missing one or one that isn't a whole number of at least 1) and
 `RUNTIME_SECRET_ARN` / `RUNTIME_SECRET_VERSION`, which name the API's runtime
 secret: `DATABASE_URL` (as `water_app`, `sslmode=verify-full`),
 `AUTH_JWT_SECRET`, `CLOUDFRONT_SHARED_SECRET` and `CLOUDFRONT_PRIVATE_KEY`
@@ -464,8 +475,10 @@ cd infra && cp backend.config.example backend.config && cp terraform.tfvars.exam
 ```
 
 Fill in `backend.config` (the tfstate bucket) and `terraform.tfvars`:
-`domain_name = "water-management.jaredhoward.com"`, `route53_zone_id` (the child zone the
-bootstrap printed), `bootstrap_slug = "water-management"`, the region, the budget
+`domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id` (its child zone),
+`redirect_domains` (each former hostname and its zone: the bootstrap's
+`water-management.jaredhoward.com`; `{}` once retired),
+`bootstrap_slug = "water-management"`, the region, the budget
 email and the DMARC report mailbox. Both files are gitignored (the estate
 keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
 
@@ -572,6 +585,11 @@ and 10c; `--rds-event-test` proves RDS events reach the topic):
 cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
 ```
 
+While `redirect_domains` holds a former hostname, add `--redirect-from <host>`
+for each (`--redirect-from water-management.jaredhoward.com` since issue
+#551): its pages must 301 to the site and its `/api/health` must still answer
+([§ Moving the site to a new domain](#moving-the-site-to-a-new-domain)).
+
 They are **repository-level** values (`gh variable set` / `gh secret set`
 with no `--env`), not `production` environment values. The release
 preflight job runs without an environment, before the approval, and only
@@ -618,7 +636,7 @@ try again." instead of showing it.
 (`deploy-frontend.yml`): the prerendered landing page (`/welcome` and
 `/welcome/af`, issues #57 and #137) writes its canonical link, `hreflang`
 alternates, `og:url` and `og:image` as absolute URLs from it
-(`kit.prerender.origin`, `frontend/svelte.config.js`). CloudFront serves
+(`paths.origin` in `frontend/vite.config.ts`'s `sveltekit({…})`). CloudFront serves
 `/welcome` from `welcome.html` and `/welcome/af` from `welcome/af.html`
 (`spa_rewrite`).
 
@@ -637,7 +655,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   S3; no NAT), the **migrate Lambda** being what the deploy runs before
   publishing new code and what `load-reference.yml` invokes.
 - The API Lambda: runtime `nodejs24.x`, 30 s timeout, 1024 MB, reserved
-  concurrency 10, with `DATABASE_URL`, `AUTH_JWT_SECRET` and its other
+  concurrency 25 (`lambda_reserved_concurrency`; with `DB_POOL_MAX=2`, at
+  most 50 database connections, infra/README.md § Connections), with `DATABASE_URL`, `AUTH_JWT_SECRET` and its other
   secrets from sops (`scripts/tf.sh`, ephemeral variables, `secrets.tf`), in
   its runtime secret in Secrets Manager, written write-only: not in its
   environment, not in Terraform state. The worker and migrate Lambdas have
@@ -692,7 +711,9 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   § Alarm tier). Production runs `"essential"`: SES bounce and complaint
   rates, the jobs / mail-events / fetch-requests / ingest-results DLQ
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
-  Lambda errors, `unhandled_error` and `mail_send_failed`, 12 alarm metrics.
+  Lambda errors and throttles (`lambda-throttles`: the API at its reserved
+  concurrency, issue #541), `unhandled_error` and `mail_send_failed`, 13
+  alarm metrics.
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
   prod tfvars to page on all of it (~$5/month in af-south-1). The RDS event
@@ -785,8 +806,11 @@ Nor is anything that goes into the report renderer's image: its base image
 (`docker`) and its npm packages (the `/backend/renderer-deps` npm entry,
 aws-lambda-ric, a native module compiled in the image's build stage), which
 the workflow excludes by fetch-metadata's `directory` and, as a backstop, by
-the PR's branch name. `pnpm check:workflows` (auto-merge rule) fails if any
-of these exclusions is dropped. A
+the PR's branch name. It queues the merge only when the repository allows
+auto-merge (Settings → General → Pull Requests → Allow auto-merge, read
+from the API each run); with that off it leaves a notice and the PR waits
+for a human. `pnpm check:workflows` (auto-merge rule) fails if any of these
+exclusions, or the setting's read, is dropped. A
 security fix that can't wait the week goes under
 `minimumReleaseAgeExclude` with a comment, removed once the week is up.
 
@@ -803,8 +827,9 @@ the real plan stays an operator step
 - **Frontend deploy** checks the build before uploading
   (`infra/scripts/check-csp.mjs`): every inline script must be hashed in
   SvelteKit's `<meta>` CSP, or the deploy stops. This needs
-  `kit.csp = { mode: 'hash', directives: { 'script-src': ['self'] } }` in
-  `frontend/svelte.config.js`. It then uploads `_app/immutable/` with a
+  `csp: { mode: 'hash', directives: { 'script-src': ['self', …] } }` in
+  `frontend/vite.config.ts`'s `sveltekit({…})` (SvelteKit 3 reads its config
+  there). It then uploads `_app/immutable/` with a
   one-year immutable cache and everything else (HTML, favicons, manifest,
   fonts) with a 60 s cache, and invalidates CloudFront.
 - **Migrations** run in the backend deploy *before* the new Lambda code is
@@ -957,7 +982,7 @@ answers one JSON chunk as before. Locally the Node server streams the same
   higher; raise the timeout with it. The CSV is measured and loaded inside
   the route's transaction and written after it ends, so a slow download
   holds no database connection, but it does hold one of the API's reserved
-  concurrent executions (10 by default) while it runs. Lambda keeps
+  concurrent executions (25 by default) while it runs. Lambda keeps
   streaming, and billing, even if the client goes away.
 - **A failure partway** fails the invocation (the `Errors` alarm counts it)
   and cuts the response off, so the browser reports a failed download
@@ -1786,7 +1811,8 @@ Lambda's list against the Sources table):
 | `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
 | `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt`, and its six neighbours' (`BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`) concatenated into a second file (gzip each); the kinds the search doesn't keep (roads, schools, …), a neighbour's places outside the basemap, and any other country's are left out at load | download the seven zips from download.geonames.org/export/dump/, unzip each in its own folder, `gzip -k ZA.txt`, and `cat` the six neighbours into one file, gzipped (steps below; maps.md § Gazetteer) |
-| `quaternaries`, `dam-register`, `gauge-stations`, `map-grid` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+| `map-grid` | allowed dataset by dataset: the Southwestern Cape surface (WAAS, 2007) only, by the operator's decision of 2026-10-23 (terms not stated; legal/map-data-licences.md § 3.3b), as dataset `WAAS-SWCape-2007`, stored with its recorded source, version and credit line whatever the file says; `Lynch-2004` and any other label refused (the gate and the Lambda), and so is a `source` | the grid cut to the client's area, in the JSON form `--out` writes (gzipped), never the ASCII grid itself | `pnpm import:map-grid waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n> --out waas-swcape.json.gz` (steps below) |
+| `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
 ```bash
 sha256sum worldcover.json.gz
@@ -1844,6 +1870,45 @@ place the load can take). Approve each run in the `production`
 environment. Never load the synthetic fixtures into production (the label
 `synthetic` is refused).
 
+**The MAP grid** (issue #560; [maps.md § MAP grid](./maps.md#map-grid)).
+Needs the first backend release that carries migration 238 deployed first
+(it lets `reference_load` record a `map-grid` load; the loader runs in the
+migrate Lambda that release ships). Then, from a folder outside the repo
+with the surface as received (an ESRI grid or GeoTIFF; never commit it):
+
+1. Check its coordinate system with `gdalinfo`. If it isn't WGS84 degrees
+   (EPSG:4326), warp it to square cells of about 100 m:
+   `gdalwarp -t_srs EPSG:4326 -tr 0.001 0.001 -r bilinear waas.tif waas-4326.tif`
+   (add `-s_srs` when the file names none: `EPSG:4222` for the Cape datum).
+2. Write the ASCII form: `gdal_translate -of AAIGrid waas-4326.tif waas.asc`.
+3. Cut it to the client's area and write the load's file. The box is the
+   client's catchments with a margin of about 0.05° (west, south, east,
+   north in degrees): it keeps the load small and shows no more of the
+   surface than the client's study needs.
+   `pnpm import:map-grid ./waas.asc --dataset WAAS-SWCape-2007 --source "Mean annual rainfall surface for the Southwestern Cape" --bbox <w,s,e,n> --out ./waas-swcape.json.gz`
+   (paths resolve from the folder the command is typed in; the `--source`
+   is the file's own and the load replaces it with the recorded credit
+   line). A 1° box at 0.001° is about a million cells, some 25 MB of JSON
+   before gzip; a box past the 200 MiB caps is the wrong box.
+4. Optionally load the same file locally first to look at it on the Map
+   tab: `pnpm import:map-grid ./waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n>`.
+5. Upload and load it:
+
+```bash
+sha256sum waas-swcape.json.gz
+aws s3 cp waas-swcape.json.gz s3://<reference_bucket>/reference/map-grid/waas-swcape-2007.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=map-grid -f key=reference/map-grid/waas-swcape-2007.json.gz -f sha256=<hex> -f dataset=WAAS-SWCape-2007
+```
+
+Approve it in the `production` environment. Check on the Map tab of the
+client's project: **MAP grid** on lists "WAAS-SWCape-2007" with its source
+line (the authors' credit line whole), and the map's credits show "MAP
+grid: WAAS (2007), Beuster Clarke & Associates", linking to
+`/data-sources#waas-map`. Then Settings → Flow generation, under Per
+unit, **MAP from the grid** proposes each unit's MAP from it, beside the typed values,
+to check them. A wider box later is a reload under the same label (a load
+replaces its dataset).
+
 Limits: the file at most 200 MiB as uploaded and 200 MiB of text unzipped
 (a gzip bomb is cut off, not unpacked), refused with a reason beyond that;
 the migrate Lambda has `migrate_memory_mb` (3 008 MB, the least Terraform
@@ -1854,7 +1919,8 @@ grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
 HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
 32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
 Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
-Africa about 50 MB, so anything bigger is the wrong file. So has the
+Africa about 50 MB, so anything bigger is the wrong file. The MAP grid
+takes the default caps: the file is the client's area only. So has the
 gazetteer, 64 MiB uploaded and 128 MiB unzipped: South Africa's dump is
 12 MB of text and its six neighbours' 10 MB together (2.7 MB and 2.4 MB
 gzipped, 2026-10-13), all of GeoNames' about 1.6 GB. A load costs cents (3 GB × a few
@@ -1996,6 +2062,69 @@ that way from 2026-10-05 and has been **open since 2026-10-06**
 (`signup_open = true` in `prod.tfvars`, applied), before go-live Gates A and
 C in [legal-status.md](./legal-status.md). To close it again, set it back to
 `false`, plan and apply (no release needed).
+
+## Moving the site to a new domain
+
+Issue #551 renamed the app Integrated Catchment - Water Balance Tool (IC-WBT)
+and moved it from `water-management.jaredhoward.com` to
+`icwbt.jaredhoward.com`. The repo, package, database and AWS resource names
+keep `water-management` (identifiers nobody sees).
+
+**What the Terraform does.** `domain_name` is the new hostname in its own
+delegated child zone (`route53_zone_id`). `redirect_domains` maps each former
+hostname to its zone: each stays a CloudFront alias and a SAN on the
+certificate, with A/AAAA records in its zone, and `spa_rewrite` answers its
+pages with a **301** to the same path and query on the new host (any host
+but `domain_name` is redirected, the distribution's `*.cloudfront.net` name
+included). `/api/*`, `/reports/*`, `/packs/*` and `/tiles/*` don't redirect
+and keep answering on a former hostname, so a mail client's one-click
+unsubscribe from an older alert email, a data logger still pushing to the old
+`/api/ingest`, and a signed download link minted before the move all keep
+working. `ALLOWED_ORIGINS` is the new origin only: a former hostname's pages
+redirect, so none calls the API from there. The SES identity, its DKIM, MAIL
+FROM and DMARC records, the sender address, every emailed link (`SITE_URL`),
+the renderer's site, the IAM and SES-endpoint From pins and the sign-in
+CAPTCHA's API key (`token_domains`) all follow `domain_name`.
+
+**What the operator does, in this order** (the zone, then its delegation,
+then the apply, because ACM can't validate a name whose zone isn't delegated
+yet; the old hostname's delegation is live already). Write down the two zone
+IDs as you go (`Z…`, without the `/hostedzone/` prefix):
+
+1. Merge the issue #551 PR to `main` (nothing deploys until the releases in steps 14 and 15).
+2. `aws sso login --profile water-management && aws sso login --profile dns-parent`
+3. Create the new child zone in this account: `aws route53 create-hosted-zone --name icwbt.jaredhoward.com --caller-reference "icwbt-$(date +%s)" --hosted-zone-config Comment="IC-WBT site, issue 551" --profile water-management --query 'HostedZone.Id' --output text`
+4. Print its four name servers: `aws route53 get-hosted-zone --id <NEW_ZONE_ID> --profile water-management --query 'DelegationSet.NameServers' --output text`
+5. Find the parent zone in the jaredhoward account (the line must read `jaredhoward.com.`): `aws route53 list-hosted-zones-by-name --dns-name jaredhoward.com --max-items 1 --profile dns-parent --query 'HostedZones[0].[Name,Id]' --output text`
+6. Delegate the new zone from the parent (the same NS record the bootstrap's stage 3 wrote for the old zone, here by hand): `aws route53 change-resource-record-sets --hosted-zone-id <PARENT_ZONE_ID> --profile dns-parent --change-batch '{"Changes":[{"Action":"CREATE","ResourceRecordSet":{"Name":"icwbt.jaredhoward.com","Type":"NS","TTL":3600,"ResourceRecords":[{"Value":"<NS1>"},{"Value":"<NS2>"},{"Value":"<NS3>"},{"Value":"<NS4>"}]}}]}'`
+7. Wait until the delegation resolves (the four servers from step 4): `dig +short NS icwbt.jaredhoward.com`
+8. Look up the old zone's ID: `aws route53 list-hosted-zones-by-name --dns-name water-management.jaredhoward.com --max-items 1 --profile water-management --query 'HostedZones[0].[Name,Id]' --output text`
+9. In `infra-secrets/water-management/prod.tfvars` set `domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id = "<NEW_ZONE_ID>"` and `redirect_domains = { "water-management.jaredhoward.com" = "<OLD_ZONE_ID>" }`, remove any `mail_from_display_name` line (the default is now `IC-WBT`), and commit it there.
+10. Plan: `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+    The plan should show: the certificate replaced (create before destroy) for `icwbt.jaredhoward.com` with the old name as a SAN, and a validation record for the new name; the distribution updated in place (aliases, certificate) and `spa_rewrite` updated; `aws_route53_record.site_a` and `site_aaaa` **moved** to `["water-management.jaredhoward.com"]` with no change, plus new `["icwbt.jaredhoward.com"]` records; the SES identity replaced, with its DKIM, MAIL FROM and DMARC records recreated in the new zone and deleted from the old; the WAF CAPTCHA API key replaced; the Lambdas' `MAIL_FROM`, `SITE_URL`, `ALLOWED_ORIGINS` and `RENDER_SITE_URL`, and the From pins in the IAM and SES endpoint policies, updated. No database, bucket, queue or secret change: stop and ask if there is one.
+11. Apply, in a quiet hour: `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
+    Until SES has verified the new domain (minutes, up to an hour), sends fail: the request still answers, the failure is logged, and `mail-send-failed` may fire. SES production access belongs to the account, so it carries over. Go on to steps 12–15 straight away: until the web release (step 15) the old build's sign-in CAPTCHA key no longer exists.
+12. Check the new identity reads `SUCCESS`, `SUCCESS`, `true`: `aws sesv2 get-email-identity --email-identity icwbt.jaredhoward.com --region af-south-1 --profile water-management --query '{dkim:DkimAttributes.Status,mailFrom:MailFromAttributes.MailFromDomainStatus,verified:VerifiedForSendingStatus}'`
+13. Push the changed outputs (`PUBLIC_SITE_URL` and the new `WAF_CAPTCHA_API_KEY`) to GitHub: `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`
+14. Release the backend (the new name in emails and the authenticator label), and approve it in the `production` environment ([§ Releasing](#releasing)): `gh release create backend@<next version> --target main --generate-notes`
+15. Once that deploy has finished, release the web app, which ships the new name and carries the new CAPTCHA key (the old build's key no longer exists, so until this release a sign-in that hits the CAPTCHA can't solve it): `gh release create web@<next version> --target main --generate-notes`
+16. Run the post-apply check, with the redirect: `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars --redirect-from water-management.jaredhoward.com`
+17. Point the repository's website at the new address: `gh repo edit Absence0760/project-water-management --homepage https://icwbt.jaredhoward.com`
+
+What people notice: the session cookie belongs to the host, so anyone signed
+in on the old address signs in again on the new one; an authenticator app
+entry added before the rename keeps its old label (its codes still work; a
+new entry is labelled IC-WBT); links in emails sent before the move redirect.
+
+**Retiring the old hostname** (a tracked follow-up, once the old address has
+had no page requests for a few months): set `redirect_domains = {}`, plan and
+apply (the alias, the SAN and its two records go), then delete the old zone's
+NS record from the parent zone (the reverse of step 6, `"Action":"DELETE"`
+with the record as it stands) and the old zone itself, once it holds only its
+NS and SOA records: `aws route53 delete-hosted-zone --id <OLD_ZONE_ID> --profile water-management`.
+A later move (to `icwbt.co.za` or `icwbt.com`, issue #551's "later") is the
+same runbook with an apex zone, `icwbt.jaredhoward.com` joining
+`redirect_domains`.
 
 ## Runbooks
 

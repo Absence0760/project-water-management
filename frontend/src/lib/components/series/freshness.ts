@@ -1,11 +1,11 @@
 // How current a project's input data is, whether runs are behind it, and
 // which stored series an uploaded file most likely updates.
 import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 
 /** Days after which data counts as stale: the one threshold ($lib/format/age). */
-export { STALE_DAYS } from '$lib/format/age';
-import { STALE_DAYS } from '$lib/format/age';
+export { STALE_DAYS } from '#lib/format/age.js';
+import { STALE_DAYS } from '#lib/format/age.js';
 
 type Meta = SeriesMeta & { updatedAt?: string };
 
@@ -21,6 +21,21 @@ export const seriesEnd = (s: Pick<SeriesMeta, 'startDate' | 'length'>) =>
  */
 export const dataEnd = (s: Pick<SeriesMeta, 'startDate' | 'length' | 'lastValueDate'>) =>
 	s.lastValueDate === undefined ? seriesEnd(s) : (s.lastValueDate ?? fromEpochDay(toEpochDay(s.startDate) - 1));
+
+/**
+ * The days a series' data spans, as the Data table's From and Data up to and
+ * the CSV menu's period line show it (issue #556): the first and last days
+ * with a value (coverage.ts coverageStats), not the stored rows' ends. An
+ * imported logger column stores the workbook's whole date range, years of
+ * blank days before its first reading included. Before its values have loaded
+ * (no stats), or for a series with no value at all, the stored ends.
+ */
+export function dataSpan(
+	s: Pick<SeriesMeta, 'startDate' | 'length'>,
+	stats?: { firstValueDate: string | null; lastValueDate: string | null } | null
+): { from: string; to: string } {
+	return { from: stats?.firstValueDate ?? s.startDate, to: stats?.lastValueDate ?? seriesEnd(s) };
+}
 
 /** Kinds that drive a run (rainfall, daily A-pan evaporation); observed flow only scores it. */
 export const isDriver = (kind: string) => kind.startsWith('rain_') || kind === 'evap_apan_mm';

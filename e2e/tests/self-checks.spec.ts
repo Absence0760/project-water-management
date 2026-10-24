@@ -1,7 +1,7 @@
 // The self-checks panel (engine 0.12.0): the model's checks on its own run,
 // the water balance's closure by water year (the table is its own Model
 // quality section since issue #137, linked from the self-checks, and links to
-// River & reserve's Water account, which links back), and the trace of one farm's day
+// the EWR page's Water account, which links back), and the trace of one farm's day
 // with its working columns (docs/ui.md § Self-checks).
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -55,7 +55,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 		'Residual (m³) runoff model (mm)'
 	]);
 
-	// The catchment's own account is on River & reserve: linked, for the same run, not copied here; Back returns.
+	// The catchment's own account is on EWR: linked, for the same run, not copied here; Back returns.
 	const runUrl = page.url();
 	await page.locator('#res-water-balance').getByTestId('balance-account-link').getByRole('link', { name: 'Water account' }).click();
 	await expect(page).toHaveURL(/[?&]tab=river&run=[^#]+#res-water-account$/);

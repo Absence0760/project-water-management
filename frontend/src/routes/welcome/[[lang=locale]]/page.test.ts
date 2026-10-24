@@ -7,14 +7,14 @@
 import { render } from 'svelte/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LOCALE, LOCALES } from '@water-management/engine/languages';
-import { messageId } from '$lib/i18n/msg';
-import { af } from '$lib/i18n/messages/af';
-import { i18n, setLocale } from '$lib/i18n/locale.svelte';
+import { messageId } from '#lib/i18n/msg.js';
+import { af } from '#lib/i18n/messages/af.js';
+import { i18n, setLocale } from '#lib/i18n/locale.svelte.js';
 import { entries, load, prerender, ssr } from './+page';
 import Page from './+page.svelte';
 
 const url = vi.hoisted(() => ({ href: 'https://example.org/welcome' }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/state', () => ({
 	page: {
@@ -23,7 +23,7 @@ vi.mock('$app/state', () => ({
 		}
 	}
 }));
-vi.mock('$lib/api', () => ({ api: {} }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
 
 const HEADLINE = 'Every drop in the catchment, accounted for.';
 type LoadEvent = Parameters<typeof load>[0];
@@ -70,7 +70,12 @@ describe('the landing page as prerendered', () => {
 		const { head, body } = render(Page, { props: { data: await loadFor('af') } as never });
 		expect(body).toContain(af[messageId(HEADLINE)]);
 		expect(body).not.toContain(HEADLINE);
-		expect(head).toContain(`<title>${af[messageId('Water Management: daily water balance for a catchment')]}</title>`);
+		const title = af[messageId('{app}: daily water balance for a catchment')] as string;
+		expect(title).toContain('{app}');
+		expect(head).toContain(`<title>${title.replace('{app}', 'IC-WBT')}</title>`);
+		// The name is a proper noun in every language (issue #551): the full name, untranslated, in the hero and as the site name.
+		expect(body).toContain('Integrated Catchment - Water Balance Tool');
+		expect(head).toContain('<meta property="og:site_name" content="Integrated Catchment - Water Balance Tool"');
 		expect(head).toContain('<link rel="canonical" href="https://example.org/welcome/af"');
 		expect(head).toContain('<link rel="alternate" hreflang="x-default" href="https://example.org/welcome"');
 		expect(head).toContain('<meta property="og:url" content="https://example.org/welcome/af"');

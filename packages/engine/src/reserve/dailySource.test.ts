@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { testCatchment } from '../outlook/testCatchment';
-import { buildNetworkPlan, naturalAtOutlet, OUTLET_EWR_LABELS, runModelWith, runModelWithoutChecks } from '../run';
+import { buildNetworkPlan, naturalAtOutlet, OUTLET_EWR_LABELS, OUTLET_EWR_WITHOUT_HIGH_FLOWS_LABEL, runModelWith, runModelWithoutChecks } from '../run';
 import { prepareRun } from '../prepare';
 import { diffInputs } from '../compare';
 import { prepareCalibration } from '../calibrate/calibrate';
@@ -25,6 +25,7 @@ import {
 	naturalMarMm3,
 	percentileReserveM3s,
 	resolveEwrDailySource,
+	withReserveTable,
 	type EwrDailySource
 } from './dailySource';
 
@@ -134,6 +135,27 @@ describe('fillOutletEwr', () => {
 		expect(out[3]).toBe(-1);
 	});
 
+	it('the Reserve table the source picks (issue #552): the flows without high flows when chosen, else the total, whatever the other holds', () => {
+		const low = R.map((v) => v / 2);
+		const base: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve(R), lowFlowPctM3s: twelve(low), tableMarMm3: 1 };
+		const q = [14 * DAY, 30 * DAY, 0.5 * DAY];
+		const read = (src: EwrDailySource) => {
+			const out = new Float64Array(3);
+			fillOutletEwr(src, 2, month, q, out, 0, 3);
+			return [...out];
+		};
+		// Between 16 and 12 on the scaled rows: 4 + 0.5 × (3 − 4) = 3.5; above the wettest: 5; below the driest: 0.4 × 0.5 ÷ 1.
+		const without = read({ ...base, reserveTable: 'withoutHighFlows' });
+		expect(without[0]).toBeCloseTo(3.5 * DAY, 6);
+		expect(without[1]).toBe(5 * DAY);
+		expect(without[2]).toBeCloseTo(0.2 * DAY, 6);
+		// 'total' and absent read the total table, so the third table changes nothing.
+		const { lowFlowPctM3s: _, ...noLow } = base;
+		expect(read({ ...base, reserveTable: 'total' })).toEqual(read(noLow));
+		expect(read(base)).toEqual(read(noLow));
+		expect(read(base)[0]).toBeCloseTo(7 * DAY, 6);
+	});
+
 	it('a natural row that rises uses its running minimum, and the source notes say so', () => {
 		const rising = [10, 8, 9, 5, 4, 3, 2, 1.5, 1, 0.5];
 		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'percentile', naturalPctM3s: twelve(rising), reservePctM3s: twelve(R), tableMarMm3: 1 };
@@ -147,6 +169,10 @@ describe('fillOutletEwr', () => {
 	it('a Reserve flow above the natural flow at its point (on the running minimum) is noted: even natural flow fails there', () => {
 		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve([12, ...R.slice(1)]), tableMarMm3: 1 };
 		expect(ewrDailySourceNotes(src)).toEqual(['the total Reserve flow is above the natural flow at 12 points (Oct 10 %, Nov 10 %, Dec 10 %, Jan 10 %, …), so even natural flow fails there']);
+		// The notes judge the table the run reads: the flows without high flows, when chosen.
+		const chosen: EwrDailySource = { ...src, reserveTable: 'withoutHighFlows', lowFlowPctM3s: twelve(R) };
+		expect(ewrDailySourceNotes(chosen)).toEqual([]);
+		expect(ewrDailySourceNotes({ ...chosen, lowFlowPctM3s: twelve([12, ...R.slice(1)]) })[0]).toMatch(/^the Reserve flow without high flows is above the natural flow at 12 points/);
 	});
 });
 
@@ -198,6 +224,38 @@ describe('ewrDailySourceIssues and resolveEwrDailySource', () => {
 		expect(fields('tab')).toEqual(['']);
 	});
 
+	it('the Reserve flows without high flows table and the Reserve table choice (issue #552): optional, validated, and the chosen table required', () => {
+		const fields = (v: unknown) => ewrDailySourceIssues(v).map((i) => i.field);
+		const pct: EwrDailySource = { ...tab(), method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve(R) };
+		// Absent (every source before engine 1.90.0), null and 'total' are all usable without the third table.
+		expect(fields(pct)).toEqual([]);
+		expect(fields({ ...pct, lowFlowPctM3s: null, reserveTable: 'total' })).toEqual([]);
+		expect(fields({ ...pct, lowFlowPctM3s: twelve(R) })).toEqual([]);
+		expect(fields({ ...pct, lowFlowPctM3s: twelve([1, 2]) })).toEqual(['lowFlowPctM3s']);
+		expect(fields({ ...pct, lowFlowPctM3s: twelve([...R.slice(1), -1]) })).toEqual(['lowFlowPctM3s']);
+		expect(fields({ ...pct, reserveTable: 'highFlows' })).toEqual(['reserveTable']);
+		// The chosen table must be there; the other one needn't be.
+		expect(fields({ ...pct, reserveTable: 'withoutHighFlows' })).toEqual(['lowFlowPctM3s']);
+		expect(fields({ ...pct, reserveTable: 'withoutHighFlows', reservePctM3s: null, lowFlowPctM3s: twelve(R) })).toEqual([]);
+		expect(fields({ ...pct, reserveTable: 'total', reservePctM3s: null, lowFlowPctM3s: twelve(R) })).toEqual(['reservePctM3s']);
+		// Under another method the choice asks for nothing.
+		expect(fields({ ...tab(), reserveTable: 'withoutHighFlows' })).toEqual([]);
+		// Resolved: copied when set, and a source without them resolves exactly as before.
+		const w = { ...pct, reserveTable: 'withoutHighFlows' as const, lowFlowPctM3s: twelve(R) };
+		const r = resolveEwrDailySource(w, [])!;
+		expect(r).toEqual(w);
+		expect(r.lowFlowPctM3s).not.toBe(w.lowFlowPctM3s);
+		expect(Object.keys(resolveEwrDailySource({ ...pct, reserveTable: 'total', lowFlowPctM3s: null }, [])!)).toEqual(Object.keys(resolveEwrDailySource(pct, [])!));
+	});
+
+	it('withReserveTable names the flows without high flows on the run’s info, and only then', () => {
+		const pct: EwrDailySource = { ...tab(), method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve(R), lowFlowPctM3s: twelve(R) };
+		const info = { method: 'percentile' as const, scaling: 'mar' as const, scale: 0.5, modelMarMm3: 50, tableMarMm3: 100 };
+		expect(withReserveTable(info, { ...pct, reserveTable: 'withoutHighFlows' })).toEqual({ ...info, reserveTable: 'withoutHighFlows' });
+		expect(withReserveTable({ ...info, reserveTable: 'withoutHighFlows' }, pct)).toEqual(info);
+		expect(withReserveTable(info, { ...pct, method: 'tab', tabM3s: new Array(12).fill(1), reserveTable: 'withoutHighFlows' })).toEqual(info);
+	});
+
 	it('an unusable source runs the pragmatic EWR and says why', () => {
 		const w: string[] = [];
 		expect(resolveEwrDailySource(tab({ tabM3s: null }), w)).toBeNull();
@@ -219,6 +277,20 @@ describe('ewrDailySourceChanges (run comparison)', () => {
 		const pct2 = { ...pct, scaling: 'area' as const, tableAreaKm2: 40, reservePctM3s: twelve(R).map((row, m) => (m === 0 ? row.map((v) => v + 1) : row)) };
 		expect(ewrDailySourceChanges(pct, pct2)).toEqual(['scaled by MAR → by area', 'table area not entered → 40 km²', 'total Reserve flow percentile table: 10 values changed']);
 	});
+	it('names a change of Reserve table, and counts the changes in the table the newer source reads (issue #552)', () => {
+		const pct: EwrDailySource = { ...tab, method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve(R), lowFlowPctM3s: twelve(R) };
+		const without: EwrDailySource = { ...pct, reserveTable: 'withoutHighFlows' };
+		expect(ewrDailySourceChanges(pct, without)).toEqual(['Reserve table total Reserve flows → Reserve flows without high flows']);
+		expect(ewrDailySourceChanges(pct, { ...pct, reserveTable: 'total' })).toEqual([]);
+		// A switch from a source that never had the third table is the switch alone, not 120 changed values.
+		const { lowFlowPctM3s: _, ...noLow } = pct;
+		expect(ewrDailySourceChanges(noLow, without)).toEqual(['Reserve table total Reserve flows → Reserve flows without high flows']);
+		const bumped = twelve(R).map((row, m) => (m === 1 ? row.map((v) => v + 1) : row));
+		// A table the run doesn't read changes nothing it computes.
+		expect(ewrDailySourceChanges(pct, { ...pct, lowFlowPctM3s: bumped })).toEqual([]);
+		expect(ewrDailySourceChanges(without, { ...without, lowFlowPctM3s: bumped })).toEqual(['Reserve flows without high flows table: 10 values changed']);
+		expect(ewrDailySourceChanges(without, { ...without, reservePctM3s: bumped })).toEqual([]);
+	});
 });
 
 describe('describeEwrDailySource (a scenario change, issue #460)', () => {
@@ -230,6 +302,8 @@ describe('describeEwrDailySource (a scenario change, issue #460)', () => {
 		expect(describeEwrDailySource(tab)).toBe('the DRM TAB file, scaled by MAR (table 12.5 Mm³/a)');
 		const pct: EwrDailySource = { ...tab, method: 'percentile', scaling: 'area', tableAreaKm2: 450, naturalPctM3s: twelve(N), reservePctM3s: twelve(R) };
 		expect(describeEwrDailySource(pct)).toBe('the DRM percentile tables, scaled by area (table 450 km²)');
+		expect(describeEwrDailySource({ ...pct, reserveTable: 'withoutHighFlows', lowFlowPctM3s: twelve(R) })).toBe('the DRM percentile tables (Reserve flows without high flows), scaled by area (table 450 km²)');
+		expect(describeEwrDailySource({ ...pct, reserveTable: 'total', lowFlowPctM3s: twelve(R) })).toBe('the DRM percentile tables, scaled by area (table 450 km²)');
 		expect(describeEwrDailySource({ ...tab, tabM3s: null })).toBe('an unusable source (the run uses the pragmatic EWR)');
 	});
 });
@@ -355,6 +429,36 @@ describe('a run with each source', () => {
 		expect(out.series.find((x) => x.key === 'ewr')!.label).toBe(OUTLET_EWR_LABELS.percentile);
 	});
 
+	it('the third table under the total Reserve flows: the same run, byte for byte (issue #552)', () => {
+		const total = run(network({ ewrDailySource: pctSource() }));
+		const low = twelve(RES.map((v) => v * 0.6));
+		for (const over of [{ lowFlowPctM3s: low }, { lowFlowPctM3s: low, reserveTable: 'total' as const }, { lowFlowPctM3s: null, reserveTable: 'total' as const }]) {
+			expect(JSON.stringify(run(network({ ewrDailySource: pctSource(over) })))).toBe(JSON.stringify(total));
+		}
+		expect(total.summary.catchment.outletEwr!.reserveTable).toBeUndefined();
+	});
+
+	it('the Reserve flows without high flows, chosen: each day read on that table × s, named in the summary, the series and the warning', () => {
+		const LOW = RES.map((v) => v * 0.6);
+		const out = run(network({ ewrDailySource: pctSource({ lowFlowPctM3s: twelve(LOW), reserveTable: 'withoutHighFlows' }) }));
+		const info = out.summary.catchment.outletEwr!;
+		expect(info.reserveTable).toBe('withoutHighFlows');
+		const s = info.scale;
+		const ewr = col(out, null, 'ewr')!;
+		const nat = NAT.map((v) => v * s);
+		const low = LOW.map((v) => v * s);
+		let lower = 0;
+		const total = col(run(network({ ewrDailySource: pctSource() })), null, 'ewr')!;
+		for (let t = 0; t < DAYS; t++) {
+			expect(ewr[t]).toBeCloseTo(percentileReserveM3s(natural[t]! / DAY, nat, low) * DAY, 6);
+			if (ewr[t]! < total[t]!) lower++;
+		}
+		// Positive control: a smaller table asks for less on most days.
+		expect(lower).toBeGreaterThan(DAYS / 2);
+		expect(out.series.find((x) => x.key === 'ewr')!.label).toBe(OUTLET_EWR_WITHOUT_HIGH_FLOWS_LABEL);
+		expect(out.summary.warnings.some((w) => w.startsWith('the daily EWR at the outlet comes from the DRM percentile tables (natural flow and Reserve flows without high flows)'))).toBe(true);
+	});
+
 	it('everything downstream follows the series: the outlet shortfall is the outflow against it', () => {
 		const out = run(network({ ewrDailySource: pctSource() }));
 		const ewr = col(out, null, 'ewr')!;
@@ -446,6 +550,13 @@ describe('the scale factor in a resumed run and in calibration', () => {
 		expect(full.summary.catchment.outletEwr!.scaling).toBe('mar');
 		const k = toEpochDay('2009-05-17') - toEpochDay(full.startDate);
 		expect(checkResume(input, k, full)).toBeNull();
+	});
+
+	it('a resumed run on the Reserve flows without high flows reads that table and names it, to the bit (issue #552)', () => {
+		const input = withSource(pctSource({ tableMarMm3: 3, lowFlowPctM3s: twelve(RES.map((v) => v * 0.6)), reserveTable: 'withoutHighFlows' }));
+		const full = runModelWithoutChecks(input);
+		expect(full.summary.catchment.outletEwr!.reserveTable).toBe('withoutHighFlows');
+		expect(checkResume(input, toEpochDay('2009-05-17') - toEpochDay(full.startDate), full)).toBeNull();
 	});
 
 	it('calibration reads the EWR off each candidate’s natural flow, as the run on it does', () => {

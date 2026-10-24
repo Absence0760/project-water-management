@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "issue #553 round 2: Runs & results' rainfall stations (UnitRainPanel's station and pairing tables, runs/stationRain.ts), the report's Rainfall stations and Station CHIRPS pairings tables (report/inputs.ts) and the run comparison's rainfall station lines (engine compare.ts); measured 2036 KB vs 2033 KB at 5ef17e74e (+3,046 bytes gzip)"
+}

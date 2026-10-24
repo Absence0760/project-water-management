@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #554: the checks-only gauges' hydrographs, flow-duration curves and out-of-sample statistics on Runs & results (runs/GaugeCheckFlows.svelte, runs/checkGauges.ts, the menu line and the help guide clause) and Fit automatically's search choices starting from the fit record. Measured locally by building origin/main and this branch: 2016 KB → 2018 KB gzipped total (+2 KB); CI measured the branch at 2021 KB against 2019, so 3 KB covers the rounding."
+}

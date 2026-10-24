@@ -4,7 +4,7 @@
 // app_user.farm_notice_version, 093). Quoted in docs/legal/disclaimer-review.md
 // § 3. Changing any of these words, or the estimate line (cards.ts
 // `disclaimer()`), means bumping FARMER_NOTICE_VERSION (farmNotice.test.ts).
-import { t } from '$lib/i18n/locale.svelte';
+import { t } from '#lib/i18n/locale.svelte.js';
 
 // i18n-section: farm.ack
 export const farmNoticeTitle = () => t('Before you look at your farm');

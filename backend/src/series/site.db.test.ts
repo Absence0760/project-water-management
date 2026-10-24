@@ -68,7 +68,7 @@ describe('a flow record’s site (084_gauge_records)', () => {
 		expect((await u.call('DELETE', `/projects/${q.id}/series/${q.rainId}`)).status).toBe(204);
 		// At a gauge too: two records attached to the weir.
 		const a = (await put({ kind: 'flow_logger_m3s', name: 'weir logger', values: flow(5) })).body.id as string;
-		const b = (await put({ kind: 'flow_logger_m3s', name: 'Weir logger', values: flow(6) })).body.id as string;
+		const b = (await put({ kind: 'flow_logger_m3s', name: 'Drift logger', values: flow(6) })).body.id as string;
 		for (const id of [a, b]) expect((await site(u, q.id, id, q.upper.id)).status).toBe(200);
 		const i = await input(u, q.id);
 		expect(i.series.rain_catchment_mm!.values).toEqual(rain(7));

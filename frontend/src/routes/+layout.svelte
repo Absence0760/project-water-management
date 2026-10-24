@@ -1,22 +1,24 @@
 <script lang="ts">
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import { goto, onNavigate } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api';
-	import { safeNext } from '$lib/auth/redirect';
-	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
-	import { stylesheetsReady } from '$lib/nav/stylesheets';
-	import { isAccountPath, isFarmerOnly, provideFarmFrame } from '$lib/auth/frame';
-	import { loadMfaPrompt, mfaPrompt, noteMfaRefusal, promptKind, resetMfaPrompt } from '$lib/auth/mfaPrompt.svelte';
-	import { askForCode, freshCode } from '$lib/auth/freshCode.svelte';
-	import { isLandingRoot, isPublicPath, isTranslatedPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '$lib/auth/session.svelte';
-	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import ConfirmHost from '$lib/components/common/ConfirmHost.svelte';
-	import { installLeaveGuard } from '$lib/nav/leaveGuard';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import { msg, type Msg } from '$lib/i18n/msg';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { safeNext } from '#lib/auth/redirect.js';
+	import { watchScrollRegions } from '#lib/a11y/scrollRegions.js';
+	import { stylesheetsReady } from '#lib/nav/stylesheets.js';
+	import { isAccountPath, isFarmerOnly, provideFarmFrame } from '#lib/auth/frame.js';
+	import { loadMfaPrompt, mfaPrompt, noteMfaRefusal, promptKind, resetMfaPrompt } from '#lib/auth/mfaPrompt.svelte.js';
+	import { askForCode, freshCode } from '#lib/auth/freshCode.svelte.js';
+	import { isLandingRoot, isPublicPath, isTranslatedPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '#lib/auth/session.svelte.js';
+	import { dropProjectPage, startProjectPage } from '#lib/workspace/firstLoad.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import ConfirmHost from '#lib/components/common/ConfirmHost.svelte';
+	import { installLeaveGuard } from '#lib/nav/leaveGuard.js';
+	import { installBackScroll } from '#lib/nav/backScroll.js';
+	import AppShell from '#lib/components/layout/AppShell.svelte';
+	import { msg, type Msg } from '#lib/i18n/msg.js';
 
 	import '../app.css';
 
@@ -28,18 +30,18 @@
 	// it is usually in by the time the answer is. /welcome is the same page
 	// prerendered once per language (routes/welcome/[[lang=locale]]), shown at once, before the session is known,
 	// since nothing on it depends on who is looking.
-	const loadLanding = () => import('$lib/components/landing/Landing.svelte');
+	const loadLanding = () => import('#lib/components/landing/Landing.svelte');
 	// By route, not by path: while prerendering, `base` is relative ('.'), so a
 	// path comparison would miss it and the page would prerender as "Loading…".
 	const staticPage = $derived(STATIC_ROUTES.includes(page.route.id ?? ''));
-	const landingRoot = $derived(session.checked && isLandingRoot(page.url.pathname, base, !!session.user));
+	const landingRoot = $derived(session.checked && isLandingRoot(page.url.pathname, basePath(), !!session.user));
 
 	async function checkSession() {
 		bootError = null;
-		if (isLandingRoot(page.url.pathname, base, false)) loadLanding().catch(() => {});
+		if (isLandingRoot(page.url.pathname, basePath(), false)) loadLanding().catch(() => {});
 		// The catchment page's own requests go out beside /auth/me, not after it
 		// (workspace/firstLoad.ts); the page still mounts only once it answers.
-		startProjectPage(page.url.pathname, base);
+		startProjectPage(page.url.pathname, basePath());
 		try {
 			session.user = await api.auth.me();
 		} catch (e) {
@@ -58,6 +60,7 @@
 	// Unsaved work (a page registers it, lib/nav/unsaved.ts) is asked about in the app's
 	// own dialog before a navigation drops it; ConfirmHost below shows every such question.
 	installLeaveGuard();
+	installBackScroll();
 	// Wide tables and drawings that scroll sideways take keyboard focus when they overflow.
 	onMount(() => watchScrollRegions(document.body));
 
@@ -66,14 +69,14 @@
 	// remembered ?next= page, so this guard and the login form's own redirect
 	// agree on where to land. Emailed-link pages (reset/verify, and an invitation
 	// on /register) work either way.
-	const access = $derived(routeAccess(page.url.pathname, base, !!session.user, page.url.searchParams));
+	const access = $derived(routeAccess(page.url.pathname, basePath(), !!session.user, page.url.searchParams));
 	$effect(() => {
 		if (!session.checked || bootError) return;
 		if (access === 'login') {
 			const next = page.url.pathname + page.url.search;
-			goto(`${base}/login?next=${encodeURIComponent(next)}`, { replaceState: true });
+			goto(resolve(`login?next=${encodeURIComponent(next)}`), { replace: true });
 		} else if (access === 'leave') {
-			goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
+			goto(safeNext(page.url.searchParams.get('next'), resolve('')), { replace: true });
 		}
 	});
 
@@ -83,15 +86,15 @@
 	// accepts (TermsUpdate, its own chunk). The public pages stay open, so the
 	// legal pages can be read from it, and the report renderer's session renders
 	// its report (it can accept nothing; termsGateApplies).
-	const termsGate = $derived(termsGateApplies(session.user, page.url.pathname, base));
+	const termsGate = $derived(termsGateApplies(session.user, page.url.pathname, basePath()));
 
 	// Sign-in and emailed-link pages have their own full-screen layout (AuthCard),
 	// even when a signed-in user opens a reset or confirmation link; so does the
 	// re-acceptance notice.
-	const authScreen = $derived(isPublicPath(page.url.pathname, base) || landingRoot || termsGate);
+	const authScreen = $derived(isPublicPath(page.url.pathname, basePath()) || landingRoot || termsGate);
 	// The farmer view (/farm/…) has its own header and Menu (FarmShell): a farmer
 	// has no projects, teams or workspace to navigate to.
-	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(base.length)));
+	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(basePath().length)));
 
 	// A user whose every membership is `farmer` has no workspace, so their
 	// account pages (/account/**) sit in the farmer view's frame too
@@ -101,14 +104,14 @@
 	// the page waits for it rather than flash the wrong frame. FarmShell is
 	// its own chunk, loaded only for such a user. If either fails, the
 	// workspace frame still works, so that is the fallback.
-	const accountScreen = $derived(isAccountPath(page.url.pathname, base));
-	type FarmShellModule = typeof import('$lib/components/farm/FarmShell.svelte');
+	const accountScreen = $derived(isAccountPath(page.url.pathname, basePath()));
+	type FarmShellModule = typeof import('#lib/components/farm/FarmShell.svelte');
 	let farmFrame = $state.raw<{ user: string; shell: FarmShellModule | null } | null>(null);
 	async function checkFarmFrame(user: string) {
 		let shell: FarmShellModule | null = null;
 		try {
 			const projects = await api.projects.list();
-			if (isFarmerOnly(projects.map((p) => p.role))) shell = await import('$lib/components/farm/FarmShell.svelte');
+			if (isFarmerOnly(projects.map((p) => p.role))) shell = await import('#lib/components/farm/FarmShell.svelte');
 		} catch {
 			shell = null;
 		}
@@ -136,9 +139,9 @@
 	// switch updates session.user). The route renders once that language is
 	// set (i18nReady), so it never shows one language and then another.
 	const translated = $derived(
-		landingRoot || termsGate || isTranslatedPath(page.url.pathname, base)
+		landingRoot || termsGate || isTranslatedPath(page.url.pathname, basePath())
 	);
-	type I18n = typeof import('$lib/i18n/locale.svelte');
+	type I18n = typeof import('#lib/i18n/locale.svelte.js');
 	let i18nModule = $state.raw<I18n | null>(null);
 	let i18nReady = $state(false);
 	let i18nFailed = $state(false);
@@ -157,7 +160,7 @@
 	async function applyLocale(chosen: string | null) {
 		i18nFailed = false;
 		try {
-			const m = i18nModule ?? (await import('$lib/i18n/locale.svelte'));
+			const m = i18nModule ?? (await import('#lib/i18n/locale.svelte.js'));
 			i18nModule = m;
 			// The landing page's language is its address's (issue #137): the
 			// page set it as it rendered. /welcome itself is also the address
@@ -169,7 +172,7 @@
 			if (page.route.id === LANDING_ROUTE) {
 				const choice = m.resolveLocale(chosen, m.readStoredLocale());
 				const here = page.params.lang;
-				if (!here && choice !== m.DEFAULT_LOCALE) await goto(`${base}${landingPath(choice)}`, { replaceState: true });
+				if (!here && choice !== m.DEFAULT_LOCALE) await goto(`${basePath()}${landingPath(choice)}`, { replace: true });
 				else if (here && m.isLocale(here) && !m.readStoredLocale()) m.storeLocale(here);
 			} else await m.setLocale(m.resolveLocale(chosen, m.readStoredLocale()));
 			i18nReady = true;
@@ -212,7 +215,7 @@
 		api.onFreshCode(async () => {
 			// Loaded before it opens, so a failed load answers "no code" instead of leaving the action waiting.
 			try {
-				await import('$lib/components/layout/FreshCodeDialog.svelte');
+				await import('#lib/components/layout/FreshCodeDialog.svelte');
 			} catch {
 				return false;
 			}
@@ -246,19 +249,19 @@
 {#snippet content()}
 	<!-- Loaded only for an unconfirmed address: it is worded from the catalogue, which the workspace doesn't load otherwise. -->
 	{#if !authScreen && session.user?.emailVerified === false}
-		{#await import('$lib/components/auth-extras/VerifyEmailBanner.svelte') then banner}
+		{#await import('#lib/components/auth-extras/VerifyEmailBanner.svelte') then banner}
 			<banner.default />
 		{:catch}
 			<div class="verify-failed"><ChunkFailed text={words(BANNER_FAILED)} reload={words(RELOAD_PAGE)} /></div>
 		{/await}
 	{:else if !authScreen && session.user?.emailVerified && !session.user.renderSession}
 		<!-- Invitations waiting to be accepted (issue #136); its own chunk, it draws nothing when there are none. -->
-		{#await import('$lib/components/auth-extras/InvitesBanner.svelte') then banner}
+		{#await import('#lib/components/auth-extras/InvitesBanner.svelte') then banner}
 			<banner.default />
 		{/await}
 	{/if}
 	{#if mfaKind}
-		{#await import('$lib/components/layout/MfaBanner.svelte') then banner}
+		{#await import('#lib/components/layout/MfaBanner.svelte') then banner}
 			<banner.default kind={mfaKind} />
 		{:catch}
 			<div class="verify-failed">
@@ -267,7 +270,7 @@
 		{/await}
 	{/if}
 	{#if freshCode.open}
-		{#await import('$lib/components/layout/FreshCodeDialog.svelte') then dialog}
+		{#await import('#lib/components/layout/FreshCodeDialog.svelte') then dialog}
 			<dialog.default />
 		{/await}
 	{/if}
@@ -283,7 +286,7 @@
 			<ChunkFailed what="This page" />
 		</main>
 	{:else if shown && termsGate}
-		{#await import('$lib/components/auth-extras/TermsUpdate.svelte') then gate}
+		{#await import('#lib/components/auth-extras/TermsUpdate.svelte') then gate}
 			<div id="main" tabindex="-1"><gate.default /></div>
 		{:catch}
 			<main class="page"><ChunkFailed what="This page" /></main>
@@ -305,7 +308,7 @@
 	<!-- The farm frame's words wait for the language, like the page's. -->
 	{#if ready}
 		<!-- /account has its own language switch (Language and units); one is enough. -->
-		<farmShell.default accountPage languageSwitch={page.url.pathname.slice(base.length) !== '/account'}>{@render content()}</farmShell.default>
+		<farmShell.default accountPage languageSwitch={page.url.pathname.slice(basePath().length) !== '/account'}>{@render content()}</farmShell.default>
 	{:else}
 		{@render content()}
 	{/if}

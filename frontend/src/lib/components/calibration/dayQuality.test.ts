@@ -37,6 +37,16 @@ describe('the data-quality panel (CR-22)', () => {
 		]);
 	});
 
+	it('lists period-high days (issue #557) only when there are any, always left out; a report from before them has none', () => {
+		expect(flowRows(summary()).some((r) => r.label.startsWith('Above a low-flow'))).toBe(false);
+		const base = summary();
+		const withHigh = summary({ flow: { ...base.flow, periodHigh: 2 } });
+		expect(flowRows(withHigh).find((r) => r.label === 'Above a low-flow period’s threshold')).toEqual({ label: 'Above a low-flow period’s threshold', days: '2', share: '33.3 %', treatment: 'left out' });
+		const { periodHigh: _p, ...oldFlow } = base.flow;
+		expect(() => flowRows(summary({ flow: oldFlow as DayQuality['flow'] }))).not.toThrow();
+		expect(flowRows(summary({ flow: oldFlow as DayQuality['flow'] })).length).toBe(flowRows(base).length);
+	});
+
 	it('says "Not flagged" instead of "in the gauged range" when no gauged range is recorded', () => {
 		expect(flowRows(summary({ rating: null }))[0]!.label).toBe('Not flagged (no gauged range recorded)');
 		expect(ratingLine(summary({ rating: null }))).toBe('No gauged range recorded for this record.');

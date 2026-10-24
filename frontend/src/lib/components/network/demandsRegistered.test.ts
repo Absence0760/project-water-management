@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Allocation } from '$lib/api';
+import type { Allocation } from '#lib/api/index.js';
 import type { DemandRow } from './demands';
 import { inForce, nodeSpans, registeredCells, registeredTotal } from './demandsRegistered';
 

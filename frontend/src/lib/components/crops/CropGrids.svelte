@@ -9,25 +9,25 @@
 	// (model/GridModal.svelte, `sections`), scenario override mode all three
 	// (scenarios/OverrideEditor.svelte). The Crops page itself (CropsTab) is
 	// cards and bars over the same editor.
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 	import type { ProjectSettings } from '@water-management/engine';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { prefetch } from '$lib/components/common/lazy';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import MoveControls from '$lib/components/model/MoveControls.svelte';
-	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
-	import { moveTo, reorderSubset } from '$lib/model/order';
-	import { fmtNum } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { prefetch } from '#lib/components/common/lazy.js';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import MoveControls from '#lib/components/model/MoveControls.svelte';
+	import { refocusMover, RowReorder } from '#lib/components/model/rowReorder.svelte.js';
+	import { moveTo, reorderSubset } from '#lib/model/order.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import MonthlyBars from '#lib/components/settings/MonthlyBars.svelte';
 	import { catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
 	import { cropAreaTotals, cropColouring, OTHER_COLOUR, rankCrops } from './cards';
 	import DemandTable from './DemandTable.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 	import { applyAreaPaste, applyFactorPaste, CROP_FACTORS_FORMAT, cropFactorsCsv, planFactorPaste, PLANTED_AREAS_FORMAT, plantedAreasCsv, planAreaPaste } from './areaPaste';
 
 	let {

@@ -1,16 +1,17 @@
 <script lang="ts">
-	import { hashId } from '$lib/help/anchor';
+	import { hashId } from '#lib/help/anchor.js';
 	// The help landing page: the illustrated catchment tour, the setup path
 	// through the workspace tabs, and the guides that explain the model. The
 	// sidebar (search, every guide, the glossary) is the help layout's.
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import PictureTour from '$lib/components/help/PictureTour.svelte';
-	import { HELP, helpFor } from '$lib/help/content';
-	import { glossaryPath } from '$lib/help/glossaryLinks';
-	import { GUIDES, SETUP_STEPS, TAB_TITLES, guideFor } from '$lib/help/guides';
-	import { TOUR } from '$lib/help/tour';
+	import PictureTour from '#lib/components/help/PictureTour.svelte';
+	import { HELP, helpFor } from '#lib/help/content.js';
+	import { glossaryPath } from '#lib/help/glossaryLinks.js';
+	import { GUIDES, SETUP_STEPS, TAB_TITLES, guideFor } from '#lib/help/guides.js';
+	import { TOUR } from '#lib/help/tour.js';
 
 	const concepts = GUIDES.filter((g) => g.kind === 'concept');
 	const pages = GUIDES.filter((g) => g.kind === 'page');
@@ -20,17 +21,17 @@
 	// bookmarks) go on to the term's topic page.
 	$effect(() => {
 		const e = helpFor(hashId(page.url.hash));
-		if (e) goto(`${base}${glossaryPath(e)}`, { replaceState: true });
+		if (e) goto(`${basePath()}${glossaryPath(e)}`, { replace: true });
 	});
 </script>
 
-<svelte:head><title>Help · Water Management</title></svelte:head>
+<svelte:head><title>Help · IC-WBT</title></svelte:head>
 
 <header class="hero">
 	<p class="eyebrow">Help</p>
 	<h1>How the catchment model works</h1>
 	<p class="lede">
-		Water Management follows a catchment’s water day by day: how much the rain produces, what each hydrological unit can
+		IC-WBT follows a catchment’s water day by day: how much the rain produces, what each hydrological unit can
 		irrigate, and whether the river keeps its ecological Reserve. Follow the numbered stops, open one to see that
 		part up close, or go on to its guide.
 	</p>
@@ -44,7 +45,7 @@
 <section aria-labelledby="setup-h" class="block">
 	<div class="block-head">
 		<h2 id="setup-h">Set up a catchment</h2>
-		<a href="{base}/help/guides/{start.id}">{start.title} →</a>
+		<a href={resolve(`help/guides/${start.id}`)}>{start.title} →</a>
 	</div>
 	<p class="muted intro">One step per tab, in the order a project’s <strong>Build the model</strong> section lists them. The project’s Summary keeps a checklist of them.</p>
 	<ol class="steps">
@@ -52,7 +53,7 @@
 			{@const guide = guideFor(step.guide)}
 			<li>
 				<span class="n" aria-hidden="true">{i + 1}</span>
-				<a href="{base}/help/guides/{step.guide}" aria-describedby="step-{i}">{TAB_TITLES[step.tab]}</a>
+				<a href={resolve(`help/guides/${step.guide}`)} aria-describedby="step-{i}">{TAB_TITLES[step.tab]}</a>
 				<p id="step-{i}">
 					{#if step.optional}<span class="opt">Optional.</span>{/if}
 					{step.text}{#if guide}<span class="visually-hidden"> Guide: {guide.title}.</span>{/if}
@@ -65,12 +66,12 @@
 <section aria-labelledby="model-h" class="block">
 	<div class="block-head">
 		<h2 id="model-h">Understand the model</h2>
-		<a href="{base}/help/glossary">Glossary, {HELP.length} terms →</a>
+		<a href={resolve('help/glossary')}>Glossary, {HELP.length} terms →</a>
 	</div>
 	<ul class="concepts">
 		{#each concepts as g (g.id)}
 			<li>
-				<a href="{base}/help/guides/{g.id}">{g.title}</a>
+				<a href={resolve(`help/guides/${g.id}`)}>{g.title}</a>
 				<p>{g.summary}</p>
 			</li>
 		{/each}
@@ -85,7 +86,7 @@
 	<ul class="concepts" data-testid="help-pages">
 		{#each pages as g (g.id)}
 			<li>
-				<a href="{base}/help/guides/{g.id}">{g.title}</a>
+				<a href={resolve(`help/guides/${g.id}`)}>{g.title}</a>
 				<p>{g.summary}</p>
 			</li>
 		{/each}

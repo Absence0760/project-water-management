@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NoteCounts } from '$lib/api/types';
+import type { NoteCounts } from '#lib/api/types.js';
 
 const counts = vi.fn(async (projectId: string): Promise<NoteCounts> => ({ project: projectId.length, nodes: {}, runs: {}, settings: {}, scenarios: {} }));
-vi.mock('$lib/api', () => ({ api: { notes: { counts: (id: string) => counts(id) } } }));
+vi.mock('#lib/api/index.js', () => ({ api: { notes: { counts: (id: string) => counts(id) } } }));
 
 const { clearNoteCounts, noteCounts } = await import('./counts.svelte');
 

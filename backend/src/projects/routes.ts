@@ -21,6 +21,7 @@ import { requireRole, UUID, type Role } from './access.js';
 import { requireOwnSecondFactor, requireProjectStepUp } from '../auth/stepUp.js';
 import { checkCalibrationSite } from './calibrationSite.js';
 import { baselineSettingsEwrRefusal, normaliseBaselineEwrRules } from './ewrRules.js';
+import { checkRainStations, remapRainStations } from './rainStationSettings.js';
 import { autoFitRecordError, baselineAllocationModeError, dataQualityPatchError, ewrOutletTableError, mergeSettings, normaliseBaselineAllocationMode, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
 import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
@@ -393,6 +394,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 				const outletError = ewrOutletTableError((settings as { ewrRules?: unknown }).ewrRules, outlets.map((r) => r.id));
 				if (outletError) throw new ApiError(400, outletError);
 			}
+			// The rainfall stations (engine ≥ 1.91.0, issue #553): each named station a station of this project, each unit a land unit.
+			if (settings && body.settings?.rainStations) await checkRainStations(db, id, body.settings.rainStations, (current.settings as { rainStations?: unknown }).rainStations);
 			// The calibration site (engine ≥ 1.41.0): a change to a gauge is checked against the network and its records.
 			const calSite = (body.settings as { calibrationSiteNodeId?: string | null } | undefined)?.calibrationSiteNodeId;
 			if (settings && typeof calSite === 'string' && calSite !== (current.settings as { calibrationSiteNodeId?: unknown }).calibrationSiteNodeId) {
@@ -511,17 +514,31 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// A gauge record's site (084_gauge_records) follows its gauge to the copy's id; one whose
 			// node has left the model has nothing to follow, so it keeps no site in the copy. A land unit's
 			// own rain (209) follows its unit the same way, and one whose unit has gone is left out: with no
-			// site it would become the copy's catchment rain.
+			// site it would become the copy's catchment rain. A rainfall station's details (239, issue #553) copy with it
+			// (only a catchment rain series with no site has them, so its site stays null).
 			const [from, to] = [[...ids.keys()], [...ids.values()]];
 			await db.query(
 				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
-					source, source_unit, source_unit_factor, hand_days)
+					source, source_unit, source_unit_factor, hand_days, station_map_mm, station_map_source, station_lat, station_lon)
 				 SELECT $2, t.kind, t.name, t.unit, t.start_date, t."values", t.product, t.product_version, t.day_boundary, m.new_id,
-					t.source, t.source_unit, t.source_unit_factor, t.hand_days
+					t.source, t.source_unit, t.source_unit_factor, t.hand_days, t.station_map_mm, t.station_map_source, t.station_lat, t.station_lon
 				 FROM time_series t LEFT JOIN unnest($3::uuid[], $4::uuid[]) AS m(old_id, new_id) ON m.old_id = t.site_node_id
 				 WHERE t.project_id = $1 AND NOT (t.site_node_id IS NOT NULL AND m.new_id IS NULL AND t.kind = ANY($5::text[]))`,
 				[srcId, newId, from, to, [...UNIT_RAIN_KINDS]]
 			);
+			// The rainfall stations settings.rainStations names (issue #553) follow their series to the copy's ids, by name (one
+			// series per kind and name in a project). Stored after the series, since only now do they have ids.
+			const rs = copiedSettings.rainStations;
+			if (rs !== null && typeof rs === 'object') {
+				const { rows: pairs } = await db.query<{ old: string; new: string }>(
+					`SELECT o.id AS old, n.id AS new FROM time_series o
+					 JOIN time_series n ON n.project_id = $2 AND n.kind = o.kind AND n.name = o.name AND n.site_node_id IS NULL
+					 WHERE o.project_id = $1 AND o.kind = 'rain_catchment_mm' AND o.site_node_id IS NULL`,
+					[srcId, newId]
+				);
+				copiedSettings.rainStations = remapRainStations(rs, new Map(), new Map(pairs.map((r) => [r.old, r.new])));
+				await db.query('UPDATE project SET settings = $2 WHERE id = $1', [newId, JSON.stringify(copiedSettings)]);
+			}
 			// Notes don't copy (docs/data-model.md § Notes): a copy diverges, and a
 			// note is its author's words about the original; RLS inserts a note only
 			// as yourself, so keeping the author would mean bypassing it, and

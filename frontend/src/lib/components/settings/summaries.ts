@@ -3,9 +3,10 @@
 // panel needn't be scanned field by field to know whether it matters. They
 // follow the unsaved form. Pure: SettingsTab passes the derived figures in.
 import { defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
-import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
-import { fmtDay, fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
+import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
+import { ewrSplitSummary } from './ewrSplit';
 
 export interface SummaryInput {
 	s: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
@@ -79,14 +80,27 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
-		'set-share': share,
+		// Flow generation (issue #553 round 3): the method, then what the flow share splits under it;
+		// the EWR split (round 4) only when it isn't the flow share.
+		'set-share':
+			s.unitRain?.mode === 'perUnit'
+				? [
+						'Per unit',
+						(() => {
+							const n = Object.keys(s.rainStations?.units ?? {}).length;
+							return n ? `${plural(n, 'unit')} on a rainfall station` : 'no unit on a rainfall station';
+						})(),
+						ewrSplitSummary(s.ewrSplit, true) ?? `EWR flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`
+					].join(' · ')
+				: [`Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`, ewrSplitSummary(s.ewrSplit, false)]
+						.filter(Boolean)
+						.join(' · '),
 		'set-restrict': restrict ? `On: ${plural(restrict.levels?.length ?? 0, 'level')}, reviewed on ${plural(restrict.reviewDates?.length ?? 0, 'date')}` : 'Off',
 		'set-flow': [
 			g ? `GR4J X1 ${fmtNum(g.x1, 0)} mm, X3 ${fmtNum(g.x3, 0)} mm, X4 ${fmtNum(g.x4, 2, true)} days${g.x2 ? `, X2 ${fmtNum(g.x2, 2, true)} mm` : ''}` : 'GR4J',
 			`${fmtNum(area != null && area > 0 ? area : i.unitAreaKm2, 1, true)} km²`,
 			`PE ${fmtNum(i.peAnnualMm)} mm a year${s.pe?.kind === 'monthly' ? ' (monthly PE)' : ''}`,
-			s.arealRain ? 'areal correction on' : null,
-			s.unitRain?.mode === 'perUnit' ? 'rain for each unit' : null
+			s.arealRain ? 'areal correction on' : null
 		]
 			.filter(Boolean)
 			.join(' · '),
@@ -94,6 +108,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			span ?? 'The whole flow record',
 			i.siteName ? `at ${i.siteName}` : 'at the outlet',
 			exclusions ? `${plural(exclusions, 'period')} left out` : null,
+			// Engine ≥ 1.90.0 (issue #557): named only when set.
+			s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
 			// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
 			s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
 		]

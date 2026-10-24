@@ -5,10 +5,10 @@
 	// always stays. A hidden section still opens from a link. The choice is
 	// the account's (user.preferences.hiddenTabs, PATCH /auth/me), so it
 	// follows them to every catchment and device.
-	import { api } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { session } from '$lib/auth/session.svelte';
-	import { ALWAYS_SHOWN, hiddenChoice, hiddenTabs, navSections, TAB_HINTS, TAB_LABELS, withTabHidden, type TabId } from '$lib/workspace/tabs';
+	import { api } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { session } from '#lib/auth/session.svelte.js';
+	import { ALWAYS_SHOWN, hiddenChoice, hiddenTabs, navSections, TAB_HINTS, TAB_LABELS, withTabHidden, type TabId } from '#lib/workspace/tabs.js';
 
 	let {
 		roleTabs,

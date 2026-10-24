@@ -2,7 +2,7 @@
 // docs/ui.md § Map): what each match is, where it is, how far the map zooms
 // to it, and the credits a list of places carries. The search itself is the
 // backend's (GET …/map/search, our own reference tables only).
-import type { MapSearchHit } from '$lib/api/types';
+import type { MapSearchHit } from '#lib/api/types.js';
 
 /** South Africa's provinces by GeoNames' admin1 code (admin1CodesASCII.txt, ZA.*). */
 export const ZA_PROVINCES: Readonly<Record<string, string>> = {

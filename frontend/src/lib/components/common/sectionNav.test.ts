@@ -135,10 +135,10 @@ describe('navText and navEmpty (issue #462)', () => {
 	});
 
 	it('names a link to another page with that page, the problem after it; a link on this page has no name of its own', () => {
-		const sec = { label: 'Reserve rules met, by month', bar: 'Reserve rules', page: 'River & reserve' };
-		expect(pageLinkName(sec, 'rail')).toBe('Reserve rules met, by month, on River & reserve');
-		expect(pageLinkName(sec, 'bar')).toBe('Reserve rules, on River & reserve');
-		expect(pageLinkName({ ...sec, problem: true }, 'rail')).toBe('Reserve rules met, by month, on River & reserve (has a problem)');
+		const sec = { label: 'Reserve rules met, by month', bar: 'Reserve rules', page: 'EWR' };
+		expect(pageLinkName(sec, 'rail')).toBe('Reserve rules met, by month, on EWR');
+		expect(pageLinkName(sec, 'bar')).toBe('Reserve rules, on EWR');
+		expect(pageLinkName({ ...sec, problem: true }, 'rail')).toBe('Reserve rules met, by month, on EWR (has a problem)');
 		expect(pageLinkName({ label: 'Summary' }, 'rail')).toBeNull();
 	});
 

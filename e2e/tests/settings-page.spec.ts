@@ -19,8 +19,8 @@ import { headerControl } from '../support/sectionHeader.ts';
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
 const SETTINGS_INDEX: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
-	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions', 'Reporting']],
-	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
+	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automation & access', ['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']]
@@ -384,7 +384,8 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	// Its cards (issue #521), each an h3; the switches inside Rain into GR4J are h4s under it.
 	expect((await names('set-flow')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
 	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Areal rainfall correction' })).toBeVisible();
-	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Rain for each unit' })).toBeVisible();
+	// Flow generation (issue #553 round 3): Fragmentation by default, its one card the flow share.
+	expect(await names('set-share')).toEqual(['Flow generation', 'Flow share']);
 	// Rain gaps: two cards, the second's three topics under it (h4).
 	expect(await names('set-rain')).toEqual(['Rain gaps', 'CHIRPS gap filling', 'Flagged rain']);
 	expect(

@@ -10,14 +10,14 @@
 	// comments as a CSV, one row per text. A commenter's email is here only
 	// where they ticked the reg 18 box. Part of the workspace, so English.
 	import { untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError, type ParticipationExport } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import { api, ApiError, type ParticipationExport } from '#lib/api/index.js';
+	import { fmtDate } from '#lib/format/number.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const scenarioId = $derived(page.params.sid ?? '');
-	const back = $derived(`${base}/projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(scenarioId)}`);
+	const back = $derived(resolve(`projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(scenarioId)}`));
 
 	let record = $state.raw<ParticipationExport | null>(null);
 	let status = $state<'loading' | 'loaded' | 'not-found' | 'error'>('loading');
@@ -51,7 +51,7 @@
 	const shown = $derived(record ? record.comments.filter((c) => c.state === 'shown').length : 0);
 </script>
 
-<svelte:head><title>{record ? `Public participation · ${record.application.name} · ` : ''}Water Management</title></svelte:head>
+<svelte:head><title>{record ? `Public participation · ${record.application.name} · ` : ''}IC-WBT</title></svelte:head>
 
 <main class="page participation" aria-busy={status === 'loading'} data-testid="participation-record">
 	<p class="no-print"><a href={back}>← Back to the application</a></p>

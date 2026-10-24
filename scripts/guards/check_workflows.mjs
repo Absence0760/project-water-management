@@ -73,7 +73,10 @@
 //              excludes the renderer image's npm directory
 //              (/backend/renderer-deps) by fetch-metadata's `directory` and by
 //              the PR's branch name, each on its own line joined with `&&`.
-//              Those PRs stay manual.
+//              Those PRs stay manual. And `gh pr merge --auto` comes after
+//              a read of the repo's `allow_auto_merge`: with the setting off
+//              the call errors, and it turned every Dependabot PR red
+//              (#542-#549) instead of leaving them for a human.
 //   pnpm-version  when the root package.json pins `packageManager: pnpm@…`, no
 //              `pnpm/action-setup` step names a `version:`. The action reads
 //              packageManager itself and fails the step on two versions
@@ -362,6 +365,12 @@ export function autoMergeProblem(text) {
 	}
 	if (missing.length) {
 		return { line: ifAt + 1, message: `the auto-merge condition does not exclude the renderer image's npm directory; add, each on its own line: ${missing.join(' / ')}` };
+	}
+	const code = (l) => !/^\s*#/.test(l);
+	const mergeAt = lines.findIndex((l) => code(l) && /\bgh pr merge\b.*--auto/.test(l));
+	const readAt = lines.findIndex((l) => code(l) && /allow_auto_merge/.test(l));
+	if (mergeAt >= 0 && (readAt < 0 || readAt > mergeAt)) {
+		return { line: mergeAt + 1, message: "`gh pr merge --auto` runs without first reading the repo's allow_auto_merge; with the setting off it errors and turns every Dependabot PR red. Read it and stop with a notice when it is off" };
 	}
 	return null;
 }

@@ -9,9 +9,9 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import { api, type RunCatchmentDay, type RunDay } from '$lib/api';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtDay, fmtNum, MINUS, parseDay } from '$lib/format/number';
+	import { api, type RunCatchmentDay, type RunDay } from '#lib/api/index.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtDay, fmtNum, MINUS, parseDay } from '#lib/format/number.js';
 	import { balanceClosure, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, traceRows } from './checks';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 

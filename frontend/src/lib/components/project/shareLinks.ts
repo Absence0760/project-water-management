@@ -1,7 +1,7 @@
 // View helpers for ShareLinksPanel (WP-2.3 phase 2): a link's state, what it
 // opens (the owner's inventory of every link) and the words for its row. Pure, so they are unit-tested (shareLinks.test.ts).
-import type { ShareLink } from '$lib/api/types';
-import { fmtDate } from '$lib/format/number';
+import type { ShareLink } from '#lib/api/types.js';
+import { fmtDate } from '#lib/format/number.js';
 
 /** How long a new link lives: the choices offered (the API takes any 1–365). */
 export const EXPIRY_CHOICES = [

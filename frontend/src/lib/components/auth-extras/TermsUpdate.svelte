@@ -9,15 +9,16 @@
 	// the person asked for renders in its place.
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { focusPageStart } from '$lib/a11y/focusPage';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import { clearAllSaved } from '$lib/components/farm/savedCopy';
-	import AuthCard from '$lib/components/layout/AuthCard.svelte';
-	import TermsSummary from '$lib/components/legal/TermsSummary.svelte';
-	import { errorText } from '$lib/i18n/apiError';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import { focusPageStart } from '#lib/a11y/focusPage.js';
+	import { api } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import { clearAllSaved } from '#lib/components/farm/savedCopy.js';
+	import AuthCard from '#lib/components/layout/AuthCard.svelte';
+	import TermsSummary from '#lib/components/legal/TermsSummary.svelte';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { changesSince, TERMS_CHANGES } from './termsChanges';
 
 	// What changed since the version the account accepted (termsChanges.ts TERMS_CHANGES).
@@ -57,12 +58,12 @@
 		session.user = null;
 		signingOut = false;
 		await tick();
-		await goto(`${base}/login`);
+		await goto(resolve('login'));
 	}
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Our terms have changed') })}</title>
+	<title>{t('{page} · {app}', { page: t('Our terms have changed'), app: APP_SHORT_NAME })}</title>
 </svelte:head>
 
 <AuthCard legal={false} title={t('Our terms have changed')}>
@@ -72,8 +73,8 @@
 		{#each shown as change (change)}<li>{t(change)}</li>{/each}
 	</ul>
 	<p class="links">
-		<a href="{base}/terms">{t('Terms of use')}</a>
-		<a href="{base}/privacy">{t('Privacy notice')}</a>
+		<a href={resolve('terms')}>{t('Terms of use')}</a>
+		<a href={resolve('privacy')}>{t('Privacy notice')}</a>
 	</p>
 	<TermsSummary id="terms-update-summary" />
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}

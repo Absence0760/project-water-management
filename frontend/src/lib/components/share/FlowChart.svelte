@@ -5,8 +5,8 @@
 	// rendered width, like the farm view's MonthlyChart and DamChart. The chart
 	// is aria-hidden; a visually hidden sentence sums it up and "Show the
 	// numbers" is a table of every month drawn.
-	import { CHART_FONT_PX, LABEL_Y } from '$lib/components/farm/chartGeometry';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { CHART_FONT_PX, LABEL_Y } from '#lib/components/farm/chartGeometry.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { flowCaption, flowChart, flowRows, flowSummary, type FlowMonth } from './chart';
 
 	let { months }: { months: FlowMonth[] } = $props();

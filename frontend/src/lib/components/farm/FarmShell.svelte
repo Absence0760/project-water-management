@@ -8,12 +8,13 @@
 	// The language switch (EN | AF, WP-2.5) sits in the header, as the design's
 	// board 1 has it.
 	import type { Snippet } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { signOutTo } from '$lib/auth/signOut';
-	import BrandMark from '$lib/components/layout/BrandMark.svelte';
-	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { signOutTo } from '#lib/auth/signOut.js';
+	import BrandMark from '#lib/components/layout/BrandMark.svelte';
+	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { clearFarmMemo } from './farmState.svelte';
 	import { farmHref, wordsHref } from './load';
 	import { keepsCopy, setKeepsCopy } from './savedCopy';
@@ -59,7 +60,7 @@
 	let menuOpen = $state(false);
 	// The farm the page is about (?node=), carried to who-decides like the other farm links, so its back link returns to it.
 	const node = $derived(nodeId ?? page.url.searchParams.get('node'));
-	const path = $derived(base && page.url.pathname.startsWith(base) ? page.url.pathname.slice(base.length) : page.url.pathname);
+	const path = $derived(basePath() && page.url.pathname.startsWith(basePath()) ? page.url.pathname.slice(basePath().length) : page.url.pathname);
 	let keep = $state(keepsCopy());
 	let menuRoot: HTMLDivElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
@@ -110,7 +111,7 @@
 <div class="farm" class:account-page={accountPage}>
 	<header class="farm-header" bind:offsetHeight={headerH}>
 		{#if accountPage && !back}
-			<a class="back" href="{base}/farm">
+			<a class="back" href={resolve('farm')}>
 				<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 L8 12 L15 19" /></svg>
 				<span class="back-label">{t('Your hydrological units')}</span>
 			</a>
@@ -130,14 +131,14 @@
 				{t('Menu')}
 			</button>
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
-				<li><a href="{base}/farm" aria-current={path === '/farm' ? 'page' : undefined}>{t('Your hydrological units')}</a></li>
-				<li><a href={wordsHref(base, page.url)} aria-current={path === '/farm/words' ? 'page' : undefined}>{t('What do these words mean?')}</a></li>
-				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
+				<li><a href={resolve('farm')} aria-current={path === '/farm' ? 'page' : undefined}>{t('Your hydrological units')}</a></li>
+				<li><a href={wordsHref(basePath(), page.url)} aria-current={path === '/farm/words' ? 'page' : undefined}>{t('What do these words mean?')}</a></li>
+				<li><a href={resolve('account')} aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
-				<li><a href="{base}/privacy">{t('Privacy notice')}</a></li>
+				<li><a href={resolve('privacy')}>{t('Privacy notice')}</a></li>
 				<!-- The catchment's organisation decides about the farm's information (POPIA s18(1)(b)): whom to ask. -->
 				{#if projectId}
-					<li><a href={farmHref(base, projectId, node, !!node, 'who-decides')} aria-current={path.endsWith('/who-decides') ? 'page' : undefined}>{t('Who decides about your hydrological unit’s information')}</a></li>
+					<li><a href={farmHref(basePath(), projectId, node, !!node, 'who-decides')} aria-current={path.endsWith('/who-decides') ? 'page' : undefined}>{t('Who decides about your hydrological unit’s information')}</a></li>
 				{/if}
 				<li>
 					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
