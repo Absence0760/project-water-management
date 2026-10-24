@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 169 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 171 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -366,6 +366,23 @@ window left out) and `station-catchment-rule2` / `-no-map` (rule 2 at the
 station rain's level, 900 mm not `gaugeMapMm`'s 450, on station days, gaps
 and the forecast; no rule 2 without the station's MAP).
 
+## What the EWR split covers
+
+`settings.ewrSplit` (model.md §2.5b, engine ≥ 1.94.0, issue #553): with
+`'naturalMar'` under per-unit rain, each unit's EWR share is its own
+`runoff_natural` (days above 0) summed over the complete water years of the
+historical days, else every historical day, ÷ the units' total in node-id
+order, every farm without runoff at 0; with no runoff over the period, and
+under catchment rain, the flow shares. `add_ewr_split` (its own random
+stream, last) sets it on half the per-unit networks and a tenth of the
+others. Compared: every unit's `ewr` and everything downstream
+(`ewr_cumulative`, `ewr_shortfall`). Probes:
+`ewr-split-station-units` (station-units' network: two units on one station,
+one draining into the other, twelve calendar years whose complete water years
+leave out the first nine months) and `ewr-split-short-run` (eight months, no
+complete water year: the whole run). Mutants: the split ignored, and the MAR
+taken over every day instead of the complete water years.
+
 ## Phase 2b (not covered yet)
 
 `model.unsupported()` names each of these, and the generator never produces
@@ -436,7 +453,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (169
+`test_verify.py` breaks `model.py` one documented rule at a time (171
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -507,7 +524,9 @@ the catchment MAP an unweighted mean, `catchmentMapMm` ignored; the run
 window from the stored record, or counting CHIRPS a refused pairing doesn't
 correct; rule 2 dividing by `gaugeMapMm`, or by the station MAP without r,
 or applying without the station's MAP; the reference fit keeping the
-station's windows. Each mutant must disagree with the engine somewhere on the examples,
+station's windows. The EWR split's 2 (engine 1.94.0): the natural MAR
+split ignored, and its MAR taken over every day rather than the complete
+water years. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes

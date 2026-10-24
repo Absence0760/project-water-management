@@ -249,7 +249,10 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
 `effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
-`ewrPragmaticM3PerDay`, `flowShareMethod`, `hiLoSplit.hi`, `hiLoSplit.lo`,
+`ewrPragmaticM3PerDay`, `flowShareMethod`, from engine 1.94.0 (issue #553)
+`ewrSplit` (`flowShare` | `naturalMar`: how the EWR is split between the
+units, [model.md §2.5b](./model.md); a baseline assumption like every
+settings op), `hiLoSplit.hi`, `hiLoSplit.lo`,
 `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,
 `calibration.rainThresholdMm`, `calibration.catchmentAreaKm2`,

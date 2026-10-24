@@ -625,6 +625,15 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual(['Allocation mode: Compare only → Cap use at the registered volume', 'Allocation comparison band: ±10% → ±15%']);
 	});
 
+	it('lists a change of the EWR split (engine 1.94.0), and none for a snapshot without it against the flow share', () => {
+		const a = snapshot();
+		const d = copyWithFreshIds(a);
+		d.settings = { ...d.settings, ewrSplit: 'flowShare' };
+		expect(texts(a, d)).toEqual([]);
+		d.settings = { ...d.settings, ewrSplit: 'naturalMar' };
+		expect(texts(a, d)).toEqual(['EWR split between units by: the flow share → each unit’s natural MAR']);
+	});
+
 	it('lists demand objects added, changed and removed, matched across a copy by unit and object name (engine 1.7.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

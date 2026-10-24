@@ -1127,6 +1127,19 @@ describe('SettingsPatch.ewrChargeSource and lowFlowMeasure (engine ≥ 1.3.0, is
 	});
 });
 
+describe('SettingsPatch.ewrSplit (engine ≥ 1.94.0, issue #553)', () => {
+	const ok = (ewrSplit: unknown) => SettingsPatch.safeParse({ ewrSplit }).success;
+
+	it('accepts the flow share and each unit’s natural MAR, and nothing else', () => {
+		for (const v of ['flowShare', 'naturalMar']) expect(ok(v), v).toBe(true);
+		for (const v of ['', 'mar', 'NaturalMar', null, 1]) expect(ok(v), String(v)).toBe(false);
+	});
+
+	it('defaults to the flow share, what every earlier run did, for a project that never set it', () => {
+		expect(mergeSettings({}).ewrSplit).toBe('flowShare');
+	});
+});
+
 describe('SettingsPatch.ewrDailySource (engine ≥ 1.77.0, issue #455)', () => {
 	const ok = (ewrDailySource: unknown) => SettingsPatch.safeParse({ ewrDailySource }).success;
 	const blank = { method: 'pragmatic', scaling: 'mar', tableMarMm3: null, tableAreaKm2: null, tabM3s: null, naturalPctM3s: null, reservePctM3s: null };

@@ -31,6 +31,8 @@
 	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
 	// Flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
 	const loadFlowGenUnits = () => loadSections().then((m) => ({ default: m.FlowGenerationUnits }));
+	// Split the EWR between units by (settings.ewrSplit, issue #553): out of the tab's chunk, for the same reason.
+	const loadEwrSplit = () => loadSections().then((m) => ({ default: m.EwrSplitFields }));
 	const loadArealRain = () => import('./ArealRainBody.svelte');
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
@@ -963,7 +965,12 @@
 			{#if flowMethod === 'perUnit'}
 				<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
 				<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
-					Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.
+					{#if s.ewrSplit === 'naturalMar'}
+						<!-- The EWR split by each unit's natural MAR (issue #553 round 4): the share then splits neither the flow nor the EWR. -->
+						Each unit makes its own runoff and the EWR is split by each unit’s natural MAR (below); the flow share now splits only the land cover’s low-flow threshold between units.
+					{:else}
+						Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.
+					{/if}
 				</p>
 			{:else}
 				<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
@@ -1001,8 +1008,13 @@
 					</fieldset>
 				{/if}
 			</div>
-			<!-- #553 round 4: the EWR split option ("Split the EWR between units by": flow share / natural MAR) mounts here as
-			     <EwrSplitFields bind:value={…} {readonly} method={flowMethod} />, under the flow share it may choose. -->
+			<!-- Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553 round 4): the flow share above or each unit's natural MAR. -->
+			<Lazy load={loadEwrSplit}>
+				{#snippet children(EwrSplitFields)}
+					<EwrSplitFields value={s.ewrSplit} perUnit={flowMethod === 'perUnit'} {readonly} onchange={(v) => (s.ewrSplit = v)} />
+				{/snippet}
+			</Lazy>
+			<FieldHistoryLine field="settings:ewrSplit" />
 		</div>
 	</section>
 

@@ -13,6 +13,7 @@ import {
 	NODE_SET_FIELDS,
 	SETTINGS_PATHS,
 	EWR_CHARGE_SOURCES,
+	EWR_SPLIT_METHODS,
 	LOW_FLOW_MEASURES,
 	ALLOCATION_MODE_LABEL,
 	ALLOCATION_MODES,
@@ -368,6 +369,8 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 		label: 'Flow-share method',
 		spec: { t: 'enum', options: plain(['area', 'hiLo', 'manual'], { area: 'By area', hiLo: 'High/low MAP', manual: 'Manual' }) }
 	},
+	// How the EWR is split between the units (engine ≥ 1.94.0, issue #553); differs from the flow share only with rain for each unit.
+	ewrSplit: { label: 'EWR split between units by', spec: { t: 'enum', options: plain(EWR_SPLIT_METHODS, { flowShare: 'The flow share', naturalMar: 'Each unit’s natural MAR' }) } },
 	'hiLoSplit.hi': { label: 'High-MAP share of runoff', spec: pct() },
 	'hiLoSplit.lo': { label: 'Low-MAP share of runoff', spec: pct() },
 	'gr4j.x1': { label: 'GR4J production store X1', spec: num('mm') },

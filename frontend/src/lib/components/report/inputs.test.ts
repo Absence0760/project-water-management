@@ -83,6 +83,18 @@ describe('settingsRows', () => {
 		expect(at({ ...pct, reserveTable: 'withoutHighFlows', lowFlowPctM3s: twelve(row.map((v) => v / 4)) })).toBe('the DRM percentile tables (Reserve flows without high flows), scaled by area (table 450 km²)');
 	});
 
+	it('names the EWR split only on a run that asked for the natural MAR (issue #553)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const key = 'EWR split between units';
+		const at = (over: Record<string, unknown>) => Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', ...over } as never), run))[key];
+		expect(at({})).toBeUndefined();
+		expect(at({ ewrSplit: 'flowShare', unitRain: { mode: 'perUnit' } })).toBeUndefined();
+		expect(at({ ewrSplit: 'naturalMar', unitRain: { mode: 'perUnit' } })).toBe(
+			'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review'
+		);
+		expect(at({ ewrSplit: 'naturalMar' })).toBe('the flow share: natural MAR was asked for, but GR4J ran once on the catchment rain, so each unit’s natural MAR share is its flow share');
+	});
+
 	it('names the runoff model and lists GR4J parameters only for a GR4J run', () => {
 		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
 		const gr4j = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run));

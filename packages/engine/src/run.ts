@@ -46,6 +46,7 @@ import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { baseflowOf, BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, hasBaseflow } from './network/baseflow';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
 import { flowShares, overAllocationError } from './network/shares';
+import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, fillPlanEwrShares, resolveEwrSplit, type EwrSplitInfo, type EwrSplitMethod, type EwrSplitPlan, type PinnedEwrSplit } from './network/ewrSplit';
 import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
@@ -355,9 +356,14 @@ function runNetwork(
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
 		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {}),
 		// The daily outlet EWR's scale factor (engine ≥ 1.77.0): the capture run's, as its other record-wide figures.
-		...(resume?.pinned.outletEwr ? { outletEwr: resume.pinned.outletEwr } : {})
+		...(resume?.pinned.outletEwr ? { outletEwr: resume.pinned.outletEwr } : {}),
+		// A natural MAR EWR split's shares (engine ≥ 1.94.0), likewise; null = resumed from a run that pinned none.
+		...(resume ? { ewrSplit: resume.pinned.ewrSplit ?? null } : {})
 	}, historyDays);
 	const { plan, topo } = built;
+	// How the EWR was split between the units (engine ≥ 1.94.0, §2.5b): a split other than the flow share says so.
+	const splitNote = ewrSplitNote(built.ewrSplit.info);
+	if (splitNote) warnings.push(splitNote);
 	const outletEwr = built.outletEwr?.info;
 	if (outletEwr) {
 		// What the run's EWR was judged by (engine ≥ 1.77.0, §2.9f): every run that doesn't use the pragmatic EWR says so.
@@ -863,6 +869,8 @@ function runNetwork(
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
 			flowShare: plan.nodes[i]!.share,
+			// Its EWR share as applied (engine ≥ 1.94.0, settings.ewrSplit): the flow share unless split by natural MAR.
+			ewrShare: plan.nodes[i]!.ewrShare ?? plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
@@ -1206,6 +1214,8 @@ function runNetwork(
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
 				// The daily outlet EWR's scale factor and its inputs (engine ≥ 1.77.0), without the resumed run's mark.
 				...(outletEwr ? { outletEwr: (({ pinned: _, ...rest }) => rest)(outletEwr) } : {}),
+				// A natural MAR EWR split's period and shares by node id (engine ≥ 1.94.0), none when it had no runoff to split by.
+				...(built.ewrSplit.pin ? { ewrSplit: built.ewrSplit.pin } : {}),
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
 				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.53.0).
 				fits: {
@@ -1256,6 +1266,7 @@ function runNetwork(
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
+			ewrSplit: built.ewrSplit.info,
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
@@ -1543,10 +1554,15 @@ export function buildNetworkPlan(
 		 * is 0. The arrays are the plan's own, so a calibration can refill them.
 		 */
 		unitRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
+		/**
+		 * A natural MAR EWR split's period and shares (engine ≥ 1.94.0): the capture run's, as its other record-wide
+		 * figures. null: a resumed run whose capture run pinned none (it split by the flow share), which keeps the flow share.
+		 */
+		ewrSplit?: PinnedEwrSplit | null;
 	} = {},
 	/** The run's historical days, before a forecast tail (./forecastTail.ts); a full allocation's factors read only these. */
 	historyDays: number = days
-): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array; outletEwr?: OutletEwrPlan } {
+): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array; outletEwr?: OutletEwrPlan; ewrSplit: PlannedEwrSplit } {
 	if (settings.demandFactorFrom != null && start === undefined) throw new Error('buildNetworkPlan: settings.demandFactorFrom needs the run start');
 	if (settings.damStorageReset != null && start === undefined) throw new Error('buildNetworkPlan: settings.damStorageReset needs the run start');
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
@@ -1861,9 +1877,66 @@ export function buildNetworkPlan(
 		const areaKm2 = resolveCatchmentAreaKm2(settings.calibration, { ...input, model });
 		outletEwr = { source: ewrSource, info: fillPlanOutletEwr(plan, topo.outflow, natural, ewrSource, areaKm2, historyDays, days, warm.outletEwr) };
 	}
-	const ewrPart = outletEwr ? { outletEwr } : {};
+	// How the EWR is split between the units (engine ≥ 1.94.0, ./network/ewrSplit.ts, §2.5b): set on the plan's farms.
+	const ewrSplit = planEwrSplit(plan, nodes, resolveEwrSplit(settings.ewrSplit, []), unitRunoffOf, start, historyDays, warm.ewrSplit);
+	const ewrPart = outletEwr ? { outletEwr, ewrSplit } : { ewrSplit };
 	if (warm.captureAt === undefined) return { plan, topo, allocation, ...ewrPart };
 	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0), ...ewrPart };
+}
+
+/**
+ * A plan's EWR split (engine ≥ 1.94.0): what the run reports, and with a natural MAR split the farms and period
+ * a calibration refills each candidate's shares from (`refill`, absent when the shares are pinned or the flow share).
+ */
+export interface PlannedEwrSplit {
+	info: EwrSplitInfo;
+	refill?: EwrSplitPlan;
+	/** The shares applied, by node id (natural MAR only). */
+	shares?: Map<string, number>;
+	/** What a snapshot of this run pins (a natural MAR split asked for under per-unit rain): its period and shares, none without runoff. */
+	pin?: PinnedEwrSplit;
+}
+
+/**
+ * Set the plan's farms' EWR shares for settings.ewrSplit (./network/ewrSplit.ts): nothing for the flow share (the
+ * run is the one before, to the bit) or under catchment rain; a resumed run's pinned shares; else each unit's
+ * natural MAR over the complete water years of the historical days.
+ */
+function planEwrSplit(
+	plan: NetworkPlan,
+	nodes: readonly NetworkNode[],
+	method: EwrSplitMethod,
+	unitRunoffOf: ReadonlyMap<string, Float64Array>,
+	start: number | undefined,
+	historyDays: number,
+	pinned: PinnedEwrSplit | null | undefined
+): PlannedEwrSplit {
+	if (method === 'flowShare') return { info: { method, applied: 'flowShare' } };
+	if (!unitRunoffOf.size) return { info: { method, applied: 'flowShare', why: 'catchmentRain' } };
+	// Resumed from a run that split by the flow share (or had no runoff to split by): its own days are a part of the
+	// record, not the period, so it keeps the flow share rather than work shares out on them.
+	if (pinned === null) return { info: { method, applied: 'flowShare', why: 'resumed' } };
+	if (pinned) {
+		// The capture run had no runoff to split by (no shares pinned): the flow share, as it did.
+		if (!pinned.shares.length) return { info: { method, applied: 'flowShare', why: 'noRunoff', pinned: true }, pin: pinned };
+		// The snapshot's fingerprint refuses another model, so every farm is in the pinned shares; one that isn't gets 0.
+		const byId = new Map(pinned.shares.map((x) => [x.nodeId, x.share]));
+		nodes.forEach((n, i) => {
+			if (n.kind === 'farm') plan.nodes[i]!.ewrShare = byId.get(n.id) ?? 0;
+		});
+		return { info: { method, applied: 'naturalMar', period: pinned.period, pinned: true }, shares: byId, pin: pinned };
+	}
+	const days = ewrSplitDays(start, historyDays);
+	const refill: EwrSplitPlan = {
+		days,
+		farms: nodes.flatMap((n, i) => (n.kind === 'farm' ? [{ index: i, nodeId: n.id, runoff: plan.nodes[i]!.localRunoff }] : []))
+	};
+	const shares = fillPlanEwrShares(plan.nodes, refill);
+	const period = ewrSplitPeriod(start, days);
+	const info: EwrSplitInfo = shares ? { method, applied: 'naturalMar', period } : { method, applied: 'flowShare', why: 'noRunoff' };
+	// What a snapshot pins: the shares, or none when there was no runoff to split by, so a resumed run does as this one did.
+	const pin: PinnedEwrSplit = { period, shares: shares ? [...shares].map(([nodeId, share]) => ({ nodeId, share })) : [] };
+	return { info, refill, pin, ...(shares ? { shares } : {}) };
 }
 
 /** The daily outlet EWR's source when it isn't the pragmatic EWR (engine ≥ 1.77.0), and what the plan's `ewr` was filled from. */

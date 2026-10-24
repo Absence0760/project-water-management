@@ -14,6 +14,7 @@ import { fromEpochDay, toEpochDay } from './calendar';
 import { ewrSourceConfidence, type EwrRuleTable, type EwrRuleSourceKind } from './reserve/rules';
 import { EWR_DAILY_SOURCE_LABEL, ewrDailySourceChanges } from './reserve/dailySource';
 import { isEwrSite } from './network/topology';
+import { EWR_SPLIT_LABEL } from './network/ewrSplit';
 import { hasMonthlyRates, transferRatesM3s } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
 import { droughtRestrictionChanges } from './network/restriction';
@@ -827,6 +828,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	// Issue #71 (ER3): the rule an evidence report's cited ensemble must follow; never changes a result. Absent = not declared.
 	evidenceUncertaintyRule: { label: 'Declared uncertainty rule (evidence)', fmt: declaredRuleText },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
+	// Engine ≥ 1.94.0 (issue #553); a snapshot without it split the EWR by the flow share, which is what older runs did.
+	ewrSplit: { label: 'EWR split between units by', fmt: (v) => (v === 'naturalMar' ? EWR_SPLIT_LABEL.naturalMar : v === 'flowShare' || v === undefined ? EWR_SPLIT_LABEL.flowShare : String(v)) },
 	// Engine ≥ 1.3.0 (issue #64); a snapshot without them ran the defaults, which is what older runs did.
 	ewrChargeSource: {
 		label: 'EWR charge follows',

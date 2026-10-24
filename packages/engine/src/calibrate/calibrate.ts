@@ -27,6 +27,7 @@ import { simulateNetwork } from '../network/simulate';
 import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
+import { fillPlanEwrShares } from '../network/ewrSplit';
 import { calibrationSiteIndex } from './site';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
@@ -417,7 +418,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		settings.unitRain?.pinned ?? undefined
 	);
 	const unitBuffers = perUnit ? perUnit.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
-	const { plan, topo, outletEwr } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, unitBuffers ? { unitRunoff: unitBuffers } : {}, historyDays);
+	const { plan, topo, outletEwr, ewrSplit } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, unitBuffers ? { unitRunoff: unitBuffers } : {}, historyDays);
 
 	// The site (engine ≥ 1.41.0, ./site.ts): the outlet's records and outflow, or an inner gauge's.
 	const siteNodeId = settings.calibrationSiteNodeId ?? null;
@@ -502,14 +503,20 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// with land cover can't stop at the last scored day.
 	// A daily outlet EWR scaled by natural MAR (engine ≥ 1.77.0, §2.9f) reads every historical day's natural flow too.
 	const wholeRun = plan.nodes.some((nd) => nd.landCover) || outletEwr?.source.scaling === 'mar';
+	// An EWR split by each unit's natural MAR (engine ≥ 1.94.0, §2.5b) reads the units' runoff over its period, the
+	// complete water years: the runoff runs to the period's end, the network still stops at the last scored day.
+	const splitRefill = ewrSplit.refill;
 	const areaKm2 = outletEwr?.info.modelAreaKm2 ?? 0;
 	const simulator = (scoredTo: number) => {
 		const n = wholeRun ? days : scoredTo;
 		const shortPlan = { ...plan, days: n };
+		const runoffTo = splitRefill ? Math.max(n, splitRefill.days.to) : n;
 		return (p: ParamSet): Float64Array => {
-			runoff(p, n);
+			runoff(p, runoffTo);
 			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would.
 			if (outletEwr) fillPlanOutletEwr(plan, topo.outflow, natural, outletEwr.source, areaKm2, historyDays, n);
+			// The EWR split by natural MAR follows each candidate's units' runoff, as a run on it would.
+			if (splitRefill) fillPlanEwrShares(plan.nodes, splitRefill);
 			if (siteIndex < 0) return new Float64Array(days);
 			return simulateNetwork(shortPlan).nodes[siteIndex]!.outflow;
 		};

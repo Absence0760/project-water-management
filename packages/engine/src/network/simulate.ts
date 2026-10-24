@@ -45,10 +45,16 @@ export interface PlanNode {
 	/**
 	 * The unit's own natural runoff, m³/day (engine ≥ 1.78.0, runoff from each
 	 * unit's own rain, docs/model.md §2.4h): its local inflow in place of
-	 * naturalFlow × share. The EWR split and the land-cover threshold still
-	 * use `share`. Absent under catchment rain.
+	 * naturalFlow × share. The land-cover threshold still uses `share`, and
+	 * the EWR split does unless `ewrShare` is set. Absent under catchment rain.
 	 */
 	localRunoff?: Float64Array;
+	/**
+	 * The unit's share of the EWR when it isn't `share` (engine ≥ 1.94.0,
+	 * settings.ewrSplit 'naturalMar', ./ewrSplit.ts): its natural MAR ÷ Σ
+	 * the units'. Absent = `share`, so a run without it is the one before.
+	 */
+	ewrShare?: number;
 	/** Share of the upstream inflow (H) that enters the dam (K); the rest passes below it (L). Engine ≥ 0.9.0 (model.md §3 Q1). */
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
@@ -1578,7 +1584,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// not a pump. Without one today (capacity 0), K, M and O are irrigated straight from the river
 			// (b023's stand-in for a river pump, ./supply.ts), so all three are abstraction: the farm leaves
 			// MIN(H + I, keep), cutting O first, then K and M pro rata, as the senior users' pass does.
-			const Y = ewrT * node.share;
+			// The unit's EWR share (engine ≥ 1.94.0, settings.ewrSplit): its natural MAR's, else its flow share.
+			const Y = ewrT * (node.ewrShare ?? node.share);
 			const Z = Y + sumZ;
 			const ho = node.handsOff;
 			const hk = ho ? handsOffToday(ho, month[t]!, Z) : 0;

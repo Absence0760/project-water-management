@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #553 round 4, the EWR split (engine 1.94.0): EwrSplitFields + ewrSplit.ts in the Settings lazy sections, the engine's split module, invariant check and compare line, the help article and the report inputs row. Measured 2050 KB on this branch against 2047 KB on origin/feat/combined-oct23 at 6f2ea3826 (both pnpm build:frontend && pnpm check:bundle): +3 KB. The base was already 3 KB over its 2044 KB ceiling, which this entry does not cover."
+}

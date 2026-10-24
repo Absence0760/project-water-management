@@ -4,6 +4,7 @@
 // body (or mirror in zod). Pure: no I/O.
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { REACH_LOSS_FRAC_MAX } from '../network/reachLoss';
+import { EWR_SPLIT_METHODS, type EwrSplitMethod } from '../network/ewrSplit';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
 import { isIsoDate } from '../calendar';
@@ -433,6 +434,8 @@ export interface SettingsPathValues {
 	panCoefficient: number[];
 	ewrPragmaticM3PerDay: number[];
 	flowShareMethod: FlowShareMethod;
+	/** How the EWR is split between the units (engine ≥ 1.94.0, issue #553): the flow share or each unit's natural MAR. */
+	ewrSplit: EwrSplitMethod;
 	'hiLoSplit.hi': number;
 	'hiLoSplit.lo': number;
 	'gr4j.x1': number;
@@ -518,6 +521,7 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	panCoefficient: monthlyOf(range(0, 2)),
 	ewrPragmaticM3PerDay: monthlyOf(nonNeg),
 	flowShareMethod: oneOf(['area', 'hiLo', 'manual']),
+	ewrSplit: oneOf(EWR_SPLIT_METHODS),
 	'hiLoSplit.hi': frac,
 	'hiLoSplit.lo': frac,
 	'gr4j.x1': gr4j('x1'),

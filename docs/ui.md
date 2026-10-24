@@ -6824,8 +6824,21 @@ two.
     explanation); Per unit, "Each unit makes its own runoff; the flow share
     now splits only the EWR and the land cover's low-flow threshold between
     units, not the flow." (a state line, shown with the explanations off;
-    `e2e/tests/flow-share-hint.spec.ts`). The card's foot is where #553's
-    EWR split option ("Split the EWR between units by") goes.
+    `e2e/tests/flow-share-hint.spec.ts`); with the EWR split by natural MAR
+    (below) the Per unit line says the flow share now splits only the land
+    cover's low-flow threshold. At the card's foot, **Split the EWR between
+    units by** (`settings.ewrSplit`, engine ≥ 1.94.0, issue #553 round 4,
+    model.md §2.5b; `EwrSplitFields.svelte`, in the lazy sections chunk):
+    *The flow share* (the default, what every earlier run did) or *Each
+    unit's natural MAR* (its own natural runoff over the run's complete water
+    years ÷ the units' total; the period is provisional). Its explanation
+    says what follows the split (the charge, curtailment, hands-off EWR
+    flows, the drought restriction's EWR trigger); its state line, shown with
+    the explanations off, follows the method: under Fragmentation both give
+    the flow share and the choice matters only under Per unit; under Per
+    unit, which share splits the EWR. A split other than the flow share
+    joins the panel's summary line, and the field has its change history
+    (`e2e/tests/ewr-split.spec.ts`).
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,

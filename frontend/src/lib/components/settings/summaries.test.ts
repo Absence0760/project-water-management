@@ -85,6 +85,10 @@ describe('settingsSummaries', () => {
 		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Fragmentation · flow share: by catchment area');
 		// No longer said in Flow calibration's line.
 		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-flow']).not.toContain('rain for each unit');
+		// Round 4: an EWR split other than the flow share.
+		expect(settingsSummaries(base({ ewrSplit: 'flowShare' }))['set-share']).toBe('Fragmentation · flow share: by catchment area');
+		expect(settingsSummaries(base({ ewrSplit: 'naturalMar', unitRain: { mode: 'perUnit' } }))['set-share']).toBe('Per unit · no unit on a rainfall station · the EWR split by each unit’s natural MAR');
+		expect(settingsSummaries(base({ ewrSplit: 'naturalMar' }))['set-share']).toBe('Fragmentation · flow share: by catchment area · the EWR split by natural MAR (the flow share under Fragmentation)');
 	});
 });
 

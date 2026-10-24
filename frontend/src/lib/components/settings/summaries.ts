@@ -6,6 +6,7 @@ import { defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } 
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
+import { ewrSplitSummary } from './ewrSplit';
 
 export interface SummaryInput {
 	s: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
@@ -79,7 +80,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
-		// Flow generation (issue #553 round 3): the method, then what the flow share splits under it.
+		// Flow generation (issue #553 round 3): the method, then what the flow share splits under it;
+		// the EWR split (round 4) only when it isn't the flow share.
 		'set-share':
 			s.unitRain?.mode === 'perUnit'
 				? [
@@ -88,9 +90,11 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 							const n = Object.keys(s.rainStations?.units ?? {}).length;
 							return n ? `${plural(n, 'unit')} on a rainfall station` : 'no unit on a rainfall station';
 						})(),
-						`EWR flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`
+						ewrSplitSummary(s.ewrSplit, true) ?? `EWR flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`
 					].join(' · ')
-				: `Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`,
+				: [`Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`, ewrSplitSummary(s.ewrSplit, false)]
+						.filter(Boolean)
+						.join(' · '),
 		'set-restrict': restrict ? `On: ${plural(restrict.levels?.length ?? 0, 'level')}, reviewed on ${plural(restrict.reviewDates?.length ?? 0, 'date')}` : 'Off',
 		'set-flow': [
 			g ? `GR4J X1 ${fmtNum(g.x1, 0)} mm, X3 ${fmtNum(g.x3, 0)} mm, X4 ${fmtNum(g.x4, 2, true)} days${g.x2 ? `, X2 ${fmtNum(g.x2, 2, true)} mm` : ''}` : 'GR4J',

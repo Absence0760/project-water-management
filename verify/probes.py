@@ -1294,6 +1294,26 @@ def station_units() -> dict:
     return doc
 
 
+def ewr_split_station_units() -> dict:
+    """The EWR split by each unit's natural MAR (§2.5b, engine >= 1.94.0) on
+    station_units' network: u1 and u2 share station A, u2 drains into u1, so
+    u1's requirement adds both shares; the period is the complete water years
+    2006/07 … 2016/17 of the twelve calendar years."""
+    doc = station_units()
+    doc["settings"]["ewrSplit"] = "naturalMar"
+    doc["settings"]["ewrPragmaticM3PerDay"] = [4000, 4000, 5000, 6000, 6000, 5000, 4000, 3000, 2500, 2500, 3000, 3500]
+    return doc
+
+
+def ewr_split_short_run() -> dict:
+    """The same split on a run of 1 January – 31 August 2010, which holds no
+    complete water year: the units' natural MAR over the whole run (§2.5b)."""
+    doc = ewr_split_station_units()
+    doc["settings"]["simulationStart"] = "2010-01-01"
+    doc["settings"]["simulationEnd"] = "2010-08-31"
+    return doc
+
+
 def station_pairing_refused() -> dict:
     """Pairings at the five-year minimum (§2.4i): station C (MAP 500) starts
     on 1 March 2013, so 2014–2017 are its four complete calendar years in
@@ -1629,4 +1649,7 @@ PROBES = {
     "station-catchment-reference": station_catchment_reference(),
     "station-catchment-rule2": station_catchment_rule2(),
     "station-catchment-rule2-no-map": station_catchment_rule2_no_map(),
+    # The EWR split (issue #553 round 4).
+    "ewr-split-station-units": ewr_split_station_units(),
+    "ewr-split-short-run": ewr_split_short_run(),
 }
