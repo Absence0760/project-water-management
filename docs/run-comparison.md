@@ -268,6 +268,18 @@ bottom:
    a bare `Setting "unitRain" changed`. A unit's MAP and its source are node lines ("MAP none →
    700 mm"), and a unit's own rain record is named by its unit
    ("Rainfall (CHIRPS) of the unit …").
+   A change of the rainfall stations (`settings.rainStations`, engine ≥
+   1.91.0, issue #553, [model.md §2.4i](./model.md)) is one settings line
+   each, labelled **Rainfall stations** (field history path `rainStations`,
+   never a bare `Setting "rainStations" changed`), stations named from the
+   run's snapshot (`inputs.stations`, else the series id): the catchment's
+   station ("the catchment's station: none → Hill station, gaps corrected
+   against Low station"; "not scaled to MAP" when scaling is off), each
+   unit's station by unit name, the catchment MAP ("the units' area-weighted
+   mean → 780 mm (source)"), where a station's CHIRPS is read (`sites`),
+   each station's unreliable periods (the date ranges before → after), and
+   a station's MAP as each run read it when both snapshots have it. The
+   engine-only pinned factors are not compared.
    A change of the drought restriction rule (`settings.droughtRestriction`,
    engine ≥ 1.54.0, [model.md §2.7i](./model.md)) is one settings line per
    change, labelled **Drought restriction rule**: "off → reviewed 5 Oct;

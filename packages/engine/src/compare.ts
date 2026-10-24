@@ -57,6 +57,7 @@ import {
 	type ProjectModel,
 	type ProjectSettings,
 	type SeriesChoice,
+	type RainStationInputs,
 	type RunSummary,
 	type Transfer
 } from './project';
@@ -81,6 +82,8 @@ export interface RunInputsSnapshot {
 	seriesChoice?: SeriesChoice | null;
 	/** A forecast run's forecast rain source (ModelInput.forecastRainSource, engine ≥ 1.85.0); absent on every other run. */
 	forecastRainSource?: 'chirps_gefs' | 'other' | null;
+	/** The rainfall stations' names and details (ModelInput.stations, engine ≥ 1.91.0, issue #553); absent unless settings.rainStations assigns a station. */
+	stations?: RainStationInputs | null;
 }
 
 export interface RunSeriesSnapshot {
@@ -733,6 +736,74 @@ function unitRainChange(ra: unknown, rb: unknown): string | null {
 	return a === b ? null : `${a} → ${b}`;
 }
 const DROUGHT_RESTRICTION_LABEL = 'Drought restriction rule';
+const RAIN_STATIONS_LABEL = 'Rainfall stations';
+
+type StationName = (id: string) => string;
+
+/** One area's station in words: "Hill station", "Hill station, not scaled to MAP, gaps corrected against Low station", or "none". */
+function stationAssignmentText(raw: unknown, stationName: StationName): string {
+	const a = raw as { stationId?: unknown; scaleToMap?: unknown; correctAgainst?: unknown } | null | undefined;
+	if (!a || typeof a.stationId !== 'string') return 'none';
+	const parts = [stationName(a.stationId)];
+	if (a.scaleToMap === false) parts.push('not scaled to MAP');
+	if (typeof a.correctAgainst === 'string' && a.correctAgainst !== a.stationId) parts.push(`gaps corrected against ${stationName(a.correctAgainst)}`);
+	return parts.join(', ');
+}
+
+const rangesText = (v: unknown) => (Array.isArray(v) && v.length ? v.map((r) => (Array.isArray(r) ? `${r[0]} to ${r[1]}` : String(r))).join(', ') : 'none');
+
+/**
+ * What changed in settings.rainStations between two runs (engine ≥ 1.91.0,
+ * issue #553), one line each: the catchment's station, each unit's, the
+ * catchment MAP, where a station's CHIRPS is read, each station's unreliable
+ * periods, and a station's MAP as the run read it (the snapshot's stations).
+ * A run without it ran the rain as before (§2.4, §2.4h). The engine-only
+ * pinned factors are not a setting, so not compared.
+ */
+function rainStationChanges(ra: unknown, rb: unknown, siteName: (id: string) => string, stationsA?: RunInputsSnapshot['stations'], stationsB?: RunInputsSnapshot['stations']): string[] {
+	const a = (ra ?? {}) as Record<string, unknown>;
+	const b = (rb ?? {}) as Record<string, unknown>;
+	const stationName: StationName = (id) => stationsB?.[id]?.name ?? stationsA?.[id]?.name ?? id;
+	const out: string[] = [];
+	const ca = stationAssignmentText(a.catchment, stationName);
+	const cb = stationAssignmentText(b.catchment, stationName);
+	if (ca !== cb) out.push(`the catchment's station: ${ca} → ${cb}`);
+	const ua = (a.units ?? {}) as Record<string, unknown>;
+	const ub = (b.units ?? {}) as Record<string, unknown>;
+	for (const id of [...new Set([...Object.keys(ua), ...Object.keys(ub)])].sort((x, y) => siteName(x).localeCompare(siteName(y)))) {
+		const x = stationAssignmentText(ua[id], stationName);
+		const y = stationAssignmentText(ub[id], stationName);
+		if (x !== y) out.push(`${siteName(id)}'s station: ${x} → ${y}`);
+	}
+	const mapText = (mm: unknown, src: unknown) => (typeof mm === 'number' ? `${fmtValue(mm, 0)} mm${typeof src === 'string' && src ? ` (${src})` : ''}` : "the units' area-weighted mean");
+	const ma = mapText(a.catchmentMapMm, a.catchmentMapSource);
+	const mb = mapText(b.catchmentMapMm, b.catchmentMapSource);
+	if (ma !== mb) out.push(`catchment MAP: ${ma} → ${mb}`);
+	const sa = (a.sites ?? {}) as Record<string, { unitId?: string } | undefined>;
+	const sb = (b.sites ?? {}) as Record<string, { unitId?: string } | undefined>;
+	const siteText = (v: { unitId?: string } | undefined) => (v?.unitId ? `the CHIRPS of ${siteName(v.unitId)}` : 'its own cell, if any');
+	for (const id of new Set([...Object.keys(sa), ...Object.keys(sb)])) {
+		if (!same(sa[id]?.unitId ?? null, sb[id]?.unitId ?? null)) out.push(`${stationName(id)}'s CHIRPS: ${siteText(sa[id])} → ${siteText(sb[id])}`);
+	}
+	const pa = (a.unreliable ?? {}) as Record<string, unknown>;
+	const pb = (b.unreliable ?? {}) as Record<string, unknown>;
+	for (const id of new Set([...Object.keys(pa), ...Object.keys(pb)])) {
+		const x = rangesText(pa[id]);
+		const y = rangesText(pb[id]);
+		if (x !== y) out.push(`${stationName(id)}'s unreliable periods: ${x} → ${y}`);
+	}
+	// A station's MAP as each run read it (both runs must have recorded the station, else nothing to compare).
+	if (stationsA && stationsB) {
+		for (const id of Object.keys(stationsB)) {
+			const x = stationsA[id];
+			const y = stationsB[id];
+			if (!x || !y) continue;
+			const t = (m: { mapMm: number | null; mapSource: string | null }) => (m.mapMm === null ? 'none' : `${fmtValue(m.mapMm, 0)} mm${m.mapSource ? ` (${m.mapSource})` : ''}`);
+			if (t(x) !== t(y)) out.push(`${y.name}'s MAP: ${t(x)} → ${t(y)}`);
+		}
+	}
+	return out;
+}
 
 type Fmt = (v: unknown) => string;
 const withUnit = (unit: string, digits = 3): Fmt => (v) => (v === null || v === undefined ? 'none' : `${fmtValue(v, digits)} ${unit}`);
@@ -947,7 +1018,8 @@ function diffFlowGapFill(ra: unknown, rb: unknown): InputChange[] {
 function diffSettings(
 	ra: RunInputsSnapshot['settings'] | undefined,
 	rb: RunInputsSnapshot['settings'] | undefined,
-	siteName: (id: string | null) => string = (id) => (id === null ? 'the outlet' : id)
+	siteName: (id: string | null) => string = (id) => (id === null ? 'the outlet' : id),
+	stations: { a?: RunInputsSnapshot['stations']; b?: RunInputsSnapshot['stations'] } = {}
 ): InputChange[] {
 	const a = effectiveSettings(ra);
 	const b = effectiveSettings(rb);
@@ -973,6 +1045,7 @@ function diffSettings(
 	if (areal) push(AREAL_RAIN_LABEL, `${AREAL_RAIN_LABEL}: ${areal}`);
 	const unitRain = unitRainChange(a.unitRain, b.unitRain);
 	if (unitRain) push(UNIT_RAIN_LABEL, `${UNIT_RAIN_LABEL}: ${unitRain}`);
+	for (const t of rainStationChanges(a.rainStations, b.rainStations, (id) => siteName(id), stations.a, stations.b)) push(RAIN_STATIONS_LABEL, `${RAIN_STATIONS_LABEL}: ${t}`);
 	const ha = a.hiLoSplit as Record<string, unknown>;
 	const hb = b.hiLoSplit as Record<string, unknown>;
 	if (!same(ha, hb)) push('Hi/lo MAP split', `Hi/lo MAP split: ${fmtValue(ha.hi)}/${fmtValue(ha.lo)} → ${fmtValue(hb.hi)}/${fmtValue(hb.lo)}`);
@@ -1054,8 +1127,9 @@ function diffSettings(
 		'effectiveRainFractionMonthly',
 		'droughtRestriction',
 		'ewrDailySource',
-		// Said in words above (unitRainText), so not again as a bare "Setting changed".
-		'unitRain'
+		// Said in words above (unitRainText, rainStationChanges), so not again as a bare "Setting changed".
+		'unitRain',
+		'rainStations'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
@@ -1774,7 +1848,15 @@ function sharedDaysText(label: string, c: NonNullable<ReturnType<typeof sharedDa
 }
 
 /** A series key's label: its kind's, or a gauge node's own record (`<kind>@<node id>`, engine ≥ 1.4.0) named by its gauge. */
-function seriesLabel(key: string, nodeName: (id: string) => string): string {
+function seriesLabel(key: string, nodeName: (id: string) => string, stationName: (id: string) => string = (id) => id): string {
+	// A rainfall station's record and the CHIRPS at its cell (issue #553): rain_station_mm#<id>, rain_chirps_station_mm#<id>.
+	const hash = key.indexOf('#');
+	if (hash > 0) {
+		const kind = key.slice(0, hash);
+		const id = key.slice(hash + 1);
+		if (kind === 'rain_station_mm') return `Rainfall station ${stationName(id)}`;
+		if (kind === 'rain_chirps_station_mm') return `CHIRPS at the rainfall station ${stationName(id)}`;
+	}
 	const g = parseGaugeSeriesKey(key);
 	if (g) return `${OBSERVED_SERIES_LABEL[g.kind]} at gauge ${nodeName(g.nodeId)}`;
 	// A land unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h).
@@ -1786,7 +1868,8 @@ function diffSeries(
 	sa: RunInputsSnapshot['series'] | undefined,
 	sb: RunInputsSnapshot['series'] | undefined,
 	values: { a?: StoredSeriesValues; b?: StoredSeriesValues } = {},
-	nodeName: (id: string) => string = (id) => id
+	nodeName: (id: string) => string = (id) => id,
+	stationName: (id: string) => string = (id) => id
 ): InputChange[] {
 	const a = sa ?? {};
 	const b = sb ?? {};
@@ -1797,7 +1880,7 @@ function diffSeries(
 	};
 	const kinds = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
 	for (const k of kinds) {
-		const label = seriesLabel(k, nodeName);
+		const label = seriesLabel(k, nodeName, stationName);
 		const x = a[k];
 		const y = b[k];
 		if (x && !y) out.push({ area: 'series', kind: 'removed', subject: label, text: `${label} series removed` });
@@ -1891,11 +1974,38 @@ export function diffInputs(
 	const names = new Map<string, string>();
 	for (const m of [a?.model, b?.model]) for (const n of m?.nodes ?? []) names.set(n.id, n.name);
 	const siteName = (id: string | null) => (id === null ? 'the outlet' : (names.get(id) ?? id));
+	// A rainfall station's series is keyed by its series id (issue #553): show its name (run B's, else A's).
+	const stationNames = new Map<string, string>();
+	for (const st of [a?.stations, b?.stations]) for (const [id, x] of Object.entries(st ?? {})) stationNames.set(id, x.name);
 	return [
 		...diffModel(a?.model, b?.model),
-		...diffSettings(a?.settings, b?.settings, siteName),
-		...diffSeries(a?.series, b?.series, values, (id) => names.get(id) ?? id)
+		...diffSettings(a?.settings, b?.settings, siteName, { a: a?.stations, b: b?.stations }),
+		...diffStations(a?.stations, b?.stations),
+		...diffSeries(a?.series, b?.series, values, (id) => names.get(id) ?? id, (id) => stationNames.get(id) ?? id)
 	];
+}
+
+/** A station's place in words: "at -33.9, 18.8", or "no place". */
+const stationPlace = (x: RainStationInputs[string]): string => (x.lat != null && x.lon != null ? `at ${x.lat}, ${x.lon}` : 'no place');
+
+/**
+ * The rainfall stations between two runs (ModelInput.stations, engine ≥ 1.91.0, issue #553): a station added or
+ * removed, and its place changing (which picks the CHIRPS cell its pairing reads). Its MAP is diffSettings's
+ * (rainStationChanges), its record a series (diffSeries). Only when both runs recorded stations: a run without
+ * them read none.
+ */
+function diffStations(sa: RainStationInputs | null | undefined, sb: RainStationInputs | null | undefined): InputChange[] {
+	if (!sa || !sb) return [];
+	const out: InputChange[] = [];
+	for (const id of [...new Set([...Object.keys(sa), ...Object.keys(sb)])].sort()) {
+		const x = sa[id];
+		const y = sb[id];
+		const subject = `Rainfall station ${(y ?? x)!.name}`;
+		if (x && !y) out.push({ area: 'series', kind: 'removed', subject, text: `${subject} removed` });
+		else if (!x && y) out.push({ area: 'series', kind: 'added', subject, text: `${subject} added (${stationPlace(y)})` });
+		else if (x && y && stationPlace(x) !== stationPlace(y)) out.push({ area: 'series', kind: 'changed', subject, text: `${subject}: ${stationPlace(x)} → ${stationPlace(y)}` });
+	}
+	return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -1916,7 +2026,8 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 		['Monthly effective rain fractions', 'effectiveRainFractionMonthly'],
 		[PE_LABEL, 'pe'],
 		['Hi/lo MAP split', 'hiLoSplit'],
-		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource']
+		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource'],
+		[RAIN_STATIONS_LABEL, 'rainStations']
 	);
 	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) out.push([`Data quality ${f.label}`, `dataQuality.${k}`]);
 	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);
