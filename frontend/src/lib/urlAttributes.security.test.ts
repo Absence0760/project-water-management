@@ -470,8 +470,10 @@ describe('URL attributes', () => {
 		expect(classify("{resolve('x') + y}")).toEqual({ ok: true });
 		expect(classify("{resolve('') + y}")).toEqual({ dynamic: 'resolve' });
 		expect(classify("{resolve('x') + (y ? '#a' : '')}")).toEqual({ ok: true });
+		expect(classify("{resolve('x')+y}")).toEqual({ ok: true });
+		expect(classify('{resolve(`a/${`b${c}`}`) + d}')).toEqual({ ok: true });
 		// Anything binding looser than + after the call leaves the value to another expression.
-		for (const e of ["resolve('x') || next", "resolve('x') ?? next", "resolve('x') ? userHref : ''", "asset('a'), x", "resolve('x') + a || b", "resolve('x') + a ? b : c", "resolve('x') && x", "resolve(x)", "resolve('x', y)", "resolve('x')(y)"]) {
+		for (const e of ["resolve('x\\') || next", "resolve('x') /* ) */ || next", "resolve('x') ?? next", "resolve('x') ? userHref : ''", "asset('a'), x", "resolve('x') + a || b", "resolve('x') + a ? b : c", "resolve('x') && x", "resolve(x)", "resolve('x', y)", "resolve('x')(y)"]) {
 			expect(classify(`{${e}}`), e).toEqual({ dynamic: e.startsWith('asset') ? 'asset' : 'resolve' });
 		}
 		expect(classify('{basePath()}/{x}')).toEqual({ dynamic: 'x' });
