@@ -70,7 +70,12 @@ describe('the landing page as prerendered', () => {
 		const { head, body } = render(Page, { props: { data: await loadFor('af') } as never });
 		expect(body).toContain(af[messageId(HEADLINE)]);
 		expect(body).not.toContain(HEADLINE);
-		expect(head).toContain(`<title>${af[messageId('Water Management: daily water balance for a catchment')]}</title>`);
+		const title = af[messageId('{app}: daily water balance for a catchment')] as string;
+		expect(title).toContain('{app}');
+		expect(head).toContain(`<title>${title.replace('{app}', 'IC-WBT')}</title>`);
+		// The name is a proper noun in every language (issue #551): the full name, untranslated, in the hero and as the site name.
+		expect(body).toContain('Integrated Catchment - Water Balance Tool');
+		expect(head).toContain('<meta property="og:site_name" content="Integrated Catchment - Water Balance Tool"');
 		expect(head).toContain('<link rel="canonical" href="https://example.org/welcome/af"');
 		expect(head).toContain('<link rel="alternate" hreflang="x-default" href="https://example.org/welcome"');
 		expect(head).toContain('<meta property="og:url" content="https://example.org/welcome/af"');

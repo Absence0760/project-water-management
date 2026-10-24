@@ -9,6 +9,7 @@
 	// (`pnpm gen:landing-art`); every figure comes from an invented example
 	// catchment (never client data), named as an example where it is shown.
 	import { asset, resolve } from '$app/paths';
+	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
 	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
 	import BrandMark from '#lib/components/layout/BrandMark.svelte';
@@ -33,7 +34,7 @@
 	// Absolute URLs for the link-preview tags, resolved against the page:
 	// `base` is relative ('.') while prerendering and absolute in the browser.
 	const abs = (path: string) => new URL(`${basePath()}${path}`, page.url.href).href;
-	const title = $derived(t('Water Management: daily water balance for a catchment'));
+	const title = $derived(t('{app}: daily water balance for a catchment', { app: APP_SHORT_NAME }));
 	const description = $derived(
 		t('Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.')
 	);
@@ -57,7 +58,7 @@
 	{/each}
 	<link rel="alternate" hreflang="x-default" href={abs(LANDING_PATH)} />
 	<meta property="og:type" content="website" />
-	<meta property="og:site_name" content="Water Management" />
+	<meta property="og:site_name" content={APP_NAME} />
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
 	<meta property="og:url" content={abs(landingPath(wordsLang()))} />
@@ -74,9 +75,9 @@
 
 <div class="landing">
 	<header class="top">
-		<a class="lockup" href={resolve('')} aria-label={t('Water Management, home')}>
+		<a class="lockup" href={resolve('')} aria-label={t('{app}, home', { app: APP_SHORT_NAME })}>
 			<BrandMark size={32} />
-			<span>Water Management</span>
+			<span>{APP_SHORT_NAME}</span>
 		</a>
 		<nav class="nav" aria-label={t('Account')}>
 			<LanguageSwitch compact addressOf={lang ? switchHref : undefined} />
@@ -113,7 +114,7 @@
 	<footer class="foot">
 		<div class="contours" aria-hidden="true"><svg viewBox="0 0 {cw} {ch}" width={cw} height={ch} focusable="false"><use href={asset('landing/contours.svg') + '#contours'} /></svg></div>
 		<div class="wrap foot-row">
-			<span class="lockup small"><BrandMark size={24} /><span>Water Management</span></span>
+			<span class="lockup small"><BrandMark size={24} /><span>{APP_NAME}</span></span>
 			<nav aria-label={t('Footer')}>
 				<a href={resolve('login')}>{t('Sign in')}</a>
 				<a href={resolve('register')}>{t('Create an account')}</a>

@@ -135,7 +135,7 @@
 	}
 </script>
 
-<svelte:head><title>{project ? `Evidence report · ${project.name} · ` : ''}Water Management</title></svelte:head>
+<svelte:head><title>{project ? `Evidence report · ${project.name} · ` : ''}IC-WBT</title></svelte:head>
 
 <main class="page report ev-page" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={status === 'loading'}>
 	{#if status === 'not-found'}

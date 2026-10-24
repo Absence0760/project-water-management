@@ -14,7 +14,7 @@
 	let projectA = $state<string | null>(null);
 </script>
 
-<svelte:head><title>Compare runs · Water Management</title></svelte:head>
+<svelte:head><title>Compare runs · IC-WBT</title></svelte:head>
 
 <main class="page">
 	<CompareView

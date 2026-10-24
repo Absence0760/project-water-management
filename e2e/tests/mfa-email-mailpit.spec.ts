@@ -54,7 +54,7 @@ async function nextCode(to: string, seen: number): Promise<string> {
 	const [id] = await mailIds(to);
 	const m = (await (await fetch(`${MAILPIT}/api/v1/message/${id}`)).json()) as { Subject: string; Text: string; To: { Address: string }[] };
 	expect(m.To.map((a) => a.Address)).toEqual([to]);
-	expect(m.Subject).toBe('Your sign-in code — Water Management');
+	expect(m.Subject).toBe('Your sign-in code — IC-WBT');
 	const code = m.Text.match(/^(\d{6})$/m)?.[1];
 	expect(code, 'a six-digit code on its own line').toMatch(/^\d{6}$/);
 	expect(m.Subject).not.toContain(code!);

@@ -68,7 +68,7 @@
 	const reportHref = $derived(resolve(`projects/${encodeURIComponent(projectId)}/report${current?.report.runId ? `?run=${encodeURIComponent(current.report.runId)}` : ''}`));
 </script>
 
-<svelte:head><title>Report PDF{projectName ? ` · ${projectName}` : ''} · Water Management</title></svelte:head>
+<svelte:head><title>Report PDF{projectName ? ` · ${projectName}` : ''} · IC-WBT</title></svelte:head>
 
 <main class="page report-job" aria-busy={phase === 'loading'}>
 	<header class="head">

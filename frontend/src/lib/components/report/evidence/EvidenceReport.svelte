@@ -19,6 +19,7 @@
 		type RunSummary
 	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '#lib/api/index.js';
+	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
 	import { dailyEwrName, dailyEwrNameOf } from '#lib/components/ewr/notMet.js';
 	import type { SignoffTarget } from '#lib/components/liability/signoffForm.js';
 	import { packVerifyLine, type VerifyRef } from '#lib/components/packs/pack.js';
@@ -177,6 +178,7 @@
 			<div class="run-head">
 				{#if s.id === 'summary'}
 					<div>
+						<p class="product" data-testid="evidence-product">{APP_NAME} ({APP_SHORT_NAME})</p>
 						<p class="eyebrow">Licensing evidence report · surface-water hydrology</p>
 						<h1 id="ev-summary-h">{id.title}</h1>
 						<p class="muted">{id.project.name}{app ? ' · an application on the nominated baseline' : ' · the nominated baseline on its own'}</p>
@@ -974,6 +976,13 @@
 	.run-head h1,
 	.run-head h2 {
 		margin: 0.1rem 0;
+	}
+	/* The app's full name on the cover (issue #551), above what the report is. */
+	.product {
+		margin: 0 0 0.25rem;
+		font-family: var(--font-display);
+		font-weight: 600;
+		color: var(--text-muted);
 	}
 	.eyebrow {
 		margin: 0;

@@ -218,7 +218,7 @@ describe('the WUA’s notice in another language', () => {
 describe('digestMail', () => {
 	it('lists every alert in one email with one unsubscribe for the project, and says why it came', () => {
 		const m = digestMail(farmer, project, [dam, { ...dam, pct: 0.2 }], unsub, 5);
-		expect(m.subject).toBe('Your alerts for Rustenvrede WUA — Water Management');
+		expect(m.subject).toBe('Your alerts for Rustenvrede WUA — IC-WBT');
 		expect(m.text.match(/Dam low on Farm One:/g)).toHaveLength(2);
 		expect(m.text).toContain('or had more than 5 alert emails in a day');
 		expect(m.text).toContain('Stop all alert emails for this catchment: http://localhost:7777/alerts/unsubscribe#t=TOKEN');

@@ -223,3 +223,28 @@ test('the domain and region come from the var file; usage errors exit 2 before a
 	assert.equal(none.aws.length + none.curl.length, 0);
 	assert.equal(run({ args: ['--region', 'af-south-1', '--domain', 'x', '--fix'] }).status, 2);
 });
+
+test('--redirect-from: a former hostname 301s a page to the same path on the site, and its /api still answers', () => {
+	const OLD = 'https://old.example.test';
+	const probe = '/wm-postapply-check/page?probe=a%26b%20c&n=1&n=2';
+	const args = ['--profile', 'water-management', '--region', 'af-south-1', '--domain', 'water.example.test', '--redirect-from', 'old.example.test'];
+	const ok = run({ args, curl: { [`${OLD}${probe}`]: { status: 301, location: `${SITE}${probe}` }, [`${OLD}/api/health`]: { status: 200, body: '{"ok":true}' } } });
+	assert.equal(ok.status, 0, ok.stdout);
+	assert.match(ok.line('redirect-page'), /^PASS /);
+	assert.match(ok.line('redirect-api'), /^PASS /);
+	assert.ok(ok.curl.every((a) => !a.includes('-L')), 'never follows the redirect');
+
+	// Not redirected (served as before), redirected elsewhere (a stale host), or the API redirected too.
+	const served = run({ args, curl: { [`${OLD}/api/health`]: { status: 200 } } });
+	assert.equal(served.status, 1);
+	assert.match(served.line('redirect-page'), /^FAIL .*answers 200, expected 301/);
+	const elsewhere = run({ args, curl: { [`${OLD}${probe}`]: { status: 301, location: `${OLD}/` }, [`${OLD}/api/health`]: { status: 200 } } });
+	assert.match(elsewhere.line('redirect-page'), /^FAIL /);
+	const apiMoved = run({ args, curl: { [`${OLD}${probe}`]: { status: 301, location: `${SITE}${probe}` }, [`${OLD}/api/health`]: { status: 301 } } });
+	assert.match(apiMoved.line('redirect-api'), /^FAIL .*answers 301, expected 200/);
+
+	// Without the flag no former hostname is called.
+	const none = run();
+	assert.ok(none.curl.every((a) => !a.at(-1).startsWith(OLD)));
+	assert.equal(none.line('redirect-page'), '');
+});

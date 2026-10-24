@@ -1,6 +1,8 @@
 # water-management
 
-A web app for **daily catchment water-balance modelling**. It replaces the
+**Integrated Catchment - Water Balance Tool (IC-WBT)**: a web app for **daily
+catchment water-balance modelling** (the repository keeps its old name,
+water-management). It replaces the
 spreadsheet-based Water Balance Tool (WBT b023) the client used before. For
 each catchment it models:
 
@@ -16,7 +18,8 @@ users as viewer, editor or owner.
 
 **Status:** V1 is in production for the client, and still being built. The roadmap is in
 [docs/plan.md](./docs/plan.md). The production URL is
-`https://water-management.jaredhoward.com` (deployed 2026-10-05; [docs/deployment.md](./docs/deployment.md)).
+`https://icwbt.jaredhoward.com` (deployed 2026-10-05 at `water-management.jaredhoward.com`,
+which now redirects there, issue #551; [docs/deployment.md](./docs/deployment.md)).
 
 ## Quick start
 

@@ -899,7 +899,7 @@
 		</div>
 	{/if}
 {/snippet}
-<svelte:head><title>{project ? `${project.name} · ` : ''}Water Management</title></svelte:head>
+<svelte:head><title>{project ? `${project.name} · ` : ''}IC-WBT</title></svelte:head>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <main

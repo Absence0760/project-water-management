@@ -32,6 +32,32 @@ here that holds each item's detail. Tick an item in both places.
 | CI, tooling and dependency hygiene | #75 |
 | UI consistency and help text | #76 |
 
+## The rename and the new domain (issue #551)
+
+The app is Integrated Catchment - Water Balance Tool (IC-WBT) at
+`icwbt.jaredhoward.com`; the code, the Terraform and the operator's runbook
+([deployment.md § Moving the site to a new domain](./deployment.md#moving-the-site-to-a-new-domain))
+are in. Still open:
+
+- [ ] **Operator: the move itself.** The new child zone, its delegation from
+      `jaredhoward.com`, the tfvars, plan, apply, the export and the two
+      releases: the runbook's steps 1–17. Trigger: the issue #551 PR merged.
+- [ ] **Operator: the estate's own records.** The cross-repo estate map
+      (`templates` repo, `docs/estate-map.md`) and the `project-mgmt` repo
+      name the site's hostname; add `icwbt.jaredhoward.com` (and the old
+      one as a redirect) there after the apply. Not in this repo.
+- [ ] **Retire `water-management.jaredhoward.com`.** Set
+      `redirect_domains = {}`, apply, then delete the old zone's NS record in
+      the parent and the old zone (the runbook's last paragraph). Trigger:
+      three months with no page requests to the old hostname (CloudFront's
+      request metrics, or the access logs if turned on), and no later than
+      2027-04-30.
+- [ ] **The app's own domain** (`icwbt.co.za` recommended, `icwbt.com`
+      redirecting to it; issue #551's comment): the same runbook with an apex
+      zone (`create_subdomain = false`), `icwbt.jaredhoward.com` joining
+      `redirect_domains`. Trigger: the domain bought, in the client's name if
+      they will own the brand.
+
 ## Blocking releases (operator)
 
 The checklist for these is issue #62; the history scrub is #63.

@@ -13,12 +13,19 @@
 # with region = "us-east-1" whatever this says (infra/README.md step 1).
 aws_region = "af-south-1"
 
-# The bootstrap's delegated child zone.
-domain_name = "water-management.jaredhoward.com"
+# The site's delegated child zone (since issue #551; docs/deployment.md
+# § Moving the site to a new domain made it).
+domain_name = "icwbt.jaredhoward.com"
 
-# Child zone ID from the bootstrap summary, or:
-#   aws route53 list-hosted-zones-by-name --dns-name water-management.jaredhoward.com --profile water-management
+# Its zone ID:
+#   aws route53 list-hosted-zones-by-name --dns-name icwbt.jaredhoward.com --profile water-management
 route53_zone_id = "Z0000000000000000000"
+
+# Former hostnames that 301 to domain_name, each with its own zone's ID (the
+# bootstrap's child zone for the first one). Required: {} once retired.
+redirect_domains = {
+  "water-management.jaredhoward.com" = "Z1111111111111111111"
+}
 
 github_repo = "Absence0760/project-water-management"
 

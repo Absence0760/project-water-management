@@ -366,7 +366,7 @@
 	}
 </script>
 
-<svelte:head><title>{selectedTeam ? `${selectedTeam.name} · ` : ''}Projects · Water Management</title></svelte:head>
+<svelte:head><title>{selectedTeam ? `${selectedTeam.name} · ` : ''}Projects · IC-WBT</title></svelte:head>
 
 <main class="page projects-page" data-outcomes-ready={outcomes !== null || outcomesFailed ? 'true' : 'false'}>
 	<div class="page-head">

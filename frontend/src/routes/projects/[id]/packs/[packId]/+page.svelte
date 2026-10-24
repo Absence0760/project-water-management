@@ -221,7 +221,7 @@
 	});
 </script>
 
-<svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}Water Management</title></svelte:head>
+<svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}IC-WBT</title></svelte:head>
 
 <main class="page report pack-page" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={status === 'loading'}>
 	{#if status === 'not-found'}

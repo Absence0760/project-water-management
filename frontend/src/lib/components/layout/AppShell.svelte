@@ -7,6 +7,7 @@
 	// sidebar.svelte.ts (the workspace: its catchment and sections). The farmer
 	// view and the sign-in pages have their own frames and don't use this.
 	import type { Snippet } from 'svelte';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
 	import { basePath } from '#lib/nav/base.js';
@@ -60,9 +61,9 @@
 </script>
 
 {#snippet brand(mark = true)}
-	<a class="brand" class:mark-only={!mark} href={resolve('')} aria-label="Water Management — projects">
+	<a class="brand" class:mark-only={!mark} href={resolve('')} aria-label="{APP_SHORT_NAME} — projects">
 		<BrandMark size={28} />
-		{#if mark}<span class="wordmark" aria-hidden="true">Water Management</span>{/if}
+		{#if mark}<span class="wordmark" aria-hidden="true">{APP_SHORT_NAME}</span>{/if}
 	</a>
 {/snippet}
 

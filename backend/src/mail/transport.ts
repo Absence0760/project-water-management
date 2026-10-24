@@ -140,7 +140,7 @@ export async function sendMail(mail: Mail): Promise<void> {
 	if (!SINGLE_ADDRESS.test(to)) throw new Error('refusing to send: the recipient is not a single email address');
 	const kind = process.env.MAIL_TRANSPORT || 'log';
 	if (cached?.key !== kind) cached = { key: kind, send: await createTransport(kind) };
-	const from = process.env.MAIL_FROM || 'Water Management <no-reply@localhost>';
+	const from = process.env.MAIL_FROM || 'IC-WBT <no-reply@localhost>';
 	await cached.send({ ...mail, to, headers: safeHeaders(mail.headers) }, from);
 }
 

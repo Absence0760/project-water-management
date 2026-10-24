@@ -33,7 +33,7 @@ describe('the data credits', () => {
 	it('carry the HydroSHEDS statement, the Copernicus notice and its liability sentence, and the WorldCover credit', () => {
 		const all = DATA_CREDITS.flatMap((c) => c.statements).join('\n');
 		for (const s of [HYDROSHEDS_STATEMENT, COPERNICUS_NOTICE, COPERNICUS_LIABILITY, WORLDCOVER_STATEMENT, JRC_WATER_STATEMENT, DPET_STATEMENT]) expect(all).toContain(s);
-		expect(HYDROSHEDS_STATEMENT).toContain('This product [Water Management] incorporates data from the HydroSHEDS version 1 database');
+		expect(HYDROSHEDS_STATEMENT).toContain('This product [Integrated Catchment - Water Balance Tool] incorporates data from the HydroSHEDS version 1 database');
 	});
 
 	it('give every dataset its own section id, a licence link and at least one statement', () => {

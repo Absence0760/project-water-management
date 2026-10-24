@@ -18,6 +18,7 @@
 	import TermsSummary from '#lib/components/legal/TermsSummary.svelte';
 	import { errorText } from '#lib/i18n/apiError.js';
 	import { t } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { changesSince, TERMS_CHANGES } from './termsChanges';
 
 	// What changed since the version the account accepted (termsChanges.ts TERMS_CHANGES).
@@ -62,7 +63,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Our terms have changed') })}</title>
+	<title>{t('{page} · {app}', { page: t('Our terms have changed'), app: APP_SHORT_NAME })}</title>
 </svelte:head>
 
 <AuthCard legal={false} title={t('Our terms have changed')}>

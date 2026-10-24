@@ -58,7 +58,7 @@ it('msg() imports nothing, so marking a message costs a shared module nothing', 
 describe('/share stays off the workspace’s code', () => {
 	/** Static (non-type) imports of any module. */
 	const imports = (code: string) => [...code.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]!);
-	const allowed = /^(svelte|\$app\/(navigation|paths|state)|#lib\/api\/(index|types|client)\.js|@water-management\/engine|#lib\/i18n\/(locale\.svelte\.js|state\.svelte\.js|msg\.js|LanguageSwitch\.svelte|apiError\.js)|#lib\/components\/share\/[\w.]+|#lib\/components\/farm\/(notice\.js|numbers\.js|format\.js|chartGeometry\.js|NoticeCard\.svelte)|#lib\/components\/layout\/BrandMark\.svelte|#lib\/format\/(age|number)\.js|#lib\/nav\/base\.js|\.\/[\w.]+)$/;
+	const allowed = /^(svelte|\$app\/(navigation|paths|state)|#lib\/api\/(index|types|client)\.js|@water-management\/engine|#lib\/i18n\/(locale\.svelte\.js|state\.svelte\.js|msg\.js|LanguageSwitch\.svelte|apiError\.js)|#lib\/components\/share\/[\w.]+|#lib\/components\/farm\/(notice\.js|numbers\.js|format\.js|chartGeometry\.js|NoticeCard\.svelte)|#lib\/components\/layout\/BrandMark\.svelte|#lib\/brand\.js|#lib\/format\/(age|number)\.js|#lib\/nav\/base\.js|\.\/[\w.]+)$/;
 	for (const file of [
 		'routes/share/+page.svelte',
 		'lib/components/share/share.ts',

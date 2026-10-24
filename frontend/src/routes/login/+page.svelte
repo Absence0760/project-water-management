@@ -19,6 +19,7 @@
 	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
 	import AuthCard from '#lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 	import { afterResetAskFailed, resetAsked, type ResetAsked } from '#lib/auth/mfaReset.js';
 	import { fmtStampTime } from '#lib/components/farm/format.js';
@@ -262,7 +263,7 @@
 	}
 </script>
 
-<svelte:head><title>{t('{page} · Water Management', { page: t('Sign in') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · {app}', { page: t('Sign in'), app: APP_SHORT_NAME })}</title></svelte:head>
 
 <AuthCard title={t('Sign in')} subtitle={t('Welcome back. Sign in to your catchment projects.')}>
 	{#if DEMO}
@@ -371,7 +372,7 @@
 					{:else}
 						<label for="mfa-code">{t('Code from your authenticator app')}</label>
 						<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
-						<span class="hint" id="mfa-code-hint">{t('Open the app on your phone and enter the 6-digit code it shows for Water Management.')}</span>
+						<span class="hint" id="mfa-code-hint">{t('Open the app on your phone and enter the 6-digit code it shows for {app}.', { app: APP_SHORT_NAME })}</span>
 					{/if}
 				</div>
 				<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Checking…') : t('Sign in')}</button>

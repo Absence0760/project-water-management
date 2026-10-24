@@ -26,12 +26,12 @@
 
 <LegalPage
 	title="Privacy notice"
-	description="How Water Management collects, uses and protects personal information, and your rights under POPIA."
+	description="How Integrated Catchment - Water Balance Tool (IC-WBT) collects, uses and protects personal information, and your rights under POPIA."
 	effective={legalEffective()}
 	{sections}
 >
 	<p>
-		This notice explains what personal information Water Management (“the service”) collects, why, who can see it, how long it is
+		This notice explains what personal information Integrated Catchment - Water Balance Tool (IC-WBT, “the service”) collects, why, who can see it, how long it is
 		kept, and the rights you have. It is written to meet South Africa’s Protection of Personal Information Act, 2013 (POPIA), and
 		applies wherever you use the service from.
 	</p>
@@ -45,7 +45,7 @@
 
 	<h2 id="roles">2. Who decides about your information</h2>
 	<p>
-		Water Management is used by organisations: water user associations, consultancies and others that model a catchment and invite
+		IC-WBT is used by organisations: water user associations, consultancies and others that model a catchment and invite
 		people to it.
 	</p>
 	<ul>

@@ -10,7 +10,8 @@
 #   frontend/src/lib/components/landing/data.generated.ts      the engine's figures (charts, what-if)
 #
 #   pnpm gen:landing-art                          everything (GPU: LANDING_ART_DEVICE, default OPTIX)
-#   LANDING_ART_ONLY=data,vector pnpm gen:landing-art   some steps: render, vector, screens, data
+#   LANDING_ART_ONLY=data,vector pnpm gen:landing-art   some steps: render, card, vector, screens, data
+#   LANDING_ART_ONLY=card pnpm gen:landing-art    the social card's words only, on the last render's backdrop
 #
 # The tools, all local, none needed to run or build the app (the output is committed):
 #   Blender 5      scripts/landing-art/diorama.py: the scene, lit for day and dusk
@@ -25,7 +26,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ONLY=",${LANDING_ART_ONLY:-render,vector,screens,data},"
+ONLY=",${LANDING_ART_ONLY:-render,card,vector,screens,data},"
 want() { [[ "$ONLY" == *",$1,"* ]]; }
 need() { command -v "$1" >/dev/null || { echo "gen-landing-art: $1 not found ($2)" >&2; exit 1; }; }
 
@@ -34,6 +35,8 @@ MODULES=frontend/src/lib/components/landing
 VECTOR=scripts/landing-art/vector
 # Kept between runs, so a partial run (LANDING_ART_ONLY) can still write the module.
 WORK=${LANDING_ART_WORK:-scripts/landing-art/.work}
+# Absolute, since the screens step hands it to Playwright, which runs in e2e/.
+case "$WORK" in /*) ;; *) WORK="$(pwd)/$WORK" ;; esac
 mkdir -p "$STATIC" "$WORK" "$WORK/vector"
 
 need magick "ImageMagick 7"
@@ -46,7 +49,6 @@ avif() {
 
 if want render; then
 	need blender "Blender 5"
-	need fontforge "the opt-in asset tools"
 	run=(blender -b --factory-startup --python-exit-code 1 --python scripts/landing-art/diorama.py -- \
 		--outdir "$WORK" --samples "${LANDING_ART_SAMPLES:-160}" --device "${LANDING_ART_DEVICE:-OPTIX}" --width 1600)
 	if command -v systemd-run >/dev/null; then
@@ -67,12 +69,16 @@ if want render; then
 		# A 24 px blur-up, inlined in the page: it holds the picture's place while it loads.
 		magick "$WORK/hero-$mode.png" -strip -resize 24x -quality 40 "$WORK/placeholder-$mode.webp"
 	done
+fi
 
-	# The social card: the dusk backdrop, the headline in the display font.
+if want card; then
+	need fontforge "the opt-in asset tools"
+	[ -f "$WORK/og-dusk.png" ] || { echo "gen-landing-art: run the render step first (the card's backdrop)" >&2; exit 1; }
+	# The social card: the dusk backdrop, the app's name (issue #551) and the headline in the display font.
 	fontforge -lang=ff -c 'Open($1); Generate($2)' frontend/static/fonts/outfit-600.woff2 "$WORK/outfit-600.ttf" 2>/dev/null
 	magick "$WORK/og-dusk.png" \
 		\( -size 1200x630 gradient:'rgba(12,24,40,0.92)'-'rgba(12,24,40,0)' -rotate -90 -resize 1200x630! \) -composite \
-		-font "$WORK/outfit-600.ttf" -fill '#36c6e0' -pointsize 24 -kerning 3 -annotate +72+150 'WATER MANAGEMENT' \
+		-font "$WORK/outfit-600.ttf" -fill '#36c6e0' -pointsize 24 -kerning 3 -annotate +72+150 'INTEGRATED CATCHMENT - WATER BALANCE TOOL (IC-WBT)' \
 		-fill white -pointsize 58 -kerning 0 -interline-spacing 4 -annotate +72+238 $'Every drop in the\ncatchment,\naccounted for.' \
 		-fill '#d9e6f2' -pointsize 26 -annotate +72+520 'Daily water balance, from rainfall to river.' \
 		-strip -quality 86 "$STATIC/og.jpg"
@@ -92,7 +98,7 @@ fi
 if want screens; then
 	[ -f "$WORK/frame-laptop.png" ] || { echo "gen-landing-art: run the vector step first (the frames)" >&2; exit 1; }
 	# The app itself on the example catchments, light and dark (e2e/art/landing-screens.spec.ts).
-	LANDING_SHOTS_DIR="$(pwd)/$WORK/shots" pnpm -C e2e exec playwright test --config art/playwright.config.ts >"$WORK/screens.log" 2>&1 \
+	LANDING_SHOTS_DIR="$WORK/shots" pnpm -C e2e exec playwright test --config art/playwright.config.ts >"$WORK/screens.log" 2>&1 \
 		|| { tail -40 "$WORK/screens.log" >&2; exit 1; }
 	echo '{' >"$WORK/screens.json.tmp"
 	for theme in light dark; do
@@ -131,5 +137,8 @@ if want data; then
 	pnpm -C backend exec tsx scripts/landing-data.ts "$(pwd)/$MODULES/data.generated.ts"
 fi
 
-node scripts/landing-art/modules.mjs "$WORK" "$WORK/vector" "$MODULES/art.generated.ts"
+# The module reads the render's, vector's and screens' output; the card and the data need it not.
+if want render || want vector || want screens; then
+	node scripts/landing-art/modules.mjs "$WORK" "$WORK/vector" "$MODULES/art.generated.ts"
+fi
 ls -l "$STATIC"

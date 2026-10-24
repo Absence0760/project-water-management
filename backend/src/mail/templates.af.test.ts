@@ -16,7 +16,10 @@ const url = 'http://localhost:7777/verify-email?token=abc';
 describe('farmer emails in Afrikaans', () => {
 	it('verify and reset come out in the account’s language, marked lang="af", link and product intact', () => {
 		for (const mail of [verifyEmailMail('ann@example.com', url, 'af'), resetPasswordMail('ann@example.com', url, 'af')]) {
-			expect(mail.subject).toMatch(/^\[af\] .* — Water Management$/);
+			expect(mail.subject).toMatch(/^\[af\] .* — IC-WBT$/);
+			// The app's name is never translated: the sign-off stays the full English name (issue #551).
+			expect(mail.text.trimEnd().endsWith('— Integrated Catchment - Water Balance Tool (IC-WBT)')).toBe(true);
+			expect(mail.html).toContain('— Integrated Catchment - Water Balance Tool (IC-WBT)</p>');
 			expect(mail.html).toMatch(/<html lang="af">/);
 			expect(mail.html).toContain(`href="${url}"`);
 			expect(mail.html).toContain('[af] If the button');
@@ -44,6 +47,6 @@ describe('farmer emails in Afrikaans', () => {
 
 	it('English stays English whatever af holds', () => {
 		expect(verifyEmailMail('ann@example.com', url).html).toMatch(/<html lang="en">/);
-		expect(verifyEmailMail('ann@example.com', url, 'en').subject).toBe('Confirm your email address — Water Management');
+		expect(verifyEmailMail('ann@example.com', url, 'en').subject).toBe('Confirm your email address — IC-WBT');
 	});
 });

@@ -19,6 +19,7 @@
 	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel, resumeProblem, suppressedText, thresholdLine } from '#lib/components/alerts/words.js';
 	import SectionHeader from '#lib/components/workspace/SectionHeader.svelte';
 	import { t } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 	import { wordsHref } from '#lib/components/farm/load.js';
 	import { page } from '$app/state';
@@ -110,7 +111,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Alert emails') })}</title>
+	<title>{t('{page} · {app}', { page: t('Alert emails'), app: APP_SHORT_NAME })}</title>
 </svelte:head>
 
 <main class="page alerts-page" data-ready={projects !== null || loadError !== null ? 'true' : undefined}>

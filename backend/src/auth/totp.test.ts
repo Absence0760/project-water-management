@@ -135,17 +135,17 @@ describe('otpauthUri', () => {
 		const uri = otpauthUri(ascii('12345678901234567890'), 'farmer+1@example.com');
 		const u = new URL(uri);
 		expect(u.protocol).toBe('otpauth:');
-		expect(uri.startsWith('otpauth://totp/Water%20Management:farmer%2B1%40example.com?')).toBe(true);
+		expect(uri.startsWith('otpauth://totp/IC-WBT:farmer%2B1%40example.com?')).toBe(true);
 		expect(u.host).toBe('totp');
-		expect(decodeURIComponent(u.pathname)).toBe('/Water Management:farmer+1@example.com');
+		expect(decodeURIComponent(u.pathname)).toBe('/IC-WBT:farmer+1@example.com');
 		expect(Object.fromEntries(u.searchParams)).toEqual({
 			secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
-			issuer: 'Water Management',
+			issuer: 'IC-WBT',
 			algorithm: 'SHA1',
 			digits: '6',
 			period: '30'
 		});
-		// A space is %20, never '+', which some apps show as a plus.
+		// The address's '+' is %2B, and a space would be %20: never a bare '+', which some apps show as a plus.
 		expect(uri).not.toContain('+');
 	});
 });

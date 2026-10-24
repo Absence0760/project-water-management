@@ -22,12 +22,12 @@ afterEach(() => vi.unstubAllEnvs());
 describe('SES transport', () => {
 	it('sends a simple UTF-8 message with text + HTML bodies from MAIL_FROM', async () => {
 		vi.stubEnv('MAIL_TRANSPORT', 'ses');
-		vi.stubEnv('MAIL_FROM', 'Water Management <no-reply@water-management.jaredhoward.com>');
+		vi.stubEnv('MAIL_FROM', 'IC-WBT <no-reply@icwbt.jaredhoward.com>');
 		vi.stubEnv('SES_CONFIGURATION_SET', 'water-management');
 		await sendMail({ to: 'ann@example.com', subject: 'Line\nbreak', text: 'plain', html: '<p>rich</p>' });
 		expect(sent).toEqual([
 			{
-				FromEmailAddress: 'Water Management <no-reply@water-management.jaredhoward.com>',
+				FromEmailAddress: 'IC-WBT <no-reply@icwbt.jaredhoward.com>',
 				Destination: { ToAddresses: ['ann@example.com'] },
 				ConfigurationSetName: 'water-management',
 				Content: {
@@ -38,5 +38,13 @@ describe('SES transport', () => {
 				}
 			}
 		]);
+	});
+
+	it('sends as IC-WBT from no-reply@localhost when MAIL_FROM is unset (local dev; production refuses that, config/production.ts)', async () => {
+		sent.length = 0;
+		vi.stubEnv('MAIL_TRANSPORT', 'ses');
+		vi.stubEnv('MAIL_FROM', '');
+		await sendMail({ to: 'ann@example.com', subject: 'Hi', text: 'plain', html: '<p>rich</p>' });
+		expect(sent).toMatchObject([{ FromEmailAddress: 'IC-WBT <no-reply@localhost>' }]);
 	});
 });

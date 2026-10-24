@@ -282,7 +282,7 @@
 	const canPublish = (p: PortfolioProject) => p.role === 'editor' || p.role === 'owner';
 </script>
 
-<svelte:head><title>{team ? `${team.name} · ` : ''}Teams · Water Management</title></svelte:head>
+<svelte:head><title>{team ? `${team.name} · ` : ''}Teams · IC-WBT</title></svelte:head>
 
 {#snippet projectRow(p: PortfolioProject)}
 	{@const age = ageText(p)}

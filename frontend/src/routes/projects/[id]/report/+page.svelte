@@ -27,6 +27,7 @@
 	// sends them to their farm page; any other role below viewer (an applicant)
 	// is told the report isn't part of their role.
 	import { untrack } from 'svelte';
+	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -286,7 +287,7 @@
 	});
 </script>
 
-<svelte:head>{#if !evidenceMode}<title>{project ? `Report · ${project.name} · ` : ''}Water Management</title>{/if}</svelte:head>
+<svelte:head>{#if !evidenceMode}<title>{project ? `Report · ${project.name} · ` : ''}IC-WBT</title>{/if}</svelte:head>
 
 {#if evidenceMode}
 	<EvidencePage {projectId} runId={runParam} />
@@ -344,6 +345,7 @@
 		{#each sections as s, i (s.id)}
 			{#if s.id === 'cover'}
 				<section class="cover" aria-labelledby="rep-cover-h">
+					<p class="product" data-testid="report-product">{APP_NAME} ({APP_SHORT_NAME})</p>
 					<p class="eyebrow">{s.title}</p>
 					<h1 id="rep-cover-h">{project.name}</h1>
 					<p class="run-name">
@@ -580,6 +582,13 @@
 	}
 	.cover {
 		margin: 0.5rem 0 1.5rem;
+	}
+	/* The app's full name on the cover (issue #551), above what the report is. */
+	.product {
+		margin: 0 0 0.35rem;
+		font-family: var(--font-display);
+		font-weight: 600;
+		color: var(--text-muted);
 	}
 	.eyebrow {
 		margin: 0;

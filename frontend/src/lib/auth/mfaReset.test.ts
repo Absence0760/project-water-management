@@ -14,7 +14,7 @@ describe('fewRecoveryCodes', () => {
 
 describe('recoveryCodesText', () => {
 	it('is saved as a plain text file', () => {
-		expect(RECOVERY_CODES_FILE).toBe('water-management-recovery-codes.txt');
+		expect(RECOVERY_CODES_FILE).toBe('icwbt-recovery-codes.txt');
 	});
 
 	it('puts one code a line between the heading and the closing line', () => {

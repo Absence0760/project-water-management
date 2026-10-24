@@ -26,7 +26,7 @@
 	const terms = $derived(q ? searchHelp(q) : []);
 </script>
 
-<svelte:head><title>{q ? `“${q}”` : 'Search'} · Help · Water Management</title></svelte:head>
+<svelte:head><title>{q ? `“${q}”` : 'Search'} · Help · IC-WBT</title></svelte:head>
 
 <HelpCrumbs trail={[{ label: 'Help', href: resolve('help') }, { label: 'Search' }]} />
 <header>

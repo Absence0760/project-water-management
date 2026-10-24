@@ -11,6 +11,7 @@
 	import { session } from '#lib/auth/session.svelte.js';
 	import AuthCard from '#lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 	import Rich from '#lib/i18n/Rich.svelte';
 
@@ -82,7 +83,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Confirm your email') })}</title>
+	<title>{t('{page} · {app}', { page: t('Confirm your email'), app: APP_SHORT_NAME })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 

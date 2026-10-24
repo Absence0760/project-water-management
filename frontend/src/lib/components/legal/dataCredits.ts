@@ -6,6 +6,8 @@
 // test checks each against docs/maps.md, where the licence was read).
 // Plain text, never HTML: the page renders it as text.
 
+import { APP_NAME } from '#lib/brand.js';
+
 /** A `YYYY-MM-DD` day in words, "1 October 2026" (UTC, so the day never shifts). */
 export const readDay = (read: string): string =>
 	new Date(`${read}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -35,7 +37,7 @@ export interface DataCredit {
 }
 
 /** The product name the HydroSHEDS licence's Exhibit B statement takes. */
-const PRODUCT = 'Water Management';
+const PRODUCT = APP_NAME;
 
 /**
  * HydroSHEDS version 1 License Agreement, Exhibit B (HydroSHEDS technical

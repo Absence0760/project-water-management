@@ -69,7 +69,7 @@ describe('emails follow the account’s language', () => {
 		const user = await register({ email, locale: 'af' });
 		expect(user.locale).toBe('af');
 		const mail = lastMailTo(email)!;
-		expect(mail.subject).toBe('[af] Confirm your email address — Water Management');
+		expect(mail.subject).toBe('[af] Confirm your email address — IC-WBT');
 		expect(mail.html).toMatch(/<html lang="af">/);
 	});
 
@@ -77,10 +77,10 @@ describe('emails follow the account’s language', () => {
 		const email = newEmail('signup-en');
 		const user = await register({ email });
 		expect(user.locale).toBeNull();
-		expect(lastMailTo(email)!.subject).toBe('Confirm your email address — Water Management');
+		expect(lastMailTo(email)!.subject).toBe('Confirm your email address — IC-WBT');
 		await asOwner(`UPDATE app_user SET locale = 'af' WHERE id = $1`, [user.id]);
 		expect((await anon('POST', '/auth/forgot-password', { email })).status).toBe(202);
-		expect(lastMailTo(email)!.subject).toBe('[af] Reset your password — Water Management');
+		expect(lastMailTo(email)!.subject).toBe('[af] Reset your password — IC-WBT');
 	});
 
 	it('refuses a language it does not know at sign-up', async () => {

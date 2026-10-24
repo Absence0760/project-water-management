@@ -74,7 +74,9 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(page).toHaveURL(teamUrl(a.team.id));
 	await outcomesReady(page);
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Projects');
-	await expect(page).toHaveTitle('Portfolio WUA A · Projects · Water Management');
+	await expect(page).toHaveTitle('Portfolio WUA A · Projects · IC-WBT');
+	// The app frame's word mark: the short name (issue #551).
+	await expect(page.getByRole('link', { name: 'IC-WBT — projects' }).first()).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Filter by owner' }).getByRole('link', { name: /^Portfolio WUA A 3$/ })).toHaveAttribute('aria-current', 'true');
 	await expect(heads(page)).toHaveCount(3);
 	await expect(page.getByText('Pf personal A')).toHaveCount(0);

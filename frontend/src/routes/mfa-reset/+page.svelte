@@ -16,6 +16,7 @@
 	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
 	import { fmtStampTime } from '#lib/components/farm/format.js';
 	import { t } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 
 	// Read once, then dropped from the address bar so it doesn't linger in history.
@@ -48,7 +49,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Remove two-step sign-in') })}</title>
+	<title>{t('{page} · {app}', { page: t('Remove two-step sign-in'), app: APP_SHORT_NAME })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 

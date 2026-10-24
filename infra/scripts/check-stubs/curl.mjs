@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // A fake `curl` for postapply-check.test.mjs: answers `curl … -o <file>
 // -w '%{http_code}' <url>` from FAKE_CURL_STATE, a JSON map of URL →
-// { "status": n, "body": "…" } (a URL it doesn't know gets 200 and the
-// SPA's index.html; { "error": "…" } fails as a connection error does).
+// { "status": n, "body": "…", "location": "…" } (a URL it doesn't know gets
+// 200 and the SPA's index.html; { "error": "…" } fails as a connection error
+// does). A -w format is filled in for %{http_code} and %{redirect_url}.
 // Every call is appended to FAKE_CURL_LOG with all its arguments.
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -10,10 +11,12 @@ const argv = process.argv.slice(2);
 appendFileSync(process.env.FAKE_CURL_LOG, JSON.stringify(argv) + '\n');
 let outFile = null;
 let url = null;
+let format = '%{http_code}';
 for (let i = 0; i < argv.length; i++) {
 	const a = argv[i];
 	if (a === '-o') outFile = argv[++i];
-	else if (a === '-w' || a === '--max-time' || a === '-H') i++;
+	else if (a === '-w') format = argv[++i];
+	else if (a === '--max-time' || a === '-H') i++;
 	else if (!a.startsWith('-')) url = a;
 }
 const state = JSON.parse(readFileSync(process.env.FAKE_CURL_STATE, 'utf8'));
@@ -24,4 +27,4 @@ if (r.error) {
 	process.exit(7);
 }
 if (outFile) writeFileSync(outFile, r.body ?? '');
-process.stdout.write(String(r.status));
+process.stdout.write(format.replace('%{http_code}', String(r.status)).replace('%{redirect_url}', r.location ?? ''));

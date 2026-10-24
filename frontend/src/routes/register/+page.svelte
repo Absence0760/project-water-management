@@ -11,6 +11,7 @@
 	import PasswordInput from '#lib/components/common/PasswordInput.svelte';
 	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
 	import { i18n, readStoredLocale, t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 	import Rich from '#lib/i18n/Rich.svelte';
 	import TermsSummary from '#lib/components/legal/TermsSummary.svelte';
@@ -93,7 +94,7 @@
 			? t('the project {name}', { name: invite.projectName })
 			: invite?.teamName
 				? t('the team {name}', { name: invite.teamName })
-				: 'Water Management'
+				: APP_SHORT_NAME
 	);
 
 	// The assent checkbox's words, "I have read the main points above and accept
@@ -162,7 +163,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Create account', {}, 'page title') })}</title>
+	<title>{t('{page} · {app}', { page: t('Create account', {}, 'page title'), app: APP_SHORT_NAME })}</title>
 	{#if hasInviteParam}<meta name="referrer" content="no-referrer" />{/if}
 </svelte:head>
 
