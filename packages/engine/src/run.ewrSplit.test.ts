@@ -29,7 +29,7 @@ const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, 
 const unit = (id: string, areaKm2: number, mapMm: number, downstreamNodeId = 'G'): NetworkNode => ({ ...node, id, name: `Unit ${id}`, kind: 'farm', downstreamNodeId, areaKm2, mapMm, mapSource: 'invented' }) as NetworkNode;
 
 /**
- * Units A (10 km², MAP 900) above gauge G1 (an EWR site) above the outlet G, with B (6, 600), C (3, 750) and D (1.5, 600)
+ * Units A (10 km², MAP 900) above G1, an EWR site, above the outlet G, with B (6, 600), C (3, 750) and D (1.5, 600)
  * straight into G. A and B share station S (MAP 600); C and D take their §2.4h rule. A irrigates, so G1 can fall short.
  */
 function catchment(settings: Partial<ProjectSettings> = {}, perUnit = true): ModelInput {
