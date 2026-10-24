@@ -611,6 +611,18 @@ section it belongs to, with the example that taught it.
   under it. On a narrow map, check the right column too: Layers sits under
   the zoom buttons, so it moves under the search's lines and the picked
   name stops short of it (`MapTab.svelte`, a `map-body` container query).
+- **The map's credits never run under its own buttons.** MapLibre's
+  attribution sits bottom right and grows leftward; the Map's Show
+  everything and Key sit bottom left. A 150-character credit (the MAP grid's
+  authors' line, issue #560) wrapped along the whole foot and the buttons
+  hid its start, at 1280 px as on a phone. The tab measures its bottom-left
+  corner (`.foot-at`: the buttons, and the Key's panel while it is open over
+  the map) and keeps the attribution beside it on a wide map, above it under
+  30rem, where beside would leave a column of one or two words a line
+  (`MapTab.svelte`, `--foot-w`/`--foot-h`; `map-layers.spec.ts` checks the
+  boxes never meet at 1280 and 390 px, Key open too). And keep each credit
+  short, linking to its full statement on `/data-sources` (HydroRIVERS',
+  the MAP grid's): the whole line stays on that page and with the layer.
 - **A popover's controls aren't in the DOM while it's closed.** The Map's
   Getting started pill kept its steps' buttons in a `hidden` box, and a check
   that the header's controls share one row (`locator('button, a.btn')`) read
@@ -974,6 +986,19 @@ section it belongs to, with the example that taught it.
   (`--series-5`, `-6`, 2.1–2.7:1), which sit in their own keyed row with the
   class named and its days counted. The spec passes those two lanes as an
   explicit `except`; anything else faint fails.
+  **Compute colour-blind separation; when the palette can't give it, add a
+  shape.** The low-flow period strip (issue #557) took `--series-7`, a green
+  next to the above-range red: CIEDE2000 under Machado (2009) protanopia,
+  deuteranopia and tritanopia kept it ≥ 12 from both its fixed neighbours in
+  both themes, but in the dark theme a protanope sees it 7.9 from the
+  suspect strip's amber, which it sits beside when no day is below the
+  gauged range, and no palette token did better. It is drawn as a **double
+  line** (a 1 px ground line along its middle, the key swatch the same, the
+  key line saying so). Not hatching: a strip's ranges are often one day,
+  under a pixel on a decade's view, where hatching can't show and the strip
+  would no longer match its key. `calibration/flowFlagColours.test.ts`
+  computes every lane pair from `app.css` (ΔE00 ≥ 10 for every reader, or a
+  shape apart) and lists the older close pairs, so a new one fails.
 - **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
   the dark theme's accent into a mid teal that read as a live secondary
   button; `.btn-primary:disabled` is the plain surface, the strong border and

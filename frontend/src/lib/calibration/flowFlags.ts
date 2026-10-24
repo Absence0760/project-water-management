@@ -14,6 +14,8 @@ export interface FlagLane {
 	label: string;
 	/** A colour token (the chart reads it from the page's CSS). */
 	color: string;
+	/** Drawn as a double line (strip and key swatch: a ground-coloured line along its middle), so it reads apart from a neighbour without its colour (LANE_DOUBLED). */
+	doubled: boolean;
 	ranges: { start: string; end: string }[];
 	days: number;
 	/** The key's line: "Above the highest gauging: 14 days; Fit automatically: censored at the highest gauging". */
@@ -23,7 +25,7 @@ export interface FlagLane {
 /** The classes drawn, top strip first; in range and missing are not (the line itself shows a missing day as a gap). */
 export const LANE_FLAGS: readonly FlowDayFlag[] = ['aboveRating', 'periodHigh', 'belowRating', 'suspect', 'infilled', 'humanUse'];
 
-const LANE_COLOR: Record<FlowDayFlag, string> = {
+export const LANE_COLOR: Record<FlowDayFlag, string> = {
 	aboveRating: '--series-9',
 	belowRating: '--series-10',
 	suspect: '--series-5',
@@ -33,6 +35,18 @@ const LANE_COLOR: Record<FlowDayFlag, string> = {
 	missing: '--text-muted',
 	periodHigh: '--series-7'
 };
+
+/**
+ * The classes drawn as a double line as well as coloured. Period-high's green
+ * (--series-7) is the palette's best choice next to the above-range red and the
+ * below-range aqua, but in the dark theme a protanope sees it only ΔE00 7.9
+ * from the suspect strip's amber, which it sits beside whenever no day is below
+ * the gauged range; the line along its middle keeps the two apart for every
+ * reader, and unlike hatching it shows on a range one pixel wide (a lone day
+ * on a decade's view). flowFlagColours.test.ts computes each pair;
+ * docs/design/ui-playbook.md § 3, Hold non-text parts to 3:1.
+ */
+export const LANE_DOUBLED: ReadonlySet<FlowDayFlag> = new Set<FlowDayFlag>(['periodHigh']);
 
 /** What Fit automatically does with a class's days under the quality-flag settings, in the engine's words (FLAG_USE_TEXT); '' without them. */
 export function flagUseText(flag: FlowDayFlag, use: Omit<QualityFlagSettings, 'ratings'> | null | undefined): string {
@@ -67,7 +81,8 @@ export function flowFlagLanes(codes: ArrayLike<number>, startDate: string, use: 
 		if (!days) continue;
 		const how = flagUseText(flag, use);
 		const label = FLOW_FLAG_LABEL[flag];
-		out.push({ flag, label, color: LANE_COLOR[flag], ranges, days, text: `${label}: ${fmtNum(days)} day${days === 1 ? '' : 's'}${how ? `; ${how}` : ''}` });
+		const doubled = LANE_DOUBLED.has(flag);
+		out.push({ flag, label, color: LANE_COLOR[flag], doubled, ranges, days, text: `${label}${doubled ? ' (double line)' : ''}: ${fmtNum(days)} day${days === 1 ? '' : 's'}${how ? `; ${how}` : ''}` });
 	}
 	return out;
 }

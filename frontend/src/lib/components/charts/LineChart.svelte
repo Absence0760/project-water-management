@@ -76,7 +76,7 @@
 		 * a strip reads by its place and its words as well as its colour (the
 		 * observed flow's per-day quality flags, calibration/flowFlags.ts).
 		 */
-		lanes?: readonly { label: string; color: string; ranges: readonly { start: string; end: string }[]; text: string }[];
+		lanes?: readonly { label: string; color: string; doubled?: boolean; ranges: readonly { start: string; end: string }[]; text: string }[];
 		/** The lanes key's heading. */
 		lanesLabel?: string;
 		/**
@@ -361,6 +361,8 @@
 
 	/** A lane's height in CSS pixels (a 1 px gap above each strip keeps neighbours apart). */
 	const LANE_H = 6;
+	/** A doubled lane's two lines, each this many CSS pixels of its LANE_H - 1 = 5 (the 1 px between is the ground; the key swatch's gradient is the same 2 + 1 + 2). */
+	const LANE_DOUBLE_EDGE = 2;
 
 	/** Each lane a strip LANE_H high along the plot's foot, the first on top, its ranges a day wide at each end. */
 	function drawLanes(u: uPlot) {
@@ -369,16 +371,26 @@
 		const px = print ? k : uPlot.pxRatio;
 		const h = LANE_H * px;
 		const top = bbox.top + bbox.height - lanes.length * h;
+		const ground = token('--surface', '#fdfdfe');
 		ctx.save();
 		lanes.forEach((lane, i) => {
 			// Full strength, as keyed: a strip is a mark (3:1, WCAG 1.4.11), and at 75 % even the red fell under.
-			ctx.fillStyle = token(lane.color, '#6c706c');
+			const fill = token(lane.color, '#6c706c');
 			const y = top + i * h;
 			for (const r of lane.ranges) {
 				const x0 = Math.max(bbox.left, u.valToPos(epochSec(r.start), 'x', true));
 				const x1 = Math.min(bbox.left + bbox.width, u.valToPos(epochSec(r.end) + 86_400, 'x', true));
 				// At least a device pixel, so a lone flagged day shows on a decades-long view.
-				if (x1 > bbox.left && x0 < bbox.left + bbox.width) ctx.fillRect(x0, y + px, Math.max(x1 - x0, px), h - px);
+				if (x1 > bbox.left && x0 < bbox.left + bbox.width) {
+					const w = Math.max(x1 - x0, px);
+					ctx.fillStyle = fill;
+					ctx.fillRect(x0, y + px, w, h - px);
+					// A double line: the ground along the strip's middle, as wide as the range, so it shows at any width.
+					if (lane.doubled) {
+						ctx.fillStyle = ground;
+						ctx.fillRect(x0, y + px + LANE_DOUBLE_EDGE * px, w, h - px - 2 * LANE_DOUBLE_EDGE * px);
+					}
+				}
 			}
 		});
 		ctx.restore();
@@ -577,7 +589,7 @@
 		<div class="lane-key">
 			<p><strong>{lanesLabel}</strong> (strips along the foot of the plot, top to bottom)</p>
 			<ul>
-				{#each lanes as lane (lane.label)}<li data-color={lane.color}><i aria-hidden="true" style:background="var({lane.color})"></i>{lane.text}</li>{/each}
+				{#each lanes as lane (lane.label)}<li data-color={lane.color} data-doubled={lane.doubled || undefined}><i aria-hidden="true" class:doubled={lane.doubled} style:background-color="var({lane.color})"></i>{lane.text}</li>{/each}
 			</ul>
 		</div>
 	{/if}
@@ -722,6 +734,12 @@
 		display: inline-block;
 		width: 1.1rem;
 		height: 0.35rem;
+	}
+	/* The doubled strip, as drawLanes draws it: two 2 px lines with 1 px of ground between. */
+	.lane-key i.doubled {
+		height: 5px;
+		align-self: center;
+		background-image: linear-gradient(transparent 2px, var(--surface) 2px 3px, transparent 3px);
 	}
 	.band-key {
 		margin: 0.25rem 0 0;

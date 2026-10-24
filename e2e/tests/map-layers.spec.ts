@@ -16,7 +16,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, loadSyntheticQuaternaries, loadSyntheticRivers, openLayers, openMap, parcelsGeoJson, showTab, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, loadSyntheticQuaternaries, loadSyntheticRivers, openKey, openLayers, openMap, parcelsGeoJson, showTab, uploadThroughSheet } from '../support/map.ts';
 import { loadSyntheticMapGrid } from '../support/mapGrid.ts';
 import { layoutSettled } from '../support/reflow.ts';
 
@@ -26,6 +26,19 @@ const canvas = (page: Page) => page.getByTestId('catchment-map').locator('canvas
 const measureBar = (page: Page) => page.getByTestId('map-measure-bar');
 const result = (page: Page) => page.getByTestId('map-measure-result');
 const mapReady = (page: Page) => expect(page.locator('.map-wrap[data-status="ready"]')).toBeVisible();
+
+/** What in the map's bottom-left corner (Show everything, Key, the Key's panel over the map) the attribution box overlaps; [] when it clears them all. */
+const footOverlap = (page: Page) =>
+	page.evaluate(() => {
+		const attrib = document.querySelector('.maplibregl-ctrl-attrib')?.getBoundingClientRect();
+		if (!attrib) return ['no attribution'];
+		return [...document.querySelectorAll<HTMLElement>('[data-testid="map-show-everything"], [data-testid="map-key-toggle"], .key-panel:not([hidden])')]
+			.filter((b) => {
+				const r = b.getBoundingClientRect();
+				return r.width > 0 && r.left < attrib.right && attrib.left < r.right && r.top < attrib.bottom && attrib.top < r.bottom;
+			})
+			.map((b) => b.dataset.testid ?? b.className);
+	});
 
 /** "33.6123° S, 21.3402° E" → [lon, lat]. */
 function parsePosition(text: string): [number, number] {
@@ -187,7 +200,8 @@ test('the MAP grid credits the Southwestern Cape surface on the map while its po
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 	await mapReady(page);
-	const credit = page.locator('.maplibregl-ctrl-attrib').getByRole('link', { name: `MAP grid: ${waas}` });
+	// Short on the map, its link opening the authors' line whole on the data sources page (legal.spec.ts checks that page).
+	const credit = page.locator('.maplibregl-ctrl-attrib').getByRole('link', { name: 'MAP grid: WAAS (2007), Beuster Clarke & Associates', exact: true });
 	await expect(credit).toHaveCount(0);
 
 	await openLayers(page);
@@ -196,7 +210,23 @@ test('the MAP grid credits the Southwestern Cape surface on the map while its po
 	await expect(page.getByTestId('map-mapgrid-source')).toHaveText(`Mean annual precipitation, mm a year. Source: ${waas}`);
 	await expect(credit).toHaveAttribute('href', '/data-sources#waas-map');
 
-	// Off again: the credit goes with the points.
+	// The attribution wraps beside the map's bottom-left buttons, never under them (PR #570: the whole line ran under
+	// Show everything and Key at 1280 px as on a phone), wide and at phone width.
+	for (const width of [1280, 390]) {
+		await page.setViewportSize({ width, height: 844 });
+		await expect(credit).toBeVisible();
+		await expect.poll(() => footOverlap(page), { message: `at ${width} px` }).toEqual([]);
+	}
+	// On the phone the Key opens as a panel over the map's corner: the credit moves clear of that too.
+	await openKey(page);
+	await expect(page.locator('.key-panel')).toBeVisible();
+	await expect(credit).toBeVisible();
+	await expect.poll(() => footOverlap(page), { message: 'with the Key open at 390 px' }).toEqual([]);
+	await page.getByTestId('map-key-toggle').click();
+	await expect(page.getByTestId('map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
+
+	// Off again: the credit goes with the points (Layers reopened: the phone width moved its panel).
+	await openLayers(page);
 	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).uncheck();
 	await expect(credit).toHaveCount(0);
 });

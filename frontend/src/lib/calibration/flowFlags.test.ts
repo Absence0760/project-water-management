@@ -64,8 +64,10 @@ describe('the low-flow period strip (issue #557)', () => {
 		expect(lanes.map((l) => l.flag)).toEqual(['aboveRating', 'periodHigh', 'belowRating']);
 		expect(LANE_FLAGS.indexOf('periodHigh')).toBe(LANE_FLAGS.indexOf('aboveRating') + 1);
 		expect(lanes[1]!.ranges).toEqual([{ start: '2021-01-02', end: '2021-01-03' }]);
-		expect(lanes[1]!.text).toBe('Above a low-flow period’s threshold: 2 days; left out of Fit automatically and the run’s statistics');
+		expect(lanes[1]!.text).toBe('Above a low-flow period’s threshold (double line): 2 days; left out of Fit automatically and the run’s statistics');
 		expect(new Set(lanes.map((l) => l.color)).size).toBe(lanes.length);
+		// A double line, strip and key alike (flowFlagColours.test.ts says why); the others are solid.
+		expect(lanes.map((l) => l.doubled)).toEqual([false, true, false]);
 		for (const use of [defaultQualityFlags(), { ...defaultQualityFlags(), aboveRating: 'include' as const, belowRating: 'include' as const, suspect: 'include' as const, infilled: 'include' as const }])
 			expect(flagUseText('periodHigh', use)).toBe('left out of Fit automatically and the run’s statistics');
 	});

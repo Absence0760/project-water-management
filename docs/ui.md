@@ -8347,7 +8347,16 @@ read it before.
   per flagged class (above the highest gauging, above a low-flow period's
   threshold, below the lowest, suspect, infilled; top to bottom in that order, each in its own `--series-*`
   colour at full strength, as its key swatch), so a class reads by its place
-  as well as its colour. A key under
+  as well as its colour. The low-flow period strip is also a **double line**
+  (strip and swatch: two 2 px lines with the ground between, which shows on
+  a range one pixel wide, where hatching would not; its key line says so):
+  its green (`--series-7`) keeps
+  ΔE00 ≥ 12 from the above-range red and the below-range aqua for every
+  colour-vision deficiency in both themes, but in the dark theme a
+  protanope sees it only 7.9 from the suspect strip's amber, which it sits
+  beside when no day is below the gauged range
+  (`calibration/flowFlagColours.test.ts` computes every pair, and fails on a
+  new close pair). A key under
   the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
   with its days and what Fit automatically does with them under the run's
   own settings snapshot: "Above the highest gauging: 14 days; Fit
