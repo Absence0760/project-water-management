@@ -5780,7 +5780,11 @@ that read the series, the columns that run used (docs/api.md § Export,
 The download menus (`export/DownloadMenu.svelte`) open fixed to the window,
 below their button or above it when there's no room
 (`lib/export/menuPosition.ts`), so a table's scroll box never clips them;
-scrolling or resizing closes an open menu.
+resizing, or a scroll that moves the button (`triggerMoved`), closes an open
+menu. A scroll that leaves the button in place doesn't: the browser's scroll
+anchoring fires one when content above changes size, which closed the Data
+tab's menu as it opened while an area's rain panel showed an error
+(`data-tab-groups.spec.ts`).
 
 The run downloads (in the results' Download menu) are where the numbers can be
 checked outside the app. A farm's **daily CSV** has every column in the

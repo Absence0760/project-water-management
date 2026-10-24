@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { menuPlacement, placementStyle } from './menuPosition';
+import { menuPlacement, placementStyle, triggerMoved } from './menuPosition';
 
 const viewport = { width: 1200, height: 800 };
 const trigger = (top: number, left = 1000, right = 1100) => ({ top, bottom: top + 30, left, right });
@@ -29,5 +29,17 @@ describe('menuPlacement', () => {
 
 	it('writes only the sides it sets', () => {
 		expect(placementStyle({ bottom: 104, right: 100, maxHeight: 688 })).toBe('bottom: 104px; right: 100px; max-height: 688px;');
+	});
+});
+
+describe('triggerMoved', () => {
+	it('is false for a scroll that leaves the trigger where the list was placed by it, under a pixel included', () => {
+		expect(triggerMoved(trigger(400), trigger(400))).toBe(false);
+		expect(triggerMoved(trigger(400), trigger(400.6))).toBe(false);
+	});
+	it('is true once the trigger moved a pixel or more, up, down or sideways', () => {
+		expect(triggerMoved(trigger(400), trigger(380))).toBe(true);
+		expect(triggerMoved(trigger(400), trigger(401))).toBe(true);
+		expect(triggerMoved(trigger(400), trigger(400, 990, 1090))).toBe(true);
 	});
 });

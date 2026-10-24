@@ -12,7 +12,7 @@
 	// focus there rather than to a button inside the now-hidden list.
 	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
 	import { fetchDownload, saveBlob } from '#lib/export/download.js';
-	import { menuPlacement, placementStyle } from '#lib/export/menuPosition.js';
+	import { menuPlacement, placementStyle, triggerMoved, type Box } from '#lib/export/menuPosition.js';
 	import type { DownloadItem, WorkbookRequest } from '#lib/export/urls.js';
 	import type { ExportProgress } from '#lib/spreadsheet/export/collect.js';
 
@@ -33,6 +33,8 @@
 	let list: HTMLUListElement | undefined = $state();
 	// Fixed to the viewport while open, so a scrolling table can't clip it (./menuPosition.ts).
 	let listStyle = $state('');
+	/** The trigger's box when the list was placed by it. */
+	let placedAt: Box | null = null;
 	const listId = `dl-${Math.random().toString(36).slice(2, 9)}`;
 
 	function close(focusTrigger = false) {
@@ -124,10 +126,12 @@
 		const onDoc = (e: PointerEvent) => {
 			if (root && !root.contains(e.target as Node)) open = false;
 		};
-		// A fixed list would drift from its button on scroll or resize: close it, as native menus do.
-		// Scrolling the list itself is fine.
+		// A fixed list would drift from its button on scroll or resize: close it, as native menus do. Scrolling the
+		// list itself is fine, and so is a scroll that leaves the button where it was: the browser's scroll anchoring
+		// fires one when content above changes size (the Data tab's area panel), which closed the menu as it opened.
 		const onScroll = (e: Event) => {
-			if (!list?.contains(e.target as Node)) open = false;
+			if (list?.contains(e.target as Node)) return;
+			if (!placedAt || !trigger || triggerMoved(placedAt, trigger.getBoundingClientRect())) open = false;
 		};
 		const onResize = () => (open = false);
 		document.addEventListener('pointerdown', onDoc);
@@ -143,6 +147,7 @@
 	function toggle() {
 		if (!open && trigger) {
 			const r = trigger.getBoundingClientRect();
+			placedAt = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
 			listStyle = placementStyle(menuPlacement(r, { width: document.documentElement.clientWidth, height: window.innerHeight }, align));
 		}
 		open = !open;
