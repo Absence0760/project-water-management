@@ -1,7 +1,7 @@
 // The fit behind each compared run's parameters (issue #4): its in-sample
 // score next to its validation scores, from each run's stored fit record.
 // Pure, so it is unit-tested; FitValidationCompare.svelte draws it.
-import { describeFitRecord, fitRecordStatus, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type FitScores, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+import { describeFitRecord, fitRecordStatus, type ApanDailyFingerprint, type ChirpsFactorSet, type FitForcingNow, type FitRecord, type FitScores, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 import { fittedAtText, objectiveName } from '$lib/calibration/fit';
 
 export interface FitValidationRow {
@@ -29,12 +29,15 @@ const forcingChangedText = (
 	settings: Partial<ProjectSettings> | null | undefined,
 	chirpsSource: SeriesProvenance | null | undefined,
 	apanDaily: ApanDailyFingerprint | null | undefined,
-	chirpsFactors: ChirpsFactorSet[] | null | undefined
+	chirpsFactors: ChirpsFactorSet[] | null | undefined,
+	runForcing: Pick<FitForcingNow, 'unitRain' | 'catchmentStation'> | undefined
 ): string => {
 	if (!r) return '–';
 	if (!settings) return 'unknown';
-	const s = fitRecordStatus(settings, r, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}) });
-	return s.chirpsSourceChanged
+	const s = fitRecordStatus(settings, r, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(runForcing ?? {}) });
+	return s.catchmentStationChanged
+		? 'yes (the catchment’s rainfall station changed)'
+		: s.chirpsSourceChanged
 		? 'yes (another CHIRPS product or version)'
 		: s.apanDailyChanged
 			? 'yes (another daily A-pan series)'
@@ -60,7 +63,9 @@ export function fitValidationRows(
 	/** Each run's daily A-pan series (its input snapshot, issue #45); undefined when not known. */
 	apanDaily: { a?: ApanDailyFingerprint | null; b?: ApanDailyFingerprint | null } = {},
 	/** Each run's applied CHIRPS factor sets (chirpsFactorSets of its summary, issue #51); undefined when not known. */
-	chirpsFactors: { a?: ChirpsFactorSet[] | null; b?: ChirpsFactorSet[] | null } = {}
+	chirpsFactors: { a?: ChirpsFactorSet[] | null; b?: ChirpsFactorSet[] | null } = {},
+	/** Each run's per-unit and catchment-station forcing (runForcingOfSummary of its summary, engine ≥ 1.91.0); undefined when not known. */
+	runForcing: { a?: Pick<FitForcingNow, 'unitRain' | 'catchmentStation'>; b?: Pick<FitForcingNow, 'unitRain' | 'catchmentStation'> } = {}
 ): FitValidationRow[] | null {
 	if (!ra && !rb) return null;
 	const both = (f: (r: FitRecord) => string) => ({ a: ra ? f(ra) : '–', b: rb ? f(rb) : '–' });
@@ -88,6 +93,6 @@ export function fitValidationRows(
 			})
 		},
 		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) },
-		{ label: 'Forcing changed since fit', a: forcingChangedText(ra, settingsA, chirps.a, apanDaily.a, chirpsFactors.a), b: forcingChangedText(rb, settingsB, chirps.b, apanDaily.b, chirpsFactors.b) }
+		{ label: 'Forcing changed since fit', a: forcingChangedText(ra, settingsA, chirps.a, apanDaily.a, chirpsFactors.a, runForcing.a), b: forcingChangedText(rb, settingsB, chirps.b, apanDaily.b, chirpsFactors.b, runForcing.b) }
 	];
 }

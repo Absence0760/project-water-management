@@ -43,6 +43,7 @@
 	import { asFitRecord } from '$lib/components/compare/fit';
 	import { compareDamStorage, leadChange, outcomeRows, takeaways } from '$lib/components/compare/summary';
 	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '$lib/series/provenance';
+	import { runForcingOfSummary } from '@water-management/engine';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { COMPARE_HEADINGS as HEADING, compareNavGroups } from '$lib/components/compare/sections';
@@ -723,6 +724,8 @@
 						apanB={apanDailyOfInput(data.b.run.inputs.series)}
 						factorsA={runChirpsFactors(data.a.run.summary)}
 						factorsB={runChirpsFactors(data.b.run.summary)}
+						forcingA={runForcingOfSummary(data.a.run.summary)}
+						forcingB={runForcingOfSummary(data.b.run.summary)}
 					/>
 				</section>
 

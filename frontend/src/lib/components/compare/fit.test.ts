@@ -134,6 +134,17 @@ describe('fitValidationRows', () => {
 			b: 'no'
 		});
 		expect(row(fitValidationRows(onPan, null, settings, null, {}, { a: undefined }), 'Forcing changed since fit').a).toBe('no');
+		// Issue #553: the catchment's rainfall station, as the run applied it, against the fit's; the same one (positive control) doesn't.
+		const station = { stationId: 's1', scaleToMap: true, correctAgainst: 's1', catchmentMapMm: 700, ratio: 1.2, factors: new Array(12).fill(1.1) };
+		const onStation = record({ ...withForcing, forcing: { ...withForcing.forcing!, catchmentStation: station } });
+		const withStation = { ...settings, rainStations: { catchment: { stationId: 's1' } } } as unknown as Partial<ProjectSettings>;
+		const drifted = { ...station, factors: station.factors.map((k, m) => (m === 3 ? k * 1.1 : k)) };
+		expect(row(fitValidationRows(onStation, onStation, withStation, withStation, {}, {}, {}, { a: { catchmentStation: drifted }, b: { catchmentStation: { ...station } } }), 'Forcing changed since fit')).toMatchObject({
+			a: 'yes (the catchment’s rainfall station changed)',
+			b: 'no'
+		});
+		// Assigned since a fit without one: said from the settings alone.
+		expect(row(fitValidationRows(withForcing, null, withStation, null), 'Forcing changed since fit').a).toBe('yes (the catchment’s rainfall station changed)');
 	});
 });
 

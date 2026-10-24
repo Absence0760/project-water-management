@@ -6,7 +6,7 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, gapFillRecordLabel, originLabel, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
+	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, gapFillRecordLabel, originLabel, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitForcingNow, type FitRecord, type PeInput, type ProjectSettings, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, rankedByText, scoreCellText, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -29,6 +29,7 @@
 		apanDaily,
 		chirpsFactors,
 		observedOrigin,
+		runForcing,
 		nodeName
 	}: {
 		record: FitRecord | null | undefined;
@@ -46,6 +47,8 @@
 		chirpsFactors?: ChirpsFactorSet[] | null;
 		/** The fitted record's source and given unit now (107_series_source.sql); undefined when not known. */
 		observedOrigin?: SeriesOrigin | null;
+		/** The run's per-unit and catchment-station forcing (runForcingOfSummary of its summary, engine ≥ 1.91.0); undefined when not known (the form). */
+		runForcing?: Pick<FitForcingNow, 'unitRain' | 'catchmentStation'>;
 		/** A node's name by id, to name the gauge a fit was scored at (engine ≥ 1.41.0); omitted = not known. */
 		nodeName?: (id: string) => string | undefined;
 	} = $props();
@@ -62,7 +65,7 @@
 	};
 
 	const uid = $props.id();
-	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}) }) : null);
+	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}), ...(runForcing ?? {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
 	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.id === 'fit-all' || c.validation)) : []);
