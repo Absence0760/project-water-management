@@ -54,6 +54,11 @@ test('Dams, on a phone: pick a dam low in the list, the chart comes into view, B
 	await expect(page).not.toHaveURL(/[?&]dam=/);
 	await expect.poll(() => topInWindow(low)).toBe(atList);
 	await expect(low).toBeInViewport();
+
+	// Forward returns to the chart the pick had brought into view.
+	await page.goForward();
+	await expect(page).toHaveURL(/[?&]dam=/);
+	await expect(chart).toBeInViewport();
 });
 
 test('Hydrological units, on a phone: pick a unit low in the list, its detail comes into view, Back returns to the list where it was', async ({ page, owner }) => {
@@ -124,6 +129,81 @@ test('the section strip’s arrow keys: Back to the section returns to where the
 	await page.keyboard.press('ArrowDown');
 	await expect(page).not.toHaveURL(/[?&]tab=dams/);
 	await page.evaluate(() => scrollTo(0, 0));
+
+	await page.goBack();
+	await expect(page).toHaveURL(/[?&]tab=dams/);
+	await expect(page.getByRole('list', { name: 'Dams' }).getByRole('listitem')).toHaveCount(14);
+	await expect.poll(() => scrollY(page)).toBe(atDams);
+});
+
+test('Back holds the place only until the reader takes over: their own scroll stays when the page changes size after', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize(PHONE);
+	const project = await seedManyDams(page, 'Back scroll reader', 12);
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=dams`);
+	await expect(page.getByRole('region', { name: /^Storage/ }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	const low = page.getByRole('list', { name: 'Dams' }).getByRole('listitem').nth(12).locator('a.name');
+	await low.scrollIntoViewIfNeeded();
+	const atList = await topInWindow(low);
+	await low.click();
+	await expect(page).toHaveURL(/[?&]dam=/);
+	await page.goBack();
+	await expect.poll(() => topInWindow(low)).toBe(atList);
+
+	// The reader scrolls up by hand; then the page re-flows (a narrower window). The hold has let go.
+	await page.mouse.move(195, 400);
+	await page.mouse.wheel(0, -600);
+	await expect.poll(() => topInWindow(low)).toBeGreaterThan(atList + 300);
+	const theirs = await scrollY(page);
+	await page.setViewportSize({ width: 380, height: 844 });
+	await expect.poll(() => scrollY(page)).not.toBe(0);
+	expect(Math.abs((await scrollY(page)) - theirs), 'not pulled back to the saved place').toBeLessThan(200);
+	expect(Math.abs((await topInWindow(low)) - atList), 'not at the saved place').toBeGreaterThan(300);
+});
+
+test('Back to a section opened at a #panel returns to where the reader was, not to the panel, and doesn’t move the focus there', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const project = await seedSupplyProject(page.request, 'Back scroll anchor', 12);
+	await createRun(page.request, project.id, 'Baseline');
+	await openSupply(page, project.id, '#res-curtailment');
+	const panel = page.locator('#res-curtailment');
+	await expect(panel).toBeInViewport();
+	await expect(panel.getByRole('heading').first()).toBeFocused();
+
+	// The reader moves on down the page, then to another section.
+	const last = unitCards(page).last();
+	// A turn of the wheel is the reader taking over (it ends the anchor's hold); then on down to the last card.
+	await page.mouse.move(700, 450);
+	await page.mouse.wheel(0, 100);
+	await last.scrollIntoViewIfNeeded();
+	await expect(panel).not.toBeInViewport();
+	const there = await scrollY(page);
+	expect(there).toBeGreaterThan(0);
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Dams', exact: true }).click();
+	await expect(page).toHaveURL(/[?&]tab=dams/);
+
+	await page.goBack();
+	await expect(page).toHaveURL(/[?&]tab=supply/);
+	await expect(last).toBeAttached();
+	await expect.poll(() => scrollY(page)).toBe(there);
+	await expect(panel).not.toBeInViewport();
+	expect(await page.evaluate(() => !!document.activeElement?.closest('#res-curtailment')), 'the focus stays out of the panel').toBe(false);
+});
+
+test('Back from another page into a section returns to where it was scrolled, as the section builds again', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const project = await seedManyDams(page, 'Back scroll across', 12);
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=dams`);
+	await expect(page.getByRole('region', { name: /^Storage/ }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	await page.evaluate(() => scrollTo(0, 600));
+	const atDams = await scrollY(page);
+	expect(atDams).toBe(600);
+	await page.getByRole('link', { name: 'Help', exact: true }).first().click();
+	await expect(page).toHaveURL(/\/help/);
 
 	await page.goBack();
 	await expect(page).toHaveURL(/[?&]tab=dams/);

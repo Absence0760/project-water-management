@@ -78,7 +78,7 @@
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 	import { foldList } from '#lib/components/common/fold.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
-	import { holdAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 
 	let {
 		projectId,
@@ -568,7 +568,7 @@
 			const heading = el.querySelector<HTMLElement>('h2, h3');
 			if (heading) {
 				if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-				heading.focus({ preventScroll: true });
+				focusAnchor(heading);
 			}
 			return true;
 		};

@@ -11,7 +11,7 @@
 	import HelpCrumbs from '#lib/components/help/HelpCrumbs.svelte';
 	import PictureTour from '#lib/components/help/PictureTour.svelte';
 	import RichText from '#lib/components/help/RichText.svelte';
-	import { hashId, holdAnchor } from '#lib/help/anchor.js';
+	import { hashId, focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import { helpFor } from '#lib/help/content.js';
 	import { glossaryPath } from '#lib/help/glossaryLinks.js';
 	import { GUIDE_KIND_TITLES, TAB_TITLES, guideFor, sectionId } from '#lib/help/guides.js';
@@ -35,7 +35,7 @@
 			const el = live ? document.getElementById(id) : null;
 			if (!el) return;
 			release = holdAnchor(el);
-			el.focus({ preventScroll: true });
+			focusAnchor(el);
 		});
 		return () => {
 			live = false;

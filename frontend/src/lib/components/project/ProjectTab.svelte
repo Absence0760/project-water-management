@@ -16,7 +16,7 @@
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { downloads } from '#lib/export/index.js';
 	import { fmtNum } from '#lib/format/number.js';
-	import { holdAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import type { ProjectDetailsDraft } from './detailsDraft.svelte';
 	import AuthorityPanel from './AuthorityPanel.svelte';
@@ -109,7 +109,7 @@
 			if (!heading) return false;
 			releaseAnchor = holdAnchor(heading);
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 			return true;
 		};
 		if (land()) return;

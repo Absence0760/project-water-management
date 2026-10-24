@@ -1,17 +1,16 @@
-// scrollToRestore (backScroll.ts): Back/Forward go back to the entry's saved scroll, unless already there.
+// awayFrom (backScroll.ts): Back/Forward move the window only when it isn't already at the saved place.
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('$app/navigation', () => ({ afterNavigate: () => {}, beforeNavigate: () => {} }));
 
-import { scrollToRestore } from './backScroll';
+import { awayFrom } from './backScroll';
 
-describe('scrollToRestore', () => {
-	it('restores the saved place when the window is elsewhere', () => {
-		expect(scrollToRestore({ x: 0, y: 2006 }, { x: 0, y: 2717 })).toEqual({ x: 0, y: 2006 });
+describe('awayFrom', () => {
+	it('is true when the window is elsewhere', () => {
+		expect(awayFrom({ x: 0, y: 2006 }, { x: 0, y: 2717 })).toBe(true);
 	});
 
-	it('does nothing when SvelteKit already restored it, to the pixel (positive control), or saved none', () => {
-		expect(scrollToRestore({ x: 0, y: 2006 }, { x: 0, y: 2006.4 })).toBeNull();
-		expect(scrollToRestore(null, { x: 0, y: 10 })).toBeNull();
+	it('is false at the saved place, to the pixel (positive control)', () => {
+		expect(awayFrom({ x: 0, y: 2006 }, { x: 0, y: 2006.4 })).toBe(false);
 	});
 });

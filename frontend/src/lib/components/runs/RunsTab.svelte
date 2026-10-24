@@ -41,7 +41,7 @@
 	import { supplyHref } from '#lib/components/supply/links.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { historyDays, ranAgo } from '#lib/components/overview/latestRun.js';
-	import { holdAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
@@ -293,7 +293,7 @@
 			releaseFragment = holdAnchor(el);
 			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 		});
 	});
 	onDestroy(() => {

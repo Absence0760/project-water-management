@@ -42,7 +42,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { withParam } from '#lib/workspace/overlays.js';
-	import { holdAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '#lib/components/notes/notes.js';
 	import {
@@ -472,7 +472,7 @@
 		const heading = el.querySelector<HTMLElement>('h2, h3');
 		if (heading) {
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 		}
 		return release;
 	});

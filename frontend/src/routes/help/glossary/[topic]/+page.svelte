@@ -15,7 +15,7 @@
 	import { page } from '$app/state';
 	import HelpCrumbs from '#lib/components/help/HelpCrumbs.svelte';
 	import RichText from '#lib/components/help/RichText.svelte';
-	import { hashId, holdAnchor } from '#lib/help/anchor.js';
+	import { hashId, focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import { CATEGORY_TITLES, HELP, countryNames, helpFor } from '#lib/help/content.js';
 	import { glossaryPath, topicForSlug } from '#lib/help/glossaryLinks.js';
 	import { currentSection } from '#lib/help/spy.js';
@@ -46,7 +46,7 @@
 			const el = live ? document.getElementById(id) : null;
 			if (!el) return;
 			release = holdAnchor(el);
-			el.focus({ preventScroll: true });
+			focusAnchor(el);
 		});
 		return () => {
 			live = false;

@@ -26,7 +26,7 @@
 	import { transferUnit } from '#lib/components/network/flowUnit.svelte.js';
 	import { onDestroy, tick } from 'svelte';
 	import { page as appPage } from '$app/state';
-	import { hashId, holdAnchor } from '#lib/help/anchor.js';
+	import { hashId, focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -172,7 +172,7 @@
 		}
 		release();
 		release = holdAnchor(heading);
-		heading.focus({ preventScroll: true });
+		focusAnchor(heading);
 	});
 	onDestroy(() => release());
 </script>

@@ -32,7 +32,7 @@
 	// never reach the workspace.
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { tick, untrack } from 'svelte';
-	import { hashId, holdAnchor } from '#lib/help/anchor.js';
+	import { hashId, focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
@@ -133,7 +133,7 @@
 			const heading = el.querySelector<HTMLElement>('h2');
 			if (heading) {
 				if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-				heading.focus({ preventScroll: true });
+				focusAnchor(heading);
 			}
 		});
 		return () => release();

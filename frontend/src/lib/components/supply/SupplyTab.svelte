@@ -27,7 +27,7 @@
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import Delta from '#lib/components/compare/Delta.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { holdAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import { runHref } from '#lib/components/overview/attention.js';
 	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '#lib/components/overview/latestRun.js';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
@@ -284,7 +284,7 @@
 			releaseFragment = holdAnchor(el);
 			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 		});
 	});
 	onDestroy(() => {
