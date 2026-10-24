@@ -12,8 +12,15 @@ vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/') } }));
 // FieldHistoryLine reads the field's history through the app's API client.
 vi.mock('$env/static/public', () => ({ PUBLIC_API_URL: 'http://localhost:3001' }));
 
-/** The markup without Svelte's hydration comments. */
-const text = (body: string) => body.replace(/<!--.*?-->/g, '');
+/** The markup without Svelte's hydration comments, stripped until none are left, so one split by another can't survive as a fresh '<!--' (CodeQL js/incomplete-multi-character-sanitization). */
+const text = (body: string) => {
+	let s = body;
+	for (let prev = ''; prev !== s; ) {
+		prev = s;
+		s = s.replace(/<!--[\s\S]*?-->/g, '');
+	}
+	return s;
+};
 
 const nodes = [
 	{ id: 'a', name: 'Upper unit', kind: 'farm' as const, areaKm2: 10, mapMm: 700 },
