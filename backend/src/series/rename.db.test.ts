@@ -1,8 +1,11 @@
 // Renaming a series (issue #556): PATCH …/series/:id { name }, as an editor,
 // unique among the project's series of one kind, logged as series.renamed.
-// Refused for a series a data feed or an API key writes into by its name.
+// Refused for a series a data feed or an API key writes into by its name,
+// including a key whose series list names it but which hasn't pushed yet
+// (239_series_name_key_listed).
 import { describe, expect, it } from 'vitest';
 import { app, asOwner, signUp } from '../__tests__/helpers.js';
+import { withApiKey, withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Meta = { id: string; kind: string; name: string; updatedAt: string; source: string | null };
@@ -108,5 +111,80 @@ describe('renaming a series', () => {
 		const r = await rename(owner, pid, s.id, 'Rain at the weir');
 		expect(r.status).toBe(409);
 		expect(r.body.error).toMatch(/API key writes into this series/);
+	});
+
+	it('refuses a series a live API key lists but has never pushed to, old name or new (409); a revoked or expired key or another project’s doesn’t stop it', async () => {
+		const owner = await signUp('RenList');
+		const editor = await signUp('RenListEd');
+		const pid = await project(owner, 'Rename listed');
+		const other = await project(owner, 'Rename listed elsewhere');
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
+		const rain = (name: string) => ({ kind: 'rain_catchment_mm', unit: 'mm', name, startDate: '2024-01-01', values: [1] });
+		const weir = await put(owner, pid, rain('Weir rain'));
+		const dam = await put(owner, pid, rain('Dam rain'));
+		const logger = await put(owner, pid, { name: 'Dam logger' });
+		const key = await owner.call('POST', `/projects/${pid}/api-keys`, {
+			name: 'Weir logger',
+			allowedSeries: [
+				{ kind: 'rain_catchment_mm', name: 'Weir rain' },
+				{ kind: 'rain_catchment_mm', name: 'Rain at the dam' }
+			]
+		});
+		expect(key.status, JSON.stringify(key.body)).toBe(201);
+		// Another project's key lists names this project's series could take or have: it doesn't count here.
+		const elsewhere = await owner.call('POST', `/projects/${other}/api-keys`, {
+			name: 'Elsewhere',
+			allowedSeries: [
+				{ kind: 'rain_catchment_mm', name: 'Dam rain' },
+				{ kind: 'rain_catchment_mm', name: 'Rain by the dam' }
+			]
+		});
+		expect(elsewhere.status, JSON.stringify(elsewhere.body)).toBe(201);
+		// The key has never pushed (no series_key_days), and the editor can't read api_key.
+		expect(await asOwner('SELECT 1 FROM series_key_days WHERE project_id = $1', [pid])).toEqual([]);
+		expect((await editor.call('GET', `/projects/${pid}/api-keys`)).status).toBe(403);
+
+		// Its old name is on the key's list: renaming it would leave the key's next push starting a new series.
+		const old = await rename(editor, pid, weir.id, 'Rain at the weir');
+		expect(old.status).toBe(409);
+		expect(old.body.error).toBe('an API key writes into this series by its name, so it keeps its name: renaming it would start a new series under the old name');
+		// Its new name is on the key's list: the key's pushes would turn into this series.
+		const into = await rename(editor, pid, dam.id, 'Rain at the dam');
+		expect(into.status).toBe(409);
+		expect(into.body.error).toBe('an API key writes into a series of that name: pick another name');
+		// Positive controls: a name no key lists, a listed name at another kind, a name only another project's key lists.
+		const free = await rename(editor, pid, dam.id, 'Rain by the dam');
+		expect(free.status, JSON.stringify(free.body)).toBe(200);
+		expect(free.body.name).toBe('Rain by the dam');
+		expect((await rename(editor, pid, logger.id, 'Rain at the dam')).status).toBe(200);
+		// The function answers only for an editor of the project: a stranger learns nothing.
+		const stranger = await signUp('RenListStranger');
+		const ask = (userId: string) =>
+			withUser(userId, async (db) => (await db.query<{ listed: boolean }>(`SELECT app_series_name_key_listed($1, 'rain_catchment_mm', 'Weir rain') AS listed`, [pid])).rows[0]!.listed);
+		expect(await ask(editor.id)).toBe(true);
+		expect(await ask(stranger.id)).toBe(false);
+		// A viewer can't rename, so it learns nothing either; nor does a key's own transaction (no user).
+		const viewer = await signUp('RenListViewer');
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+		expect(await ask(viewer.id)).toBe(false);
+		expect(
+			await withApiKey(key.body.key.id, async (db) => (await db.query<{ listed: boolean }>(`SELECT app_series_name_key_listed($1, 'rain_catchment_mm', 'Weir rain') AS listed`, [pid])).rows[0]!.listed)
+		).toBe(false);
+		// A live key with no list (any series) names nothing in advance: it doesn't stop a rename until it pushes.
+		const anyKey = await owner.call('POST', `/projects/${pid}/api-keys`, { name: 'Any series' });
+		expect(anyKey.status, JSON.stringify(anyKey.body)).toBe(201);
+		expect((await rename(editor, pid, logger.id, 'Dam logger again')).status).toBe(200);
+		expect((await rename(editor, pid, logger.id, 'Rain at the dam')).status).toBe(200);
+		// An expired key can't push again, so its list stops counting once it expires.
+		const expiring = await owner.call('POST', `/projects/${pid}/api-keys`, { name: 'Expiring', expiresInDays: 1, allowedSeries: [{ kind: 'rain_catchment_mm', name: 'Old weir name' }] });
+		expect(expiring.status, JSON.stringify(expiring.body)).toBe(201);
+		expect((await rename(editor, pid, dam.id, 'Old weir name')).status).toBe(409);
+		await asOwner(`UPDATE api_key SET created_at = now() - interval '2 days', expires_at = now() - interval '1 day' WHERE id = $1`, [expiring.body.key.id]);
+		expect((await rename(editor, pid, dam.id, 'Old weir name')).status).toBe(200);
+		// A revoked key can't push again, so its list no longer holds the name.
+		expect((await owner.call('DELETE', `/projects/${pid}/api-keys/${key.body.key.id}`)).status).toBe(204);
+		const after = await rename(editor, pid, weir.id, 'Rain at the weir');
+		expect(after.status, JSON.stringify(after.body)).toBe(200);
+		expect(await names(editor, pid)).toEqual(['flow_logger_m3s:Rain at the dam', 'rain_catchment_mm:Old weir name', 'rain_catchment_mm:Rain at the weir']);
 	});
 });
