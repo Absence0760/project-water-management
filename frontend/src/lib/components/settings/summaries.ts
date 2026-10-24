@@ -79,14 +79,24 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
-		'set-share': share,
+		// Flow generation (issue #553 round 3): the method, then what the flow share splits under it.
+		'set-share':
+			s.unitRain?.mode === 'perUnit'
+				? [
+						'Per unit',
+						(() => {
+							const n = Object.keys(s.rainStations?.units ?? {}).length;
+							return n ? `${plural(n, 'unit')} on a rainfall station` : 'no unit on a rainfall station';
+						})(),
+						`EWR flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`
+					].join(' · ')
+				: `Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`,
 		'set-restrict': restrict ? `On: ${plural(restrict.levels?.length ?? 0, 'level')}, reviewed on ${plural(restrict.reviewDates?.length ?? 0, 'date')}` : 'Off',
 		'set-flow': [
 			g ? `GR4J X1 ${fmtNum(g.x1, 0)} mm, X3 ${fmtNum(g.x3, 0)} mm, X4 ${fmtNum(g.x4, 2, true)} days${g.x2 ? `, X2 ${fmtNum(g.x2, 2, true)} mm` : ''}` : 'GR4J',
 			`${fmtNum(area != null && area > 0 ? area : i.unitAreaKm2, 1, true)} km²`,
 			`PE ${fmtNum(i.peAnnualMm)} mm a year${s.pe?.kind === 'monthly' ? ' (monthly PE)' : ''}`,
-			s.arealRain ? 'areal correction on' : null,
-			s.unitRain?.mode === 'perUnit' ? 'rain for each unit' : null
+			s.arealRain ? 'areal correction on' : null
 		]
 			.filter(Boolean)
 			.join(' · '),

@@ -321,8 +321,8 @@ describe('Settings paths named in help and in the app', () => {
 		expect(settingsPaths('Settings → Calibration record → Flow gaps can fill them')).toEqual([['Calibration record', 'Flow gaps can fill them']]);
 		expect(settingsPaths('`pick a gauge in Settings → Calibration record`')).toEqual([['Calibration record']]);
 		expect(settingsPaths('keep them dry in Settings -> Rain gaps -> Flagged rain')).toEqual([['Rain gaps', 'Flagged rain']]);
-		expect(pathProblem(['Flow generation', 'Rain for each unit'])).toMatch(/no Settings panel/);
-		expect(pathProblem(['Flow calibration', 'Rain into GR4J', 'Rain for each unit is on'])).toBeNull();
+		expect(pathProblem(['Flow share', 'Method'])).toMatch(/no Settings panel/);
+		expect(pathProblem(['Flow generation', 'Units without a station'])).toBeNull();
 		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);
 	});
 

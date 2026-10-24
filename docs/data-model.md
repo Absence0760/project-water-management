@@ -543,8 +543,11 @@ mapMm, mapSource, lat, lon }`):
   and an import gives the series fresh ids and the setting follows; a
   restore of a deleted series brings it back under its own id while no
   series holds it (`series/replace.ts` `reuseId`). A deleted station the
-  setting names doesn't block other saves or the run (the engine warns); a
-  save that names it again is refused.
+  setting names doesn't block other saves or the run (the engine warns): a
+  save is checked only for the stations and units it names that the stored
+  setting doesn't (`checkRainStations`'s `stored`), since the Settings form
+  sends the whole setting with every save (issue #553 round 3). A save that
+  names it anew (one where the stored setting didn't) is refused.
 - **What a run reads.** Only when `settings.rainStations` assigns a station
   to the catchment or a unit (`runs/stationInput.ts`): every station's
   record under `rain_station_mm#<series id>` and its name, MAP, source and

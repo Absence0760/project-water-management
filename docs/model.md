@@ -2303,6 +2303,19 @@ every example catchment and random networks both ways, unit records in the
 input or not, and compares the output to the bit. An unusable setting
 (`unitRainError`) runs the catchment rain with a warning.
 
+**In Settings** (issue #553 round 3, [ui.md § Settings &
+calibration](./ui.md)) this is the **Flow generation** method:
+**Fragmentation** is `unitRain` absent, null or `catchment`; **Per unit** is
+`perUnit`. The radio writes the same setting the earlier "Runoff from each
+unit's own rain" checkbox did, so the move changed no stored project and no
+run. Under Per unit each land unit takes its rainfall station if
+`settings.rainStations.units` assigns one (§2.4i), else the chain below
+(*Units without a station* in Settings). A fit records the method it ran
+under (its forcing has `unitRain` only under Per unit), and a fit made under
+the other method reads "Parameters not fitted for this method" in Settings
+and on the fit record (`fitFlowMethod`, `FitRecordStatus.methodChanged`):
+GR4J's parameters were fitted to other rain, so refit.
+
 **Why.** The glossary has always given a hydrological unit "its own area,
 MAP and rain gauge" (§7), but GR4J ran once for the catchment and split the
 flow by area or the Hi/Lo MAP shares. With a rain record per unit (its own
@@ -2851,6 +2864,23 @@ An assignment without a station id is dropped with a warning
 (`resolveRainStations`); so is an unusable catchment MAP (outside
 `MAP_MM_MIN`–`MAP_MM_MAX`), which falls back to the units' mean.
 
+**Where it is set** (issue #553 round 3, [ui.md § Settings &
+calibration](./ui.md)): Settings → Flow generation, with Per unit chosen,
+lists every land unit with its **Station** (the project's stations, or *No
+station*, which keeps the unit on §2.4h's chain; satellite rain is never an
+option, CHIRPS only fills gaps), **Scale to unit MAP** (`scaleToMap`) with
+the ratio it gives, and **Gaps: CHIRPS corrected against**
+(`correctAgainst`), then each station in use once with its MAP and, for a
+station without coordinates, the unit it **Stands in** (`sites`). The form
+stores defaults as none (scaling on, the unit's own station), and an
+emptied setting as null, so assigning a station and taking it away again
+stores what was there. `units` stays stored under Fragmentation, unused.
+`catchment`, `catchmentMapMm` and `unreliable` have no field yet (the API
+takes them). A fit's forcing records each unit's station, so the form says
+"forcing changed since the fit" when a unit is given another station, none,
+or another correcting station (`unitRainSettingChanged`); scaling and the
+ratio are compared against a run's summary.
+
 **The rule.** One rule for the catchment and for a unit; only the area
 differs. On run day *t* of calendar month *m*:
 
@@ -3024,8 +3054,8 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`); under
   runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0) a land unit's runoff
   is its own GR4J runoff instead, and the share still splits the EWR (and
-  the land cover's low-flow threshold, §2.5a): Settings → Flow share says
-  which, by the state of Rain for each unit (issue #553)
+  the land cover's low-flow threshold, §2.5a): Settings → Flow generation
+  says which, by the method chosen (Fragmentation or Per unit, issue #553)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
 Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —

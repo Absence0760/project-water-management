@@ -395,7 +395,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 				if (outletError) throw new ApiError(400, outletError);
 			}
 			// The rainfall stations (engine ≥ 1.91.0, issue #553): each named station a station of this project, each unit a land unit.
-			if (settings && body.settings?.rainStations) await checkRainStations(db, id, body.settings.rainStations);
+			if (settings && body.settings?.rainStations) await checkRainStations(db, id, body.settings.rainStations, (current.settings as { rainStations?: unknown }).rainStations);
 			// The calibration site (engine ≥ 1.41.0): a change to a gauge is checked against the network and its records.
 			const calSite = (body.settings as { calibrationSiteNodeId?: string | null } | undefined)?.calibrationSiteNodeId;
 			if (settings && typeof calSite === 'string' && calSite !== (current.settings as { calibrationSiteNodeId?: unknown }).calibrationSiteNodeId) {

@@ -75,7 +75,7 @@ export const SETTING_NOTE_GROUPS = {
 	flow: 'Flow calibration',
 	rain: 'Rain gaps',
 	record: 'Calibration record',
-	share: 'Flow share',
+	share: 'Flow generation',
 	ewr: 'EWR',
 	period: 'Simulation period',
 	quality: 'Data quality',

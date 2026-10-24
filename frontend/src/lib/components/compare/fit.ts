@@ -35,7 +35,9 @@ const forcingChangedText = (
 	if (!r) return '–';
 	if (!settings) return 'unknown';
 	const s = fitRecordStatus(settings, r, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(runForcing ?? {}) });
-	return s.catchmentStationChanged
+	return s.methodChanged
+		? 'yes (fitted under the other flow generation method)'
+		: s.catchmentStationChanged
 		? 'yes (the catchment’s rainfall station changed)'
 		: s.chirpsSourceChanged
 		? 'yes (another CHIRPS product or version)'

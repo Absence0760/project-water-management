@@ -36,7 +36,7 @@ describe('settingsSummaries', () => {
 		expect(s['set-period']).toBe('The whole rain record');
 		expect(s['set-rain']).toBe('CHIRPS bias-corrected per month fills gaps · fitted on the whole record · zero runs treated as missing');
 		expect(s['set-quality']).toBe('The default limits');
-		expect(s['set-share']).toBe('By catchment area');
+		expect(s['set-share']).toBe('Fragmentation · flow share: by catchment area');
 		expect(s['set-restrict']).toBe('Off');
 		expect(s['set-record']).toBe('The whole flow record · at the outlet');
 		expect(s['set-fit']).toBe('GR4J · no fit record: the parameters were set by hand or imported');
@@ -70,15 +70,21 @@ describe('settingsSummaries', () => {
 		expect(s['set-demand']).toMatch(/^A-pan 1\s?230 mm a year · effective rain/);
 		// The rain threshold for demand lives in Demand (issue #521), so its line names it.
 		expect(s['set-demand']).toMatch(/ · rain threshold \d+(\.\d)? mm · /);
-		expect(s['set-share']).toBe('High/low MAP split, 60% / 40%');
+		expect(s['set-share']).toBe('Fragmentation · flow share: high/low MAP split, 60% / 40%');
 		expect(s['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · low flows only in 1 period · river stops Feb, Mar, Apr');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 
-	it('names rain for each unit in the Flow calibration summary only while it is on (issue #482)', () => {
-		expect(settingsSummaries(base())['set-flow']).not.toContain('rain for each unit');
-		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-flow']).not.toContain('rain for each unit');
-		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-flow']).toMatch(/ · rain for each unit$/);
+	it('names the flow generation method in the Flow generation summary, with the units on a station (issues #482, #553)', () => {
+		expect(settingsSummaries(base())['set-share']).toBe('Fragmentation · flow share: by catchment area');
+		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-share']).toMatch(/^Fragmentation · /);
+		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR flow share: by catchment area');
+		const units = { a: { stationId: 's' }, b: { stationId: 's' } };
+		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' }, rainStations: { units } }))['set-share']).toBe('Per unit · 2 units on a rainfall station · EWR flow share: by catchment area');
+		// Stations kept from an earlier Per unit don't count under Fragmentation.
+		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Fragmentation · flow share: by catchment area');
+		// No longer said in Flow calibration's line.
+		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-flow']).not.toContain('rain for each unit');
 	});
 });
 

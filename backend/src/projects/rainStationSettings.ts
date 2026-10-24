@@ -124,10 +124,19 @@ function namesOf(rs: RainStationSettings): { stations: Map<string, string>; unit
  * Refuse (400) a rainStations save whose stations aren't rainfall stations of
  * this project, or whose units aren't its land units, saying which and where.
  * Read under the caller's RLS (an editor's save). Null (stations off) passes.
+ * Only the names `stored` (the setting as saved now) doesn't already name are
+ * checked: the Settings form sends the whole setting on every save, so a
+ * station deleted since (restorable under its id) or a unit removed from the
+ * model must not block a save of some other field; the run warns about it.
  */
-export async function checkRainStations(db: Db, projectId: string, rainStations: unknown): Promise<void> {
+export async function checkRainStations(db: Db, projectId: string, rainStations: unknown, stored?: unknown): Promise<void> {
 	if (!isObj(rainStations)) return;
 	const { stations, units } = namesOf(rainStations as RainStationSettings);
+	if (isObj(stored)) {
+		const kept = namesOf(stored as RainStationSettings);
+		for (const id of kept.stations.keys()) stations.delete(id);
+		for (const id of kept.units.keys()) units.delete(id);
+	}
 	if (stations.size) {
 		const { rows } = await db.query<{ id: string }>(
 			`SELECT id FROM time_series WHERE project_id = $1 AND id = ANY($2::uuid[]) AND kind = 'rain_catchment_mm' AND site_node_id IS NULL`,

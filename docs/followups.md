@@ -4876,6 +4876,20 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       source note from an entered MAP. Trigger: the hydrologist setting a
       correction by hand in the app.
 
+- [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
+      2026-10-24). Settings → Flow generation sets each land unit's station,
+      scaling, correcting station and a station's site
+      (`settings.rainStations.units`, `.sites`), but three parts round 2's
+      engine runs are API-only: `catchment` (Fragmentation's average catchment
+      rainfall from a station, the operator's decision of 2026-10-23),
+      `catchmentMapMm` / `catchmentMapSource`, and each station's
+      `unreliable` periods ([model.md §2.4i](./model.md)). Durable fix: a
+      "Catchment rainfall" station select with the catchment MAP under
+      Fragmentation, and the unreliable periods on the station's Series
+      details. Trigger: the operator assigns a catchment station, or a
+      station needs a period set aside. Remaining #553 rounds (4 EWR split, 5
+      Data tab) don't cover them.
+
 ## Notes (WP-2.7)
 
 - [x] **Notes in the project export and copy** (2026-09-26). The export

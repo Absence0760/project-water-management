@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "#553 round 3: Settings → Flow generation (the Fragmentation / Per unit radio, the per-unit rainfall station table FlowGenerationUnits in the lazy sections chunk, flowGeneration.ts) and the rain-stations glossary entry; measured 2053 KB against the base branch's 2047 KB"
+}

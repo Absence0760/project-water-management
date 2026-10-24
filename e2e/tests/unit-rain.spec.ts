@@ -9,7 +9,7 @@
 //   is left to change. An editor opens it from the head's Rain from the map
 //   and sees the proposal with no button. The panel passes axe.
 // - A unit's form takes its MAP and asks for its source before Save.
-// - Settings → Flow calibration → Rain into GR4J → Rain for each unit switches it on, reads the
+// - Settings → Flow generation's Per unit switches it on (issue #553 round 3), its Units without a station reads the
 //   gauge's MAP from the catchment rain station (issue #553; set in Series details,
 //   flow-share-hint.spec.ts), and keeps it after a reload; its link opens
 //   the Data feeds panel (?rain=units). A viewer reads it, read-only.
@@ -151,7 +151,8 @@ test('Settings switches rain for each unit on, reads the gauge’s MAP from the 
 	const id = await seed(page.request, 'Unit rain settings');
 	await openSettings(page, id);
 	const group = page.getByTestId('unit-rain-settings');
-	const sw = group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' });
+	const sw = page.locator('#set-share').getByRole('radio', { name: 'Per unit' });
+	const off = page.locator('#set-share').getByRole('radio', { name: 'Fragmentation' });
 	await expect(sw).not.toBeChecked();
 	await sw.check();
 	await expect(group.getByTestId('unit-rain-coverage')).toContainText('0 of 2 units with land have a MAP.');
@@ -166,16 +167,16 @@ test('Settings switches rain for each unit on, reads the gauge’s MAP from the 
 	await group.getByLabel('First year').blur();
 	await expect(group.getByTestId('unit-rain-period-note')).toContainText('3 years: the MAP factor wants at least 10 complete years');
 	// Switched off and on again before saving, it comes back as it was.
-	await sw.uncheck();
+	await off.check();
 	await expect(group.getByLabel('First year')).toHaveCount(0);
 	await sw.check();
 	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await expectNoViolations(page, { include: '[data-testid="unit-rain-settings"]' });
 	await saveSettings(page);
-	await expect(page.getByTestId('summary-flow')).toContainText('rain for each unit');
+	await expect(page.getByTestId('summary-share')).toContainText('Per unit');
 
 	await page.reload();
-	await expect(group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' })).toBeChecked();
+	await expect(sw).toBeChecked();
 	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await expect(group.getByLabel('Last year')).toHaveValue('2020');
 });
@@ -185,7 +186,7 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	const id = await seed(page.request, 'Unit rain link');
 	await openSettings(page, id);
 	const group = page.getByTestId('unit-rain-settings');
-	await group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' }).check();
+	await page.locator('#set-share').getByRole('radio', { name: 'Per unit' }).check();
 	await expect(group.getByTestId('unit-rain-without-map')).toContainText('Without a MAP: Upper farm, Lower farm.');
 	await expect(group.getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', /^\?tab=network&edit=[^&]+&section=area$/);
 	await saveSettings(page);
@@ -196,9 +197,10 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	const viewer = await signIn('Unit rain viewer');
 	await addMember(page.request, id, viewer.user.email, 'viewer');
 	await openSettings(viewer.page, id);
-	const seen = viewer.page.getByTestId('unit-rain-settings');
-	await expect(seen.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' })).toBeChecked();
-	await expect(seen.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' })).toBeDisabled();
+	const seen = viewer.page.locator('#set-share').getByRole('radio', { name: 'Per unit' });
+	await expect(seen).toBeChecked();
+	await expect(seen).toBeDisabled();
+	await expect(viewer.page.getByTestId('unit-rain-settings')).toBeVisible();
 	// Data feeds' proposals are for editors: a viewer has no button to open them, and the link opens nothing.
 	const viewerFeeds = viewer.page.getByRole('region', { name: 'Data feeds' });
 	await expect(viewerFeeds.getByRole('button', { name: 'Refresh status' })).toBeVisible();

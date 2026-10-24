@@ -72,16 +72,19 @@ test('at 1440×900 Flow calibration opens on its parameters with the jump to the
 	expect(await squashedChecks(page)).toEqual([]);
 });
 
-test('with the explanations on, the rain-for-each-unit explanation sits on its own line under its switch', async ({ page, owner }) => {
+test('with the explanations on, Flow generation’s explanation sits on its own line under its two methods', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await openProject(page, 'Flow explain');
 	await showExplanations(page);
-	const unitRain = flow(page).getByTestId('unit-rain-settings');
-	const label = await box(unitRain.locator('label.check'));
-	const hint = await box(unitRain.locator('.hint.explain').first());
+	const method = page.getByTestId('flowgen-method');
+	const label = await box(method.locator('label.check').first());
+	const hint = await box(method.locator('.hint.explain'));
 	expect(hint.y).toBeGreaterThanOrEqual(label.y + label.height - 1);
 	expect(Math.abs(hint.x - label.x)).toBeLessThanOrEqual(1);
+	// The two methods side by side on one line.
+	const second = await box(method.locator('label.check').nth(1));
+	expect(Math.abs(second.y - label.y)).toBeLessThanOrEqual(1);
 });
 
 test('at 1440×900 the Calibration record opens on the window and the exclusions, with Exclude… in the list’s header row', async ({ page, owner }) => {

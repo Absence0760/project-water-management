@@ -106,7 +106,7 @@ test('unit feeds fetched offline, unit MAPs and a gauge MAP give a run on each u
 	// Settings: rain for each unit; the gauge's MAP is the catchment rain station's (issue #553), set in Series details.
 	await openSettings(page, id);
 	const group = page.getByTestId('unit-rain-settings');
-	await group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' }).check();
+	await page.locator('#set-share').getByRole('radio', { name: 'Per unit' }).check();
 	await expect(group.getByTestId('unit-rain-coverage')).toContainText('3 of 3 units with land have a MAP.');
 	await saveSettings(page);
 	await group.getByRole('link', { name: 'Set it in Series details' }).click();
