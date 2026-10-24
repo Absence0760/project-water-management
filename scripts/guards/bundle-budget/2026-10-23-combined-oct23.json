@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Combined draft #570: the ten-KB sum of its branches' own entries (#554 3, #552 2, #557 3, #556 1, #560 1) undercounts the combined build by per-branch rounding plus #558's EWR page, which had no entry; measured the combined branch at 2031 KB against 2029 KB, main 2019 KB; 3 rather than 2 because CI has measured these branches up to 3 KB above a local build"
+}
