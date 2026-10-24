@@ -16,6 +16,7 @@ import {
 	type RunVerification,
 	type ScenarioOp,
 	type SeriesChoice,
+	type SeriesPick,
 	type SeriesKind,
 	seriesOrigin,
 	type SeriesOrigin,
@@ -139,22 +140,32 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 }
 
 /**
- * The outlet's CHIRPS series a run reads and the others of that kind, with
- * the first and last day each holds a value (engine ModelInput.seriesChoice,
- * ≥ 1.90.0, issue #561): the run warns when another spans more of it than the
- * one it reads. Null with fewer than two, so such a project's input is as before.
+ * The CHIRPS series a run reads and the others it could have read in their
+ * place, each with the first and last day it holds a value (engine
+ * ModelInput.seriesChoice, ≥ 1.90.0, issue #561): the outlet's and each land
+ * unit's own, sited at it. The run warns when another spans more of it than
+ * the one it reads. Only where there are two or more, so another
+ * project's input is as before; null when there are none.
  */
 export async function chirpsSeriesChoice(db: Db, projectId: string): Promise<SeriesChoice | null> {
-	const { rows } = await db.query<SeriesSpan>(
-		`SELECT name,
+	const { rows } = await db.query<SeriesSpan & { siteNodeId: string | null }>(
+		`SELECT name, site_node_id AS "siteNodeId",
 			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay",
 			to_char(start_date + (SELECT max(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "lastDay"
-		 FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND site_node_id IS NULL ORDER BY name COLLATE "C"`,
+		 FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm'
+		 ORDER BY site_node_id NULLS FIRST, name COLLATE "C"`,
 		[projectId]
 	);
-	if (rows.length < 2) return null;
-	const [read, ...others] = rows;
-	return { rain_chirps_mm: { name: read!.name, others } };
+	// By site, each in the order a run picks (the first is the one it reads, as loadLiveInput's DISTINCT ON).
+	const bySite = new Map<string | null, SeriesSpan[]>();
+	for (const { siteNodeId, ...span } of rows) bySite.set(siteNodeId, [...(bySite.get(siteNodeId) ?? []), span]);
+	const pick = (spans: SeriesSpan[]): SeriesPick => ({ name: spans[0]!.name, others: spans.slice(1) });
+	const choice: SeriesChoice = {};
+	const outlet = bySite.get(null);
+	if (outlet && outlet.length > 1) choice.rain_chirps_mm = pick(outlet);
+	const units = [...bySite].filter((e): e is [string, SeriesSpan[]] => e[0] !== null && e[1].length > 1);
+	if (units.length) choice.unitChirps = Object.fromEntries(units.map(([id, spans]) => [id, pick(spans)]));
+	return choice.rain_chirps_mm || choice.unitChirps ? choice : null;
 }
 
 /**

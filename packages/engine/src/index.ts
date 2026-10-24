@@ -8,7 +8,7 @@ export * from './format';
 export * from './project';
 export * from './names';
 export * from './seriesNames';
-export { chirpsChoiceWarning } from './seriesChoice';
+export { chirpsChoiceWarnings } from './seriesChoice';
 export * from './manifest';
 export * from './run';
 export * from './warmstart/snapshot';

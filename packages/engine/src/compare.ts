@@ -79,6 +79,8 @@ export interface RunInputsSnapshot {
 	series: Partial<Record<string, RunSeriesSnapshot>>;
 	/** The CHIRPS series the run read and the others (engine ≥ 1.90.0, ModelInput.seriesChoice); absent when there were no others. */
 	seriesChoice?: SeriesChoice | null;
+	/** A forecast run's forecast rain source (ModelInput.forecastRainSource, engine ≥ 1.85.0); absent on every other run. */
+	forecastRainSource?: 'chirps_gefs' | 'other' | null;
 }
 
 export interface RunSeriesSnapshot {

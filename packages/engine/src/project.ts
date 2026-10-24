@@ -2873,10 +2873,11 @@ export interface ModelInput {
 	/**
 	 * The series of a kind the run read, by name, and the others of that kind
 	 * it didn't (engine ≥ 1.90.0, issue #561, docs/model.md § Which CHIRPS
-	 * series the run reads): set by the backend for the outlet's CHIRPS when the
-	 * project holds more than one. A run reads the first series of each kind by
-	 * name, so a new series can take over unseen; the run warns when another
-	 * spans more of the run than the one it read. Only a warning reads it.
+	 * series the run reads): set by the backend for the outlet's CHIRPS and
+	 * each land unit's own, where there is more than one. A run reads the
+	 * first series of each kind by name, so a new series can take over unseen;
+	 * the run warns when another spans more of the run than the one it read.
+	 * Only a warning reads it.
 	 */
 	seriesChoice?: SeriesChoice | null;
 }
@@ -2888,9 +2889,18 @@ export interface SeriesSpan {
 	lastDay: string | null;
 }
 
-/** ModelInput.seriesChoice: per kind, the name of the series the run read and the others of that kind. */
+/** One series a run read, by name, and the others it could have read in its place. */
+export interface SeriesPick {
+	name: string;
+	others: SeriesSpan[];
+}
+
+/** ModelInput.seriesChoice: the CHIRPS series the run read and the others of that kind, at the outlet and at each land unit. */
 export interface SeriesChoice {
-	rain_chirps_mm?: { name: string; others: SeriesSpan[] };
+	/** The outlet's CHIRPS. */
+	rain_chirps_mm?: SeriesPick;
+	/** Each land unit's own CHIRPS (sited at the unit), by node id: only units with two or more. */
+	unitChirps?: Record<string, SeriesPick>;
 }
 
 /** One daily output series. nodeId null = catchment level. */

@@ -151,6 +151,25 @@ export function runResultsText(r: { startDate: string; summary: unknown; series:
 	});
 }
 
+/**
+ * A bundled run's engine input from its stored snapshot and checked series:
+ * the settings and model, and what the engine reads beside them, as the
+ * backend's loadRunInput rebuilds it: `seriesChoice` (the CHIRPS series the
+ * run read and the others, which a run warning reads; engine ≥ 1.90.0, issue
+ * #561) and a forecast run's `forecastRainSource` (its units' forecast days,
+ * engine ≥ 1.85.0), the latter only as one of its two values.
+ */
+export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'model' | 'seriesChoice' | 'forecastRainSource'>, series: Record<string, DailySeries>): ModelInput {
+	const source = snapshot.forecastRainSource;
+	return {
+		settings: snapshot.settings,
+		model: snapshot.model,
+		series,
+		...(snapshot.seriesChoice ? { seriesChoice: snapshot.seriesChoice } : {}),
+		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {})
+	} as ModelInput;
+}
+
 /** A run's results digest and each output's hash, from its summary and daily outputs (stored, or fresh from runModel). */
 export async function runResultsDigest(
 	r: { startDate: string; summary: unknown; series: readonly { nodeId: string | null; key: string; label?: string | null; values: readonly (number | null)[] }[] },
@@ -568,9 +587,7 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 			if (!sameJson(snapshot.model, want.model)) problems.push(`its model isn't the manifest's (${differingPaths(snapshot.model, want.model).join(', ')})`);
 		}
 		const ok = add(`inputs:${r}`, problems.length === 0, problems.join('; ') || `${mine.length === 1 ? '1 input series matches its hash' : `${mine.length} input series match their hashes`} and the manifest${r === 'baseline' ? ', and so do the settings and model' : ''}`);
-		// seriesChoice: the CHIRPS series the run read and the others, which a run warning reads (engine ≥ 1.90.0, issue #561).
-		const choice = snapshot.seriesChoice ? { seriesChoice: snapshot.seriesChoice } : {};
-		inputs[r] = { snapshot, values, input: ok ? ({ settings: snapshot.settings, model: snapshot.model, series, ...choice } as ModelInput) : null };
+		inputs[r] = { snapshot, values, input: ok ? bundleRunInput(snapshot, series) : null };
 	}
 
 	// The application: its inputs are the baseline's with the changes the manifest lists, from the scenario it names.

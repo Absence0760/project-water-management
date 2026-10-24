@@ -635,7 +635,8 @@ headline, farm and daily-overlay components.
 Each run stores a snapshot of its inputs in `model_run.inputs`: the settings
 (merged over the defaults), the whole model document, and each driving series'
 **start date, length and a SHA-256 hash of its values** (`valuesSha256`). (It may also hold `seriesChoice`, the CHIRPS series the run read and the
-others, for a run warning only: `diffInputs` doesn't read it, and the
+others at the outlet and at each land unit, for a run warning only, and a
+forecast run's `forecastRainSource`: `diffInputs` reads neither, and the
 warning itself shows among the runs' warnings; [model.md § Which CHIRPS
 series the run reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561).)
 Since migration 021 each run also stores the series' **values**

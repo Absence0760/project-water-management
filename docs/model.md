@@ -1432,11 +1432,12 @@ months with no word. The feeds no longer do that
 ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), and
 the run says when it happens anyway (`seriesChoice.ts`):
 
-- the backend passes the outlet's CHIRPS series the run read and the others
-  of that kind, each with its first and last day with a value
-  (`ModelInput.seriesChoice`, only when there are two or more; the run's
-  stored input keeps it, so a reproduction and an evidence pack's re-run
-  give the same warning);
+- the backend passes the CHIRPS series the run read and the others it could
+  have read in its place, each with its first and last day with a value:
+  the outlet's (`seriesChoice.rain_chirps_mm`) and each land unit's own
+  (§2.4h; `seriesChoice.unitChirps`, by node id, among the series sited at
+  that unit), only where there are two or more. The run's stored input keeps
+  it, so a reproduction and an evidence pack's re-run give the same warning;
 - each series' **span in the run** is the run's days between its first and
   last reading (the series read: from its own values; blanks inside count,
   as the others' are known only by their ends);
@@ -1448,14 +1449,26 @@ the run says when it happens anyway (`seriesChoice.ts`):
   CHIRPS (the fill of catchment rain’s blank days included). Rename or
   remove one of them so the run reads the record you mean". A tie goes to
   the series read; the widest other is named (the first by name among
-  equals).
+  equals);
+- a land unit's own CHIRPS gets the same check, its warning naming the unit:
+  "for the unit “Upper”, the run read the CHIRPS series “CHIRPS v3 (rnl)
+  Upper” (…), which spans 30 of its 6139 days, but “Upper record” (…) spans
+  6139: a run reads a unit’s first CHIRPS series by name and uses only that
+  one for the unit’s own rain. Rename or remove one …". Only under per-unit
+  rain (`settings.unitRain.mode` `perUnit`), the only time a run reads a
+  unit's own CHIRPS, and only for units the model has (a scenario that
+  removes a unit drops its warning). The outlet's comes first, then the
+  units' in the model's node order. (The rain-for-each-unit feed itself
+  never writes a new series ahead of a unit's record.)
 
-It covers the outlet's CHIRPS only. A land unit's own CHIRPS (§2.4h) is
-picked the same way among that unit's series, but its rain-for-each-unit
-feed never writes a new series ahead of a unit's record (refused, naming
-both), so it has no warning of its own. Values the run treats as blank
-(negative, not finite) don't count toward a span. A scenario run on a run
-carries its `seriesChoice` (`applyScenario`), so it warns as its base run does.
+Values the run treats as blank (negative, not finite) don't count toward a
+span. A scenario run carries its base input's `seriesChoice`, and its
+`forecastRainSource` (§2.4h): from engine 1.90.0 `applyScenario` keeps every
+field of the input beside settings, model and series. Before, it rebuilt the
+input from those three alone, so a scenario on a forecast input lost its
+CHIRPS-GEFS credit and each unit's forecast days fell back to the gauge MAP
+ratio. No scenario is based on a forecast run today (the routes refuse one),
+so no stored run changes.
 
 Only the warning reads `seriesChoice`: every number the run computes is the
 same with or without it (`seriesChoice.test.ts`). It is a new warning, and a

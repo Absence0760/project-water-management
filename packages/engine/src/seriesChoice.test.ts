@@ -1,12 +1,15 @@
 // Which CHIRPS series the run read, against the others (engine 1.90.0, issue
-// #561): a run reads the first by name, so a short new series can take over a
-// long record; the run says so, naming both.
+// #561; the outlet's and each land unit's own): a run reads the first by name, so a
+// short new series can take over a long record; the run says so, naming both.
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from './calendar';
 import type { DailySeries, ModelInput, NetworkNode } from './project';
 import { runModel } from './run';
 import { applyScenario } from './scenario';
-import { chirpsChoiceWarning } from './seriesChoice';
+import { chirpsChoiceWarnings } from './seriesChoice';
+
+/** The outlet's warning alone (the first, when the input names no unit). */
+const chirpsChoiceWarning = (...a: Parameters<typeof chirpsChoiceWarnings>) => chirpsChoiceWarnings(...a)[0] ?? null;
 import { sameOutput } from './testing/invariants';
 
 const START = toEpochDay('2020-01-01');
@@ -121,6 +124,39 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		...over
 	};
 }
+
+describe('chirpsChoiceWarnings at each land unit', () => {
+	const model = { nodes: [{ id: 'u2', name: 'Upper' }, { id: 'u1', name: 'Lower' }] } as unknown as ModelInput['model'];
+	const pick = (name: string, firstDay: string) => ({ name, others: [{ name: 'Unit record', firstDay, lastDay: '2020-12-31' }] });
+
+	const perUnit = { unitRain: { mode: 'perUnit' } } as never;
+	it('under per-unit rain, warns for each modelled unit whose own CHIRPS another series of that unit outspans, naming the unit, after the outlet and in the model’s order', () => {
+		const input = {
+			model,
+			settings: perUnit,
+			series: { rain_chirps_mm: chirps('2020-01-01', DAYS), 'rain_chirps_mm@u1': chirps('2020-12-02', 30), 'rain_chirps_mm@u2': chirps('2020-12-02', 30) },
+			seriesChoice: {
+				rain_chirps_mm: { name: 'Outlet', others: [{ name: 'Short', firstDay: '2020-01-01', lastDay: '2020-01-10' }] },
+				unitChirps: { u1: pick('CHIRPS v3 (rnl) Lower', '2020-01-01'), u2: pick('CHIRPS v3 (rnl) Upper', '2020-12-15'), gone: pick('Old', '2020-01-01') }
+			}
+		};
+		// The outlet's record spans the run: no warning. Upper's other spans less than its own: none. Lower's spans more.
+		// A unit the model doesn't have (a scenario removed it) is about nothing the run read: none.
+		expect(chirpsChoiceWarnings(input, START, DAYS)).toEqual([
+			'for the unit “Lower”, the run read the CHIRPS series “CHIRPS v3 (rnl) Lower” (2020-12-02 to 2020-12-31), which spans 30 of its 366 days, but “Unit record” (2020-01-01 to 2020-12-31) spans 366: ' +
+				'a run reads a unit’s first CHIRPS series by name and uses only that one for the unit’s own rain. Rename or remove one of them so the run reads the record you mean'
+		]);
+		// Without per-unit rain the run reads no unit’s own CHIRPS: no unit warning (the outlet's still would be).
+		expect(chirpsChoiceWarnings({ ...input, settings: {} }, START, DAYS)).toEqual([]);
+		expect(chirpsChoiceWarnings({ ...input, settings: { unitRain: { mode: 'off' } } as never }, START, DAYS)).toEqual([]);
+	});
+
+	it('ignores a malformed unit map or entry, never throwing', () => {
+		const series = { 'rain_chirps_mm@u1': chirps('2020-01-01', 2) };
+		expect(chirpsChoiceWarnings({ model, settings: perUnit, series, seriesChoice: { unitChirps: 'x' as never } }, START, DAYS)).toEqual([]);
+		expect(chirpsChoiceWarnings({ model, settings: perUnit, series, seriesChoice: { unitChirps: { u1: null as never, u2: { name: 3 } as never } } }, START, DAYS)).toEqual([]);
+	});
+});
 
 describe('a run with seriesChoice', () => {
 	const base: ModelInput = {
