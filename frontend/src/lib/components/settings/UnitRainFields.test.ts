@@ -1,7 +1,7 @@
 // Settings → Flow calibration → Rain into GR4J → Rain for each unit (UnitRainFields.svelte,
 // issue #482), rendered with Svelte's server renderer: off shows the switch
-// alone; on shows the coverage, the gauge MAP, its source once set, and the
-// MAP period; a problem sits under its field, named by aria-describedby. The
+// alone; on shows the coverage, the gauge MAP read from the catchment rain
+// station (issue #553) with a link to edit it, and the MAP period; a problem sits under its field, named by aria-describedby. The
 // browser flow is pinned by e2e/tests/unit-rain.spec.ts.
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,9 @@ vi.mock('$app/paths', () => ({ base: '' }));
 vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/') } }));
 // FieldHistoryLine reads the field's history through the app's API client.
 vi.mock('$env/static/public', () => ({ PUBLIC_API_URL: 'http://localhost:3001' }));
+
+/** The markup without Svelte's hydration comments. */
+const text = (body: string) => body.replace(/<!--.*?-->/g, '');
 
 const nodes = [
 	{ id: 'a', name: 'Upper unit', kind: 'farm' as const, areaKm2: 10, mapMm: 700 },
@@ -24,6 +27,7 @@ describe('UnitRainFields', () => {
 		expect(body).not.toContain('checked');
 		expect(body).not.toContain('MAP period');
 		expect(body).not.toContain('Rain gauge’s MAP');
+		expect(body).toContain('id="set-unit-rain"');
 	});
 
 	it('on, says how many units have a MAP and shows the gauge MAP and the default period', () => {
@@ -33,18 +37,29 @@ describe('UnitRainFields', () => {
 		// The one without is named, linked to its form's Catchment area card (section=area).
 		expect(body).toMatch(/Without a MAP:.*<a href="\?tab=network&amp;edit=b&amp;section=area">Lower unit<\/a>/s);
 		expect(body).toContain('Rain gauge’s MAP');
+		// A read-out now, not a field: the station's MAP is edited in Series details (issue #553).
+		expect(body).not.toMatch(/id="[^"]*-gmap"/);
 		expect(body).not.toContain('Source of the gauge’s MAP');
 		expect(body).toContain('MAP period');
 		expect(body).toMatch(/value="1991"/);
 		expect(body).toMatch(/value="2020"/);
 	});
 
-	it('asks for the gauge MAP’s source once the MAP is set, with the problem under it', () => {
-		const { body } = render(UnitRainFields, { props: { value: { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: '' }, nodes } });
-		expect(body).toContain('Source of the gauge’s MAP');
-		const err = body.match(/<span class="err[^"]*" id="([^"]+)"[^>]*>Say where the rain gauge’s MAP comes from/);
-		expect(err).not.toBeNull();
-		expect(body).toMatch(new RegExp(`aria-invalid="true"[^>]*aria-describedby="[^"]*${err![1]}"|aria-describedby="[^"]*${err![1]}"[^>]*aria-invalid="true"`));
+	it('reads the gauge MAP from the catchment rain station, with a link to change it in Series details', () => {
+		const catchmentRain = { id: 'r1', name: 'Gauge A', station: { mapMm: 745, mapSource: 'station record 1991–2020', lat: null, lon: null } };
+		const body = text(render(UnitRainFields, { props: { value: { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'old' }, nodes, catchmentRain } }).body);
+		expect(body).toMatch(/data-from="station"[^>]*>\s*<strong>745 mm<\/strong> \(station record 1991–2020\), the station MAP of “Gauge A”/);
+		expect(body).toMatch(/<a href="\?tab=series&amp;series=r1#data-chart"[^>]*>Change it in Series details<\/a>/);
+	});
+
+	it('still shows an older project’s settings gauge MAP while the station has none, and says where to set it', () => {
+		const catchmentRain = { id: 'r1', name: 'Gauge A', station: null };
+		const body = text(render(UnitRainFields, { props: { value: { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'gauge record' }, nodes, catchmentRain } }).body);
+		expect(body).toMatch(/data-from="settings"[^>]*>\s*<strong>640 mm<\/strong> \(gauge record\), kept from these settings/);
+		expect(body).toContain('>Set it in Series details</a>');
+		const none = render(UnitRainFields, { props: { value: { mode: 'perUnit' }, nodes, catchmentRain: null } }).body;
+		expect(none).toContain('the project has no catchment rain series yet');
+		expect(none).not.toContain('unit-rain-gauge-map-edit');
 	});
 
 	it('notes a short period without an error, and shows a reversed one as the period’s problem', () => {
@@ -70,9 +85,10 @@ describe('UnitRainFields', () => {
 		expect(gone).toContain('data-testid="unit-rain-reference-gone"');
 	});
 
-	it('for a viewer, the switch is disabled and the source is read-only, still focusable', () => {
-		const { body } = render(UnitRainFields, { props: { value: { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'gauge record' }, nodes, readonly: true } });
+	it('for a viewer, the switch is disabled and the gauge MAP’s link only shows it', () => {
+		const catchmentRain = { id: 'r1', name: 'Gauge A', station: { mapMm: 745, mapSource: 'station record', lat: null, lon: null } };
+		const { body } = render(UnitRainFields, { props: { value: { mode: 'perUnit' }, nodes, catchmentRain, readonly: true } });
 		expect(body).toMatch(/<input type="checkbox"[^>]*disabled/);
-		expect(body).toMatch(/<input[^>]*id="[^"]*-gsrc"[^>]*readonly/);
+		expect(body).toContain('>See it in Series details</a>');
 	});
 });
