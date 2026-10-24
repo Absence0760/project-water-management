@@ -217,6 +217,16 @@ describe('what an item says', () => {
 		expect(
 			eventLine(ev('series.replaced', { kind: 'flow_observed_m3s', name: '', daysChanged: 3, origin: { from: 'a · given in m³/s', to: 'b · given in l/s (× 0.001)' } }))
 		).toMatch(/; source now b · given in l\/s \(× 0\.001\), was a · given in m³\/s$/);
+		// A rainfall station's details (issue #553): recorded, changed and cleared, as the backend's stationLabel words each side.
+		expect(eventLine(ev('series.labelled', { kind: 'rain_catchment_mm', name: 'Gauge A', station: { from: 'not a station', to: 'MAP 745 mm (record 1991–2020)' } }))).toMatch(
+			/^Recorded .*Gauge A.* as a rainfall station: MAP 745 mm \(record 1991–2020\)$/
+		);
+		expect(
+			eventLine(ev('series.labelled', { kind: 'rain_catchment_mm', name: 'Gauge A', station: { from: 'MAP 745 mm (record)', to: 'MAP 750 mm (record) at -33.9, 18.9' } }))
+		).toMatch(/^Changed the rainfall station details of .*Gauge A.*: MAP 750 mm \(record\) at -33\.9, 18\.9 \(was MAP 745 mm \(record\)\)$/);
+		expect(eventLine(ev('series.labelled', { kind: 'rain_catchment_mm', name: 'Gauge A', station: { from: 'MAP 745 mm (record)', to: 'not a station' } }))).toMatch(
+			/^Cleared the rainfall station details of .*Gauge A.* \(was MAP 745 mm \(record\)\)$/
+		);
 		expect(eventLine(ev('series.labelled', { kind: 'rain_chirps_mm', name: '', provenance: { from: 'an unrecorded version', to: 'CHIRPS v2.0' } }))).toBe(
 			'Marked the Rainfall — CHIRPS series as CHIRPS v2.0 (was an unrecorded version)'
 		);
