@@ -20,4 +20,3 @@ export function firstOutletSeries<T extends Named>(list: readonly T[], kind: str
 	for (const s of list) if (s.kind === kind && !s.siteNodeId && (!first || compareSeriesNames(s.name, first.name) < 0)) first = s;
 	return first;
 }
-
