@@ -272,6 +272,10 @@ test('on a phone, Use my location places the point there, asked only on the tap'
 	const place = page.getByRole('dialog', { name: 'Place a point' });
 	await expect(place.getByTestId('map-place-at')).toContainText('33.6500° S, 21.3500° E');
 	await place.getByRole('button', { name: 'Place the point' }).click();
+	// Settled: the sheet closes in the URL change that picks the new point, so Details shows it. Before that the list is
+	// already in (the tabs appear on the first feature, on Features) and choosing a tab would race the pick's switch to Details.
+	await expect(place).toBeHidden();
+	await expect(page.getByTestId('map-tab-details')).toHaveAttribute('aria-selected', 'true');
 	await showTab(page, 'features');
 	await expect(row(page, 'Gauge')).toContainText('33.6500° S, 21.3500° E');
 });

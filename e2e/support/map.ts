@@ -177,7 +177,8 @@ export async function uploadThroughSheet(page: Page, kind: string | null, name: 
 
 /**
  * The side column's tab (Details, Features, Checks; docs/ui.md § Map): one panel shows at a time, and a pick
- * shows its Details, so a spec opens the list's tab before reading the list after a pick.
+ * shows its Details, so a spec opens the list's tab before reading the list after a pick. After a save from a
+ * sheet, call it once the sheet is hidden: the sheet closes with the pick, and reading the tab before then races it.
  */
 export async function showTab(page: Page, tab: 'details' | 'features' | 'checks' | 'layers' | 'key'): Promise<void> {
 	const t = page.getByTestId(`map-tab-${tab}`);
