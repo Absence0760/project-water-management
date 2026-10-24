@@ -71,7 +71,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'outflow', letter: 'U', formula: 'R + S + T + seepage − seepage lost + release' },
 	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam + GW + GWd) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW, GWd and Dep only with boreholes)' },
 	{ key: 'deficit', letter: 'W', formula: 'D − G' },
-	{ key: 'ewr', letter: 'Y', formula: "pragmatic EWR × this farm's share" },
+	{ key: 'ewr', letter: 'Y', formula: "pragmatic EWR × this farm's EWR share (its flow share, or its natural MAR share, model.md §2.5b)" },
 	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Y + Σ Z of the elements directly upstream' },
 	{ key: 'ewr_shortfall', letter: 'AA', formula: 'MIN(U − Z, 0)' },
 	{ key: 'ewr_shortfall_incremental', letter: 'AB', formula: 'reach shortfall, a diagnostic only (engine ≥ 0.17.0): MIN(AA − Σ AA of the elements directly upstream, 0)' },

@@ -262,7 +262,19 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_unit_rain_decisions(random.Random(seed * 32452843 + 7), doc)
     add_external_transfers(random.Random(seed * 49979687 + 13), doc, dense)
     add_rain_stations(random.Random(seed * 67867967 + 5), doc, start, days, dense)
+    add_ewr_split(random.Random(seed * 86028121 + 3), doc)
     return doc
+
+
+def add_ewr_split(rng: random.Random, doc: dict) -> None:
+    """The EWR split by each unit's natural MAR (§2.5b, engine >= 1.94.0),
+    from its own stream so the rest of a network is unchanged: on half the
+    per-unit networks, and now and then under catchment rain, where it is the
+    flow share."""
+    s = doc["settings"]
+    per_unit = (s.get("unitRain") or {}).get("mode") == "perUnit"
+    if rng.random() < (0.5 if per_unit else 0.1):
+        s["ewrSplit"] = "naturalMar"
 
 
 def _unit_series(rng: random.Random, start: dt.date, days: int, scale: float, chirps: bool) -> dict:

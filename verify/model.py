@@ -1983,6 +1983,28 @@ def run(doc: dict) -> dict:
     sim_out = [0.0] * n
     cat_short = [0.0] * n
     ewr_share = {x["id"]: shares.get(x["id"], 0.0) for x in farms}
+    # §2.5b (engine >= 1.94.0): settings.ewrSplit 'naturalMar' under per-unit rain splits the EWR by each
+    # unit's natural MAR: its own runoff over the complete water years of the historical days (else all of
+    # them) / the units' total, a negative day counting 0; no runoff over the period keeps the flow share.
+    if settings.get("ewrSplit") == "naturalMar" and local is not None:
+        full = [i for i in range(hist) if water_year(days[i]) != water_year(days[0]) or _dt.date.fromordinal(days[0]).strftime("%m-%d") == "10-01"]
+        full = [i for i in full if water_year(days[i]) != water_year(days[hist - 1]) or _dt.date.fromordinal(days[hist - 1]).strftime("%m-%d") == "09-30"]
+        period = full if full else list(range(hist))
+        vol = {}
+        for x in sorted(farms, key=lambda f: f["id"]):
+            q = local.get(x["id"])
+            v = 0.0
+            if q is not None:
+                for i in period:
+                    if q[i] > 0 and math.isfinite(q[i]):
+                        v += q[i]
+            vol[x["id"]] = v
+        tot = 0.0
+        for fid in sorted(vol):
+            tot += vol[fid]
+        if tot > 0 and math.isfinite(tot):
+            ewr_share = {fid: v / tot for fid, v in vol.items()}
+            diag["ewr_split_mar"] = diag.get("ewr_split_mar", 0) + 1
     use_y: dict[tuple, float] = {}
 
     def spend(nid, src, v):

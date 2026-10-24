@@ -2662,9 +2662,11 @@ place of natural × share; a farm with no area has none. Natural flow at the
 outlet is the units' runoff summed in node-id order (the network routes
 within the day, so the sum is the routed flow; with bed losses on, the
 WR2012 check and a Reserve rule table read it routed down the reaches net
-of the natural losses, §2.6b). The EWR split (`ewr × share`) and the land
-cover's low-flow threshold (`Q75 × share`, §2.5a) still use the flow
-shares. The catchment area is the land units' areas summed:
+of the natural losses, §2.6b). The land cover's low-flow threshold
+(`Q75 × share`, §2.5a) still uses the flow shares, and so does the EWR
+split (`ewr × share`) unless `settings.ewrSplit` is `'naturalMar'`, which
+splits it by each unit's own natural runoff instead (§2.5b, engine ≥
+1.94.0). The catchment area is the land units' areas summed:
 `calibration.catchmentAreaKm2` is ignored, with a warning when it differs
 by more than 1 % (`resolveCatchmentAreaKm2`). With no land unit at all (no
 farm has an area), the setting can't apply: GR4J runs on the catchment rain
@@ -2794,8 +2796,10 @@ for each unit](./maps.md#map-for-each-unit).
   CHIRPS, not on the unit's cells;
 - the run window still follows the catchment's rain series (§2.1), so a
   project needs a catchment series or a set simulation period;
-- the EWR split and the land cover's low-flow threshold stay on the flow
-  shares, while each unit's runoff is its own (engine-audit.md U1);
+- the land cover's low-flow threshold stays on the flow shares, while each
+  unit's runoff is its own (engine-audit.md U1); the EWR split does too
+  unless `settings.ewrSplit` is `'naturalMar'` (§2.5b, engine ≥ 1.94.0,
+  its period provisional, engine-audit.md ES1);
 - the reference fit reads the checked catchment rain over its whole record,
   including the days a §2.4e rain-source period sets from an alternate
   series or the reanalysis fallback: the fit then compares that series, not
@@ -3026,7 +3030,9 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
   is its own GR4J runoff instead, and the share still splits the EWR (and
   the land cover's low-flow threshold, §2.5a): Settings → Flow share says
   which, by the state of Rain for each unit (issue #553)
-- Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
+- Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`);
+  from engine 1.94.0 `frag[f]` here is the unit's EWR share, which is its flow
+  share unless `settings.ewrSplit` asks for each unit's natural MAR (§2.5b)
 
 Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
 all farms** downloads (`export/farms.csv?key=runoff|ewr`, [api.md § Export](./api.md#export)).
@@ -3124,6 +3130,74 @@ close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
 - **Checks** (`checkLandCover`): runoff + reduction = natural × share,
   0 ≤ reduction ≤ that, the reduction follows the formula from the run's own
   natural flow, and the catchment series and summary add up.
+
+### 2.5b The EWR split between units (engine ≥ 1.94.0, issue #553)
+
+Each unit's EWR requirement `Y` is the outlet's EWR (the pragmatic EWR, or
+the daily EWR of §2.9f) × the unit's **EWR share**; an EWR site's requirement
+`Z` adds up the shares above it (§2.7). `settings.ewrSplit` chooses the
+share (Settings → Flow share → *Split the EWR between units by*; operator
+decision 2026-10-23):
+
+| `ewrSplit` | A unit's EWR share |
+| --- | --- |
+| `'flowShare'` (the default; absent means it) | its flow share `frag[f]` (§2.5), by the flow-share method: area, Hi/Lo MAP or specific. Every run before engine 1.94.0 did this, and a run with the default is the same to the bit |
+| `'naturalMar'` | `MAR_f ÷ Σ MAR_u`, its natural MAR over the units' total, where `MAR_f` is the unit's natural runoff summed over the **MAR period** |
+
+- **Natural runoff.** Under runoff from each unit's own rain (§2.4h) a land
+  unit's natural runoff is its own GR4J runoff from its own rain (the
+  `runoff_natural` column), before land cover (§2.5a) and base flow (§2.6b)
+  touch it; a farm with no area has none and an EWR share of 0. Each day
+  counts its runoff when it is above 0. The units are summed in node-id
+  order, so the shares are the same to the bit however the network is
+  listed. Under fragmentation (catchment rain) a unit's natural runoff is
+  `naturalFlow × frag[f]`, so the natural MAR shares are the flow shares:
+  the run applies the flow shares and says so (`why: 'catchmentRain'`), and
+  the option matters only with Rain for each unit on, which Settings says.
+- **The MAR period** (provisional, engine-audit.md ES1): the run's complete
+  water years (1 October to 30 September, every day inside the run),
+  historical days only, never a forecast tail's (§2.4f); a run without one
+  complete water year takes every historical day instead. With no runoff
+  from any unit over the period there is nothing to split by, and the run
+  keeps the flow shares (`why: 'noRunoff'`).
+- **The shares add up to 1** under `'naturalMar'`, the whole EWR asked of
+  the units, where flow shares that add up to less leave the rest of the EWR
+  to no unit (§2.5).
+- **What follows the split.** Only `Y` changes, so `Z` at every unit and
+  gauge, every EWR site's shortfall, the attribution and charge (§2.7b; at a
+  site whose charge follows its rule table, `ewrChargeSource: 'ruleTable'`,
+  the table instead), the curtailment (§2.11), the hands-off EWR flows
+  (§2.7h, `handsOffEwr`) and the drought restriction's EWR trigger at a
+  gauge (§2.7i) all read the split EWR. At the outlet the trigger reads the
+  whole EWR, and the outlet's own `Z` is the shares' sum × the EWR: the
+  whole EWR under `'naturalMar'`, but only Σ flow shares × the EWR when
+  the flow shares add up to less than 1, so switching such a project to the
+  natural MAR raises the outlet's requirement too. The flow itself (`I`)
+  and the land cover's low-flow threshold stay on the flow shares.
+- **Resumed runs and calibration.** A run resumed from a snapshot (a
+  seasonal outlook's members, §2.15) takes the capture run's period and
+  shares, so it splits its EWR as the uninterrupted run did; one whose
+  capture run pinned none (it fell back to the flow share) keeps the flow
+  share rather than work shares out on its own days (`why: 'resumed'`; a
+  snapshot refuses a resume under other settings, so this is the fallback
+  case, or a seasonal outlook member's). Calibration
+  refills each candidate's shares from that candidate's own unit runoff,
+  over the same period, so a scored day is the run's to the bit (§2.10).
+- **The record.** `RunSummary.ewrSplit` holds the method asked for, the one
+  applied, why they differ and the period (`{ start, end, waterYears }`,
+  `waterYears` 0 for the whole run); each `FarmSummary.ewrShare` is the
+  share applied, beside its `flowShare`. A split other than the default is a
+  run warning (its note), the summary CSV's `EWR share (%)` column sits
+  beside `Flow share (%)` (an older run's is its flow share), the report's
+  Inputs table names it, a scenario can set it (`settings.set`
+  `ewrSplit`, [scenarios.md](./scenarios.md)) and the run comparison lists
+  a change ([run-comparison.md](./run-comparison.md)).
+- **Checks** (`checkEwrSplit`, in the invariant tests): every unit's `Y` is
+  the outlet EWR × its recorded share every day; under the flow share the
+  share is the flow share; under the natural MAR the shares add up to 1 and
+  each is recomputed from the run's own `runoff_natural` columns over the
+  recorded period. `verify/` writes the split from this section
+  (`model.py`, probes `ewr-split-station-units` and `ewr-split-short-run`).
 
 ### 2.6 Transfers (`[Transfers]`)
 

@@ -21,6 +21,7 @@ import type { SeriesProvenance } from './seriesProvenance';
 import { QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN } from './quantileMap';
 import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
+import type { EwrSplitInfo, EwrSplitMethod } from './network/ewrSplit';
 import type { EwrDailySource, OutletEwrInfo } from './reserve/dailySource';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
@@ -346,6 +347,15 @@ export interface ProjectSettings {
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
+	/**
+	 * How the EWR is split between the units (engine ≥ 1.94.0, issue #553,
+	 * ./network/ewrSplit.ts, docs/model.md §2.5b): 'flowShare' (the default,
+	 * the flow share of flowShareMethod) or 'naturalMar' (each unit's natural
+	 * MAR ÷ Σ the units', which differs only under runoff from each unit's own
+	 * rain). Optional so settings stored before it still type; absent =
+	 * 'flowShare'.
+	 */
+	ewrSplit?: EwrSplitMethod;
 	/** Pitman high/low MAP split used by the `hiLo` flow-share method. */
 	hiLoSplit: { hi: number; lo: number };
 	/**
@@ -858,6 +868,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		lakeEvapFactorSource: '',
 		apanMm: zeros,
 		flowShareMethod: 'area',
+		ewrSplit: 'flowShare',
 		hiLoSplit: { hi: 0.5, lo: 0.5 },
 		runoffModel: 'gr4j',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
@@ -3066,6 +3077,13 @@ export interface FarmSummary {
 	 */
 	flowShare?: number;
 	/**
+	 * The farm's share of the EWR, 0–1, as the run applied it (engine ≥
+	 * 1.94.0, settings.ewrSplit, docs/model.md §2.5b): its flow share, or
+	 * under 'naturalMar' with runoff from each unit's own rain its natural MAR
+	 * ÷ Σ the units'. Absent on older runs, whose EWR the flow share split.
+	 */
+	ewrShare?: number;
+	/**
 	 * Mean EWR charge (positive): this farm's share of the shortfall at the EWR
 	 * sites below it (engine ≥ 0.17.0, audit Q17). Engines before 0.17.0 stored
 	 * the mean incremental shortfall (Element sheet AB).
@@ -4127,6 +4145,14 @@ export interface RunSummary {
 	unitRain?: UnitRainSummary;
 	/** How settings.rainStations forced the catchment and the units (issue #553, engine ≥ 1.91.0). */
 	stations?: RainStationSummary;
+	/**
+	 * How the EWR was split between the units (engine ≥ 1.94.0,
+	 * settings.ewrSplit, ./network/ewrSplit.ts): the method asked for, the one
+	 * applied and, for a natural MAR split, the days it was taken over. Each
+	 * unit's share is FarmSummary.ewrShare. Absent on older runs (the flow
+	 * share).
+	 */
+	ewrSplit?: EwrSplitInfo;
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;

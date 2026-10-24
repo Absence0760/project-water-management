@@ -48,6 +48,7 @@ import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calen
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
+import { resolveEwrSplit } from './network/ewrSplit';
 import { resolveEwrDailySource } from './reserve/dailySource';
 import { RUNOFF_MODELS } from './runoff/types';
 import {
@@ -847,5 +848,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);
 		s.flowShareMethod = 'area';
 	}
+	// How the EWR is split between the units (engine ≥ 1.94.0, issue #553): an unknown value splits by the flow share.
+	s.ewrSplit = resolveEwrSplit(s.ewrSplit, warnings);
 	return s;
 }

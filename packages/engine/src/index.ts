@@ -99,6 +99,7 @@ export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './netw
 export { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, DAM_SEDIMENT_MAX_PER_YEAR, damCapacityFactor, damCapacityOn, developmentProblem, SEDIMENT_YEAR_DAYS } from './network/development';
 export { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 export { flowShares, inputFlowShares, overAllocationError, SHARE_TOLERANCE, type FlowShares } from './network/shares';
+export { EWR_SPLIT_LABEL, EWR_SPLIT_METHODS, ewrSplitNote, resolveEwrSplit, type EwrSplitInfo, type EwrSplitMethod, type EwrSplitPeriod } from './network/ewrSplit';
 export { calibrationStats, type CalibrationWindow } from './network/stats';
 export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';
 export { belowEwr, ewrAgreement, scoreContingency, type EwrAgreementExclusion, type EwrAgreementOptions } from './network/ewrAgreement';
