@@ -37,7 +37,7 @@ let userId: string;
 /** Invented, Afrikaans-shaped place names: a prefix word or none, a compound of two parts, then a word and a number. */
 function place(i: number): PlaceRecord {
 	const pre = ['klein', 'groot', 'nuwe', 'ou', 'boven', 'onder', 'wes', 'oos', '', ''][(i * 7) % 10]!;
-	const a = ['kwarts', 'wilge', 'sand', 'more', 'vaal', 'riet', 'doorn', 'klip', 'berg', 'leeu', 'olifants', 'bos', 'water', 'fontein', 'kraal', 'hoek', 'drift', 'rand', 'kloof', 'vlei'][i % 20]!;
+	const a = ['kwarts', 'wilge', 'sand', 'more', 'vaal', 'riet', 'doorn', 'klip', 'berg', 'duin', 'olifants', 'bos', 'water', 'fontein', 'kraal', 'hoek', 'drift', 'rand', 'kloof', 'vlei'][i % 20]!;
 	const b = ['vallei', 'rivier', 'laagte', 'ster', 'bank', 'fontein', 'kop', 'spruit', 'dal', 'pan', 'hoek', 'kuil', 'berg', 'plaas', 'vlakte'][Math.floor(i / 20) % 15]!;
 	const tail = i % 3 === 0 ? `${['dam', 'farm', 'noord', 'suid', 'plot'][Math.floor(i / 300) % 5]} ${i % 997}` : `${i % 5003}`;
 	const name = `${pre ? `${pre} ` : ''}${a}${b} ${tail}`;

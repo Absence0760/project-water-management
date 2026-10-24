@@ -877,7 +877,7 @@ _SOURCE_UNITS = {"m3/s": "m³/s", "mm": "mm"}
 def flow_data_origin(heading: str, column: str, unit: str) -> dict[str, Any]:
     """Where a [Flow data] series came from (issue #556): the workbook column, and the unit it was read in.
 
-    The column's heading is the series' source ("Workbook column 'Logger A1 (Curr. Day)'"), or its letter when it
+    The column's heading is the series' source ("Workbook column 'Logger Q7 (Curr. Day)'"), or its letter when it
     has none. The values are read as they stand, so the upload unit is the column's own (factor 1).
     """
     source = f"Workbook column '{heading}'" if heading else f"Workbook [Flow data] column {column}"
@@ -894,7 +894,7 @@ def outlet_name(elements: list[dict[str, Any]], outflow: str | None, roots: list
 def name_logger_after_outlet(series: list[dict[str, Any]], outlet: str | None) -> None:
     """Name the logger series after where it is measured, in place (issue #556): "<outlet> logger", else "Outlet logger".
 
-    The workbook's logger column heading is the client's own code ("Logger A1 (Curr. Day)"), which means nothing to a
+    The workbook's logger column heading is the client's own code ("Logger Q7 (Curr. Day)"), which means nothing to a
     reader; it stays in the series' source (flow_data_origin).
     """
     for s in series:

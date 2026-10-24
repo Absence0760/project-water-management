@@ -25,7 +25,7 @@ const SOURCE_UNITS: Record<string, string> = { 'm3/s': 'm³/s', mm: 'mm' };
 
 /**
  * flow_data_origin(): where a [Flow data] series came from (issue #556). The
- * column's heading is its source ("Workbook column 'Logger A1 (Curr. Day)'"),
+ * column's heading is its source ("Workbook column 'Logger Q7 (Curr. Day)'"),
  * or its letter when it has none; the unit it was read in is the column's own.
  */
 export function flowDataOrigin(heading: string, column: string, unit: string): Pick<ImportedSeries, 'source' | 'sourceUnit' | 'sourceUnitFactor'> {

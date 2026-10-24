@@ -32,7 +32,7 @@ describe('renaming a series', () => {
 		const pid = await project(owner, 'Rename');
 		expect((await owner.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
 		expect((await owner.call('POST', `/projects/${pid}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
-		const s = await put(owner, pid, { name: 'Logger A1 (Curr. Day)', source: 'Workbook column' });
+		const s = await put(owner, pid, { name: 'Logger Q7 (Curr. Day)', source: 'Workbook column' });
 
 		expect((await rename(viewer, pid, s.id, 'Drift Logger')).status).toBe(403);
 		expect((await rename(stranger, pid, s.id, 'Drift Logger')).status).toBe(404);
@@ -46,7 +46,7 @@ describe('renaming a series', () => {
 		expect(await names(viewer, pid)).toEqual(['flow_logger_m3s:Drift Logger']);
 		// The same name again changes and logs nothing.
 		expect((await rename(editor, pid, s.id, 'Drift Logger')).status).toBe(200);
-		expect(await renames(pid)).toEqual([{ seriesId: s.id, kind: 'flow_logger_m3s', name: 'Drift Logger', rename: { from: 'Logger A1 (Curr. Day)', to: 'Drift Logger' } }]);
+		expect(await renames(pid)).toEqual([{ seriesId: s.id, kind: 'flow_logger_m3s', name: 'Drift Logger', rename: { from: 'Logger Q7 (Curr. Day)', to: 'Drift Logger' } }]);
 		// The History tab lists it.
 		const history = (await viewer.call('GET', `/projects/${pid}/history`)).body;
 		expect(JSON.stringify(history)).toContain('series.renamed');
@@ -100,7 +100,7 @@ describe('renaming a series', () => {
 		const owner = await signUp('RenKey');
 		const pid = await project(owner, 'Rename key');
 		const s = await put(owner, pid, { kind: 'rain_catchment_mm', unit: 'mm', name: 'Weir rain', startDate: '2024-01-01', values: [null] });
-		const key = await owner.call('POST', `/projects/${pid}/api-keys`, { name: 'Weir logger' });
+		const key = await owner.call('POST', `/projects/${pid}/api-keys`, { name: 'Drift logger' });
 		expect(key.status, JSON.stringify(key.body)).toBe(201);
 		const pushed = await app.request('/ingest/v1/series/merge', {
 			method: 'POST',
@@ -124,7 +124,7 @@ describe('renaming a series', () => {
 		const dam = await put(owner, pid, rain('Dam rain'));
 		const logger = await put(owner, pid, { name: 'Dam logger' });
 		const key = await owner.call('POST', `/projects/${pid}/api-keys`, {
-			name: 'Weir logger',
+			name: 'Drift logger',
 			allowedSeries: [
 				{ kind: 'rain_catchment_mm', name: 'Weir rain' },
 				{ kind: 'rain_catchment_mm', name: 'Rain at the dam' }

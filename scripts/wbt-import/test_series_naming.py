@@ -19,7 +19,7 @@ from extract_project import flow_data_origin, name_logger_after_outlet, outlet_n
 def flow_series() -> list[dict]:
     return [
         {"kind": "flow_observed_m3s", "name": "Gauge", "unit": "m3/s", **flow_data_origin("Gauge", "G", "m3/s")},
-        {"kind": "flow_logger_m3s", "name": "Logger A1 (Curr. Day)", "unit": "m3/s", **flow_data_origin("Logger A1 (Curr. Day)", "H", "m3/s")},
+        {"kind": "flow_logger_m3s", "name": "Logger Q7 (Curr. Day)", "unit": "m3/s", **flow_data_origin("Logger Q7 (Curr. Day)", "H", "m3/s")},
     ]
 
 
@@ -29,9 +29,9 @@ class SeriesNamingTest(unittest.TestCase):
             flow_series()[1],
             {
                 "kind": "flow_logger_m3s",
-                "name": "Logger A1 (Curr. Day)",
+                "name": "Logger Q7 (Curr. Day)",
                 "unit": "m3/s",
-                "source": "Workbook column 'Logger A1 (Curr. Day)'",
+                "source": "Workbook column 'Logger Q7 (Curr. Day)'",
                 "sourceUnit": "m³/s",
                 "sourceUnitFactor": 1,
             },

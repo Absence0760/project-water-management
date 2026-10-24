@@ -34,7 +34,7 @@ async function ingest(method: string, path: string, key: string | null, body?: u
 	return { status: r.status, body: text ? JSON.parse(text) : null, headers: r.headers };
 }
 
-const createKey = (pid: string, body: Record<string, unknown> = {}, as: User = owner) => as.call('POST', `/projects/${pid}/api-keys`, { name: 'Weir logger', ...body });
+const createKey = (pid: string, body: Record<string, unknown> = {}, as: User = owner) => as.call('POST', `/projects/${pid}/api-keys`, { name: 'Drift logger', ...body });
 async function newKey(pid: string, body: Record<string, unknown> = {}): Promise<{ id: string; secret: string }> {
 	const res = await createKey(pid, body);
 	expect(res.status, JSON.stringify(res.body)).toBe(201);

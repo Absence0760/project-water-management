@@ -11,7 +11,7 @@ test('an editor renames a series in Series details; a rename that changes what r
 	void owner;
 	const project = await createProject(page.request, 'Series rename');
 	const days = { startDate: '2021-10-01', values: [1, 2, 3, 4, 5] };
-	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', name: 'Logger A1 (Curr. Day)', unit: 'm³/s', ...days });
+	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', name: 'Logger Q7 (Curr. Day)', unit: 'm³/s', ...days });
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Average', unit: 'mm', ...days });
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Bergwater gauge', unit: 'mm', ...days });
 	await page.goto(`/projects/${project.id}?tab=series`);
@@ -21,8 +21,8 @@ test('an editor renames a series in Series details; a rename that changes what r
 	const nameBox = details.getByRole('textbox', { name: 'Name' });
 
 	// The only logger: the new name changes nothing about what runs read, so it saves at once.
-	await table.getByRole('row').filter({ hasText: 'Logger A1 (Curr. Day)' }).getByRole('button', { name: 'View', exact: true }).click();
-	await expect(nameBox).toHaveValue('Logger A1 (Curr. Day)');
+	await table.getByRole('row').filter({ hasText: 'Logger Q7 (Curr. Day)' }).getByRole('button', { name: 'View', exact: true }).click();
+	await expect(nameBox).toHaveValue('Logger Q7 (Curr. Day)');
 	await nameBox.fill('Drift Logger');
 	await nameBox.press('Enter');
 	await expect(nameBox).toHaveAccessibleDescription('Saved');

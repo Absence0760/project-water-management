@@ -369,7 +369,7 @@ describe('the rules at a calibration site (engine ≥ 1.41.0, settings.calibrati
 		const put = (body: Record<string, unknown>) => owner.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2010-10-01', ...body });
 		// The outlet's record and the weir's, each with its own source.
 		expect((await put({ name: 'Outlet record', source: 'Outlet gauge (synthetic)', values: m3s('simulated_outflow', null) })).status).toBe(200);
-		const weirRec = await put({ name: 'Weir record', source: 'Weir logger (synthetic)', values: m3s('outflow', weir.id) });
+		const weirRec = await put({ name: 'Weir record', source: 'Drift logger (synthetic)', values: m3s('outflow', weir.id) });
 		expect(weirRec.status).toBe(200);
 		expect((await owner.call('PATCH', `/projects/${projectId}/series/${weirRec.body.id}`, { siteNodeId: weir.id })).status).toBe(200);
 		const current = (await owner.call('GET', `/projects/${projectId}`)).body.project.settings;
@@ -389,7 +389,7 @@ describe('the rules at a calibration site (engine ≥ 1.41.0, settings.calibrati
 		expect(applied.status, JSON.stringify(applied.body)).toBe(200);
 		const record = (await owner.call('GET', `/projects/${projectId}`)).body.project.settings.fitRecord;
 		expect(record.siteNodeId).toBe(weir.id);
-		expect(record.observedOrigin).toEqual({ source: 'Weir logger (synthetic)', unit: 'm3/s', factor: 1 });
+		expect(record.observedOrigin).toEqual({ source: 'Drift logger (synthetic)', unit: 'm3/s', factor: 1 });
 		// The run it made scores the same site, so its statistics are the fit's own days.
 		const run = (await owner.call('GET', `/projects/${projectId}/runs/${applied.body.runId}`)).body.run;
 		expect(run.summary.calibration).toMatchObject({ siteNodeId: weir.id, siteName: 'Weir', fitStatus: 'fitted' });

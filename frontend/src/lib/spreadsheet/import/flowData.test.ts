@@ -66,11 +66,11 @@ describe('readFlowData', () => {
 describe('naming the logger after the outlet (issue #556)', () => {
 	const series = (): ImportedSeries[] => [
 		{ kind: 'flow_observed_m3s', name: 'Gauge', unit: 'm3/s', startDate: '2010-01-01', values: [1], ...flowDataOrigin('Gauge', 'G', 'm3/s') },
-		{ kind: 'flow_logger_m3s', name: 'Logger A1 (Curr. Day)', unit: 'm3/s', startDate: '2010-01-01', values: [1], ...flowDataOrigin('Logger A1 (Curr. Day)', 'H', 'm3/s') }
+		{ kind: 'flow_logger_m3s', name: 'Logger Q7 (Curr. Day)', unit: 'm3/s', startDate: '2010-01-01', values: [1], ...flowDataOrigin('Logger Q7 (Curr. Day)', 'H', 'm3/s') }
 	];
 
 	it('keeps the heading as the source, read in m³/s', () => {
-		expect(series()[1]).toMatchObject({ source: "Workbook column 'Logger A1 (Curr. Day)'", sourceUnit: 'm³/s', sourceUnitFactor: 1 });
+		expect(series()[1]).toMatchObject({ source: "Workbook column 'Logger Q7 (Curr. Day)'", sourceUnit: 'm³/s', sourceUnitFactor: 1 });
 	});
 
 	it('names the logger "<outlet> logger", the gauge untouched; "Outlet logger" without an outlet', () => {

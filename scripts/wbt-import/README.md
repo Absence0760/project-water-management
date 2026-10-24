@@ -254,8 +254,8 @@ rows and columns don't break it.
   its column heading as its name, except the logger, which is named after
   where it is measured: "&lt;outlet&gt; logger" (the outflow gauge, else the one
   element with nothing downstream; "Outlet logger" without one), since the
-  heading is the client's own code ("Logger A1 (Curr. Day)"). Every series
-  records the column as its `source` ("Workbook column 'Logger A1 (Curr.
+  heading is the client's own code ("Logger Q7 (Curr. Day)"). Every series
+  records the column as its `source` ("Workbook column 'Logger Q7 (Curr.
   Day)'", or "Workbook [Flow data] column J" for a column with no heading) and
   the unit it was read in as `sourceUnit` (m³/s or mm, `sourceUnitFactor` 1),
   so the Data tab's Source and Upload unit say where it came from

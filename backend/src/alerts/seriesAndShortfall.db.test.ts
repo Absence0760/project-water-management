@@ -57,7 +57,7 @@ async function addSeries(pid: string, name: string, startDate: string, values: (
 }
 
 async function newKey(pid: string): Promise<string> {
-	const res = await owner.call('POST', `/projects/${pid}/api-keys`, { name: 'Weir logger' });
+	const res = await owner.call('POST', `/projects/${pid}/api-keys`, { name: 'Drift logger' });
 	expect(res.status, JSON.stringify(res.body)).toBe(201);
 	return res.body.secret as string;
 }

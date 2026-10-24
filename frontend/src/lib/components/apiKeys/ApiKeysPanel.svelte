@@ -144,7 +144,7 @@
 			<div class="row">
 				<div class="field grow">
 					<label for="key-name">Name</label>
-					<input id="key-name" required maxlength={API_KEY_NAME_MAX} placeholder="Weir logger gateway" bind:value={name} />
+					<input id="key-name" required maxlength={API_KEY_NAME_MAX} placeholder="Drift logger gateway" bind:value={name} />
 				</div>
 				<div class="field">
 					<label for="key-days">Works for</label>
