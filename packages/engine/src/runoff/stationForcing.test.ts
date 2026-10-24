@@ -17,6 +17,7 @@ import { stationAreaRain } from './stationAreaRain';
 import { catchmentMapOf, stationAreaDays, stationRatio, STATION_DAY_SOURCE } from './stationForcing';
 import { checkedStationRecord } from './stationRecord';
 import { pairingFactorOn } from './stationPairing';
+import { Hasher } from '../warmstart/plain';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
 const START = '2015-01-01';
@@ -318,4 +319,45 @@ describe('carry-through', () => {
 		const out = runModel(member);
 		expect(out.summary.stations!.pairings[0]!.pinned).toBe(true);
 	});
+});
+
+// Golden pins of the station paths (as ./unitRain.golden.test.ts pins today's): a hash over every output series'
+// bits, the rain and flow sums, and a hash of summary.stations. An intended change of the station rule updates
+// these in the same change as its ENGINE_VERSION bump; any other difference is a bug. GOLDEN_PRINT=1 prints them.
+describe('the station paths stay bit-identical (golden)', () => {
+	const SUMMED = /^(rain_used|rain_final|rain_unit|runoff_natural|natural_flow)$/;
+	const fingerprint = (out: Out) => {
+		const h = new Hasher();
+		for (const s of out.series) {
+			h.text(s.nodeId ?? '').text(s.key).number(s.values.length);
+			for (const v of s.values) h.number(v);
+		}
+		const sums: Record<string, number> = {};
+		for (const s of out.series) if (SUMMED.test(s.key)) sums[`${s.key}@${s.nodeId ?? ''}`] = Number(s.values.reduce((a, v) => a + v, 0).toPrecision(6));
+		return { series: h.digest(), sums, stations: new Hasher().text(JSON.stringify(out.summary.stations)).digest() };
+	};
+	const CASES: Record<string, () => ModelInput> = {
+		units: () => catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' }, B: { stationId: 'S', correctAgainst: 'S' }, C: { stationId: 'T' } }, sites: SITES, unreliable: { S: [UNRELIABLE] } } }),
+		catchment: () => catchment({ rainStations: { catchment: { stationId: 'S' }, sites: SITES, unreliable: { S: [UNRELIABLE] } } }),
+		both: () => catchment({ unitRain: PER_UNIT, rainStations: { catchment: { stationId: 'S' }, units: { A: { stationId: 'S', scaleToMap: false } }, catchmentMapMm: 700, catchmentMapSource: 'invented', sites: SITES } })
+	};
+	const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
+		units: {
+			series: '573bb525e678a3a4',
+			sums: { 'natural_flow@': 128067000, 'rain_used@': 11708.7, 'rain_unit@A': 14499.2, 'runoff_natural@A': 87632100, 'rain_unit@B': 9664, 'runoff_natural@B': 25929600, 'rain_unit@C': 9310.8, 'runoff_natural@C': 12221000, 'rain_unit@D': 6080, 'runoff_natural@D': 2284090, 'rain_final@': 6080 },
+			stations: '877236f927ef3240'
+		},
+		catchment: { series: '476280e012bd33c7', sums: { 'natural_flow@': 138623000, 'rain_used@': 12378.5, 'rain_final@': 12378.5 }, stations: 'd12766e1c3b56f38' },
+		both: {
+			series: '50853c9fb516701c',
+			sums: { 'natural_flow@': 71115400, 'rain_used@': 8257.63, 'rain_unit@A': 9683.2, 'runoff_natural@A': 43411100, 'rain_unit@B': 3600, 'runoff_natural@B': 1719330, 'rain_unit@C': 11299.9, 'runoff_natural@C': 17323300, 'rain_unit@D': 11299.9, 'runoff_natural@D': 8661660, 'rain_final@': 11299.9 },
+			stations: 'a02b2b1a2b1002d3'
+		}
+	};
+	for (const [name, build] of Object.entries(CASES))
+		it(name, () => {
+			const got = fingerprint(runModel(build()));
+			if (process.env.GOLDEN_PRINT) console.log(name, JSON.stringify(got));
+			expect(got).toEqual(EXPECTED[name]);
+		});
 });
