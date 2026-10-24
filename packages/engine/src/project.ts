@@ -1101,6 +1101,14 @@ export const stationChirpsSeriesKey = (stationId: string): StationSeriesKey => `
 /** ModelInput.stations[id] (issue #553): a station's name and details as the run read them. */
 export interface RainStationInput extends RainStationMeta {
 	name: string;
+	/**
+	 * This station is the record the catchment rain (`rain_catchment_mm`) is
+	 * read from today (the backend sets it: the first unsited catchment rain
+	 * series by name). Its checks then take the catchment's full rain-check
+	 * settings, dated lists and rain-source periods included, since those were
+	 * made for this record.
+	 */
+	isCatchmentGauge?: boolean;
 }
 
 /** `settings.unitRain.reference` (engine ≥ 1.80.0, issue #500, docs/model.md §2.4h *Reference gauge*). */
