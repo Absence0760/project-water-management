@@ -16,7 +16,7 @@ flowchart LR
   end
 
   subgraph AWS["AWS (Phase 6: deployed, minimal tier)"]
-    CF[CloudFront + WAF<br/>water-management.jaredhoward.com]
+    CF[CloudFront + WAF<br/>icwbt.jaredhoward.com]
     S3[(S3<br/>static build)]
     L[Lambda · Hono<br/>Function URL]
     EL[engine<br/>stored runs]

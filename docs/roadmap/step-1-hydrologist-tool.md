@@ -16,7 +16,8 @@ and use every day. For them this means:
   questions answered or explicitly accepted);
 - the spreadsheet chores gone: `.xlsx` in and out, instant what-if, automatic
   calibration, templates for bulk entry;
-- a live site at `water-management.jaredhoward.com` that has backups, alarms
+- a live site at `icwbt.jaredhoward.com` (`water-management.jaredhoward.com`
+  until issue #551) that has backups, alarms
   and a runbook.
 
 ## 2. Users and jobs to be done

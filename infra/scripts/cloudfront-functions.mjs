@@ -17,7 +17,14 @@ export function functionCode(name, source = readFileSync(TF, 'utf8')) {
 	return lines.map((l) => l.slice(indent)).join('\n');
 }
 
-/** Evaluate a function's code; returns its handler and the named top-level vars. */
-export function loadFunction(name, vars = []) {
-	return new Function(`${functionCode(name)}\nreturn { handler: handler, ${vars.map((v) => `${v}: ${v}`).join(', ')} };`)();
+/**
+ * Evaluate a function's code; returns its handler and the named top-level vars.
+ * `tf` fills the Terraform interpolations the code carries, as Terraform would
+ * (`{ 'var.domain_name': 'example.org' }` for `${var.domain_name}`); one left
+ * unfilled stays as its literal text.
+ */
+export function loadFunction(name, vars = [], tf = {}) {
+	let code = functionCode(name);
+	for (const [ref, value] of Object.entries(tf)) code = code.replaceAll(`\${${ref}}`, value);
+	return new Function(`${code}\nreturn { handler: handler, ${vars.map((v) => `${v}: ${v}`).join(', ')} };`)();
 }

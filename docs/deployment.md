@@ -1,7 +1,11 @@
 # Deployment
 
 > **Status:** deployed (2026-10-05) at `https://water-management.jaredhoward.com`,
-> minimal tier in `af-south-1`. The Terraform (VPC, RDS, the five Lambdas, the
+> minimal tier in `af-south-1`. Issue #551 renames the app Integrated
+> Catchment - Water Balance Tool (IC-WBT) and moves it to
+> `https://icwbt.jaredhoward.com`, the old hostname redirecting; the
+> Terraform for it is in, and the operator's steps are
+> [§ Moving the site to a new domain](#moving-the-site-to-a-new-domain). The Terraform (VPC, RDS, the five Lambdas, the
 > SQS queues, the S3 buckets, SES, CloudFront + WAF + security headers, alarms
 > and budgets) is applied, `backend@0.1.0` and `web@0.1.2` are released, the
 > report renderer is created, and `infra/scripts/postapply-check.sh` passes. The map
@@ -15,7 +19,8 @@
 ## Target setup
 
 ```
-browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-management.jaredhoward.com
+browser ──HTTPS──► CloudFront (+ WAF rate limit) ── icwbt.jaredhoward.com
+                     │                                 (water-management.jaredhoward.com: pages 301 here)
                      ├─ /*      → S3 (private, OAC)       static SvelteKit build
                      └─ /api/*  → Lambda Function URL      Hono backend
                                    (+ X-CloudFront-Shared-Secret header,
@@ -198,7 +203,10 @@ This creates, inside the org:
   parent zone, which lives in the `jaredhoward` account. This is the same
   pattern as `disag.jaredhoward.com`. The ACM certificate, the CloudFront alias
   and the A/AAAA records inside the child zone belong to *this* repo's
-  Terraform.
+  Terraform. Since issue #551 the site is at **`icwbt.jaredhoward.com`**, a
+  second child zone the operator made by hand
+  ([§ Moving the site to a new domain](#moving-the-site-to-a-new-domain));
+  the bootstrap's zone stays for the old hostname's redirect.
 
 It also turns on **required linear history** on `main`, so GitHub accepts
 only squash and rebase merges there.
@@ -356,17 +364,18 @@ The backend sends verification, password-reset and invitation emails
 is no SMTP password to store. Terraform provisions all of it in
 [`infra/ses.tf`](../infra/ses.tf), in the primary region (`aws_region`):
 
-- **Domain identity** for `water-management.jaredhoward.com` with **Easy
+- **Domain identity** for `domain_name` (`icwbt.jaredhoward.com` since
+  issue #551; it was `water-management.jaredhoward.com`) with **Easy
   DKIM** (RSA 2048). The three `<token>._domainkey` CNAMEs go into the child
   Route 53 zone. Their target is `<token>.dkim.amazonses.com`, or the regional
   `<token>.dkim.<region>.amazonses.com` in af-south-1 and the other newer
   regions; Terraform picks the right one.
-- **Custom MAIL FROM** `mail.water-management.jaredhoward.com`, with its MX
+- **Custom MAIL FROM** `mail.icwbt.jaredhoward.com`, with its MX
   (`10 feedback-smtp.<region>.amazonses.com`) and SPF TXT
   (`v=spf1 include:amazonses.com -all`), so SPF aligns for DMARC. If the MX
   ever goes missing, SES falls back to its own MAIL FROM instead of bouncing
   (DKIM still aligns).
-- **DMARC** TXT `_dmarc.water-management.jaredhoward.com`:
+- **DMARC** TXT `_dmarc.icwbt.jaredhoward.com`:
   `v=DMARC1; p=none; rua=mailto:<dmarc_report_email>; adkim=r; aspf=r`.
   Tighten `dmarc_policy` to `quarantine` once the reports are clean
   (infra/README.md operator step 8b).
@@ -381,7 +390,7 @@ is no SMTP password to store. Terraform provisions all of it in
 - **IAM:** the API and worker Lambda roles may call `ses:SendEmail` on this
   account's SES identities in its own region (`identity/*`) and the
   configuration set only, with the condition
-  `ses:FromAddress = no-reply@water-management.jaredhoward.com`. Nothing else.
+  `ses:FromAddress = no-reply@icwbt.jaredhoward.com`. Nothing else.
   The wildcard is for the sandbox, which also authorises each send against the
   **recipient's** verified identity (`identity/<address>`): naming only the
   domain identity denies every sandbox send, the operator's own test
@@ -421,8 +430,8 @@ Lambda environment (set by `infra/lambda.tf`):
 | Variable | Value |
 | --- | --- |
 | `MAIL_TRANSPORT` | `ses` (must be set: the default `log` sends nothing, and in Lambda doesn't print bodies) |
-| `MAIL_FROM` | `Water Management <no-reply@water-management.jaredhoward.com>` (`mail_from_display_name`, `mail_from_local_part`) |
-| `SITE_URL` | `https://water-management.jaredhoward.com` (the base of every emailed link) |
+| `MAIL_FROM` | `IC-WBT <no-reply@icwbt.jaredhoward.com>` (`mail_from_display_name`, `mail_from_local_part`) |
+| `SITE_URL` | `https://icwbt.jaredhoward.com` (the base of every emailed link) |
 | `SES_CONFIGURATION_SET` | `water-management` |
 | `SES_REGION` | unset: SES is in the Lambda's own region |
 | `RUNS_KEPT_PER_PROJECT` | not set by Terraform, so the backend default (20 runs per project) applies; see [data-model.md § Run output volume](./data-model.md#time-series-storage) |
@@ -464,8 +473,10 @@ cd infra && cp backend.config.example backend.config && cp terraform.tfvars.exam
 ```
 
 Fill in `backend.config` (the tfstate bucket) and `terraform.tfvars`:
-`domain_name = "water-management.jaredhoward.com"`, `route53_zone_id` (the child zone the
-bootstrap printed), `bootstrap_slug = "water-management"`, the region, the budget
+`domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id` (its child zone),
+`redirect_domains` (each former hostname and its zone: the bootstrap's
+`water-management.jaredhoward.com`; `{}` once retired),
+`bootstrap_slug = "water-management"`, the region, the budget
 email and the DMARC report mailbox. Both files are gitignored (the estate
 keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
 
@@ -571,6 +582,11 @@ and 10c; `--rds-event-test` proves RDS events reach the topic):
 ```bash
 cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
 ```
+
+While `redirect_domains` holds a former hostname, add `--redirect-from <host>`
+for each (`--redirect-from water-management.jaredhoward.com` since issue
+#551): its pages must 301 to the site and its `/api/health` must still answer
+([§ Moving the site to a new domain](#moving-the-site-to-a-new-domain)).
 
 They are **repository-level** values (`gh variable set` / `gh secret set`
 with no `--env`), not `production` environment values. The release
@@ -2041,6 +2057,69 @@ that way from 2026-10-05 and has been **open since 2026-10-06**
 (`signup_open = true` in `prod.tfvars`, applied), before go-live Gates A and
 C in [legal-status.md](./legal-status.md). To close it again, set it back to
 `false`, plan and apply (no release needed).
+
+## Moving the site to a new domain
+
+Issue #551 renamed the app Integrated Catchment - Water Balance Tool (IC-WBT)
+and moved it from `water-management.jaredhoward.com` to
+`icwbt.jaredhoward.com`. The repo, package, database and AWS resource names
+keep `water-management` (identifiers nobody sees).
+
+**What the Terraform does.** `domain_name` is the new hostname in its own
+delegated child zone (`route53_zone_id`). `redirect_domains` maps each former
+hostname to its zone: each stays a CloudFront alias and a SAN on the
+certificate, with A/AAAA records in its zone, and `spa_rewrite` answers its
+pages with a **301** to the same path and query on the new host (any host
+but `domain_name` is redirected, the distribution's `*.cloudfront.net` name
+included). `/api/*`, `/reports/*`, `/packs/*` and `/tiles/*` don't redirect
+and keep answering on a former hostname, so a mail client's one-click
+unsubscribe from an older alert email, a data logger still pushing to the old
+`/api/ingest`, and a signed download link minted before the move all keep
+working. `ALLOWED_ORIGINS` is the new origin only: a former hostname's pages
+redirect, so none calls the API from there. The SES identity, its DKIM, MAIL
+FROM and DMARC records, the sender address, every emailed link (`SITE_URL`),
+the renderer's site, the IAM and SES-endpoint From pins and the sign-in
+CAPTCHA's API key (`token_domains`) all follow `domain_name`.
+
+**What the operator does, in this order** (the zone, then its delegation,
+then the apply, because ACM can't validate a name whose zone isn't delegated
+yet; the old hostname's delegation is live already). Write down the two zone
+IDs as you go (`Z…`, without the `/hostedzone/` prefix):
+
+1. Merge the issue #551 PR to `main` (nothing deploys until the releases in steps 14 and 15).
+2. `aws sso login --profile water-management && aws sso login --profile dns-parent`
+3. Create the new child zone in this account: `aws route53 create-hosted-zone --name icwbt.jaredhoward.com --caller-reference "icwbt-$(date +%s)" --hosted-zone-config Comment="IC-WBT site, issue 551" --profile water-management --query 'HostedZone.Id' --output text`
+4. Print its four name servers: `aws route53 get-hosted-zone --id <NEW_ZONE_ID> --profile water-management --query 'DelegationSet.NameServers' --output text`
+5. Find the parent zone in the jaredhoward account (the line must read `jaredhoward.com.`): `aws route53 list-hosted-zones-by-name --dns-name jaredhoward.com --max-items 1 --profile dns-parent --query 'HostedZones[0].[Name,Id]' --output text`
+6. Delegate the new zone from the parent (the same NS record the bootstrap's stage 3 wrote for the old zone, here by hand): `aws route53 change-resource-record-sets --hosted-zone-id <PARENT_ZONE_ID> --profile dns-parent --change-batch '{"Changes":[{"Action":"CREATE","ResourceRecordSet":{"Name":"icwbt.jaredhoward.com","Type":"NS","TTL":3600,"ResourceRecords":[{"Value":"<NS1>"},{"Value":"<NS2>"},{"Value":"<NS3>"},{"Value":"<NS4>"}]}}]}'`
+7. Wait until the delegation resolves (the four servers from step 4): `dig +short NS icwbt.jaredhoward.com`
+8. Look up the old zone's ID: `aws route53 list-hosted-zones-by-name --dns-name water-management.jaredhoward.com --max-items 1 --profile water-management --query 'HostedZones[0].[Name,Id]' --output text`
+9. In `infra-secrets/water-management/prod.tfvars` set `domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id = "<NEW_ZONE_ID>"` and `redirect_domains = { "water-management.jaredhoward.com" = "<OLD_ZONE_ID>" }`, remove any `mail_from_display_name` line (the default is now `IC-WBT`), and commit it there.
+10. Plan: `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+    The plan should show: the certificate replaced (create before destroy) for `icwbt.jaredhoward.com` with the old name as a SAN, and a validation record for the new name; the distribution updated in place (aliases, certificate) and `spa_rewrite` updated; `aws_route53_record.site_a` and `site_aaaa` **moved** to `["water-management.jaredhoward.com"]` with no change, plus new `["icwbt.jaredhoward.com"]` records; the SES identity replaced, with its DKIM, MAIL FROM and DMARC records recreated in the new zone and deleted from the old; the WAF CAPTCHA API key replaced; the Lambdas' `MAIL_FROM`, `SITE_URL`, `ALLOWED_ORIGINS` and `RENDER_SITE_URL`, and the From pins in the IAM and SES endpoint policies, updated. No database, bucket, queue or secret change: stop and ask if there is one.
+11. Apply, in a quiet hour: `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
+    Until SES has verified the new domain (minutes, up to an hour), sends fail: the request still answers, the failure is logged, and `mail-send-failed` may fire. SES production access belongs to the account, so it carries over. Go on to steps 12–15 straight away: until the web release (step 15) the old build's sign-in CAPTCHA key no longer exists.
+12. Check the new identity reads `SUCCESS`, `SUCCESS`, `true`: `aws sesv2 get-email-identity --email-identity icwbt.jaredhoward.com --region af-south-1 --profile water-management --query '{dkim:DkimAttributes.Status,mailFrom:MailFromAttributes.MailFromDomainStatus,verified:VerifiedForSendingStatus}'`
+13. Push the changed outputs (`PUBLIC_SITE_URL` and the new `WAF_CAPTCHA_API_KEY`) to GitHub: `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`
+14. Release the backend (the new name in emails and the authenticator label), and approve it in the `production` environment ([§ Releasing](#releasing)): `gh release create backend@<next version> --target main --generate-notes`
+15. Once that deploy has finished, release the web app, which ships the new name and carries the new CAPTCHA key (the old build's key no longer exists, so until this release a sign-in that hits the CAPTCHA can't solve it): `gh release create web@<next version> --target main --generate-notes`
+16. Run the post-apply check, with the redirect: `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars --redirect-from water-management.jaredhoward.com`
+17. Point the repository's website at the new address: `gh repo edit Absence0760/project-water-management --homepage https://icwbt.jaredhoward.com`
+
+What people notice: the session cookie belongs to the host, so anyone signed
+in on the old address signs in again on the new one; an authenticator app
+entry added before the rename keeps its old label (its codes still work; a
+new entry is labelled IC-WBT); links in emails sent before the move redirect.
+
+**Retiring the old hostname** (a tracked follow-up, once the old address has
+had no page requests for a few months): set `redirect_domains = {}`, plan and
+apply (the alias, the SAN and its two records go), then delete the old zone's
+NS record from the parent zone (the reverse of step 6, `"Action":"DELETE"`
+with the record as it stands) and the old zone itself, once it holds only its
+NS and SOA records: `aws route53 delete-hosted-zone --id <OLD_ZONE_ID> --profile water-management`.
+A later move (to `icwbt.co.za` or `icwbt.com`, issue #551's "later") is the
+same runbook with an apex zone, `icwbt.jaredhoward.com` joining
+`redirect_domains`.
 
 ## Runbooks
 

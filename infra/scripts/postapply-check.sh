@@ -8,7 +8,7 @@
 #
 #   infra/scripts/postapply-check.sh --profile water-management --region af-south-1 \
 #     [--var-file ../../infra-secrets/water-management/prod.tfvars] [--domain <site domain>] \
-#     [--rds-event-test]
+#     [--redirect-from <former hostname>]... [--rds-event-test]
 #
 # Checks:
 #   sns-<region>     Both alert topics (<region> and us-east-1, the budgets')
@@ -30,6 +30,14 @@
 #   function-url     The API's Function URL, called directly without the
 #                    CloudFront shared secret, answers 403 (the /api prefix is
 #                    CloudFront's, so the direct path is /health).
+#   redirect-*       Only with --redirect-from <host> (repeatable; each former
+#                    hostname in redirect_domains, issue #551): a page on
+#                    https://<host> answers 301 to the same path and query on
+#                    https://<domain> (the probe's query has an encoded '&'
+#                    and space and a repeated name, so a redirect that decoded
+#                    or dropped values would fail it), and https://<host>/api/health still
+#                    answers 200 (the API keeps serving a former hostname, for
+#                    one-click unsubscribes and logger pushes).
 #
 # --rds-event-test (opt-in; it changes nothing either): the topic policy lets
 # events.rds.amazonaws.com publish only with aws:SourceAccount = this account
@@ -69,6 +77,7 @@ profile=""
 region=""
 var_file=""
 domain=""
+redirect_from=()
 rds_event_test=0
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -76,6 +85,7 @@ while [ $# -gt 0 ]; do
 	--region) region="${2:?--region needs a value}"; shift 2 ;;
 	--var-file) var_file="${2:?--var-file needs a value}"; shift 2 ;;
 	--domain) domain="${2:?--domain needs a value}"; shift 2 ;;
+	--redirect-from) redirect_from+=("${2:?--redirect-from needs a value}"); shift 2 ;;
 	--rds-event-test) rds_event_test=1; shift ;;
 	-h | --help) usage ;;
 	*) echo "postapply-check: unknown argument: $1" >&2; usage ;;
@@ -253,6 +263,26 @@ for path in '/?list-type=2' '/?list-type=2&prefix=' '/_app/?list-type=2&prefix=_
 		fail edge-no-listing "$path returns an S3 bucket listing (status $code): the default behaviour forwards a query string or the rewrite lets a directory through (s3_cloudfront.tf)"
 	else
 		pass edge-no-listing "$path returns no bucket listing (status $code)"
+	fi
+done
+
+# --- Former hostnames redirect (issue #551) -----------------------------------------
+
+for host in ${redirect_from[@]+"${redirect_from[@]}"}; do
+	probe="/wm-postapply-check/page?probe=a%26b%20c&n=1&n=2"
+	rm -f "$tmp/body"
+	out="$(curl -sS --max-time 20 -o "$tmp/body" -w '%{http_code} %{redirect_url}' "https://$host$probe" 2>"$errfile")" || out="000"
+	if [ "$out" = "301 $site$probe" ]; then
+		pass redirect-page "https://$host$probe answers 301 to $site$probe"
+	else
+		out="${out% }"
+		fail redirect-page "https://$host$probe answers ${out:-000}, expected 301 to $site$probe$([ "${out%% *}" = 000 ] && printf ' (%s)' "$(last_error)")"
+	fi
+	code="$(get "https://$host/api/health")"
+	if [ "$code" = "200" ]; then
+		pass redirect-api "https://$host/api/health still answers 200"
+	else
+		fail redirect-api "https://$host/api/health answers $code, expected 200: the API must keep answering a former hostname (s3_cloudfront.tf, spa_rewrite)"
 	fi
 done
 

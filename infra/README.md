@@ -1,14 +1,17 @@
 # Infrastructure
 
-Terraform for the production stack at **https://water-management.jaredhoward.com**.
+Terraform for the production stack at **https://icwbt.jaredhoward.com** (since
+issue #551; the former `water-management.jaredhoward.com` redirects there:
+[docs/deployment.md § Moving the site to a new domain](../docs/deployment.md#moving-the-site-to-a-new-domain)).
 One root module, flat files, state in the estate bootstrap's S3 bucket. Nothing
 here has been applied yet; see [Operator steps](#operator-steps) for the order.
 
 ## Architecture
 
 ```
-browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-management.jaredhoward.com
+browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredhoward.com (+ redirect_domains)
                     ├─ /*         → CF Function spa_rewrite → S3 (private, OAC)     SPA build
+                    │              (another host: 301 to the same path on domain_name)
                     ├─ /reports/* → signed URLs only (key group) → S3 reports (OAC) report PDFs
                     ├─ /packs/*   → signed URLs only (key group) → S3 packs (OAC)   evidence pack PDFs
                     ├─ /tiles/*   → CF Function tiles_range (≤ 2 MiB ranges) → S3 tiles (OAC)  basemap, relief, glyphs
@@ -196,7 +199,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | File | What |
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
-| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `github_repo`, `budget_alert_email`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
+| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint (`secretsmanager_endpoint_az_count`) and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
@@ -220,7 +223,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist, and a logging CloudTrail trail (this account's or the Organization's) records KMS write management events in the region (the database key alarm's source). PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
-| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
+| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) `--redirect-from <host>` (each former hostname in `redirect_domains`, issue #551) also checks that its pages 301 to the site and its `/api/health` still answers |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
@@ -428,8 +431,14 @@ the us-east-1 one ([§ Budget alerts](#budget-alerts)).
 
 - **arm64 Lambdas**, ~20% cheaper per GB-s. The bundle is pure JS (`bcryptjs`,
   not native bcrypt).
-- **No www alias.** `www.water-management.jaredhoward.com` isn't worth a SAN,
+- **No www alias.** `www.icwbt.jaredhoward.com` isn't worth a SAN,
   records and a redirect.
+- **A former hostname is an alias of the same distribution**, not a second
+  distribution (`redirect_domains`): `spa_rewrite` 301s its pages, its
+  `/api/*` keeps answering (one-click unsubscribes, logger pushes), and the
+  certificate covers it as a SAN. A second distribution would have meant
+  moving the alias between distributions, which CloudFront only allows once
+  the first has let go of it: minutes with the old address down.
 - **Own response-headers policies** (`security_headers.tf`) instead of the
   managed SecurityHeadersPolicy: HSTS 2 years with subdomains (no preload —
   only a registrable domain can be preloaded), nosniff, `X-Frame-Options:
@@ -613,7 +622,9 @@ Claude does not run any of these, and none of them print a secret. Replace
    default region us-east-1).
 
    Wait until the child zone's delegation resolves:
-   `dig +short NS water-management.jaredhoward.com`. ACM validation hangs
+   `dig +short NS water-management.jaredhoward.com` (and, since issue #551,
+   `icwbt.jaredhoward.com`, the zone made by hand: docs/deployment.md § Moving
+   the site to a new domain). ACM validation hangs
    until it does.
 2. **Region (af-south-1 only).**
    `aws account enable-region --region-name af-south-1 --profile water-management`,
@@ -709,7 +720,9 @@ Claude does not run any of these, and none of them print a secret. Replace
    topic (the us-east-1 one carries every budget and cost-anomaly alert).
    Then run the post-apply check (read-only):
    `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
-   It FAILS while a subscription is still `PendingConfirmation`, and checks
+   (add `--redirect-from <host>` for each former hostname while
+   `redirect_domains` holds one: `--redirect-from water-management.jaredhoward.com`
+   since issue #551). It FAILS while a subscription is still `PendingConfirmation`, and checks
    the RDS event subscription is `active`, the renderer's ECR policy (10a),
    SES production access (a WARN until step 8a is granted) and the edge: a
    missing `/x.pdf` and a missing file under `/_app/` answer 404, no
@@ -725,11 +738,11 @@ Claude does not run any of these, and none of them print a secret. Replace
 8a. **SES: verify, then leave the sandbox.** The DKIM, MAIL FROM and DMARC
    records are created by the apply; the identity turns `SUCCESS` once DNS
    propagates (minutes to an hour):
-   `aws sesv2 get-email-identity --email-identity water-management.jaredhoward.com --region <region> --profile water-management --query '{dkim:DkimAttributes.Status,mailFrom:MailFromAttributes.MailFromDomainStatus,verified:VerifiedForSendingStatus}'`.
+   `aws sesv2 get-email-identity --email-identity icwbt.jaredhoward.com --region <region> --profile water-management --query '{dkim:DkimAttributes.Status,mailFrom:MailFromAttributes.MailFromDomainStatus,verified:VerifiedForSendingStatus}'`.
    A new account is in the **SES sandbox** (200 emails/day, 1/s, and only to
    *verified* addresses), which Terraform can't change. Request production
    access — it is a human review by AWS, usually within a day:
-   `aws sesv2 put-account-details --production-access-enabled --mail-type TRANSACTIONAL --website-url https://water-management.jaredhoward.com --use-case-description "Transactional account email only (email verification, password reset, project invitations) for a low-volume B2B water-modelling tool; no marketing. Bounces and complaints go to the SES suppression list and CloudWatch alarms." --contact-language EN --region <region> --profile water-management`.
+   `aws sesv2 put-account-details --production-access-enabled --mail-type TRANSACTIONAL --website-url https://icwbt.jaredhoward.com --use-case-description "Transactional account email only (email verification, password reset, project invitations) for a low-volume B2B water-modelling tool; no marketing. Bounces and complaints go to the SES suppression list and CloudWatch alarms." --contact-language EN --region <region> --profile water-management`.
    Until it is granted, verify your own address to test
    (`aws sesv2 create-email-identity --email-identity you@example.com --region <region> --profile water-management`):
    mail to it goes through (the send policy allows the recipient's identity,
@@ -764,7 +777,7 @@ Claude does not run any of these, and none of them print a secret. Replace
 
     Approve each in the `production` environment. The backend deploy ends
     with a `/api/health` check through CloudFront; check the site by hand
-    too: `curl -s https://water-management.jaredhoward.com/api/health`.
+    too: `curl -s https://icwbt.jaredhoward.com/api/health`.
 
     **Expected alarm between the apply and this deploy:** the apply creates
     the worker and fetcher with Terraform's stub code, which throws on every
