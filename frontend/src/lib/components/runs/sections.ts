@@ -12,6 +12,7 @@ import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor, riverHref } fr
 import { supplyAnchor, supplyHref } from '$lib/components/supply/links';
 import { runoffModelName } from './runoff';
 import { unitRainOf } from './unitRain';
+import { stationsOf } from './stationRain';
 
 export type ResultSection = NavSection;
 
@@ -21,7 +22,7 @@ export interface ResultGroup extends NavGroup {
 	sections: ResultSection[];
 }
 
-type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast' | 'unitRain'> & { calibration?: Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'> | null };
+type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast' | 'unitRain' | 'stations'> & { calibration?: Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'> | null };
 
 /**
  * `rail`: the side index, with a line for each panel. On the bar (which must
@@ -59,8 +60,12 @@ export function resultGroups(summary: SectionInput, rail = false): ResultGroup[]
 				{ id: 'res-water-balance', label: 'Water balance by water year', bar: 'Water balance' },
 				// Runoff model balance: conceptual models (GR4J) only.
 				...(summary.runoff ? [{ id: 'res-runoff', label: `Runoff model: ${runoffModelName(summary.runoff)}`, bar: 'Runoff model' }] : []),
-				// Rain for each unit: runs with settings.unitRain perUnit only (issue #482).
-				...(unitRainOf(summary) ? [{ id: 'res-unit-rain', label: 'Rain for each unit', bar: 'Unit rain' }] : []),
+				// Rain for each unit: runs with settings.unitRain perUnit (issue #482), or rainfall stations (issue #553).
+				...(unitRainOf(summary)
+					? [{ id: 'res-unit-rain', label: 'Rain for each unit', bar: 'Unit rain' }]
+					: stationsOf(summary)
+						? [{ id: 'res-unit-rain', label: 'Rain from rainfall stations', bar: 'Station rain' }]
+						: []),
 				// WR2012 check: only when the project has a reference.
 				...(summary.wr2012 ? [{ id: 'res-wr2012', label: wr2012Heading(summary.wr2012), bar: 'WR2012 check' }] : []),
 				{ id: 'res-ewr-agreement', label: 'EWR test: model against observed flow', bar: 'EWR vs observed' },

@@ -66,6 +66,17 @@ describe('the factor in words', () => {
 	});
 });
 
+describe('a unit on its rainfall station (issue #553)', () => {
+	it('says the station and its MAP ratio, held and noted like the gauge’s', () => {
+		const u = unit({ rule: 'station', rainKey: 'rain_station_mm#s1', factor: 4, factorSource: 'gaugeMap', gaugeMapOwnFactor: 4.6, gaugeMapClamped: true });
+		expect(factorText(u)).toBe('× 4, unit MAP ÷ station MAP');
+		expect(factorClamped(u)).toBe(true);
+		expect(unitRainNotes({ units: [u] })).toEqual(['Upper unit: the factor was held at the 0.25–4 bound; check its MAP and the station’s.']);
+		const body = withoutComments(render(UnitRainPanel, { props: { result: result([u]) } }).body);
+		expect(body).toContain('Its rainfall station × MAP ratio');
+	});
+});
+
 describe('unitRainNotes', () => {
 	it('names the units that fell back to the catchment rain, held factors, a short CHIRPS mean and raw CHIRPS', () => {
 		expect(unitRainNotes(result([unit()]))).toEqual([]);

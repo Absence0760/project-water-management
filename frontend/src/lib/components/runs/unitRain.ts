@@ -27,7 +27,9 @@ export const RULE_LABEL: Record<UnitRainResultUnit['rule'], string> = {
 	unitGauge: 'Its own rain gauge',
 	gaugeMap: 'Catchment gauge × MAP ratio',
 	unitChirps: 'Its own CHIRPS',
-	catchment: 'Catchment rain (fallback)'
+	catchment: 'Catchment rain (fallback)',
+	// Engine ≥ 1.91.0 (issue #553): its rainfall station × MAP ratio, the station table below says which.
+	station: 'Its rainfall station × MAP ratio'
 };
 
 const FACTOR_SOURCE: Record<UnitRainResultUnit['factorSource'], string> = {
@@ -45,7 +47,8 @@ const RUNS_ON: Record<UnitRainResultUnit['rule'], string> = {
 	unitGauge: 'its own rain gauge',
 	gaugeMap: 'the catchment gauge × its MAP ratio',
 	unitChirps: 'its own CHIRPS',
-	catchment: 'the catchment rain'
+	catchment: 'the catchment rain',
+	station: 'its rainfall station × its MAP ratio'
 };
 
 type ReferenceLevel = Extract<UnitRainResultUnit['chirps'] & {}, { source: 'reference' }>;
@@ -59,8 +62,9 @@ const legacyRatio = (c: ReferenceLevel) => c as unknown as { mapRatio?: number; 
  * day; on the reference factors, k_unit on top of them: unit MAP ÷ the unit's
  * mean annual (CHIRPS × factors) over the MAP period.
  */
-export function factorText(u: Pick<UnitRainResultUnit, 'factor' | 'factorSource'> & { chirps?: UnitRainResultUnit['chirps'] }): string {
-	const src = FACTOR_SOURCE[u.factorSource] ?? u.factorSource;
+export function factorText(u: Pick<UnitRainResultUnit, 'factor' | 'factorSource'> & { chirps?: UnitRainResultUnit['chirps']; rule?: UnitRainResultUnit['rule'] }): string {
+	// A station unit's factor is its MAP ratio (issue #553), recorded as factorSource 'gaugeMap'.
+	const src = u.rule === 'station' ? 'unit MAP ÷ station MAP' : (FACTOR_SOURCE[u.factorSource] ?? u.factorSource);
 	if (u.factor === null && u.factorSource === 'chirpsReference' && u.chirps?.source === 'reference') {
 		const k = kUnitOf(u.chirps);
 		if (k)
@@ -74,7 +78,7 @@ export function factorText(u: Pick<UnitRainResultUnit, 'factor' | 'factorSource'
 
 /** Whether the unit's factor was held at the 0.25–4 bound. */
 export function factorClamped(u: Pick<UnitRainResultUnit, 'gaugeMapClamped' | 'chirps' | 'rule'>): boolean {
-	if (u.rule === 'gaugeMap') return !!u.gaugeMapClamped;
+	if (u.rule === 'gaugeMap' || u.rule === 'station') return !!u.gaugeMapClamped;
 	if (u.rule !== 'unitChirps') return false;
 	if (u.chirps?.source === 'map') return u.chirps.clamped;
 	if (u.chirps?.source === 'reference') {
@@ -91,7 +95,7 @@ export function factorClamped(u: Pick<UnitRainResultUnit, 'gaugeMapClamped' | 'c
  */
 export function factorOutsideBand(u: Pick<UnitRainResultUnit, 'gaugeMapOutsideBand' | 'chirps' | 'rule' | 'gaugeMapClamped'>): boolean {
 	if (factorClamped(u)) return false;
-	if (u.rule === 'gaugeMap') return !!u.gaugeMapOutsideBand;
+	if (u.rule === 'gaugeMap' || u.rule === 'station') return !!u.gaugeMapOutsideBand;
 	if (u.rule !== 'unitChirps') return false;
 	if (u.chirps?.source === 'map') return !!u.chirps.outsideBand;
 	if (u.chirps?.source === 'reference') return !!kUnitOf(u.chirps)?.outsideBand;
@@ -100,7 +104,7 @@ export function factorOutsideBand(u: Pick<UnitRainResultUnit, 'gaugeMapOutsideBa
 
 /** The unit's level factor's own value (before any clamp), for a note; null when it varies by day. */
 function ownFactor(u: UnitRainResultUnit): number | null {
-	if (u.rule === 'gaugeMap') return u.gaugeMapOwnFactor;
+	if (u.rule === 'gaugeMap' || u.rule === 'station') return u.gaugeMapOwnFactor;
 	if (u.chirps?.source === 'map') return u.chirps.ownFactor;
 	if (u.chirps?.source === 'reference') return kUnitOf(u.chirps)?.ownFactor ?? null;
 	return null;
@@ -154,10 +158,10 @@ export function unitRainNotes(r: Pick<UnitRainResult, 'units'> & Partial<Pick<Un
 	if (fellBack.length)
 		out.push(`${fellBack.join(', ')} ${fellBack.length === 1 ? 'has' : 'have'} no rain of ${fellBack.length === 1 ? 'its' : 'their'} own (no gauge, and no CHIRPS feed or MAP to scale by), so ${fellBack.length === 1 ? 'it runs' : 'they run'} on the catchment rain.`);
 	for (const u of r.units) {
-		if (factorClamped(u)) out.push(`${u.name}: the factor was held at the ${CLAMP} bound; check its MAP${u.rule === 'gaugeMap' ? ' and the gauge’s' : ''}.`);
+		if (factorClamped(u)) out.push(`${u.name}: the factor was held at the ${CLAMP} bound; check its MAP${u.rule === 'gaugeMap' ? ' and the gauge’s' : u.rule === 'station' ? ' and the station’s' : ''}.`);
 		else if (factorOutsideBand(u)) {
 			const own = ownFactor(u);
-			out.push(`${u.name}: its level factor${own === null ? '' : `, ${fmtNum(own, 2, true)},`} is outside ${BAND}; it is used, but check its MAP${u.rule === 'gaugeMap' ? ' and the gauge’s' : ''}.`);
+			out.push(`${u.name}: its level factor${own === null ? '' : `, ${fmtNum(own, 2, true)},`} is outside ${BAND}; it is used, but check its MAP${u.rule === 'gaugeMap' ? ' and the gauge’s' : u.rule === 'station' ? ' and the station’s' : ''}.`);
 		}
 		// Issue #500 answer 7a: CHIRPS that averages 0 mm a year looks broken, so the unit skipped it.
 		if (u.chirps?.source === 'unusable') {

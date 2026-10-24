@@ -32,6 +32,7 @@
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import { unitRainOf } from './unitRain';
+	import { stationsOf } from './stationRain';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
 	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
@@ -803,12 +804,11 @@
 							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} forecastFrom={summary.forecast?.from ?? null} />
 						</div>
 					{/if}
-					{#if unitRainOf(summary)}
-						{@const unitRain = unitRainOf(summary)!}
+					{#if unitRainOf(summary) || stationsOf(summary)}
 						<div class="panel" id="res-unit-rain">
 							<Lazy load={loadUnitRainPanel}>
 								{#snippet children(UnitRainPanel)}
-									<UnitRainPanel result={unitRain} order={summary.farms.map((f) => f.nodeId)} />
+									<UnitRainPanel result={unitRainOf(summary)} stations={stationsOf(summary)} order={summary.farms.map((f) => f.nodeId)} />
 								{/snippet}
 							</Lazy>
 						</div>

@@ -53,6 +53,15 @@ describe('resultGroups', () => {
 		expect(ids.indexOf('res-unit-rain')).toBe(ids.indexOf('res-runoff') + 1);
 	});
 
+	it('lists the same panel as Rain from rainfall stations for a run whose catchment ran on a station, without rain for each unit (issue #553)', () => {
+		const sections = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections;
+		const runoff = { model: 'gr4j' } as RunSummary['runoff'];
+		const catchment = { nodeId: null, name: 'Synthetic catchment' } as NonNullable<RunSummary['stations']>['catchment'];
+		const s = sections({ farms: [], runoff, stations: { pairings: [], catchment, units: [], catchmentMapMm: null, catchmentMapFromUnits: true } });
+		expect(s.find((x) => x.id === 'res-unit-rain')?.label).toBe('Rain from rainfall stations');
+		expect(sections({ farms: [], runoff, stations: { pairings: [], catchment: null, units: [], catchmentMapMm: null, catchmentMapFromUnits: true } }).map((x) => x.id)).not.toContain('res-unit-rain');
+	});
+
 	it('puts the flow-duration curve with the hydrograph', () => {
 		const groups = resultGroups({ farms: [] });
 		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
