@@ -12,6 +12,7 @@ import { applyScenario } from '../scenario/overrides';
 import { sameOutput } from '../testing/invariants';
 import { checkResume } from '../testing/warmstartInvariants';
 import { outlookMemberInput } from '../outlook/outlook';
+import { ensembleContext, resolveEnsembleOptions } from '../uncertainty/ensemble';
 import { stationAreaRain } from './stationAreaRain';
 import { catchmentMapOf, stationAreaDays, stationRatio, STATION_DAY_SOURCE } from './stationForcing';
 import { checkedStationRecord } from './stationRecord';
@@ -290,6 +291,21 @@ describe('carry-through', () => {
 		const r = applyScenario(x, []);
 		expect(r.input.stations).toEqual(x.stations);
 		expect(sameOutput(runModel(r.input), runModel(x))).toBe(true);
+	});
+
+	it('the ensemble’s CHIRPS-only member blanks the stations: every area reads its CHIRPS × the base’s pinned pairing factors', () => {
+		const x = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' } }, catchment: { stationId: 'S' }, sites: SITES } });
+		const base = runModel(x);
+		const fit = base.summary.stations!.pairings.find((p) => p.stationId === 'S')!;
+		const { options } = resolveEnsembleOptions(x, { members: 30, rainSources: ['recorded', 'chirps'] });
+		const member = ensembleContext(x, options).chirps!;
+		expect((member.series[stationSeriesKey('S')]!.values as unknown[]).every((v) => v === null)).toBe(true);
+		expect(member.settings.rainStations?.pinnedFactors?.S).toEqual(fit.months.map((m) => m.factor));
+		const out = runModel(member);
+		const chA = x.series['rain_chirps_mm@A']!.values as number[];
+		const a = col(out, 'rain_unit', 'A');
+		for (let t = 0; t < DAYS; t += 7) expect(a[t]).toBe(chA[t]! * pairingFactorOn(fit, D0 + t)!);
+		expect(out.summary.stations!.catchment!.days).toMatchObject({ station: 0, chirps: DAYS });
 	});
 
 	it('an outlook member keeps the stations and pins the base input’s pairing factors', () => {
