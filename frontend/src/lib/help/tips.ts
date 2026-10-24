@@ -1248,7 +1248,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'quality-flags',
 		term: 'Quality flags (per-day)',
-		short: 'Each observed day is in the gauged range, above or below it, suspect, infilled or missing. Fit automatically sets flagged days aside.',
+		short: 'Each observed day is in the gauged range, above or below it, over a low-flow threshold, suspect, infilled or missing. Fits set flags aside.',
 		category: 'fit',
 		fields: ['settings.qualityFlags', 'run.observed_flow_quality']
 	},

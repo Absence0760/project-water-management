@@ -65,6 +65,9 @@ import {
 	FLOW_DAY_FLAGS,
 	ratingError,
 	RATING_SOURCE_MAX,
+	LOW_FLOW_PERIODS_MAX,
+	LOW_FLOW_TEXT_MAX,
+	lowFlowPeriodsError,
 	ZERO_RUN_RULES,
 	calibrationRulesError,
 	resolveCalibrationRules,
@@ -731,6 +734,27 @@ const QualityFlags = z
 				const err = zeroFlowMonthsError(v);
 				if (err) ctx.addIssue({ code: 'custom', message: err });
 			})
+			.optional(),
+		// Engine ≥ 1.90.0 (issue #557): periods in which only a record's low flows are valid (lowFlowPeriodsError is
+		// the rule). Optional, so settings and fit records from before it still validate (absent = none).
+		lowFlowPeriods: z
+			.array(
+				z
+					.object({
+						kind: z.enum(CALIBRATION_FLOW_KINDS),
+						start: z.string(),
+						end: z.string(),
+						maxM3s: z.number().finite().gt(0),
+						reason: z.string().max(LOW_FLOW_TEXT_MAX),
+						source: z.string().max(RATING_SOURCE_MAX)
+					})
+					.strict()
+			)
+			.max(LOW_FLOW_PERIODS_MAX)
+			.superRefine((v, ctx) => {
+				const err = lowFlowPeriodsError(v);
+				if (err) ctx.addIssue({ code: 'custom', message: err });
+			})
 			.optional()
 	})
 	.strict();
@@ -742,11 +766,17 @@ const DayQuality = z
 	.object({
 		flowKind: z.enum(CALIBRATION_FLOW_KINDS),
 		rating: z.object({ gaugedMaxM3s: z.number().finite().nullable(), gaugedMinM3s: z.number().finite().nullable(), source: z.string().max(RATING_SOURCE_MAX) }).strict().nullable(),
-		use: QualityFlags.omit({ ratings: true, zeroFlowMonths: true }),
+		use: QualityFlags.omit({ ratings: true, zeroFlowMonths: true, lowFlowPeriods: true }),
 		// Engine ≥ 1.81.0: the river-stops months the flags read. Absent on an older record.
 		zeroFlowMonths: z.array(z.number().int().min(1).max(12)).max(12).optional(),
 		windowDays: dayCount,
-		flow: z.object(Object.fromEntries(FLOW_DAY_FLAGS.map((f) => [f, dayCount])) as Record<(typeof FLOW_DAY_FLAGS)[number], typeof dayCount>).strict(),
+		// periodHigh (engine ≥ 1.90.0, issue #557) is absent on an older record.
+		flow: z
+			.object({
+				...(Object.fromEntries(FLOW_DAY_FLAGS.filter((f) => f !== 'periodHigh').map((f) => [f, dayCount])) as Record<Exclude<(typeof FLOW_DAY_FLAGS)[number], 'periodHigh'>, typeof dayCount>),
+				periodHigh: dayCount.optional()
+			})
+			.strict(),
 		scoredDays: dayCount,
 		censoredDays: dayCount,
 		leftOutDays: dayCount,

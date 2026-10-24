@@ -253,3 +253,76 @@ describe('quality flags and the flag-aware objective (§2.10h)', () => {
 		expect(rx.fit.scores.days).toBe(q.filter((v) => v <= qMax).length);
 	});
 });
+
+describe('low-flow periods: only the low flows of a date range (issue #557, §2.10h)', () => {
+	// Water year 2006/07 (run days 730 – 1094): only flows at or below the median are valid in it.
+	const FROM = 730;
+	const TO = 1094;
+	const period = (maxM3s: number) => ({ kind: 'flow_observed_m3s' as const, start: '2006-10-01', end: '2007-09-30', maxM3s, reason: 'logger over-read high flows', source: 'client site visit' });
+	function setup() {
+		const { input, q } = base();
+		const sorted = [...q].sort((a, b) => a - b);
+		const thr = sorted[Math.floor(sorted.length * 0.5)]!;
+		input.settings.qualityFlags = { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', lowFlowPeriods: [period(thr)] };
+		input.series.flow_observed_m3s = { startDate: START, values: q.slice() };
+		const high = q.flatMap((v, t) => (t >= FROM && t <= TO && v > thr ? [t] : []));
+		return { input, q, thr, high };
+	}
+	/** The same record with the days above the threshold read wrong, in both directions (still above it). */
+	function wrong(input: ModelInput, q: number[], high: number[]) {
+		const x = structuredClone(input);
+		const v = q.slice();
+		high.forEach((t, i) => (v[t] = i % 2 ? v[t]! * 7 : v[t]! * 1.0001 + 0.0001));
+		x.series.flow_observed_m3s = { startDate: START, values: v };
+		return x;
+	}
+
+	it('two records that differ only above the threshold inside the period give the same parameters, and those days are not scored', () => {
+		const { input, q, high } = setup();
+		expect(high.length).toBeGreaterThan(30);
+		const a = calibrate(input, { budget: 40, seed: 5, validate: false });
+		const b = calibrate(wrong(input, q, high), { budget: 40, seed: 5, validate: false });
+		expect(b.params).toEqual(a.params);
+		expect(a.fit.scores.days).toBe(q.length - high.length);
+		expect(a.dayQuality!.flow.periodHigh).toBe(high.length);
+		// Left out, not censored: no day is censored.
+		expect(a.dayQuality!.censoredDays).toBe(0);
+	});
+
+	it('the run’s statistics and its EWR test on the observed record leave the days out, and the quality column flags them (code 7)', () => {
+		const { input, q, high } = setup();
+		const out = runModel(input);
+		const qual = series(out, 'observed_flow_quality')!;
+		const set = new Set(high);
+		qual.forEach((c, t) => expect(c, `day ${t}`).toBe(set.has(t) ? FLOW_FLAG_CODE.periodHigh : FLOW_FLAG_CODE.inRange));
+		// The same statistics as a run on the record with those days blank.
+		const blank = structuredClone(input);
+		delete blank.settings.qualityFlags!.lowFlowPeriods;
+		blank.series.flow_observed_m3s = { startDate: START, values: q.map((v, t) => (set.has(t) ? null : v)) };
+		const ref = runModel(blank);
+		expect(out.summary.calibration!.days).toBe(q.length - high.length);
+		const { fitStatus: _a, ...stats } = out.summary.calibration!;
+		const { fitStatus: _b, ...refStats } = ref.summary.calibration!;
+		expect(stats).toEqual(refStats);
+		expect(out.summary.catchment.ewrAgreement).toBeTruthy();
+		expect(out.summary.catchment.ewrAgreement).toEqual(ref.summary.catchment.ewrAgreement);
+		// The plausibility checks read the record without those readings too.
+		expect(out.summary.plausibility).toBeTruthy();
+		expect(out.summary.plausibility).toEqual(ref.summary.plausibility);
+		// And none of it moves when the wrong high readings do.
+		const w = runModel(wrong(input, q, high));
+		expect(w.summary.calibration).toEqual(out.summary.calibration);
+		expect(w.summary.plausibility).toEqual(out.summary.plausibility);
+	});
+
+	it('a project without one is bit-identical: an empty list or none at all', () => {
+		const { input } = setup();
+		const none = structuredClone(input);
+		delete none.settings.qualityFlags!.lowFlowPeriods;
+		const empty = structuredClone(none);
+		empty.settings.qualityFlags!.lowFlowPeriods = [];
+		const { engineVersion: _a, ...x } = runModel(none) as never as Record<string, unknown>;
+		const { engineVersion: _b, ...y } = runModel(empty) as never as Record<string, unknown>;
+		expect(JSON.stringify(y)).toBe(JSON.stringify(x));
+	});
+});

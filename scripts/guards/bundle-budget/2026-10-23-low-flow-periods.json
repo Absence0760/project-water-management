@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "issue #557: the Low flows only settings list (LowFlowPeriods.svelte), the periodHigh flag and its help text; build measured 2022 KB vs 2019 KB"
+}

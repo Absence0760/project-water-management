@@ -871,14 +871,21 @@ alongside teams, e.g. to give an outside client `viewer` access.
   }`, the highest (> 0) and lowest (≥ 0, below the highest) field gauging in
   m³/s or `null`, and a source of at most 200 characters, required once a
   bound is set; `aboveRating` is `censor` (default) | `exclude` | `include`,
-  the other three `exclude` (default) | `include`. Anything else is a `400`.
+  the other three `exclude` (default) | `include`. From engine 1.81.0
+  `zeroFlowMonths` (calendar months 1–12, each once), and from engine 1.90.0
+  (issue #557) `lowFlowPeriods`: at most 50 strict `{ kind
+  ('flow_observed_m3s' | 'flow_logger_m3s'), start, end (YYYY-MM-DD, not
+  reversed), maxM3s (> 0), reason, source }` (reason ≤ 500 and source ≤ 200
+  characters, both required; the same record and dates at most once),
+  replaced whole. Anything else is a `400`.
   It changes only automatic calibration and the recession diagnostics, never
-  a run's calibration statistics, with one exception from engine 1.23.0:
+  a run's calibration statistics, with two exceptions: from engine 1.23.0
   `infilled` also decides whether days that `flowGapFill` filled count in the
   run's calibration statistics, the EWR test on the observed record and the
   plausibility checks (they are not readings, so they aren't scored unless
-  `include`). Settings stored before it read back with
-  the defaults.
+  `include`), and from engine 1.90.0 a reading above a low-flow period's
+  threshold is left out of those three as well as the fit. Settings stored
+  before it read back with the defaults (and no low-flow periods).
   `flowGapFill` (engine ≥ 1.23.0, issue #66) is `{ flow_observed_m3s,
   flow_logger_m3s }`: per observed record `null` (not filled,
   the default) or `{ interpolateMaxDays (whole, 0–30), donor
@@ -928,7 +935,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   absent on older records), and from engine 1.22.0 the optional `qualityFlags` (validated like the
   setting), `dayQuality` (the fit's `DayQuality` summary: `flowKind, rating,
   use, windowDays, flow, scoredDays, censoredDays, leftOutDays,
-  suspectZeroDays, rain, notes`, or `null`) and `fitAllDays` (a scored
+  suspectZeroDays, rain, notes`, or `null`; `flow` has an optional
+  `periodHigh` count from engine 1.90.0, absent on older records, and `use`
+  never holds the low-flow periods) and `fitAllDays` (a scored
   period, or `null`), from engine 1.25.0 the optional `auto` (issue #153:
   `{ rules, ruleExclusions, chosen, cases }`, how automated calibration chose
   the fit), and no others. `auto` is the server's to write

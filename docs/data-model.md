@@ -751,7 +751,9 @@ left out of every calibration score, each a whole water year or a date range
 with a required reason. `settings.qualityFlags` (engine ≥ 1.22.0, CR-18/19)
 holds each calibration record's gauged range (highest and lowest field
 gauging with a source) and how automatic calibration treats extrapolated,
-suspect and infilled days; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
+suspect and infilled days, and from engine 1.90.0 (issue #557) its
+`lowFlowPeriods`, date ranges in which only a record's flows at or below a
+threshold are valid; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
 issue #153) is automated calibration's pre-declared rule set with its
 server-kept revision and the hydrologist's sign-off; no migration either
 (model.md §2.10j). `settings.evidenceUncertaintyRule` (issue #71) is the

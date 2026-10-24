@@ -34,7 +34,7 @@ import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } f
 import { CHECK_GAUGE_FLOW_KEY, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
-import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
+import { lowFlowThresholds, resolveQualityFlags } from '../calibrate/qualityFlagSettings';
 import { FLOW_FILL_COLUMNS } from '../flowGapFill';
 
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
@@ -348,9 +348,12 @@ export function checkFlowQuality(input: ModelInput, out: ModelOutput): string | 
 	if (q.values.length !== obs.length) return `${FLOW_QUALITY_COLUMN.key} has ${q.values.length} days, observed_flow ${obs.length}`;
 	// The scored record's kind (summary.calibration is set whenever the column is).
 	const kind = out.summary.calibration?.flowKind;
-	const rating = site === null && kind ? resolveQualityFlags(input.settings.qualityFlags).ratings[kind] : undefined;
+	const resolved = resolveQualityFlags(input.settings.qualityFlags);
+	const rating = site === null && kind ? resolved.ratings[kind] : undefined;
 	const hi = rating?.gaugedMaxM3s ?? null;
 	const lo = rating?.gaugedMinM3s ?? null;
+	// The low-flow periods (engine ≥ 1.90.0, issue #557): the outlet records' only, like the gauged range.
+	const thr = site === null && kind ? lowFlowThresholds(resolved.lowFlowPeriods, kind, toEpochDay(out.startDate), obs.length) : null;
 	const SEC = 86_400;
 	for (let t = 0; t < obs.length; t++) {
 		const c = q.values[t]!;
@@ -363,6 +366,11 @@ export function checkFlowQuality(input: ModelInput, out: ModelOutput): string | 
 		if (!filled && (f === 'missing') === reading) return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is ${f} where observed_flow is ${obs[t]}`;
 		if (!reading) continue;
 		const m3s = obs[t]! / SEC;
+		const cap = thr ? thr[t]! : NaN;
+		if (f === 'periodHigh' && !(m3s > cap * (1 - 1e-12))) return `day ${t} is flagged above a low-flow period's threshold, but reads ${m3s} m³/s (threshold ${Number.isNaN(cap) ? 'none' : cap})`;
+		if ((f === 'inRange' || f === 'aboveRating' || f === 'belowRating' || f === 'suspect') && m3s > cap * (1 + 1e-12))
+			return `day ${t} reads ${m3s} m³/s, above the low-flow period's threshold ${cap} m³/s, but is flagged ${f}`;
+		if (f === 'periodHigh') continue;
 		const above = hi !== null && m3s > hi * (1 + 1e-12);
 		if (f === 'aboveRating' && (hi === null || m3s <= hi * (1 - 1e-12))) return `day ${t} is flagged above the highest gauging, but reads ${m3s} m³/s (highest gauging ${hi ?? 'none'})`;
 		if (f === 'belowRating' && (lo === null || !(m3s > 0) || m3s >= lo * (1 + 1e-12))) return `day ${t} is flagged below the lowest gauging, but reads ${m3s} m³/s (lowest gauging ${lo ?? 'none'})`;
@@ -1215,10 +1223,17 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		if (!obsSeries) return 'EWR agreement without an observed_flow series';
 		const shortDaily = get.get('null|ewr_shortfall')!;
 		const excluded = excludedDayMask(exclusionRanges(sanitizeExclusions(input.settings.calibrationExclusions, [])), out.startDate, out.days);
+		// A reading above a low-flow period's threshold (engine ≥ 1.90.0, issue #557) is no observation here: the
+		// outlet record's kind as the run picks it (run.ts pickObservedKind; not imported, run.ts imports this module).
+		const series = input.series ?? {};
+		const wanted = input.settings.calibrationFlowKind;
+		const outletKind = wanted && series[wanted] ? wanted : series.flow_observed_m3s ? 'flow_observed_m3s' : 'flow_logger_m3s';
+		const cap = lowFlowThresholds(resolveQualityFlags(input.settings.qualityFlags).lowFlowPeriods, outletKind, toEpochDay(out.startDate), out.days);
 		let observed = 0;
 		let modelBelow = 0;
 		for (let t = 0; t < out.days; t++) {
 			if (!Number.isFinite(obsSeries[t]!)) continue;
+			if (cap && obsSeries[t]! / 86_400 > cap[t]!) continue;
 			observed++;
 			if (!excluded[t] && shortDaily[t]! < 0) modelBelow++;
 		}

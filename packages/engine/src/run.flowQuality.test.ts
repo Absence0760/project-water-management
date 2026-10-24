@@ -3,9 +3,9 @@
 // fit reads, stored beside the scored `observed_flow` only when a day is
 // flagged, and checked by the run's self-checks.
 import { describe, expect, it } from 'vitest';
-import { toEpochDay } from './calendar';
+import { fromEpochDay, toEpochDay } from './calendar';
 import { prepareCalibration } from './calibrate/calibrate';
-import { FLOW_DAY_FLAGS, FLOW_FLAG_CODE, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
+import { FLOW_DAY_FLAGS, FLOW_FLAG_CODE, FLOW_FLAG_LABEL, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { defaultQualityFlags } from './calibrate/qualityFlagSettings';
 import { gaugeSeriesKey, type ModelInput, type ModelOutput, type NetworkNode } from './project';
 import { runModel, runModelCapturing, runModelChecked, runModelFrom } from './run';
@@ -158,6 +158,29 @@ describe('observed_flow_quality', () => {
 		expect(checkFlowQuality(inp, tamper(() => {}, 'H'))).toMatch(/but the run scores the outlet/);
 	});
 
+	it('flags a low-flow period’s high readings at the outlet only, and the verify check holds the column to the periods (issue #557)', () => {
+		const lowFlowPeriods = [{ kind: 'flow_observed_m3s' as const, start: START, end: fromEpochDay(toEpochDay(START) + 199), maxM3s: 1.2, reason: 'r', source: 's' }];
+		const inp = input({ qualityFlags: { ...defaultQualityFlags(), lowFlowPeriods } }, { flow_observed_m3s: record() });
+		// Every self-check passes: the EWR agreement's day count leaves the period-high days out too.
+		const out = runModelChecked(inp);
+		expect(out.summary.verification?.checks.every((c) => c.passed)).toBe(true);
+		expect(checkFlowQuality(inp, out)).toBeNull();
+		const q = col(out)!.values;
+		const rec = record().values;
+		for (let t = 0; t < 400; t++) {
+			const v = rec[t];
+			expect(q[t], `day ${t}`).toBe(v == null ? FLOW_FLAG_CODE.missing : t < 200 && v > 1.2 ? FLOW_FLAG_CODE.periodHigh : FLOW_FLAG_CODE.inRange);
+		}
+		const tamper = (at: number, c: number): ModelOutput => ({ ...out, series: out.series.map((s) => (s.key === FLOW_QUALITY_COLUMN.key ? { ...s, values: s.values.map((x, t) => (t === at ? c : x)) } : s)) });
+		const high = q.indexOf(FLOW_FLAG_CODE.periodHigh);
+		const low = q.findIndex((c, t) => t < 200 && c === FLOW_FLAG_CODE.inRange);
+		expect(checkFlowQuality(inp, tamper(high, FLOW_FLAG_CODE.inRange))).toMatch(/above the low-flow period's threshold/);
+		expect(checkFlowQuality(inp, tamper(low, FLOW_FLAG_CODE.periodHigh))).toMatch(/flagged above a low-flow period's threshold/);
+		// At an inner gauge the periods don't apply: they are the outlet records'.
+		const inner = input({ calibrationSiteNodeId: 'H', qualityFlags: { ...defaultQualityFlags(), lowFlowPeriods } }, { flow_observed_m3s: record(), [gaugeSeriesKey('flow_observed_m3s', 'H')]: record() });
+		expect(col(runModel(inner), 'H')?.values.includes(FLOW_FLAG_CODE.periodHigh) ?? false).toBe(false);
+	});
+
 	it('a run resumed from a snapshot keeps the column, computed for its own days, even with no flagged day left', () => {
 		// Only the first year is above the rating: resumed in the second, no day of the tail is flagged.
 		const values = record().values.map((v, t) => (v === null ? null : t < 365 ? v : Math.min(v, 1.3)));
@@ -236,7 +259,9 @@ describe('recordFlowFlags', () => {
 	it('names every code in the column label', () => {
 		for (const i of FLOW_DAY_FLAGS.keys()) expect(FLOW_QUALITY_COLUMN.label).toContain(`${i} = `);
 		expect(FLOW_QUALITY_COLUMN.label).toContain('3 = above the highest gauging');
-		expect(FLOW_DAY_FLAGS.length).toBe(7);
+		expect(FLOW_FLAG_LABEL.periodHigh).toBeTruthy();
+		expect(FLOW_QUALITY_COLUMN.label).toContain('7 = above a low-flow period’s threshold');
+		expect(FLOW_DAY_FLAGS.length).toBe(8);
 	});
 });
 

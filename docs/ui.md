@@ -6277,7 +6277,18 @@ two.
   2015-10-01 – 2016-09-30"). A blank reason, a reversed range or a period
   listed twice shows an alert and blocks Save (the save bar links here).
   Excluded days are left out of Fit automatically and the run's calibration
-  statistics (model.md §2.10). Under them, **Quality flags for Fit
+  statistics (model.md §2.10). Under them, **Low flows only**
+  (`calibration/LowFlowPeriods.svelte`; engine ≥ 1.90.0, issue #557,
+  `settings.qualityFlags.lowFlowPeriods`, model.md §2.10h): "Use only low
+  flows in a date range" adds a row with the **Record** (the project's
+  records, the logger first), **From** and **To**, **Valid up to (m³/s)**
+  and a required **Reason** and **Source**. Inside the dates a reading
+  above the threshold is left out of Fit automatically, the run's
+  statistics, its EWR test on the record and the plausibility checks;
+  readings at or below it are scored. A blank reason or source, a reversed
+  range, a threshold not above 0 or the same record and range twice shows
+  an alert and blocks Save (the save bar links here); the section's summary
+  line adds "low flows only in N periods". Under them, **Quality flags for Fit
   automatically** (`settings/QualityFlagsFields.svelte`, helpers in
   `settings/qualityFlags.ts`; engine ≥ 1.22.0, CR-18/19, model.md §2.10h): for
   each calibration record the project has (both when not known), its
@@ -8329,8 +8340,8 @@ read it before.
   observed flow's quality flags** (engine ≥ 1.48.0, model.md §2.10h: the
   run's `observed_flow_quality` column, stored only when a day is flagged)
   are thin strips along the foot of the plot, behind the lines, one strip
-  per flagged class (above the highest gauging, below the lowest, suspect,
-  infilled; top to bottom in that order, each in its own `--series-*`
+  per flagged class (above the highest gauging, above a low-flow period's
+  threshold, below the lowest, suspect, infilled; top to bottom in that order, each in its own `--series-*`
   colour at full strength, as its key swatch), so a class reads by its place
   as well as its colour. A key under
   the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
