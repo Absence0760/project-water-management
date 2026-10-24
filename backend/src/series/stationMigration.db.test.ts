@@ -197,6 +197,53 @@ describe('239_rain_stations', () => {
 		expect(await map(first)).toEqual({ m: 745.25, s: 'Synthetic gauge 1990-2020' });
 	});
 
+	it('fills the copied MAP into the older revisions of each station it filled, and no other revision', async () => {
+		const project = async (name: string) => {
+			const id = await newProject(owner, name);
+			await client.query(`UPDATE project SET settings = settings || '{"unitRain":{"mode":"perUnit","gaugeMapMm":733,"gaugeMapSource":"Synthetic gauge"}}'::jsonb WHERE id = $1`, [id]);
+			return id;
+		};
+		const revision = async (project: string, seriesId: string, name: string, extra: Record<string, unknown> = {}) => {
+			const row = { project_id: project, series_id: seriesId, kind: 'rain_catchment_mm', name, unit: 'mm', start_date: '2020-01-01', values: VALUES, values_sha256: '0'.repeat(64), reason: 'replace', ...extra };
+			const keys = Object.keys(row);
+			const r = await client.query<{ id: string }>(
+				`INSERT INTO series_revision (${keys.map((k) => (k === 'values' ? '"values"' : k)).join(', ')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id`,
+				Object.values(row)
+			);
+			return r.rows[0]!.id;
+		};
+		const revMap = async (id: string) =>
+			(await client.query<{ m: number | null; s: string | null }>('SELECT station_map_mm AS m, station_map_source AS s FROM series_revision WHERE id = $1', [id])).rows[0];
+
+		const p = await project('Revisions');
+		const station = await insert({ name: 'A station' }, p);
+		const other = await insert({ name: 'B station' }, p); // not the one a run reads
+		const own = [await revision(p, station, 'A station'), await revision(p, station, 'A station', { reason: 'delete' })];
+		// Already recorded with a MAP of its own: kept.
+		const recorded = await revision(p, station, 'A station', { station_map_mm: 650, station_map_source: 'Recorded' });
+		const ofOther = await revision(p, other, 'B station');
+		// A deleted series, even one named like the station: its id matches no series the step filled.
+		const deleted = await revision(p, '00000000-0000-4000-8000-000000000001', 'A station');
+		const deletedOther = await revision(p, '00000000-0000-4000-8000-000000000002', 'Old gauge');
+		// A station that already had its MAP isn't filled, so its revisions aren't either.
+		const k = await project('Revisions kept');
+		const keptStation = await insert({ name: 'Gauge', station_map_mm: 500, station_map_source: 'Own' }, k);
+		const ofKept = await revision(k, keptStation, 'Gauge');
+
+		await client.query(COPY);
+
+		for (const id of own) expect(await revMap(id)).toEqual({ m: 733, s: 'Synthetic gauge' });
+		expect(await revMap(recorded)).toEqual({ m: 650, s: 'Recorded' });
+		for (const id of [ofOther, deleted, deletedOther, ofKept]) expect(await revMap(id)).toEqual({ m: null, s: null });
+
+		// Run again: the station has its MAP, so nothing is filled, a revision recorded since stays as it was, and nothing changes.
+		const since = await revision(p, station, 'A station');
+		const before = (await client.query('SELECT id, station_map_mm, station_map_source FROM series_revision WHERE project_id = ANY($1) ORDER BY id', [[p, k]])).rows;
+		await client.query(COPY);
+		expect((await client.query('SELECT id, station_map_mm, station_map_source FROM series_revision WHERE project_id = ANY($1) ORDER BY id', [[p, k]])).rows).toEqual(before);
+		expect(await revMap(since)).toEqual({ m: null, s: null });
+	});
+
 	it('picks the same station as a run among several by the name’s bytes', async () => {
 		const id = await newProject(owner, 'Copy order');
 		await client.query(`UPDATE project SET settings = settings || '{"unitRain":{"mode":"perUnit","gaugeMapMm":701,"gaugeMapSource":"Synthetic"}}'::jsonb WHERE id = $1`, [id]);
