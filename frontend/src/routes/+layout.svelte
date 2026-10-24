@@ -16,6 +16,7 @@
 	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
 	import ConfirmHost from '#lib/components/common/ConfirmHost.svelte';
 	import { installLeaveGuard } from '#lib/nav/leaveGuard.js';
+	import { installBackScroll } from '#lib/nav/backScroll.js';
 	import AppShell from '#lib/components/layout/AppShell.svelte';
 	import { msg, type Msg } from '#lib/i18n/msg.js';
 
@@ -59,6 +60,7 @@
 	// Unsaved work (a page registers it, lib/nav/unsaved.ts) is asked about in the app's
 	// own dialog before a navigation drops it; ConfirmHost below shows every such question.
 	installLeaveGuard();
+	installBackScroll();
 	// Wide tables and drawings that scroll sideways take keyboard focus when they overflow.
 	onMount(() => watchScrollRegions(document.body));
 
