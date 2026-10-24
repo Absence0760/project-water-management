@@ -11,11 +11,11 @@
 // and a pack bundle's input carries them; that a copy, an export + import and
 // a restore keep the setting naming the stations; and that deleting a station
 // the setting names doesn't break the input or the run.
-import { bundleRunInput, ENGINE_VERSION, stationChirpsSeriesKey, stationSeriesKey, type ModelInput } from '@water-management/engine';
+import { bundleRunInput, stationChirpsSeriesKey, stationSeriesKey, type ModelInput } from '@water-management/engine';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildExamples } from '../../scripts/examples/catchments.js';
 import { importProjectData } from '../../scripts/import-project.js';
-import { asOwner, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { chcCell } from '../feeds/cellCache.js';
 import { loadBundleRun } from '../evidence/bundle.js';
@@ -161,8 +161,35 @@ describe('rainfall stations in a run’s input', () => {
 		expect(row!.stations).toEqual((await input()).stations);
 		expect(Object.keys(row!.series)).toEqual(expect.arrayContaining([stationSeriesKey(gauge), stationSeriesKey(ridge), stationSeriesKey(vlei), stationChirpsSeriesKey(ridge)]));
 		const refs = (await asOwner(`SELECT kind, series_id FROM run_input_series WHERE run_id = $1 AND kind LIKE '%#%' ORDER BY kind`, [runId])) as { kind: string; series_id: string | null }[];
-		expect(refs).toHaveLength(4);
-		expect(refs.every((r) => r.series_id === null)).toBe(true);
+		// Each station's record names its series (240), so a manual run is a person accepting it (series/hold.ts);
+		// the CHIRPS at the ridge's cell is no series.
+		expect(refs).toEqual(
+			[
+				{ kind: stationChirpsSeriesKey(ridge), series_id: null },
+				{ kind: stationSeriesKey(gauge), series_id: gauge },
+				{ kind: stationSeriesKey(ridge), series_id: ridge },
+				{ kind: stationSeriesKey(vlei), series_id: vlei }
+			].sort((x, y) => (x.kind < y.kind ? -1 : 1))
+		);
+		// What the ingest hold reads as accepted for the ridge: this run's values of it (056/188's function, here as the owner).
+		const [accepted] = (await asOwner(
+			`SELECT i.start_date::text AS start FROM run_input_series i JOIN model_run r ON r.id = i.run_id
+			 WHERE i.series_id = $1 AND r.trigger = 'manual' ORDER BY r.created_at DESC LIMIT 1`,
+			[ridge]
+		)) as { start: string }[];
+		expect(accepted!.start).toBe('2011-01-01');
+		// The catchment gauge's download still shows the run's catchment columns, from its rain_catchment_mm key.
+		const csv = await (await app.request(`/projects/${pid}/series/${gauge}/export.csv`, { headers: { cookie: owner.cookie, origin: 'http://localhost:7777' } })).text();
+		expect(csv).toMatch(/Rain used/);
+		// The trigger refuses a station key naming another series.
+		await expect(
+			asOwner(`INSERT INTO run_input_series (run_id, project_id, kind, start_date, sha256, series_id) SELECT run_id, project_id, $2, start_date, sha256, $3 FROM run_input_series WHERE run_id = $1 AND kind = $4`, [
+				runId,
+				stationSeriesKey(vlei) + 'x',
+				ridge,
+				stationSeriesKey(ridge)
+			])
+		).rejects.toThrow(/names a series of another kind/);
 		const rebuilt = await withUser(viewer.id, (db) => loadRunInput(db, runId));
 		expect(rebuilt.stations).toEqual(row!.stations);
 		expect(rebuilt.series[stationChirpsSeriesKey(ridge)]!.startDate).toBe(`${CACHE_YEAR}-01-01`);
@@ -170,7 +197,7 @@ describe('rainfall stations in a run’s input', () => {
 		expect(repro.status).toBe('identical');
 		// The bundle's run: its input.json is the snapshot, and the re-run's input (bundleRunInput) has the stations and their series.
 		const bundled = await withUser(owner.id, (db) => loadBundleRun(db, runId));
-		const series = Object.fromEntries(Object.entries(bundled.inputs.series ?? {}).map(([k, s]) => [k, { startDate: s!.startDate, values: bundled.values[k]! }]));
+		const series = Object.fromEntries(Object.entries(bundled.inputs.series ?? {}).map(([k, s]) => [k, { startDate: s!.startDate, values: [...bundled.values[k]!] }]));
 		const again = bundleRunInput(bundled.inputs, series);
 		expect(again.stations).toEqual(row!.stations);
 		expect(again.series[stationSeriesKey(ridge)]!.values).toEqual(rebuilt.series[stationSeriesKey(ridge)]!.values);
@@ -208,13 +235,31 @@ describe('rainfall stations in a run’s input', () => {
 		expect((await owner.call('POST', '/projects/import', bad)).status).toBe(400);
 	});
 
-	it('deleting a station the setting names leaves the input buildable and the run made; restoring it brings it back under its id', async () => {
+	it('a run forces the catchment from its station × catchment MAP ÷ station MAP, and pairs it on its own cached cell (engine ≥ 1.91.0)', async () => {
+		const rs = { catchment: { stationId: ridge }, catchmentMapMm: 410, catchmentMapSource: 'an invented catchment MAP' };
+		expect((await save(owner, rs)).status).toBe(200);
+		const r = (await call(owner, 'POST', `/projects/${pid}/runs`, { label: 'station forcing' }, 201)).run;
+		const st = r.summary.stations as { catchment: { stationId: string; ratio: number; stationMapMm: number; areaMapMm: number; days: { station: number } }; pairings: { stationId: string; chirpsAt: unknown; refused: string | null }[] };
+		expect(st.catchment).toMatchObject({ stationId: ridge, stationMapMm: 820, areaMapMm: 410 });
+		expect(st.catchment.ratio).toBeCloseTo(0.5, 12);
+		expect(st.catchment.days.station).toBeGreaterThan(0);
+		// The ridge's pairing reads its own cell, which this file cached for one year only: too short, so refused, saying so.
+		const pairing = st.pairings.find((p) => p.stationId === ridge)!;
+		expect(pairing.chirpsAt).toEqual({ cell: true });
+		expect(pairing.refused).toEqual(expect.any(String));
+		// The positive control: without the setting, no station summary.
+		expect((await save(owner, null)).status).toBe(200);
+		expect((await call(owner, 'POST', `/projects/${pid}/runs`, { label: 'no stations' }, 201)).run.summary.stations).toBeUndefined();
+	});
+
+	it('deleting a station the setting names leaves the input buildable and the run made, warning; restoring it brings it back under its id', async () => {
+		expect((await save(owner, { catchment: { stationId: vlei } })).status).toBe(200);
 		await call(owner, 'DELETE', `/projects/${pid}/series/${vlei}`, undefined, 204);
 		const got = await input();
 		expect(Object.keys(got.stations!).sort()).toEqual([gauge, ridge].sort());
 		expect(got.series[stationSeriesKey(vlei)]).toBeUndefined();
 		const r = await call(owner, 'POST', `/projects/${pid}/runs`, { label: 'a station gone' }, 201);
-		if (ENGINE_VERSION >= '1.91.0') expect((r.run.summary.warnings as string[]).join('\n')).toMatch(/Station Vlei|station/i);
+		expect((r.run.summary.warnings as string[]).join('\n')).toMatch(/the catchment’s station ".+" has no record in this run’s input/);
 		// A save that names it again is refused, until it is back.
 		expect((await save(owner, { catchment: { stationId: vlei } })).status).toBe(400);
 		const revs = (await call(owner, 'GET', `/projects/${pid}/series/${vlei}/revisions`)).revisions as { id: string; reason: string }[];

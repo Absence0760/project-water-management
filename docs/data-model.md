@@ -554,8 +554,15 @@ mapMm, mapSource, lat, lon }`):
   `rnl`). Nothing fetches a station's cell on its own: the cache holds it
   when a feed of any project covers it (a boundary or unit feed); without
   it the engine pairs the station against the CHIRPS of the unit it stands
-  in (`rainStations.sites`), else refuses the pairing. These inputs have no
-  `run_input_series.series_id` (their key is no stored kind). Tested by
+  in (`rainStations.sites`), else refuses the pairing. A station's record
+  names its series in `run_input_series.series_id` (240_station_input_series:
+  `run_input_series_series_kind` takes `rain_station_mm#<id>` naming that
+  very `rain_catchment_mm` series), so a manual run is a person accepting
+  every station it read, as the API-key ingest hold reads it
+  (`series/hold.ts` step 2, not only the one also read as
+  `rain_catchment_mm`), and a station's download shows the run that read it
+  (preferring the `rain_catchment_mm` key, whose columns it has). The CHIRPS
+  at a station's cell is no series and names none. Tested by
   `runs/stations.db.test.ts`.
 
 **Run output volume.** Each run stores tens to a couple of hundred output arrays

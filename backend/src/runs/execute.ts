@@ -14,6 +14,7 @@ import {
 	type ModelOutput,
 	type OpClass,
 	type RainStationInputs,
+	stationSeriesKey,
 	type RunVerification,
 	type ScenarioOp,
 	type SeriesChoice,
@@ -142,9 +143,13 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	if (cell) (series as Record<string, DailySeries>)[cell.key] = cell.series;
 	// The rainfall stations (engine ≥ 1.91.0, issue #553, runs/stationInput.ts): each station's record, the CHIRPS at its
 	// own cell where the cache holds it, and its details; only when settings.rainStations assigns one, so other inputs are
-	// as before. They have no series id: run_input_series.series_id names a series of the key's kind, and these keys are none.
+	// as before. A station's record names its series (240_station_input_series), so a manual run counts as a person
+	// accepting it (series/hold.ts) and its download shows the run; the cell's CHIRPS is no series and names none.
 	const stationed = await stationInputs(db, projectId, settings.rainStations, read?.id ?? null);
-	if (stationed) Object.assign(series, stationed.series);
+	if (stationed) {
+		Object.assign(series, stationed.series);
+		for (const id of Object.keys(stationed.stations)) (seriesIds as Record<string, string>)[stationSeriesKey(id)] = id;
+	}
 	// The EWR is assessed and reported in the baseline, never applied (issue #523 B4, projects/ewrRules.ts): the
 	// rules that keep water for it are a scenario's, so whatever the store holds, the baseline runs without them.
 	// A save refuses them and 220 switched the stored ones off, so this normally changes nothing.

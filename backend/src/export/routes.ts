@@ -191,7 +191,8 @@ async function loadReadingRun(
 			(r.inputs->'settings'->'calibration'->>'rainThresholdMm')::float8 AS threshold
 		 FROM run_input_series i JOIN model_run r ON r.id = i.run_id
 		 WHERE i.project_id = $1 AND i.series_id = $2
-		 ORDER BY r.created_at DESC, r.id DESC LIMIT 1`,
+		 -- A station the run also read as rain_catchment_mm (issue #553, 240): that key, whose columns the download has.
+		 ORDER BY r.created_at DESC, r.id DESC, (i.kind LIKE 'rain_station_mm#%') LIMIT 1`,
 		[projectId, seriesId]
 	);
 	const hit = rows[0];
