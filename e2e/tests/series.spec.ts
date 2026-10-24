@@ -56,7 +56,8 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	// Both are listed, and survive a reload.
 	await page.reload();
 	const table = page.getByRole('region', { name: 'Input time series' }).getByRole('table');
-	await expect(table.getByRole('row')).toHaveCount(3);
+	// Two series rows (beside the header row and a heading row per group, issue #553).
+	await expect(table.locator('tr[data-series]')).toHaveCount(2);
 	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge W7' });
 	await expect(flowRow).toContainText('Flow — observed gauge');
 	// Day first (issue #521).
@@ -167,7 +168,8 @@ test("a series' CSV menu opens in full, even on the table's last row", async ({ 
 	await expect(buttons).toHaveCount(4);
 	await buttons.last().scrollIntoViewIfNeeded();
 	await buttons.last().click();
-	const item = page.getByRole('button', { name: /\(CSV\)/ });
+	// The last row's own item (the panel's Download (CSV) menu is named like one too).
+	const item = page.locator('tr[data-series]').last().getByRole('button', { name: /\(CSV\)/ });
 	await expect(item).toBeVisible();
 	await expect(item).toBeInViewport({ ratio: 1 });
 	// The table's scroll box doesn't grow a vertical scrollbar around the open menu.

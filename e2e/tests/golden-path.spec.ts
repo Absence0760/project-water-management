@@ -171,7 +171,8 @@ test('a new user builds a catchment through the UI, runs it and reads the result
 	await upload.getByLabel('CSV file').setInputFiles(fixture('apan-2y.csv'));
 	await upload.getByRole('button', { name: 'Upload' }).click();
 	await expect(uploadedNote(page)).toHaveText('Uploaded 730 days to “Evaporation — A-pan, daily”.');
-	await expect(page.getByRole('region', { name: 'Input time series' }).getByRole('row')).toHaveCount(4);
+	// Three series rows (the table also has its header and a heading row per group, issue #553).
+	await expect(page.getByRole('region', { name: 'Input time series' }).locator('tr[data-series]')).toHaveCount(3);
 
 	// --- run the model ---------------------------------------------------------------
 	await tab(page, 'Runs & results').click();

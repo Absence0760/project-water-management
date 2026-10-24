@@ -99,7 +99,8 @@ test('the list is grouped: stations with their MAPs and areas, the catchment’s
 	await show.click();
 	const hide = upper.getByRole('button', { name: 'Hide rain used: Upper unit' });
 	await expect(hide).toHaveAttribute('aria-expanded', 'true');
-	await expect(hide).toHaveAttribute('aria-controls', /^area-unit-/);
+	// It controls the unit's series rows and the panel.
+	await expect(hide).toHaveAttribute('aria-controls', /^ser-row-[^ ]+ area-unit-[^ ]+$/);
 	await expect(seriesRow(page, 'CHIRPS Upper unit')).toBeVisible();
 	await expect(seriesRow(page, 'CHIRPS Upper unit').getByTestId('series-role')).toHaveText('Upper unit’s own rain');
 	const panel = page.getByTestId('area-rain');
