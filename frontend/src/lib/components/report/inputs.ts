@@ -63,6 +63,8 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 			parts.push(st.catchmentMapMm != null ? `catchment MAP ${fmtNum(st.catchmentMapMm)} mm${st.catchmentMapSource ? ` (${st.catchmentMapSource})` : ''}` : 'catchment MAP: the units’ area-weighted mean');
 			const periods = Object.values(st.unreliable ?? {}).reduce((n, r) => n + r.length, 0);
 			if (periods) parts.push(`${periods === 1 ? '1 unreliable period' : `${fmtNum(periods)} unreliable periods`} set aside`);
+			// The station rule's own calls are provisional (engine-audit.md RS1–RS4), so a report that used them says so.
+			parts.push('the station rule’s choices are provisional, pending the hydrologist’s review');
 			rows.push(['Rainfall stations (GR4J rain)', parts.join('; ')]);
 		}
 	}

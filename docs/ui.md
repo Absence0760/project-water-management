@@ -8509,7 +8509,8 @@ read it before.
   The report's inputs carry the same as two tables, **Rainfall stations**
   and **Station CHIRPS pairings** (`report/inputs.ts` `stationRows`,
   `stationPairingRows`), with a "Rainfall stations (GR4J rain)" settings row
-  (which areas, the catchment MAP, the unreliable periods), and the summary
+  (which areas, the catchment MAP, the unreliable periods, and that the
+  station rule's choices are provisional, engine-audit.md RS1–RS4), and the summary
   CSV a "Rain from rainfall stations" block after the per-unit rain
   (`backend/src/export/run-tables.ts` `stationLines`: one row per area with
   both MAPs and their sources, own and applied ratio, the correcting

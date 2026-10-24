@@ -65,9 +65,9 @@ describe('settingsRows', () => {
 		const row = (rainStations: unknown) => Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', rainStations } as never), run))[key];
 		expect(row(undefined)).toBeUndefined();
 		expect(row({ catchment: null, units: {} })).toBeUndefined();
-		expect(row({ catchment: { stationId: 's1' } })).toBe('the catchment from a station; catchment MAP: the units’ area-weighted mean');
+		expect(row({ catchment: { stationId: 's1' } })).toBe('the catchment from a station; catchment MAP: the units’ area-weighted mean; the station rule’s choices are provisional, pending the hydrologist’s review');
 		expect(row({ units: { u1: { stationId: 's1' }, u2: { stationId: 's2' } }, catchmentMapMm: 780, catchmentMapSource: 'isohyets', unreliable: { s1: [['2001-01-01', '2001-02-01']] } })).toBe(
-			'the catchment rain as before; 2 land units from their stations; catchment MAP 780 mm (isohyets); 1 unreliable period set aside'
+			'the catchment rain as before; 2 land units from their stations; catchment MAP 780 mm (isohyets); 1 unreliable period set aside; the station rule’s choices are provisional, pending the hydrologist’s review'
 		);
 	});
 
