@@ -228,6 +228,22 @@ Before a release that carries this, list the production projects whose pick
 moves (series of one kind whose linguistic and byte orders differ;
 deployment.md runbook).
 
+Because the pick is by name, a new series can take over from a record no one
+chose to replace (issue #561: a boundary feed's 60-day "CHIRPS boundary"
+sorted before a workbook's 16-year "Rainfall CHIRPS satelite (mm)"). So a
+data feed never writes a new series that sorts ahead of one of its kind
+holding a record (409 `series_takes_over`, `feeds/routes.ts`
+`refuseTakeOver`; the boundary and per-unit proposals name theirs to sort
+after), and a run records the outlet's CHIRPS series it read and the others
+of that kind with their first and last day with a value
+(`model_run.inputs.seriesChoice`, engine ≥ 1.90.0, `runs/execute.ts`
+`chirpsSeriesChoice`), and warns when another spans more of the run
+([model.md § Which CHIRPS series the run
+reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
+An upload of a new series that would sort first says so before it is saved
+("this one will replace “…” in runs", frontend `lib/series/pick.ts`
+`newSeriesEffect`), so no path adds a series that takes over unseen.
+
 ### Series provenance (032_series_provenance.sql)
 
 `time_series.product` and `product_version` say what the values are, e.g.
@@ -532,7 +548,13 @@ can't be. `GET /compare/runs` returns the whole snapshot, and
 `forecastRainSource`): `chirps_gefs` only when the forecast series'
 `feed_id` is a CHIRPS-GEFS feed and its `feed_days` cover every day from
 the first forecast day to the series' end (031_feed_days), read when the
-run is made; the report's forecast line credits CHIRPS-GEFS only then. The compare "what changed" list (engine `diffInputs`, see
+run is made; the report's forecast line credits CHIRPS-GEFS only then. A
+run of a project with two or more outlet CHIRPS series also holds
+`seriesChoice` (engine ≥ 1.90.0, issue #561, `runs/execute.ts`
+`chirpsSeriesChoice`): the name of the one it read and the others' names
+with their first and last day with a value. Only a run warning reads it; a
+reproduction, a scenario run on the run and an evidence pack's re-run carry
+it, so they warn alike. The compare "what changed" list (engine `diffInputs`, see
 [run-comparison.md](./run-comparison.md)) sees a series being extended or
 trimmed, and values edited within the same dates when both runs carry a hash.
 The same hash could later drive an "inputs changed since this run" flag.

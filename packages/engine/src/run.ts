@@ -111,6 +111,7 @@ import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn, entersServiceAfter } from './network/development';
 import { forecastTail } from './forecastTail';
+import { chirpsChoiceWarning } from './seriesChoice';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -916,6 +917,9 @@ function runNetwork(
 	const window = resolveReportWindow(settings, start, days, warnings);
 	const forecastRain = forecastRainDays(input, aligned, start, days, window, warnings);
 	missingRainWarning(input, settings.rainSource, aligned, start, days, window, warnings);
+	// Another CHIRPS series spans more of the run than the one it read (engine ≥ 1.90.0, issue #561).
+	const chirpsChoice = chirpsChoiceWarning(input, start, days);
+	if (chirpsChoice) warnings.push(chirpsChoice);
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {

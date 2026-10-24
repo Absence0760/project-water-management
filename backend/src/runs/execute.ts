@@ -15,10 +15,12 @@ import {
 	type OpClass,
 	type RunVerification,
 	type ScenarioOp,
+	type SeriesChoice,
 	type SeriesKind,
 	seriesOrigin,
 	type SeriesOrigin,
 	type SeriesProvenance,
+	type SeriesSpan,
 	type UnitRainKind,
 	type UnitRainSettings,
 	unitRainSeriesKey,
@@ -132,7 +134,27 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// rules that keep water for it are a scenario's, so whatever the store holds, the baseline runs without them.
 	// A save refuses them and 220 switched the stored ones off, so this normally changes nothing.
 	const baseline = withoutEwrKeepingRules({ settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model }).project;
-	return { input: { settings: baseline.settings, model: baseline.model, series }, seriesIds, publishedRecords };
+	const seriesChoice = await chirpsSeriesChoice(db, projectId);
+	return { input: { settings: baseline.settings, model: baseline.model, series, ...(seriesChoice ? { seriesChoice } : {}) }, seriesIds, publishedRecords };
+}
+
+/**
+ * The outlet's CHIRPS series a run reads and the others of that kind, with
+ * the first and last day each holds a value (engine ModelInput.seriesChoice,
+ * ≥ 1.90.0, issue #561): the run warns when another spans more of it than the
+ * one it reads. Null with fewer than two, so such a project's input is as before.
+ */
+export async function chirpsSeriesChoice(db: Db, projectId: string): Promise<SeriesChoice | null> {
+	const { rows } = await db.query<SeriesSpan>(
+		`SELECT name,
+			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay",
+			to_char(start_date + (SELECT max(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "lastDay"
+		 FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND site_node_id IS NULL ORDER BY name COLLATE "C"`,
+		[projectId]
+	);
+	if (rows.length < 2) return null;
+	const [read, ...others] = rows;
+	return { rain_chirps_mm: { name: read!.name, others } };
 }
 
 /**
@@ -576,7 +598,9 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		),
 		...(scenario ? { scenario } : {}),
 		// A forecast run: where its forecast rain came from (the report credits CHIRPS-GEFS only on 'chirps_gefs').
-		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {})
+		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {}),
+		// The CHIRPS series the run read and the others (engine ≥ 1.90.0, issue #561): its warning reads them, so a reproduction needs them.
+		...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {})
 	};
 	// The id is made here, not RETURNING'd: RETURNING needs the new row to pass
 	// a SELECT policy, and a contributor running their application reads no
@@ -741,7 +765,13 @@ interface StoredRun {
 	created_at: Date;
 	/** The project's (058): the run's date in a message is the day there. */
 	time_zone: string | null;
-	inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries>; forecastRainSource?: ForecastRainSource };
+	inputs: {
+		settings: ModelInput['settings'];
+		model: ModelInput['model'];
+		series?: Record<string, SnapshotSeries>;
+		forecastRainSource?: ForecastRainSource;
+		seriesChoice?: SeriesChoice | null;
+	};
 }
 interface StoredRef {
 	kind: string;
@@ -781,5 +811,13 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 	if (extra) throw new RunInputError('inconsistent', `the run stored a ${extra.kind} series its snapshot doesn't list`);
 	// A forecast run's rain source, which the engine reads (engine ≥ 1.85.0, per-unit rain on CHIRPS-GEFS days).
 	const source = r.inputs.forecastRainSource;
-	return { settings: r.inputs.settings, model: r.inputs.model, series, ...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}) };
+	// The CHIRPS series it read and the others (engine ≥ 1.90.0, issue #561), which its warning reads.
+	const choice = r.inputs.seriesChoice;
+	return {
+		settings: r.inputs.settings,
+		model: r.inputs.model,
+		series,
+		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}),
+		...(choice ? { seriesChoice: choice } : {})
+	};
 }

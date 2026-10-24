@@ -1314,6 +1314,15 @@ merges into:
     the stage waits. Withdrawing the confirmation (`replaceSeries: false`),
     a new one, re-targeting or a new config discards the stage
     (`data_feed_stamp`); removing the feed takes it with it.
+  - **A new series never takes over unseen** (issue #561). A run reads the
+    first series of each kind by name, so attaching or re-targeting a feed
+    into a new series that would sort ahead of one holding a record answers
+    **409** (`series_takes_over`, `feeds/routes.ts refuseTakeOver`): name it
+    to sort after, or replace that record as above. The boundary's feed
+    names its series that way itself and offers the replacement as a choice
+    ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)),
+    and a run warns when another series of its CHIRPS kind spans more of it
+    than the one it read.
   - The replacement changes the forcing: the next run's CHIRPS factors are
     fitted on the new values, the fit record flags "forcing changed since
     fit" (its `forcing.chirpsSource` no longer matches, model.md §2.10b), and

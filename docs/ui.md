@@ -6978,10 +6978,20 @@ part of the Settings tab's chunk; WP-2.10,
   catchment boundary** (a heading in the card) with the proposal: the boundary (name,
   area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
   in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
-  source, what **Apply** does (attach a new feed, or give an empty feed the
-  cells), and **The cells** (a disclosure with a table: latitude, longitude,
-  share inside, weight). Owners get **Apply**; editors read "An owner of the
-  project applies it"; **Close** closes the card. What Apply did, or the
+  source, "Runs read" (the CHIRPS series runs read now, with its first and
+  last day, when there is one), what **Apply** does (attach a new feed, or
+  give an empty feed the cells), and **The cells** (a disclosure with a table: latitude, longitude,
+  share inside, weight). Owners also choose (issue #561): where runs read a
+  CHIRPS record, **The CHIRPS series runs read** (radios): *Keep “…” for
+  runs, and put the boundary’s rain beside it to compare* (the default; the
+  new series sorts after it) or *Replace “…” with the boundary’s rain, once
+  its whole record is read* (disabled, with the reason, when it can't be
+  replaced); while keeping, **Daily product** (rnl / sat) and **Start date**
+  (a day field), set to the record's first day and rnl when it starts
+  before 1998, else sat and empty (the last 60 days). The Apply sentence
+  follows the choices ("Runs keep reading “…”: the new series sorts after
+  it …", or the replacement's backfill and swap). Owners get **Apply**;
+  editors read "An owner of the project applies it"; **Close** closes the card. What Apply did, or the
   error, sits above that row. The applied feed's card reads "14 cells of the
   catchment boundary “…”, area weighted". The Map tab's link (`?rain=boundary`)
   opens the card on it at once, its heading focused (`DataFeedsPanel` reads
@@ -7074,7 +7084,10 @@ part of the Settings tab's chunk; WP-2.10,
   "“Rainfall — catchment” already has data (1,200 days)", that the values
   already there stay and the records would mix, and a suggested separate
   series name no series or feed of that kind uses ("CHIRPS", "CHIRPS 2",
-  "DWS A2H012"). Focus lands on **Use a separate series: CHIRPS**, which
+  "DWS A2H012"), and never one that sorts ahead of the record runs read
+  (then "<that record> (CHIRPS)": a run reads the first series by name, and
+  the server refuses a new series that would take over, 409
+  `series_takes_over`, whose message the form shows; issue #561). Focus lands on **Use a separate series: CHIRPS**, which
   fills the name and focuses the name field; **Fill its empty days**
   attaches into the existing series; Escape backs out to the name field.
   Changing the series drops the question. Once it runs, the card says how

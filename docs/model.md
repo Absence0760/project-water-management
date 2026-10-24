@@ -1420,6 +1420,47 @@ changed. The model itself never reads the label, so this needs no
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep linear scaling per calendar month as the default, with the 90-day / 50 mm sample and the 0.25–4 clamp; the quantile map stays opt-in, recommended where a month has ≥ 30 wet days on both sides. This run-time correction is also D7's CHIRPS scale factor: a feed stores CHIRPS as published.
 
+#### Which CHIRPS series the run reads (engine ≥ 1.90.0, issue #561)
+
+A project may hold several CHIRPS series; a run reads the first by name
+([data-model.md § Which series a run reads](./data-model.md#which-series-a-run-reads)),
+and only that one wherever it reads CHIRPS, this gap fill included. A new
+series that sorts first takes over without anyone choosing it: a boundary
+feed's "CHIRPS boundary", 60 days long, once sorted before a workbook's
+16-year "Rainfall CHIRPS satelite (mm)", and the gap fill shrank to two
+months with no word. The feeds no longer do that
+([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), and
+the run says when it happens anyway (`seriesChoice.ts`):
+
+- the backend passes the outlet's CHIRPS series the run read and the others
+  of that kind, each with its first and last day with a value
+  (`ModelInput.seriesChoice`, only when there are two or more; the run's
+  stored input keeps it, so a reproduction and an evidence pack's re-run
+  give the same warning);
+- each series' **span in the run** is the run's days between its first and
+  last reading (the series read: from its own values; blanks inside count,
+  as the others' are known only by their ends);
+- when another series spans more of the run than the one read, the run warns:
+  "the run read the CHIRPS series “CHIRPS boundary” (2025-08-24 to
+  2025-10-22), which spans 60 of its 6139 days, but “Rainfall CHIRPS
+  satelite (mm)” (2009-01-01 to 2025-10-22) spans 6139: a run reads the
+  first CHIRPS series by name and uses only that one wherever it reads
+  CHIRPS (the fill of catchment rain’s blank days included). Rename or
+  remove one of them so the run reads the record you mean". A tie goes to
+  the series read; the widest other is named (the first by name among
+  equals).
+
+It covers the outlet's CHIRPS only. A land unit's own CHIRPS (§2.4h) is
+picked the same way among that unit's series, but its rain-for-each-unit
+feed never writes a new series ahead of a unit's record (refused, naming
+both), so it has no warning of its own. Values the run treats as blank
+(negative, not finite) don't count toward a span. A scenario run on a run
+carries its `seriesChoice` (`applyScenario`), so it warns as its base run does.
+
+Only the warning reads `seriesChoice`: every number the run computes is the
+same with or without it (`seriesChoice.test.ts`). It is a new warning, and a
+run's warnings are in its results digest, so `ENGINE_VERSION` went to 1.90.0.
+
 ### 2.4c Zero-rain runs treated as missing
 
 Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20

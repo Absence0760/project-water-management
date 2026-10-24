@@ -924,8 +924,10 @@ boundary itself rather than over a box around it.
   the boundary (name, area, when it was last changed), the CHIRPS v3 cells
   it covers with how much of them lies inside, the method ("area-weighted
   over N CHIRPS v3 cells (0.05°), each by the share of it inside the
-  boundary"), the source, what Apply will do, and each cell (latitude,
-  longitude, share inside, weight) in a table.
+  boundary"), the source, what Apply will do, the CHIRPS series runs read
+  now ("Runs read", when there is one), the product and start date (owners
+  choose them, as on the grid form), and each cell (latitude, longitude,
+  share inside, weight) in a table.
 - **Apply** (`POST …/from-boundary`, owner, as every feed change): attaches a
   CHIRPS daily feed into the CHIRPS reference series (`rain_chirps_mm`), or
   gives the cells to a CHIRPS feed whose series holds no days yet. It names
@@ -938,9 +940,35 @@ boundary itself rather than over a box around it.
   so new cells never go to a feed whose series already holds a record (409),
   nor while a fetch for that feed is still out (409 `feed_fetching`): its
   answer was asked for with the old cells, so the save waits for it.
-  The proposal then attaches a new feed into a separate series ("CHIRPS
-  boundary") to compare beside the old one. Switch the old feed off once
-  satisfied.
+  The proposal then attaches a new feed into a separate series to compare
+  beside the old one. Switch the old feed off once satisfied.
+- **Beside the record runs read** (issue #561). A run reads the first CHIRPS
+  series by name ([data-model.md § Which series a run
+  reads](./data-model.md#which-series-a-run-reads)), so a new series that
+  sorted first once took over unseen: "CHIRPS boundary" sorts before a
+  workbook's "Rainfall CHIRPS satelite (mm)", and a feed reading the last 60
+  days replaced a 16-year gap-filler with two months. Now:
+  - a new series is always named to sort after the record runs read: `""`
+    while there is none, else "CHIRPS boundary", "CHIRPS boundary 2" … or
+    "<the record's name> (boundary)", the first free one that sorts after it.
+    A `targetName` that would sort ahead is refused (409
+    `series_takes_over`), on this route and on the plain attach and
+    re-target (`feeds/routes.ts refuseTakeOver`); "Rain for each unit"
+    refuses a unit whose new series would sort ahead of its own record;
+  - where a record exists, the feed reads from its first day (no earlier than
+    1981), with `rnl` when that is before 1998 (`sat` begins then), never
+    only the last 60 days; the owner can change the product and the start
+    date;
+  - **Replace** it instead (a choice in the proposal): the feed points at the
+    record as a confirmed replacement, backfills the whole record from its
+    first day into a stage (`feed_stage`), and swaps it in once complete, as
+    [architecture.md § Data feeds](./architecture.md#data-feeds) describes;
+    runs keep reading the old values until then. Not offered while another
+    feed writes the record, or when it already holds the product and version
+    the feed would write (the ingest would add to it rather than replace it);
+  - a run whose CHIRPS series spans less of it than another CHIRPS series
+    warns, naming both ([model.md § Which CHIRPS series the run
+    reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
 - **The weights** (`backend/src/feeds/boundaryCells.ts`, pure). Each 0.05°
   cell gets *share of the cell inside the boundary × cos(cell-centre
   latitude)*, the weighting `bboxCells` gives a box, so a rectangle gets

@@ -499,7 +499,7 @@ export const GUIDES: Guide[] = [
 							'Put the catchment boundary on the **Map** (delineate, draw or upload it).',
 							'Open **Settings & calibration → Data feeds**, press **Attach a feed** (an editor: **Rain from the map**) and choose the **Area** *The catchment boundary, from the map* (the Map’s own link opens it too).',
 							'Read the proposal: the CHIRPS cells the boundary covers, the share of each inside it and its weight. A boundary over about 2 500 km² needs feeds for its parts.',
-							'An owner presses **Apply**. The feed attaches into the CHIRPS series; if that series already holds a record, it goes into a separate series to compare beside the old one, which you switch off once satisfied.'
+							'An owner presses **Apply**. Where runs already read a CHIRPS record (**Runs read**), the owner chooses: **Keep** it, the default, and the feed goes into a new series named to sort after it, so runs keep reading the record, read from its first day (rnl when that is before 1998); or **Replace** it, and the feed reads the whole record again from its first day and takes its place once complete (the old values stay in the History). The daily product and start date can be changed before Apply.'
 						]
 					},
 					{

@@ -21,6 +21,7 @@
 // into one record: an existing unit feed takes new cells (or another product)
 // only while its series holds nothing yet. A unit whose polygon changed after
 // its feed has fetched is refused, saying so; its feed is left as it is.
+import { compareSeriesNames } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -220,6 +221,11 @@ async function plan(db: Db, projectId: string, asked?: ChirpsDailyProduct): Prom
 		} else if (own) {
 			// An empty series of the unit's own: the feed writes that one, so the unit never has two (a run reads the first by name).
 			targetName = own.name;
+		}
+		// Never a new series ahead of the record the unit's runs read (issue #561): a run reads the unit's first by name.
+		if (action !== 'none' && own && own.days > 0 && targetName !== own.name && compareSeriesNames(targetName, own.name) < 0) {
+			refuse(`a run reads the unit’s first CHIRPS series by name, so “${targetName}” would take over from “${own.name}”, which holds ${own.days} days: rename or remove one of them first`);
+			continue;
 		}
 		if (action !== 'none' && (!feed || targetName !== feed.targetName)) {
 			const named = await seriesNamed(db, projectId, targetName);

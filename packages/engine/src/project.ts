@@ -2867,6 +2867,27 @@ export interface ModelInput {
 	 * MAP ratio, as before.
 	 */
 	forecastRainSource?: 'chirps_gefs' | 'other' | null;
+	/**
+	 * The series of a kind the run read, by name, and the others of that kind
+	 * it didn't (engine ≥ 1.90.0, issue #561, docs/model.md § Which CHIRPS
+	 * series the run reads): set by the backend for the outlet's CHIRPS when the
+	 * project holds more than one. A run reads the first series of each kind by
+	 * name, so a new series can take over unseen; the run warns when another
+	 * spans more of the run than the one it read. Only a warning reads it.
+	 */
+	seriesChoice?: SeriesChoice | null;
+}
+
+/** A series a run could have read: its name and the first and last day it holds a value (null: none). */
+export interface SeriesSpan {
+	name: string;
+	firstDay: string | null;
+	lastDay: string | null;
+}
+
+/** ModelInput.seriesChoice: per kind, the name of the series the run read and the others of that kind. */
+export interface SeriesChoice {
+	rain_chirps_mm?: { name: string; others: SeriesSpan[] };
 }
 
 /** One daily output series. nodeId null = catchment level. */

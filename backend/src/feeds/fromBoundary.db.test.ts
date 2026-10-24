@@ -78,7 +78,10 @@ describe('the rain feed from the catchment boundary', () => {
 		expect(p.rows).toBe(3);
 		expect(p.insideKm2).toBeCloseTo(b.areaM2 / 1e6, 0);
 		expect(p.method).toMatch(/^area-weighted over 9 CHIRPS v3 cells/);
-		expect(p.apply).toEqual({ action: 'create', targetKind: 'rain_chirps_mm', targetName: '' });
+		// No CHIRPS record yet: the default series, sat over the last 60 days (startDate null), and nothing to replace.
+		expect(p.apply).toEqual({ action: 'create', targetKind: 'rain_chirps_mm', targetName: '', product: 'sat', startDate: null });
+		expect(p.runSeries).toBeNull();
+		expect(p.replace).toBeNull();
 
 		const r = await apply(owner, pid, b);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
@@ -135,7 +138,7 @@ describe('the rain feed from the catchment boundary', () => {
 		const b = await drawBoundary(owner, pid);
 		const feed = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [{ lat: -33.72, lon: 21.27 }], product: 'rnl', startDate: '2020-01-01' } })).body.feed;
 		const p = (await owner.call('GET', at(pid))).body;
-		expect(p.apply).toEqual({ action: 'update', feedId: feed.id, targetKind: 'rain_chirps_mm', targetName: '' });
+		expect(p.apply).toEqual({ action: 'update', feedId: feed.id, targetKind: 'rain_chirps_mm', targetName: '', product: 'rnl', startDate: '2020-01-01' });
 		const r = await apply(owner, pid, b, { feedId: feed.id });
 		expect(r.status, JSON.stringify(r.body)).toBe(200);
 		expect(r.body.feed.config).toMatchObject({ product: 'rnl', startDate: '2020-01-01', boundary: { featureId: b.id } });
@@ -150,7 +153,8 @@ describe('the rain feed from the catchment boundary', () => {
 		const spliced = await apply(owner, pid, b2, { feedId: feed.id });
 		expect(spliced.status).toBe(409);
 		expect(spliced.body.error).toMatch(/never splices two areas/);
-		expect((await owner.call('GET', at(pid))).body.apply).toEqual({ action: 'create', targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary' });
+		// From the record's first day, sat (it starts after 1998).
+		expect((await owner.call('GET', at(pid))).body.apply).toEqual({ action: 'create', targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary', product: 'sat', startDate: '2026-01-01' });
 		expect((await apply(owner, pid, b2, { targetName: '' })).status).toBe(409);
 		const sep = await apply(owner, pid, b2);
 		expect(sep.status).toBe(201);
@@ -210,5 +214,124 @@ describe('the rain feed from the catchment boundary', () => {
 		expect(listed.lastDataDate).not.toBeNull();
 		const series = ((await owner.call('GET', `/projects/${pid}/series`)).body.series as { kind: string; length: number }[]).find((s) => s.kind === 'rain_chirps_mm');
 		expect(series!.length).toBeGreaterThan(50);
+	});
+});
+
+// Issue #561: a project whose runs read a CHIRPS record (a workbook import's, no
+// product recorded). The boundary's feed never takes over from it unseen: its
+// series is named to sort after it, it backfills from the record's first day
+// (rnl for a record before 1998), and replacing the record is a choice of its
+// own, staged and swapped in whole.
+describe('a boundary feed beside the CHIRPS record runs read (issue #561)', () => {
+	const RECORD = 'Rainfall CHIRPS satelite (mm)';
+	/** The series a run reads for CHIRPS now: the first with no site by name, in byte order (runs/execute.ts loadLiveInput). */
+	const runPick = async (pid: string) =>
+		(
+			await asOwner(`SELECT name FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND site_node_id IS NULL ORDER BY name COLLATE "C" LIMIT 1`, [pid])
+		)[0]?.name as string | undefined;
+	async function withRecord(startDate = '1995-01-01') {
+		const s = await setup();
+		const put = await s.owner.call('PUT', `/projects/${s.pid}/series`, { kind: 'rain_chirps_mm', name: RECORD, unit: 'mm', startDate, values: [1, 2, 3] });
+		expect(put.status, JSON.stringify(put.body)).toBe(200);
+		return { ...s, b: await drawBoundary(s.owner, s.pid) };
+	}
+
+	it('proposes a series that sorts after the record, read from its first day with rnl, and offers to replace it', async () => {
+		const { owner, pid, b } = await withRecord();
+		const p = (await owner.call('GET', at(pid))).body;
+		expect(p.runSeries).toEqual({ name: RECORD, firstDay: '1995-01-01', lastDay: '1995-01-03' });
+		expect(p.apply).toEqual({ action: 'create', targetKind: 'rain_chirps_mm', targetName: `${RECORD} (boundary)`, product: 'rnl', startDate: '1995-01-01' });
+		expect(p.replace).toEqual({ available: true, targetName: RECORD, product: 'rnl', startDate: '1995-01-01' });
+
+		const r = await apply(owner, pid, b);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		expect(r.body.feed).toMatchObject({ targetName: `${RECORD} (boundary)`, config: { product: 'rnl', startDate: '1995-01-01' } });
+		// Its first days arrive (as a fetch writes them): runs still read the record.
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: `${RECORD} (boundary)`, unit: 'mm', startDate: '2026-01-01', values: [4] })).status).toBe(200);
+		expect(await runPick(pid)).toBe(RECORD);
+	});
+
+	it('refuses a name that would sort ahead of the record (“CHIRPS boundary”, the default series), positive control a name after it', async () => {
+		const { owner, pid, b } = await withRecord();
+		for (const targetName of ['CHIRPS boundary', '']) {
+			const r = await apply(owner, pid, b, { targetName });
+			expect(r.status).toBe(409);
+			expect(r.body.details).toMatchObject({ code: 'series_takes_over', runSeries: RECORD, targetName });
+		}
+		expect((await apply(owner, pid, b, { targetName: 'Satellite boundary' })).status).toBe(201);
+		expect(await runPick(pid)).toBe(RECORD);
+	});
+
+	it('takes a product and start date; sat clamps the default start to 1998, and an earlier one asked for is refused', async () => {
+		const { owner, pid, b } = await withRecord();
+		const sat = await apply(owner, pid, b, { product: 'sat' });
+		expect(sat.status, JSON.stringify(sat.body)).toBe(201);
+		expect(sat.body.feed.config).toMatchObject({ product: 'sat', startDate: '1998-01-01' });
+		await asOwner('DELETE FROM data_feed WHERE project_id = $1', [pid]);
+		expect((await apply(owner, pid, b, { product: 'sat', startDate: '1997-12-31' })).status).toBe(400);
+		const chosen = await apply(owner, pid, b, { product: 'rnl', startDate: '2001-02-03' });
+		expect(chosen.status).toBe(201);
+		expect(chosen.body.feed.config).toMatchObject({ product: 'rnl', startDate: '2001-02-03' });
+	});
+
+	it('replaces the record only when asked: the feed writes it, backfilling from its first day, staged until complete', async () => {
+		const { owner, pid, b } = await withRecord();
+		// sat can't backfill a record from 1995: one product end to end.
+		const sat = await apply(owner, pid, b, { replace: true, product: 'sat' });
+		expect(sat.status).toBe(409);
+		expect(sat.body.details).toMatchObject({ code: 'series_backfill' });
+		expect((await apply(owner, pid, b, { replace: true, targetName: 'x' })).status).toBe(400);
+
+		const r = await apply(owner, pid, b, { replace: true });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		expect(r.body.feed).toMatchObject({ targetName: RECORD, config: { product: 'rnl', startDate: '1995-01-01', boundary: { featureId: b.id } } });
+		const [row] = await asOwner('SELECT replace_series_from FROM data_feed WHERE id = $1', [r.body.feed.id]);
+		expect(row.replace_series_from).not.toBeNull();
+		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'feed.configured' ORDER BY id DESC LIMIT 1`, [pid]);
+		expect(ev.subject).toMatchObject({ action: 'created', targetName: RECORD, boundary: { featureId: b.id }, replaceSeries: expect.any(String) });
+		expect(await runPick(pid)).toBe(RECORD);
+		// A boundary feed now reads it: nothing more to apply or replace.
+		const after = (await owner.call('GET', at(pid))).body;
+		expect(after.apply).toEqual({ action: 'none', feedId: r.body.feed.id });
+		expect(after.replace).toBeNull();
+	});
+
+	it('offers no replacement of a record another feed writes, or one already of the version the feed would write', async () => {
+		const { owner, pid, b } = await withRecord();
+		const other = await owner.call('POST', `/projects/${pid}/feeds`, {
+			source: 'chirps',
+			config: { cells: [{ lat: -33.72, lon: 21.27 }], product: 'rnl', startDate: '1995-01-01' },
+			targetName: RECORD,
+			replaceSeries: true
+		});
+		expect(other.status, JSON.stringify(other.body)).toBe(201);
+		const p = (await owner.call('GET', at(pid))).body;
+		expect(p.replace).toMatchObject({ available: false, targetName: RECORD, reason: expect.stringMatching(/a feed already writes “Rainfall CHIRPS satelite \(mm\)”/) });
+		expect((await apply(owner, pid, b, { replace: true })).body.details).toMatchObject({ code: 'series_replace' });
+
+		const same = await setup();
+		await same.owner.call('PUT', `/projects/${same.pid}/series`, { kind: 'rain_chirps_mm', name: RECORD, unit: 'mm', startDate: '2001-01-01', values: [1], product: 'CHIRPS sat', productVersion: '3.0' });
+		const sb = await drawBoundary(same.owner, same.pid);
+		expect((await same.owner.call('GET', at(same.pid))).body.replace).toMatchObject({ available: false, reason: expect.stringMatching(/already holds CHIRPS v3 sat days of this version/) });
+		expect((await apply(same.owner, same.pid, sb, { replace: true })).status).toBe(409);
+	});
+});
+
+describe('a plain feed never takes over the series runs read (issue #561)', () => {
+	it('refuses an attach or a re-target into a new series that sorts ahead of a filled one; positive controls a name after it and the series itself', async () => {
+		const { owner, pid } = await setup();
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'Rainfall CHIRPS', unit: 'mm', startDate: '2001-01-01', values: [1, 2] });
+		const cells = [{ lat: -33.72, lon: 21.27 }];
+		const ahead = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells } });
+		expect(ahead.status).toBe(409);
+		expect(ahead.body.details).toMatchObject({ code: 'series_takes_over', runSeries: 'Rainfall CHIRPS', targetName: '' });
+		expect(ahead.body.error).toMatch(/the series without a name would take over from “Rainfall CHIRPS” \(2001-01-01 to 2001-01-02\)/);
+		const after = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells }, targetName: 'Rainfall CHIRPS 2' });
+		expect(after.status, JSON.stringify(after.body)).toBe(201);
+		const moved = await owner.call('PATCH', `/projects/${pid}/feeds/${after.body.feed.id}`, { targetName: 'CHIRPS feed' });
+		expect(moved.status).toBe(409);
+		expect(moved.body.details).toMatchObject({ code: 'series_takes_over' });
+		// Another kind's series don't count: a forecast feed into the default name is fine.
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps_gefs', config: { cells } })).status).toBe(201);
 	});
 });

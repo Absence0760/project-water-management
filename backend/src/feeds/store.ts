@@ -157,6 +157,38 @@ export async function targetSeries(
 	};
 }
 
+/** The series of a kind a run reads now (runSeries), with what it holds and the feed that writes it, if any. */
+export interface RunSeriesPick {
+	name: string;
+	/** The first and last day it holds a value on; null when it holds none. */
+	firstDay: string | null;
+	lastDay: string | null;
+	provenance: SeriesProvenance | null;
+	/** The feed that writes it (data_feed's target), if one does. */
+	feedId: string | null;
+}
+
+/**
+ * The series of `kind` with no site that a run reads now: the first by name,
+ * in byte order (runs/execute.ts loadLiveInput; data-model.md § Which series
+ * a run reads). Null when the project has none of that kind.
+ */
+export async function runSeries(db: Db, projectId: string, kind: string): Promise<RunSeriesPick | null> {
+	const { rows } = await db.query<Omit<RunSeriesPick, 'provenance'> & { product: string | null; productVersion: string | null }>(
+		`SELECT t.name, t.product, t.product_version AS "productVersion",
+			to_char(t.start_date + (SELECT min(i) FROM generate_subscripts(t."values", 1) i WHERE t."values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay",
+			to_char(t.start_date + (SELECT max(i) FROM generate_subscripts(t."values", 1) i WHERE t."values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "lastDay",
+			(SELECT f.id FROM data_feed f WHERE f.project_id = t.project_id AND f.target_kind = t.kind AND f.target_name = t.name) AS "feedId"
+		 FROM time_series t WHERE t.project_id = $1 AND t.kind = $2 AND t.site_node_id IS NULL
+		 ORDER BY t.name COLLATE "C" LIMIT 1`,
+		[projectId, kind]
+	);
+	const r = rows[0];
+	if (!r) return null;
+	const { product, productVersion, ...rest } = r;
+	return { ...rest, provenance: product !== null && productVersion !== null ? { product, version: productVersion } : null };
+}
+
 /** One pending fetch per feed (the jobs' dedupe key): Run now, the scheduler and a backfill's next window share it. */
 export const feedFetchDedupeKey = (feedId: string) => `feed_fetch:${feedId}`;
 
