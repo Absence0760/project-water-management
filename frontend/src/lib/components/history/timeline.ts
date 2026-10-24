@@ -291,6 +291,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const at = (v: unknown) => (str(v) === 'the outlet' ? 'the outlet' : `gauge ${str(v)}`);
 			return `Moved ${seriesName(s)} to ${at(p.to)} (was ${at(p.from)})`;
 		}
+		case 'series.renamed': {
+			// A series renamed in Series details (issue #556); `name` is the new name.
+			const r = (s.rename ?? {}) as Record<string, unknown>;
+			// A series uploaded with no name (the kind's own) is named, not renamed.
+			if (!str(r.from)) return `Named the ${kindLabel(str(s.kind))} series “${str(r.to)}”`;
+			return `Renamed the ${kindLabel(str(s.kind))} series “${str(r.from)}” → “${str(r.to)}”`;
+		}
 		case 'restore':
 			return s.target === 'series' ? `Restored earlier values of ${seriesName(s)}${range(s)}` : 'Restored an earlier version';
 		case 'run.created':

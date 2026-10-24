@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidImportOptionsError } from './errors';
-import type { ImportedSeries } from './flowData';
+import { flowDataOrigin, type ImportedSeries } from './flowData';
 import { duplicateLogger, gaugeAsReference, validateScaling } from './gauge';
 import { Report } from './report';
 
 // Ported from scripts/wbt-import/test_gauge_reference.py: synthetic series only (no workbook).
 function flowSeries(): ImportedSeries[] {
 	return [
-		{ kind: 'rain_catchment_mm', name: 'Rain', unit: 'mm', startDate: '2006-06-29', values: [1, 1, 1, 1, 1] },
-		{ kind: 'flow_observed_m3s', name: 'Gauge', unit: 'm3/s', startDate: '2006-06-29', values: [2, null, 4, 3, 0] },
-		{ kind: 'flow_logger_m3s', name: 'Logger', unit: 'm3/s', startDate: '2006-06-29', values: [1, 1, 1, 1, 1] }
+		{ kind: 'rain_catchment_mm', name: 'Rain', unit: 'mm', startDate: '2006-06-29', values: [1, 1, 1, 1, 1], ...flowDataOrigin('Rain', 'I', 'mm') },
+		{ kind: 'flow_observed_m3s', name: 'Gauge', unit: 'm3/s', startDate: '2006-06-29', values: [2, null, 4, 3, 0], ...flowDataOrigin('Gauge', 'G', 'm3/s') },
+		{ kind: 'flow_logger_m3s', name: 'Logger', unit: 'm3/s', startDate: '2006-06-29', values: [1, 1, 1, 1, 1], ...flowDataOrigin('Logger', 'H', 'm3/s') }
 	];
 }
 

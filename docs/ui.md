@@ -2386,7 +2386,11 @@ it's read in a Web Worker (`lib/spreadsheet/import/import.worker.ts`, loaded
 only now; [architecture.md § Code splitting](./architecture.md#code-splitting-frontend)),
 and only the extracted project is sent to `POST /projects/import`, like a
 `.json` file. The view logic is `import/workbookFile.ts`; the review's
-workbook part is `WorkbookReview.svelte`.
+workbook part is `WorkbookReview.svelte`. Its `[Flow data]` series each
+record their workbook column as their Source and m³/s or mm as their Upload
+unit, and the logger column is named "&lt;outlet&gt; logger" rather than its
+heading, the client's own code (issue #556, `flowData.ts`; the Python
+importer's README § What it reads).
 
 The app never shows the client build's code name ("b023", "b02x"; issue
 #523): the button is *Import workbook*, a file is "a Water Balance Tool
@@ -5306,7 +5310,12 @@ with the table the data needs).
   count. **Data up to** is the column straight after the series; **From**
   after it gives only the first date (both day first, `1 Oct 2021`, as is
   the CSV menu's period line; issue #521) (it was a *Period* start → end, whose
-  end repeated Data up to, issue #174). (Until 2026-09-26 any row
+  end repeated Data up to, issue #174). Both, and the CSV menu's period
+  line, are the first and last days **with a value** (`freshness.ts`
+  `dataSpan`, issue #556), not the stored rows' ends: a b023 import stores a
+  logger column from the workbook's first date, years of blank days before
+  its first reading included, so From used to show 1 Oct 2009 for a record
+  that starts in April 2013. (Until 2026-09-26 any row
   older than 31 days, flow included, was amber, which disagreed with the
   badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
   (`agoText` in `lib/format/age.ts`; those two days used to read "1 months" / "1 years").
@@ -5381,7 +5390,16 @@ gauge record adds a line saying where it is checked and scored
 keyboard, touch and screen-reader users never got. **Series details**
 (issue #464, `series/details.ts`): under the chart, one labelled row for the
 charted series (a group named *Series details*, a `<dl>` whose terms are the
-fields' visible labels): **Product**, **Measured at**, **Source**,
+fields' visible labels): **Name** (editors only, issue #556: a text box saved
+on change, `PATCH …/series/:id { name }`; one line, 1–100 characters, unique
+among the project's series of its kind, else *Not saved: another series of
+this kind already has that name*. Runs read the first series of each kind,
+at each site, by name, so a new name that changes which one they read asks
+first, *Change which series runs read?* "Runs will read “Bergwater gauge”
+instead of “Average” for Rainfall — catchment …" (`lib/series/pick.ts`
+`renamePickChange`); Cancel puts the old name back. A series a data feed or
+an API key writes into keeps its name: the server refuses it with why.
+Viewers read the name in the table row), **Product**, **Measured at**, **Source**,
 **Upload unit** and **Edited by hand** (the days typed in, "2021-10-02,
 2021-10-04 to 2021-10-06"), each only where it applies, wrapping to one
 column on a phone. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,

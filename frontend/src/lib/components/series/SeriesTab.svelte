@@ -69,8 +69,8 @@
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
 	import EditDay from './EditDay.svelte';
 	import { handDayCount, handPoints, handRangesText } from '$lib/series/editDay';
-	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, roleBadge, seriesInUse, SITED_KINDS } from './roles';
-	import { freshness, freshnessOrder, STALE_DAYS } from './freshness';
+	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
+	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
@@ -352,6 +352,44 @@
 		});
 	}
 
+	/**
+	 * Rename a series (issue #556). Runs read the first series of each kind (at each site) by name, so a new name
+	 * that changes which one they read says so and asks first (series/pick.ts renamePickChange); one that doesn't,
+	 * saves at once. Its values and the runs already stored are untouched.
+	 */
+	async function rename(s: SeriesMeta, el: HTMLInputElement) {
+		const next = el.value.trim();
+		const key = saveId(s, 'name');
+		// Back to the stored name: nothing to save, and an earlier "Not saved" no longer applies.
+		const revert = () => {
+			el.value = s.name;
+			const { [key]: _, ...rest } = saves;
+			saves = rest;
+		};
+		if (next === s.name) return revert();
+		if (!next) {
+			el.value = s.name;
+			saves = { ...saves, [key]: { state: 'error', text: 'a series needs a name' } };
+			return;
+		}
+		// Judged as the role badges are (roles.ts renameEffect): a series no run reads asks nothing.
+		const change = renameEffect(list, s.id, next, rainSourceKinds(settings?.rainSource), gauges);
+		if (change) {
+			const where = s.siteNodeId ? `at ${siteText(s.siteNodeId, gauges).replace(/^Gauge /, 'gauge ')}` : null;
+			const ok = await confirmDialog({
+				title: 'Change which series runs read?',
+				message: `${renameEffectText(change, s.id, next, kindLabel, where)} Runs already stored are not affected.`,
+				confirmLabel: 'Rename'
+			});
+			if (!ok) return revert();
+		}
+		await saveOnChange(key, el, s.name, async () => {
+			const meta = await api.series.rename(projectId, s.id, next);
+			list = list.map((x) => (x.id === s.id ? { ...x, name: meta.name } : x));
+			onSeriesChange?.(list);
+		});
+	}
+
 	// The charted series' days edited by hand (212_series_hand_days) that hold a value, drawn as points.
 	const viewingHand = $derived(viewing && values[viewing.id] ? handPoints(values[viewing.id]!, viewing.handDays) : null);
 
@@ -626,7 +664,8 @@
 					{#each fold.shown as s (s.id)}
 						{@const st = stats[s.id]}
 						{@const end = endDate(s)}
-						{@const age = daysBetween(st?.lastValueDate ?? end, today)}
+						{@const span = dataSpan(s, st)}
+						{@const age = daysBetween(span.to, today)}
 						{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite })}
 						{@const behind = behindAge.get(s.id)}
 						{@const fed = feedMark(s.feed, st?.present)}
@@ -667,18 +706,18 @@
 								{/if}
 							</th>
 							<td role="cell" class="upto" data-label="Data up to">
-								<span class="num">{fmtDay(st?.lastValueDate ?? end)}</span>
+								<span class="num">{fmtDay(span.to)}</span>
 								<span class="age">{agoText(age)}</span>
 								<!-- In a mid-width column From folds in here (the From column is hidden from sight, kept for screen readers). -->
-								<span class="from-inline" aria-hidden="true">from {fmtDay(s.startDate)}</span>
+								<span class="from-inline" aria-hidden="true">from {fmtDay(span.from)}</span>
 								{#if behind !== undefined}
 									<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
 										>Behind</span
 									>
 								{/if}
 							</td>
-							<!-- The start only: the end is Data up to's (issue #174). -->
-							<td role="cell" class="num period from-col" data-label="From">{fmtDay(s.startDate)}</td>
+							<!-- The start only: the end is Data up to's (issue #174). Both are the days with a value (freshness.ts dataSpan, issue #556). -->
+							<td role="cell" class="num period from-col" data-label="From">{fmtDay(span.from)}</td>
 							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
 							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
 							<td role="cell" class="cov" data-label="Coverage by year">
@@ -693,7 +732,7 @@
 								<div class="acts">
 								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => choose(s.id)}>View</button>
 								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)} onpointerenter={warmPreview} onfocus={warmPreview}>Preview</button>
-								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${fmtDay(s.startDate)} → ${fmtDay(end)}` }]} />
+								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${fmtDay(span.from)} → ${fmtDay(span.to)}` }]} />
 								{#if !readonly}
 									<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
 								{/if}
@@ -749,6 +788,34 @@
 			<div class="details-h"><h3 id="details-h">Series details</h3><HelpTip key="series-source" /></div>
 			{#key viewing.id}
 				<dl class="details-list">
+					<!-- The name (issue #556): editors rename it here, saved on change like the source; viewers read it. A
+					     series a data feed writes keeps its name (the feed writes by it), so it reads as words with why. -->
+					<div class="detail detail-name">
+						{#if readonly || viewing.feed}
+							<dt>Name</dt>
+							<dd>
+								<span data-testid="series-name">{viewing.name || 'Not named'}</span>
+								{#if !readonly && viewing.feed}
+									<span class="name-why" data-testid="series-name-fed">A data feed writes into this series by its name, so it keeps it.</span>
+								{/if}
+							</dd>
+						{:else}
+							<dt><label for="series-name-input">Name</label></dt>
+							<dd>
+								<input
+									id="series-name-input"
+									data-testid="series-name"
+									maxlength="100"
+									placeholder="Not named: shown as {kindLabel(viewing.kind)}"
+									aria-describedby={saveId(viewing, 'name')}
+									aria-invalid={saveFailed(saveId(viewing, 'name')) ? 'true' : undefined}
+									value={viewing.name}
+									onchange={(e) => rename(viewing, e.currentTarget)}
+								/>
+								{@render saveStatus(saveId(viewing, 'name'))}
+							</dd>
+						{/if}
+					</div>
 					{#if viewingProduct}
 						<div class="detail">
 							{#if viewingProduct === 'chirps' && !readonly}
@@ -965,13 +1032,21 @@
 		margin: 0;
 		font-size: 0.85rem;
 	}
-	.detail-source {
+	/* The name and the source take two columns: both hold up to 100–200 characters (issue #556). */
+	.detail-source,
+	.detail-name {
 		grid-column: span 2;
 	}
 	@container data-page (max-width: 640px) {
-		.detail-source {
+		.detail-source,
+		.detail-name {
 			grid-column: auto;
 		}
+	}
+	.name-why {
+		display: block;
+		font-size: var(--font-sm);
+		color: var(--text-2);
 	}
 	.detail dt {
 		font-size: var(--font-sm);

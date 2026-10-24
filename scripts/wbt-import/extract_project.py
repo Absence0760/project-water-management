@@ -856,10 +856,50 @@ def read_flow_data(wb: Workbook) -> dict[str, Any]:
             continue
         if all(v is None for v in values):
             continue
+        heading = clean(header[1 + i])
         series.append(
-            {"kind": kind, "name": clean(header[1 + i]) or kind, "unit": unit, "startDate": dates[0], "values": values}
+            {
+                "kind": kind,
+                "name": heading or kind,
+                "unit": unit,
+                "startDate": dates[0],
+                "values": values,
+                **flow_data_origin(heading, get_column_letter(h1 + 1 + i), unit),
+            }
         )
     return {"dates": dates, "series": series, "calc": calc, "pitman_days": pitman_days}
+
+
+# The unit each [Flow data] column is read in, as the Data tab's Upload unit shows it.
+_SOURCE_UNITS = {"m3/s": "m³/s", "mm": "mm"}
+
+
+def flow_data_origin(heading: str, column: str, unit: str) -> dict[str, Any]:
+    """Where a [Flow data] series came from (issue #556): the workbook column, and the unit it was read in.
+
+    The column's heading is the series' source ("Workbook column 'Logger A1 (Curr. Day)'"), or its letter when it
+    has none. The values are read as they stand, so the upload unit is the column's own (factor 1).
+    """
+    source = f"Workbook column '{heading}'" if heading else f"Workbook [Flow data] column {column}"
+    return {"source": source[:200], "sourceUnit": _SOURCE_UNITS.get(unit, unit), "sourceUnitFactor": 1}
+
+
+def outlet_name(elements: list[dict[str, Any]], outflow: str | None, roots: list[str]) -> str | None:
+    """The outlet's element name: the outflow gauge when it is an element, else the one element with nothing downstream."""
+    if outflow and any(e["name"] == outflow for e in elements):
+        return outflow
+    return roots[0] if len(roots) == 1 else None
+
+
+def name_logger_after_outlet(series: list[dict[str, Any]], outlet: str | None) -> None:
+    """Name the logger series after where it is measured, in place (issue #556): "<outlet> logger", else "Outlet logger".
+
+    The workbook's logger column heading is the client's own code ("Logger A1 (Curr. Day)"), which means nothing to a
+    reader; it stays in the series' source (flow_data_origin).
+    """
+    for s in series:
+        if s["kind"] == LOGGER_KIND:
+            s["name"] = (f"{outlet} logger" if outlet else "Outlet logger")[:100].strip()
 
 
 def gauge_as_reference(
@@ -1420,6 +1460,7 @@ def extract(
         dup_note = duplicate_logger_note(flow["series"], settings)
         if dup_note:
             wb.notes.append(dup_note)
+        name_logger_after_outlet(flow["series"], outlet_name(elements, outflow, roots))
         if gauge_reference:
             wb.notes.extend(gauge_as_reference(flow["series"], settings, scaling_from, scale_factor))
         if flow["pitman_days"]:

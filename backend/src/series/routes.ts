@@ -7,6 +7,7 @@ import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { isUnitRainKind, siteProblem, type SiteNode } from './site.js';
 import { z } from 'zod';
+import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
 import {
 	bodyOrigin,
 	bodyProvenance,
@@ -70,13 +71,63 @@ export async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
  * an area, null = the catchment's rain; series/site.ts).
  */
 const LabelBody = z
-	.object({ ...ProvenanceFields, siteNodeId: z.string().uuid().nullable().optional(), source: SourceField })
+	.object({
+		...ProvenanceFields,
+		siteNodeId: z.string().uuid().nullable().optional(),
+		source: SourceField,
+		// A new name (issue #556): one line, 1–100 characters (the upload's and a data feed's bound), trimmed.
+		name: z.string().trim().min(1).max(100).refine((v) => !hasNameControlChars(v), NAME_CONTROL_MESSAGE).optional()
+	})
 	.strict()
 	.superRefine(checkProvenance)
 	.refine(
-		(b) => b.product !== undefined || b.siteNodeId !== undefined || b.source !== undefined,
-		'give product and productVersion (both null: not recorded), siteNodeId, or source (null: not recorded)'
+		(b) => b.product !== undefined || b.siteNodeId !== undefined || b.source !== undefined || b.name !== undefined,
+		'give product and productVersion (both null: not recorded), siteNodeId, source (null: not recorded), or name'
 	);
+
+/**
+ * Rename a series (issue #556): the values, site and provenance are
+ * untouched, and so is every run, which reads a series by kind and site and
+ * keeps the name it ran with in its own snapshot. Names are unique among a
+ * project's series of one kind (001's UNIQUE (project_id, kind, name)): 409.
+ *
+ * Refused (409) for a series something outside the app writes by its name:
+ * a data feed (data_feed.target_name) or an API key that has pushed days to
+ * it (series_key_days). Renaming it would leave the feed or the key writing a
+ * new series under the old name. Likewise a new name a data feed already
+ * writes to: the feed would write into this series. Logged as series.renamed.
+ */
+async function setName(db: Db, projectId: string, seriesId: string, name: string): Promise<SeriesMetaRow> {
+	const { rows: cur } = await db.query<{ kind: string; name: string }>(
+		'SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE',
+		[projectId, seriesId]
+	);
+	if (!cur[0]) throw new ApiError(404, 'not found');
+	const { kind, name: was } = cur[0];
+	if (was !== name) {
+		const { rows: writers } = await db.query<{ feed: boolean; key: boolean }>(
+			`SELECT EXISTS (SELECT 1 FROM data_feed WHERE project_id = $1 AND target_kind = $2 AND target_name = $3) AS feed,
+				EXISTS (SELECT 1 FROM series_key_days WHERE project_id = $1 AND series_id = $4) AS key`,
+			[projectId, kind, was, seriesId]
+		);
+		if (writers[0]?.feed) throw new ApiError(409, 'a data feed writes into this series by its name, so it keeps its name: renaming it would start a new series under the old name');
+		if (writers[0]?.key) throw new ApiError(409, 'an API key writes into this series by its name, so it keeps its name: renaming it would start a new series under the old name');
+		const { rows: taken } = await db.query('SELECT 1 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 AND id <> $4', [projectId, kind, name, seriesId]);
+		if (taken[0]) throw new ApiError(409, 'another series of this kind already has that name');
+		// A feed set up to write a series of that name (one it hasn't created yet) would write into this one.
+		const { rows: aimed } = await db.query('SELECT 1 FROM data_feed WHERE project_id = $1 AND target_kind = $2 AND target_name = $3', [projectId, kind, name]);
+		if (aimed[0]) throw new ApiError(409, 'a data feed writes into a series of that name: pick another name');
+	}
+	const { rows } = await db
+		.query<SeriesMetaRow>(`UPDATE time_series SET name = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`, [projectId, seriesId, name])
+		.catch((err: unknown) => {
+			// Two renames to one name at once: the second meets the unique constraint.
+			if ((err as { code?: string }).code === '23505') throw new ApiError(409, 'another series of this kind already has that name');
+			throw err;
+		});
+	if (was !== name) await recordAudit(db, projectId, 'series.renamed', { seriesId, kind, name, rename: { from: was, to: name } });
+	return rows[0]!;
+}
 
 /**
  * Say where a series' values came from (107_series_source.sql), without
@@ -195,9 +246,10 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
+			const named = body.name !== undefined ? await setName(db, id, seriesId, body.name) : null;
 			const sited = body.siteNodeId !== undefined ? await setSite(db, id, seriesId, body.siteNodeId) : null;
 			const sourced = body.source !== undefined ? await setSource(db, id, seriesId, body.source) : null;
-			if (body.product === undefined) return c.json((sourced ?? sited)!);
+			if (body.product === undefined) return c.json((sourced ?? sited ?? named)!);
 			const { rows: cur } = await db.query<{ product: string | null; productVersion: string | null }>(
 				`SELECT product, product_version AS "productVersion" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 				[id, seriesId]

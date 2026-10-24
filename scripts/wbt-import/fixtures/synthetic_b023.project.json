@@ -1763,11 +1763,14 @@
         0.04960000000000001,
         0.0488,
         0.0488
-      ]
+      ],
+      "source": "Workbook column 'Flow Gauge Z1 (m³/s)'",
+      "sourceUnit": "m³/s",
+      "sourceUnitFactor": 1
     },
     {
       "kind": "flow_logger_m3s",
-      "name": "Logger L1 (Curr. Day) (m³/s)",
+      "name": "Outlet Gauge logger",
       "unit": "m3/s",
       "startDate": "2019-10-01",
       "values": [
@@ -2867,7 +2870,10 @@
         0.067,
         0.066,
         0.063
-      ]
+      ],
+      "source": "Workbook column 'Logger L1 (Curr. Day) (m³/s)'",
+      "sourceUnit": "m³/s",
+      "sourceUnitFactor": 1
     },
     {
       "kind": "rain_catchment_mm",
@@ -3971,7 +3977,10 @@
         0,
         0,
         0
-      ]
+      ],
+      "source": "Workbook column 'Average Catchment Rainfall (mm)'",
+      "sourceUnit": "mm",
+      "sourceUnitFactor": 1
     },
     {
       "kind": "rain_chirps_mm",
@@ -5075,7 +5084,10 @@
         0,
         0,
         0
-      ]
+      ],
+      "source": "Workbook [Flow data] column J",
+      "sourceUnit": "mm",
+      "sourceUnitFactor": 1
     }
   ]
 }

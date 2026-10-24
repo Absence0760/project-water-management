@@ -12,6 +12,7 @@ describe('coverageStats', () => {
 			missingPct: 50,
 			meanDaily: 2,
 			meanAnnualMm: null,
+			firstValueDate: '2021-10-01',
 			lastValueDate: '2021-10-03'
 		});
 	});
@@ -31,7 +32,13 @@ describe('coverageStats', () => {
 		expect(s.missingPct).toBe(100);
 		expect(s.meanDaily).toBeNull();
 		expect(s.meanAnnualMm).toBeNull();
+		expect(s.firstValueDate).toBeNull();
 		expect(s.lastValueDate).toBeNull();
+	});
+
+	it('gives the first and last days with a value past leading and trailing blanks (issue #556)', () => {
+		const s = coverageStats({ startDate: '2009-10-01', values: [null, null, 4, null, 5, null] }, 'flow_logger_m3s');
+		expect([s.startDate, s.firstValueDate, s.lastValueDate, s.endDate]).toEqual(['2009-10-01', '2009-10-03', '2009-10-05', '2009-10-06']);
 	});
 });
 

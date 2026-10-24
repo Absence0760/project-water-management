@@ -220,7 +220,11 @@ new series will replace…" (frontend `lib/series/pick.ts`), the fit record's
 document (`fit-sweep`, `pan-sensitivity`, `import:project --fit`;
 `backend/scripts/fit-project.ts` `inputSeriesOf`). Lists shown to people
 (the Data tab, the export) keep the database's order; only the pick is
-pinned. An API key may not add a second outlet series of a kind
+pinned. A rename (`PATCH …/series/:id { name }`, issue #556) can therefore
+change which series the next run reads; the Data tab says which before it
+saves (`renamePickChange`). A run stores no series name (`run_input_series`
+is keyed by kind, with the series id), so the export, the report and the run
+comparison name a series by its current name. An API key may not add a second outlet series of a kind
 (100_key_series_kind.sql), since it could name one to sort first. The local
 and CI databases already sort by byte, so no DB test fails if `COLLATE "C"`
 is dropped: `series/pickOrder.test.ts` checks the two queries' text instead.
@@ -843,6 +847,8 @@ the result change?", and put back any earlier version.
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `series.site_changed` (084: a flow
   record moved to a gauge or back to the outlet, `site: { from, to }`),
+  `series.renamed` (issue #556: a series renamed by PATCH, `rename: { from,
+  to }`, `name` the new one),
   `series.held` (WP-2.16: an API key's
   pushed days the data-quality rules flag, with `negative`, `outlier`, up to
   5 `examples` and the `source` label; automatic runs wait until a person
