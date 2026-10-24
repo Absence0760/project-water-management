@@ -187,7 +187,7 @@ describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggle
 		const grid = (a: unknown) => ({ on: true, zoomIn: false, error: null, answer: a, range: [790, 790], pick: () => {}, retry: () => {} }) as never;
 		const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
 		const same = props({ mapGrid: grid(answer(waas, waas)) });
-		expect(same).toContain(`Source: ${waas.replace('&', '&amp;')}`);
+		expect(same).toContain(`Source: ${waas.replaceAll('&', '&amp;')}`);
 		expect(same).not.toContain('Credit:');
 		expect(props({ mapGrid: grid(answer('A provincial surface', 'Its authors, 2007')) })).toContain('Source: A provincial surface. Credit: Its authors, 2007');
 		// The synthetic grid's warning already says what its attribution would.
