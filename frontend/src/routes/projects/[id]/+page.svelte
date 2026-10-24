@@ -1005,6 +1005,7 @@
 								settings={project!.settings}
 								timeZone={project!.timeZone}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
+								nodes={editor.model.nodes}
 								onSeriesChange={(l) => (series = l)}
 								onadddata={() => openAddData()}
 							/>

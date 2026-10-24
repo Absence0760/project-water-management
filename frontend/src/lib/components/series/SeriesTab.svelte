@@ -46,7 +46,10 @@
 		type SeriesCheckKind,
 		type SeriesKind,
 		type RainStationMeta,
-		type SeriesMeta
+		type SeriesMeta,
+		ENGINE_VERSION,
+		type NetworkNode,
+		isLandUnit
 	} from '@water-management/engine';
 	import { api, type RunMeta } from '#lib/api/index.js';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
@@ -65,6 +68,22 @@
 	import { asksSite, productField, rowSiteMark, siteText, uploadUnitText } from './details';
 	import { asksStation } from './station';
 	import StationFields from './StationFields.svelte';
+	import AreaRainPanel from './AreaRainPanel.svelte';
+	import type { AreaRainLines } from './derivedRain';
+	import { ModelInputCache } from './areaInput';
+	import { groupedCsv, type ExportArea, type ExportSize } from './groupedCsv';
+	import {
+		areaNames,
+		areaRowInfo,
+		CATCHMENT_ITEM_ID,
+		groupSeries,
+		itemOfSeries,
+		stationsOf,
+		stationUses,
+		stationUsesText,
+		type AreaItem as GroupAreaItem,
+		type SeriesGroupId
+	} from './groups';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
 	import { agoText } from '#lib/format/age.js';
 	import AgreementTable from './AgreementTable.svelte';
@@ -89,6 +108,7 @@
 		initial = null,
 		settings = null,
 		gauges = [],
+		nodes = [],
 		timeZone = null,
 		onSeriesChange,
 		onadddata
@@ -103,6 +123,8 @@
 		settings?: ProjectSettings | null;
 		/** The model's gauge nodes above the outlet: a flow record can be attached to one (084_gauge_records, engine ≥ 1.4.0). */
 		gauges?: readonly { id: string; name: string }[];
+		/** The model's nodes: the land units the Hydrological units group lists, with their MAPs, and the catchment's MAP (issue #553). */
+		nodes?: readonly NetworkNode[];
 		/** The project's time zone: data ages count to its calendar date, as in the header and on the project list (issue #137). */
 		timeZone?: string | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
@@ -471,7 +493,8 @@
 		actionError = null;
 		try {
 			await api.series.remove(projectId, s.id);
-			const at = rows.findIndex((x) => x.id === s.id);
+			// Its place among the rows as drawn (grouped, folded), so the View that takes the focus is the one now there.
+			const at = [...document.querySelectorAll('#series-rows tr[data-series]')].findIndex((tr) => (tr as HTMLElement).dataset.series === s.id);
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
 			// The deleted series was charted: back to the default, without a history entry for it.
@@ -538,11 +561,146 @@
 	// --- the fold: the first few rows in that order (and the charted one), the rest behind "Show all N series" ---
 	let pageW = $state(0);
 	let chartEl: HTMLElement | undefined = $state();
-	let open = $state(false);
-	// Six rows and the chart's head sit on a 1440 × 960 first screen; in a column 640 px or narrower each row is a
-	// tall card (the same container width as the CSS's `@container data-page`), so four.
-	const cap = $derived(pageW > 0 && pageW <= 640 ? 4 : 6);
-	const fold = $derived(foldList(rows, (r) => r.id, selectedId, open, cap));
+	// Four rows a group (a unit's row counts once), three in a column 640 px or narrower where each row is a tall card
+	// (the same container width as the CSS's `@container data-page`): a project with every group long still lists
+	// each group's first rows before the chart, which a pick brings into view.
+	const cap = $derived(pageW > 0 && pageW <= 640 ? 3 : 4);
+
+	// --- the groups (issue #553 round 5, groups.ts): stations, catchment rainfall, hydrological units, flow, other,
+	// each in the freshness order, each folded on its own (the charted series' row always shows, its unit opened) ---
+	let openGroups = $state<Partial<Record<SeriesGroupId, boolean>>>({});
+	const GROUP_NOUN: Record<SeriesGroupId, string> = { stations: 'stations', catchment: 'catchment series', units: 'units', flow: 'flow records', other: 'series' };
+	const groups = $derived(groupSeries(rows, nodes, settings, new Set(behindAge.keys())));
+	const selectedItem = $derived(itemOfSeries(groups, selectedId));
+	const grouped = $derived(groups.map((g) => ({ ...g, noun: GROUP_NOUN[g.id], fold: foldList(g.items, (i) => i.id, selectedItem, !!openGroups[g.id], cap) })));
+
+	// --- the derived rows: a unit, or the catchment's average rainfall (groups.ts areaRowInfo, derivedRain.ts) ---
+	type AreaItem = GroupAreaItem<SeriesMeta>;
+	// A row opened or closed by hand; otherwise open only while it holds the charted series.
+	let expanded = $state<Record<string, boolean>>({});
+	const areaOpen = (id: string) => expanded[id] ?? selectedItem === id;
+	// A newly charted series reopens its unit even if it was closed by hand (Back to a series inside it, say).
+	$effect(() => {
+		const it = selectedItem;
+		untrack(() => {
+			if (it && expanded[it] === false) {
+				const { [it]: _, ...rest } = expanded;
+				expanded = rest;
+			}
+		});
+	});
+	const areaCtx = $derived({
+		settings,
+		nodes,
+		stations: stationsOf(list),
+		behind: new Set(behindAge.keys()),
+		catchmentChirps: list.some((s) => s.kind === 'rain_chirps_mm' && !s.siteNodeId)
+	});
+	// The role badges' view of the units and the stations (roles.ts roleBadge, issue #553).
+	const unitNames = $derived(new Map(nodes.filter(isLandUnit).map((n) => [n.id, n.name])));
+	const assignedStations = $derived.by(() => {
+		const rs = settings?.rainStations;
+		const out = new Set<string>();
+		for (const a of [rs?.catchment, ...Object.values(rs?.units ?? {})]) {
+			if (!a?.stationId) continue;
+			out.add(a.stationId);
+			if (a.correctAgainst) out.add(a.correctAgainst);
+		}
+		return out;
+	});
+	const areaOf = (it: AreaItem) => areaNames(it, areaCtx);
+	const areaInfo = (it: AreaItem) => areaRowInfo(it, areaCtx);
+	const areaPanelId = (itemId: string) => `area-${itemId.replace(':', '-')}`;
+	const nodeIdOf = (itemId: string) => (itemId === CATCHMENT_ITEM_ID ? null : itemId.slice('unit:'.length));
+
+	// The model input a run would read, fetched when a derived row opens or a grouped CSV is built (areaInput.ts),
+	// dropped whenever the series, the settings or the model change. The engine code that reads it (derivedRain.ts,
+	// the run preparation) is its own chunk, loaded then.
+	const loadDerived = () => import('./derivedRain');
+	const inputs = new ModelInputCache(() => api.runs.modelInput(projectId));
+	let areaLines = $state.raw<Record<string, AreaRainLines | null>>({});
+	let areaErrors = $state.raw<Record<string, string>>({});
+	const pending = new Set<string>();
+	$effect(() => {
+		void list;
+		void settings;
+		void nodes;
+		untrack(() => {
+			inputs.invalidate();
+			pending.clear();
+			areaLines = {};
+			areaErrors = {};
+		});
+	});
+	/** Yield to the browser: the run preparation is main-thread work, so a "Computing…" line paints first. */
+	const yieldToPaint = () => new Promise((r) => setTimeout(r, 0));
+	async function computeArea(itemId: string) {
+		const gen = inputs.generation;
+		pending.add(itemId);
+		const { [itemId]: _, ...rest } = areaErrors;
+		areaErrors = rest;
+		try {
+			const [x, derived] = await Promise.all([inputs.get(), loadDerived()]);
+			await yieldToPaint();
+			const lines = derived.areaRainLines(x, nodeIdOf(itemId));
+			if (inputs.current(gen)) areaLines = { ...areaLines, [itemId]: lines };
+		} catch (e) {
+			if (inputs.current(gen)) areaErrors = { ...areaErrors, [itemId]: msg(e) };
+		} finally {
+			if (inputs.current(gen)) pending.delete(itemId);
+		}
+	}
+	// An open derived row computes its lines once per input.
+	$effect(() => {
+		for (const g of grouped)
+			for (const it of g.fold.shown) {
+				if (it.type === 'series' || !areaOpen(it.id) || !areaOf(it)) continue;
+				if (it.id in areaLines || it.id in areaErrors || pending.has(it.id)) continue;
+				const id = it.id;
+				untrack(() => void computeArea(id));
+			}
+	});
+
+	// The grouped CSV (groupedCsv.ts): Compact or Full, built here since its derived columns are never stored.
+	async function buildExport(size: ExportSize): Promise<{ blob: Blob; filename: string }> {
+		const missing = list.filter((s) => !values[s.id]).length;
+		if (missing) throw new Error(`the values of ${missing} series haven’t loaded yet; try again in a moment`);
+		const items = groups.flatMap((g) => g.items).filter((it): it is AreaItem => it.type !== 'series' && areaOf(it) !== null);
+		let read: ((nodeId: string | null) => AreaRainLines | null) | null = null;
+		let inputError: string | null = null;
+		if (items.length) {
+			try {
+				const [x, derived] = await Promise.all([inputs.get(), loadDerived()]);
+				// One run preparation for every area's pairing (each area's rain used still prepares its own, in the engine).
+				const prep = derived.prepareFor(x);
+				read = (nodeId) => derived.areaRainLines(x, nodeId, prep);
+			} catch (e) {
+				inputError = msg(e);
+			}
+		}
+		const areas: ExportArea[] = [];
+		for (const it of items) {
+			const nodeId = nodeIdOf(it.id);
+			let lines: AreaRainLines | null = null;
+			let error = inputError;
+			if (read) {
+				await yieldToPaint();
+				try {
+					lines = read(nodeId);
+					if (!lines) error = 'a run reads no station for it with the settings as saved';
+				} catch (e) {
+					error = msg(e);
+				}
+			}
+			areas.push({ nodeId, name: areaOf(it)!.name, sentence: areaInfo(it).sentence, lines, error });
+		}
+		const text = groupedCsv(size, groups, values, areas, { engineVersion: ENGINE_VERSION, exportedOn: today });
+		return { blob: new Blob([text], { type: 'text/csv;charset=utf-8' }), filename: `data-series-${size}-${today}.csv` };
+	}
+	const exportItems = $derived([
+		{ label: 'Compact (CSV)', url: 'build:data-compact', hint: 'Rainfall stations, the average catchment rainfall, each unit’s rain used, flow records', build: () => buildExport('compact') },
+		{ label: 'Full (CSV)', url: 'build:data-full', hint: 'Every stored series, and each area’s station × ratio, corrected CHIRPS and rain used', build: () => buildExport('full') }
+	]);
 	const CHART_H = 320;
 
 	// The section header (workspace/SectionHeader) carries the title and the count; the tab adds Preview all data.
@@ -603,6 +761,125 @@
 	>
 {/snippet}
 
+{#snippet seriesRow(s: SeriesMeta, sub: boolean)}
+	{@const st = stats[s.id]}
+	{@const end = endDate(s)}
+	{@const span = dataSpan(s, st)}
+	{@const age = daysBetween(span.to, today)}
+	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite, units: unitNames, unitRainOn: settings?.unitRain?.mode === 'perUnit', assignedStations })}
+	{@const behind = behindAge.get(s.id)}
+	{@const fed = feedMark(s.feed, st?.present)}
+	<!-- Pointer shortcut only; the View button is the accessible control. -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_no_redundant_roles -->
+	<tr role="row" id="ser-row-{s.id}" class="pick" class:sub class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
+		<th scope="row" role="rowheader">
+			<span class="kind">{kindLabel(s.kind)}</span>
+			<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
+			<!-- A rainfall station (issue #553): its MAP and where its rain goes, so the group reads without opening each one. -->
+			{#if asksStation(s)}
+				<span class="prov" data-testid="series-station">{s.station?.mapMm != null ? `MAP ${fmtNum(s.station.mapMm, 1)} mm${s.station.mapSource ? ` (${s.station.mapSource})` : ''}` : 'No MAP recorded'}</span>
+				<span class="prov" data-testid="series-station-uses">{stationUsesText(stationUses(s.id, settings, nodes))}</span>
+			{/if}
+			{#if s.rebuilding}
+				<span class="rebuilding" data-testid="series-rebuilding" title="A data feed is backfilling a replacement; this series stays as it is until it completes">Being replaced</span>
+			{/if}
+			<!-- The data feed that wrote days of it (031_feed_days), with how many when it wrote only some. -->
+			{#if fed}
+				<span class="prov" data-testid="series-feed">{fed}</span>
+			{/if}
+			<!-- Days a person typed in (212_series_hand_days, issue #477): an edited record never passes as the raw one. -->
+			{#if s.handDays?.length}
+				{@const n = handDayCount(s.handDays)}
+				<span class="prov" data-testid="series-hand">{fmtNum(n)} {n === 1 ? 'day' : 'days'} edited by hand</span>
+			{/if}
+			<!-- A flow record placed at a gauge says which; the product, where measured, source and upload unit are
+			     the Series details under the chart (issue #464), so the row stays short. -->
+			{#if rowSiteMark(s, gauges)}
+				<span class="prov" data-testid="series-site">{rowSiteMark(s, gauges)}</span>
+			{/if}
+			{#if s.dayBoundary}
+				<!-- In words, not a hover title: a day added up from sub-daily readings in these windows. -->
+				<span class="prov" data-testid="series-day-boundary">{s.dayBoundary}–{s.dayBoundary} days, added up from sub-daily readings</span>
+			{/if}
+			{#if role}
+				<!-- The badge, the kind's role as a HelpTip (keyboard and touch reach it; a title doesn't), and for a gauge record where it is checked and scored, in words. -->
+				<span class="role-line">
+					<span class="role" class:unused={role.unused} data-testid="series-role">{role.label}</span>
+					<HelpTip key={`series.${s.kind}`} />
+				</span>
+				{#if role.why}<span class="prov why" data-testid="series-role-why">{role.why}</span>{/if}
+			{/if}
+		</th>
+		<td role="cell" class="upto" data-label="Data up to">
+			<span class="num">{fmtDay(span.to)}</span>
+			<span class="age">{agoText(age)}</span>
+			<!-- In a mid-width column From folds in here (the From column is hidden from sight, kept for screen readers). -->
+			<span class="from-inline" aria-hidden="true">from {fmtDay(span.from)}</span>
+			{#if behind !== undefined}
+				<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
+					>Behind</span
+				>
+			{/if}
+		</td>
+		<!-- The start only: the end is Data up to's (issue #174). Both are the days with a value (freshness.ts dataSpan, issue #556). -->
+		<td role="cell" class="num period from-col" data-label="From">{fmtDay(span.from)}</td>
+		<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
+		<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
+		<td role="cell" class="cov" data-label="Coverage by year">
+			{#if values[s.id]}
+				<CoverageStrip bins={bins[s.id] ?? []} byMonth={s.length < 3 * 365} label="Coverage of {s.name || kindLabel(s.kind)}" />
+				<span class="range"><span>{s.startDate.slice(0, 4)}</span><span>{end.slice(0, 4)}</span></span>
+			{:else}
+				<span class="strip-ph" aria-hidden="true"></span>
+			{/if}
+		</td>
+		<td role="cell" class="act">
+			<div class="acts">
+			<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => choose(s.id)}>View</button>
+			<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)} onpointerenter={warmPreview} onfocus={warmPreview}>Preview</button>
+			<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${fmtDay(span.from)} → ${fmtDay(span.to)}` }]} />
+			{#if !readonly}
+				<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
+			{/if}
+			</div>
+		</td>
+	</tr>
+{/snippet}
+
+<!-- A derived row (issue #553 round 5): a hydrological unit, or the catchment's average rainfall under its station.
+     Its sentence says what its rain is made of; its disclosure lists the unit's own series and charts the rain used. -->
+{#snippet areaRow(it: AreaItem)}
+	{@const info = areaInfo(it)}
+	{@const open = areaOpen(it.id)}
+	<!-- Explicit roles, as the table's: some browsers drop table semantics once rows stop being display: table-row. -->
+	<!-- svelte-ignore a11y_no_redundant_roles -->
+	<tr role="row" class="unit-row" class:is-behind={info.behind} class:open data-area={it.id}>
+		<th scope="row" role="rowheader">
+			<span class="kind">{info.kind}</span>
+			<span class="nm">{info.name}</span>
+			{#if info.map}<span class="prov" data-testid="area-map">{info.map}</span>{/if}
+		</th>
+		<td role="cell" colspan="5" class="area-info">
+			<span data-testid="area-sentence">{info.sentence}</span>
+			{#if info.seriesNote}<span class="prov" data-testid="area-series">{info.seriesNote}</span>{/if}
+			{#if info.behind}<span class="behind" data-testid="series-behind">Behind</span>{/if}
+		</td>
+		<td role="cell" class="act">
+			<div class="acts">
+				{#if info.toggle}
+					<button
+						type="button"
+						class="btn btn-sm"
+						aria-expanded={open}
+						aria-controls={open ? [...(it.type === 'unit' ? it.series.map((x) => `ser-row-${x.id}`) : []), ...(info.toggle === 'rain used' ? [areaPanelId(it.id)] : [])].join(' ') : undefined}
+						aria-label="{open ? 'Hide' : 'Show'} {info.toggle}: {info.name}"
+						onclick={() => (expanded = { ...expanded, [it.id]: !open })}>{open ? 'Hide' : 'Show'} {info.toggle}</button
+					>
+				{/if}
+			</div>
+		</td>
+	</tr>
+{/snippet}
 {#snippet headerActions()}
 	{#if list.length}
 		<button type="button" class="btn" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview all data</button>
@@ -634,11 +911,17 @@
 <section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
-		<!-- The feeds that fill series daily live in Settings → Data feeds; a project that has none had no way to
-		     find them from here (issue #444). -->
-		{#if !readonly}
-			<a class="small feeds-link" href="?tab=settings#set-feeds" data-testid="data-feeds-link">Fetch data automatically (CHIRPS rain, forecast, DWS flow) <span aria-hidden="true">→</span> Data feeds</a>
-		{/if}
+		<div class="head-tools">
+			<!-- The feeds that fill series daily live in Settings → Data feeds; a project that has none had no way to
+			     find them from here (issue #444). -->
+			{#if !readonly}
+				<a class="small feeds-link" href="?tab=settings#set-feeds" data-testid="data-feeds-link">Fetch data automatically (CHIRPS rain, forecast, DWS flow) <span aria-hidden="true">→</span> Data feeds</a>
+			{/if}
+			<!-- The grouped list as one CSV (issue #553 round 5): Compact or Full, each with what every area's rain is made of. -->
+			{#if list.length}
+				<span data-testid="data-export"><DownloadMenu label="Download (CSV)" items={exportItems} /></span>
+			{/if}
+		</div>
 	</div>
 	<LoadState
 		{loading}
@@ -673,94 +956,53 @@
 						<th scope="col" role="columnheader"><span class="visually-hidden">Actions</span></th>
 					</tr>
 				</thead>
-				<tbody role="rowgroup">
-					{#each fold.shown as s (s.id)}
-						{@const st = stats[s.id]}
-						{@const end = endDate(s)}
-						{@const span = dataSpan(s, st)}
-						{@const age = daysBetween(span.to, today)}
-						{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite })}
-						{@const behind = behindAge.get(s.id)}
-						{@const fed = feedMark(s.feed, st?.present)}
-						<!-- Pointer shortcut only; the View button is the accessible control. -->
-						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-						<tr role="row" class="pick" class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
-							<th scope="row" role="rowheader">
-								<span class="kind">{kindLabel(s.kind)}</span>
-								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
-								{#if s.rebuilding}
-									<span class="rebuilding" data-testid="series-rebuilding" title="A data feed is backfilling a replacement; this series stays as it is until it completes">Being replaced</span>
-								{/if}
-								<!-- The data feed that wrote days of it (031_feed_days), with how many when it wrote only some. -->
-								{#if fed}
-									<span class="prov" data-testid="series-feed">{fed}</span>
-								{/if}
-								<!-- Days a person typed in (212_series_hand_days, issue #477): an edited record never passes as the raw one. -->
-								{#if s.handDays?.length}
-									{@const n = handDayCount(s.handDays)}
-									<span class="prov" data-testid="series-hand">{fmtNum(n)} {n === 1 ? 'day' : 'days'} edited by hand</span>
-								{/if}
-								<!-- A flow record placed at a gauge says which; the product, where measured, source and upload unit are
-								     the Series details under the chart (issue #464), so the row stays short. -->
-								{#if rowSiteMark(s, gauges)}
-									<span class="prov" data-testid="series-site">{rowSiteMark(s, gauges)}</span>
-								{/if}
-								{#if s.dayBoundary}
-									<!-- In words, not a hover title: a day added up from sub-daily readings in these windows. -->
-									<span class="prov" data-testid="series-day-boundary">{s.dayBoundary}–{s.dayBoundary} days, added up from sub-daily readings</span>
-								{/if}
-								{#if role}
-									<!-- The badge, the kind's role as a HelpTip (keyboard and touch reach it; a title doesn't), and for a gauge record where it is checked and scored, in words. -->
-									<span class="role-line">
-										<span class="role" class:unused={role.unused} data-testid="series-role">{role.label}</span>
-										<HelpTip key={`series.${s.kind}`} />
-									</span>
-									{#if role.why}<span class="prov why" data-testid="series-role-why">{role.why}</span>{/if}
-								{/if}
-							</th>
-							<td role="cell" class="upto" data-label="Data up to">
-								<span class="num">{fmtDay(span.to)}</span>
-								<span class="age">{agoText(age)}</span>
-								<!-- In a mid-width column From folds in here (the From column is hidden from sight, kept for screen readers). -->
-								<span class="from-inline" aria-hidden="true">from {fmtDay(span.from)}</span>
-								{#if behind !== undefined}
-									<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
-										>Behind</span
-									>
-								{/if}
-							</td>
-							<!-- The start only: the end is Data up to's (issue #174). Both are the days with a value (freshness.ts dataSpan, issue #556). -->
-							<td role="cell" class="num period from-col" data-label="From">{fmtDay(span.from)}</td>
-							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
-							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
-							<td role="cell" class="cov" data-label="Coverage by year">
-								{#if values[s.id]}
-									<CoverageStrip bins={bins[s.id] ?? []} byMonth={s.length < 3 * 365} label="Coverage of {s.name || kindLabel(s.kind)}" />
-									<span class="range"><span>{s.startDate.slice(0, 4)}</span><span>{end.slice(0, 4)}</span></span>
-								{:else}
-									<span class="strip-ph" aria-hidden="true"></span>
-								{/if}
-							</td>
-							<td role="cell" class="act">
-								<div class="acts">
-								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => choose(s.id)}>View</button>
-								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)} onpointerenter={warmPreview} onfocus={warmPreview}>Preview</button>
-								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${fmtDay(span.from)} → ${fmtDay(span.to)}` }]} />
-								{#if !readonly}
-									<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
-								{/if}
-								</div>
-							</td>
+				{#each grouped as g (g.id)}
+					<tbody role="rowgroup" id="grp-{g.id}" aria-labelledby="grp-{g.id}-h" data-group={g.id}>
+						<tr role="row" class="grp-row">
+							<th scope="rowgroup" role="rowheader" colspan="7"><h3 id="grp-{g.id}-h" class="grp-h">{g.title}</h3></th>
 						</tr>
-					{/each}
-				</tbody>
+						{#each g.fold.shown as it (it.id)}
+							{#if it.type === 'series'}
+								{@render seriesRow(it.series, false)}
+							{:else}
+								{@render areaRow(it)}
+								{#if areaOpen(it.id)}
+									{#if it.type === 'unit'}
+										{#each it.series as s (s.id)}{@render seriesRow(s, true)}{/each}
+									{/if}
+									{#if areaOf(it)}
+										{@const a = areaOf(it)!}
+										<tr role="row" class="area-panel-row">
+											<td role="cell" colspan="7">
+												<AreaRainPanel
+													id={areaPanelId(it.id)}
+													name={a.name}
+													stationName={a.stationName}
+													correctingName={a.correctingName}
+													lines={areaLines[it.id] ?? null}
+													loading={!(it.id in areaLines) && !areaErrors[it.id]}
+													error={areaErrors[it.id] ?? null}
+													onretry={() => computeArea(it.id)}
+												/>
+											</td>
+										</tr>
+									{/if}
+								{/if}
+							{/if}
+						{/each}
+						{#if openGroups[g.id] || g.fold.hidden}
+							<tr role="row" class="grp-more">
+								<td role="cell" colspan="7">
+									<button type="button" class="btn btn-sm" aria-expanded={!!openGroups[g.id]} aria-controls="grp-{g.id}" onclick={() => (openGroups = { ...openGroups, [g.id]: !openGroups[g.id] })}>
+										{openGroups[g.id] ? `Show only the first ${cap} ${g.noun}` : `Show all ${g.items.length} ${g.noun}`}
+									</button>
+								</td>
+							</tr>
+						{/if}
+					</tbody>
+				{/each}
 			</table>
 		</div>
-		{#if open || fold.hidden}
-			<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="series-rows" onclick={() => (open = !open)}>
-				{open ? `Show only the first ${cap} series` : `Show all ${rows.length} series`}
-			</button>
-		{/if}
 		<p class="muted small key">
 			<span class="sw full"></span> complete year <span class="sw part"></span> some days missing <span class="sw none"></span> no data.
 			Rainfall "typical" = mean annual total; flow = mean daily flow. <span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.
@@ -1214,6 +1456,45 @@
 		border-left-color: var(--danger);
 		color: var(--danger);
 	}
+	/* The groups (issue #553 round 5): a heading row over each, a unit's own series indented under it, an open
+	   derived row's chart across the table. */
+	.grp-row > th {
+		padding: 0.9rem 0.5rem 0.3rem;
+		border-bottom: 1px solid var(--border);
+		background: var(--surface);
+	}
+	tbody:first-of-type .grp-row > th {
+		padding-top: 0.4rem;
+	}
+	.grp-h {
+		margin: 0;
+		font-size: 0.9rem;
+	}
+	tr.unit-row > th[scope='row'],
+	tr.unit-row > td {
+		background: var(--surface-2);
+	}
+	tr.pick.sub > th[scope='row'] {
+		padding-left: 1.5rem;
+	}
+	.area-info {
+		font-size: 0.85rem;
+		color: var(--text-2);
+		max-width: 48rem;
+	}
+	.area-panel-row > td {
+		padding: 0 0.5rem;
+	}
+	.grp-more > td {
+		padding: 0.4rem 0.5rem 0.6rem;
+		border-bottom: 0;
+	}
+	.head-tools {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+	}
 	.data-page {
 		container: data-page / inline-size;
 	}
@@ -1221,9 +1502,6 @@
 	   instead of scrolling inside the global 70vh cap; it still scrolls sideways if it must. */
 	.list-panel .table-wrap {
 		max-height: none;
-	}
-	.more {
-		margin-top: 0.5rem;
 	}
 	.warn {
 		color: var(--warning);
@@ -1335,6 +1613,42 @@
 			overflow: hidden;
 			clip: rect(0 0 0 0);
 			white-space: nowrap;
+		}
+		.series tr.grp-row,
+		.series tr.grp-more,
+		.series tr.area-panel-row,
+		.series tr.grp-row > th,
+		.series tr.grp-more > td,
+		.series tr.area-panel-row > td {
+			display: block;
+		}
+		.series tr.unit-row {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr);
+			gap: 0.4rem;
+			padding: 0.75rem;
+			border-bottom: 1px solid var(--border);
+			background: var(--surface-2);
+		}
+		.series tr.unit-row > th,
+		.series tr.unit-row > td {
+			display: block;
+			padding: 0;
+			border: 0;
+			background: none;
+			text-align: left;
+		}
+		.series tr.unit-row .acts {
+			justify-content: flex-start;
+		}
+		.series tr.unit-row.is-behind {
+			box-shadow: inset 3px 0 0 var(--warning);
+		}
+		.series tr.pick.sub > th[scope='row'] {
+			padding-left: 0;
+		}
+		.series tr.pick.sub {
+			padding-left: 1.25rem;
 		}
 		.series tr.pick {
 			display: grid;

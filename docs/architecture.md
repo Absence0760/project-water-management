@@ -81,7 +81,10 @@ The same `runModel` runs:
   (`frontend/src/lib/calibration/autocal.worker.ts`): about a minute of model
   runs on the input from `GET /projects/:id/model-input`, with the unsaved
   Settings form in place of the saved settings. It fills the form and never
-  saves. The uncertainty ensemble (issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9))
+  saves. The Data tab reads the same input, on demand, for each area's rain
+  used under its rainfall station (issue #553, `series/derivedRain.ts`, the
+  engine's `stationAreaRain`, a chunk of its own loaded when a row opens or
+  a grouped CSV is built). The uncertainty ensemble (issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9))
   runs in the same worker: hundreds of full `runModel`s on a run's own input
   (`GET …/runs/:runId/model-input`), with options the server resolved and a
   seed the database drew; the server re-runs a few members before storing
@@ -308,7 +311,7 @@ worker both use carries everything either of them calls, with its imports, so
 the small things pages read must not live beside the run, fit or ensemble code.
 They have modules of their own: `version.ts` (`ENGINE_VERSION`), `prepare.ts`
 (`prepareRun`: settings, run window and aligned inputs, for the Data tab's
-series preview), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
+series preview and, with `runoff/stationAreaRain.ts`, its derived rain rows, both loaded only when used), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
 `calibrate/objectives.ts` (objective ids and labels), `runoff/params.ts` (the
 GR4J parameter table; the legacy one went with that model in engine 1.0.0), `runoff/pet.ts`
 (`hasPotentialEvaporation`), `reference/wr2012Settings.ts` (the WR2012

@@ -136,6 +136,21 @@ describe('roleBadge', () => {
 		const gone = { ...g, siteNodeId: 'n9' };
 		expect(roleBadge(gone, ctx([gone]))?.label).toBe('Not used: its gauge is no longer in the model');
 	});
+
+	it('a unit’s own rain is its unit’s, not a gauge record; an assigned station is a rainfall station (issue #553)', () => {
+		const own = { ...meta('u', 'rain_chirps_mm', 'CHIRPS Upper'), siteNodeId: 'u1' };
+		const units = new Map([['u1', 'Upper unit']]);
+		expect(roleBadge(own, ctx([own], { units, unitRainOn: true }))).toEqual({ label: 'Upper unit’s own rain', unused: false, why: null });
+		expect(roleBadge(own, ctx([own], { units, unitRainOn: false }))).toEqual({ label: 'Not used: per-unit rain is off', unused: true, why: null });
+		// Without the units known it reads as before (a record at a node that isn't a gauge).
+		expect(roleBadge(own, ctx([own]))?.label).toBe('Not used: its gauge is no longer in the model');
+		const a = meta('a', 'rain_catchment_mm', 'A');
+		const b = meta('b', 'rain_catchment_mm', 'Kloof');
+		expect(roleBadge(b, ctx([a, b], { assignedStations: new Set(['b']) }))).toEqual({ label: 'Rainfall station', unused: false, why: null });
+		// The catchment rain read by name keeps its role; an unassigned station is still not used.
+		expect(roleBadge(a, ctx([a, b], { assignedStations: new Set(['a', 'b']) }))?.label).toBe('Main rainfall');
+		expect(roleBadge(b, ctx([a, b], { assignedStations: new Set() }))?.label).toBe('Not used (another series of this kind is)');
+	});
 });
 
 describe('renameEffect (issue #556)', () => {

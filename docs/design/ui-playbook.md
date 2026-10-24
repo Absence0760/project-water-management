@@ -1235,8 +1235,9 @@ picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
 `network/NetworkTab.svelte` (map page, Tables menu, node sheet),
 `series/SeriesTab.svelte` (a table over a chart in
-the window's one scroll, the long table folded under "Show all N series"
-with the picked row kept, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
+the window's one scroll, the table split into named `<tbody>` groups each
+folded under its own "Show all N …" with the picked row kept, a derived row
+that opens in place to its own chart, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into
 cards in a narrow column), `history/HistoryTab.svelte` (a timeline: rows
 beside the picked entry with Newer/Older, filters in the URL, whole entries

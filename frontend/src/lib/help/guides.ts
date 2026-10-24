@@ -1663,6 +1663,10 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'p',
 						text: 'With [[unit-rain|flow generation]] set to **Per unit** (**Settings & calibration → Flow generation**), each unit with land also gets a rain series of its own: its [[rain-stations|rainfall station]] × unit MAP ÷ station MAP when it is given one, its gaps filled by its CHIRPS corrected against a station; else, in this order, its **own gauge**, with the same zero-run and accumulation checks, its gaps and set-aside days taking its CHIRPS levelled to its MAP; else the **catchment gauge × unit MAP ÷ gauge MAP**, when the gauge’s MAP is set and the unit has one; else its **own CHIRPS**, levelled by its MAP ÷ the CHIRPS mean over the MAP period; else the catchment rain, with a warning. Demand, rain on the dams and the WR2012 check keep the catchment rain. A seasonal outlook, the uncertainty ensemble’s CHIRPS-only member and a run resumed from a saved state keep each unit’s rule and factors **pinned** as the base run had them, rather than refitting them on a shorter record; the run’s Rain for each unit panel then says its factors are pinned.'
+					},
+					{
+						type: 'p',
+						text: 'Where Settings assigns a rainfall station, the **Data** page shows what a run reads: a hydrological unit’s row, or **Average catchment rainfall**, says how its rain is made (the station × area MAP ÷ station MAP, gaps from CHIRPS corrected against a station), and **Show rain used** charts that rain with the station and CHIRPS lines behind it and a strip for the days that didn’t come from the station. **Download (CSV) → Full** has every one of those lines by day.'
 					}
 				]
 			},

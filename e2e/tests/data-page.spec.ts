@@ -1,12 +1,13 @@
-// The Data section (?tab=series, issue #17 option A): the input series freshness first, the series behind (the
-// sidebar badge's count and rule) marked and listed first, the picked series charted (series=<id>), the page flowing in
-// the window's one scroll with a long table folded under "Show all", and Add data refreshing the list. Synthetic series only.
+// The Data section (?tab=series, issue #17 option A): the input series in groups (issue #553), each freshness
+// first, the series behind (the sidebar badge's count and rule) marked and listed first in their group, the picked
+// series charted (series=<id>), the page flowing in the window's one scroll with a long group folded under "Show all",
+// and Add data refreshing the list. Synthetic series only.
 import { fileURLToPath } from 'node:url';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { csv } from '../support/addData.ts';
 import { API_URL } from '../support/env.ts';
-import { chartReady, openData, putEnding, sections, seedFreshnessMix, seriesChart, seriesRow, seriesRows, seriesTable } from '../support/data.ts';
+import { chartReady, openData, putEnding, sections, seedFreshnessMix, seriesChart, seriesGroup, seriesRow, seriesRows, seriesTable } from '../support/data.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, layoutSettled } from '../support/reflow.ts';
 
@@ -17,7 +18,7 @@ async function seriesIds(request: import('@playwright/test').APIRequestContext, 
 	return Object.fromEntries(series.map((s) => [s.name, s.id]));
 }
 
-test('the series behind come first and are marked, the same count as the sidebar badge and the header', async ({ page, owner }) => {
+test('the series are grouped, the series behind come first in their group and are marked, the same count as the sidebar badge and the header', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Data freshness');
@@ -36,13 +37,21 @@ test('the series behind come first and are marked, the same count as the sidebar
 	// The feeds that fill series daily are one link away (Settings → Data feeds).
 	await expect(page.getByTestId('data-feeds-link')).toHaveAttribute('href', '?tab=settings#set-feeds');
 
-	// Most days behind first (A-pan 45 days, CHIRPS 20), each marked in words; nothing else is, the 60-day-old logger
-	// included (it only scores a run) and the forecast that runs ahead.
+	// Grouped by what each series is (issue #553): the station, the catchment's other rain, the flow records, the
+	// rest. Within a group the series behind come first (CHIRPS, 20 days, before the forecast that runs ahead), each
+	// marked in words; nothing else is, the 60-day-old logger included (it only scores a run).
 	await expect(seriesRows(page)).toHaveCount(5);
-	await expect(seriesRows(page).nth(0)).toContainText('Pan station');
-	await expect(seriesRows(page).nth(1)).toContainText('CHIRPS cell');
+	await expect(seriesTable(page).getByRole('rowgroup').filter({ has: page.getByRole('heading') })).toHaveCount(4);
+	await expect(seriesTable(page).getByRole('heading', { level: 3 })).toHaveText(['Rainfall stations', 'Catchment rainfall', 'Flow records', 'Other inputs']);
+	await expect(seriesRows(page)).toHaveText([/Gauge R1/, /CHIRPS cell/, /Forecast F1/, /Logger L1/, /Pan station/]);
+	await expect(seriesGroup(page, 'Rainfall stations').locator('tr[data-series]')).toHaveText([/Gauge R1/]);
+	await expect(seriesGroup(page, 'Other inputs').locator('tr[data-series]')).toHaveText([/Pan station/]);
+	await expect(seriesRow(page, 'Pan station').getByTestId('series-behind')).toHaveText('Behind');
 	await expect(page.getByTestId('series-behind')).toHaveCount(2);
-	await expect(seriesRows(page).nth(0).getByTestId('series-behind')).toHaveText('Behind');
+	await expect(seriesRow(page, 'CHIRPS cell').getByTestId('series-behind')).toHaveText('Behind');
+	// A station says its MAP and where its rain goes, in its row.
+	await expect(seriesRow(page, 'Gauge R1').getByTestId('series-station')).toHaveText('No MAP recorded');
+	await expect(seriesRow(page, 'Gauge R1').getByTestId('series-station-uses')).toHaveText('Not assigned to the catchment or a unit.');
 	await expect(seriesRow(page, 'Logger L1').getByTestId('series-behind')).toHaveCount(0);
 	await expect(seriesRow(page, 'Forecast F1').getByTestId('series-behind')).toHaveCount(0);
 	await expect(seriesRow(page, 'Logger L1')).toContainText('2 months ago');
@@ -99,70 +108,83 @@ const innerScrollers = (page: import('@playwright/test').Page) =>
 			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
 	);
 
-test('with 30 series the table shows the first six, the rest under “Show all”; the charted row stays; a pick brings the chart into view; nothing scrolls inside itself', async ({ page, owner }) => {
+test('with 30 series each group shows its first four, the rest under its own “Show all”; the charted row stays; a pick brings the chart into view; nothing scrolls inside itself', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Data big');
 	const kinds = ['rain_catchment_mm', 'rain_chirps_mm', 'flow_observed_m3s', 'flow_logger_m3s', 'evap_apan_mm', 'rain_catchment_alt_mm'];
-	for (let i = 0; i < 30; i++) {
-		// Every fifth series is behind: A-pan more than 7 days old.
-		const kind = kinds[i % kinds.length]!;
-		await putEnding(page.request, project.id, { kind, name: `Station ${String(i + 1).padStart(2, '0')} with a long descriptive name`, endAgo: kind === 'evap_apan_mm' ? 30 + i : 2, length: 800 });
-	}
+	// Every fifth series is behind: A-pan more than 7 days old. Stored side by side (each its own name).
+	await Promise.all(
+		Array.from({ length: 30 }, (_, i) => {
+			const kind = kinds[i % kinds.length]!;
+			return putEnding(page.request, project.id, { kind, name: `Station ${String(i + 1).padStart(2, '0')} with a long descriptive name`, endAgo: kind === 'evap_apan_mm' ? 30 + i : 2, length: 800 });
+		})
+	);
 	await openData(page, project.id);
 	await chartReady(page);
 
-	// The five behind lead, then the observed flow a run reads (the default chart): six rows, the rest folded.
-	await expect(seriesRows(page)).toHaveCount(6);
-	for (let i = 0; i < 5; i++) await expect(seriesRows(page).nth(i).getByTestId('series-behind')).toBeVisible();
-	await expect(seriesRows(page).nth(5)).toHaveClass(/selected/);
+	// Five stations, ten catchment series (CHIRPS and the alternative gauge), ten flow records, five A-pan: the groups
+	// of ten fold to their first four (a group of five shows whole). The five behind are the A-pan's, in their own group.
+	const group = (title: string) => seriesGroup(page, title).locator('tr[data-series]');
+	await expect(group('Rainfall stations')).toHaveCount(5);
+	await expect(group('Catchment rainfall')).toHaveCount(4);
+	await expect(group('Flow records')).toHaveCount(4);
+	await expect(group('Other inputs')).toHaveCount(5);
+	for (let i = 0; i < 5; i++) await expect(group('Other inputs').nth(i).getByTestId('series-behind')).toBeVisible();
+	await expect(page.getByTestId('series-behind')).toHaveCount(5);
+	// The observed flow a run reads is the default chart, in the flow group.
+	await expect(seriesGroup(page, 'Flow records').locator('tr.selected')).toHaveCount(1);
 	await expect(sections(page).getByRole('link', { name: /^Data/ })).toContainText('(5 series behind)');
 	await expect(page.getByTestId('section-context')).toHaveText('30 daily input series · 5 behind');
-	const more = page.getByRole('button', { name: 'Show all 30 series' });
+	const more = page.getByRole('button', { name: 'Show all 10 catchment series' });
 	await expect(more).toHaveAttribute('aria-expanded', 'false');
-	await expect(more).toHaveAttribute('aria-controls', 'series-rows');
-	// The page flows: the table grows with its rows, the chart below starts on the first screen, nothing scrolls in a box.
+	await expect(more).toHaveAttribute('aria-controls', 'grp-catchment');
+	await expect(page.getByRole('button', { name: 'Show all 10 flow records' })).toBeVisible();
+	// The page flows: the table grows with its rows, nothing scrolls in a box, nothing sideways.
 	await expect(seriesRows(page).first()).toBeInViewport();
-	await expect(seriesChart(page)).toBeInViewport();
 	expect(await innerScrollers(page)).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 	await expectNoViolations(page);
 
-	// Open: all thirty in place, the page (not the table) growing.
+	// Open one group: all ten in place, the page (not the table) growing; the other group stays folded.
 	await more.click();
-	await expect(seriesRows(page)).toHaveCount(30);
-	const fewer = page.getByRole('button', { name: 'Show only the first 6 series' });
+	await expect(group('Catchment rainfall')).toHaveCount(10);
+	await expect(group('Flow records')).toHaveCount(4);
+	const fewer = page.getByRole('button', { name: 'Show only the first 4 catchment series' });
 	await expect(fewer).toHaveAttribute('aria-expanded', 'true');
 	expect(await innerScrollers(page)).toEqual([]);
 
 	// Pick one far down: its chart comes into view (the chart is below the table), and it is a history entry.
-	const far = seriesRows(page).nth(20);
+	const far = group('Catchment rainfall').nth(8);
 	const name = (await far.locator('.nm').innerText()).replace(/\s*\(.*\)$/, '').trim();
 	await far.locator('.kind').click();
 	await expect(far).toHaveClass(/selected/);
 	await expect(seriesChart(page).getByRole('figure')).toContainText(name);
 	await expect(seriesChart(page)).toBeInViewport({ ratio: 1 });
 
-	// Fold again: the picked row keeps its place after the first six, and a reload of the link shows it too.
+	// Fold again: the picked row keeps its place after its group's first four, and a reload of the link shows it too.
 	await fewer.click();
-	await expect(seriesRows(page)).toHaveCount(7);
-	await expect(seriesRows(page).last()).toContainText(name);
+	await expect(group('Catchment rainfall')).toHaveCount(5);
+	await expect(group('Catchment rainfall').last()).toContainText(name);
 	await page.reload();
-	await expect(seriesRows(page)).toHaveCount(7);
-	await expect(seriesRows(page).last()).toHaveClass(/selected/);
+	await expect(group('Catchment rainfall')).toHaveCount(5);
+	await expect(group('Catchment rainfall').last()).toHaveClass(/selected/);
 
-	// A phone: four cards, then the fold (and the picked one); no inner scroll, no sideways scroll.
+	// A phone: three cards a group, then its fold (and the picked one); no inner scroll, no sideways scroll.
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect(seriesRows(page)).toHaveCount(5);
-	await expect(page.getByRole('button', { name: 'Show all 30 series' })).toBeVisible();
+	await expect(group('Catchment rainfall')).toHaveCount(4);
+	await expect(group('Rainfall stations')).toHaveCount(3);
+	await expect(group('Flow records')).toHaveCount(3);
+	await expect(page.getByRole('button', { name: 'Show all 5 stations' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Show all 10 catchment series' })).toBeVisible();
 	await chartReady(page);
 	expect(await innerScrollers(page)).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
 	expect(await wrap.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 	// A pick on a phone brings the chart, below the cards, into view.
-	await seriesRows(page).nth(1).locator('.kind').click();
-	await expect(seriesRows(page).nth(1)).toHaveClass(/selected/);
+	await group('Rainfall stations').nth(1).locator('.kind').click();
+	await expect(group('Rainfall stations').nth(1)).toHaveClass(/selected/);
 	await expect(seriesChart(page)).toBeInViewport();
 	await expectNoViolations(page);
 });

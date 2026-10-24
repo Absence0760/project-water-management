@@ -5,7 +5,12 @@ import { putSeries } from './api.ts';
 import { expect } from './fixtures.ts';
 
 export const seriesTable = (page: Page) => page.getByRole('region', { name: 'Input time series' }).getByRole('table');
-export const seriesRows = (page: Page) => seriesTable(page).getByRole('row').filter({ has: page.getByRole('rowheader') });
+// The stored series' rows (`data-series`): not the group headings, a hydrological unit's row or an open area's chart (issue #553).
+export const seriesRows = (page: Page) => seriesTable(page).locator('tr[data-series]');
+/** A group of the grouped list (Rainfall stations, Catchment rainfall, Hydrological units, Flow records, Other inputs). */
+export const seriesGroup = (page: Page, title: string) => seriesTable(page).getByRole('rowgroup', { name: title });
+/** A derived row: a hydrological unit, or the average catchment rainfall. */
+export const areaRow = (page: Page, name: string) => seriesTable(page).locator('tr[data-area]').filter({ has: page.getByRole('rowheader', { name: new RegExp(name) }) });
 export const seriesRow = (page: Page, text: string) => seriesRows(page).filter({ hasText: text });
 export const seriesChart = (page: Page) => page.getByRole('region', { name: 'Series chart' });
 export const sections = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });

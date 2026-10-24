@@ -96,7 +96,8 @@
 			return;
 		}
 		try {
-			const { blob, filename } = await fetchDownload(item.url);
+			// A file the page builds itself (the Data tab's grouped CSV, whose derived columns are never stored), else the server's.
+			const { blob, filename } = item.build ? await item.build() : await fetchDownload(item.url);
 			saveBlob(blob, filename);
 			done = `Downloaded ${filename}`;
 			close(true);

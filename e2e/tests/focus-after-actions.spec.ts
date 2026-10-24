@@ -93,7 +93,7 @@ test('deleting a run, a series or a scenario puts the focus on what took its pla
 
 	// Data: the rain record goes; the flow record's View takes the focus.
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const rows = page.locator('#series-rows tbody tr');
+	const rows = page.locator('#series-rows tr[data-series]');
 	await expect(rows).toHaveCount(2);
 	const keptView = rows.filter({ hasText: 'Flow — observed gauge' }).getByRole('button', { name: 'View', exact: true });
 	await rows.filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: /^Delete / }).click();
