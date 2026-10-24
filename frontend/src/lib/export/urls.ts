@@ -18,6 +18,8 @@ export interface DownloadItem {
 	hint?: string;
 	/** Build this run's .xlsx workbook in a Web Worker instead of fetching `url` ($lib/spreadsheet/export). */
 	workbook?: WorkbookRequest;
+	/** Build the file in the browser instead of fetching `url` (then a unique key): the Data tab's grouped CSV, whose derived columns are computed when viewed. */
+	build?: () => Promise<{ blob: Blob; filename: string }>;
 	/** When set, the menu offers a Preview beside the entry, which calls this (the in-page table). */
 	preview?: () => void;
 }
