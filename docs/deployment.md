@@ -2093,7 +2093,7 @@ IDs as you go (`Z…`, without the `/hostedzone/` prefix):
 
 1. Merge the issue #551 PR to `main` (nothing deploys until the releases in steps 14 and 15).
 2. `aws sso login --profile water-management && aws sso login --profile dns-parent`
-3. Create the new child zone in this account: `aws route53 create-hosted-zone --name icwbt.jaredhoward.com --caller-reference "icwbt-$(date +%s)" --hosted-zone-config Comment="IC-WBT site, issue 551" --profile water-management --query 'HostedZone.Id' --output text`
+3. Create the new child zone in this account: `aws route53 create-hosted-zone --name icwbt.jaredhoward.com --caller-reference "icwbt-$(date +%s)" --hosted-zone-config Comment="IC-WBT site for issue 551" --profile water-management --query 'HostedZone.Id' --output text` (no comma in `Comment`: the CLI's shorthand splits on commas and refuses the list)
 4. Print its four name servers: `aws route53 get-hosted-zone --id <NEW_ZONE_ID> --profile water-management --query 'DelegationSet.NameServers' --output text`
 5. Find the parent zone in the jaredhoward account (the line must read `jaredhoward.com.`): `aws route53 list-hosted-zones-by-name --dns-name jaredhoward.com --max-items 1 --profile dns-parent --query 'HostedZones[0].[Name,Id]' --output text`
 6. Delegate the new zone from the parent (the same NS record the bootstrap's stage 3 wrote for the old zone, here by hand): `aws route53 change-resource-record-sets --hosted-zone-id <PARENT_ZONE_ID> --profile dns-parent --change-batch '{"Changes":[{"Action":"CREATE","ResourceRecordSet":{"Name":"icwbt.jaredhoward.com","Type":"NS","TTL":3600,"ResourceRecords":[{"Value":"<NS1>"},{"Value":"<NS2>"},{"Value":"<NS3>"},{"Value":"<NS4>"}]}}]}'`
