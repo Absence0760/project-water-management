@@ -393,6 +393,13 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			reservePctM3s: natural.map((r) => r.map((v) => v * dsr.float(0.05, 1.2)))
 		};
 	}
+	// The Reserve flows without high flows, chosen (engine ≥ 1.90.0, issue #552), from its own stream so earlier seeds don't move.
+	const lfr = new Rng(seed ^ 0x5e9b2c47);
+	const daily = settings.ewrDailySource;
+	if (daily && lfr.bool(0.5)) {
+		daily.lowFlowPctM3s = daily.naturalPctM3s!.map((r) => r.map((v) => v * lfr.float(0.05, 1)));
+		daily.reserveTable = lfr.pick(['total', 'withoutHighFlows'] as const);
+	}
 
 	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
 	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);

@@ -71,12 +71,18 @@ describe('planDailyPaste', () => {
 		if ('error' in r) throw new Error(r.error);
 		expect(r.patch.reservePctM3s![11]).toEqual(POINTS.map((_, c) => 11 + c));
 		expect(r.message).toBe('Filled the total Reserve flow table (rows matched by month name).');
+		// The third table (issue #552).
+		const low = planDailyPaste(src, 'lowFlowPctM3s', tsv((m, c) => m + c, false));
+		if ('error' in low) throw new Error(low.error);
+		expect(low.patch.lowFlowPctM3s![2]).toEqual(POINTS.map((_, c) => 2 + c));
+		expect(low.message).toBe('Filled the Reserve flow without high flows table (rows matched by month name).');
 		expect(planDailyPaste(src, 'naturalPctM3s', MONTHS.map((m) => `${m}\t1\t2`).join('\n'))).toEqual({ error: 'The paste has 2 values a row; the table has 10, one per point (10 % … 99 %).' });
 	});
 	it('writes CSVs that paste back unchanged', () => {
 		const src = { ...blankEwrDailySource(), method: 'percentile' as const, tabM3s: MONTHS.map((_, i) => i / 4), naturalPctM3s: MONTHS.map((_, r) => POINTS.map((_, c) => r * 10 + c)) };
-		for (const which of ['tabM3s', 'naturalPctM3s'] as const) {
-			const r = planDailyPaste(src, which, '﻿' + dailyCsv(src, which));
+		const withLow = { ...src, lowFlowPctM3s: MONTHS.map((_, r) => POINTS.map((_, c) => r + c / 10)) };
+		for (const which of ['tabM3s', 'naturalPctM3s', 'lowFlowPctM3s'] as const) {
+			const r = planDailyPaste(withLow, which, '﻿' + dailyCsv(withLow, which));
 			if ('error' in r) throw new Error(r.error);
 			expect(r.plan.changes).toEqual([]);
 		}

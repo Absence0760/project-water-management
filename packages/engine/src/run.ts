@@ -60,7 +60,7 @@ import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology'
 import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
-import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
+import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, withReserveTable, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
 import { naturalFlowFor, perUnitAreaKm2, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
@@ -525,7 +525,7 @@ function runNetwork(
 		if (siteId === null) outletFlowFlags = flags;
 		scoredFlowFlags = flags;
 	}
-	push(null, 'ewr', outletEwr ? OUTLET_EWR_LABELS[outletEwr.method] : 'Pragmatic EWR', 'm³/day', ewr);
+	push(null, 'ewr', outletEwrSeriesLabel(outletEwr), 'm³/day', ewr);
 	// The drought restriction (engine ≥ 1.54.0, docs/model.md §2.7i): the level in force each day and, per part a
 	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
 	const restrictionRule = plan.restriction ? resolveDroughtRestriction(settings.droughtRestriction, []) : null;
@@ -1868,7 +1868,8 @@ export function fillPlanOutletEwr(
 	pinned?: OutletEwrInfo
 ): OutletEwrInfo {
 	const at = naturalAtOutlet(plan, outflow, natural) ?? natural;
-	const info: OutletEwrInfo = pinned ? { ...pinned, pinned: true } : ewrDailyScale(source, at, historyDays, areaKm2);
+	// A pinned factor keeps its scale; the Reserve table read is this run's own (issue #552).
+	const info: OutletEwrInfo = pinned ? withReserveTable({ ...pinned, pinned: true }, source) : ewrDailyScale(source, at, historyDays, areaKm2);
 	fillOutletEwr(source, info.scale, plan.month, at, plan.ewr, 0, n);
 	return info;
 }
@@ -2808,6 +2809,16 @@ export const OUTLET_EWR_LABELS: Record<OutletEwrInfo['method'], string> = {
 	tab: 'EWR from the DRM TAB file (scaled)',
 	percentile: 'EWR from the DRM percentile tables (scaled)'
 };
+
+/** The `ewr` series label when the percentile tables read the Reserve flows without high flows (engine ≥ 1.90.0, issue #552). */
+export const OUTLET_EWR_WITHOUT_HIGH_FLOWS_LABEL = 'EWR from the DRM percentile tables, without high flows (scaled)';
+
+/** The outlet `ewr` series' label: "Pragmatic EWR", or the DRM table the run read it from. */
+export function outletEwrSeriesLabel(info: { method: string; reserveTable?: string } | null | undefined): string {
+	if (!info || info.method === 'pragmatic') return 'Pragmatic EWR';
+	if (info.method === 'percentile' && info.reserveTable === 'withoutHighFlows') return OUTLET_EWR_WITHOUT_HIGH_FLOWS_LABEL;
+	return OUTLET_EWR_LABELS[info.method as OutletEwrInfo['method']];
+}
 
 /** The label of an EWR site's `ewr_charge_shortfall` series (engine ≥ 1.3.0, settings.ewrChargeSource 'ruleTable'). */
 export const EWR_CHARGE_SHORTFALL_LABEL = 'EWR shortfall the charge follows: the Reserve rule table’s requirement (negative)';

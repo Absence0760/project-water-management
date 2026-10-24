@@ -2,7 +2,7 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { arealRainText, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
+import { arealRainText, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, describeEwrDailySource, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
 import { findSystem, systemLabel } from '$lib/model/systems';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -68,6 +68,8 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
+		// Engine ≥ 1.77.0; the Reserve table it reads, engine ≥ 1.90.0 (issue #552). Only on a run that had one, so older reports read as before.
+		...(s.ewrDailySource ? [['Daily EWR at the outlet', describeEwrDailySource(s.ewrDailySource)] as [string, string]] : []),
 		// Monthly factors (engine ≥ 0.35.0, WP-3.5) are listed with the monthly rows; engine ≥ 1.49.0 adds where
 		// the factors came from (a lake-factor preset's note), when noted.
 		[

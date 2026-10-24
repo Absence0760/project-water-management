@@ -50,7 +50,7 @@ describe('DrmFormatHelp builds on the shared Expected format', () => {
 
 	it('says what each file fills for its form: the daily EWR keeps its method', () => {
 		const daily = render(DrmFormatHelp, { props: { target: 'dailyEwr', context: 'x' } }).body;
-		expect(daily).toContain('The method you picked stays as it is.');
+		expect(daily).toContain('The method you picked, and which Reserve table is the EWR, stay as they are.');
 		expect(daily).toContain('A CSV isn’t loaded here');
 		const rule = render(DrmFormatHelp, { props: { target: 'ruleTable', context: 'x' } }).body;
 		expect(rule).toContain('It fills the determination’s natural MAR and the REC.');

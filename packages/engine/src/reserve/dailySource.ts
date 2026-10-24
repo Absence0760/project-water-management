@@ -1,8 +1,9 @@
 // Where the daily EWR at the outlet comes from (engine ≥ 1.77.0, issue
 // #455, docs/model.md §2.9f): the pragmatic EWR (the default, every earlier
 // run), the Desktop Reserve Model's TAB output (a monthly total flow), or
-// its RUL output's two percentile tables, read day by day at the day's
-// natural flow. Whichever it is, the series is the run's `ewr`, fragmented to
+// its RUL output's percentile tables, read day by day at the day's natural
+// flow: the total Reserve flows or, by choice (engine ≥ 1.90.0, issue #552),
+// the Reserve flows without high flows. Whichever it is, the series is the run's `ewr`, fragmented to
 // the units and judged exactly as the pragmatic EWR always was. Types,
 // validation (shared by the backend's zod schema, the Settings form and the
 // engine) and the arithmetic. Pure: no I/O.
@@ -24,6 +25,21 @@ export type EwrDailyScaling = (typeof EWR_DAILY_SCALINGS)[number];
 
 /** The percentile points of the DRM RUL output's tables, as fractions (10 % … 99 %). */
 export const EWR_PERCENTILE_POINTS: readonly number[] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99];
+
+/**
+ * Which of the RUL output's Reserve tables is the daily requirement under the
+ * percentile method (engine ≥ 1.90.0, issue #552): the total Reserve flows
+ * (the file's first, unheaded table, with high flows; the default and every
+ * earlier run) or the Reserve flows without high flows.
+ */
+export const EWR_RESERVE_TABLES = ['total', 'withoutHighFlows'] as const;
+export type EwrReserveTable = (typeof EWR_RESERVE_TABLES)[number];
+
+/** What each Reserve table is called in a warning, the run summary line and the Settings form. */
+export const EWR_RESERVE_TABLE_LABELS: Record<EwrReserveTable, string> = {
+	total: 'total Reserve flows',
+	withoutHighFlows: 'Reserve flows without high flows'
+};
 
 /** Largest flow accepted in a table, m³/s. */
 export const EWR_DAILY_VALUE_MAX = 1e6;
@@ -55,7 +71,24 @@ export interface EwrDailySource {
 	naturalPctM3s: number[][] | null;
 	/** The RUL output's "Total Reserve Flow Percentile Table", m³/s: same shape. */
 	reservePctM3s: number[][] | null;
+	/**
+	 * The RUL output's "Reserve Flows without High Flows", m³/s: same shape
+	 * (engine ≥ 1.90.0, issue #552). Absent = null: not entered.
+	 */
+	lowFlowPctM3s?: number[][] | null;
+	/**
+	 * Which Reserve table is the daily requirement under 'percentile' (engine
+	 * ≥ 1.90.0, issue #552). Absent = 'total', so every earlier source reads
+	 * as before.
+	 */
+	reserveTable?: EwrReserveTable;
 }
+
+/** The Reserve table a source reads (absent = 'total'). */
+export const reserveTableOf = (s: Pick<EwrDailySource, 'reserveTable'>): EwrReserveTable => s.reserveTable ?? 'total';
+
+/** The grid of the Reserve table a source reads: the total Reserve flows, or the flows without high flows. */
+export const chosenReserveGrid = (s: EwrDailySource): number[][] | null => (reserveTableOf(s) === 'withoutHighFlows' ? (s.lowFlowPctM3s ?? null) : s.reservePctM3s);
 
 export interface EwrDailySourceIssue {
 	/** Field the problem is on (a key of EwrDailySource, or '' for the whole). */
@@ -127,6 +160,11 @@ export function ewrDailySourceIssues(v: unknown): EwrDailySourceIssue[] {
 	if (nat) out.push({ field: 'naturalPctM3s', message: nat });
 	const res = v.reservePctM3s == null ? null : gridIssue(v.reservePctM3s, 'total Reserve flow percentile table');
 	if (res) out.push({ field: 'reservePctM3s', message: res });
+	// Optional since engine 1.90.0 (issue #552): absent reads as null and 'total'.
+	const low = v.lowFlowPctM3s == null ? null : gridIssue(v.lowFlowPctM3s, 'Reserve flows without high flows table');
+	if (low) out.push({ field: 'lowFlowPctM3s', message: low });
+	if (v.reserveTable !== undefined && !(EWR_RESERVE_TABLES as readonly unknown[]).includes(v.reserveTable)) out.push({ field: 'reserveTable', message: 'Pick the Reserve table the daily EWR reads: total Reserve flows or Reserve flows without high flows.' });
+	const withoutHigh = v.reserveTable === 'withoutHighFlows';
 	for (const k of ['tableMarMm3', 'tableAreaKm2', 'tabM3s', 'naturalPctM3s', 'reservePctM3s'] as const) {
 		if (!(k in v)) out.push({ field: k, message: `${k} is missing (null when not entered).` });
 	}
@@ -134,12 +172,14 @@ export function ewrDailySourceIssues(v: unknown): EwrDailySourceIssue[] {
 		if (method === 'tab' && v.tabM3s === null) out.push({ field: 'tabM3s', message: 'Enter the TAB file’s 12 monthly total flows, or pick another source.' });
 		if (method === 'percentile') {
 			if (v.naturalPctM3s === null) out.push({ field: 'naturalPctM3s', message: 'Enter the natural flow percentile table, or pick another source.' });
-			if (v.reservePctM3s === null) out.push({ field: 'reservePctM3s', message: 'Enter the total Reserve flow percentile table, or pick another source.' });
+			if (withoutHigh) {
+				if (v.lowFlowPctM3s == null) out.push({ field: 'lowFlowPctM3s', message: 'Enter the Reserve flows without high flows table (a .rul fills it), or read the total Reserve flows.' });
+			} else if (v.reservePctM3s === null) out.push({ field: 'reservePctM3s', message: 'Enter the total Reserve flow percentile table, or pick another source.' });
 		}
 		if (v.scaling === 'mar' && v.tableMarMm3 === null) out.push({ field: 'tableMarMm3', message: 'Scaling by MAR needs the table’s MAR (Mm³ a year, the TAB header’s “MAR =”).' });
 		if (v.scaling === 'area' && v.tableAreaKm2 === null) out.push({ field: 'tableAreaKm2', message: 'Scaling by area needs the table’s catchment area (km²).' });
 	}
-	const known = new Set(['method', 'scaling', 'tableMarMm3', 'tableAreaKm2', 'tabM3s', 'naturalPctM3s', 'reservePctM3s']);
+	const known = new Set(['method', 'scaling', 'tableMarMm3', 'tableAreaKm2', 'tabM3s', 'naturalPctM3s', 'reservePctM3s', 'lowFlowPctM3s', 'reserveTable']);
 	const extra = Object.keys(v).filter((k) => !known.has(k));
 	if (extra.length) out.push({ field: '', message: `Unknown field${extra.length === 1 ? '' : 's'}: ${extra.join(', ')}.` });
 	return out;
@@ -152,13 +192,14 @@ export function ewrDailySourceIssues(v: unknown): EwrDailySourceIssue[] {
  * rise.
  */
 export function ewrDailySourceNotes(s: EwrDailySource): string[] {
-	if (s.method !== 'percentile' || !s.naturalPctM3s || !s.reservePctM3s) return [];
+	const reserve = chosenReserveGrid(s);
+	if (s.method !== 'percentile' || !s.naturalPctM3s || !reserve) return [];
 	const out: string[] = [];
 	const rising = s.naturalPctM3s.flatMap((row, m) => (row.some((v, i) => i > 0 && v > row[i - 1]! * (1 + 1e-9)) ? [WY_MONTHS[m]!] : []));
 	if (rising.length) out.push(`the natural flow percentile table rises with the point in ${rising.join(', ')}; the run uses each row's running minimum`);
 	// Against the curve the run uses: each natural row's running minimum (as reserve/rules.ts ewrRuleTableNotes).
 	const above: string[] = [];
-	s.reservePctM3s.forEach((row, m) => {
+	reserve.forEach((row, m) => {
 		let min = Infinity;
 		row.forEach((v, i) => {
 			min = Math.min(min, s.naturalPctM3s![m]![i]!);
@@ -166,7 +207,7 @@ export function ewrDailySourceNotes(s: EwrDailySource): string[] {
 		});
 	});
 	if (above.length) {
-		out.push(`the total Reserve flow is above the natural flow at ${above.length} point${above.length === 1 ? '' : 's'} (${above.slice(0, 4).join(', ')}${above.length > 4 ? ', …' : ''}), so even natural flow fails there`);
+		out.push(`the ${reserveTableOf(s) === 'withoutHighFlows' ? 'Reserve flow without high flows' : 'total Reserve flow'} is above the natural flow at ${above.length} point${above.length === 1 ? '' : 's'} (${above.slice(0, 4).join(', ')}${above.length > 4 ? ', …' : ''}), so even natural flow fails there`);
 	}
 	return out;
 }
@@ -193,7 +234,10 @@ export function resolveEwrDailySource(raw: unknown, warnings: string[]): EwrDail
 		tableAreaKm2: r.tableAreaKm2,
 		tabM3s: r.tabM3s ? [...r.tabM3s] : null,
 		naturalPctM3s: r.naturalPctM3s ? r.naturalPctM3s.map((row) => [...row]) : null,
-		reservePctM3s: r.reservePctM3s ? r.reservePctM3s.map((row) => [...row]) : null
+		reservePctM3s: r.reservePctM3s ? r.reservePctM3s.map((row) => [...row]) : null,
+		// Only when set, so a source without them resolves to the same object as before engine 1.90.0.
+		...(r.lowFlowPctM3s ? { lowFlowPctM3s: r.lowFlowPctM3s.map((row) => [...row]) } : {}),
+		...(r.reserveTable === 'withoutHighFlows' ? { reserveTable: 'withoutHighFlows' as const } : {})
 	};
 }
 
@@ -216,6 +260,14 @@ export interface OutletEwrInfo {
 	tableAreaKm2?: number;
 	/** The scale factor came from the snapshot a resumed run started from (the capture run's), not this run's days. */
 	pinned?: true;
+	/** 'percentile' read the Reserve flows without high flows (engine ≥ 1.90.0, issue #552); absent = the total Reserve flows. */
+	reserveTable?: 'withoutHighFlows';
+}
+
+/** `info` naming the Reserve table `src` reads: set for the flows without high flows, dropped otherwise (a pinned factor keeps only its scale). */
+export function withReserveTable(info: OutletEwrInfo, src: EwrDailySource): OutletEwrInfo {
+	const { reserveTable: _, ...rest } = info;
+	return src.method === 'percentile' && reserveTableOf(src) === 'withoutHighFlows' ? { ...rest, reserveTable: 'withoutHighFlows' } : rest;
 }
 
 /**
@@ -238,9 +290,9 @@ export function ewrDailyScale(src: EwrDailySource, naturalAtOutlet: ArrayLike<nu
 	const method = src.method as OutletEwrInfo['method'];
 	if (src.scaling === 'mar') {
 		const modelMarMm3 = naturalMarMm3(naturalAtOutlet, historyDays);
-		return { method, scaling: 'mar', scale: modelMarMm3 / src.tableMarMm3!, modelMarMm3, tableMarMm3: src.tableMarMm3! };
+		return withReserveTable({ method, scaling: 'mar', scale: modelMarMm3 / src.tableMarMm3!, modelMarMm3, tableMarMm3: src.tableMarMm3! }, src);
 	}
-	return { method, scaling: 'area', scale: modelAreaKm2 / src.tableAreaKm2!, modelAreaKm2, tableAreaKm2: src.tableAreaKm2! };
+	return withReserveTable({ method, scaling: 'area', scale: modelAreaKm2 / src.tableAreaKm2!, modelAreaKm2, tableAreaKm2: src.tableAreaKm2! }, src);
 }
 
 /**
@@ -271,7 +323,9 @@ export function percentileReserveM3s(q: number, natural: ArrayLike<number>, rese
  * Fill out[from … to − 1] with the daily outlet EWR (m³/day) from `src` at
  * scale `s`: 'tab' = the month's TAB flow × s × 86 400; 'percentile' = the
  * Reserve flow at the day's natural flow at the outlet (m³/day ÷ 86 400) on
- * the day's month's rows × s (the natural row's running minimum), × 86 400.
+ * the day's month's rows × s (the natural row's running minimum), × 86 400,
+ * from the Reserve table the source picks (the total Reserve flows, or the
+ * flows without high flows; issue #552).
  * `month` holds each day's calendar month (1–12).
  */
 export function fillOutletEwr(src: EwrDailySource, s: number, month: ArrayLike<number>, naturalAtOutlet: ArrayLike<number>, out: Float64Array, from: number, to: number): void {
@@ -284,7 +338,7 @@ export function fillOutletEwr(src: EwrDailySource, s: number, month: ArrayLike<n
 		let min = Infinity;
 		return Float64Array.from(row, (v) => (min = Math.min(min, v)) * s);
 	});
-	const res = src.reservePctM3s!.map((row) => Float64Array.from(row, (v) => v * s));
+	const res = chosenReserveGrid(src)!.map((row) => Float64Array.from(row, (v) => v * s));
 	for (let t = from; t < to; t++) {
 		const m = waterYearIndex(month[t]!);
 		out[t] = percentileReserveM3s(naturalAtOutlet[t]! / DAY_S, nat[m]!, res[m]!) * DAY_S;
@@ -298,7 +352,8 @@ export function outletEwrNote(info: OutletEwrInfo): string {
 		info.scaling === 'mar'
 			? `the model's natural MAR at the outlet, ${fmt(info.modelMarMm3!, 3)} Mm³/a, ÷ the table's ${fmt(info.tableMarMm3!, 3)} Mm³/a`
 			: `the modelled area, ${fmt(info.modelAreaKm2!, 3)} km², ÷ the table's ${fmt(info.tableAreaKm2!, 3)} km²`;
-	return `the daily EWR at the outlet comes from ${EWR_DAILY_METHOD_LABELS[info.method]}, scaled by s = ${s} (${info.pinned ? 'pinned from the snapshot this run resumed from: ' : ''}${how})`;
+	const what = info.reserveTable === 'withoutHighFlows' ? 'the DRM percentile tables (natural flow and Reserve flows without high flows)' : EWR_DAILY_METHOD_LABELS[info.method];
+	return `the daily EWR at the outlet comes from ${what}, scaled by s = ${s} (${info.pinned ? 'pinned from the snapshot this run resumed from: ' : ''}${how})`;
 }
 
 function fmt(v: number, sig: number): string {
@@ -325,6 +380,7 @@ export function ewrDailySourceChanges(a: unknown, b: unknown): string[] {
 	if (!ra || !rb || ma !== mb) return ma === mb ? [] : [`${METHOD_SHORT[ma]} → ${METHOD_SHORT[mb]}`];
 	const out: string[] = [];
 	const num = (v: number | null, unit: string) => (v === null ? 'not entered' : `${String(v)} ${unit}`);
+	if (mb === 'percentile' && reserveTableOf(ra) !== reserveTableOf(rb)) out.push(`Reserve table ${EWR_RESERVE_TABLE_LABELS[reserveTableOf(ra)]} → ${EWR_RESERVE_TABLE_LABELS[reserveTableOf(rb)]}`);
 	if (ra.scaling !== rb.scaling) out.push(`scaled by ${ra.scaling === 'mar' ? 'MAR' : 'area'} → by ${rb.scaling === 'mar' ? 'MAR' : 'area'}`);
 	if (rb.scaling === 'mar' && ra.tableMarMm3 !== rb.tableMarMm3) out.push(`table MAR ${num(ra.tableMarMm3, 'Mm³/a')} → ${num(rb.tableMarMm3, 'Mm³/a')}`);
 	if (rb.scaling === 'area' && ra.tableAreaKm2 !== rb.tableAreaKm2) out.push(`table area ${num(ra.tableAreaKm2, 'km²')} → ${num(rb.tableAreaKm2, 'km²')}`);
@@ -338,9 +394,13 @@ export function ewrDailySourceChanges(a: unknown, b: unknown): string[] {
 		if (months.length) out.push(`TAB flows changed in ${months.join(', ')}`);
 	} else {
 		const n = cells(ra.naturalPctM3s, rb.naturalPctM3s);
-		const r = cells(ra.reservePctM3s, rb.reservePctM3s);
 		if (n) out.push(`natural flow percentile table: ${n} value${n === 1 ? '' : 's'} changed`);
-		if (r) out.push(`total Reserve flow percentile table: ${r} value${r === 1 ? '' : 's'} changed`);
+		// The Reserve table the newer source reads (a table it doesn't read changes nothing the run computes); after a
+		// switch of table the switch line says it, so the values aren't counted against the other table's.
+		const without = reserveTableOf(rb) === 'withoutHighFlows';
+		const switched = reserveTableOf(ra) !== reserveTableOf(rb);
+		const r = switched ? 0 : without ? cells(ra.lowFlowPctM3s ?? null, rb.lowFlowPctM3s ?? null) : cells(ra.reservePctM3s, rb.reservePctM3s);
+		if (r) out.push(`${without ? 'Reserve flows without high flows table' : 'total Reserve flow percentile table'}: ${r} value${r === 1 ? '' : 's'} changed`);
 	}
 	return out;
 }
@@ -357,5 +417,6 @@ export function describeEwrDailySource(raw: unknown): string {
 	const s = raw as EwrDailySource;
 	if (s.method === 'pragmatic') return METHOD_SHORT.pragmatic;
 	const by = s.scaling === 'mar' ? `scaled by MAR (table ${fmt(s.tableMarMm3!, 6)} Mm³/a)` : `scaled by area (table ${fmt(s.tableAreaKm2!, 6)} km²)`;
-	return `${METHOD_SHORT[s.method]}, ${by}`;
+	const table = s.method === 'percentile' && reserveTableOf(s) === 'withoutHighFlows' ? ` (${EWR_RESERVE_TABLE_LABELS.withoutHighFlows})` : '';
+	return `${METHOD_SHORT[s.method]}${table}, ${by}`;
 }

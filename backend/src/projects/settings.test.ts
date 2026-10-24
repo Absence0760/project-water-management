@@ -1133,6 +1133,20 @@ describe('SettingsPatch.ewrDailySource (engine ≥ 1.77.0, issue #455)', () => {
 		}
 	});
 
+	it('takes the Reserve flows without high flows table and the Reserve table choice (engine ≥ 1.90.0, issue #552)', () => {
+		const pct = { ...blank, method: 'percentile', scaling: 'area', naturalPctM3s: grid, reservePctM3s: grid, tableAreaKm2: 900 };
+		expect(ok({ ...pct, lowFlowPctM3s: grid, reserveTable: 'withoutHighFlows' })).toBe(true);
+		expect(ok({ ...pct, lowFlowPctM3s: null, reserveTable: 'total' })).toBe(true);
+		const r = SettingsPatch.safeParse({ ewrDailySource: { ...pct, reserveTable: 'withoutHighFlows' } });
+		expect(r.success).toBe(false);
+		expect(JSON.stringify(r.error?.issues)).toContain('daily EWR source: lowFlowPctM3s: Enter the Reserve flows without high flows table');
+		expect(ok({ ...pct, reserveTable: 'high' })).toBe(false);
+		expect(ok({ ...pct, lowFlowPctM3s: [[1]] })).toBe(false);
+		// Stored and patched whole, the new keys with it.
+		const stored = mergeSettings({ ewrDailySource: { ...pct, lowFlowPctM3s: grid, reserveTable: 'withoutHighFlows' } });
+		expect(stored.ewrDailySource).toMatchObject({ lowFlowPctM3s: grid, reserveTable: 'withoutHighFlows' });
+	});
+
 	it('defaults to the pragmatic EWR, and a patch replaces the source whole', () => {
 		expect(mergeSettings({}).ewrDailySource).toBeNull();
 		const stored = mergeSettings({ ewrDailySource: { ...blank, naturalPctM3s: grid } });

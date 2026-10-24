@@ -57,6 +57,18 @@ describe('settingsRows', () => {
 		).toBe('on: GR4J ran once per unit with land on its own rain; MAP period 2001–2020; rain gauge’s MAP 640 mm (gauge record)');
 	});
 
+	it('names the daily EWR source and its Reserve table only on a run that had one (issues #455, #552)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const key = 'Daily EWR at the outlet';
+		const twelve = (row: number[]) => Array.from({ length: 12 }, () => [...row]);
+		const row = [10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.5];
+		const pct = { method: 'percentile' as const, scaling: 'area' as const, tableMarMm3: null, tableAreaKm2: 450, tabM3s: null, naturalPctM3s: twelve(row), reservePctM3s: twelve(row.map((v) => v / 2)) };
+		const at = (ewrDailySource: unknown) => Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', ewrDailySource } as never), run))[key];
+		expect(at(undefined)).toBeUndefined();
+		expect(at(pct)).toBe('the DRM percentile tables, scaled by area (table 450 km²)');
+		expect(at({ ...pct, reserveTable: 'withoutHighFlows', lowFlowPctM3s: twelve(row.map((v) => v / 4)) })).toBe('the DRM percentile tables (Reserve flows without high flows), scaled by area (table 450 km²)');
+	});
+
 	it('names the runoff model and lists GR4J parameters only for a GR4J run', () => {
 		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
 		const gr4j = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run));

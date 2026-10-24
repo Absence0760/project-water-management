@@ -187,13 +187,21 @@ export function parseDrmFile(text: string): DrmParse<RulFile | TabFile> | null {
 /** A grid in a .rul file's unit → m³/s (each month's mean flow; February 28 days). */
 export const gridToM3s = (grid: number[][], unit: RulFile['unit']): number[][] => (unit === 'm3s' ? grid.map((r) => [...r]) : grid.map((r, wy) => r.map((v) => mcmMonthToM3s(v, wy))));
 
-/** The percentile tables of the daily EWR's source from a .rul file, in m³/s; an error when it lacks a block or the DRM's ten points. */
-export function percentileTablesFromRul(rul: RulFile): DrmParse<Pick<EwrDailySource, 'naturalPctM3s' | 'reservePctM3s'>> {
+/**
+ * The percentile tables of the daily EWR's source from a .rul file, in m³/s:
+ * the natural duration curves, the total Reserve and (issue #552) the Reserve
+ * flows without high flows, null when the file has no such block; an error
+ * when it lacks the natural block or the DRM's ten points.
+ */
+export function percentileTablesFromRul(rul: RulFile): DrmParse<RulPercentileTables> {
 	const want = EWR_PERCENTILE_POINTS.map((p) => Math.round(p * 100));
 	if (rul.points.length !== want.length || rul.points.some((p, i) => p !== want[i])) return { error: `The file's % points (${rul.points.join(', ')}) aren't the DRM's ten (${want.join(', ')}).` };
 	if (!rul.natural) return { error: 'The file has no “Natural Duration curves” block, which the percentile tables need.' };
-	return { naturalPctM3s: gridToM3s(rul.natural, rul.unit), reservePctM3s: gridToM3s(rul.total, rul.unit) };
+	return { naturalPctM3s: gridToM3s(rul.natural, rul.unit), reservePctM3s: gridToM3s(rul.total, rul.unit), lowFlowPctM3s: rul.lowFlow ? gridToM3s(rul.lowFlow, rul.unit) : null };
 }
+
+/** The three percentile tables a .rul gives the daily EWR's source (m³/s). */
+export type RulPercentileTables = { naturalPctM3s: number[][]; reservePctM3s: number[][]; lowFlowPctM3s: number[][] | null };
 
 /**
  * A rule table filled from a .rul file: its unit and % points, the total

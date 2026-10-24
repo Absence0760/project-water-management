@@ -23,7 +23,7 @@ export function drmFormat(target: DrmTarget): FileFormat {
 			'**Rule curves (.rul)**: the header (`Ecological Category = B`), a unit line (`Data are given in m^3/s mean monthly flow`, or `… m^3 * 10^6 monthly flow volume` for Mm³ a month), the `% Points` line (10% … 99%), then three blocks of 12 month rows, a month name and one number per point: the total Reserve (right after the points), `Reserve Flows without High Flows` and `Natural Duration curves`. ' +
 				(table
 					? 'They fill the EWR (total flow), the low flows and the natural flows at each point, in the file’s unit, the % points and the REC.'
-					: 'The total Reserve and the natural duration curve fill the two percentile tables, converted to m³/s when the file is in Mm³ (a month’s volume ÷ its days × 86 400 s, February 28 days). The method you picked stays as it is.'),
+					: 'The natural duration curves, the total Reserve and the Reserve flows without high flows fill the three percentile tables, converted to m³/s when the file is in Mm³ (a month’s volume ÷ its days × 86 400 s, February 28 days). The method you picked, and which Reserve table is the EWR, stay as they are.'),
 			'**Summary (.tab)**: `MAR = …` (Mm³ a year), `Ecological Category = …` and the `Monthly Distributions (Mill. cu. m.)` table (Month, natural mean, SD, CV, then low flows maint. and drought, high flows maint., total flows maint.). ' +
 				(table
 					? 'It fills the determination’s natural MAR and the REC.'
