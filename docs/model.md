@@ -2802,6 +2802,168 @@ for each unit](./maps.md#map-for-each-unit).
   the gauge, with the cell on those days. Whether to leave them out is the
   hydrologist's call ([followups.md § Hydrologist](./followups.md#hydrologist)).
 
+### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553)
+
+`settings.rainStations` (`RainStationSettings` in
+`packages/engine/src/project.ts`; the forcing in
+`packages/engine/src/runoff/stationForcing.ts`, the record checks in
+`runoff/stationRecord.ts`, the pairing fit in `runoff/stationPairing.ts`).
+Absent or null, and for every area without an assignment: the rain as
+before (§2.4, §2.4h), to the bit (`runoff/stationForcing.test.ts`; the
+§2.4h golden cases in `runoff/unitRain.golden.test.ts` are unchanged). No
+migration assigns a station for an existing project: a project keeps
+today's path until someone assigns one.
+
+**A station.** A catchment rain series (`rain_catchment_mm`, no site) with a
+name, a MAP and its source, and optionally coordinates (`SeriesMeta.station`,
+the Data tab). A project may have several, and several areas may share one.
+The run's input holds each station's record as
+`series[stationSeriesKey(id)]` (`rain_station_mm#<series id>`, not a stored
+kind) and its details as `ModelInput.stations[id]`
+(`{ name, mapMm, mapSource, lat, lon, isCatchmentGauge? }`). The CHIRPS at
+the station's own 0.05° cell, when the backend has it, is
+`series[stationChirpsSeriesKey(id)]` (`rain_chirps_station_mm#<id>`).
+
+**The setting.**
+
+- `catchment`: `{ stationId, scaleToMap?, correctAgainst? }` or null, the
+  station of Fragmentation's average catchment rainfall (the one GR4J run,
+  §2.4a, §2.5);
+- `units`: land unit id → the same assignment, read only under per-unit
+  rain (`settings.unitRain` `perUnit`, §2.4h);
+- `scaleToMap` defaults to true; `correctAgainst` (the station whose
+  pairing corrects the area's CHIRPS) defaults to the area's own station;
+- `catchmentMapMm` / `catchmentMapSource`: the catchment's MAP for its
+  ratio; absent = the **land units' area-weighted mean MAP** (Σ MAP × area ÷
+  Σ area over every farm with an area, node-id order). If any land unit has
+  no MAP, there is no catchment MAP: the ratio is 1, with a warning naming
+  the units;
+- `sites`: station id → `{ unitId }`, the land unit a station stands in,
+  whose CHIRPS (`rain_chirps_mm@<unit>`) its pairing reads when it has no
+  cell series of its own;
+- `unreliable`: station id → inclusive `[from, to]` ISO date ranges the user
+  marks unreliable;
+- `pinnedFactors` (engine-only, never stored by the API): station id → 12
+  factors used instead of fitting the pairing (a resumed run, an outlook
+  member, the ensemble's CHIRPS-only member).
+
+An assignment without a station id is dropped with a warning
+(`resolveRainStations`); so is an unusable catchment MAP (outside
+`MAP_MM_MIN`–`MAP_MM_MAX`), which falls back to the units' mean.
+
+**The rule.** One rule for the catchment and for a unit; only the area
+differs. On run day *t* of calendar month *m*:
+
+| Day | Rain on the area |
+| --- | --- |
+| The station has a reading in its checked record | station(*t*) × *r*, *r* = clamp(area MAP ÷ station MAP, 0.25, 4); *r* = 1 with `scaleToMap` false or either MAP missing (warns) |
+| Otherwise, the area has CHIRPS on *t* and the pairing of `correctAgainst` isn't refused | CHIRPS_area(*t*) × f(*m*), **as is**: no MAP ratio on top |
+| Otherwise | the area's next fallback: the catchment → the forecast (`rain_forecast_mm`); a unit → its own forecast (`rain_forecast_mm@<unit>`, outlook members only), then the catchment forcing (catchment ?? CHIRPS ?? forecast, × 1); else dry (0 mm, counted) |
+
+CHIRPS_area is the catchment's `rain_chirps_mm` for the catchment and the
+unit's `rain_chirps_mm@<unit>` for a unit. A negative value is a no-data
+code in every record, as in §2.4b. The ratio is clamped and banded as every
+unit factor (§2.4h): a ratio past 0.25–4 is clamped and warns; one outside
+0.5–2 warns and is used as it is.
+
+**Why the gaps take the corrected CHIRPS as is** (the operator, 2026-10-23,
+issue #553). The area's own CHIRPS already carries its location, and the
+pairing's factors carry the station's level; × the MAP ratio as well would
+count the spatial difference twice. For a unit this is decided; for the
+catchment it is the same call, provisional ([engine-audit.md § Rainfall
+stations](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
+A station's days and its gaps therefore sit at different levels when the
+area's MAP differs from the station's: station × *r* is at the area's MAP,
+the corrected CHIRPS at the CHIRPS-over-the-area's level brought to the
+station's season and bias. Satellite rain is never the primary source of an
+area with a station.
+
+**The checked record** (`checkedStationRecord`). The station's stored
+record goes through the catchment's §2.4c zero-run and §2.4d accumulation
+checks with the catchment's settings (modes, fill threshold,
+`settings.dataQuality`'s limits), as a unit's own gauge does (§2.4h rule 1),
+compared against the CHIRPS at the station (its cell, else the unit it
+stands in, else the catchment's CHIRPS). The catchment gauge's dated lists
+(missing, keep dry, keep readings, add accumulations), its §2.4e rain-source
+periods and the quantile map name days of the catchment gauge's record, so
+they don't apply, except to the station that **is** the catchment gauge
+(`ModelInput.stations[id].isCatchmentGauge`, set by the backend): it gets
+the catchment's full checks, periods included, so its record can reach days
+a period writes in past the stored series. Then the user's unreliable
+periods are blanked. A day either sets aside is a gap. The checks run on the
+whole stored record, so a day's value doesn't depend on the window.
+
+**The pairing** (`fitStationPairing`). For each calendar month *m*,
+f(*m*) = Σ station ÷ Σ CHIRPS over the days of *m* where both the checked
+station record (accumulation windows left out, as §2.4b's fit leaves them
+out) and the CHIRPS at the station have a reading, over their whole
+records. The CHIRPS at the station is its own cell when the input has it,
+else the CHIRPS of the unit it stands in (`sites`). A month needs §2.4b's 90
+shared days and 50 mm of CHIRPS, else its factor is 1, with a warning;
+factors are clamped to 0.25–4 and banded at 0.5–2. **Refused** (no factors,
+a reason in `refused`, a warning) when the station has no record, there is
+no CHIRPS at it, or the two have fewer than `STATION_PAIRING_MIN_YEARS` = 5
+complete calendar years in common (a year every day of which both have a
+reading; not necessarily consecutive). A refused pairing corrects nothing:
+its areas' gap days take the next fallback. Each pairing is fitted once per
+run, however many areas use it, and its factors are what a snapshot pins.
+
+**Which station is missing.** An assignment naming a station with no
+record in the input warns, and the area runs as without it: the catchment
+rain as before, or the unit's §2.4h rule.
+
+**The catchment under its station.** The catchment rain every reader sees
+(`aligned('rain_catchment_mm')`: GR4J, demand's effective rain, the WR2012
+check, a rule-4 unit, `rain_final`) is station × *r* on the station's days,
+and `aligned('rain_chirps_mm')` the catchment CHIRPS × f on the others (null
+where the pairing can't correct, so the forecast fills). The stored
+`rain_catchment_mm` is not read: not for the forcing, not for §2.4b's fit,
+§2.4c–§2.4e or the double-mass check (`summary.chirpsCorrection` is mode
+`none`, and the rain-source periods warn that they are not read unless the
+station is the catchment gauge). The run window follows the station's record
+in the gauge's place. The areal correction (§2.4g) is off, with a warning:
+× catchment MAP ÷ station MAP already takes the point rain to the
+catchment's level. **Switching the catchment to a station replaces the
+§2.4b factors with the pairing's**, even when the station is today's
+catchment gauge, so results change and a refit is due.
+
+**Per-unit rain.** A land unit with a station takes rule `'station'`
+(`UNIT_RAIN_RULES`), recorded in `summary.unitRain.units[]` as `rainKey:
+'rain_station_mm#<id>'`, `factor` = *r*, `factorSource: 'gaugeMap'` (a gauge
+× a MAP ratio, as rule 2), its station days counted under `days.gaugeMap`
+and its corrected CHIRPS days under `days.unitChirps`. No areal correction
+(the station sets the level). A unit without a station keeps its §2.4h
+chain, which reads "the catchment's rain" as the catchment forcing, the
+station's when the catchment has one. The fit fingerprint records the
+station unit's correcting station and its 12 factors, so a factor moving by
+more than 2 % is "Forcing changed since fit".
+
+**What the run records.** `summary.stations` (`RainStationSummary`, only
+when some area has a station): `pairings` (each station used, station-id
+order: `StationPairingFit`, its CHIRPS source, fit period, complete years,
+shared days, pinned, the 12 months as the reference gauge's, or `refused`
+with its reason), `catchment` and `units` (`StationAreaForcing`: the
+station, both MAPs and sources, `ownRatio` and `ratio`, `clamped`,
+`scaleToMap`, `correctedBy`, the run days by source `{ station, chirps,
+fallback, none }`, and the station days set aside inside the run window
+`{ checks, unreliable }`; a day both set aside counts under the checks),
+`catchmentMapMm` and `catchmentMapFromUnits`. Warnings start "station:" or
+"station pairing:".
+
+**Copies of the input.** A snapshot pins every pairing's factors
+(`PreparedFits.stationFactors`) and each unit's station recipe, so a resumed
+run is the uninterrupted one to the bit. A scenario keeps the input's
+`stations`. A seasonal outlook member keeps them and pins the base input's
+pairing factors (`pinnedFactors`), so a history cut at the decision date
+isn't refitted on a shorter record or refused for one. The uncertainty
+ensemble's CHIRPS-only member blanks every station's record (the rule still
+applies, with no station day) and pins the base's factors, so every area
+reads its CHIRPS × f on every day.
+
+**The Data tab** reads an area's rain used and each day's source from the
+same code (`stationAreaRain(input, nodeId | null)`), so the view and a run
+of the same input can't disagree.
+
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
 Each farm gets a fixed **share** (`frag[f]`, 0–1) of the catchment flow. The
