@@ -83,8 +83,8 @@ The same `runModel` runs:
   Settings form in place of the saved settings. It fills the form and never
   saves. The Data tab reads the same input, on demand, for each area's rain
   used under its rainfall station (issue #553, `series/derivedRain.ts`, the
-  engine's `stationAreaRain`, a chunk of its own loaded when a row opens or
-  a grouped CSV is built). The uncertainty ensemble (issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9))
+  engine's `stationAreaRain`, a chunk of its own loaded when a row opens, a
+  grouped CSV is built or Preview all data opens). The uncertainty ensemble (issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9))
   runs in the same worker: hundreds of full `runModel`s on a run's own input
   (`GET …/runs/:runId/model-input`), with options the server resolved and a
   seed the database drew; the server re-runs a few members before storing

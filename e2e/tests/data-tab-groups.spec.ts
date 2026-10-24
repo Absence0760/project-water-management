@@ -192,3 +192,67 @@ test('with the model input unavailable a unit says why and offers Try again, and
 	await err.getByRole('button', { name: 'Try again' }).click();
 	await expect(page.getByTestId('area-rain').locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 });
+
+test('Preview all data shows each area’s derived rain beside the stored series, in its own column group, marked not stored', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const { project, a } = await seed(page.request);
+	await openData(page, project.id);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+
+	// The column chooser has the Full CSV's derived columns for the catchment and each unit, as their own group.
+	await dialog.getByText('Columns', { exact: true }).click();
+	const areaGroup = dialog.getByRole('group', { name: 'Each area’s rain (derived, not stored)' });
+	const lines = ['station × ratio', 'CHIRPS corrected', 'rain used', 'rain used from'];
+	await expect(areaGroup.getByRole('checkbox')).toHaveCount(12);
+	for (const area of ['Average catchment rainfall', 'Upper unit', 'Lower unit'])
+		for (const line of lines) await expect(areaGroup.getByRole('checkbox', { name: `${area}: ${line}`, exact: true })).toBeChecked();
+	await dialog.getByText('Columns', { exact: true }).click();
+
+	// Each header says it is derived, not stored.
+	const headers = dialog.locator('thead th');
+	await expect(headers.filter({ hasText: 'Upper unit: rain used from' }).getByTestId('derived-tag')).toHaveText('Derived · not stored');
+	await expect(dialog.getByTestId('derived-tag')).toHaveCount(12);
+	await expect(dialog.getByTestId('preview-areas')).toHaveCount(0);
+
+	// Upper unit's columns by their ids (preview.ts areaColumnId), the Date column first.
+	const ids = await headers.evaluateAll((ths) => ths.map((th) => th.getAttribute('data-series-col')));
+	const col = (line: string) => ids.indexOf(`area:${a.id}:${line}`);
+	const search = dialog.getByLabel('Search by date or value');
+	const row = (day: string) => dialog.getByRole('table').getByRole('row').filter({ has: page.getByRole('cell', { name: day, exact: true }) });
+	const cell = (day: string, label: string) => row(day).getByRole('cell').nth(col(label));
+
+	// A Bergwater gap day: Upper unit's rain used is its corrected CHIRPS, and says so.
+	await search.fill('2015-02-13');
+	await expect(dialog).toContainText(/1 of [\d\s]+ days shown/);
+	await expect(cell('13 Feb 2015', 'source')).toHaveText('corrected CHIRPS');
+	const corrected = (await cell('13 Feb 2015', 'chirpsCorrected').innerText()).trim();
+	expect(corrected).toMatch(/^\d/);
+	await expect(cell('13 Feb 2015', 'rainUsed')).toHaveText(corrected);
+
+	// A day the station read: the rain used is Bergwater × 1.16.
+	await search.fill('2015-01-11');
+	await expect(cell('11 Jan 2015', 'source')).toHaveText('station');
+	const scaled = (await cell('11 Jan 2015', 'stationScaled').innerText()).trim();
+	expect(scaled).toMatch(/^44\.\d+$/); // 38.4 × 863.1 / 745
+	await expect(cell('11 Jan 2015', 'rainUsed')).toHaveText(scaled);
+	await expectNoViolations(page);
+});
+
+test('Preview all data says when each area’s rain couldn’t be computed, and Try again computes it', async ({ page, owner }) => {
+	void owner;
+	const { project } = await seed(page.request);
+	let fail = true;
+	await page.route(`${API_URL}/projects/${project.id}/model-input`, (route) => (fail ? route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"unavailable"}' }) : route.fallback()));
+	await openData(page, project.id);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	const note = dialog.getByTestId('preview-areas');
+	await expect(note).toContainText('Couldn’t compute the rain of Average catchment rainfall (unavailable)');
+	await expect(dialog.getByTestId('derived-tag')).toHaveCount(0);
+	fail = false;
+	await note.getByRole('button', { name: 'Try again' }).click();
+	await expect(dialog.getByTestId('derived-tag')).toHaveCount(12);
+	await expect(note).toHaveCount(0);
+});

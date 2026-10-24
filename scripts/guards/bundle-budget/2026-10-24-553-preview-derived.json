@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Preview all data's derived area columns (issue #553): the dialog's area column group and four help entries; measured 2064 -> 2066 KB against origin/feat/combined-oct23"
+}

@@ -2,7 +2,11 @@ import { defaultProjectSettings, SERIES_KINDS, type ProjectSettings, type Series
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
 import { helpFor } from '#lib/help/content.js';
+import type { AreaRainLines } from './derivedRain';
 import {
+	areaCell,
+	areaColumnId,
+	buildAreaColumns,
 	buildPreviewColumns,
 	buildPreviewRows,
 	filterPreviewRows,
@@ -336,5 +340,59 @@ describe('filterPreviewRows', () => {
 		expect(filterPreviewRows(rows, { query: '2099', missingOnly: false, flaggedOnly: false, visibleSeriesIds: ['a', 'b'] })).toEqual([]);
 		expect(filterPreviewRows(rows, { query: '', missingOnly: false, flaggedOnly: false, visibleSeriesIds: [] }).length).toBe(rows.length);
 		expect(filterPreviewRows(rows, { query: '> 1000', missingOnly: false, flaggedOnly: false, visibleSeriesIds: ['a', 'b'] })).toEqual([]);
+	});
+});
+
+describe('each area’s derived rain (issue #553)', () => {
+	const lines = (over: Partial<AreaRainLines> = {}): AreaRainLines =>
+		({
+			startDate: '2020-01-01',
+			rainUsed: [4, 0, 2.5],
+			source: ['station', 'none', 'chirps'],
+			stationRaw: [3, null, null],
+			stationScaled: [4, null, null],
+			chirpsRaw: [1, 0, 2],
+			chirpsCorrected: [1.25, 0, 2.5],
+			factors: null,
+			refused: null,
+			correctAgainst: 'st',
+			forcing: {} as AreaRainLines['forcing'],
+			warnings: [],
+			...over
+		}) as AreaRainLines;
+
+	it('has the Full CSV’s columns per area, in its order and words, each its own help key and marked derived', () => {
+		const cols = buildAreaColumns([
+			{ nodeId: null, name: 'ignored', lines: lines() },
+			{ nodeId: 'u1', name: 'Upper unit', lines: lines({ chirpsCorrected: null }) },
+			{ nodeId: 'u2', name: 'Lower unit', lines: null, error: 'unavailable' }
+		]);
+		expect(cols.map((c) => c.label)).toEqual([
+			'Average catchment rainfall: station × ratio',
+			'Average catchment rainfall: CHIRPS corrected',
+			'Average catchment rainfall: rain used',
+			'Average catchment rainfall: rain used from',
+			// No CHIRPS of its own: no corrected column.
+			'Upper unit: station × ratio',
+			'Upper unit: rain used',
+			'Upper unit: rain used from'
+		]);
+		expect(cols.every((c) => c.group === 'area')).toBe(true);
+		expect(cols[0]).toMatchObject({ id: areaColumnId(null, 'stationScaled'), unit: 'mm', area: { nodeId: null, line: 'stationScaled' } });
+		expect(cols[3]).toMatchObject({ id: 'area:catchment:source', unit: '' });
+		expect(cols[4]!.id).toBe('area:u1:stationScaled');
+		for (const c of cols) expect(helpFor(c.helpKey), c.helpKey).toBeTruthy();
+	});
+
+	it('reads a day’s value by date, the source in words, blank outside the run window', () => {
+		const l = lines();
+		expect(areaCell(l, 'rainUsed', '2020-01-01')).toBe(4);
+		expect(areaCell(l, 'stationScaled', '2020-01-02')).toBeNull();
+		expect(areaCell(l, 'chirpsCorrected', '2020-01-03')).toBe(2.5);
+		expect(areaCell(l, 'source', '2020-01-02')).toBe('no source (dry)');
+		expect(areaCell(l, 'source', '2020-01-03')).toBe('corrected CHIRPS');
+		expect(areaCell(l, 'rainUsed', '2019-12-31')).toBeNull();
+		expect(areaCell(l, 'rainUsed', '2020-01-04')).toBeNull();
+		expect(areaCell(lines({ chirpsCorrected: null }), 'chirpsCorrected', '2020-01-01')).toBeNull();
 	});
 });

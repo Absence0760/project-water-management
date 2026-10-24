@@ -661,10 +661,25 @@
 			}
 	});
 
-	// The grouped CSV (groupedCsv.ts): Compact or Full, built here since its derived columns are never stored.
-	async function buildExport(size: ExportSize): Promise<{ blob: Blob; filename: string }> {
-		const missing = list.filter((s) => !values[s.id]).length;
-		if (missing) throw new Error(`the values of ${missing} series haven’t loaded yet; try again in a moment`);
+	// Every area's derived lines (the catchment's and each unit's, derivedRain.ts), for the grouped CSV and Preview all
+	// data: one run preparation for them all, kept until the inputs change; an answer with an area that failed isn't kept.
+	let areasMemo: { gen: number; areas: Promise<ExportArea[]> } | null = null;
+	function derivedAreas(): Promise<ExportArea[]> {
+		const gen = inputs.generation;
+		if (areasMemo?.gen === gen) return areasMemo.areas;
+		const memo = { gen, areas: computeAreas() };
+		areasMemo = memo;
+		void memo.areas.then(
+			(a) => {
+				if (a.some((x) => x.error) && areasMemo === memo) areasMemo = null;
+			},
+			() => {
+				if (areasMemo === memo) areasMemo = null;
+			}
+		);
+		return memo.areas;
+	}
+	async function computeAreas(): Promise<ExportArea[]> {
 		const items = groups.flatMap((g) => g.items).filter((it): it is AreaItem => it.type !== 'series' && areaOf(it) !== null);
 		let read: ((nodeId: string | null) => AreaRainLines | null) | null = null;
 		let inputError: string | null = null;
@@ -694,6 +709,14 @@
 			}
 			areas.push({ nodeId, name: areaOf(it)!.name, sentence: areaInfo(it).sentence, lines, error });
 		}
+		return areas;
+	}
+
+	// The grouped CSV (groupedCsv.ts): Compact or Full, built here since its derived columns are never stored.
+	async function buildExport(size: ExportSize): Promise<{ blob: Blob; filename: string }> {
+		const missing = list.filter((s) => !values[s.id]).length;
+		if (missing) throw new Error(`the values of ${missing} series haven’t loaded yet; try again in a moment`);
+		const areas = await derivedAreas();
 		const text = groupedCsv(size, groups, values, areas, { engineVersion: ENGINE_VERSION, exportedOn: today });
 		return { blob: new Blob([text], { type: 'text/csv;charset=utf-8' }), filename: `data-series-${size}-${today}.csv` };
 	}
@@ -1228,7 +1251,7 @@
 {#if previewMounted}
 	<Lazy load={loadPreviewDialog}>
 		{#snippet children(SeriesPreviewDialog)}
-			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} failed={valuesFailed} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} />
+			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} failed={valuesFailed} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} loadAreas={derivedAreas} />
 		{/snippet}
 	</Lazy>
 {/if}

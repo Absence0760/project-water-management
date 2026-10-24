@@ -1741,6 +1741,37 @@ export const TIPS: HelpTipText[] = [
 		fields: ['preview.excluded']
 	},
 	{
+		id: 'preview-area-station-scaled',
+		term: 'Station × ratio (daily preview)',
+		short: 'An area’s rainfall station as recorded × the ratio of the area’s MAP to the station’s: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaStationScaled']
+	},
+	{
+		id: 'preview-area-chirps-corrected',
+		term: 'Area CHIRPS corrected (daily preview)',
+		short: 'The area’s own CHIRPS × its month’s factor from the pairing with its correcting station: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaChirpsCorrected']
+	},
+	{
+		id: 'preview-area-rain-used',
+		term: 'Area rain used (daily preview)',
+		short: 'The rain a run reads for the catchment or a land unit under its station, gaps filled: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaRainUsed']
+	},
+	{
+		id: 'preview-area-rain-from',
+		term: 'Rain used from (daily preview)',
+		short: 'Where each day of an area’s rain used came from: the station, corrected CHIRPS, the next fallback or no source.',
+		category: 'data',
+		fields: ['preview.areaRainFrom']
+	},
+	{
 		id: 'wr90',
 		term: 'WR90 / WR2012',
 		short: 'The Water Resources of South Africa studies (1990, 2012): S-pan evaporation, MAP and naturalised flow per quaternary catchment.',

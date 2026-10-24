@@ -5400,10 +5400,10 @@ with the table the data needs).
     cells that read as a formula get an apostrophe, and a `#` line's
     commas, quotes and line breaks are percent-encoded, so it stays one
     cell. It waits for every series' values, and says so if they haven't
-    loaded. Preview all data stays the stored series' table: the derived
-    lines are the panel's chart and this CSV (the operator asked for them in
-    Preview too; a follow-up). `data-tab-groups.spec.ts` covers the groups, a unit opened, a
-    link to its series and both downloads.
+    loaded. **Preview all data** shows the same derived columns as the Full
+    CSV (see *Preview* below). `data-tab-groups.spec.ts` covers the groups, a
+    unit opened, a link to its series, both downloads and the derived
+    columns in Preview.
 - **Freshness first**: within each group the table lists the series
   **behind** first, most days behind first, then the series a run reads,
   then the rest (another series of that kind is read, reference only),
@@ -5744,7 +5744,25 @@ for every flow series; **Rain used (model)** and its source (catchment / CHIRPS 
 forecast) after gap-fill, in words beside the value; the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
-inside a Settings → *Calibration exclusions* period. A flagged value says
+inside a Settings → *Calibration exclusions* period. A third group, *Each
+area’s rain (derived, not stored)*, has the Full CSV's columns for each area
+with a station (the average catchment rainfall, then each land unit, in the
+list's order; issue #553): *station × ratio*, *CHIRPS corrected* (absent when
+the area has no CHIRPS), *rain used* and *rain used from* (station, corrected
+CHIRPS, next fallback, or no source), each header marked *Derived · not
+stored* and its cells set in italics. They are asked for on every open from
+the Data tab (`SeriesTab` `derivedAreas`, the same lines and the same lazily
+loaded `derivedRain.ts` chunk as the area rows and the grouped CSV: the
+engine's `stationAreaRain` over `GET …/model-input`, one run preparation for
+every area, kept until the series, settings or model change), so the dialog
+itself never runs that code; *Computing each area’s rain under its station…*
+shows meanwhile, and an area that couldn't be computed is named with the
+reason and a **Try again**. They cover the run window, so a day of the
+stored series outside it is blank (`preview.ts` `buildAreaColumns`,
+`areaCell`; help `preview.areaStationScaled`, `preview.areaChirpsCorrected`,
+`preview.areaRainUsed`, `preview.areaRainFrom`). The search's value
+comparison and *Missing only* / *Flagged only* still look only at the stored
+series. A flagged value says
 which check flagged it beside it (*12.4 · Outlier*), Rain used its source
 and Excluded its reason, in small text on screen, not only to a screen
 reader; the row stays 28 px. Every column header,
@@ -5753,7 +5771,7 @@ it is derived and what it tells you: a raw series column reuses its kind's
 `series.<SeriesKind>` entry, and each derived column has its own
 `preview.<column>` entry (`preview.date`, `preview.flowM3Day`,
 `preview.rainUsed`, `preview.chirpsFactor`, `preview.chirpsCorrected`,
-`preview.excluded`), the key set per column in `series/preview.ts`. The bubble
+`preview.excluded`, and the four area keys above), the key set per column in `series/preview.ts`. The bubble
 is a top-layer popover, so the sideways scroll and sticky header don't clip
 it, and Escape closes the tip without closing the dialog. A header shows its
 unit once: the m³/day columns name it in their label, so no second `(m³/day)`

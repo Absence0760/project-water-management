@@ -150,6 +150,28 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		related: ['calibration-exclusions', 'calibration-window'],
 		source: 'Not in the workbook; docs/model.md §2.10'
 	},
+	'preview-area-station-scaled': {
+		long: 'Shown for the average catchment rainfall and each land unit that reads a rainfall station (Settings → Flow generation). It is the station’s record as stored, multiplied by the ratio a run applies: the area’s MAP divided by the station’s MAP, or 1 when a MAP is missing or the scaling is off. Blank where the station has no reading.\n\nNothing here is stored: it is worked out when the preview opens, with the same engine code a run uses over the inputs a run would read, so it changes as soon as a series or a setting does. It is the same column as “station × ratio” in the Data tab’s Full CSV.',
+		aliases: ['station times ratio', 'scaled station rain'],
+		related: ['rain-stations', 'unit-rain', 'preview-area-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
+	},
+	'preview-area-chirps-corrected': {
+		long: 'The area’s own CHIRPS (a unit’s CHIRPS feed, or the catchment CHIRPS for the average catchment rainfall) multiplied by the factor of the day’s month, from the pairing a run fits between that CHIRPS and the area’s correcting station. It is what fills a day the station has no reading. The column is missing when the area has no CHIRPS, and blank when the pairing is refused, so its gaps are not corrected.\n\nDerived when the preview opens, never stored: the Full CSV’s “CHIRPS corrected” column. Unlike the catchment’s CHIRPS (corrected) column, it applies the factor on every day.',
+		related: ['chirps-bias', 'rain-stations', 'preview-area-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4i'
+	},
+	'preview-area-rain-used': {
+		long: 'The rain a run reads for this area, to the bit: the station × ratio where the station has a reading, else the corrected CHIRPS, else the next fallback, else nothing (read as dry, 0). For the average catchment rainfall it is Fragmentation’s rain; for a land unit, its per-unit rain. It covers the run window only.\n\nIt is computed when the preview opens with the engine’s own code over the inputs a run would read, not stored, so it is never older than the series and settings. The Rain used from column says, day by day, which source it came from.',
+		aliases: ['unit rain used', 'area rain'],
+		related: ['rain-stations', 'unit-rain', 'preview-area-rain-from'],
+		source: 'Not in the workbook; docs/model.md §2.4i'
+	},
+	'preview-area-rain-from': {
+		long: 'Each day of the area’s rain used names its source: station (the station × ratio), corrected CHIRPS (the station had no reading, or the day was set aside), next fallback (no corrected CHIRPS that day either) or no source, which a run reads as dry. The Full CSV writes the same as station, chirps, fallback or none.\n\nRead down it to see where a long record leans on CHIRPS, or where an area had no rain at all.',
+		related: ['preview-area-rain-used', 'rain-stations'],
+		source: 'Not in the workbook; docs/model.md §2.4i'
+	},
 	'wr90': {
 		long: 'The standard national source for the monthly evaporation and naturalised-flow inputs.',
 		aliases: ['WR2012', 'Water Resources of South Africa'],

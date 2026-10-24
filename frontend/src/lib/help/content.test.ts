@@ -15,7 +15,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
+import { buildAreaColumns, buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
 import { ARTICLES } from './articles';
 import { DATA_ARTICLES } from './articles-data';
 import { EWR_ARTICLES } from './articles-ewr';
@@ -130,7 +130,9 @@ const PREVIEW_KEYS = [
 	PREVIEW_DATE_HELP_KEY,
 	...buildPreviewColumns(SERIES_KINDS.map((kind, i) => ({ id: `s${i}`, kind, name: '', unit: '', startDate: '2020-01-01', length: 1 })))
 		.map((c) => c.helpKey)
-		.filter((k) => k.startsWith('preview.'))
+		.filter((k) => k.startsWith('preview.')),
+	// Each area's derived rain (issue #553), every line present.
+	...buildAreaColumns([{ nodeId: null, name: '', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationScaled: [], chirpsCorrected: [] } as never }]).map((c) => c.helpKey)
 ];
 
 const settings = defaultProjectSettings();
