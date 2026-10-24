@@ -1,15 +1,17 @@
 <script lang="ts">
-	// A catchment's EWR status as words in a coloured pill: "Red: EWR not met
-	// 9 of 30 days". The words carry the meaning; the colour repeats it, and an
-	// unknown gets a dashed outline. The teams list, the team page and the
-	// portfolio all show it the same way.
+	// A catchment's status as words in a coloured pill: its EWR ("Red: EWR not
+	// met 9 of 30 days", the teams list and the team page) or its irrigation
+	// supply ("Amber: 88.0% supplied, …", the project list since issue #558).
+	// The words carry the meaning; the colour repeats it, and an unknown gets
+	// a dashed outline.
 	import type { PortfolioProject } from '$lib/api/types';
-	import { ewrText } from './portfolio';
+	import { ewrText, irrigationText } from './portfolio';
 
-	let { p }: { p: Pick<PortfolioProject, 'ewr'> } = $props();
+	let { p, kind = 'ewr' }: { p: Pick<PortfolioProject, 'ewr' | 'irrigation'>; kind?: 'ewr' | 'irrigation' } = $props();
 </script>
 
-<span class="st st-{p.ewr.status}">{ewrText(p)}</span>
+<!-- The irrigation pill is the status and the share alone; the list says the units below 95 % under it. -->
+<span class="st st-{p[kind].status}">{kind === 'ewr' ? ewrText(p) : irrigationText(p, true)}</span>
 
 <style>
 	.st {

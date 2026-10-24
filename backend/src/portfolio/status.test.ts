@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
 import { toPortfolioProject, type PortfolioRow } from './portfolio.js';
-import { ageDays, EWR_THRESHOLDS, ewrFigure, ewrStatus, isStale } from './status.js';
+import { ageDays, EWR_THRESHOLDS, ewrFigure, ewrStatus, IRRIGATION_THRESHOLDS, irrigationFigure, irrigationStatus, isStale } from './status.js';
 
 // Rule 7: the server's own zone never changes a day; only the zone passed in does.
 const tz = process.env.TZ;
@@ -74,6 +74,41 @@ describe('ewrFigure', () => {
 	});
 });
 
+describe('irrigationStatus', () => {
+	it('green from 95 % supplied, amber from 80 %, red below (provisional, issue #558)', () => {
+		expect(IRRIGATION_THRESHOLDS).toEqual({ green: 95, amber: 80 });
+		expect(irrigationStatus(1)).toBe('green');
+		expect(irrigationStatus(0.95)).toBe('green'); // exactly 95 %, though 0.95 × 100 is 94.999…
+		expect(irrigationStatus(0.9499)).toBe('amber');
+		expect(irrigationStatus(0.8)).toBe('amber');
+		expect(irrigationStatus(0.7999)).toBe('red');
+		expect(irrigationStatus(0)).toBe('red');
+	});
+	it('has no status for an impossible share', () => {
+		expect(irrigationStatus(Number.NaN)).toBeNull();
+		expect(irrigationStatus(-0.1)).toBeNull();
+	});
+	it('takes other thresholds, in percent', () => {
+		expect(irrigationStatus(0.9, { green: 90, amber: 50 })).toBe('green');
+		expect(irrigationStatus(0.4, { green: 90, amber: 50 })).toBe('red');
+	});
+});
+
+describe('irrigationFigure', () => {
+	const known = { hasFigures: true, units: 4, demandM3Day: 400, suppliedM3Day: 300, unitsBelow: 2 };
+	it('says why it is unknown, in order: no figures, no units, no demand', () => {
+		expect(irrigationFigure({ ...known, hasFigures: false })).toMatchObject({ status: 'unknown', reason: 'no-figures' });
+		expect(irrigationFigure({ ...known, units: 0 })).toMatchObject({ status: 'unknown', reason: 'no-units' });
+		expect(irrigationFigure({ ...known, demandM3Day: 0, suppliedM3Day: 0 })).toMatchObject({ status: 'unknown', reason: 'no-demand' });
+	});
+	it('a known figure carries the share supplied and the units short, and no reason', () => {
+		expect(irrigationFigure(known)).toEqual({ status: 'red', fractionSupplied: 0.75, units: 4, unitsBelow: 2 });
+	});
+	it('never reads more than all of the demand as supplied', () => {
+		expect(irrigationFigure({ ...known, suppliedM3Day: 401 }).fractionSupplied).toBe(1);
+	});
+});
+
 describe('age and staleness', () => {
 	it.each(['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'])('counts whole UTC days (TZ %s)', (zone) => {
 		process.env.TZ = zone;
@@ -111,6 +146,11 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 	run_days30: null,
 	run_not_met30: null,
 	live_farm_count: 13,
+	// 12 units: 1 800 of 2 000 m³/day supplied (90 %), 3 below 95 %.
+	irr_units: 12,
+	irr_demand: 2000,
+	irr_supplied: 1800,
+	irr_below: 3,
 	alerts_firing: 0,
 	feeds: [],
 	...over
@@ -138,6 +178,7 @@ describe('toPortfolioProject', () => {
 			behindData: false,
 			newerRun: false,
 			ewr: { status: 'amber', daysNotMet30: 3, days30: 30, fraction30: 0.1 },
+			irrigation: { status: 'amber', fractionSupplied: 0.9, units: 12, unitsBelow: 3 },
 			farmsShort7: 2,
 			farmsShort30: 5,
 			farmCount: 12,
@@ -190,6 +231,14 @@ describe('toPortfolioProject', () => {
 			restriction: null,
 			newerRun: false
 		});
+	});
+
+	it('reads irrigation from the source run whether or not it is published, unknown without a run (issue #558)', () => {
+		expect(toPortfolioProject(row({ published_at: null }), today).irrigation).toMatchObject({ status: 'amber', fractionSupplied: 0.9 });
+		const none = toPortfolioProject(row({ published_at: null, last_run_at: null, irr_units: 0, irr_demand: 0, irr_supplied: 0, irr_below: 0 }), today);
+		expect(none.irrigation).toEqual({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'no-figures' });
+		// pg returns a float8 sum as a number, a numeric as a string: either reads.
+		expect(toPortfolioProject(row({ irr_demand: '2000' as unknown as number, irr_supplied: '1960' as unknown as number }), today).irrigation.status).toBe('green');
 	});
 
 	it('a run whose outlet series is missing is unknown (no-series)', () => {

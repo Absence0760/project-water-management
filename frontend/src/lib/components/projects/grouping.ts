@@ -14,7 +14,7 @@ export type SortKey = 'updated' | 'name' | OutcomeSortKey;
 export const SORT_LABELS: Record<SortKey, string> = {
 	updated: 'Recently edited',
 	attention: 'Needs attention first',
-	status: 'EWR status (worst first)',
+	status: 'Irrigation supplied (worst first)',
 	farms: 'Hydrological units short (most first)',
 	dam: 'Lowest dam (lowest first)',
 	age: 'Figures age (oldest first)',
@@ -152,7 +152,7 @@ export function parseDir(v: string | null): SortDir {
 /**
  * The old team portfolio's address (`/teams/:id/portfolio?sort=…&dir=…`) as
  * the project list filtered to that team (issue #176). Its default order,
- * worst EWR first, comes along; its sort keys are the list's.
+ * worst status first (irrigation supply since issue #558), comes along; its sort keys are the list's.
  */
 export function portfolioListHref(teamId: string, sort: string | null = null, dir: string | null = null): string {
 	const key = sort && Object.hasOwn(SORT_LABELS, sort) && sort !== 'updated' ? sort : 'status';

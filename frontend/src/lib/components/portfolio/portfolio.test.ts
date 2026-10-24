@@ -10,6 +10,8 @@ import {
 	ewrWindowLabel,
 	farmsShortText,
 	farmsUnknownText,
+	irrigationText,
+	irrigationUnitsText,
 	portfolioTotals,
 	feedsText,
 	last30Text,
@@ -40,6 +42,7 @@ const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
 	behindData: false,
 	newerRun: false,
 	ewr: { status: 'red', daysNotMet30: 9, days30: 30, fraction30: 0.3 },
+	irrigation: { status: 'amber', fractionSupplied: 0.88, units: 14, unitsBelow: 3 },
 	farmsShort7: 2,
 	farmsShort30: 5,
 	farmCount: 14,
@@ -195,9 +198,44 @@ describe('totals (the teams list, the team page and the portfolio header)', () =
 		const t = portfolioTotals([
 			row({ id: 'a', alertsFiring: 1, stale: true }),
 			row({ id: 'b', ewr: { status: 'green', daysNotMet30: 0, days30: 30, fraction30: 0 } }),
-			row({ id: 'c', alertsFiring: 2, ewr: unknown('no-figures') })
+			row({ id: 'c', alertsFiring: 2, ewr: unknown('no-figures'), irrigation: { status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'no-figures' } })
 		]);
-		expect(t).toEqual({ catchments: 3, counts: { red: 1, amber: 0, green: 1, unknown: 1 }, alertsFiring: 3, stale: 1 });
-		expect(portfolioTotals([])).toEqual({ catchments: 0, counts: { red: 0, amber: 0, green: 0, unknown: 0 }, alertsFiring: 0, stale: 0 });
+		expect(t).toEqual({ catchments: 3, counts: { red: 1, amber: 0, green: 1, unknown: 1 }, irrigation: { red: 0, amber: 2, green: 0, unknown: 1 }, alertsFiring: 3, stale: 1 });
+		const none = { red: 0, amber: 0, green: 0, unknown: 0 };
+		expect(portfolioTotals([])).toEqual({ catchments: 0, counts: none, irrigation: none, alertsFiring: 0, stale: 0 });
+	});
+});
+
+describe('irrigation (the project list’s status, issue #558)', () => {
+	const irr = (over: Partial<PortfolioProject['irrigation']>) => row({ irrigation: { status: 'green', fractionSupplied: 1, units: 4, unitsBelow: 0, ...over } });
+
+	it('says the share supplied, and how many units fell below 95 %', () => {
+		expect(irrigationText(row())).toBe('Amber: 88.0% supplied, 3 of 14 units below 95%');
+		// The list's pill leaves the units to the line under it.
+		expect(irrigationText(row(), true)).toBe('Amber: 88.0% supplied');
+		expect(irrigationUnitsText(row())).toBe('3 of 14 units below 95%');
+		expect(irrigationUnitsText(irr({}))).toBeNull();
+		expect(irrigationText(irr({ status: 'green', fractionSupplied: 0.981 }))).toBe('Green: 98.1% supplied');
+		expect(irrigationText(irr({ status: 'red', fractionSupplied: 0.5, units: 1, unitsBelow: 1 }))).toBe('Red: 50.0% supplied, 1 of 1 unit below 95%');
+	});
+	it('says why it is unknown', () => {
+		const u = (reason: 'no-figures' | 'no-units' | 'no-demand') => irr({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason });
+		expect(irrigationText(u('no-figures'))).toBe('Unknown: no run yet');
+		expect(irrigationText(u('no-units'))).toBe('Unknown: no hydrological units in the run');
+		expect(irrigationText(u('no-demand'))).toBe('Unknown: no irrigation demand in the run');
+	});
+	it('sorts worst first: red, amber, unknown, green, and less supplied first within a colour', () => {
+		const rows = [
+			irr({ status: 'green', fractionSupplied: 0.99 }),
+			irr({ status: 'red', fractionSupplied: 0.7 }),
+			irr({ status: 'red', fractionSupplied: 0.4 }),
+			irr({ status: 'unknown', fractionSupplied: null }),
+			irr({ status: 'amber', fractionSupplied: 0.85 })
+		].map((r, i) => ({ ...r, id: String(i), name: String(i) }));
+		expect(sortPortfolio(rows, { key: 'supply', dir: 'asc' }).map((r) => r.id)).toEqual(['2', '1', '4', '3', '0']);
+	});
+	it('counts the irrigation statuses apart from the EWR’s', () => {
+		expect(statusCounts([row(), irr({})], 'irrigation')).toEqual({ red: 0, amber: 1, green: 1, unknown: 0 });
+		expect(statusCounts([row(), irr({})])).toEqual({ red: 2, amber: 0, green: 0, unknown: 0 });
 	});
 });

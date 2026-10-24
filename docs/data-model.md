@@ -2991,7 +2991,11 @@ thresholds, `{ "portfolio": { "thresholds": { "green": 5, "amber": 20 } } }`:
 percent of the last 30 days with the outlet EWR not met, green below `green`,
 amber below `amber`, red otherwise, each 0–100 with `green < amber`. Absent
 means the defaults (5 % and 20 %, `portfolio/status.ts` `EWR_THRESHOLDS`),
-which the hydrologist still has to confirm. The `team_settings_valid` CHECK
+which the hydrologist still has to confirm. They judge only the EWR status
+(the teams list and the team page): the project list's status is irrigation
+supply since issue #558, judged by fixed, provisional cut-offs
+(`IRRIGATION_THRESHOLDS`, 95 % and 80 % of demand supplied) that are not a
+team setting. The `team_settings_valid` CHECK
 (`app_team_settings_valid`, plpgsql so each step is guarded before the next
 casts) holds that shape for any writer and rejects unknown keys; the API
 validates the same (`teams/settings.ts`). Access needs no new policy:

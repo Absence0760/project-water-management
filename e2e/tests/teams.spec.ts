@@ -276,7 +276,7 @@ test('the teams list shows each team’s numbers and its projects’ traffic lig
 	await expect(card).toContainText(/1 (red|amber|unknown), 1 (unknown|green)/);
 	await expect(card.getByRole('list', { name: /^Projects of Card Board/ }).getByRole('link')).toHaveCount(2);
 	await expect(card.getByText('Unknown: no run yet')).toBeVisible();
-	// The team's catchments in full: the project list filtered to the team, worst EWR first (issue #176).
+	// The team's catchments in full: the project list filtered to the team, worst first (issue #176).
 	await card.getByRole('link', { name: 'Project list' }).click();
 	await expect(page).toHaveURL(new RegExp(`/\\?owner=team:${team.id}&sort=status$`));
 	await expect(page.getByRole('table').getByRole('rowheader')).toHaveCount(2);

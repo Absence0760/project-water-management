@@ -8,7 +8,7 @@ import { withUser } from '../db/tx.js';
 import { utcToday } from '../feeds/fetch.js';
 import { loadMyOutcomes, loadPortfolio, type PortfolioProject } from './portfolio.js';
 import { localDate } from '../projects/timeZone.js';
-import { ageDays, ewrStatus } from './status.js';
+import { ageDays, ewrStatus, irrigationStatus } from './status.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -173,6 +173,7 @@ describe('the figures, and where they come from', () => {
 			behindData: false,
 			newerRun: false,
 			ewr: { status: 'unknown', daysNotMet30: null, days30: null, fraction30: null, reason: 'no-figures' },
+			irrigation: { status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'no-figures' },
 			farmsShort7: null,
 			farmsShort30: null,
 			farmCount: 0,
@@ -214,11 +215,21 @@ describe('the figures, and where they come from', () => {
 		expect(before.sourceRunId).toBe(runId);
 		expect(before.ewr.status).not.toBe('unknown');
 		expect(before.ewr.days30).toBe(30);
+		// Irrigation (issue #558, the project list's status): the run summary's units, read in SQL, as the workspace's Summary reads them.
+		type Farm = { avgDemandM3Day: number; avgSuppliedM3Day: number; fractionSupplied: number };
+		const farms = ((await asOwner(`SELECT summary->'farms' AS farms FROM model_run WHERE id = $1`, [runId])) as { farms: Farm[] }[])[0]!.farms;
+		const sum = (k: 'avgDemandM3Day' | 'avgSuppliedM3Day') => farms.reduce((a, f) => a + f[k], 0);
+		const fraction = sum('avgSuppliedM3Day') / sum('avgDemandM3Day');
+		expect(farms).toHaveLength(3);
+		expect(before.irrigation.fractionSupplied).toBeCloseTo(fraction, 9);
+		expect(before.irrigation).toMatchObject({ units: 3, unitsBelow: farms.filter((f) => f.fractionSupplied < 0.95).length });
+		expect(before.irrigation.status).toBe(irrigationStatus(fraction));
 
 		expect((await admin.call('POST', `/projects/${pid}/publication`, { runId, restriction: { level: 'restricted', pct: 20 } })).status).toBe(201);
 		const after = byId((await portfolio(admin)).body.projects, pid)!;
 		expect(after.source).toBe('published');
 		expect(after.ewr).toEqual(before.ewr);
+		expect(after.irrigation).toEqual(before.irrigation);
 		expect(after.figuresUntil).toBe(before.figuresUntil);
 		expect(after.restriction).toEqual({ level: 'restricted', pct: 20 });
 		expect(after.newerRun).toBe(false);
@@ -252,7 +263,7 @@ describe('the figures, and where they come from', () => {
 		// A newer run leaves the published figures in place, and says there's a newer one (positive control).
 		await run(admin, pid);
 		const later = byId((await portfolio(admin)).body.projects, pid)!;
-		expect(later).toMatchObject({ source: 'published', sourceRunId: runId, newerRun: true, ewr: before.ewr });
+		expect(later).toMatchObject({ source: 'published', sourceRunId: runId, newerRun: true, ewr: before.ewr, irrigation: before.irrigation });
 		expect(Date.parse(later.lastRunAt!)).toBeGreaterThan(Date.parse(later.publishedAt!));
 	});
 

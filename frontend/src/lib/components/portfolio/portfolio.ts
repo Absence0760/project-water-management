@@ -56,6 +56,35 @@ export function ewrText(p: Pick<PortfolioProject, 'ewr'>): string {
 	return `${label}: EWR not met ${e.daysNotMet30} of ${e.days30} days`;
 }
 
+/** The project list's status column (issue #558): irrigation supplied over the source run, not the EWR. */
+export const IRRIGATION_LABEL = 'Irrigation supplied';
+
+/** The irrigation traffic light's rule (backend portfolio/status.ts IRRIGATION_THRESHOLDS; provisional, no team setting yet). */
+export const IRRIGATION_RULE = 'green from 95 % of demand supplied over the run, amber from 80 %, red below';
+
+/** "3 of 5 units below 95%", or null when none is (or the figure is unknown). */
+export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): string | null {
+	const r = p.irrigation;
+	return r.status !== 'unknown' && r.unitsBelow && r.units ? `${r.unitsBelow} of ${plural(r.units, 'unit')} below 95%` : null;
+}
+
+/**
+ * "Red: 72.0% supplied, 3 of 5 units below 95%", "Green: 98.1% supplied", or
+ * "Unknown: <why>" (issue #558). The share is over the source run's whole
+ * record, as the workspace's Irrigation supplied card. `short` leaves the
+ * units out (the list's pill, which says them on the line under it).
+ */
+export function irrigationText(p: Pick<PortfolioProject, 'irrigation'>, short = false): string {
+	const r = p.irrigation;
+	if (r.status === 'unknown' || r.fractionSupplied == null) {
+		const why = r.reason === 'no-units' ? 'no hydrological units in the run' : r.reason === 'no-demand' ? 'no irrigation demand in the run' : 'no run yet';
+		return `Unknown: ${why}`;
+	}
+	const head = `${STATUS_LABEL[r.status]}: ${fmtNum(r.fractionSupplied * 100, 1)}% supplied`;
+	const units = irrigationUnitsText(p);
+	return units && !short ? `${head}, ${units}` : head;
+}
+
 /** Where the figures come from, in words. */
 export function sourceText(p: Pick<PortfolioProject, 'source' | 'publishedAt' | 'newerRun'>): string {
 	if (p.source === 'published') return p.newerRun ? 'Published run (a newer run is not published)' : 'Published run';
@@ -133,7 +162,7 @@ export function feedsText(p: Pick<PortfolioProject, 'feeds'>): string {
 // ---------------------------------------------------------------------------
 
 /** The keys comparePortfolio sorts by (the project list names them, projects/grouping.ts). */
-export type PortfolioSortKey = 'status' | 'name' | 'age' | 'farms' | 'dam';
+export type PortfolioSortKey = 'status' | 'supply' | 'name' | 'age' | 'farms' | 'dam';
 export type SortDir = 'asc' | 'desc';
 export interface PortfolioSort {
 	key: PortfolioSortKey;
@@ -157,6 +186,9 @@ function value(p: PortfolioProject, key: PortfolioSortKey): number | null {
 		case 'status':
 			// Within a colour, more days not met is worse.
 			return STATUS_RANK[p.ewr.status] * 1000 - (p.ewr.fraction30 ?? 0) * 100;
+		case 'supply':
+			// Within a colour, less supplied is worse.
+			return STATUS_RANK[p.irrigation.status] * 1000 - (1 - (p.irrigation.fractionSupplied ?? 1)) * 100;
 		case 'age':
 			return p.figuresAgeDays == null ? null : -p.figuresAgeDays;
 		case 'farms':
@@ -189,10 +221,10 @@ export function comparePortfolio({ key, dir }: PortfolioSort): (a: PortfolioProj
 }
 
 
-/** Counts per status, for the summary line above the table. */
-export function statusCounts(rows: readonly PortfolioProject[]): Record<PortfolioEwrStatus, number> {
+/** Counts per status, for the summary line above the table: the EWR's (the teams pages), or irrigation's (the project list, issue #558). */
+export function statusCounts(rows: readonly PortfolioProject[], of: 'ewr' | 'irrigation' = 'ewr'): Record<PortfolioEwrStatus, number> {
 	const out: Record<PortfolioEwrStatus, number> = { red: 0, amber: 0, green: 0, unknown: 0 };
-	for (const r of rows) out[r.ewr.status]++;
+	for (const r of rows) out[r[of].status]++;
 	return out;
 }
 
@@ -225,6 +257,8 @@ export function statusSummary(counts: Record<PortfolioEwrStatus, number>): strin
 export interface PortfolioTotals {
 	catchments: number;
 	counts: Record<PortfolioEwrStatus, number>;
+	/** The irrigation statuses (the project list's, issue #558). */
+	irrigation: Record<PortfolioEwrStatus, number>;
 	alertsFiring: number;
 	/** Catchments whose figures are over 7 days old. */
 	stale: number;
@@ -237,5 +271,5 @@ export function portfolioTotals(rows: readonly PortfolioProject[]): PortfolioTot
 		alertsFiring += r.alertsFiring;
 		if (r.stale) stale++;
 	}
-	return { catchments: rows.length, counts: statusCounts(rows), alertsFiring, stale };
+	return { catchments: rows.length, counts: statusCounts(rows), irrigation: statusCounts(rows, 'irrigation'), alertsFiring, stale };
 }

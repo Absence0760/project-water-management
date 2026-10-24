@@ -1,7 +1,8 @@
 <script lang="ts">
 	// One group of projects as a compact table (issue #17, docs/ui.md § Project
 	// list): each row says how the catchment is doing, from the portfolio's
-	// figures (GET /projects/outcomes): the EWR status, units short in the figures' last week,
+	// figures (GET /projects/outcomes): irrigation supplied (the status since issue #558; the EWR's
+	// is the teams pages' and the workspace's EWR page's), units short in the figures' last week,
 	// the lowest dam and the published restriction, data freshness, the last run
 	// and the alerts firing (the team portfolio's columns, folded in by issue #176).
 	// A click anywhere on a row opens the project (the name link stretches over
@@ -17,8 +18,9 @@
 		alertsText,
 		curtailmentHref,
 		damText,
-		ewrWindowLabel,
 		farmsShortText,
+		IRRIGATION_LABEL,
+		irrigationUnitsText,
 		feedsText,
 		last30Text,
 		restrictionText,
@@ -134,15 +136,14 @@
 		if (menuFor && !menuEl?.contains(to) && !trigger?.contains(to)) closeMenu();
 	}
 
-	// "EWR, last 30 days" only while the rows' figures are current: once stale, the date they end on.
-	const ewrLabel = $derived(ewrWindowLabel(projects.flatMap((p) => outcomes?.get(p.id) ?? [])));
-	const SORTABLE = $derived<{ key: SortKey; label: string; cls: string; col: string }[]>([
-		{ key: 'status', label: ewrLabel, cls: 'wide', col: 'c-ewr' },
+	const SORTABLE: { key: SortKey; label: string; cls: string; col: string }[] = [
+		// Irrigation supplied over the run the figures come from (issue #558), in place of the EWR's 30 days.
+		{ key: 'status', label: IRRIGATION_LABEL, cls: 'wide', col: 'c-status' },
 		{ key: 'farms', label: 'Hydrological units short', cls: 'wide', col: 'c-units' },
 		{ key: 'dam', label: 'Lowest dam', cls: 'wide xwide', col: 'c-dam' },
 		// The Data column sorts by how old the figures are, as the portfolio's did.
 		{ key: 'age', label: 'Data', cls: 'wide', col: 'c-data' }
-	]);
+	];
 	// Each key's own order is worst (or newest) first; Last run's is newest first, so it reads "descending".
 	const ariaSort = (key: SortKey) => {
 		if (sort !== key) return undefined;
@@ -233,7 +234,7 @@
 						{#if p.description}<span class="desc">{p.description}</span>{/if}
 						<!-- Narrow tables: the columns that fold away, as lines under the name. -->
 						<span class="meta meta-narrow">
-							{#if o}<StatusPill p={o} />{:else}<span class="muted">{noFigures(p)}</span>{/if}
+							{#if o}<StatusPill p={o} kind="irrigation" />{:else}<span class="muted">{noFigures(p)}</span>{/if}
 							{#if o}<span class="line">{#if !farmsShortText(o)}Hydrological units short:{' '}{/if}{@render units(o)}</span>{/if}
 						</span>
 						<span class="meta meta-narrow">
@@ -246,9 +247,11 @@
 							{#if o && o.alertsFiring > 0}<span class="badge badge-warn alerts-badge">{o.alertsFiring} alert{o.alertsFiring === 1 ? '' : 's'} firing</span>{/if}
 						</span>
 					</th>
-					<td class="wide c-ewr">
+					<td class="wide c-status">
 						{#if o}
-							<StatusPill p={o} />
+							<StatusPill p={o} kind="irrigation" />
+							<!-- Over the whole run, as the pill: not the week the next column counts. -->
+							{#if irrigationUnitsText(o)}<span class="sub">{irrigationUnitsText(o)} over the run</span>{/if}
 							{#if sourceShort(o)}<span class="sub">{sourceShort(o)}{#if ageText(o)}{' '}· {ageText(o)}{/if}</span>{/if}
 						{:else}<span class="muted">{noFigures(p)}</span>{/if}
 					</td>
@@ -319,7 +322,7 @@
 	.projects {
 		table-layout: fixed;
 	}
-	.c-ewr {
+	.c-status {
 		width: 205px;
 	}
 	.c-units {
