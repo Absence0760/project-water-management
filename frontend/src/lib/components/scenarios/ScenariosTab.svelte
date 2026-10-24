@@ -14,7 +14,7 @@
 	// `new=1` (Back closes it). The list is a rail beside the scenario, as tall
 	// as the window from where it starts and scrolling inside itself; the
 	// scenario is an editing page and scrolls with the page. With none picked
-	// the first (newest) opens, in place (replaceState), so there's no empty
+	// the first (newest) opens, in place (goto's replace), so there's no empty
 	// half-page. The Applicant view has no section header: its New
 	// application button sits at the top of the list instead.
 	import { tick, untrack } from 'svelte';

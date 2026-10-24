@@ -2844,8 +2844,14 @@ In short:
   `frontend/src/lib/urlAttributes.security.test.ts` scans every component's
   URL attributes (`href`, `src`, `srcset`, `action`, `formaction`, …, and
   `{href}` shorthand). A value that starts with literal text (`/…`, `?tab=…`,
-  `#…`, `{base}/…`) sets its own scheme, and that scheme must be http(s),
-  mailto or tel, never protocol-relative. A value that starts with an
+  `#…`, `{basePath()}/…`) sets its own scheme, and that scheme must be http(s),
+  mailto or tel, never protocol-relative. SvelteKit's `resolve()`/`asset()`
+  put the base and a `/` first, so one whole `resolve('<literal>')` or
+  `asset('<literal>')` whose path starts with a literal segment passes without
+  review, with only `+` terms after it (names, member access, calls, strings,
+  templates); any looser operator at its top level (`||`, `??`, `?:`, a comma,
+  `&&`), a non-literal argument, or `resolve('') + x` (which could make
+  `//host`) stays an expression. Any other value that starts with an
   expression must be a *reviewed* head, listed with where its value comes
   from and the components it was reviewed in (the same name in another
   component is a new one). A new one fails until someone reviews it, and a

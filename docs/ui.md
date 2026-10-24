@@ -2257,10 +2257,13 @@ that hasn't run is not flagged.
 (All projects, Personal, each team, Shared with me, with counts, and
 **Manage teams**), or a select when the page is 600 px or narrower. Search
 matches name, description and team (`?q=`); a search is one step in history:
-its first keystroke after the box takes the focus adds an entry, the rest
-replace it, so Back returns to the list before the search, not letter by
+its first change that lands after the box takes the focus adds an entry, the
+rest replace it, so Back returns to the list before the search, not letter by
 letter (until issue #521 every keystroke replaced the entry the list came
-from, so Back left the page). Sort (`?sort=`): *Recently
+from, so Back left the page; on SvelteKit 3 a first keystroke's push the next
+keystroke overtook never landed, so `SearchStep` waits for one that does).
+Back and Forward also return the window to where it was on that entry
+(`lib/nav/backScroll.ts`; ui-playbook § URL state). Sort (`?sort=`): *Recently
 updated* (the default), *Needs attention first*, *Irrigation supplied*
 (worst first: red, amber, unknown, green, less supplied first within one;
 the EWR status until issue #558; `?sort=status`), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
