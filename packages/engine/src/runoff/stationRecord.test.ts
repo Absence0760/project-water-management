@@ -111,7 +111,7 @@ describe('checkedStationRecord', () => {
 	});
 
 	it('unreliable periods blank exactly their inclusive days, counted once; days without a reading aren’t counted', () => {
-		const stored = rainOf(1).map((v) => v! + 1); // a reading every day, none of them a suspect zero
+		const stored: (number | null)[] = rainOf(1).map((v) => v! + 1); // a reading every day, none of them a suspect zero
 		stored[at('2018-03-05')] = null;
 		const s = settingsWith({
 			unreliable: {
