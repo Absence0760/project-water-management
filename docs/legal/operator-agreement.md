@@ -16,7 +16,7 @@
 1. **[Client legal name]**, [registration number], of [address]
    (**"the Client"**), a [water user association / irrigation board /
    consultancy], acting as the **responsible party**; and
-2. **Jared Howard**, a sole proprietor trading as Water Management, of
+2. **Jared Howard**, a sole proprietor trading as Integrated Catchment - Water Balance Tool (IC-WBT), of
    Virginia, United States of America, `jared@jaredhoward.com`
    (**"the Operator"**).
 
@@ -24,7 +24,7 @@
 
 ## 1. What this agreement is for
 
-1.1 The Client uses Water Management (**"the service"**), a web application
+1.1 The Client uses Integrated Catchment - Water Balance Tool (IC-WBT, **"the service"**), a web application
 for catchment water-balance modelling, to run one or more catchment projects
 and to share results with its members (farmers, hydrologists, staff and
 others it invites).

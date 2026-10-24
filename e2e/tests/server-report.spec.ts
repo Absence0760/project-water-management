@@ -80,7 +80,7 @@ test('Email me the PDF: the worker renders the report, the page offers the downl
 
 	// The email: to the requester, with a link to the sign-in-gated download page.
 	const mail = await mailTo(owner.email);
-	expect(mail.subject).toBe('Catchment report: Server report catchment — Water Management');
+	expect(mail.subject).toBe('Catchment report: Server report catchment — IC-WBT');
 	const link = mail.text.match(/Download the report: (\S+)/)?.[1];
 	expect(link).toMatch(new RegExp(`/projects/${projectId}/reports/[0-9a-f-]{36}$`));
 	await page.goto(link!);

@@ -22,6 +22,7 @@
 	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
 	import TwoStepSignIn from '#lib/components/account/TwoStepSignIn.svelte';
 	import { t } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 
 	const msg = errorText;
@@ -197,7 +198,7 @@
 	}
 </script>
 
-<svelte:head><title>{t('{page} · Water Management', { page: t('Account') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · {app}', { page: t('Account'), app: APP_SHORT_NAME })}</title></svelte:head>
 
 <main class="page account">
 	<section class="page-head" aria-labelledby="account-h">

@@ -10,7 +10,7 @@
 	import { FORMAT_GROUPS } from '#lib/help/fileFormats.js';
 </script>
 
-<svelte:head><title>File formats · Help · Water Management</title></svelte:head>
+<svelte:head><title>File formats · Help · IC-WBT</title></svelte:head>
 
 <HelpCrumbs trail={[{ label: 'Help', href: resolve('help') }, { label: 'Reference' }, { label: 'File formats' }]} />
 <header class="head">

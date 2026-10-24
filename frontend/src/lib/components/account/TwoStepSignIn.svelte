@@ -17,6 +17,7 @@
 	// works" goes to the farmer words (farm-two-step, translated) in the farm
 	// frame, else to the workspace's guide.
 	import { onDestroy, onMount, tick } from 'svelte';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { resolve } from '$app/paths';
 	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
@@ -267,7 +268,7 @@
 	const codesText = (list: string[]) =>
 		recoveryCodesText(
 			list,
-			t('Water Management recovery codes for {email}', { email: session.user?.email ?? '' }),
+			t('{app} recovery codes for {email}', { app: APP_SHORT_NAME, email: session.user?.email ?? '' }),
 			t('Each code works once, in place of a code from your authenticator app or your email.')
 		);
 	async function downloadCodes() {

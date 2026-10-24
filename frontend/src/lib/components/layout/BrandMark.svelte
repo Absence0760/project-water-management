@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The Outlet mark (source: brand/src/mark.svg): farm nodes draining to one
-	// gauge. Decorative next to the "Water Management" wordmark, so hidden from
+	// gauge. Decorative next to the "IC-WBT" wordmark, so hidden from
 	// assistive tech. Colours follow the theme tokens so it works in dark mode.
 	let { size = 24 }: { size?: number } = $props();
 	const small = $derived(size < 32);

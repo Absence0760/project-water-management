@@ -83,7 +83,7 @@
 	const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 </script>
 
-<svelte:head><title>Teams · Water Management</title></svelte:head>
+<svelte:head><title>Teams · IC-WBT</title></svelte:head>
 
 {#snippet card(t: Team)}
 	{@const pf = portfolios[t.id]}

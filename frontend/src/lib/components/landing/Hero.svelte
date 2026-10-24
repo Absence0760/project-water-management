@@ -2,6 +2,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { APP_NAME } from '#lib/brand.js';
 	import { t } from '#lib/i18n/locale.svelte.js';
 	import Diorama from './Diorama.svelte';
 	import { DATA } from './data.generated';
@@ -30,7 +31,7 @@
 
 <section class="hero" aria-labelledby="landing-title">
 	<div class="copy">
-		<p class="kicker">{t('Catchment water balance')}</p>
+		<p class="kicker">{APP_NAME}</p>
 		<h1 id="landing-title">{t('Every drop in the catchment, accounted for.')}</h1>
 		<p class="lede">
 			{t('Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.')}

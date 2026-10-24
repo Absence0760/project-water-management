@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Issue #551: the app's name as constants (lib/brand.ts, its own tiny chunk) imported by the title, header, cover and legal pages; measured 2047 → 2048 KB against the base build"
+}

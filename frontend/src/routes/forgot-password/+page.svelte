@@ -6,6 +6,7 @@
 	import { emailAuthApi } from '#lib/api/emailAuth.js';
 	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 	import Rich from '#lib/i18n/Rich.svelte';
 
@@ -33,7 +34,7 @@
 	}
 </script>
 
-<svelte:head><title>{t('{page} · Water Management', { page: t('Reset your password') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · {app}', { page: t('Reset your password'), app: APP_SHORT_NAME })}</title></svelte:head>
 
 <AuthCard title={sentTo ? t('Check your email') : t('Reset your password')} subtitle={sentTo ? undefined : t('Enter the email address you signed up with and we’ll send you a link to choose a new password.')}>
 	{#if sentTo}

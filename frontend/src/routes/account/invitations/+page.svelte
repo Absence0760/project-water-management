@@ -21,6 +21,7 @@
 	import { fmtDay } from '#lib/format/number.js';
 	import { msg, type Msg } from '#lib/i18n/msg.js';
 	import { t } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { errorText } from '#lib/i18n/apiError.js';
 
 	/** What an invitation makes you, in words (project and team roles alike, as roleLabels.ts reads them). */
@@ -96,7 +97,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: t('Invitations', {}, 'page title') })}</title>
+	<title>{t('{page} · {app}', { page: t('Invitations', {}, 'page title'), app: APP_SHORT_NAME })}</title>
 </svelte:head>
 
 <main class="page invitations-page" data-ready={invites !== null || loadError !== null ? 'true' : undefined}>

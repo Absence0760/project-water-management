@@ -27,9 +27,9 @@ test('at set-up the codes download as a text file and copy, then the Account pag
 
 	// The file: a heading naming the account, the ten codes one a line, how they work.
 	const [download] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Download the codes' }).click()]);
-	expect(download.suggestedFilename()).toBe('water-management-recovery-codes.txt');
+	expect(download.suggestedFilename()).toBe('icwbt-recovery-codes.txt');
 	const file = await readFile((await download.path())!, 'utf8');
-	expect(file).toBe(`Water Management recovery codes for ${owner.email}\n\n${codes.join('\n')}\n\nEach code works once, in place of a code from your authenticator app or your email.\n`);
+	expect(file).toBe(`IC-WBT recovery codes for ${owner.email}\n\n${codes.join('\n')}\n\nEach code works once, in place of a code from your authenticator app or your email.\n`);
 
 	// The clipboard: the same text.
 	await panel.getByRole('button', { name: 'Copy the codes' }).click();

@@ -51,7 +51,7 @@
 	const shown = $derived(record ? record.comments.filter((c) => c.state === 'shown').length : 0);
 </script>
 
-<svelte:head><title>{record ? `Public participation · ${record.application.name} · ` : ''}Water Management</title></svelte:head>
+<svelte:head><title>{record ? `Public participation · ${record.application.name} · ` : ''}IC-WBT</title></svelte:head>
 
 <main class="page participation" aria-busy={status === 'loading'} data-testid="participation-record">
 	<p class="no-print"><a href={back}>← Back to the application</a></p>

@@ -16,6 +16,6 @@
 	});
 </script>
 
-<svelte:head><title>Projects · Water Management</title></svelte:head>
+<svelte:head><title>Projects · IC-WBT</title></svelte:head>
 
 <main class="page"><p class="muted">Opening the team's projects…</p></main>

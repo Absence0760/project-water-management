@@ -14,6 +14,7 @@
 	// Language). Everything shown is text (Svelte escapes it); the register
 	// links are the engine's fixed URLs, never the database's.
 	import { untrack } from 'svelte';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -88,14 +89,14 @@
 </script>
 
 <svelte:head>
-	<title>{v ? `Evidence pack ${v.shortCode} · ${v.catchment} · ` : 'Verify an evidence pack · '}Water Management</title>
+	<title>{v ? `Evidence pack ${v.shortCode} · ${v.catchment} · ` : 'Verify an evidence pack · '}IC-WBT</title>
 	<meta name="robots" content="noindex, nofollow" />
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
 <div class="verify">
 	<header class="verify-header">
-		<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">Water Management</span><span class="tag">Evidence pack verification</span></span></span>
+		<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">{APP_SHORT_NAME}</span><span class="tag">Evidence pack verification</span></span></span>
 	</header>
 
 	<main class="verify-main" data-verify-state={status} aria-busy={status === 'loading'}>

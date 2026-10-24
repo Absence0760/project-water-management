@@ -50,7 +50,7 @@ In a git worktree both URLs point at that worktree's own dev database,
 | `COOKIE_SECURE` | `false` | Session cookie `Secure` flag; off for local http, unset (on) in every deployed environment |
 | `MAIL_TRANSPORT` | `smtp` | `smtp` → Mailpit locally; `log` prints emails to the console; `ses` in production |
 | `SMTP_HOST` / `SMTP_PORT` | `127.0.0.1` / `1026` | Mailpit's SMTP port |
-| `MAIL_FROM` | `Water Management <no-reply@localhost>` | Sender |
+| `MAIL_FROM` | `IC-WBT <no-reply@localhost>` | Sender |
 | `RUNS_KEPT_PER_PROJECT` | `20` | Runs kept per project; each new run deletes the oldest beyond it (default 20 when unset or invalid) |
 | `JOB_TRANSPORT` | `inprocess` | How the job worker is woken: `inprocess` (the local worker polls and LISTENs), `memory` (tests), `sqs` (production). See [Background jobs](#background-jobs) |
 | `JOB_POLL_SECONDS` | `15` | How often the local worker looks for due jobs without a wake-up |

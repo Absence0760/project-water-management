@@ -7,6 +7,7 @@
 	// it. Its words are summary.ts's and the page's own; never the link, which
 	// is the credential.
 	import type { ShareView } from '#lib/api/types.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 	import { CHART_FONT_PX, LABEL_Y } from '#lib/components/farm/chartGeometry.js';
 	import type { NoticeVm } from '#lib/components/farm/notice.js';
 	import { t } from '#lib/i18n/locale.svelte.js';
@@ -34,7 +35,7 @@
 
 <article class="paper" data-testid="member-summary" data-window={w}>
 	<header class="p-head">
-		<p class="brand">Water Management · {t('Member summary')}</p>
+		<p class="brand">{APP_SHORT_NAME} · {t('Member summary')}</p>
 		<h1>{view.project.name}</h1>
 		<p class="period">{windowLine(cv, w)}</p>
 		<p class="fine">{publishedLine(view)} {printedLine(today)}</p>

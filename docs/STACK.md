@@ -1,6 +1,9 @@
 # Stack: water-management
 
-A multi-project web app for daily catchment water-balance modelling. It is a
+Integrated Catchment - Water Balance Tool (IC-WBT; issue #551 renamed it
+from Water Management, and the repo, packages, databases and AWS resources
+keep the `water-management` slug) is a multi-project web app for daily
+catchment water-balance modelling. It is a
 port of the WBT b023 Excel tool (see [model.md](./model.md)). There is a static
 SvelteKit frontend, a Hono API (a Node server locally, Lambda in production),
 Postgres with row-level security, and one TypeScript model engine that both

@@ -60,7 +60,7 @@ describe('project invites', () => {
 		expect(days).toBeLessThanOrEqual(7);
 
 		const mail = lastMailTo(email)!;
-		expect(mail.subject).toBe('InvOwner invited you to Water Management');
+		expect(mail.subject).toBe('InvOwner invited you to IC-WBT');
 		expect(mail.text).toContain('Kloof <River>');
 		expect(mail.html).toContain('Kloof &lt;River&gt;');
 		expect(mail.html).not.toContain('<River>');
@@ -241,7 +241,7 @@ describe('project invites', () => {
 		// The email goes to the real inbox and asks to confirm (the account can't sign up again).
 		expect(mailCount(email)).toBe(before + 1);
 		const mail = lastMailTo(email)!;
-		expect(mail.text).toContain('There is already a Water Management account');
+		expect(mail.text).toContain('There is already an IC-WBT account');
 		expect(mail.text).toMatch(/http:\/\/localhost:7777\/verify-email\?token=[A-Za-z0-9_-]{43}/);
 		expect(mail.text).toMatch(/Forgot password/);
 

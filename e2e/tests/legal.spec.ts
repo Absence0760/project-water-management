@@ -31,11 +31,11 @@ for (const p of PAGES) {
 // the legal and methods pages run no script to correct it, so app.html's
 // fallback must come after the page's own.
 const TITLED = [
-	{ path: '/privacy', title: 'Privacy notice · Water Management' },
-	{ path: '/terms', title: 'Terms of use · Water Management' },
-	{ path: '/methods', title: 'How the model is checked · Water Management' },
-	{ path: '/data-sources', title: 'Data sources and credits · Water Management' },
-	{ path: '/welcome', title: 'Water Management: daily water balance for a catchment' }
+	{ path: '/privacy', title: 'Privacy notice · IC-WBT' },
+	{ path: '/terms', title: 'Terms of use · IC-WBT' },
+	{ path: '/methods', title: 'How the model is checked · IC-WBT' },
+	{ path: '/data-sources', title: 'Data sources and credits · IC-WBT' },
+	{ path: '/welcome', title: 'IC-WBT: daily water balance for a catchment' }
 ];
 test('every prerendered page names itself, before and without any script', async ({ request, page }) => {
 	for (const p of TITLED) {
@@ -135,7 +135,7 @@ test('the header has only the logo, and the footer’s Contact opens the terms�
 	await page.goto('/privacy');
 	const banner = page.getByRole('banner');
 	await expect(banner.getByRole('link')).toHaveCount(1);
-	const home = banner.getByRole('link', { name: 'Water Management, home' });
+	const home = banner.getByRole('link', { name: 'Integrated Catchment - Water Balance Tool, home' });
 	expect((await home.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 	const contact = page.getByRole('contentinfo').getByRole('link', { name: 'Contact' });
 	await expect(contact).toHaveAttribute('href', /\/terms#contact$/);
@@ -154,7 +154,7 @@ test('the landing footer, the sign-in pages and the sign-up form link both pages
 	await expect(footer.getByRole('link', { name: 'Data sources' })).toHaveAttribute('href', '/data-sources');
 	await footer.getByRole('link', { name: 'Privacy notice' }).click();
 	await expect(page).toHaveURL('/privacy');
-	await page.getByRole('link', { name: 'Water Management, home' }).click();
+	await page.getByRole('link', { name: 'Integrated Catchment - Water Balance Tool, home' }).click();
 	await expect(page).toHaveURL('/');
 
 	await page.goto('/login');
@@ -228,7 +228,7 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 	const html = await res.text();
 	expect(html).toMatch(/<h1[^>]*>Data sources and credits<\/h1>/);
 	for (const text of [
-		'This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022)',
+		'This product [Integrated Catchment - Water Balance Tool] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022)',
 		'The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30',
 		'© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium',
 		'© Protomaps © OpenStreetMap contributors',

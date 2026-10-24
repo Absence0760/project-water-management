@@ -111,7 +111,7 @@ describe('the self-service reset', () => {
 		const mail = lastMailTo(u.email)!;
 		const sast = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Africa/Johannesburg' }).format(row.effective_at);
 		expect(mail.text).toContain(`${sast} SAST`);
-		expect(mail.subject).toMatch(/^Two-step sign-in will be removed on \d{1,2} \w{3} \d{4} — Water Management$/);
+		expect(mail.subject).toMatch(/^Two-step sign-in will be removed on \d{1,2} \w{3} \d{4} — IC-WBT$/);
 		expect(mail.html).toContain('/mfa-reset/cancel?token=');
 
 		// The Account page sees it; the factor still works through the wait.
@@ -137,7 +137,7 @@ describe('the self-service reset', () => {
 		expect((await anon('GET', '/auth/me', undefined, u.cookie)).status).toBe(401);
 		// The completion email, once.
 		expect(mailCount(u.email)).toBe(sent + 1);
-		expect(lastMailTo(u.email)!.subject).toBe('Two-step sign-in was removed — Water Management');
+		expect(lastMailTo(u.email)!.subject).toBe('Two-step sign-in was removed — IC-WBT');
 		// A second tick has nothing more to do for it.
 		await runMfaResets();
 		expect(mailCount(u.email)).toBe(sent + 1);
@@ -388,7 +388,7 @@ describe('the self-service reset: edges', () => {
 		await ask(u);
 		const linksOf = (text: string) => [...text.matchAll(/https?:\/\/\S+/g)].map((m) => m[0]);
 		const confirmMail = lastMailTo(u.email)!;
-		expect(confirmMail.subject).toBe('Confirm removing two-step sign-in — Water Management');
+		expect(confirmMail.subject).toBe('Confirm removing two-step sign-in — IC-WBT');
 		expect(linksOf(confirmMail.text)).toEqual([expect.stringMatching(/^http:\/\/localhost:7777\/mfa-reset\?token=[A-Za-z0-9_-]{43}$/)]);
 		expect((await anon('POST', '/auth/mfa/reset/confirm', { token: tokenIn(confirmMail) })).status).toBe(200);
 		const startMail = lastMailTo(u.email)!;
@@ -564,7 +564,7 @@ describe('a team admin resets a member’s second factor', () => {
 		expect((await resets(m.id)).at(-1)).toMatchObject({ end_reason: 'factor_removed' });
 		expect((await anon('POST', '/auth/mfa/reset/cancel', { token: cancel })).status).toBe(400);
 		const mail = lastMailTo(m.email)!;
-		expect(mail).toMatchObject({ kind: 'mfa_reset', subject: 'Your two-step sign-in was removed — Water Management' });
+		expect(mail).toMatchObject({ kind: 'mfa_reset', subject: 'Your two-step sign-in was removed — IC-WBT' });
 		expect(mail.text).toContain('An admin of the team “Reset WUA” removed two-step sign-in');
 		expect((await events(m.id)).at(-1)).toBe('mfa.reset_by_admin');
 		const audit = await asOwner(`SELECT actor_user_id, subject FROM audit_event WHERE project_id = $1 AND kind = 'team_member.mfa_reset'`, [projectId]);

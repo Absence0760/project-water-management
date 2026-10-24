@@ -1,6 +1,7 @@
 # Security
 
-The security model for the water-management app. The data it holds is
+The security model for the IC-WBT app (Integrated Catchment - Water Balance
+Tool; repo slug water-management). The data it holds is
 catchment configuration and farm-level water use for named farms. It is not
 financial data, but it is commercially sensitive to the client and may be
 personal information under POPIA (see [plan.md questions](./plan.md#questions-for-the-client)).

@@ -101,6 +101,8 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await ready(page);
 	const report = page.getByTestId('evidence-report');
 	await expect(report).toHaveAttribute('data-evidence-mode', 'application');
+	// The app's full name on the cover (issue #551).
+	await expect(report.getByTestId('evidence-product')).toHaveText('Integrated Catchment - Water Balance Tool (IC-WBT)');
 
 	// § 1's locality map (evidence-12): the applicant's unit named, the neighbour's parcel drawn but never named, read as text.
 	const locality = page.getByTestId('evidence-locality');

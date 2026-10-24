@@ -79,7 +79,7 @@
 	});
 </script>
 
-<svelte:head><title>{guide ? `${guide.title} · Help` : 'Guide not found'} · Water Management</title></svelte:head>
+<svelte:head><title>{guide ? `${guide.title} · Help` : 'Guide not found'} · IC-WBT</title></svelte:head>
 
 <article class="guide-page">
 	<HelpCrumbs

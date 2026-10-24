@@ -27,9 +27,9 @@ test.beforeAll(async () => {
 	test.skip(!(await mailpitUp()) && !process.env.CI, 'needs Mailpit: pnpm dev:mail:up');
 });
 
-const CONFIRM_SUBJECT = 'Confirm removing two-step sign-in — Water Management';
-const STARTED_SUBJECT = /^Two-step sign-in will be removed on \d{1,2} \w{3} \d{4} — Water Management$/;
-const DONE_SUBJECT = 'Two-step sign-in was removed — Water Management';
+const CONFIRM_SUBJECT = 'Confirm removing two-step sign-in — IC-WBT';
+const STARTED_SUBJECT = /^Two-step sign-in will be removed on \d{1,2} \w{3} \d{4} — IC-WBT$/;
+const DONE_SUBJECT = 'Two-step sign-in was removed — IC-WBT';
 
 /** An authenticator for the signed-in page's account, from the Account page; its codes come from `next()`, a later step each time. */
 async function enrol(page: Page) {
@@ -68,7 +68,7 @@ async function toCodeStep(page: Page, email: string) {
 
 /** The six-digit code in the newest code email to `to` that isn't among `seen` (206). */
 async function emailedCode(to: string, seen: readonly string[]): Promise<string> {
-	const m = await waitForEmail(to, 'Your sign-in code — Water Management', seen);
+	const m = await waitForEmail(to, 'Your sign-in code — IC-WBT', seen);
 	const code = m.text.match(/^(\d{6})$/m)?.[1];
 	expect(code, 'a six-digit code on its own line').toMatch(/^\d{6}$/);
 	return code!;
@@ -259,7 +259,7 @@ test('a team admin removes a member’s two-step sign-in: a fresh code, the conf
 	await dialog.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.locator('[data-reset-done]')).toHaveText('Two-step sign-in was removed from Phone Loser. They can sign in with their password and set it up again.');
 
-	const mail = await waitForEmail(member.user.email, 'Your two-step sign-in was removed — Water Management');
+	const mail = await waitForEmail(member.user.email, 'Your two-step sign-in was removed — IC-WBT');
 	expect(mail.to).toEqual([member.user.email]);
 	expect(mail.text).toContain('An admin of the team “Reset WUA” removed two-step sign-in');
 	expect(linkIn(mail, `${WEB_URL}/login`).pathname).toBe('/login');

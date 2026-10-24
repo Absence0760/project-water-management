@@ -446,7 +446,7 @@ describe('the daily cap and the digest', () => {
 		const mails = mailsTo(lone);
 		expect(mails.length).toBe(6);
 		const digest = mails.at(-1)!;
-		expect(digest.subject).toBe('Your alerts for Alerts — Water Management');
+		expect(digest.subject).toBe('Your alerts for Alerts — IC-WBT');
 		expect(digest.text.match(/Dam low on Farm One/g)).toHaveLength(2);
 		// Positive control for the line limit below: a small digest writes every line, and no "more".
 		expect(digest.text).not.toContain('more alerts');
@@ -965,11 +965,11 @@ describe('the project’s local day', () => {
 		await sendAlerts({ now: new Date('2026-09-26T04:30:00Z') });
 		expect(await status(sa)).toBe('sent');
 		expect(await status(kiri)).toBe('digest');
-		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest SA — Water Management']);
+		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest SA — IC-WBT']);
 		// 06:00 on the 27th in Kiritimati (16:00 UTC on the 26th): now it goes.
 		await sendAlerts({ now: new Date('2026-09-26T16:00:00Z') });
 		expect(await status(kiri)).toBe('sent');
-		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest SA — Water Management', 'Your alerts for Digest Kiritimati — Water Management']);
+		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest SA — IC-WBT', 'Your alerts for Digest Kiritimati — IC-WBT']);
 	});
 
 	it('the daily cap counts since 06:00 in the project’s zone', async () => {
@@ -1065,7 +1065,7 @@ describe('a failed send is logged without personal data', () => {
 		// The next run, with the transport back, sends the same line.
 		await sendAlerts({ now: new Date('2026-09-26T04:45:00Z') });
 		expect(await row()).toMatchObject({ status: 'sent' });
-		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest send fails — Water Management']);
+		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest send fails — IC-WBT']);
 	});
 
 	it('without the token secret nothing is sent (no unsubscribe link can be signed) and the delivery waits', async () => {

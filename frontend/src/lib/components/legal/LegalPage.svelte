@@ -14,6 +14,7 @@
 	// for anyone, signed in or not. English only: the English text is the
 	// binding version (docs/legal-status.md).
 	import type { Snippet } from 'svelte';
+	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
 	import { resolve } from '$app/paths';
 	import BrandMark from '#lib/components/layout/BrandMark.svelte';
 
@@ -27,15 +28,15 @@
 </script>
 
 <svelte:head>
-	<title>{title} · Water Management</title>
+	<title>{title} · {APP_SHORT_NAME}</title>
 	<meta name="description" content={description} />
 </svelte:head>
 
 <div class="legal">
 	<header class="top">
-		<a class="lockup" href={resolve('')} aria-label="Water Management, home">
+		<a class="lockup" href={resolve('')} aria-label="{APP_NAME}, home">
 			<BrandMark size={28} />
-			<span>Water Management</span>
+			<span>{APP_NAME}</span>
 		</a>
 	</header>
 

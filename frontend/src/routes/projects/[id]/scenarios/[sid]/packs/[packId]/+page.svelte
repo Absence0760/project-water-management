@@ -138,7 +138,7 @@
 	});
 </script>
 
-<svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}Water Management</title></svelte:head>
+<svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}IC-WBT</title></svelte:head>
 
 <main class="page applicant-pack" aria-busy={status === 'loading'} data-testid="applicant-pack" data-report-ready={(status === 'loaded' && !!view) || undefined} data-report-footer={footer}>
 	<p class="no-print"><a href={back}>← Back to the application</a></p>

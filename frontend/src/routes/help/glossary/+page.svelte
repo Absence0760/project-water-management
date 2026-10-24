@@ -23,7 +23,7 @@
 	});
 </script>
 
-<svelte:head><title>Glossary · Help · Water Management</title></svelte:head>
+<svelte:head><title>Glossary · Help · IC-WBT</title></svelte:head>
 
 <HelpCrumbs trail={[{ label: 'Help', href: resolve('help') }, { label: 'Reference' }, { label: 'Glossary' }]} />
 <header class="head">

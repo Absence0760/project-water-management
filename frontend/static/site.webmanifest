@@ -1,6 +1,6 @@
 {
-  "name": "Water Management",
-  "short_name": "Water Mgmt",
+  "name": "Integrated Catchment - Water Balance Tool",
+  "short_name": "IC-WBT",
   "icons": [
     {
       "src": "/icon-192.png",

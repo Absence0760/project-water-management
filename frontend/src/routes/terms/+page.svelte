@@ -38,7 +38,7 @@
 
 <LegalPage
 	title="Terms of use"
-	description="The terms for using Water Management, the catchment water-balance modelling service."
+	description="The terms for using Integrated Catchment - Water Balance Tool (IC-WBT), the catchment water-balance modelling service."
 	effective={legalEffective()}
 	{sections}
 >
@@ -52,7 +52,7 @@
 	<h2 id="agreement">1. This agreement</h2>
 	<p>
 		These terms are an agreement between <strong>Jared Howard</strong>, a sole proprietor based in Virginia, United States (“we”,
-		“us”), and you, the person using Water Management (“the service”), or the organisation you use it for. By creating an account,
+		“us”), and you, the person using Integrated Catchment - Water Balance Tool (IC-WBT, “the service”), or the organisation you use it for. By creating an account,
 		accepting an invitation or otherwise using the service, you accept these terms and our
 		<a href={resolve('privacy')}>privacy notice</a>. If you use the service for an organisation, you confirm you may accept these terms
 		for it. If you don’t accept them, don’t use the service.
@@ -60,7 +60,7 @@
 
 	<h2 id="service">2. The service</h2>
 	<p>
-		Water Management models a catchment’s water balance day by day: rainfall and runoff, farm dams, irrigation supply and demand,
+		IC-WBT models a catchment’s water balance day by day: rainfall and runoff, farm dams, irrigation supply and demand,
 		transfers, and the river’s flow against its ecological reserve. It lets an organisation build and calibrate a model, run it,
 		compare scenarios, publish results to its members, and let each farmer see their own farm. We may change, add or remove
 		features, and we will try to give notice of changes that remove something you rely on.
@@ -166,7 +166,7 @@
 	<h2 id="ours">10. Our software</h2>
 	<p>
 		The service’s source code is published under the MIT License, which governs that code. These terms govern your use of the
-		hosted service we run: the right to use it, not ownership of it, the Water Management name, or anyone else’s content in it.
+		hosted service we run: the right to use it, not ownership of it, the IC-WBT name, or anyone else’s content in it.
 		Feedback you give us may be used without any obligation to you.
 	</p>
 

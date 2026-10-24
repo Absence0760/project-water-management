@@ -8,9 +8,9 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe('siteLink', () => {
 	it('joins SITE_URL, path and token, tolerating a trailing slash', () => {
-		vi.stubEnv('SITE_URL', 'https://water-management.jaredhoward.com/');
-		expect(siteLink('/reset-password', TOKEN)).toBe(`https://water-management.jaredhoward.com/reset-password?token=${TOKEN}`);
-		expect(siteLink('/register', TOKEN, 'invite')).toBe(`https://water-management.jaredhoward.com/register?invite=${TOKEN}`);
+		vi.stubEnv('SITE_URL', 'https://icwbt.jaredhoward.com/');
+		expect(siteLink('/reset-password', TOKEN)).toBe(`https://icwbt.jaredhoward.com/reset-password?token=${TOKEN}`);
+		expect(siteLink('/register', TOKEN, 'invite')).toBe(`https://icwbt.jaredhoward.com/register?invite=${TOKEN}`);
 	});
 
 	it('falls back to the local dev site', () => {
@@ -23,19 +23,19 @@ describe('email templates', () => {
 	const url = `http://localhost:7777/reset-password?token=${TOKEN}`;
 
 	it.each([
-		['verify', verifyEmailMail('ann@example.com', url), /Confirm your email address — Water Management/, /48 hours/],
-		['verify (no locale chosen: English)', verifyEmailMail('ann@example.com', url, null), /Confirm your email address — Water Management/, /48 hours/],
-		['reset', resetPasswordMail('ann@example.com', url), /Reset your password — Water Management/, /1 hour/],
+		['verify', verifyEmailMail('ann@example.com', url), /Confirm your email address — IC-WBT/, /48 hours/],
+		['verify (no locale chosen: English)', verifyEmailMail('ann@example.com', url, null), /Confirm your email address — IC-WBT/, /48 hours/],
+		['reset', resetPasswordMail('ann@example.com', url), /Reset your password — IC-WBT/, /1 hour/],
 		[
 			'invite',
 			inviteMail('ann@example.com', url, 'Ben', { kind: 'project', name: 'Kloof', role: 'viewer' }),
-			/Ben invited you to Water Management/,
+			/Ben invited you to IC-WBT/,
 			/7 days/
 		],
 		[
 			'invite (existing unverified account)',
 			inviteMail('ann@example.com', url, 'Ben', { kind: 'project', name: 'Kloof', role: 'viewer' }, 'confirm'),
-			/Ben invited you to Water Management/,
+			/Ben invited you to IC-WBT/,
 			/48 hours/
 		]
 	])('%s: subject, link and expiry in both the HTML and the text alternative', (_name, mail, subject, expiry) => {
@@ -43,7 +43,8 @@ describe('email templates', () => {
 		expect(mail.subject).toMatch(subject);
 		expect(mail.text).toContain(url);
 		expect(mail.text).toMatch(expiry);
-		expect(mail.text).toContain('Water Management');
+		expect(mail.text).toContain('— Integrated Catchment - Water Balance Tool (IC-WBT)');
+		expect(mail.html).toContain('— Integrated Catchment - Water Balance Tool (IC-WBT)</p>');
 		expect(mail.text).not.toMatch(/<[a-z]/i);
 		expect(mail.html).toContain(`href="${url}"`);
 		expect(mail.html).toMatch(expiry);
@@ -69,7 +70,7 @@ describe('email templates', () => {
 
 	it('asks an existing unverified account to confirm, and says how to take a squatted address back', () => {
 		const mail = inviteMail('x@example.com', url, 'A', { kind: 'team', name: 'T', role: 'member' }, 'confirm');
-		expect(mail.text).toContain('There is already a Water Management account for x@example.com');
+		expect(mail.text).toContain('There is already an IC-WBT account for x@example.com');
 		expect(mail.text).toContain(`Confirm email and accept: ${url}`);
 		expect(mail.text).toMatch(/Forgot password/);
 		expect(mail.text).not.toMatch(/Create account/);
@@ -132,7 +133,7 @@ describe('reportReadyMail', () => {
 	const url = 'https://water.example.com/projects/p/reports/j';
 	it('links to the sign-in-gated download page, names the run and pages, and escapes user text', () => {
 		const m = reportReadyMail('ann@example.com', url, { projectName: 'Upper <Kleinberg>', runName: 'Baseline & wet', pages: 9, requestedBy: 'Bob', scheduled: false });
-		expect(m.subject).toBe('Catchment report: Upper <Kleinberg> — Water Management');
+		expect(m.subject).toBe('Catchment report: Upper <Kleinberg> — IC-WBT');
 		expect(m.text).toContain('Bob made a PDF of the report for the run Baseline & wet (9 pages).');
 		expect(m.text).toContain(`Download the report: ${url}`);
 		expect(m.text).toContain('The PDF is kept for 7 days.');
@@ -190,7 +191,7 @@ describe('farmer invite email (WP-2.2)', () => {
 		const mail = farmerInviteMail('farmer@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'] }, 'confirm');
 		expect(mail.text).toContain('Confirm email and accept');
 		expect(mail.text).toMatch(/48 hours/);
-		expect(mail.text).toContain('There is already a Water Management account for farmer@example.com');
+		expect(mail.text).toContain('There is already an IC-WBT account for farmer@example.com');
 	});
 
 	it('defaults to English (the Afrikaans wording is in templates.af.test.ts)', () => {
@@ -272,8 +273,8 @@ describe('packNoticeMail (issue #71)', () => {
 describe('accountDeletedMail (issue #112, POPIA s24(4))', () => {
 	it('says what was deleted, what stays without the name and what keeps it, and names what the person left', () => {
 		const m = accountDeletedMail('a@example.com', { projects: ['Kloof', 'Vaal'], teams: ['Hydro team'] });
-		expect(m).toMatchObject({ kind: 'account_deleted', to: 'a@example.com', subject: 'Your account has been deleted — Water Management' });
-		expect(m.text).toContain('As you asked, we deleted the Water Management account for a@example.com.');
+		expect(m).toMatchObject({ kind: 'account_deleted', to: 'a@example.com', subject: 'Your account has been deleted — IC-WBT' });
+		expect(m.text).toContain('As you asked, we deleted the IC-WBT account for a@example.com.');
 		expect(m.text).toContain('Deleted with it: your name, email address and password');
 		expect(m.text).toContain('You are no longer a member of Kloof, Vaal and Hydro team.');
 		expect(m.text).toContain('Kept without your name:');
@@ -296,7 +297,7 @@ describe('erratumNoticeMail (issue #103, the known-defect procedure)', () => {
 
 	it('names the bug, when it changes results, the affected runs and the fix, and links the project’s runs', () => {
 		const m = erratumNoticeMail('o@example.com', base);
-		expect(m).toMatchObject({ kind: 'erratum_notice', to: 'o@example.com', subject: 'Known engine bug ER-7 may affect Upper dam — Water Management' });
+		expect(m).toMatchObject({ kind: 'erratum_notice', to: 'o@example.com', subject: 'Known engine bug ER-7 may affect Upper dam — IC-WBT' });
 		expect(m.text).toContain('We confirmed a bug in the model engine (ER-7, severity medium): The dam was topped up short.');
 		expect(m.text).toContain('It changes results only when: A transfer into a dam that loses water.');
 		expect(m.text).toContain('3 runs in Upper dam were made by engine 0.16.0 up to (not including) 0.19.0, which had this bug.');
@@ -328,7 +329,7 @@ describe('mfaResetMail (205_mfa_recovery, recovering a lost second factor)', () 
 
 	it('the confirmation link: nothing changes until it is followed, it starts a 3-day wait, and someone else has the password', () => {
 		const m = mfaResetMail('a@example.com', { stage: 'confirm', url: `http://localhost:7777/mfa-reset?token=${TOKEN}` });
-		expect(m).toMatchObject({ kind: 'mfa_reset', to: 'a@example.com', subject: 'Confirm removing two-step sign-in — Water Management' });
+		expect(m).toMatchObject({ kind: 'mfa_reset', to: 'a@example.com', subject: 'Confirm removing two-step sign-in — IC-WBT' });
 		expect(m.text).toContain('3-day wait');
 		expect(m.text).toContain(`Confirm and start the 3-day wait: http://localhost:7777/mfa-reset?token=${TOKEN}`);
 		expect(m.text).toContain('This link expires in 1 hour and works once.');
@@ -340,7 +341,7 @@ describe('mfaResetMail (205_mfa_recovery, recovering a lost second factor)', () 
 		// 21:30 UTC on the 11th is 23:30 on the 11th in South Africa: the 12th in Kiritimati, still the 11th in Pago Pago.
 		expect(resetWhen(at)).toEqual({ date: '11 Oct 2026', time: '23:30 SAST' });
 		const m = mfaResetMail('a@example.com', { stage: 'started', cancelUrl: `http://localhost:7777/mfa-reset/cancel?token=${TOKEN}`, effectiveAt: at });
-		expect(m.subject).toBe('Two-step sign-in will be removed on 11 Oct 2026 — Water Management');
+		expect(m.subject).toBe('Two-step sign-in will be removed on 11 Oct 2026 — IC-WBT');
 		expect(m.text).toContain('Two-step sign-in will be removed from your account on 11 Oct 2026 at 23:30 SAST');
 		expect(m.text).toContain('was confirmed from this inbox');
 		expect(m.text).toContain(`Not you? Cancel it: http://localhost:7777/mfa-reset/cancel?token=${TOKEN}`);
@@ -355,11 +356,11 @@ describe('mfaResetMail (205_mfa_recovery, recovering a lost second factor)', () 
 
 	it('the end, and a team admin’s reset: what happened, signed out everywhere, how to set it up again', () => {
 		const done = mfaResetMail('a@example.com', { stage: 'done' });
-		expect(done.subject).toBe('Two-step sign-in was removed — Water Management');
+		expect(done.subject).toBe('Two-step sign-in was removed — IC-WBT');
 		expect(done.text).toContain('every device was signed out');
 		expect(done.text).toContain('Sign in: http://localhost:7777/login');
 		const admin = mfaResetMail('a@example.com', { stage: 'admin', team: 'Upper <WUA>' });
-		expect(admin.subject).toBe('Your two-step sign-in was removed — Water Management');
+		expect(admin.subject).toBe('Your two-step sign-in was removed — IC-WBT');
 		expect(admin.text).toContain('An admin of the team “Upper <WUA>” removed two-step sign-in');
 		expect(admin.html).toContain('Upper &lt;WUA&gt;');
 	});
@@ -384,7 +385,7 @@ describe('the two-step sign-in code by email (206)', () => {
 		for (const reason of ['sign-in', 'confirm', 'enrol'] as const) {
 			const m = mfaCodeMail('ann@example.com', '012345', reason);
 			expect(m.kind).toBe('mfa_code');
-			expect(m.subject).toBe('Your sign-in code — Water Management');
+			expect(m.subject).toBe('Your sign-in code — IC-WBT');
 			expect(m.subject).not.toContain('012345');
 			expect(m.text).toMatch(/^012345$/m);
 			expect(m.html).toContain('>012345</p>');
@@ -396,7 +397,7 @@ describe('the two-step sign-in code by email (206)', () => {
 	});
 
 	it('says what the code is for, so one nobody asked for stands out', () => {
-		expect(mfaCodeMail('ann@example.com', '012345', 'sign-in').text).toContain('Someone signed in to the Water Management account ann@example.com with its password');
+		expect(mfaCodeMail('ann@example.com', '012345', 'sign-in').text).toContain('Someone signed in to the IC-WBT account ann@example.com with its password');
 		expect(mfaCodeMail('ann@example.com', '012345', 'sign-in').text).toContain('someone knows your password');
 		expect(mfaCodeMail('ann@example.com', '012345', 'enrol').text).toContain('turn on sign-in codes by email');
 		expect(mfaCodeMail('ann@example.com', '012345', 'confirm').text).toContain('To confirm what you are doing');

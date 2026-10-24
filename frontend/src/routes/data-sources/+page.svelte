@@ -16,13 +16,13 @@
 
 <LegalPage
 	title="Data sources and credits"
-	description="The third-party data Water Management uses, the licence each is used under, and the credit each licence asks for."
+	description="The third-party data Integrated Catchment - Water Balance Tool (IC-WBT) uses, the licence each is used under, and the credit each licence asks for."
 	effective={licencesReadLine()}
 	{sections}
 >
 	<h2 id="about">About these credits</h2>
 	<p>
-		Water Management draws on data published by others. Each dataset below is used under its publisher’s licence, and each credit
+		Integrated Catchment - Water Balance Tool (IC-WBT) draws on data published by others. Each dataset below is used under its publisher’s licence, and each credit
 		is worded as that licence asks. The data is provided as its publishers provide it; how the service treats data from others is
 		in section 9 of the <a href={resolve('terms#third-party')}>terms of use</a>. A deployment uses only the datasets its operator has
 		loaded, so a project may never show some of them.

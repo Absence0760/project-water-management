@@ -102,7 +102,7 @@
 	});
 </script>
 
-<svelte:head><title>{category ? `${title} · Glossary` : 'Topic not found'} · Help · Water Management</title></svelte:head>
+<svelte:head><title>{category ? `${title} · Glossary` : 'Topic not found'} · Help · IC-WBT</title></svelte:head>
 
 <div class="topic-page">
 	<HelpCrumbs

@@ -427,8 +427,11 @@ other signed-out route still goes to `/login?next=`.
   the page's own address, `hreflang` alternates name every language's (and
   `x-default` → `/welcome`), and `og:locale` is the language's (`af_ZA`).
 - **Frame.** Outside the app shell, like the sign-in pages: a slim header (the
-  mark and name, the language switch, **Sign in**), the page, a footer. A
-  reading page with a 1200 px column; on a phone the header keeps the mark only.
+  mark and the short name, IC-WBT; the language switch, **Sign in**), the
+  page, a footer with the full name. A reading page with a 1200 px column; on
+  a phone the header keeps the mark only. The hero's kicker is the full name,
+  and the tab title is "IC-WBT: daily water balance for a catchment" (the
+  description translated, [§ Language](#language), The app's name).
 - **Sections**, in order: the hero (headline, lede, **Sign in** and **Create an
   account**, the animated catchment); *From rainfall to river* (five steps over
   a pinned diorama, each with a small chart); *Try a what-if* (two sliders over
@@ -481,7 +484,7 @@ screen, and open from 601 px. The footer's links (Home, the three pages, and
 **Contact**, which goes to the terms' contact section, `/terms#contact`, so
 the address is written once) start in line with the text column. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). Each has its
-own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
+own `<title>` (*Privacy notice · IC-WBT*, …) in the HTML itself:
 `app.html`'s fallback title sits after the page's head, since the document's
 title is the first `<title>` and these pages run no script to correct it
 (WCAG 2.4.2; `legal.spec.ts`). English
@@ -1270,7 +1273,7 @@ role, freshness, Add data) and each tab's own header:
   the first half of a 360 × 740 screen (issue #521 round 5: it started at
   429–579 px, the header taking 48–78 % of the first screen). The
   catchment's name and your role go in the app's phone bar in place of the
-  "Water Management" word mark (the logo stays, linking to the projects;
+  "IC-WBT" word mark (the logo stays, linking to the projects;
   `layout/sidebar.svelte.ts` `fillPhoneTitle`), the name in at most two
   lines with the whole name in its title. **How this page works** is a "?"
   after the title (36 px, its target 44 px), named in words. The pills share
@@ -11578,6 +11581,26 @@ address, reset password, the farmer invite, the alert emails and their
 digest). The modeller workspace stays English, and so do the public
 methods and verify pages (their readers are assessors).
 
+- **The app's name** (issue #551). It is **Integrated Catchment - Water
+  Balance Tool**, abbreviated **IC-WBT** (it was Water Management), and it is
+  a proper noun in every language: neither the full name nor the
+  abbreviation is translated, only a descriptive tagline beside it (the
+  landing page's "daily water balance for a catchment"). Messages carry it as
+  a placeholder, `{app}` on the site and `{product}` in the emails, so a
+  later rename touches no translation. The full name goes where there is
+  room: the landing page's hero kicker and footer, its `og:site_name`, the
+  sign-in pages' brand panel, the legal pages' header and first mention,
+  the report and evidence-pack covers, the web manifest and every email's
+  sign-off ("— Integrated Catchment - Water Balance Tool (IC-WBT)"). IC-WBT
+  goes where space is tight: the app's header and the sign-in and landing
+  headers, the browser tab's suffix ("Account · IC-WBT"), email subjects and
+  sentences, the sender name, the authenticator app's label and the
+  recovery-codes file (`icwbt-recovery-codes.txt`). Both live in
+  `frontend/src/lib/brand.ts` and `backend/src/mail/templates.ts`
+  (`PRODUCT`, `PRODUCT_FULL`); `lib/brand.test.ts` fails if "Water
+  Management" comes back in the frontend, the backend or the brand sources.
+  The repo, package, database and AWS names keep `water-management`.
+
 - **The language table.** Every language the site, the emails and the
   database know is one entry in `packages/engine/src/languages.ts`
   (`LANGUAGES`: code, own name, Intl locale, decimal mark; issue #58). The
@@ -12095,7 +12118,7 @@ signed in or out, for someone outside the project, on a phone first.
   period chosen, from the same answer: no second renderer, no new data, and
   nothing a link doesn't already show (the counts are `catchment_view`'s
   last 30 days, season or whole run per EWR site; the chart is the same
-  k-ruled series). On paper: "Water Management · Member summary", the
+  k-ruled series). On paper: "IC-WBT · Member summary", the
   catchment's name, the period with its dates, the published line and
   "Printed on *date*." (the day of the print, set on `beforeprint`), the caveat; the WUA's notice (level, words, the %
   beside them, who published it); each EWR site's reserve over

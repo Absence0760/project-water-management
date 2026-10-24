@@ -37,6 +37,7 @@
 	import { localIsoDate } from '#lib/format/number.js';
 	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
 	import { t, wordsLang } from '#lib/i18n/locale.svelte.js';
+	import { APP_SHORT_NAME } from '#lib/brand.js';
 
 	let token = $state<string | null>(null);
 	let kind: 'scenario' | 'pack' | null = null;
@@ -121,7 +122,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: title })}</title>
+	<title>{t('{page} · {app}', { page: title, app: APP_SHORT_NAME })}</title>
 	<meta name="robots" content="noindex, nofollow" />
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
@@ -131,7 +132,7 @@
 	     row on a 360 px phone with the EN | AF switch beside it. -->
 	<header class="share-header screen-only">
 		<div class="header-in">
-			<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">Water Management</span><span class="tag">{t('Shared view')}</span></span></span>
+			<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">{APP_SHORT_NAME}</span><span class="tag">{t('Shared view')}</span></span></span>
 			<LanguageSwitch compact />
 		</div>
 	</header>
