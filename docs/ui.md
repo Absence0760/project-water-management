@@ -6628,13 +6628,24 @@ two.
   value and inputs; for the MAR ratio the last run's natural MAR ÷ the table
   MAR (the last run's own s when it used the tables, else an estimate from its
   mean natural flow, so labelled; "Run the model to see it" without a run).
-  Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
-  **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
-  ten points, m³/s), each before scaling, and under them **The tables scaled
-  to the model: each value × s** (an open fold, its line saying "once the
-  tables and the scale factor are known" until then; `settings/ScaledEwrTablesView.svelte`,
-  `ewrDailySource.ts scaledEwrTables`, issue #90 B1 gap a): the tables the
-  method reads × s, read only, as soon as s is known (the area ratio at once,
+  Under the percentile tables, **The EWR is the Reserve table** (engine ≥
+  1.90.0, issue #552), first in that field grid, picks `reserveTable`:
+  *Total Reserve flow (with high flows; the default)* or *Reserve flow without
+  high flows*.
+  Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the three
+  **Natural flow**, **Total Reserve flow** and **Reserve flow without high
+  flows percentile tables** (12 rows × the ten points, m³/s; one set of names,
+  `ewrDailySource.ts DAILY_TABLE_LABELS`, for the captions, the paste choices
+  and the scaled view), each before scaling: the Reserve table the daily EWR
+  reads captioned *the daily EWR*, the other folded into its line ("not used
+  by the daily EWR · entered / empty", `common/Fold`), and
+  under them **The tables scaled to the model: each value × s** (an open fold,
+  its line saying "once the tables and the scale factor are known" until then;
+  `settings/ScaledEwrTablesView.svelte`, `ewrDailySource.ts scaledEwrTables`,
+  issue #90 B1 gap a): the tables the method reads × s (under the percentile
+  tables all three, under a line naming them the EWR at the outlet and which
+  Reserve table the daily EWR reads, or that it isn't entered yet; that table
+  is marked *the daily EWR* and the other *not used by the daily EWR*), read only, as soon as s is known (the area ratio at once,
   the MAR ratio from the last run, exact or estimated as the factor line
   says), else a line saying they show once the tables and s are known.
   The TAB row's cells are as slim as the pragmatic row's, so all twelve
@@ -6650,10 +6661,11 @@ two.
   February 28 days) in a preview with **Use these values** (which fills the TAB
   flows and the table MAR from its `MAR =` line; under the percentile tables
   the button is **Use its MAR only**, since a .tab and a .rul from one
-  determination go together) and Cancel; a `.rul` fills both percentile
-  tables (the total Reserve and the natural duration curve, converted from Mm³
-  a month when its unit line says so), asking first over tables already
-  there. A file never changes **Daily EWR from**: a `.rul` loaded under the
+  determination go together) and Cancel; a `.rul` fills the three percentile
+  tables (the natural duration curves, the total Reserve and the Reserve flows
+  without high flows, converted from Mm³ a month when its unit line says so;
+  a file without the last block empties that table, and says so when it is
+  the one the daily EWR reads), asking first over tables already there. A file never changes **Daily EWR from**: a `.rul` loaded under the
   TAB file fills the percentile tables and says the daily EWR still comes
   from the DRM TAB file, with a **Use the percentile tables** button to switch
   on the person's say (`ewrDailySource.ts rulLoad`); a `.tab` under the
@@ -6661,8 +6673,7 @@ two.
   dialog (`model/GridPasteDialog.svelte` with `wholeTable`, which shows only
   its layout line; `settings/ewrPaste.ts`): the 12 TAB flows (a row or a
   column, read by `parseMonthlyRow` as before) or, under the percentile
-  tables, a choice of **The natural flow table** or **The total Reserve
-  table** and a percentile table (as the rule tables' paste: 12 month rows,
+  tables, a choice of the three tables by the same names, and a percentile table (as the rule tables' paste: 12 month rows,
   optional % heading). Its preview lists every value it changes, Now and
   Pasted, before **Apply**; **Download the table as CSV** gives the table to
   fill in, and that CSV pastes back unchanged. The **Expected format** (`settings/DrmFormatHelp.svelte`,
@@ -6677,8 +6688,11 @@ two.
   EWR at the outlet**, in this same editor, refused in the same words
   (issue #460, [scenarios.md](./scenarios.md)). Run results say which EWR a run used: the *EWR not met* stat on
   Runs & results and in the printed report (the same `RunSummaryView`)
-  carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)" or "EWR:
-  the pragmatic EWR", and the run's warnings repeat it. Under the run
+  carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)", "EWR: the
+  DRM percentile tables (Reserve flows without high flows) × …" or "EWR: the
+  pragmatic EWR", and the run's warnings repeat it; the printed report's
+  Inputs table has a **Daily EWR at the outlet** row (the source, its Reserve
+  table and scaling) on a run that had one. Under the run
   summary on Runs & results, a run judged by a DRM table has a closed
   **The daily EWR's tables as this run read them (× s = …)**
   (`runs/RunScaledEwrTables.svelte`, its own chunk): its settings snapshot's
@@ -6690,12 +6704,14 @@ two.
   and the seasonal outlook's days-below measure, the licence impact board,
   the evidence report's days-below rows and the export workbook's EWR grid)
   it uses `ewr/notMet.ts dailyEwrName`: "the pragmatic EWR", or "the daily
-  EWR from the DRM TAB file / percentile tables"; runs compared with
+  EWR from the DRM TAB file / percentile tables" (… "percentile tables
+  without high flows" when that table was read); runs compared with
   different sources are "each run's daily EWR" (`dailyEwrNameOf`), each
   run's own named in the chart's legend and caption. The EWR flow chart
   (River & reserve, the printed report) labels the outlet's EWR line as the
-  run stored it, "EWR from the DRM TAB file (scaled)" or "… percentile tables
-  (scaled)" (the engine's `OUTLET_EWR_LABELS`), else "Pragmatic EWR", and its
+  run stored it, "EWR from the DRM TAB file (scaled)", "… percentile tables
+  (scaled)" or "… percentile tables, without high flows (scaled)" (the
+  engine's `outletEwrSeriesLabel`), else "Pragmatic EWR", and its
   caption counts the days below "the daily EWR line (from the DRM TAB file)"
   (`runs/flowSeries.ts ewrLineWords`); beside a rule table at another site
   it is headed **Flow vs daily EWR**. A DRM source counts as a daily test set

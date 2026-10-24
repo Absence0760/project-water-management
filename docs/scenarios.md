@@ -270,14 +270,18 @@ and with a harsher table. A rule's `ewrTrigger` can be set **only** here
 (issue #523 B4, § The EWR-keeping rules below).
 And from engine 1.80.0 (issue #460) `ewrDailySource`: the daily outlet
 EWR's source, whole (`method` `pragmatic` | `tab` | `percentile`, `scaling`
-`mar` | `area`, the table MAR or area, and the DRM tables it reads), or
+`mar` | `area`, the table MAR or area, the DRM tables it reads and, from
+engine 1.90.0 (issue #552), the `.rul`'s Reserve flows without high flows
+`lowFlowPctM3s` and `reserveTable`, which Reserve table the percentile method
+reads), or
 `null` for the pragmatic EWR ([model.md §2.9f](./model.md)); a `null` over
 no source changes nothing. So "judge this application by the TAB file
 instead of the pragmatic EWR" is a scenario, not a copy of the project. The
 tables travel in the op's value, so a base that never had them can still be
 judged by them; the value is checked by the engine's `ewrDailySourceIssues`,
 as a settings save is, and a source the run couldn't use (a TAB method with
-no TAB flows, the percentile method missing a table, a MAR scaling without
+no TAB flows, the percentile method missing the natural table or its chosen
+Reserve table, a MAR scaling without
 the table MAR, an area scaling without the table area) is refused as the
 op's problem rather than left for the run to drop back to the pragmatic EWR
 with a warning. The pragmatic method with tables half entered is accepted,
@@ -1151,8 +1155,9 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   hears it once. Described as
   "Daily EWR at the outlet: the pragmatic EWR → the DRM TAB file, scaled by
   MAR (table 12.5 Mm³/a)" (the engine's `describeEwrDailySource`); the
-  compare page's Inputs that differ lists the method, scaling and table
-  changes (`ewrDailySourceChanges`). A baseline assumption, like every
+  compare page's Inputs that differ lists the method, Reserve table ("Reserve
+  table total Reserve flows → Reserve flows without high flows"), scaling and
+  table changes (`ewrDailySourceChanges`). A baseline assumption, like every
   `settings.set`.
 - **Scale demand** (`demand.scale`): whose demand (farms' irrigation or
   other water users'), the new demand as a % of what they'd take (0–200 %),
