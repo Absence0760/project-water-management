@@ -402,7 +402,20 @@ curve) of its start-of-day storage, so float noise in an empty dam becomes a
 visible area (an exponent of 0.62 turns 1e-13 m³ into 4e-4 m²), and the
 rain on it and its evaporation follow. On a day both sides started with a
 storage within 1e-6 m³ of 0, those three columns aren't compared; the
-storage itself still is. Likewise `ewr_binding_site` labels a day with a
+storage itself still is, net of the water a noise area gained. That rain
+can grow the noise past 1e-6 m³ over a wet spell (dense seed 206: an
+exponent of 0.53 turned 8.5e-14 m³ into 1.2e-5 m³ in two days, and the next
+day's area 0.03 m²). So each side carries the water its noise areas gained
+(rain on the dam less evaporation on a noise day, never more than its
+storage, until the dam lets it go), the next noise day is judged on the
+storage net of it, and the storage column compares the net storage
+(`_dam_noise` in diff.py). The water then goes on to real flows (dense 206:
+it stood in for 1.28e-4 m³ of borehole pumping, and the depletion lag spread
+that), so a case's tolerance is widened by exactly the water the two sides'
+noise areas gained apart: Σ |Δ(rain on the dam − evaporation)| over the
+noise days. It is 0 in a case without such an episode (177 of 180 station
+cases; the other two under 1e-20 m³), never a fixed amount, and a real
+difference is still bigger than the noise water it rides on. Likewise `ewr_binding_site` labels a day with a
 charge, so on a day both sides' charge on the unit is within 1e-6 m³ of 0
 (float noise either side of the attribution's 10⁻¹² cut-off: dense seed
 1101, a 1e-8 m³ charge on 12 000 m³ of flow) the label isn't compared; the

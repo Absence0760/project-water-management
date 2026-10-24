@@ -70,6 +70,46 @@ def _num(v):
     return math.nan if v is None else float(v)
 
 
+def _dam_noise(node, ps: dict, es: dict):
+    """An empty dam's float noise (verify/README.md § Tolerance). A dam whose
+    start-of-day storage is within ATOL of 0 on both sides has a noise-level
+    area, so its area, the rain on it and its evaporation that day are noise.
+    Over a wet spell that rain grows the storage past ATOL (an exponent of
+    0.53 turns 8.5e-14 m³ into 1.2e-5 m³ in two days: dense seed 206), and
+    the next days' areas follow. So the water that came from a noise area is
+    carried as noise, never more than the storage, until the dam lets it go:
+    each side's storage net of it decides the next noise day and is what the
+    storage comparison reads. Returns (noise days, net storage python,
+    net storage engine, and the water the two sides' noise areas gained
+    apart: Σ |Δ(rain on the dam − evaporation)| over the noise days)."""
+    qa, qb = ps[(node, "dam_storage")], es[(node, "dam_storage")]
+    n = len(qa)
+
+    def flow(src, key, d):
+        v = src.get((node, key))
+        x = _num(v[d]) if v is not None and d < len(v) else 0.0
+        return 0.0 if math.isnan(x) else x
+
+    net_a, net_b = [_num(v) for v in qa], [_num(v) for v in qb]
+    carry = [0.0, 0.0]
+    days = set()
+    apart = 0.0
+    for d in range(n):
+        noise = d > 0 and abs(net_a[d - 1]) <= ATOL and abs(net_b[d - 1]) <= ATOL
+        gains = [0.0, 0.0]
+        if noise:
+            days.add(d)
+            gains = [flow(src, "rain_on_dam", d) - flow(src, "dam_evaporation", d) for src in (ps, es)]
+            apart += abs(gains[0] - gains[1])
+        for j, (q, net) in enumerate(((qa, net_a), (qb, net_b))):
+            s_ = _num(q[d])
+            c = carry[j] + gains[j]
+            c = min(max(c, 0.0), max(s_, 0.0)) if not math.isnan(s_) else 0.0
+            carry[j] = c
+            net[d] = s_ - c
+    return days, net_a, net_b, apart
+
+
 def compare(py: dict, eng: dict) -> dict:
     """Per (nodeId, key): max abs diff, scale and whether it agrees."""
     res = {"window": None, "columns": {}, "only_python": [], "only_engine": []}
@@ -78,6 +118,13 @@ def compare(py: dict, eng: dict) -> dict:
         return res
     ps = {(s["nodeId"], s["key"]): s["values"] for s in py["series"]}
     es = {(s["nodeId"], s["key"]): s["values"] for s in eng["series"]}
+    # Each dam's float-noise episodes, and the water they put into the two sides apart (README § Tolerance):
+    # whatever a dam then does with that water (draws it for demand, pumps less, spills it), no column of the
+    # case can be further apart than it, so it widens this case's tolerance by exactly that amount; 0 in a case
+    # with no such episode.
+    dam_noise = {nid: _dam_noise(nid, ps, es) for nid, key in ps if key == "dam_storage" and (nid, key) in es}
+    noise_water = sum(v[3] for v in dam_noise.values())
+    res["noise_water"] = noise_water
     for k in sorted(set(ps) | set(es), key=lambda k: (k[1], k[0] or "")):
         if k[1] in NOT_COMPARED:
             continue
@@ -104,9 +151,11 @@ def compare(py: dict, eng: dict) -> dict:
         # noise-level storage don't compare those three (the storage itself
         # is compared, README § Tolerance).
         noise_days = set()
-        if k[1] in ("dam_area", "rain_on_dam", "dam_evaporation") and (k[0], "dam_storage") in ps and (k[0], "dam_storage") in es:
-            qa, qb = ps[(k[0], "dam_storage")], es[(k[0], "dam_storage")]
-            noise_days = {d for d in range(1, len(qa)) if abs(_num(qa[d - 1])) <= ATOL and abs(_num(qb[d - 1])) <= ATOL}
+        if k[1] in ("dam_area", "rain_on_dam", "dam_evaporation", "dam_storage") and (k[0], "dam_storage") in ps and (k[0], "dam_storage") in es:
+            noise_days, net_a, net_b, _ = dam_noise[k[0]]
+            if k[1] == "dam_storage":
+                # The storage is compared net of the water that came from a noise area (README § Tolerance).
+                a, b, noise_days = net_a, net_b, set()
         # The binding site is a label of a day with a charge: a charge both
         # sides put within ATOL of 0 (float noise either side of the
         # attribution's 1e-12 cut-off) says nothing about which site binds.
@@ -125,7 +174,7 @@ def compare(py: dict, eng: dict) -> dict:
             if diff > worst:
                 worst = diff
                 worst_day = d
-        tol = ATOL + RTOL * scale
+        tol = ATOL + RTOL * scale + noise_water
         res["columns"][k] = {
             "abs": worst,
             "rel": worst / scale if scale > 0 else (0.0 if worst == 0 else math.inf),
