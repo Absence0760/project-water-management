@@ -3608,7 +3608,12 @@ role and not before it.
       tests in `check_service_image_pins.test.mjs`) refuses a workflow
       service image without a digest, one docker-compose.yml doesn't run, or
       one whose digest differs from compose's, so a Dependabot compose bump
-      fails until ci.yml's services move with it.
+      fails until ci.yml's services move with it. **Superseded (2026-10-23,
+      #570):** ci.yml had already moved off `services:` (issue #521), but
+      coverage.yml's DB job still pulled Postgres through one and ECR Public
+      refused it on #545. It now starts compose's services through
+      `scripts/ci/service-image.sh` like ci.yml, and `serviceImageProblems`
+      refuses any `services:` image at all.
 
 ## Pipelines
 

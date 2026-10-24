@@ -19,12 +19,15 @@
 // And every URL tarball in pnpm-lock.yaml (lockfileTarballProblems) keeps its
 // `integrity:` hash, its only pin.
 //
-// And CI's service containers (serviceImageProblems): every `services:` image
-// in .github/workflows/*.yml carries an @sha256 digest, and the same digest
-// docker-compose.yml gives that image:tag, so CI tests against what local dev
-// runs. Dependabot's docker-compose entry moves compose's tag and digest but
-// never a workflow's service image, so its PR fails here until ci.yml's
-// services move with it.
+// And CI's service containers (serviceImageProblems): no workflow starts one
+// through a job's `services:`. GitHub always pulls a `services:` image from
+// its own registry, before any step can intervene, and those pulls were
+// refused: Docker Hub's anonymous limit (issue #492), then ECR Public's
+// "toomanyrequests: Data limit exceeded" (issue #521, and coverage.yml's DB
+// job on #545 after ci.yml had moved). A job starts docker-compose.yml's
+// service instead, through scripts/ci/service-image.sh (pulled by the pinned
+// digest, Google's mirror first, or loaded from a cached tarball), so CI runs
+// what local dev runs and a Dependabot compose bump moves CI with it.
 //
 // The same guard holds the rest of the renderer image's pins, which have no
 // version to agree on but must stay pinned (imageProblems): every FROM
@@ -235,32 +238,18 @@ function workflowServiceImages(workflow) {
 	return out;
 }
 
-const PINNED = /^([^\s@]+:[^\s@]+)@(sha256:[0-9a-f]{64})$/;
-
 /**
- * CI's service images that aren't pinned to docker-compose.yml's digest for
- * the same image:tag: one line each. `workflows` is [{ where, text }],
- * `compose` docker-compose.yml's text.
+ * CI's service containers: one line each for every `services:` image in a
+ * workflow, since each is pulled from its registry on every run (header).
+ * `workflows` is [{ where, text }].
  */
-export function serviceImageProblems(workflows, compose) {
-	const composed = new Map();
-	for (const m of compose.matchAll(/^\s*image:\s*["']?([^"'\s#]+)["']?/gm)) {
-		const [name, digest] = m[1].split('@');
-		composed.set(name, digest ?? null);
-	}
+export function serviceImageProblems(workflows) {
 	const problems = [];
 	for (const { where, text } of workflows) {
 		for (const { line, image } of workflowServiceImages(text)) {
-			const at = `${where}:${line}`;
-			const pinned = image.match(PINNED);
-			if (!pinned) {
-				problems.push(`${at}: service image "${image}" is not pinned by digest (image:tag@sha256:…, the digest docker-compose.yml gives it)`);
-				continue;
-			}
-			const [, name, digest] = pinned;
-			if (!composed.has(name)) problems.push(`${at}: service image ${name} is not one docker-compose.yml runs; CI's services test against local dev's images`);
-			else if (composed.get(name) === null) problems.push(`${at}: docker-compose.yml names ${name} without a digest to match (image:tag@sha256:…)`);
-			else if (composed.get(name) !== digest) problems.push(`${at}: service image ${name} is at ${digest}, docker-compose.yml at ${composed.get(name)}; move ci.yml's services with compose`);
+			problems.push(
+				`${where}:${line}: service container ${image} is pulled from its registry on every run (refused before: issues #492, #521); start docker-compose.yml's service through scripts/ci/service-image.sh, as ci.yml's db-test job does`
+			);
 		}
 	}
 	return problems;
@@ -272,13 +261,12 @@ function main() {
 	const services = serviceImageProblems(
 		readdirSync(workflowDir)
 			.filter((f) => /\.ya?ml$/.test(f))
-			.map((f) => ({ where: `.github/workflows/${f}`, text: readFileSync(join(workflowDir, f), 'utf8') })),
-		readFileSync(join(root, 'docker-compose.yml'), 'utf8')
+			.map((f) => ({ where: `.github/workflows/${f}`, text: readFileSync(join(workflowDir, f), 'utf8') }))
 	);
 	if (services.length) {
 		console.error(`::error::CI service images:\n${services.join('\n')}`);
 		process.exitCode = 1;
-	} else console.log("CI service images: by docker-compose.yml's digest.");
+	} else console.log('CI service images: none pulled through `services:` (scripts/ci/service-image.sh).');
 	const pins = readPins((path) => readFileSync(join(root, path), 'utf8'));
 	const problems = pinProblems(pins);
 	const image = imageProblems(readFileSync(join(root, 'backend/renderer.Dockerfile'), 'utf8'));
