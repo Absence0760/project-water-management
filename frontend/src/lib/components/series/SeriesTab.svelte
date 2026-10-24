@@ -297,7 +297,8 @@
 		const fill = resolveFlowGapFill(settings?.flowGapFill);
 		const donorKind = fill[viewing.kind]?.donor;
 		const d = donorKind ? first(donorKind) : undefined;
-		return flowFillShading(viewing.kind, v, fill, (d && values[d.id]) || null);
+		// The low-flow periods' high readings anchor nothing and are out of the donor's ratio and the clamp, as in a run (issue #567).
+		return flowFillShading(viewing.kind, v, fill, (d && values[d.id]) || null, resolveQualityFlags(settings?.qualityFlags).lowFlowPeriods);
 	});
 
 	// The per-day quality flags of a flow record Fit automatically can score (CR-18, engine ≥ 1.48.0): the classes it

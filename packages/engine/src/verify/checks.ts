@@ -1229,11 +1229,13 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		const wanted = input.settings.calibrationFlowKind;
 		const outletKind = wanted && series[wanted] ? wanted : series.flow_observed_m3s ? 'flow_observed_m3s' : 'flow_logger_m3s';
 		const cap = lowFlowThresholds(resolveQualityFlags(input.settings.qualityFlags).lowFlowPeriods, outletKind, toEpochDay(out.startDate), out.days);
+		// A gap-filled day is no reading, so the period never leaves it out (issue #567).
+		const filledDay = get.get(`null|${FLOW_FILL_COLUMNS.observed_flow.code.key}`);
 		let observed = 0;
 		let modelBelow = 0;
 		for (let t = 0; t < out.days; t++) {
 			if (!Number.isFinite(obsSeries[t]!)) continue;
-			if (cap && obsSeries[t]! / 86_400 > cap[t]!) continue;
+			if (cap && obsSeries[t]! / 86_400 > cap[t]! && !filledDay?.[t]) continue;
 			observed++;
 			if (!excluded[t] && shortDaily[t]! < 0) modelBelow++;
 		}
