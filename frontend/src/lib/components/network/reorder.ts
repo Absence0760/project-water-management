@@ -3,7 +3,7 @@
 // calculation order always comes from the drains-into topology.
 import type { NetworkNode } from '@water-management/engine';
 
-export { moveTo, renumber } from '$lib/model/order';
+export { moveTo, renumber } from '#lib/model/order.js';
 
 /** Ids of every node upstream of `id` (draining into it directly or indirectly). */
 export function upstreamOf(nodes: readonly Pick<NetworkNode, 'id' | 'downstreamNodeId'>[], id: string): Set<string> {

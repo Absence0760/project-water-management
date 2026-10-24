@@ -3,8 +3,8 @@
 // the workspace. No message catalogue here: the workspace never loads it
 // (lib/i18n/boundary.test.ts). The farmer-facing pages' words are in
 // ./words.ts. Pure, so it is unit-tested apart from the pages.
-import type { AlertEvent, AlertFeedbackSummary, AlertKind, AlertRule } from '$lib/api/types';
-import { fmtDay, fmtNum } from '$lib/format/number';
+import type { AlertEvent, AlertFeedbackSummary, AlertKind, AlertRule } from '#lib/api/types.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 export const KIND_NAME: Record<AlertKind, string> = {
 	dam_below: 'Dam low',

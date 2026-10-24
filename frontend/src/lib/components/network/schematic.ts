@@ -2,7 +2,7 @@
 // outflow gauge at the bottom and headwaters at the top, in grid units
 // (col, row) that the SVG scales to pixels.
 import type { NetworkNode } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { fmtVolume, hasDam } from './fields';
 
 export interface SchematicNode {

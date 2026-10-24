@@ -1,7 +1,7 @@
 // Display helpers for a run's WR2012 check (RunSummary.wr2012; issue #4 phase 8).
 import type { Wr2012FlagLevel, Wr2012Report } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
-import { monthName } from '$lib/format/months';
+import { fmtNum } from '#lib/format/number.js';
+import { monthName } from '#lib/format/months.js';
 
 export const FLAG_LABEL: Record<Wr2012FlagLevel, string> = {
 	ok: 'Within the note threshold',

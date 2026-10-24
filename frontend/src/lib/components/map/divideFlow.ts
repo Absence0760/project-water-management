@@ -7,8 +7,8 @@
 // until the editor ticks it), the problems the server would refuse, and what
 // apply will do.
 import type { NetworkNode } from '@water-management/engine';
-import type { DividePlan, DivideTicks, DivideUnit, MapFeature } from '$lib/api';
-import { fmtNum } from '$lib/format/number';
+import type { DividePlan, DivideTicks, DivideUnit, MapFeature } from '#lib/api/index.js';
+import { fmtNum } from '#lib/format/number.js';
 import { KIND_NODES } from './mapData';
 import { candidatePoints, isUnitBoundary } from './startFlow';
 import type { PlacementChoices } from './placement';

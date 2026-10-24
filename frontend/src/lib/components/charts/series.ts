@@ -1,6 +1,6 @@
 // Helpers for turning API daily series into uPlot's aligned-array format.
 import { toEpochDay } from '@water-management/engine';
-import { fmtDay } from '$lib/format/number';
+import { fmtDay } from '#lib/format/number.js';
 
 export interface DailyInput {
 	startDate: string;

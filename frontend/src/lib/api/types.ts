@@ -44,7 +44,7 @@ import type {
 	YearClassMethod,
 	YieldPoint
 } from '@water-management/engine';
-import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
+import type { ImportNote, UnmappedItem } from '#lib/spreadsheet/import/report.js';
 
 /**
  * Project roles, lowest first. `farmer` (WP-2.1) and `contributor` (WP-3.3, a

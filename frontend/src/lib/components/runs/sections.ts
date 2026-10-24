@@ -7,9 +7,9 @@
 // the run header links there, the side index lists the main ones under their
 // pages (otherPageGroups), and their old anchors here are sent on (movedHref).
 import type { RunSummary } from '@water-management/engine';
-import type { NavGroup, NavSection } from '$lib/components/common/sectionNav';
-import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor, riverHref } from '$lib/components/river/links';
-import { supplyAnchor, supplyHref } from '$lib/components/supply/links';
+import type { NavGroup, NavSection } from '#lib/components/common/sectionNav.js';
+import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor, riverHref } from '#lib/components/river/links.js';
+import { supplyAnchor, supplyHref } from '#lib/components/supply/links.js';
 import { runoffModelName } from './runoff';
 import { unitRainOf } from './unitRain';
 import { stationsOf } from './stationRain';

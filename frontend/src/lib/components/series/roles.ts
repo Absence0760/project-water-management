@@ -1,7 +1,7 @@
 // What the model does with each series kind (see packages/engine run.ts /
 // flow.ts), for the Time series tab's explanation and per-series badges.
 import type { SeriesMeta } from '@water-management/engine';
-import { byKindThenName } from '$lib/series/pick';
+import { byKindThenName } from '#lib/series/pick.js';
 
 export interface KindRole {
 	/** Short badge text. */

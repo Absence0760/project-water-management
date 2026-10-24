@@ -1,8 +1,8 @@
 // The field history line (WP-2.4 UI, docs/ui.md § Field history): what it
 // says and where it links. Pure: no DOM, no fetch. Kept apart from
 // timeline.ts so a form's chunk doesn't pull in the History tab's sentences.
-import type { FieldHistory } from '$lib/api/types';
-import { fmtDay, localIsoDate } from '$lib/format/number';
+import type { FieldHistory } from '#lib/api/types.js';
+import { fmtDay, localIsoDate } from '#lib/format/number.js';
 
 /** "Changed 3× · last by Ann, 12 Aug 2026: 40% → 60%", the date in the viewer's time zone. */
 export function fieldHistoryText(f: FieldHistory): string {

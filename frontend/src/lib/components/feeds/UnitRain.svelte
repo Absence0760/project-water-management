@@ -12,14 +12,14 @@
 	focus once loaded). Close closes the card (`onclose`). Helpers in ./unitRain.ts.
 -->
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, tick } from 'svelte';
-	import { foldList } from '$lib/components/common/fold';
-	import { api } from '$lib/api';
-	import { ApiError } from '$lib/api/client';
-	import type { UnitRainProduct, UnitRainProposal } from '$lib/api/types';
-	import { fmtNum } from '$lib/format/number';
+	import { foldList } from '#lib/components/common/fold.js';
+	import { api } from '#lib/api/index.js';
+	import { ApiError } from '#lib/api/client.js';
+	import type { UnitRainProduct, UnitRainProposal } from '#lib/api/types.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { CHIRPS_PRODUCT_FIRST_DAY, errorText, feedsApi, type FeedMeta } from './feeds';
 	import { appliedWords, feedLimitNote, sortUnitRows, STALE_PROPOSAL_CODES, UNIT_RAIN_DEFAULT_PRODUCT, unitRainAction, unitRainBody, unitRainRows, unitRainUpToDate } from './unitRain';
 

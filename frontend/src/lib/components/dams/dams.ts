@@ -9,9 +9,9 @@
 // when the dam's own settings have been edited since the run the card says so
 // (damChange, issue #444), as the Network's drawing does.
 import { CROP_SUPPLY_DEFAULTS, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, SUPPLY_DEFAULTS, WATER_SOURCE_DEFAULTS, fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
-import type { ChartSeries } from '$lib/components/charts/series';
-import { pctOfCapacity, type DamLevel } from '$lib/components/overview/damLevels';
-import { fmtDay, fmtNum } from '$lib/format/number';
+import type { ChartSeries } from '#lib/components/charts/series.js';
+import { pctOfCapacity, type DamLevel } from '#lib/components/overview/damLevels.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 

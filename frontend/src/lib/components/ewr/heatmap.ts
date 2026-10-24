@@ -1,6 +1,6 @@
 // Pure logic for the EWR compliance heat map: binning, legend and summaries.
 import { ewrBand, type EwrBand, type EwrCompliance, type EwrComplianceGrid } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { bandLabels, EWR_BANDS } from './bands';
 
 export type HeatMetric = 'pct' | 'volume';

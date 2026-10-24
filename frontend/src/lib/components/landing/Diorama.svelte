@@ -20,8 +20,9 @@
 	// Before the script runs, and under reduced motion, it is the loop's last
 	// frame: the dams full, the rivers lit, the tag shown.
 	import { onMount, type Snippet } from 'svelte';
-	import { base } from '$app/paths';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { asset } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { ART } from './art.generated';
 
 	let {
@@ -66,7 +67,7 @@
 		});
 	});
 
-	const srcset = (mode: 'day' | 'dusk', type: 'avif' | 'webp') => hero.widths.map((w) => `${base}/landing/hero-${mode}-${w}.${type} ${w}w`).join(', ');
+	const srcset = (mode: 'day' | 'dusk', type: 'avif' | 'webp') => hero.widths.map((w) => `${basePath()}/landing/hero-${mode}-${w}.${type} ${w}w`).join(', ');
 	const sizes = '(max-width: 760px) 140vw, 56vw';
 
 	let root: HTMLElement | undefined = $state();
@@ -127,7 +128,7 @@
 			<source type="image/webp" media="(prefers-color-scheme: dark)" srcset={srcset('dusk', 'webp')} {sizes} />
 			<source type="image/avif" srcset={srcset('day', 'avif')} {sizes} />
 			<img
-				src="{base}/landing/hero-day-1200.webp"
+				src={asset('landing/hero-day-1200.webp')}
 				srcset={srcset('day', 'webp')}
 				{sizes}
 				width={hero.width}

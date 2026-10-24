@@ -15,9 +15,9 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { waterYearLabel, type ChirpsFitPeriod, type ChirpsFitRange } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesProblem, type ChirpsFitChoice } from './rain';
 	import { proposedNote, type FitRangeProposal } from './fitRangeProposal';
 

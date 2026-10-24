@@ -1,6 +1,6 @@
 import type { FarmSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { RunSeriesRef } from '$lib/api/types';
+import type { RunSeriesRef } from '#lib/api/types.js';
 import { displayUnit, m3DayToMm3a, runDamCapacity, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit, outletEwrLine } from './results';
 
 const farm = (nodeId: string, name: string, fractionSupplied: number, avgDeficitM3Day: number): FarmSummary => ({

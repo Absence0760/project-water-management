@@ -1,5 +1,5 @@
 // Messages between the page (runner.ts) and the export worker.
-import type { WorkbookRequest } from '$lib/export/urls';
+import type { WorkbookRequest } from '#lib/export/urls.js';
 import type { ExportProgress } from './collect';
 
 export type ToWorker = { type: 'start'; request: WorkbookRequest };

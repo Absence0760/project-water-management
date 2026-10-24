@@ -4,7 +4,7 @@
 	// (PATCH …/series/:id { station }), as the engine's rainStationError judges them together; a viewer reads them.
 	// Settings → Rain for each unit reads the MAP from here and links to it (id="series-station").
 	import { MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, type RainStationMeta, type SeriesMeta } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import { stationChanged, stationDraft, stationFromDraft, stationMapText, stationPlaceText, stationProblem } from './station';
 
 	let {

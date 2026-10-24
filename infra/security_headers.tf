@@ -30,7 +30,7 @@
 #      /api only), and `script-src 'self' 'unsafe-inline'`.
 #   2. SvelteKit's own <meta http-equiv="content-security-policy"> with
 #      `script-src 'self' 'sha256-<bootstrap>'`, which kit computes per build
-#      when `kit.csp.mode = 'hash'` is set in frontend/svelte.config.js.
+#      when `csp.mode = 'hash'` is set in frontend/vite.config.ts.
 #
 # The effective script policy is the intersection: only same-origin files and
 # the one hashed bootstrap run; an injected inline script passes the header
@@ -59,7 +59,7 @@ locals {
   # Nothing else: no 'unsafe-eval' (the SDK doesn't need it), no blob: and no
   # wildcard. The SDK's web-font stylesheet on static.captcha.awswaf.com stays
   # blocked (the puzzle falls back to the system font). SvelteKit's meta CSP
-  # adds the same two origins to its script-src (frontend/svelte.config.js).
+  # adds the same two origins to its script-src (frontend/svelte-options.js).
   csp_site = join("; ", [
     "default-src 'self'",
     join(" ", concat(["script-src 'self' 'unsafe-inline'"], local.waf_captcha_origins)),

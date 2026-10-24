@@ -4,7 +4,7 @@
 // needs no API client (and no SvelteKit $env).
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MapFeature, QuaternaryLayer as Answer } from '$lib/api/types';
+import type { MapFeature, QuaternaryLayer as Answer } from '#lib/api/types.js';
 import { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { quaternaryBbox } from './mapLayers';
 import { deferred, square } from './layerTesting';

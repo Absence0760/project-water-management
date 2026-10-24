@@ -618,7 +618,7 @@ try again." instead of showing it.
 (`deploy-frontend.yml`): the prerendered landing page (`/welcome` and
 `/welcome/af`, issues #57 and #137) writes its canonical link, `hreflang`
 alternates, `og:url` and `og:image` as absolute URLs from it
-(`kit.prerender.origin`, `frontend/svelte.config.js`). CloudFront serves
+(`paths.origin` in `frontend/vite.config.ts`'s `sveltekit({…})`). CloudFront serves
 `/welcome` from `welcome.html` and `/welcome/af` from `welcome/af.html`
 (`spa_rewrite`).
 
@@ -785,8 +785,11 @@ Nor is anything that goes into the report renderer's image: its base image
 (`docker`) and its npm packages (the `/backend/renderer-deps` npm entry,
 aws-lambda-ric, a native module compiled in the image's build stage), which
 the workflow excludes by fetch-metadata's `directory` and, as a backstop, by
-the PR's branch name. `pnpm check:workflows` (auto-merge rule) fails if any
-of these exclusions is dropped. A
+the PR's branch name. It queues the merge only when the repository allows
+auto-merge (Settings → General → Pull Requests → Allow auto-merge, read
+from the API each run); with that off it leaves a notice and the PR waits
+for a human. `pnpm check:workflows` (auto-merge rule) fails if any of these
+exclusions, or the setting's read, is dropped. A
 security fix that can't wait the week goes under
 `minimumReleaseAgeExclude` with a comment, removed once the week is up.
 
@@ -803,8 +806,9 @@ the real plan stays an operator step
 - **Frontend deploy** checks the build before uploading
   (`infra/scripts/check-csp.mjs`): every inline script must be hashed in
   SvelteKit's `<meta>` CSP, or the deploy stops. This needs
-  `kit.csp = { mode: 'hash', directives: { 'script-src': ['self'] } }` in
-  `frontend/svelte.config.js`. It then uploads `_app/immutable/` with a
+  `csp: { mode: 'hash', directives: { 'script-src': ['self', …] } }` in
+  `frontend/vite.config.ts`'s `sveltekit({…})` (SvelteKit 3 reads its config
+  there). It then uploads `_app/immutable/` with a
   one-year immutable cache and everything else (HTML, favicons, manifest,
   fonts) with a 60 s cache, and invalidates CloudFront.
 - **Migrations** run in the backend deploy *before* the new Lambda code is
@@ -1877,8 +1881,9 @@ gh workflow run load-reference.yml -f kind=map-grid -f key=reference/map-grid/wa
 
 Approve it in the `production` environment. Check on the Map tab of the
 client's project: **MAP grid** on lists "WAAS-SWCape-2007" with its source
-line, and the map's credits show "MAP grid: Mean annual rainfall surface
-for the Southwestern Cape. …". Then Settings → Rain for each unit → **MAP
+line (the authors' credit line whole), and the map's credits show "MAP
+grid: WAAS (2007), Beuster Clarke & Associates", linking to
+`/data-sources#waas-map`. Then Settings → Rain for each unit → **MAP
 from the grid** proposes each unit's MAP from it, beside the typed values,
 to check them. A wider box later is a reload under the same label (a load
 replaces its dataset).

@@ -4,7 +4,7 @@
 // the confirmation and the notice after it. The panel itself is pinned by
 // e2e/tests/unit-map.spec.ts.
 import { describe, expect, it } from 'vitest';
-import type { UnitMapProposal } from '$lib/api';
+import type { UnitMapProposal } from '#lib/api/index.js';
 import { appliedNotice, candidateLabel, cellText, coverageLine, coveredText, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
 
 const unit = (name: string, mapMm: number, patch: Partial<UnitMapProposal['units'][number]> = {}): UnitMapProposal['units'][number] => ({

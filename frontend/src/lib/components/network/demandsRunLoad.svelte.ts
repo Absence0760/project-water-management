@@ -2,8 +2,8 @@
 // grid) and gives each row its figure (demandsRun.ts). The latest run is
 // runs[0], as the Network's supply colouring takes it; the summary comes from
 // the Runs cache when the page already holds it, else one fetch.
-import { api, type RunMeta } from '$lib/api';
-import { detailCache } from '$lib/components/runs/cache';
+import { api, type RunMeta } from '#lib/api/index.js';
+import { detailCache } from '#lib/components/runs/cache.js';
 import type { RunSummary } from '@water-management/engine';
 import type { DemandRow } from './demands';
 import { demandRunFigures, runTotal, type RunFigure } from './demandsRun';

@@ -109,6 +109,7 @@ async function startReset(page: Page, email: string, factor: 'totp' | 'email' = 
 	expect(await mfaResetState(email)).toEqual({ waiting: false, endReason: null });
 	await page.goto(link.href);
 	await expect(page.getByRole('heading', { name: 'Remove two-step sign-in' })).toBeVisible();
+	await expect(page).toHaveURL('/mfa-reset');
 	expect(await mfaResetState(email)).toEqual({ waiting: false, endReason: null });
 	await page.getByRole('button', { name: 'Start the 3-day wait' }).click();
 	await expect(page.locator('[data-reset-started]')).toContainText('The 3-day wait has started.');
@@ -325,6 +326,8 @@ test('dead links: the confirmation and cancel pages say so, and pass an a11y sca
 	const page = await stranger.newPage();
 	await page.goto('/mfa-reset?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
 	await expect(page.getByRole('heading', { name: 'Remove two-step sign-in' })).toBeVisible();
+	// The token is read, then taken out of the address bar (a shallow goto since SvelteKit 3).
+	await expect(page).toHaveURL('/mfa-reset');
 	await expectNoViolations(page);
 	await page.getByRole('button', { name: 'Start the 3-day wait' }).click();
 	await expect(page.getByRole('alert')).toHaveText('This link is invalid, already used, or older than 1 hour. Sign in again and ask for a new one.');
@@ -332,6 +335,7 @@ test('dead links: the confirmation and cancel pages say so, and pass an a11y sca
 
 	await page.goto('/mfa-reset/cancel?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
 	await expect(page.getByRole('heading', { name: 'Keep two-step sign-in' })).toBeVisible();
+	await expect(page).toHaveURL('/mfa-reset/cancel');
 	await expectNoViolations(page);
 	await page.getByRole('button', { name: 'Cancel the removal' }).click();
 	await expect(page.getByRole('alert')).toContainText('This link no longer works');

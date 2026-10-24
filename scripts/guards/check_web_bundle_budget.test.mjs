@@ -148,11 +148,11 @@ test("the calibration, preview and map workers must share the page build's chunk
 test('the tab modules are the LOAD map of the workspace page, nothing else', () => {
 	const page = `<script module lang="ts">
 	const LOAD = {
-		network: () => import('$lib/components/network/NetworkTab.svelte'),
-		runs: () => import("$lib/components/runs/RunsTab.svelte"),
-		compare: () => import('$lib/components/compare/CompareView.svelte')
+		network: () => import('#lib/components/network/NetworkTab.svelte'),
+		runs: () => import("#lib/components/runs/RunsTab.svelte"),
+		compare: () => import('#lib/components/compare/CompareView.svelte')
 	};
-	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
+	const loadAddData = () => import('#lib/components/series/AddDataDialog.svelte');
 </script>`;
 	assert.deepEqual(tabModules(page), [
 		'src/lib/components/network/NetworkTab.svelte',
@@ -359,22 +359,32 @@ test('the map library has a ceiling of its own, outside the total and the per-ch
 	};
 	const { files, errors } = mapChunks(chunks, ['src/lib/components/map/MapTab.svelte']);
 	assert.deepEqual(errors, []);
-	assert.deepEqual([...files].sort(), ['_app/immutable/assets/ml.css', '_app/immutable/chunks/Map1.js', '_app/immutable/chunks/Map2.js', '_app/immutable/chunks/Pm.js']);
+	assert.deepEqual([...files].sort(), [
+		'_app/immutable/assets/ml.css',
+		'_app/immutable/chunks/Map1.js',
+		'_app/immutable/chunks/Map2.js',
+		'_app/immutable/chunks/Pm.js',
+		'_app/immutable/workers/maplibre.worker-a.js',
+	]);
 	const m = measure(
 		[
 			{ path: '_app/immutable/chunks/Map1.js', gzipBytes: 9 * 1024 },
 			{ path: '_app/immutable/chunks/Map2.js', gzipBytes: 8 * 1024 },
 			{ path: '_app/immutable/assets/ml.css', gzipBytes: 1024 },
 			{ path: '_app/immutable/chunks/Pm.js', gzipBytes: 1024 },
+			{ path: '_app/immutable/workers/maplibre.worker-a.js', gzipBytes: 1024 },
+			{ path: '_app/immutable/workers/autocal.worker-b.js', gzipBytes: 3 * 1024 },
 			{ path: '_app/immutable/chunks/App.js', gzipBytes: 2 * 1024 },
 		],
 		new Set(),
 		new Set(),
 		files,
 	);
-	assert.equal(m.mapKb, 19);
-	assert.equal(m.totalCodeKb, 2, 'the map library is not in the total');
+	// MapLibre's worker is self-contained since maplibre-gl 6.13: map code, loaded with the map.
+	assert.equal(m.mapKb, 20);
+	assert.equal(m.totalCodeKb, 5, 'the map library and its worker are not in the total');
 	assert.equal(m.largestChunk.kb, 2, 'nor against the per-chunk ceiling');
+	assert.equal(m.largestWorker.kb, 3, "nor is MapLibre's worker against the per-worker ceiling (positive control: the app's own worker is)");
 	assert.deepEqual(violations(m, budget), []);
 	const over = violations(measure([{ path: 'm.js', gzipBytes: 21 * 1024 }, { path: 'app.js', gzipBytes: 1024 }], new Set(), new Set(), new Set(['m.js'])), budget);
 	assert.equal(over.length, 1);

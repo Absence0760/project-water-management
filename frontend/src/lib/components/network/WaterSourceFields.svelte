@@ -11,8 +11,8 @@
 	// kept when the source goes back to the unit's supply, where they are inert.
 	import type { Snippet } from 'svelte';
 	import type { WaterSource } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import PumpCapacityField from './PumpCapacityField.svelte';
 
 	let {

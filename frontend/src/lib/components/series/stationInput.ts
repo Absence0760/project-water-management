@@ -6,7 +6,7 @@
 // the create request sends (engine RainStationMeta), which the API's own rule
 // (engine rainStationError) then passes.
 import { MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, rainStationError, type RainStationMeta, type SeriesMeta } from '@water-management/engine';
-import { fmtNum, parseNum } from '$lib/format/number';
+import { fmtNum, parseNum } from '#lib/format/number.js';
 
 /** The Kind select's value for a station: not a series kind of its own, a catchment rain series with station details. */
 export const STATION_OPTION = 'rain_station';

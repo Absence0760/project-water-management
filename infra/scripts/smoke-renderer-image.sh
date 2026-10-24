@@ -54,11 +54,15 @@ fail() {
 }
 
 # --- The emulator: pinned by version and checksum -----------------------------------------
-if [ ! -x "$RIE_BIN" ] || ! echo "$RIE_SHA256  $RIE_BIN" | sha256sum -c --status; then
+# The file's SHA-256, compared by value: `sha256sum -c --status` is GNU only, and
+# macOS's own sha256sum (/sbin, BSD) has no --status, so the check failed on the
+# operator's Mac. Both print "<hash>  <file>". (smoke-renderer-image.test.mjs)
+sha256_of() { sha256sum "$1" | awk '{print $1}'; }
+if [ ! -x "$RIE_BIN" ] || [ "$(sha256_of "$RIE_BIN")" != "$RIE_SHA256" ]; then
 	mkdir -p "$(dirname "$RIE_BIN")"
 	curl -sSfL --retry 3 -o "$RIE_BIN.part" \
 		"https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/download/${RIE_VERSION}/aws-lambda-rie"
-	echo "$RIE_SHA256  $RIE_BIN.part" | sha256sum -c --status || fail "aws-lambda-rie ${RIE_VERSION} does not match its pinned SHA-256"
+	[ "$(sha256_of "$RIE_BIN.part")" = "$RIE_SHA256" ] || fail "aws-lambda-rie ${RIE_VERSION} does not match its pinned SHA-256"
 	chmod +x "$RIE_BIN.part"
 	mv "$RIE_BIN.part" "$RIE_BIN"
 fi

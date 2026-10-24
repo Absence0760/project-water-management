@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
-import { navText } from '$lib/components/common/sectionNav';
+import type { RunMeta } from '#lib/api/types.js';
+import { navText } from '#lib/components/common/sectionNav.js';
 import { RIVER_ANCHORS, riverAnchor, riverHref, summaryToRiverAnchor } from './links';
 import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 

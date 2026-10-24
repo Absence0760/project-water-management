@@ -10,7 +10,7 @@ import {
 	type Fao56KpResult,
 	type PanSiting
 } from '@water-management/engine';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 
 export type HelperMonth = { rhPct: number | null; windMs: number | null };
 

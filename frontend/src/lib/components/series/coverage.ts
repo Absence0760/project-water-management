@@ -103,7 +103,7 @@ export function coverageBins(s: Daily): CoverageBin[] {
 }
 
 /** Whole days from `iso` to `todayIso` (both YYYY-MM-DD): the one age module's. */
-export { daysBetween } from '$lib/format/age';
+export { daysBetween } from '#lib/format/age.js';
 
 export interface MergePreview {
 	/** Days that get a value where the stored series had none (or didn't reach). */

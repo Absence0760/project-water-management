@@ -11,12 +11,12 @@
 	// waits until each specialist signer has a current check (a year, and the
 	// latest check says registered). Editors read the list; owners, and the
 	// editors the authority confirmed as acting for it (163, 229), record.
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { onMount, tick } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '$lib/api';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '#lib/api/index.js';
 	import { REGISTRATION_BODIES, registrationBody as bodyInfo, registrationCategoriesOf, type RegistrationBodyCode } from '@water-management/engine';
-	import { fmtDate, localIsoDate, pastDayMoment } from '$lib/format/number';
+	import { fmtDate, localIsoDate, pastDayMoment } from '#lib/format/number.js';
 
 	let { projectId, isOwner, actsForAuthority = false }: { projectId: string; isOwner: boolean; actsForAuthority?: boolean } = $props();
 

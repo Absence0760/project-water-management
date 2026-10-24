@@ -220,7 +220,9 @@ new series will replace…" (frontend `lib/series/pick.ts`), the fit record's
 document (`fit-sweep`, `pan-sensitivity`, `import:project --fit`;
 `backend/scripts/fit-project.ts` `inputSeriesOf`). Lists shown to people
 (the Data tab, the export) keep the database's order; only the pick is
-pinned. A rename (`PATCH …/series/:id { name }`, issue #556) can therefore
+pinned. A rename (`PATCH …/series/:id { name }`, issue #556; refused for a
+series a data feed or an API key writes by name, a key's series list
+included, [§ API keys](#api-keys-039_api_keyssql)) can therefore
 change which series the next run reads; the Data tab says which before it
 saves (`renamePickChange`). A run stores no series name (`run_input_series`
 is keyed by kind, with the series id), so the export, the report and the run
@@ -3014,6 +3016,17 @@ merges daily readings without a session (WP-2.9;
   any), and NULL in a transaction that also has a user;
   `app_api_key_allows(kind, name)` checks `allowed_series`;
   `app_api_key_label()` is the audit actor label.
+- **Which names a key's list holds** (240_series_name_key_listed.sql):
+  `app_series_name_key_listed(project, kind, name)` (`SECURITY DEFINER`,
+  `EXECUTE` to `water_app`) is true when a live key of the project (not
+  revoked, not expired) has an `allowed_series` naming exactly that
+  `{ kind, name }`; a key with no list names nothing in advance. It is false
+  unless the caller is an editor of the project (`requireRole`'s rule), and
+  returns only the boolean. The series rename (`PATCH …/series/:id { name }`,
+  issue #556) uses it to refuse renaming a listed series or to a listed name,
+  since `api_key` is owner-only and an editor may rename: the key would
+  otherwise push into a new series under the old name, or into this one
+  under the new.
 - **Automatic re-runs** (042_auto_rerun.sql, [§ Jobs](#jobs-016_jobssql)):
   a key's ingest that changes days queues the project's re-run (when it has
   automatic runs on) with the key's **creator** as the acting user; the job

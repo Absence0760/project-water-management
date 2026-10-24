@@ -5,15 +5,15 @@
 	// and the rules. Fixed content in a fixed order; nothing here is the
 	// applicant's own words (G13).
 	import type { EvidenceReport } from '@water-management/engine';
-	import type { Signoff } from '$lib/api';
-	import { fmtDate, fmtNum } from '$lib/format/number';
-	import { monthName } from '$lib/format/months';
-	import type { VerifyRef } from '$lib/components/packs/pack';
+	import type { Signoff } from '#lib/api/index.js';
+	import { fmtDate, fmtNum } from '#lib/format/number.js';
+	import { monthName } from '#lib/format/months.js';
+	import type { VerifyRef } from '#lib/components/packs/pack.js';
 	import LicenceImpactBoard from '../LicenceImpactBoard.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { BoardView } from '../licenceImpact';
 	import { changeText, signed, valueText, worseText } from './format';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 	import { AUTHORISED_HEADING, MODELLED_HEADING, authorisedRow, mixLines } from './authorised';
 
 	let {

@@ -104,10 +104,13 @@ const LabelBody = z
  * project's series of one kind (001's UNIQUE (project_id, kind, name)): 409.
  *
  * Refused (409) for a series something outside the app writes by its name:
- * a data feed (data_feed.target_name) or an API key that has pushed days to
- * it (series_key_days). Renaming it would leave the feed or the key writing a
- * new series under the old name. Likewise a new name a data feed already
- * writes to: the feed would write into this series. Logged as series.renamed.
+ * a data feed (data_feed.target_name), an API key that has pushed days to it
+ * (series_key_days), or a live API key whose series list names it, pushed or
+ * not (allowed_series, read through 240's app_series_name_key_listed, since
+ * an editor can't read api_key). Renaming it would leave the feed or the key
+ * writing a new series under the old name. Likewise a new name a data feed
+ * writes to or a key's list names: it would write into this series. Logged
+ * as series.renamed.
  */
 async function setName(db: Db, projectId: string, seriesId: string, name: string): Promise<SeriesMetaRow> {
 	const { rows: cur } = await db.query<{ kind: string; name: string }>(
@@ -119,16 +122,22 @@ async function setName(db: Db, projectId: string, seriesId: string, name: string
 	if (was !== name) {
 		const { rows: writers } = await db.query<{ feed: boolean; key: boolean }>(
 			`SELECT EXISTS (SELECT 1 FROM data_feed WHERE project_id = $1 AND target_kind = $2 AND target_name = $3) AS feed,
-				EXISTS (SELECT 1 FROM series_key_days WHERE project_id = $1 AND series_id = $4) AS key`,
+				EXISTS (SELECT 1 FROM series_key_days WHERE project_id = $1 AND series_id = $4) OR app_series_name_key_listed($1, $2, $3) AS key`,
 			[projectId, kind, was, seriesId]
 		);
 		if (writers[0]?.feed) throw new ApiError(409, 'a data feed writes into this series by its name, so it keeps its name: renaming it would start a new series under the old name');
 		if (writers[0]?.key) throw new ApiError(409, 'an API key writes into this series by its name, so it keeps its name: renaming it would start a new series under the old name');
 		const { rows: taken } = await db.query('SELECT 1 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 AND id <> $4', [projectId, kind, name, seriesId]);
 		if (taken[0]) throw new ApiError(409, 'another series of this kind already has that name');
-		// A feed set up to write a series of that name (one it hasn't created yet) would write into this one.
-		const { rows: aimed } = await db.query('SELECT 1 FROM data_feed WHERE project_id = $1 AND target_kind = $2 AND target_name = $3', [projectId, kind, name]);
-		if (aimed[0]) throw new ApiError(409, 'a data feed writes into a series of that name: pick another name');
+		// A feed set up to write a series of that name (one it hasn't created yet), or a key whose list names it,
+		// would write into this one.
+		const { rows: aimed } = await db.query<{ feed: boolean; key: boolean }>(
+			`SELECT EXISTS (SELECT 1 FROM data_feed WHERE project_id = $1 AND target_kind = $2 AND target_name = $3) AS feed,
+				app_series_name_key_listed($1, $2, $3) AS key`,
+			[projectId, kind, name]
+		);
+		if (aimed[0]?.feed) throw new ApiError(409, 'a data feed writes into a series of that name: pick another name');
+		if (aimed[0]?.key) throw new ApiError(409, 'an API key writes into a series of that name: pick another name');
 	}
 	const { rows } = await db
 		.query<SeriesMetaRow>(`UPDATE time_series SET name = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`, [projectId, seriesId, name])

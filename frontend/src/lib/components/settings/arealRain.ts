@@ -2,7 +2,7 @@
 // 1.13.0, docs/model.md §2.4g): switching it on and off, filling one factor
 // into every month, and the check that blocks Save.
 import { AREAL_RAIN_FACTOR_MAX, AREAL_RAIN_FACTOR_MIN, PE_SOURCE_MAX, type ArealRain, type ArealRainMethod, type ProjectSettings } from '@water-management/engine';
-import { WATER_YEAR_MONTHS } from '$lib/format/months';
+import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 
 /** The form's mutable copy (the engine's `Monthly` is a readonly tuple). */
 export type EditableArealRain = { factors: number[]; method: ArealRainMethod; source: string };

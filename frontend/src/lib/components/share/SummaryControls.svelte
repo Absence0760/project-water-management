@@ -3,8 +3,8 @@
 	// The /share page's "Print a summary for members" card (issue #118): the
 	// period, and the button that opens the browser's print dialog, where
 	// Save as PDF makes the file. What prints is MemberSummary.svelte.
-	import type { SharedCatchmentView } from '$lib/api/types';
-	import { t } from '$lib/i18n/locale.svelte';
+	import type { SharedCatchmentView } from '#lib/api/types.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { SUMMARY_WINDOWS, windowDates, windowName, type SummaryWindow } from './summary';
 
 	let { cv, period = $bindable() }: { cv: SharedCatchmentView; period: SummaryWindow } = $props();

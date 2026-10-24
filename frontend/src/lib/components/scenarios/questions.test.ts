@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ApplicationQuestion } from '$lib/api';
+import type { ApplicationQuestion } from '#lib/api/index.js';
 import { askables, opsText, ruleLabel, rulesText } from './questions';
 
 const q = (problem: string, askedAt: string, answer: string | null = null): ApplicationQuestion => ({

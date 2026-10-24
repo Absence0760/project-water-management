@@ -4,8 +4,8 @@
 // translation sheet), so /share uses it without the workspace's code
 // (./cards.ts re-exports it).
 import { language, pickNotice, type Locale, type RestrictionLevel } from '@water-management/engine';
-import { msg, type Msg } from '$lib/i18n/msg';
-import { wordsLang } from '$lib/i18n/state.svelte';
+import { msg, type Msg } from '#lib/i18n/msg.js';
+import { wordsLang } from '#lib/i18n/state.svelte.js';
 
 export { pickNotice };
 

@@ -8,10 +8,10 @@
 -->
 <script lang="ts">
 	import { EWR_ASSURANCE_MIN_YEARS, type EwrAssuranceSite } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { describeMonths, monthName, WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { waterYearLabel } from '$lib/components/calibration/metrics';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
+	import { describeMonths, monthName, WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
 	import {
 		conditionText,
 		describeMethod,

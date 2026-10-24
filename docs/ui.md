@@ -448,7 +448,7 @@ other signed-out route still goes to `/login?next=`.
   account). `/welcome` is also the address for a visitor whose language
   isn't known yet: once the app runs, a visitor whose choice (the
   account's, this device's, else the browser's) is another language goes on
-  to that language's address (`replaceState`). `/welcome/af` stays
+  to that language's address (`goto` with `replace`). `/welcome/af` stays
   Afrikaans whatever the browser says, and reading it becomes the device's
   choice when it has none, so the sign-in pages it leads to carry on in
   Afrikaans. A signed-out `/` switches in place, as the sign-in pages do.
@@ -2281,10 +2281,13 @@ that hasn't run is not flagged.
 (All projects, Personal, each team, Shared with me, with counts, and
 **Manage teams**), or a select when the page is 600 px or narrower. Search
 matches name, description and team (`?q=`); a search is one step in history:
-its first keystroke after the box takes the focus adds an entry, the rest
-replace it, so Back returns to the list before the search, not letter by
+its first change that lands after the box takes the focus adds an entry, the
+rest replace it, so Back returns to the list before the search, not letter by
 letter (until issue #521 every keystroke replaced the entry the list came
-from, so Back left the page). Sort (`?sort=`): *Recently
+from, so Back left the page; on SvelteKit 3 a first keystroke's push the next
+keystroke overtook never landed, so `SearchStep` waits for one that does).
+Back and Forward also return the window to where it was on that entry
+(`lib/nav/backScroll.ts`; ui-playbook § URL state). Sort (`?sort=`): *Recently
 updated* (the default), *Needs attention first*, *Irrigation supplied*
 (worst first: red, amber, unknown, green, less supplied first within one;
 the EWR status until issue #558; `?sort=status`), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
@@ -5351,11 +5354,11 @@ with the table the data needs).
   and Back returns to the series before. Without `series=` (or with one that
   no longer exists) the observed flow a run reads is charted, else the main
   rainfall, else the first. Deleting the charted series drops the parameter
-  (`replaceState`); an upload through **Add data** on this tab charts the
-  uploaded series (`series=<id>`, `replaceState`, the page's `onUploaded`).
+  (`goto` with `replace`); an upload through **Add data** on this tab charts the
+  uploaded series (`series=<id>`, with `replace`, the page's `onUploaded`).
   The chart sits under the table, so after a pick it scrolls just into view
   (smoothly, unless the viewer prefers reduced motion; not at all when it is
-  already in view, and not for the upload's `replaceState` pick).
+  already in view, and not for the upload's replacing pick).
 - **Layout**: the page flows in the window's one scroll, and nothing on it
   scrolls inside itself (the table grows with its rows rather than the
   global 70vh table box; it would still scroll sideways if it had to). With
@@ -5425,7 +5428,10 @@ at each site, by name, so a new name that changes which one they read asks
 first, *Change which series runs read?* "Runs will read “Bergwater gauge”
 instead of “Average” for Rainfall — catchment …" (`lib/series/pick.ts`
 `renamePickChange`); Cancel puts the old name back. A series a data feed or
-an API key writes into keeps its name: the server refuses it with why.
+an API key writes into, or whose name a live key's series list holds, keeps
+its name, and a new name a feed or a key's list already uses is refused too:
+the server refuses it with why, shown under the box as *Not saved: …* (the
+feed case reads as words with why up front).
 Viewers read the name in the table row), **Product**, **Measured at**, **Source**,
 **Upload unit** and **Edited by hand** (the days typed in, "2021-10-02,
 2021-10-04 to 2021-10-06"), each only where it applies, wrapping to one
@@ -5520,7 +5526,9 @@ record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were
 interpolated and how many came from the donor record × its ratio, why a donor
-was refused, and how many gaps stay open (`series/flowFill.ts`). **Quality
+was refused, and how many gaps stay open (`series/flowFill.ts`). It reads
+past a low-flow period's high readings as a run does (engine ≥ 1.90.0, issue
+#567): they anchor nothing and are out of the donor's ratio and the clamp. **Quality
 flags**: on a flow record a run reads (the outlet's gauge or logger record,
 or the calibration site's record when calibration scores a gauge inside the
 network), the days Fit automatically would flag (above
@@ -6334,8 +6342,9 @@ two.
   records, the logger first), **From** and **To**, **Valid up to (m³/s)**
   and a required **Reason** and **Source**. Inside the dates a reading
   above the threshold is left out of Fit automatically, the run's
-  statistics, its EWR test on the record and the plausibility checks;
-  readings at or below it are scored. A blank reason or source, a reversed
+  statistics, its EWR test on the record and the plausibility checks, and
+  the flow gap fill reads past it (issue #567, model.md §2.10i); readings
+  at or below it are scored. A blank reason or source, a reversed
   range, a threshold not above 0 or the same record and range twice shows
   an alert and blocks Save (the save bar links here); the section's summary
   line adds "low flows only in N periods". Under them, **Quality flags for Fit
@@ -8400,9 +8409,30 @@ read it before.
   run's `observed_flow_quality` column, stored only when a day is flagged)
   are thin strips along the foot of the plot, behind the lines, one strip
   per flagged class (above the highest gauging, above a low-flow period's
-  threshold, below the lowest, suspect, infilled; top to bottom in that order, each in its own `--series-*`
-  colour at full strength, as its key swatch), so a class reads by its place
-  as well as its colour. A key under
+  threshold, below the lowest, suspect, infilled, human use dominant; top to
+  bottom in that order, each in its own colour token at full strength,
+  as its key swatch), so a class reads by its place as well as its colour.
+  The strips have **two looks**, by what the class says: **solid** for a
+  reading outside the flow it can be trusted at (above the highest gauging
+  red `--series-9`, above a low-flow period's threshold green `--series-7`,
+  below the lowest aqua `--series-10`), and a **double line** for a reading
+  that is itself doubtful or not the river's own (suspect gold, infilled
+  violet, human use rose: `--lane-suspect`, `--lane-infilled`,
+  `--lane-human-use`, the strips' own tokens): two 2 px lines with the
+  ground between, strip and swatch alike. While a strip is a double line the
+  key's heading says what the looks mean ("solid: outside the flow the
+  record can be trusted at; double line: a doubtful reading, or not the river’s own flow") and that
+  strip's line says "double line". It shows on a range one pixel wide (a
+  lone day on a decade's view), which hatching would not. No choice of six
+  palette colours keeps every pair apart for colour-blind readers; within
+  each look every pair is ΔE00 ≥ 10 under normal vision and simulated
+  protanopia, deuteranopia and tritanopia in both themes, every strip is
+  ≥ 3:1 on the card, and none is within ΔE00 13 of a line the flow charts
+  draw (`--series-1…4`, `--chart-obs`; the palette's light violet was
+  `--series-4`'s exact colour, and its yellow and pink under 3:1, which is
+  why the double-line classes have tokens of their own;
+  `calibration/flowFlagColours.test.ts` computes all of it from `app.css`
+  and `LineChart.svelte`). A key under
   the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
   with its days and what Fit automatically does with them under the run's
   own settings snapshot: "Above the highest gauging: 14 days; Fit
@@ -9290,7 +9320,7 @@ them scenarios).
   rows scroll inside it. The scenario is an editing page and scrolls with
   the page. Narrower, the list stacks above the scenario, capped at a few
   rows that scroll inside it. With none picked, the first (newest) opens in
-  place (`replaceState`, so Back leaves the section rather than stopping on
+  place (`goto` with `replace`, so Back leaves the section rather than stopping on
   the bare list), but only once no navigation is in flight and the URL
   doesn't ask for the create dialog, so it can't cancel a `+ New scenario`
   click made while the list was loading.
@@ -12017,8 +12047,8 @@ Share](./api.md#share), [security.md § Share links](./security.md#share-links))
 signed in or out, for someone outside the project, on a phone first.
 
 - **The token** is in the fragment (`/share#t=…`). The page reads it once,
-  strips it from the address bar (`replaceState`, as the reset pages strip
-  `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
+  strips it from the address bar (a shallow `goto` with `replace`, as the
+  reset pages strip `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
   (only the fragment changes) is picked up the same way, and only the latest
   link's answer is shown, however the two answers race (`share/load.ts latestOnly`). The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water

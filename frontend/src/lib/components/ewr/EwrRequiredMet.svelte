@@ -8,11 +8,11 @@
 	RunSummary.supplyAssurance.waterAccount; nothing shows on older runs.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { SupplyAssurance, WaterAccountRow } from '@water-management/engine';
-	import { fmtNum } from '$lib/format/number';
-	import { waterYearLabel } from '$lib/components/calibration/metrics';
-	import { ewrMetShare, pctText } from '$lib/components/reliability/reliability';
+	import { fmtNum } from '#lib/format/number.js';
+	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
+	import { ewrMetShare, pctText } from '#lib/components/reliability/reliability.js';
 	import { fmtVolume } from './heatmap';
 
 	let { assurance }: { assurance: SupplyAssurance | undefined | null } = $props();

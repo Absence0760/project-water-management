@@ -8,9 +8,9 @@
 	// or three on a phone. Each field shows its month above it; its accessible
 	// name comes from `label`. The caption names the group, and the fill button
 	// copies October's value into every month (./monthFields.ts).
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { fillFromFirst, fillMessage, withMonth } from './monthFields';
 
 	let {

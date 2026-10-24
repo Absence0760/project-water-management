@@ -3,7 +3,7 @@
 	// "Compared with last season" (design §3 Q1, E4): the same dates a year
 	// earlier, from the same published run.
 	import type { FarmProjection } from '@water-management/engine';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { compareCard } from './cards';
 
 	let { farm }: { farm: FarmProjection } = $props();

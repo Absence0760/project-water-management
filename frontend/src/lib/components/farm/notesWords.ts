@@ -2,9 +2,9 @@
 // NotesList takes its words as a prop so the workspace, which shares it,
 // never loads the catalogue (lib/components/notes/words.ts). Call it where it
 // renders, so a language switch re-words the list.
-import type { NotesWords } from '$lib/components/notes/words';
-import { errorText } from '$lib/i18n/apiError';
-import { t } from '$lib/i18n/locale.svelte';
+import type { NotesWords } from '#lib/components/notes/words.js';
+import { errorText } from '#lib/i18n/apiError.js';
+import { t } from '#lib/i18n/locale.svelte.js';
 
 export function farmNotesWords(): NotesWords {
 	return {

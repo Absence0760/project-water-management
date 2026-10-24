@@ -11,7 +11,7 @@
 // Deliberately no import from lib/components/map: those pages must not pull
 // the map's code into their bundle. The fetch is passed in
 // (`api.map.linkedNodes`), so this module needs no $env.
-import type { MapLinkedNodes } from '$lib/api/types';
+import type { MapLinkedNodes } from '#lib/api/types.js';
 import { overlayHref } from './overlays';
 
 /** The Map tab with this node selected. */

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { i18n } from '$lib/i18n/state.svelte';
+import { i18n } from '#lib/i18n/state.svelte.js';
 import { fmt, signed } from './format';
 
 afterEach(() => {

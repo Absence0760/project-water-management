@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DownloadError } from '$lib/export/download';
+import { DownloadError } from '#lib/export/download.js';
 import { collectWorkbookInput, FORECAST_FLAG_HEADER, withForecastFlag, type ExportProgress } from './collect';
 
 const P = 'p1';

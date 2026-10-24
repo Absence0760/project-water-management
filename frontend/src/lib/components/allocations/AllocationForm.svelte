@@ -3,12 +3,12 @@
 	// in a side sheet the page opens from `volume=new` or `volume=<id>`. The
 	// unit picker is how a row is matched by hand. Only editors reach it, and
 	// only they send a holder name (decision D3).
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import { api, type Allocation, type AllocationInput } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { parseNum } from '$lib/format/number';
-	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import { api, type Allocation, type AllocationInput } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { parseNum } from '#lib/format/number.js';
+	import MonthPicker from '#lib/components/common/MonthPicker.svelte';
 	import { AUTHORISATION_LABEL, conditionsFromText, monthsText, PURPOSE_LABEL, SOURCE_LABEL, WATER_USE_LABEL } from './allocations';
 
 	let {

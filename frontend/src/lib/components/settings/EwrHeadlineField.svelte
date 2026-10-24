@@ -8,8 +8,8 @@
 -->
 <script lang="ts">
 	import type { EwrChargeSource, EwrDailySource, EwrRuleTable, NetworkNode } from '@water-management/engine';
-	import type { EwrHeadline } from '$lib/api/types';
-	import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, ruleTableSites } from '$lib/components/ewr/headline';
+	import type { EwrHeadline } from '#lib/api/types.js';
+	import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, ruleTableSites } from '#lib/components/ewr/headline.js';
 
 	let {
 		value = $bindable(),

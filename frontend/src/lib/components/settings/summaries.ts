@@ -3,8 +3,8 @@
 // panel needn't be scanned field by field to know whether it matters. They
 // follow the unsaved form. Pure: SettingsTab passes the derived figures in.
 import { defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
-import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
-import { fmtDay, fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
+import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
 
 export interface SummaryInput {

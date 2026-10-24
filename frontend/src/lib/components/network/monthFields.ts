@@ -2,7 +2,7 @@
 // the dam release, a demand object's demand or profile, an other water user's
 // demand, the hands-off flow and River to dam by month. What an edit and the
 // fill button write, kept out of the component so it is tested. Pure: no Svelte.
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** Twelve copies of `v`: a monthly row that starts as one value all year. */
 export const monthsOf = (v: number): number[] => new Array<number>(12).fill(v);

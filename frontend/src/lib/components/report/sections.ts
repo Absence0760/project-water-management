@@ -15,7 +15,7 @@
 // it is an impact report: an "Impact against the baseline" section right
 // after the cover.
 import { FORECAST_RAIN_NOTE, REPORT_NOT_EVIDENCE, REPORT_NOT_SIGNED, REPORT_READ_FIRST, REPORT_SIGNED_BY } from '@water-management/engine';
-import type { Run, Signoff } from '$lib/api/types';
+import type { Run, Signoff } from '#lib/api/types.js';
 
 export type ReportSectionId =
 	| 'cover'

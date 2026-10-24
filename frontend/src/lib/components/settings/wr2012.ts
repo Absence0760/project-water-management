@@ -2,7 +2,7 @@
 // in, the checks that block Save (the engine's own plausibility rules, which
 // the backend applies too), and unit helpers for the form.
 import { defaultWr2012Settings, wr2012FlagIssues, wr2012PenaltyIssues, wr2012ReferenceIssues, type Wr2012Reference, type Wr2012Settings } from '@water-management/engine';
-import { describeMonths } from '$lib/format/months';
+import { describeMonths } from '#lib/format/months.js';
 
 /** A reference as the form edits it: numbers may still be blank (null). */
 export type Wr2012Draft = Omit<Wr2012Reference, 'areaKm2' | 'marMm3' | 'monthlyMm3' | 'periodStart' | 'periodEnd'> & {

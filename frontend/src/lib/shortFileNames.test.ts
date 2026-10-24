@@ -22,15 +22,21 @@ describe('short output file names', () => {
 		expect(out.assetFileNames).toBe('_app/immutable/assets/[hash:7][extname]');
 	});
 
-	it('leaves patterns without a hash, and functions, alone', () => {
-		const fn = () => 'x.js';
-		const out = rewrite({ entryFileNames: '[name].js', chunkFileNames: fn, assetFileNames: 'assets/[name][extname]' });
+	it('shortens what a pattern function returns: SvelteKit 3 names client chunks with one, the route manifest without a hash', () => {
+		const kit = (info: { name: string }) => (info.name === 'sveltekit-manifest' ? '_app/manifest.js' : '_app/immutable/chunks/[hash].js');
+		const out = rewrite({ chunkFileNames: kit }) as { chunkFileNames: typeof kit };
+		expect(out.chunkFileNames({ name: 'x' })).toBe('_app/immutable/chunks/[hash:7].js');
+		expect(out.chunkFileNames({ name: 'sveltekit-manifest' })).toBe('_app/manifest.js');
+	});
+
+	it('leaves patterns without a hash alone', () => {
+		const out = rewrite({ entryFileNames: '[name].js', chunkFileNames: () => 'x.js', assetFileNames: 'assets/[name][extname]' }) as Names & { chunkFileNames: () => string };
 		expect(out.entryFileNames).toBe('[name].js');
-		expect(out.chunkFileNames).toBe(fn);
+		expect(out.chunkFileNames()).toBe('x.js');
 		expect(out.assetFileNames).toBe('assets/[name][extname]');
 	});
 
-	it('runs before the worker chunk plugin, which needs the chunk pattern as a string', () => {
+	it('runs before the worker chunk plugin, which renames what it returns', () => {
 		const names = (config as { plugins: { name?: string }[] }).plugins.flat().map((p) => p?.name);
 		expect(names.indexOf('water:short-file-names')).toBeGreaterThanOrEqual(0);
 		expect(names.indexOf('water:short-file-names')).toBeLessThan(names.indexOf('water:worker-chunks'));

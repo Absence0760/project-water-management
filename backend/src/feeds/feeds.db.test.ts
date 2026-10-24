@@ -24,7 +24,7 @@ import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { parseFetchRequest } from '../jobs/transport.js';
 import { CHIRPS_REVISION_DAYS, FEED_META_MAX_BYTES, runFetch, utcToday } from './fetch.js';
-import { FIXTURE_CELL, fixtureHttp } from './fixtures.js';
+import { dwsFixtureLastDataDay, FIXTURE_CELL, fixtureHttp } from './fixtures.js';
 import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { ingestResult } from './ingest.js';
@@ -498,7 +498,9 @@ describe('the scheduler', () => {
 		const s = (await series(owner, pid, 'flow_observed_m3s'))!;
 		expect(s.unit).toBe('m³/s'); // as the Data tab's upload writes it (frontend series/kinds.ts)
 		expect(s.startDate).toBe(addDays(-400));
-		expect((await feedRow(id)).last_data_date).toBe(addDays(-90));
+		// The newest day with a value: 90 days back, or earlier on the days that lands in
+		// one of the sample's gaps (it failed on 2026-10-21, CI run 39562063586).
+		expect((await feedRow(id)).last_data_date).toBe(dwsFixtureLastDataDay(addDays(0)));
 	});
 
 	it('when the acting owner lost the editor role: the feed shows failing and nothing is written (positive control: a new save runs as the saver)', async () => {

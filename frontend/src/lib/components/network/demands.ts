@@ -15,7 +15,7 @@ import {
 	type NetworkNode,
 	type ProjectModel
 } from '@water-management/engine';
-import { annualMm3, farmDemands } from '$lib/components/crops/demand';
+import { annualMm3, farmDemands } from '#lib/components/crops/demand.js';
 
 export type DemandRowKind = 'crops' | 'object' | 'user';
 

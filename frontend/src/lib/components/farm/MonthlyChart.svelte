@@ -10,7 +10,7 @@
 	// #70): a line in the Received cell, not a fourth column, which didn't fit
 	// a 320 px phone in Afrikaans (docs/design/ui-playbook.md: stack, don't scroll).
 	import type { FarmProjection } from '@water-management/engine';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { barChart, CHART_BASE, CHART_FONT_PX, LABEL_Y, rangeCaption, supplyLevelKey, supplyRows, supplySummary } from './chart';
 
 	import type { VolumeUnit } from './format';

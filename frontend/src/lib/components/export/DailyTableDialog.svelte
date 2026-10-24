@@ -9,10 +9,10 @@
 	// (series/SeriesPreviewDialog.svelte): only the rows in view are real
 	// <tr>s, the header row and the date column stay in view while scrolling,
 	// and number columns are right-aligned under right-aligned headers.
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fetchDownload, saveBlob } from '$lib/export/download';
-	import { parseDailyCsv, type DailyTable } from '$lib/export/dailyTable';
-	import { dayPrefix, fmtDay, fmtNum, fmtReading } from '$lib/format/number';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { fetchDownload, saveBlob } from '#lib/export/download.js';
+	import { parseDailyCsv, type DailyTable } from '#lib/export/dailyTable.js';
+	import { dayPrefix, fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 
 	let {
 		open = $bindable(false),

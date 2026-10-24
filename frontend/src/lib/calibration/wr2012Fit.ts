@@ -9,7 +9,7 @@ import {
 	type Wr2012FitStatKey,
 	type Wr2012FitStats
 } from '@water-management/engine';
-import { fmtNum, fmtQty } from '$lib/format/number';
+import { fmtNum, fmtQty } from '#lib/format/number.js';
 
 /** `volume`: a small catchment's MAR can be well under 0.001 Mm³, so volumes keep 2 significant figures (fmtQty). */
 export const WR2012_FIT_STAT: Record<Wr2012FitStatKey, { label: string; unit: string; digits: number; volume?: boolean }> = {

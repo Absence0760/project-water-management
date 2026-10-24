@@ -14,14 +14,14 @@
 	// Network's node sheet): ‹ a select of every unit › in the cards' order,
 	// least supplied first, so a unit is found without unfolding the cards.
 	import type { DailySeries, FarmSummary, SupplyAssurance } from '@water-management/engine';
-	import { api, type RunSeriesRef } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import type { ChartSeries } from '$lib/components/charts/series';
-	import { forecastBand } from '$lib/components/forecast/forecast';
-	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
-	import { cachedSeries } from '$lib/components/runs/cache';
-	import NodeAssurance from '$lib/components/reliability/NodeAssurance.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { api, type RunSeriesRef } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import type { ChartSeries } from '#lib/components/charts/series.js';
+	import { forecastBand } from '#lib/components/forecast/forecast.js';
+	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '#lib/components/overview/summaryChart.js';
+	import { cachedSeries } from '#lib/components/runs/cache.js';
+	import NodeAssurance from '#lib/components/reliability/NodeAssurance.svelte';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { shortRanges } from './supply';
 
 	let {

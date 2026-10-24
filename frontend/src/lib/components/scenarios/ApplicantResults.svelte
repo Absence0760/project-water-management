@@ -11,12 +11,12 @@
 	// the published baseline (the server leaves the rest out). The workspace
 	// is English (the Applicant view has no t()).
 	import { untrack } from 'svelte';
-	import { api, type ApplicantResults, type ApplicantResultsRun, type ApplicantEwrFigures, type ApplicantUnitFigures } from '$lib/api';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
+	import { api, type ApplicantResults, type ApplicantResultsRun, type ApplicantEwrFigures, type ApplicantUnitFigures } from '#lib/api/index.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { fmtDate, fmtNum, fmtPct } from '#lib/format/number.js';
 
-	const loadChart = () => import('$lib/components/charts/LineChart.svelte');
+	const loadChart = () => import('#lib/components/charts/LineChart.svelte');
 
 	let { projectId, scenarioId, lastRunId, opsSha256 }: { projectId: string; scenarioId: string; lastRunId: string | null; opsSha256: string } = $props();
 

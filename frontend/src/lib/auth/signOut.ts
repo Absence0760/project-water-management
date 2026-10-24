@@ -5,20 +5,20 @@
 // farm view's Sign out and Delete my account all end here.
 import { tick } from 'svelte';
 import { goto } from '$app/navigation';
-import { base } from '$app/paths';
-import { api } from '$lib/api';
-import { session } from '$lib/auth/session.svelte';
-import { clearAllSaved } from '$lib/components/farm/savedCopy';
-import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
+import { basePath } from '#lib/nav/base.js';
+import { api } from '#lib/api/index.js';
+import { session } from '#lib/auth/session.svelte.js';
+import { clearAllSaved } from '#lib/components/farm/savedCopy.js';
+import { clearNoteCounts } from '#lib/components/notes/counts.svelte.js';
 
 /** Forget the session here, then go to `to` (a path under the app, default the sign-in page). */
-export async function forgetSession(to = '/login', options?: { replaceState?: boolean }): Promise<void> {
+export async function forgetSession(to = '/login', options?: { replace?: boolean }): Promise<void> {
 	clearAllSaved();
 	clearNoteCounts();
 	session.user = null;
 	// Let the layout's route guard react first; the navigation below then wins.
 	await tick();
-	await goto(`${base}${to}`, options);
+	await goto(`${basePath()}${to}`, options);
 }
 
 /** Sign out on the server (`end`, this device's logout by default; signed out here whatever it answers), then forgetSession(`to`). */

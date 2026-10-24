@@ -11,11 +11,11 @@
 	acting for it, the action to endorse it, once (163, 229).
 -->
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { tick } from 'svelte';
-	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fmtDay, fmtStamp } from '$lib/format/number';
+	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { fmtDay, fmtStamp } from '#lib/format/number.js';
 	import { damsWithoutStopLevel, draftFrom, emptyDraft, LEVEL_LABEL, noticeLanguages, noticeTextFields, parseDraft, publishBlocker, restrictionSummary, type NoticeDraft } from './publication';
 
 	let {

@@ -3,8 +3,8 @@
 // its message (the contract in backend/src/http/errors.ts ERROR_CODES).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
-import { DownloadError } from '$lib/export/download';
+import { ApiError } from '#lib/api/client.js';
+import { DownloadError } from '#lib/export/download.js';
 import { errorText } from './apiError';
 
 const backendCodes = () => {

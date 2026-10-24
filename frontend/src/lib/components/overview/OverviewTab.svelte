@@ -1,26 +1,26 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
-	import { api, type Project, type Run, type RunMeta } from '$lib/api';
-	import AlertsPanel from '$lib/components/alerts/AlertsPanel.svelte';
-	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
+	import { api, type Project, type Run, type RunMeta } from '#lib/api/index.js';
+	import AlertsPanel from '#lib/components/alerts/AlertsPanel.svelte';
+	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { fmtDay } from '$lib/format/number';
-	import { projectToday } from '$lib/components/projects/freshness';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { loadOnce, peek } from '$lib/components/common/lazy';
+	import { fmtDay } from '#lib/format/number.js';
+	import { projectToday } from '#lib/components/projects/freshness.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { loadOnce, peek } from '#lib/components/common/lazy.js';
 	import { attention, runHref } from './attention';
-	import { riverHref, summaryToRiverAnchor } from '$lib/components/river/links';
-	import { supplyHref } from '$lib/components/supply/links';
-	import { allocationsHref } from '$lib/components/allocations/links';
+	import { riverHref, summaryToRiverAnchor } from '#lib/components/river/links.js';
+	import { supplyHref } from '#lib/components/supply/links.js';
+	import { allocationsHref } from '#lib/components/allocations/links.js';
 	import { checklist, checklistMode } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
 	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
-	import { projectAnchor, projectHref } from '$lib/components/project/links';
+	import { projectAnchor, projectHref } from '#lib/components/project/links.js';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
@@ -55,11 +55,11 @@
 	// `#res-…` EWR panel goes there the same way.
 	onMount(() => {
 		const hash = page.url.hash.slice(1);
-		if (projectAnchor(hash)) goto(projectHref(hash), { replaceState: true, noScroll: true });
+		if (projectAnchor(hash)) goto(projectHref(hash), { replace: true, reset: false });
 		else {
 			const ewr = summaryToRiverAnchor(hash);
 			// For the run the Summary shows, as the strip was.
-			if (ewr) goto(riverHref(pick?.latest.id ?? null, ewr), { replaceState: true, noScroll: true });
+			if (ewr) goto(riverHref(pick?.latest.id ?? null, ewr), { replace: true, reset: false });
 		}
 	});
 

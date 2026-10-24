@@ -3,8 +3,8 @@
 	// it also shows `summary` (the run's name and what changed) under the
 	// legend, `actions` beside it, and a coloured top edge (`colour`).
 	import type { Snippet } from 'svelte';
-	import type { ProjectSummary, RunMeta } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import type { ProjectSummary, RunMeta } from '#lib/api/index.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { runOptionLabel } from './picker';
 
 	let {

@@ -11,9 +11,9 @@
 	Its own chunk. Helpers in ./unitRain.ts and ./stationRain.ts.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { foldList } from '$lib/components/common/fold';
-	import { fmtNum } from '$lib/format/number';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { foldList } from '#lib/components/common/fold.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { catchmentMapText, chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, ratioText, stationAreas, stationNotes, type StationsResult } from './stationRain';
 	import { factorClamped, factorOutsideBand, factorText, periodText, referenceFactorsText, referenceFitText, RULE_LABEL, sortResultUnits, unitRainNotes, type UnitRainResult } from './unitRain';
 

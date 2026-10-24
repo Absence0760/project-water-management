@@ -21,11 +21,11 @@
 	centres, where its daily rainfall values sit.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { MapFeature } from '$lib/api';
-	import { fmtNum } from '$lib/format/number';
+	import type { MapFeature } from '#lib/api/index.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import {
 		CHIRPS_CELL_DEG,
 		CHIRPS_MAX_POINTS,
@@ -91,7 +91,7 @@
 	const uid = $props.id();
 
 	function toggle(layer: MapLayer, on: boolean) {
-		void goto(withLayer(page.url.search, layer, on), { noScroll: true, keepFocus: true });
+		void goto(withLayer(page.url.search, layer, on), { reset: false });
 	}
 
 	const answer = $derived(quaternaries.answer);

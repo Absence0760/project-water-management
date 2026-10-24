@@ -4,9 +4,9 @@
 	// way to sign. The same for an evidence pack (WP-3.14, issue #71): its
 	// target is the pack, its statement the pack statement. The dialog is its
 	// own chunk, loaded when opened.
-	import type { PackSignoffList, Signoff, SignoffList } from '$lib/api';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import type { PackSignoffList, Signoff, SignoffList } from '#lib/api/index.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { fmtDate } from '#lib/format/number.js';
 	import { registrationBody, registrationLine } from '@water-management/engine';
 	import { registrationHeading, shortHash, SIGNOFF_KIND_LABEL, type SignoffTarget } from './signoffForm';
 

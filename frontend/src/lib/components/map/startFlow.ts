@@ -6,8 +6,8 @@
 // units are the user's own boundaries (start-16, #523 C1): a dam or an
 // abstraction point is part of the unit whose boundary holds it (its
 // composite dam, its river pump), never a unit of its own.
-import type { DivideProposal, MapFeature, StartPlan, StartProposal, StartRole, StartState, StartTicks, StartUnit } from '$lib/api';
-import { fmtNum } from '$lib/format/number';
+import type { DivideProposal, MapFeature, StartPlan, StartProposal, StartRole, StartState, StartTicks, StartUnit } from '#lib/api/index.js';
+import { fmtNum } from '#lib/format/number.js';
 import type { PlacementChoices } from './placement';
 
 export type StartStep = 'boundary' | 'points' | 'review' | 'data' | 'closed';

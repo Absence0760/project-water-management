@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newNetworkNode, type NetworkNode } from '@water-management/engine';
-import { developmentIssue, supplyIssues } from '$lib/model/validate';
+import { developmentIssue, supplyIssues } from '#lib/model/validate.js';
 import { developmentProblemFields, supplyProblemFields } from './problemFields';
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({ ...newNetworkNode('n', 1, 'out'), kind: 'farm', ...over });

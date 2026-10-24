@@ -1,9 +1,9 @@
 // The catchment flow charts' series, shared by the Runs tab (RunCharts) and
 // the printable report: which lines, in which colour, width and style.
 import { OBSERVED_SERIES_LABEL, outletEwrSeriesLabel, type DailySeries } from '@water-management/engine';
-import type { DailyEwrSource } from '$lib/components/ewr/notMet';
-import type { ChartSeries } from '$lib/components/charts/series';
-import { fmtNum } from '$lib/format/number';
+import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';
+import type { ChartSeries } from '#lib/components/charts/series.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** The run's catchment series the flow charts draw (each absent when the run has none). */
 export interface CatchmentFlows {

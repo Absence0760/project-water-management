@@ -3,7 +3,7 @@
 // checks, what the model uses). The ids are set on the panels in
 // SeriesTab.svelte. Uploading is the header's Add data dialog; the Upload CSV
 // panel that repeated it is gone, and its `#upload-csv` is a retired id.
-import type { NavGroup } from '$lib/components/common/sectionNav';
+import type { NavGroup } from '#lib/components/common/sectionNav.js';
 
 /** Every panel id, in page order. */
 export const DATA_ANCHORS = ['data-series', 'data-chart', 'data-agreement', 'data-double-mass', 'data-checks', 'data-uses'] as const;

@@ -5,7 +5,7 @@
 // (D-U1, D-U6), and direction by sign only (G15: no verdict colour).
 // Pure: the page and the tests read the same text.
 import type { Band, EvidenceChange, EvidenceRow } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** Decimal places per unit. */
 export function digitsFor(unit: string): number {

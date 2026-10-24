@@ -7,14 +7,14 @@
 import { render } from 'svelte/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LOCALE, LOCALES } from '@water-management/engine/languages';
-import { messageId } from '$lib/i18n/msg';
-import { af } from '$lib/i18n/messages/af';
-import { i18n, setLocale } from '$lib/i18n/locale.svelte';
+import { messageId } from '#lib/i18n/msg.js';
+import { af } from '#lib/i18n/messages/af.js';
+import { i18n, setLocale } from '#lib/i18n/locale.svelte.js';
 import { entries, load, prerender, ssr } from './+page';
 import Page from './+page.svelte';
 
 const url = vi.hoisted(() => ({ href: 'https://example.org/welcome' }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/state', () => ({
 	page: {
@@ -23,7 +23,7 @@ vi.mock('$app/state', () => ({
 		}
 	}
 }));
-vi.mock('$lib/api', () => ({ api: {} }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
 
 const HEADLINE = 'Every drop in the catchment, accounted for.';
 type LoadEvent = Parameters<typeof load>[0];

@@ -440,7 +440,7 @@ the us-east-1 one ([§ Budget alerts](#budget-alerts)).
   The CloudFront header carries everything build-independent (`default-src
   'self'`, `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors
   'none'`, `connect-src 'self'`) plus `script-src 'self' 'unsafe-inline'`;
-  SvelteKit's `<meta>` CSP (`kit.csp.mode = 'hash'`) adds `script-src 'self'
+  SvelteKit's `<meta>` CSP (`csp.mode = 'hash'` in `frontend/vite.config.ts`) adds `script-src 'self'
   'sha256-…'`. Browsers enforce both, so only the hashed bootstrap and
   same-origin files run. `scripts/check-csp.mjs` fails the frontend deploy if
   the meta policy is missing, so the header's `'unsafe-inline'` can never be

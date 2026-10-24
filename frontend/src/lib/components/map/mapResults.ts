@@ -3,8 +3,8 @@
 // how it sits in the URL, the legend's rows, and the figure a card or a table
 // row gives a feature. Pure: the figures come from mapStatus.ts, the run and
 // its loading from mapResults.svelte.ts.
-import type { MapFeature, RunMeta } from '$lib/api/types';
-import { fmtDate } from '$lib/format/number';
+import type { MapFeature, RunMeta } from '#lib/api/types.js';
+import { fmtDate } from '#lib/format/number.js';
 import { BAND_TOKEN, BAND_WORD, DEFAULT_MAP_MEASURE, MAP_MEASURES, MEASURE_LEGEND, type MapBand, type MapMeasure, type MapRunChoice, type MapStatus } from './mapStatus';
 
 /** What the map's areas are coloured by: a measure, or `kind` (each feature's kind, the colours before results). */

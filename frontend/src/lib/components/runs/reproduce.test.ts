@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Reproduction } from '$lib/api';
+import type { Reproduction } from '#lib/api/index.js';
 import { differenceText, reproductionHeadline } from './reproduce';
 
 const names = (id: string) => (id === 'n1' ? 'Upper farm' : undefined);

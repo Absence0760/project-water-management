@@ -8,8 +8,8 @@
 	// rules at once, so a kind switched on over a figure already past its
 	// line alerts now (once: it re-arms only after the figure recovers).
 	import { onMount } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { api, type AlertRule } from '$lib/api';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { api, type AlertRule } from '#lib/api/index.js';
 	import AlertFeedbackSummary from './AlertFeedbackSummary.svelte';
 	import { feedRuleLabel, groupRules, SERIES_STALE_NAME, seriesRuleLabel, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 

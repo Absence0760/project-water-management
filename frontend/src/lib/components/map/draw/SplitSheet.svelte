@@ -10,8 +10,8 @@
 -->
 <script lang="ts">
 	import { oneLineName } from '@water-management/engine';
-	import { api, type MapFeature, type MapGeometry, type MapPosition } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { api, type MapFeature, type MapGeometry, type MapPosition } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { areaText, KIND_LABEL } from '../mapData';
 	import { shapeAreaM2 } from '../measure/measure';
 	import { partSide } from './draft.svelte';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { navText } from '$lib/components/common/sectionNav';
+import { navText } from '#lib/components/common/sectionNav.js';
 import { compareNavGroups, COMPARE_HEADINGS } from './sections';
 
 const all = { overrides: true, reserve: true, plausibility: true, assurance: true };

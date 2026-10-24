@@ -11,7 +11,7 @@
 // ./file.ts picks the reader.
 import { fromEpochDay, toEpochDay, type DayBoundary } from '@water-management/engine';
 import type { DwsImport } from './dws';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 export interface ParsedSeries {
 	startDate: string;

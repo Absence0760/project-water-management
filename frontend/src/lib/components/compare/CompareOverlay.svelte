@@ -12,13 +12,13 @@
 	// #51, overlay.ts recordOf), as every figure of the run does.
 	import { untrack } from 'svelte';
 	import type { DailySeries } from '@water-management/engine';
-	import { api, type RunCompareResponse, type RunSeriesRef } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import type { ChartSeries } from '$lib/components/charts/series';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { forecastBand } from '$lib/components/forecast/forecast';
-	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { toDisplayUnit } from '$lib/components/runs/results';
+	import { api, type RunCompareResponse, type RunSeriesRef } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import type { ChartSeries } from '#lib/components/charts/series.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { forecastBand } from '#lib/components/forecast/forecast.js';
+	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
+	import { toDisplayUnit } from '#lib/components/runs/results.js';
 	import { CATCHMENT_GROUP, deltaStats, isFlowSeries, matchOverlay, overlayForecastFrom, pickOption, recordOf, seriesDelta, summaryText, zeroSeries } from './overlay';
 
 	let { data }: { data: RunCompareResponse } = $props();

@@ -4,7 +4,7 @@
 	// in words, and the conditions as the licence gives them. Also a
 	// variation's terms (228_decision_events).
 	import type { ModelInput } from '@water-management/engine';
-	import type { LicenceTerms } from '$lib/api';
+	import type { LicenceTerms } from '#lib/api/index.js';
 	import OpList from './OpList.svelte';
 	import { opItems } from './ops';
 

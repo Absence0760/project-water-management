@@ -1,5 +1,5 @@
 // Guard: the scoping class Svelte adds to each component's elements is
-// `s<hash>` (svelte.config.js compilerOptions.cssHash; Svelte's default
+// `s<hash>` (svelte-options.js compilerOptions.cssHash, passed to sveltekit() in vite.config.ts; Svelte's default
 // `svelte-<hash>` cost ~2.6 KB gzip more across the bundle, issue #9). A
 // short class could in principle equal one the app writes itself (`small`,
 // `steps`…), and that element would then pick up another component's scoped
@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
-import svelteConfig from '../../svelte.config.js';
+import { compilerOptions } from '../../svelte-options.js';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 
@@ -26,7 +26,7 @@ const components = files.filter((f) => f.endsWith('.svelte'));
 
 /** The class the build scopes `file`'s styles with: a one-rule component compiled under that file name. */
 function scopeClass(file: string): string {
-	const { js } = compile('<p class="x">a</p><style>.x { color: red; }</style>', { ...svelteConfig.compilerOptions, filename: file });
+	const { js } = compile('<p class="x">a</p><style>.x { color: red; }</style>', { ...compilerOptions, filename: file });
 	const m = /class="x ([^"]+)"/.exec(js.code);
 	if (!m) throw new Error(`no scope class in the output for ${file}`);
 	return m[1]!;

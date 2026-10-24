@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 
 	let {
 		headingId,

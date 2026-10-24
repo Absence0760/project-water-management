@@ -9,8 +9,8 @@
 	// the applicant's: the question carries what the assessors need, and
 	// stays when the draft is deleted (234, issue #523 G7: "(draft deleted)").
 	import { untrack } from 'svelte';
-	import { api, type AssessorQuestion } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import { api, type AssessorQuestion } from '#lib/api/index.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { opsText, rulesText } from './questions';
 
 	let { projectId }: { projectId: string } = $props();

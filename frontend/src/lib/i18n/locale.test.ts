@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { DAYS } from '$lib/components/farm/format';
-import { ORDINAL } from '$lib/components/farm/chart';
+import { DAYS } from '#lib/components/farm/format.js';
+import { ORDINAL } from '#lib/components/farm/chart.js';
 import { markedCatalogue } from './fixtureCatalogue';
 import { messageId, pluralId } from './msg';
 import { plainText } from './rich';

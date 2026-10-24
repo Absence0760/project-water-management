@@ -10,7 +10,7 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/projects/p?tab=map') } }));
 
 import MapLayers from './MapLayers.svelte';
-import type { RiverReach } from '$lib/api';
+import type { RiverReach } from '#lib/api/index.js';
 import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { reachKey } from './mapLayers';
 import type { RiverLayer } from './riverLayer.svelte';
@@ -18,7 +18,7 @@ import type { AreaFill } from './areaFill.svelte';
 import { withoutComments } from '../__fixtures__/withoutComments';
 
 // HelpTip links to the glossary under the app's base path.
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const quaternaries = { on: false } as unknown as QuaternaryLayer;
 const riversOff = { on: false } as unknown as RiverLayer;

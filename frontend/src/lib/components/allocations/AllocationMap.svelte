@@ -13,8 +13,8 @@
 -->
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { appIsDark, watchAppTheme } from '$lib/components/map/appTheme';
-	import { basemapLayerIds, basemapStyle, labelLayers, type Style } from '$lib/components/map/mapStyle';
+	import { appIsDark, watchAppTheme } from '#lib/components/map/appTheme.js';
+	import { basemapLayerIds, basemapStyle, labelLayers, type Style } from '#lib/components/map/mapStyle.js';
 	import { bandColours, HATCH_IMAGE, hatchPixels, useBounds, useLayers, useMapData, useSentence, USE_SOURCE_ID, type UseShading } from './useMap';
 
 	let {
@@ -41,7 +41,7 @@
 	let status = $state<'loading' | 'ready' | 'failed'>('loading');
 	let tilesNote = $state(false);
 	let dark = $state(typeof matchMedia === 'function' && typeof document !== 'undefined' && appIsDark());
-	type Lib = typeof import('$lib/components/map/maplibre');
+	type Lib = typeof import('#lib/components/map/maplibre.js');
 	let lib: Lib | null = null;
 	let map: InstanceType<Lib['MapLibreMap']> | null = null;
 	const markers = new Map<string, { marker: InstanceType<Lib['Marker']>; button: HTMLButtonElement; key: string }>();
@@ -119,7 +119,7 @@
 		let stopTheme: (() => void) | null = null;
 		(async () => {
 			try {
-				lib = await import('$lib/components/map/maplibre');
+				lib = await import('#lib/components/map/maplibre.js');
 				if (tilesUrl) await lib.usePmtiles();
 				if (disposed) return;
 				const style = styleNow();

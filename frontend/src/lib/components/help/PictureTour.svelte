@@ -9,11 +9,12 @@
 	// A stop with `more` has a "Show more" button that opens it in place,
 	// across the full width: key points beside a close-up of that part of the
 	// scene, or a diagram.
-	import { base } from '$app/paths';
-	import Diagram from '$lib/components/help/Diagram.svelte';
-	import RichText from '$lib/components/help/RichText.svelte';
-	import { guideFor, type PictureStop } from '$lib/help/guides';
-	import { DUSK_MEDIA, SHOTS, SHOT_ALT, pictureSrc, pictureSrcset, type ShotId } from '$lib/help/pictures';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
+	import Diagram from '#lib/components/help/Diagram.svelte';
+	import RichText from '#lib/components/help/RichText.svelte';
+	import { guideFor, type PictureStop } from '#lib/help/guides.js';
+	import { DUSK_MEDIA, SHOTS, SHOT_ALT, pictureSrc, pictureSrcset, type ShotId } from '#lib/help/pictures.js';
 
 	let {
 		shot,
@@ -37,10 +38,10 @@
 	<div class="picture" class:framed={!pic.cutout}>
 		<!-- By day in light mode, at dusk in dark mode: one camera, so one set of markers. -->
 		<picture>
-			<source media={DUSK_MEDIA} srcset={pictureSrcset(shot, base, 'dusk')} {sizes} />
+			<source media={DUSK_MEDIA} srcset={pictureSrcset(shot, basePath(), 'dusk')} {sizes} />
 			<img
-				src="{base}{pictureSrc(shot)}"
-				srcset={pictureSrcset(shot, base)}
+				src="{basePath()}{pictureSrc(shot)}"
+				srcset={pictureSrcset(shot, basePath())}
 				{sizes}
 				width={pic.width}
 				height={pic.height}
@@ -86,11 +87,11 @@
 							<div class="more-grid" class:with-pic={stop.more.shot}>
 								{#if stop.more.shot}
 									<picture>
-										<source media={DUSK_MEDIA} srcset={pictureSrcset(stop.more.shot, base, 'dusk')} sizes="(min-width: 64rem) 22rem, 100vw" />
+										<source media={DUSK_MEDIA} srcset={pictureSrcset(stop.more.shot, basePath(), 'dusk')} sizes="(min-width: 64rem) 22rem, 100vw" />
 										<img
 											class="closeup"
-											src="{base}{pictureSrc(stop.more.shot, SHOTS[stop.more.shot].width / 2)}"
-											srcset={pictureSrcset(stop.more.shot, base)}
+											src="{basePath()}{pictureSrc(stop.more.shot, SHOTS[stop.more.shot].width / 2)}"
+											srcset={pictureSrcset(stop.more.shot, basePath())}
 											sizes="(min-width: 64rem) 22rem, 100vw"
 											width={SHOTS[stop.more.shot].width}
 											height={SHOTS[stop.more.shot].height}
@@ -119,7 +120,7 @@
 								onclick={() => (expanded[stop.spot] = !open)}>{open ? 'Show less' : 'Show more'}</button
 							>
 						{/if}
-						{#if guide}<a href="{base}/help/guides/{guide.id}">{guide.title} →</a>{/if}
+						{#if guide}<a href={resolve(`help/guides/${guide.id}`)}>{guide.title} →</a>{/if}
 					</p>
 				</div>
 			</li>

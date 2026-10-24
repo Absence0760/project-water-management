@@ -5,8 +5,8 @@
 // a system of the scheme's own, which then needs its efficiency. The block is
 // mapped by $lib/spreadsheet/paste/grid.ts.
 import type { IrrigationSystemDef } from '@water-management/engine';
-import { mapPaste, sameValue, toCsv, type GridFormat, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-import { sabiRange } from '$lib/model/systems';
+import { mapPaste, sameValue, toCsv, type GridFormat, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
+import { sabiRange } from '#lib/model/systems.js';
 
 /** Headings the first column goes by. */
 const NAME_HEADINGS = ['System', 'Irrigation system', 'Name'];

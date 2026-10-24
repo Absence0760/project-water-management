@@ -1,11 +1,11 @@
 // The sign-in CAPTCHA's client side (issue #126): telling the WAF's CAPTCHA
 // answer from an ordinary 405, the retry carrying the solved token, the
 // build config that keeps it off locally, the script loaded once and only on
-// demand, and the meta-CSP origins svelte.config.js derives from the URL.
+// demand, and the meta-CSP origins svelte-options.js derives from the URL.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, CAPTCHA_REQUIRED, createApi, isWafCaptcha, WAF_TOKEN_HEADER } from '$lib/api/client';
+import { ApiError, CAPTCHA_REQUIRED, createApi, isWafCaptcha, WAF_TOKEN_HEADER } from '#lib/api/client.js';
 import { captchaConfig, loadCaptchaSdk, resetCaptchaSdkForTests, type AwsWafCaptchaApi } from './wafCaptcha';
-import { wafCaptchaOrigins } from '../../../svelte.config.js';
+import { wafCaptchaOrigins } from '../../../svelte-options.js';
 
 const SCRIPT = 'https://a1b2c3.edge.captcha-sdk.awswaf.com/a1b2c3/jsapi.js';
 
@@ -128,7 +128,7 @@ describe('loadCaptchaSdk', () => {
 	});
 });
 
-describe('wafCaptchaOrigins (svelte.config.js, the meta CSP)', () => {
+describe('wafCaptchaOrigins (svelte-options.js, the meta CSP)', () => {
 	it('allows exactly the SDK origin and its challenge script’s, or nothing', () => {
 		expect(wafCaptchaOrigins(undefined)).toEqual([]);
 		expect(wafCaptchaOrigins('')).toEqual([]);

@@ -3,7 +3,7 @@
 // reference ET, the A-pan row for A-pan), whether it holds the proposal
 // already, the implied pan coefficient cross-check, and the provenance line.
 import { describe, expect, it } from 'vitest';
-import type { EvaporationAccepted, EvaporationProposals } from '$lib/api';
+import type { EvaporationAccepted, EvaporationProposals } from '#lib/api/index.js';
 import { acceptedText, coverageText, impliedPanCoefficient, outsidePanRange, proposalState, sameAsSaved, savedRow, useMessage } from './evaporationProposal';
 
 const BASE = [120, 150, 175, 180, 150, 130, 90, 65, 50, 55, 75, 95];

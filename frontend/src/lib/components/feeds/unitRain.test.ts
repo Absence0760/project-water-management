@@ -2,7 +2,7 @@
 // words, the button, the product and start-date checks, and the calls. The
 // browser flow is pinned by e2e/tests/unit-rain.spec.ts.
 import { describe, expect, it, vi } from 'vitest';
-import type { UnitRainProposal, UnitRainProposalUnit } from '$lib/api/types';
+import type { UnitRainProposal, UnitRainProposalUnit } from '#lib/api/types.js';
 import { feedsApi, type FeedHealth } from './feeds';
 import { appliedWords, feedLimitNote, sortUnitRows, UNIT_RAIN_DEFAULT_PRODUCT, unitRainAction, unitRainBody, unitRainRows, unitRainUpToDate } from './unitRain';
 

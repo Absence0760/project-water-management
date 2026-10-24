@@ -1,23 +1,24 @@
 <script lang="ts">
-	import { SearchStep } from '$lib/nav/searchStep';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { SearchStep } from '#lib/nav/searchStep.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, tick, untrack } from 'svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { isFarmerOnly } from '$lib/auth/frame';
-	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
-	import { api, hasTeamRole, type PortfolioProject, type ProjectSummary, type Team } from '$lib/api';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { loadOnce, peek, prefetch } from '$lib/components/common/lazy';
-	import GetStarted from '$lib/components/projects/GetStarted.svelte';
-	import NeedsAttention from '$lib/components/projects/NeedsAttention.svelte';
-	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
-	import { needsAttention } from '$lib/components/projects/outcomes';
+	import { isFarmerOnly } from '#lib/auth/frame.js';
+	import { cleanName, workspaceNameProblem } from '#lib/format/visibleName.js';
+	import { api, hasTeamRole, type PortfolioProject, type ProjectSummary, type Team } from '#lib/api/index.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { loadOnce, peek, prefetch } from '#lib/components/common/lazy.js';
+	import GetStarted from '#lib/components/projects/GetStarted.svelte';
+	import NeedsAttention from '#lib/components/projects/NeedsAttention.svelte';
+	import ProjectTable from '#lib/components/projects/ProjectTable.svelte';
+	import { needsAttention } from '#lib/components/projects/outcomes.js';
 	import {
 		IRRIGATION_LABEL,
 		IRRIGATION_RULE,
@@ -26,8 +27,8 @@
 		thresholdsRule,
 		thresholdsSource,
 		type SortDir
-	} from '$lib/components/portfolio/portfolio';
-	import { evidenceRefusal, type EvidenceRefusal } from '$lib/components/projects/deleteRefusal';
+	} from '#lib/components/portfolio/portfolio.js';
+	import { evidenceRefusal, type EvidenceRefusal } from '#lib/components/projects/deleteRefusal.js';
 	import {
 		filterProjects,
 		groupProjects,
@@ -39,7 +40,7 @@
 		sortProjects,
 		type OwnerFilter,
 		type SortKey
-	} from '$lib/components/projects/grouping';
+	} from '#lib/components/projects/grouping.js';
 
 	let projects = $state<ProjectSummary[]>([]);
 	let teams = $state<Team[]>([]);
@@ -100,7 +101,7 @@
 	// press still reruns the import (lazy.ts), which helps only if it was the
 	// chunk's CSS that failed.
 	// components/import/homeSplit.test.ts keeps the static imports off it.
-	const loadImportDialog = () => import('$lib/components/import/ImportProjectDialog.svelte');
+	const loadImportDialog = () => import('#lib/components/import/ImportProjectDialog.svelte');
 	const prefetchImport = () => prefetch(loadImportDialog);
 	let ImportProjectDialog = $state.raw(peek(loadImportDialog));
 	let importWaiting = $state(false);
@@ -150,14 +151,16 @@
 	// returns to the list before it), the rest replace it, so Back never steps letter by letter.
 	const searchStep = new SearchStep();
 	function setParams(next: { owner?: OwnerFilter; sort?: SortKey; dir?: SortDir; q?: string }) {
-		const u = new URL(page.url);
+		const u = new URL(page.url.href);
 		const set = (k: string, v: string, dflt: string) => (v === dflt ? u.searchParams.delete(k) : u.searchParams.set(k, v));
 		if (next.owner !== undefined) set('owner', next.owner, 'all');
 		if (next.sort !== undefined) set('sort', next.sort, 'updated');
 		if (next.dir !== undefined) set('dir', next.dir, 'asc');
 		if (next.q !== undefined) set('q', next.q.trim(), '');
 		if (u.search === page.url.search) return;
-		goto(u.pathname + u.search, { replaceState: next.q !== undefined && searchStep.replace(), keepFocus: true, noScroll: true });
+		const href = u.pathname + u.search;
+		if (next.q !== undefined) void searchStep.write(href, (replace) => goto(href, { replace, reset: false }));
+		else goto(href, { reset: false });
 	}
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -188,7 +191,7 @@
 			// A user who is only ever a farmer has no workspace: their farms are
 			// the farmer view (WP-2.6, docs/design/farmer-view.md).
 			if (isFarmerOnly(p.value.map((x) => x.role))) {
-				await goto(`${base}/farm`, { replaceState: true });
+				await goto(resolve('farm'), { replace: true });
 				return;
 			}
 			projects = p.value;
@@ -205,9 +208,9 @@
 		await load();
 		// ?new=1 (e.g. "New project in this team" on a team page) opens the dialog.
 		if (page.url.searchParams.get('new') === '1') {
-			const u = new URL(page.url);
+			const u = new URL(page.url.href);
 			u.searchParams.delete('new');
-			await goto(u.pathname + u.search, { replaceState: true, keepFocus: true, noScroll: true });
+			await goto(u.pathname + u.search, { replace: true, reset: false });
 			if (!loadError) openCreate();
 		}
 	});
@@ -215,7 +218,7 @@
 	const options = $derived(ownerOptions(projects, teams));
 	const filtered = $derived(filterProjects(projects, { owner, query }));
 	const visible = $derived(sortProjects(filtered, sort, outcomes ?? undefined, dir));
-	const flagged = $derived(outcomes ? needsAttention(filtered, outcomes, base) : []);
+	const flagged = $derived(outcomes ? needsAttention(filtered, outcomes, basePath()) : []);
 	// The header's one line: how the catchments in view are doing, with what the
 	// team portfolio's tiles counted (alerts firing, stale figures) when there are any.
 	const inView = $derived(outcomes ? filtered.map((p) => outcomes!.get(p.id)).filter((o): o is PortfolioProject => !!o) : []);
@@ -244,7 +247,7 @@
 			...(d === 'desc' ? { dir: d } : {}),
 			...(q ? { q } : {})
 		}).toString();
-		return qs ? `?${qs}` : `${base}/`;
+		return qs ? `?${qs}` : resolve('');
 	};
 
 	// A dashboard on a wide screen (issue #17): the list's card takes at most
@@ -299,7 +302,7 @@
 		try {
 			const p = await api.projects.create(cleanName(newName), newDescription.trim() || undefined, newTeamId || null);
 			createOpen = false;
-			await goto(`${base}/projects/${p.id}`);
+			await goto(resolve(`projects/${p.id}`));
 		} catch (err) {
 			actionError = msg(err);
 		} finally {
@@ -342,7 +345,7 @@
 		actionError = null;
 		try {
 			await api.projects.remove(p.id);
-			const at = [...document.querySelectorAll('.groups a.name')].findIndex((a) => a.getAttribute('href') === `${base}/projects/${p.id}`);
+			const at = [...document.querySelectorAll('.groups a.name')].findIndex((a) => a.getAttribute('href') === resolve(`projects/${p.id}`));
 			projects = projects.filter((x) => x.id !== p.id);
 			// Its row, and the menu that asked, have gone: the project now in its place takes the focus, or
 			// the search once none is shown, or the heading once the list has made way for Get started.
@@ -446,7 +449,7 @@
 						</li>
 					{/each}
 				</ul>
-				<a class="manage" href="{base}/teams">Manage teams</a>
+				<a class="manage" href={resolve('teams')}>Manage teams</a>
 			</nav>
 
 			{#if selectedTeam}
@@ -457,8 +460,8 @@
 					{IRRIGATION_RULE}, a provisional default that can’t be changed yet. The team page's EWR status is the outlet over the 30 days to the figures'
 					last day: {thresholdsRule(selectedTeam.portfolioThresholds)}.
 					{thresholdsSource(selectedTeam.portfolioThresholds)}
-					{#if hasTeamRole(selectedTeam.role, 'admin')}<a href="{base}/teams/{selectedTeam.id}?settings=1">Change them on the team page</a
-						>.{:else}A team owner can change them on the <a href="{base}/teams/{selectedTeam.id}">team page</a>.{/if}
+					{#if hasTeamRole(selectedTeam.role, 'admin')}<a href={resolve(`teams/${selectedTeam.id}?settings=1`)}>Change them on the team page</a
+						>.{:else}A team owner can change them on the <a href={resolve(`teams/${selectedTeam.id}`)}>team page</a>.{/if}
 				</p>
 			{/if}
 
@@ -505,7 +508,7 @@
 						<div class="none">
 							{#if unknownTeam}
 								<p role="alert">This team doesn't exist or you're not a member.</p>
-								<p><a href="{base}/teams">Your teams</a> · <a href="{base}/">All projects</a></p>
+								<p><a href={resolve('teams')}>Your teams</a> · <a href={resolve('')}>All projects</a></p>
 							{:else if query.trim()}
 								<p>No projects in <strong>{ownerLabel}</strong> match “{query.trim()}”.</p>
 								<button type="button" class="btn" onclick={clearFilters}>Clear search and filter</button>
@@ -533,7 +536,7 @@
 									<span class="count">{g.projects.length}<span class="visually-hidden"> projects</span></span>
 									{#if g.teamId}
 										<a class="team-link" href={hrefWith({ owner: `team:${g.teamId}` })}>Only this team</a>
-										<a class="team-link" href="{base}/teams/{g.teamId}">Team members & settings</a>
+										<a class="team-link" href={resolve(`teams/${g.teamId}`)}>Team members & settings</a>
 									{/if}
 								</div>
 								{@render table(g.projects, g.label, g.key === 'shared')}
@@ -582,7 +585,7 @@
 					Personal: only you and people you share it with. In a team, its editors and owners can edit it and its
 					viewers can only read it.
 				{:else}
-					Only you and people you share it with. <a href="{base}/teams">Create a team</a> to work on catchments together.
+					Only you and people you share it with. <a href={resolve('teams')}>Create a team</a> to work on catchments together.
 				{/if}
 			</span>
 		</div>
@@ -628,7 +631,7 @@
 			series are copied, the runs and their nominations are not.
 		</p>
 		<p>
-			<a href="{base}/projects/{kept.project.id}?tab=runs{kept.run ? `&run=${kept.run.id}` : ''}"
+			<a href={resolve(`projects/${kept.project.id}?tab=runs${kept.run ? `&run=${kept.run.id}` : ''}`)}
 				>{kept.run ? 'Open the evidence run' : 'Open the project’s runs'}</a
 			>
 		</p>

@@ -4,8 +4,8 @@
 // features go back out in the format they came in, and the file imports
 // again (its `kind` property is read by the upload's review, maps.md §
 // Uploads). Pure (mapExport.test.ts).
-import type { MapFeature } from '$lib/api/types';
-import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '$lib/components/legal/dataCredits';
+import type { MapFeature } from '#lib/api/types.js';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '#lib/components/legal/dataCredits.js';
 import { creditedFeature, jrcCreditedFeature } from './mapLayers';
 
 export interface ExportedProperties {

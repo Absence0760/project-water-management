@@ -5,10 +5,10 @@
 // English, with the line naming the language the WUA wrote in), with no
 // other change.
 import { describe, expect, it, vi } from 'vitest';
-import { vaalbankFixture } from '$lib/components/farm/fixture';
-import { noticeCard } from '$lib/components/farm/cards';
-import { languageName, pickNotice } from '$lib/components/farm/notice';
-import { i18n } from '$lib/i18n/locale.svelte';
+import { vaalbankFixture } from '#lib/components/farm/fixture.js';
+import { noticeCard } from '#lib/components/farm/cards.js';
+import { languageName, pickNotice } from '#lib/components/farm/notice.js';
+import { i18n } from '#lib/i18n/locale.svelte.js';
 import { draftFrom, emptyDraft, noticeTextFields, noticeLanguages, parseDraft } from './publication';
 
 /** The types know only the shipped languages; the stand-in exists at run time. */

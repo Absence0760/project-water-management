@@ -4,11 +4,11 @@
 // vs what-if i + 1); this module turns those into the outcomes table's rows,
 // the plain-language takeaways under it, and the one-line "what changed" of
 // each run card. Pure: no I/O, no Svelte.
-import { EWR_NOT_MET } from '$lib/components/ewr/notMet';
+import { EWR_NOT_MET } from '#lib/components/ewr/notMet.js';
 import { SUPPLY_TARGET, type FarmSummary, type InputChange, type InputChangeArea, type MetricDelta, type RunComparison } from '@water-management/engine';
-import { fmtNum, fmtPct } from '$lib/format/number';
-import { capacityOnDate, damDevOf } from '$lib/components/overview/damLevels';
-import { historyEnd } from '$lib/components/overview/latestRun';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
+import { capacityOnDate, damDevOf } from '#lib/components/overview/damLevels.js';
+import { historyEnd } from '#lib/components/overview/latestRun.js';
 import type { MetricSpec } from './delta';
 
 /** Days in an average year, for the takeaways' "days a year below the EWR" from the share of days. */

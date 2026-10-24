@@ -1,11 +1,11 @@
 // The farm view's map words and colours (issue #326 A3; farmMap.ts).
 import { describe, expect, it } from 'vitest';
-import type { FarmMapFeature } from '$lib/api/types';
-import { BAND_TOKEN } from '$lib/components/map/mapStatus';
+import type { FarmMapFeature } from '#lib/api/types.js';
+import { BAND_TOKEN } from '#lib/components/map/mapStatus.js';
 import { vaalbankFixture } from './fixture';
-import { creditedFeature, jrcCreditedFeature, mapCredits } from '$lib/components/map/mapLayers';
-import { BASEMAP_ATTRIBUTION } from '$lib/components/map/mapStyle';
-import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
+import { creditedFeature, jrcCreditedFeature, mapCredits } from '#lib/components/map/mapLayers.js';
+import { BASEMAP_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
+import { HYDRORIVERS_MAP_ATTRIBUTION } from '#lib/components/legal/dataCredits.js';
 import { asMapFeatures, FARM_BAND_TOKEN, farmFills, farmMapCard, farmMapCredits, kindWord, mapWords, placeText, showsMap } from './farmMap';
 
 const sp = (s: string) => s.replace(/[  ]/g, ' ');

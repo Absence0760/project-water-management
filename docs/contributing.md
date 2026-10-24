@@ -52,7 +52,7 @@ proposed there, not forked here.
 - `.github/workflows/security.yml` — CodeQL static analysis + container scanning
 - `.github/workflows/scorecard.yml` — OSSF Scorecard
 - `.github/workflows/claude.yml` — Claude Code automation on PRs/issues
-- `.github/workflows/dependabot-auto-merge.yml` — auto-merges minor/patch Dependabot PRs
+- `.github/workflows/dependabot-auto-merge.yml` — auto-merges minor/patch Dependabot PRs when the repository allows auto-merge (else it leaves a notice; docs/deployment.md)
 - `.github/workflows/dependabot-lockfile.yml` — re-syncs pnpm lockfile on Dependabot PRs
 - `.github/dependabot.yml` — dependency update PRs
 - `SECURITY.md` — vulnerability reporting policy

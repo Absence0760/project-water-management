@@ -9,9 +9,9 @@
 // table's ±tolerance status, which also calls 0.9–1.0 "within". The wording
 // never says "lawful" or "compliant" (allocations.ts).
 import { USE_BANDS, useBand, type AllocationComparison, type AllocationNodeComparison, type UseBand } from '@water-management/engine';
-import type { MapFeature, MapGeometry, MapPosition } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
-import { interiorPoint } from '$lib/components/map/pieces';
+import type { MapFeature, MapGeometry, MapPosition } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
+import { interiorPoint } from '#lib/components/map/pieces.js';
 
 // The band rule lives in the engine (allocations/useBand.ts), so the example
 // seed is held to the same edges as the map.

@@ -7,8 +7,8 @@
 	(WR2012_GOOD_FIT_BANDS in the engine).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { wr2012BandsNote, wr2012FitRows, wr2012FitSummary, type Wr2012FitPeriod } from '$lib/calibration/wr2012Fit';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { wr2012BandsNote, wr2012FitRows, wr2012FitSummary, type Wr2012FitPeriod } from '#lib/calibration/wr2012Fit.js';
 
 	let { periods }: { periods: Wr2012FitPeriod[] } = $props();
 

@@ -12,11 +12,11 @@
 -->
 <script lang="ts">
 	import { APPLICANT_PROMPT_MAX, APPLICANT_PROMPTS, NO_PROMPTS, type ApplicantPrompts } from '@water-management/engine';
-	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { guardUnsaved } from '#lib/nav/unsaved.js';
 	import { leavesScenario } from './leaves';
 	import { answeredCount, statementPatch, storedAnswers } from './statement';
 	import { statementSummary } from './details';
-	import Fold from '$lib/components/common/Fold.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
 
 	let {
 		scenarioName,

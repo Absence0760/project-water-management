@@ -5,7 +5,7 @@
 // hydrologist both asked for this before the river results. The fit is not
 // one of them: it has no verdict and the NSE card says it (issue #177).
 import type { RunSummary } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { checksHeadline } from './checks';
 import { findings } from './plausibility';
 import { FLAG_LABEL } from './wr2012';

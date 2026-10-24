@@ -124,8 +124,8 @@ after a Node major bump ([upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md
    where `$effect` and `$effect.root` do nothing, so the constructor's effect
    never runs and a test awaiting its request waits forever. Wrap the class
    in `$effect.root(…)`, call `flushSync()` after changing its inputs, and
-   pass its requests in rather than importing `$lib/api` (whose
-   `$env/static/public` exists only under SvelteKit;
+   pass its requests in rather than importing `#lib/api/index.js` (whose
+   `$app/env/public` exists only under SvelteKit;
    `components/map/riverLayer.svelte.test.ts` is the pattern).
 
 ## Layout checks and fonts
@@ -201,6 +201,11 @@ wall-clock claim (the perf projects do), and both set a 60 s
 `testTimeout`/`hookTimeout` that only catches a hang
 (`backend/vitest.config.ts`). Until 2026-10 the DB project had the default,
 and the Coverage workflow failed on whichever runner was slow that day. A
+backend coverage run (`--coverage`) multiplies the unit project's hang guard
+by 4, and exposes the factor as `COVERAGE_SLOWDOWN` for a test that sets its
+own: the example catchments' GR4J fit (`scripts/examples/catchments.test.ts`)
+took about 100 s of its 120 s guard under coverage, and went over it on a
+slower runner (PR #570). A
 test that records what its requests do keeps the record per request
 (`role-ladder.db.test.ts` carries it in an `AsyncLocalStorage`), so a request
 still running after its test ends can't fail the next one.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FarmSummary, NetworkNode, ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { attention, nameList, runHref, type AttentionInput } from './attention';
 
 const node = (id: string, kind: NetworkNode['kind'] = 'farm', name = id): NetworkNode =>

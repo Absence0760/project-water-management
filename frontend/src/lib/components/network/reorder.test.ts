@@ -1,7 +1,7 @@
 import type { NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { newNode } from '$lib/model/editor.svelte';
-import { validateModel } from '$lib/model/validate';
+import { newNode } from '#lib/model/editor.svelte.js';
+import { validateModel } from '#lib/model/validate.js';
 import { canDrainInto, flowPathOrder, makeOutlet, moveTo, upstreamOf, validDropTargets } from './reorder';
 
 let seq = 0;

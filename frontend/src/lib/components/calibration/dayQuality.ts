@@ -6,7 +6,7 @@
 // chunk stays free of the model code (issue #9); dayQuality.test.ts checks
 // they agree.
 import type { AboveRatingUse, DayQuality, FlowDayFlag } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** The flow classes in the order the panel lists them, with how each is named. */
 export const FLOW_ROWS: { flag: FlowDayFlag; label: string }[] = [

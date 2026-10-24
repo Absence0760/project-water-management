@@ -13,10 +13,10 @@
 	// 1.73.0, issue #408, §2.7k: CropSupplyFields). The node is the editor's
 	// own object, so edits land in the model directly.
 	import { hasCropShares, SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { operatingIssues, supplyIssues } from '$lib/model/validate';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { operatingIssues, supplyIssues } from '#lib/model/validate.js';
 	import MonthFields from './MonthFields.svelte';
 	import WaterSourceFields from './WaterSourceFields.svelte';
 	import CropSupplyFields from './CropSupplyFields.svelte';

@@ -8,9 +8,9 @@
 	// participation (./ShareComments.svelte: anyone signed in comments through
 	// the link, with no role in the project, 166_public_participation). Every
 	// word is in ./scenario.ts, ./ShareComments.svelte or t() here.
-	import { base } from '$app/paths';
-	import type { ShareScenario } from '$lib/api/types';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { resolve } from '$app/paths';
+	import type { ShareScenario } from '#lib/api/types.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { changeRows, daysLine, ewrRows, resultsNote, statusLine, volumeRows } from './scenario';
 	import ShareComments from './ShareComments.svelte';
 	import { shareCaveat } from './share';
@@ -114,7 +114,7 @@
 			<p>{t('An application to use water in this catchment, modelled on its published baseline. It is read-only, and it names no other hydrological unit.')}</p>
 			<p class="fine">{t('This link works until it expires or is withdrawn, while the application is submitted or decided.')}</p>
 			<p class="fine">{t('It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.')}</p>
-			<p class="fine legal-links"><a href="{base}/terms">{t('Terms of use')}</a> · <a href="{base}/privacy">{t('Privacy notice')}</a></p>
+			<p class="fine legal-links"><a href={resolve('terms')}>{t('Terms of use')}</a> · <a href={resolve('privacy')}>{t('Privacy notice')}</a></p>
 		</section>
 	</div>
 </div>

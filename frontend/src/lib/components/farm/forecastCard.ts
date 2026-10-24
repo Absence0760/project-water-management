@@ -4,7 +4,7 @@
 // rain, never as what will happen, and with the day the forecast was made so
 // an old one reads as old. Words from the message catalogue ($lib/i18n, WP-2.5).
 import type { FarmProjection } from '@water-management/engine';
-import { t } from '$lib/i18n/locale.svelte';
+import { t } from '#lib/i18n/locale.svelte.js';
 import { count, DAYS, daysBetween, fmtDayMonth, fmtPct } from './format';
 
 export interface ForecastVm {

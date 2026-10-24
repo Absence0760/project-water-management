@@ -263,15 +263,24 @@ export function lowFlowThresholds(periods: readonly LowFlowPeriod[] | undefined,
  * The aligned record (m³/s, null = missing) with its readings above a
  * low-flow period's threshold blanked, as the run's statistics, its EWR test
  * on the observed record and the plausibility checks read it (issue #557).
- * Returns `values` itself when no day is blanked.
+ * `filled` is the gap fill's per-day code (FLOW_FILL_CODE, aligned to
+ * `values`): a filled day is no reading, so it is never blanked here; the
+ * infilled treatment decides it, as the fit's flags do (infilled outranks
+ * periodHigh, issue #567). Returns `values` itself when no day is blanked.
  */
-export function withoutPeriodHighs<T extends number | null>(values: readonly T[], periods: readonly LowFlowPeriod[] | undefined, kind: CalibrationFlowKind, start: number): (T | null)[] {
+export function withoutPeriodHighs<T extends number | null>(
+	values: readonly T[],
+	periods: readonly LowFlowPeriod[] | undefined,
+	kind: CalibrationFlowKind,
+	start: number,
+	filled?: ArrayLike<number> | null
+): (T | null)[] {
 	const thr = lowFlowThresholds(periods, kind, start, values.length);
 	if (!thr) return values as (T | null)[];
 	let out: (T | null)[] | null = null;
 	for (let t = 0; t < values.length; t++) {
 		const v = values[t];
-		if (typeof v === 'number' && v > thr[t]!) (out ??= values.slice())[t] = null;
+		if (typeof v === 'number' && v > thr[t]! && !filled?.[t]) (out ??= values.slice())[t] = null;
 	}
 	return out ?? (values as (T | null)[]);
 }

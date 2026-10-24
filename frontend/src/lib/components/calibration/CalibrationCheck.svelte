@@ -15,12 +15,12 @@
 <script lang="ts">
 	import type { DailySeries } from '@water-management/engine';
 	import type { Snippet } from 'svelte';
-	import { api, type RunSeriesRef } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { cachedSeries } from '$lib/components/runs/cache';
-	import { observedLabels, observedSources } from '$lib/components/runs/flowSeries';
-	import { toDisplayUnit } from '$lib/components/runs/results';
-	import { fmtNum } from '$lib/format/number';
+	import { api, type RunSeriesRef } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import { cachedSeries } from '#lib/components/runs/cache.js';
+	import { observedLabels, observedSources } from '#lib/components/runs/flowSeries.js';
+	import { toDisplayUnit } from '#lib/components/runs/results.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { allKeys, beforeForecastFlows, checkGauges, checkKeys, checkSeries, sumDaily, type CheckFlows, type CheckNode, type SeriesKey } from './calibrationCheck';
 
 	let {

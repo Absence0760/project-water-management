@@ -12,7 +12,7 @@
 // control on a real chart and one on a drawn canvas (issue #521, round 6).
 // Synthetic data only.
 import type { Page } from '@playwright/test';
-import { createProject, createRun, putModel, sampleModel, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, syntheticFlow, updateSettings } from '../support/api.ts';
 import { expectNonTextContrast, nonTextContrast } from '../support/contrast.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, openMap, uploadThroughSheet } from '../support/map.ts';
@@ -56,12 +56,6 @@ async function drawCharts(page: Page, min: number) {
 	expect(await page.locator('main .uplot canvas').count()).toBeGreaterThanOrEqual(min);
 }
 
-// The light theme's yellow and pink (--series-5, -6) are under 3:1 on the
-// surface at full strength (the playbook's documented exception for the
-// categorical palette). As lane strips (suspect, human use) each sits in its
-// own row, top to bottom as keyed, and the key names the class and counts its
-// days, so the strip's colour is never the only cue. Dark: no exception.
-const LIGHT_LANE_EXCEPTIONS = '.lane-key li:is([data-color="--series-5"], [data-color="--series-6"])';
 
 test.describe('canvas charts', () => {
 	// Two device pixels per CSS pixel, so a 1.25 px line and text stems have pixels at full strength (support/contrast.ts).
@@ -113,24 +107,31 @@ test.describe('canvas charts', () => {
 	for (const colorScheme of ['light', 'dark'] as const) {
 		test.describe(`${colorScheme} theme`, () => {
 			test.use({ colorScheme });
-			const except = colorScheme === 'light' ? LIGHT_LANE_EXCEPTIONS : undefined;
 
 			test('Runs & results and Data: every series, lane strip and axis label is at 3:1 (text 4.5:1)', async ({ page, owner }) => {
 				void owner;
 				const project = await seedRunnableProject(page.request, `Contrast canvas runs ${colorScheme}`);
-				// Days below and above the gauged range: two lane strips under the hydrograph.
+				// The record with a 20-day flat stretch (suspect by the Data checks), so a double-line strip is drawn beside the
+				// solid above-range one: both looks on the canvas, each at 3:1.
+				const flow = syntheticFlow(120).map((v, i) => (i >= 60 && i < 80 ? 0.12 : v));
+				await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: flow });
 				await updateSettings(page.request, project.id, { runoffModel: 'gr4j', qualityFlags: { ratings: { flow_observed_m3s: { gaugedMaxM3s: 0.3, gaugedMinM3s: 0.05, source: 'Synthetic rating table' } } } });
 				const run = await createRun(page.request, project.id, 'Rated');
 				await page.goto(`/projects/${project.id}?tab=runs&run=${run}`);
-				await expect(page.locator('#res-hydrograph figure.chart').first()).toHaveAttribute('data-lanes', '1');
+				const hydro = page.locator('#res-hydrograph figure.chart').first();
+				await expect(hydro).toHaveAttribute('data-lanes', '2');
+				await expect(hydro.locator('.lane-key li[data-doubled] i.doubled')).toHaveCount(1);
+				await expect(hydro.locator('.lane-key p')).toContainText('top to bottom; solid: outside the flow the record can be trusted at; double line: a doubtful reading, or not the river’s own flow');
 				await drawCharts(page, 4);
-				await expectNonTextContrast(page, { within: 'main', except });
+				await expectNonTextContrast(page, { within: 'main' });
 
 				await page.goto(`/projects/${project.id}?tab=series`);
 				await page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Flow — observed gauge' }).getByRole('button', { name: 'View', exact: true }).click();
-				await expect(page.locator('#data-chart figure.chart')).toHaveAttribute('data-lanes', '1');
+				const data = page.locator('#data-chart figure.chart');
+				await expect(data).toHaveAttribute('data-lanes', '2');
+				await expect(data.locator('.lane-key li[data-doubled] i.doubled')).toHaveCount(1);
 				await drawCharts(page, 1);
-				await expectNonTextContrast(page, { within: 'main', except });
+				await expectNonTextContrast(page, { within: 'main' });
 			});
 
 			test('EWR: the flow, the reserve and its rule are at 3:1', async ({ page, owner }) => {

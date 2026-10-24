@@ -14,8 +14,8 @@
 	// the report's is a fixed 520-unit drawing scaled to the page, never
 	// under 549 px (its 9 px text at 9.5 px), scrolling sideways on a phone.
 	// Each label's full text and each mark's year and share are its tooltip.
-	import { fmtNum } from '$lib/format/number';
-	import { distinctShortNames } from '$lib/components/network/schematic';
+	import { fmtNum } from '#lib/format/number.js';
+	import { distinctShortNames } from '#lib/components/network/schematic.js';
 	import { waterYearLabel } from './allocations';
 	import { useSummary, type UseRow } from './usePlot';
 

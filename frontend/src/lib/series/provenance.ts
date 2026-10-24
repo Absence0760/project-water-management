@@ -20,7 +20,7 @@ import {
 	type SeriesMeta,
 	type SeriesProvenance
 } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { byKindThenName, firstOutletSeries } from './pick';
 
 /** The kinds a person is asked the product and version of: the CHIRPS series. */

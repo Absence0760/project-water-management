@@ -9,7 +9,10 @@
 //           day later (chirps-sample.json)
 //   GEFS    an issue every day, 16 forecast days (gefs-sample.json)
 //   DWS     the sample page's values replayed for the requested window,
-//           ending DWS_FIXTURE_LAG_DAYS before today (dws-sample.html)
+//           ending DWS_FIXTURE_LAG_DAYS before today (dws-sample.html). The
+//           sample has gaps, replayed by date (dwsFixtureValue), so on some
+//           days the newest days served are gaps and the feed's last data
+//           date is earlier (dwsFixtureLastDataDay)
 //
 // Every file has a tag (FeedHttp.rangeTagged / head): a hash of its bytes, as
 // an ETag would change with them. With `rewrite` (FEED_FIXTURE_REWRITE=1, or
@@ -65,6 +68,24 @@ const RNL_FIRST = toEpochDay('1981-01-01');
 
 /** The DWS fixture's newest day is this many days before today. */
 export const DWS_FIXTURE_LAG_DAYS = 90;
+
+const DWS_SAMPLE = parseDwsDaily(readFileSync(`${FIXTURE_DIR}dws-sample.html`, 'utf8')).values;
+
+/** The flow the DWS fixture serves for `day` (an epoch day or ISO date): the sample replayed by date, null in its gaps. */
+export function dwsFixtureValue(day: number | string): number | null {
+	const d = typeof day === 'string' ? toEpochDay(day) : day;
+	return DWS_SAMPLE[((d % DWS_SAMPLE.length) + DWS_SAMPLE.length) % DWS_SAMPLE.length] ?? null;
+}
+
+/**
+ * The newest day the DWS fixture serves a value for, given today: DWS_FIXTURE_LAG_DAYS
+ * before it, or earlier when that day falls in one of the sample's gaps.
+ */
+export function dwsFixtureLastDataDay(today: string): string {
+	let d = toEpochDay(today) - DWS_FIXTURE_LAG_DAYS;
+	while (dwsFixtureValue(d) === null) d--;
+	return fromEpochDay(d);
+}
 
 /** The rainfall of the fixture grid at (row, col) on pattern step `k`. */
 export function fixtureValue(f: GridFixture, k: number, row: number, col: number): number {
@@ -123,7 +144,6 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 	const rewritten = (day: number, t: number) => rewrite !== null && day >= t - rewrite.fromDaysAgo && day <= t - rewrite.toDaysAgo;
 	const scaled = (f: GridFixture) => ({ ...f, pattern: f.pattern.map((v) => v * rewrite!.factor) });
 	const gefs = load<GridFixture>('gefs-sample.json');
-	const dwsSample = parseDwsDaily(readFileSync(`${FIXTURE_DIR}dws-sample.html`, 'utf8'));
 	const cache = new Map<string, Uint8Array>();
 	const cached = (key: string, make: () => Uint8Array) => {
 		let v = cache.get(key);
@@ -196,12 +216,8 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 			if (q.get('DataType') !== 'Daily' || !station) return null;
 			const from = toEpochDay(q.get('StartDT') ?? '');
 			const to = Math.min(toEpochDay(q.get('EndDT') ?? ''), toEpochDay(today()) - DWS_FIXTURE_LAG_DAYS);
-			const sample = dwsSample.values;
 			const rows = [];
-			for (let d = from; d <= to; d++) {
-				const k = ((d % sample.length) + sample.length) % sample.length;
-				rows.push({ date: fromEpochDay(d), value: sample[k] ?? null, quality: '1' });
-			}
+			for (let d = from; d <= to; d++) rows.push({ date: fromEpochDay(d), value: dwsFixtureValue(d), quality: '1' });
 			return renderDwsPage(station, rows);
 		}
 	};

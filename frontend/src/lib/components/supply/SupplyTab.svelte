@@ -17,39 +17,39 @@
 	// units" (no card list scrolls inside itself), and on a wide page the chart
 	// sticks beside the cards, under the "On this page" menu, as they are read
 	// down. The tables below grow with their rows rather than scrolling in a box.
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { DailySeries } from '@water-management/engine';
-	import { api, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
-	import WithheldUnitsNote from '$lib/components/runs/WithheldUnitsNote.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import Delta from '$lib/components/compare/Delta.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { holdAnchor } from '$lib/help/anchor';
-	import { runHref } from '$lib/components/overview/attention';
-	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '$lib/components/overview/latestRun';
-	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import ReportWindowPanel from '$lib/components/runs/ReportWindowPanel.svelte';
-	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
-	import { runDamCapacity } from '$lib/components/runs/results';
-	import { runYears } from '$lib/components/runs/runList';
-	import { dataEndOf } from '$lib/format/age';
-	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { withParam } from '$lib/workspace/overlays';
-	import { mapNodeHref } from '$lib/workspace/mapLinks';
-	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
+	import { api, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
+	import WithheldUnitsNote from '#lib/components/runs/WithheldUnitsNote.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import Delta from '#lib/components/compare/Delta.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { runHref } from '#lib/components/overview/attention.js';
+	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '#lib/components/overview/latestRun.js';
+	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
+	import ReportWindowPanel from '#lib/components/runs/ReportWindowPanel.svelte';
+	import AssurancePanel from '#lib/components/reliability/AssurancePanel.svelte';
+	import { runDamCapacity } from '#lib/components/runs/results.js';
+	import { runYears } from '#lib/components/runs/runList.js';
+	import { dataEndOf } from '#lib/format/age.js';
+	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { withParam } from '#lib/workspace/overlays.js';
+	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
+	import { MappedNodes } from '#lib/workspace/mappedNodes.svelte.js';
 	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
-	import { allocationsHref } from '$lib/components/allocations/links';
+	import { allocationsHref } from '#lib/components/allocations/links.js';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
 	import { BAND_WORDS, cardFacts, daysShort, foldCards, foldNote, pickUnit, previousRunOf, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { hasHumanImpacts, loadHumanImpacts, usersTableOnSupply } from '$lib/components/runs/humanImpacts';
-	import { loadRestrictionTables } from '$lib/components/runs/restrictions';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { hasHumanImpacts, loadHumanImpacts, usersTableOnSupply } from '#lib/components/runs/humanImpacts.js';
+	import { loadRestrictionTables } from '#lib/components/runs/restrictions.js';
 
 	let {
 		projectId,
@@ -225,7 +225,7 @@
 	function choose(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
-		void goto(withParam(page.url, UNIT_PARAM, id), { noScroll: true, keepFocus: true }).then(() => {
+		void goto(withParam(page.url, UNIT_PARAM, id), { reset: false }).then(() => {
 			if (!side) chartEl?.scrollIntoView({ block: 'start' });
 		});
 	}
@@ -234,7 +234,7 @@
 	// (‹ at the first unit is disabled, so to the select), and ‹ › can be pressed again and again.
 	function pickUnitById(id: string) {
 		const from = document.activeElement?.id;
-		void goto(withParam(page.url, UNIT_PARAM, id), { noScroll: true, keepFocus: true })
+		void goto(withParam(page.url, UNIT_PARAM, id), { reset: false })
 			.then(() => tick())
 			.then(() => {
 				if (!from?.startsWith('unit-')) return;
@@ -245,7 +245,7 @@
 	function pickRun(id: string) {
 		const q = new URLSearchParams(page.url.search);
 		q.set('run', id);
-		void goto(`?${q}`, { noScroll: true, keepFocus: true });
+		void goto(`?${q}`, { reset: false });
 	}
 
 	// --- the fold: the least supplied few cards, every unit below the target or short this week, and the
@@ -284,7 +284,7 @@
 			releaseFragment = holdAnchor(el);
 			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 		});
 	});
 	onDestroy(() => {

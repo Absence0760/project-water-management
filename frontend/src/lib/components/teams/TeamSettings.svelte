@@ -7,13 +7,13 @@
 	// thresholds or delete. Leaving and deleting are the page's (they need its
 	// members and navigate away), so they come in as callbacks.
 	import { untrack } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { base } from '$app/paths';
-	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
-	import { api, type Team } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { thresholdsError, thresholdsRule, thresholdsSource } from '$lib/components/portfolio/portfolio';
-	import RequireTwoStep from '$lib/components/auth-extras/RequireTwoStep.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { resolve } from '$app/paths';
+	import { cleanName, workspaceNameProblem } from '#lib/format/visibleName.js';
+	import { api, type Team } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { thresholdsError, thresholdsRule, thresholdsSource } from '#lib/components/portfolio/portfolio.js';
+	import RequireTwoStep from '#lib/components/auth-extras/RequireTwoStep.svelte';
 
 	let {
 		open = $bindable(false),
@@ -175,7 +175,7 @@
 	<section class="part" aria-labelledby="pt-h-t">
 		<h3 id="pt-h"><span id="pt-h-t">EWR traffic lights</span> <HelpTip key="ewr-traffic-light" label="About the EWR traffic lights" /></h3>
 		<p class="small rule">
-			A catchment's EWR status in the <a href="{base}/?owner=team:{team.id}&sort=status">project list</a> counts the days in the last 30 its outlet
+			A catchment's EWR status in the <a href={resolve(`?owner=team:${team.id}&sort=status`)}>project list</a> counts the days in the last 30 its outlet
 			EWR was not met: {thresholdsRule(team.portfolioThresholds)}.
 		</p>
 		<p class="muted small">{thresholdsSource(team.portfolioThresholds)}</p>

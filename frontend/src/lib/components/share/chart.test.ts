@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ShareSeries } from '$lib/api/types';
-import { CHART_BASE } from '$lib/components/farm/chart';
+import type { ShareSeries } from '#lib/api/types.js';
+import { CHART_BASE } from '#lib/components/farm/chart.js';
 import { addMonths, FLOW_MONTHS, flowCaption, flowChart, flowMonths, flowRows, flowSummary, flowVerdict, monthsBelow, recentMonths } from './chart';
 
 const sp = (s: string) => s.replace(/[  ]/g, ' ');

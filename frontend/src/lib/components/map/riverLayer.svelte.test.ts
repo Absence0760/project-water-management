@@ -4,7 +4,7 @@
 // requests are the deps' `load` and `add`, so the test needs no API client.
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MapFeature, RiverLayer as Answer, RiverReach } from '$lib/api/types';
+import type { MapFeature, RiverLayer as Answer, RiverReach } from '#lib/api/types.js';
 import { RiverLayer, type RiverLayerDeps } from './riverLayer.svelte';
 import { reachRef, riverBbox, riverViewBbox } from './mapLayers';
 import { deferred, square } from './layerTesting';

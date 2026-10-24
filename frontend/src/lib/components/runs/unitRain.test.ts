@@ -6,7 +6,7 @@ import UnitRainPanel from './UnitRainPanel.svelte';
 import { factorClamped, factorOutsideBand, factorText, periodText, referenceFactorsText, referenceFitText, sortResultUnits, unitRainNotes, unitRainOf, type UnitRainResult, type UnitRainResultUnit } from './unitRain';
 import { withoutComments } from '../__fixtures__/withoutComments';
 
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const unit = (over: Partial<UnitRainResultUnit> = {}): UnitRainResultUnit => ({
 	nodeId: 'u1',

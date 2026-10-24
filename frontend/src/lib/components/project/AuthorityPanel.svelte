@@ -7,8 +7,8 @@
 	// runs current) and saved at once, as the members are. The decision form
 	// fills it in, and the evidence report prints "For: …" from it.
 	import type { ProjectSettings } from '@water-management/engine';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { api, type Project, type ResponsibleAuthority } from '$lib/api';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { api, type Project, type ResponsibleAuthority } from '#lib/api/index.js';
 
 	let {
 		project,

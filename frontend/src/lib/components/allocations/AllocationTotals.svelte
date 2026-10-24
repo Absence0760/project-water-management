@@ -5,9 +5,9 @@
 	// registered volumes in force today and the run's modelled use, each summed
 	// per water source, only for a source 5 or more registered users hold. No
 	// unit, name or registration number.
-	import type { AllocationComparisonTotals, AllocationTotal } from '$lib/api';
-	import { fmtNum } from '$lib/format/number';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import type { AllocationComparisonTotals, AllocationTotal } from '#lib/api/index.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { judgementSentence, SOURCE_LABEL, totalsSentence, waterYearLabel } from './allocations';
 
 	let {

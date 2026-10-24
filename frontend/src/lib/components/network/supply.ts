@@ -4,8 +4,8 @@
 // (supplyIssues). Pure: no Svelte.
 import { riverToDamUnit } from './flowUnit.svelte';
 import { SUPPLY_DEFAULTS, type NetworkNode, type SupplyRule } from '@water-management/engine';
-import { describeMonths, WATER_YEAR_CALENDAR } from '$lib/format/months';
-import { groupedText } from '$lib/components/common/numberText';
+import { describeMonths, WATER_YEAR_CALENDAR } from '#lib/format/months.js';
+import { groupedText } from '#lib/components/common/numberText.js';
 import { monthsOf } from './monthFields';
 
 /** What each rule does, under the form's select. */

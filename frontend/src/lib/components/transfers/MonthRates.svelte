@@ -10,10 +10,10 @@
 	// so thirty rules don't cost thirty extra lines.
 	import type { Snippet } from 'svelte';
 	import { transferRatesM3s, withMonthlyRates, type Transfer } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtNum } from '$lib/format/number';
-	import { transferUnit } from '$lib/components/network/flowUnit.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import { describeMonths, WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { transferUnit } from '#lib/components/network/flowUnit.svelte.js';
 
 	let {
 		rule,

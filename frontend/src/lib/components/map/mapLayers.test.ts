@@ -1,7 +1,7 @@
 // The Map tab's layers (mapLayers.ts, issue #326 A6, the relief, the river network #345):
 // `layers=` in the URL and the bbox the quaternaries and rivers are asked for around the features.
 import { describe, expect, it } from 'vitest';
-import type { MapFeature } from '$lib/api/types';
+import type { MapFeature } from '#lib/api/types.js';
 import {
 	CHIRPS_MAX_POINTS,
 	DEM_GRID_BBOX_MAX_DEG,
@@ -229,7 +229,7 @@ describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
 		expect(mapCredits([], false, null)).toEqual([]);
 		expect(mapCredits([], false, 'Synthetic MAP grid (invented rainfall over region Z), water-management test fixture')).toEqual([]);
 		expect(mapCredits([], false, `${waas} (edited)`)).toEqual([]);
-		expect(MAP_CREDIT_TEXT['waas-map']).toBe(`MAP grid: ${waas}`);
+		expect(MAP_CREDIT_TEXT['waas-map']).toBe('MAP grid: WAAS (2007), Beuster Clarke & Associates');
 	});
 
 	it('words each credit for the attribution control: the JRC line names the source as JRC asks and says the outline was modified', () => {

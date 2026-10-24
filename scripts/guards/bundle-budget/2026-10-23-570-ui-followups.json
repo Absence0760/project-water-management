@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "PR #570 follow-ups: the flow-quality strips' two looks (the key's looks note, lane tokens, swatch alignment) and the Map tab's attribution clearance; measured 2036 -> 2037 KB against the branch head"
+}

@@ -2,10 +2,10 @@
 // with the same shape as the workspace's English (notes/words.ts), and server
 // errors worded from their code, never the server's English.
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
-import { NOTE_MAX } from '$lib/api/types';
-import { bodyProblem } from '$lib/components/notes/notes';
-import { NOTES_EN } from '$lib/components/notes/words';
+import { ApiError } from '#lib/api/client.js';
+import { NOTE_MAX } from '#lib/api/types.js';
+import { bodyProblem } from '#lib/components/notes/notes.js';
+import { NOTES_EN } from '#lib/components/notes/words.js';
 import { farmNotesWords } from './notesWords';
 
 describe('farmNotesWords', () => {

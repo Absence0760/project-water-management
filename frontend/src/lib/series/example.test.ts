@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exampleHref } from '$lib/components/common/formatHelp';
+import { exampleHref } from '#lib/components/common/formatHelp.js';
 import { SERIES_EXAMPLE, SERIES_EXAMPLE_FILE } from './example';
 import { parseSeriesFile } from './file';
 

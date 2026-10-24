@@ -7,9 +7,9 @@
 	// page's footer, Terms §9 and the map's attribution while a credited
 	// layer is drawn. A notice, not part
 	// of the terms: changing it asks no one to accept anything again.
-	import { base } from '$app/paths';
-	import LegalPage from '$lib/components/legal/LegalPage.svelte';
-	import { DATA_CREDITS, licencesReadLine, readDay } from '$lib/components/legal/dataCredits';
+	import { resolve } from '$app/paths';
+	import LegalPage from '#lib/components/legal/LegalPage.svelte';
+	import { DATA_CREDITS, licencesReadLine, readDay } from '#lib/components/legal/dataCredits.js';
 
 	const sections = [{ id: 'about', label: 'About these credits' }, ...DATA_CREDITS.map((c, i) => ({ id: c.id, label: `${i + 1}. ${c.name}` }))];
 </script>
@@ -24,7 +24,7 @@
 	<p>
 		Water Management draws on data published by others. Each dataset below is used under its publisher’s licence, and each credit
 		is worded as that licence asks. The data is provided as its publishers provide it; how the service treats data from others is
-		in section 9 of the <a href="{base}/terms#third-party">terms of use</a>. A deployment uses only the datasets its operator has
+		in section 9 of the <a href={resolve('terms#third-party')}>terms of use</a>. A deployment uses only the datasets its operator has
 		loaded, so a project may never show some of them.
 	</p>
 

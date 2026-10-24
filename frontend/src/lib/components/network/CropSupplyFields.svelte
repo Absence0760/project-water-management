@@ -10,10 +10,10 @@
 	// in the model directly; the remote unit's list and the problems read the
 	// network's nodes.
 	import { cropSupplyIssues, hasCropShares, type NetworkNode } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import { pumpUnit } from './flowUnit.svelte';
 	import PumpCapacityField from './PumpCapacityField.svelte';

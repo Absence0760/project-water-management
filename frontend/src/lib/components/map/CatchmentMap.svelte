@@ -48,7 +48,7 @@
 	corner) and a click on one opens its card (`onpiecepick`).
 -->
 <script module lang="ts">
-	import type { MapFeatureKind } from '$lib/api/types';
+	import type { MapFeatureKind } from '#lib/api/types.js';
 
 	/** Everything the map says in words (the farm view passes its own, translated). */
 	export interface MapWords {
@@ -66,8 +66,8 @@
 
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { base } from '$app/paths';
-	import type { MapFeature } from '$lib/api/types';
+	import { resolve } from '$app/paths';
+	import type { MapFeature } from '#lib/api/types.js';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
 	import { MAP_CREDIT_TEXT, mapCredits, type MapCredit } from './mapLayers';
 	import { appIsDark, watchAppTheme } from './appTheme';
@@ -109,7 +109,7 @@
 		fillOpacity,
 		type ChirpsCellData
 	} from './mapStyle';
-	import type { MapGeometry, MapPosition } from '$lib/api/types';
+	import type { MapGeometry, MapPosition } from '#lib/api/types.js';
 	import { attachDrawing } from './draw/attachDrawing';
 	import type { Draft } from './draw/draft.svelte';
 	import { DRAFT_SOURCE, draftData, draftLayers } from './draw/drawLayers';
@@ -427,7 +427,7 @@
 	// Southwestern Cape MAP surface while the MAP grid layer draws its points.
 	const credited = $derived(mapCredits(features, riversCredit, mapGrid?.length ? mapGridAttribution : null));
 	const ALL_CREDITS = Object.keys(MAP_CREDIT_TEXT) as MapCredit[];
-	const creditEntries = (ids: readonly MapCredit[]) => ids.map((id) => ({ id, html: creditLink(`${base}/data-sources`, id, MAP_CREDIT_TEXT[id]) }));
+	const creditEntries = (ids: readonly MapCredit[]) => ids.map((id) => ({ id, html: creditLink(resolve('data-sources'), id, MAP_CREDIT_TEXT[id]) }));
 
 	/** Add or drop each credit on the live map, to match what is drawn (a style load carries them already). */
 	function syncCredits() {
@@ -452,7 +452,7 @@
 		const url = reliefUrl();
 		const has = !!map.getLayer(RELIEF_LAYER);
 		if (url && !has) {
-			if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(url, `${base}/data-sources`) as never);
+			if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(url, resolve('data-sources')) as never);
 			map.addLayer(reliefLayer(dark) as never, reliefBeforeId(map.getStyle().layers.map((l) => l.id)));
 		} else if (!url && has) {
 			map.removeLayer(RELIEF_LAYER);
@@ -476,7 +476,7 @@
 						channels: channelData(channels, channelsDim),
 						terrain: reliefUrl(),
 						credits: creditEntries(credited),
-						dataSourcesHref: `${base}/data-sources`,
+						dataSourcesHref: resolve('data-sources'),
 						proposal: proposalData(proposal),
 						units: unitsData(units, features),
 						mapGrid: mapGridData(mapGrid),

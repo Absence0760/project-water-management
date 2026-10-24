@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PointPlacement } from '$lib/api/types';
+import type { PointPlacement } from '#lib/api/types.js';
 import { choiceFor, emptyPlacement, OUTLET_KEY, placedByMappedRivers, placementLine, withPlacement } from './placement';
 
 const reach = { dataset: 'HydroRIVERS-v10', reachId: 11509680, upstreamKm2: 292.4, chosen: false };

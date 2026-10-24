@@ -302,7 +302,7 @@ section it belongs to, with the example that taught it.
   column, its first line the old message (specs and help quote it) and a
   second line saying what a run's results hold.
 - **Pick a default rather than show an empty half.** With nothing in the
-  URL, open the first item and write it with `replaceState`, so Back leaves
+  URL, open the first item and write it with goto's `replace`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
   Hydrological units show a default without writing it). Don't start that
   write while a navigation is in flight (`navigating.to`) or while the URL
@@ -611,6 +611,18 @@ section it belongs to, with the example that taught it.
   under it. On a narrow map, check the right column too: Layers sits under
   the zoom buttons, so it moves under the search's lines and the picked
   name stops short of it (`MapTab.svelte`, a `map-body` container query).
+- **The map's credits never run under its own buttons.** MapLibre's
+  attribution sits bottom right and grows leftward; the Map's Show
+  everything and Key sit bottom left. A 150-character credit (the MAP grid's
+  authors' line, issue #560) wrapped along the whole foot and the buttons
+  hid its start, at 1280 px as on a phone. The tab measures its bottom-left
+  corner (`.foot-at`: the buttons, and the Key's panel while it is open over
+  the map) and keeps the attribution beside it on a wide map, above it under
+  30rem, where beside would leave a column of one or two words a line
+  (`MapTab.svelte`, `--foot-w`/`--foot-h`; `map-layers.spec.ts` checks the
+  boxes never meet at 1280 and 390 px, Key open too). And keep each credit
+  short, linking to its full statement on `/data-sources` (HydroRIVERS',
+  the MAP grid's): the whole line stays on that page and with the layer.
 - **A popover's controls aren't in the DOM while it's closed.** The Map's
   Getting started pill kept its steps' buttons in a `hidden` box, and a check
   that the header's controls share one row (`locator('button, a.btn')`) read
@@ -970,10 +982,31 @@ section it belongs to, with the example that taught it.
   (decoration, as in SVG); `LineChart`'s `shade` tint (`--warning` at 16 %)
   and a `band`'s tint and hatching, each keyed in words under the plot with a
   full-strength edge (the band's dashed `--series-4` start line is a mark and
-  passes); and, in the light theme only, the yellow and pink lane strips
-  (`--series-5`, `-6`, 2.1–2.7:1), which sit in their own keyed row with the
-  class named and its days counted. The spec passes those two lanes as an
-  explicit `except`; anything else faint fails.
+  passes). The quality strips no longer use the light theme's yellow and
+  pink (2.1–2.7:1, once an explicit `except` in the spec): every lane is
+  ≥ 3:1 on the card, `non-text-contrast.spec.ts` draws a solid and a
+  double-line strip and checks both, and anything faint fails.
+  **Compute colour-blind separation; when the palette can't give it, add a
+  shape.** The flow-quality strips (issue #557) needed six colours that stay
+  apart for colour-blind readers, and no choice of six palette tokens does
+  (CIEDE2000 after Machado 2009 protanopia, deuteranopia and tritanopia, every
+  choice computed): the low-flow period's green sat 7.9 from the suspect
+  amber for a dark-theme protanope, the light theme's aqua 4.8 from the human
+  use pink, and so on. So the strips have two looks, by what the class says:
+  solid for a reading outside the flow it can be trusted at, a **double
+  line** (a 1 px ground line along the middle, the swatch the same, the
+  key's heading saying what the two looks mean) for a doubtful one; within
+  each look every pair is ≥ 10 for every reader in both themes. One cue,
+  grouped by meaning, not a pattern per lane. And a strip isn't a line: the
+  double-line classes have their own tokens (`--lane-*`), because the
+  palette's light violet was the line charts' `--series-4` exactly and
+  borrowing `--series-2`/`-3` put an orange strip under the orange simulated
+  line (the review caught both); the test also holds every strip ΔE00 ≥ 13
+  from each line the flow charts draw. Not hatching: a strip's ranges are often one day, under
+  a pixel on a decade's view, where hatching can't show and the strip would
+  no longer match its key. `calibration/flowFlagColours.test.ts` computes
+  every lane pair and each lane's contrast from `app.css`, so a token change
+  that brings two together fails.
 - **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
   the dark theme's accent into a mid teal that read as a live secondary
   button; `.btn-primary:disabled` is the plain surface, the strong border and
@@ -1220,11 +1253,11 @@ Interaction details that bit:
 - **A sticky element inside a scroll container covers controls** as they
   scroll, and axe fails the covered ones (target size). Put a picker in the
   Dialog `subhead` instead.
-- **Closing an overlay drops its param with `replaceState`**, so Back
+- **Closing an overlay drops its param with goto's `replace`**, so Back
   closes the overlay rather than leaving the page. A create dialog
   (Scenarios' `new=1`) that navigates on success lets the URL close it: drop
   the param in the same `goto` that picks the new item (with
-  `replaceState`), rather than setting its `open` to false first, which
+  `replace`), rather than setting its `open` to false first, which
   starts a second `goto` that races the first.
 - **When a state replaces the focused control, move focus to the title.**
   Forgot password's *Send reset link* button disappears into *Check your
@@ -1575,13 +1608,18 @@ Interaction details that bit:
   Allocations added one, so Back did different things on neighbouring pages
   (issue #521). The rule: a run, unit, dam or feature the user picks, and a
   filter or sort chosen from a control, pushes (`goto` without
-  `replaceState`), so Back returns to the pick before. A search typed into a
+  `replace`), so Back returns to the pick before. A search typed into a
   box is one step: its first change after the box takes the focus pushes,
   the rest replace (the project list, Runs' label filter, History's
   Parameter filter, one `SearchStep` each from `lib/nav/searchStep.ts`:
-  `onfocus={step.focus}`, `replaceState: step.replace()`). A default pick, a redirect from an old link and closing an
+  `onfocus={step.focus}`, each write through `step.write(href, (replace) => goto(href, { replace }))`, which pushes until a push has landed: SvelteKit drops a navigation a newer one overtakes). A default pick, a redirect from an old link and closing an
   overlay replace. Every sort and filter is in the URL, so a reload keeps it
-  (the Applications sort `sort=status`, Runs' `q=`).
+  (the Applications sort `sort=status`, Runs' `q=`). Back also returns the
+  window to where it was on that entry, even when a pick scrolled its detail
+  into view: SvelteKit 3 skips that for `reset: false` steps, so the root
+  layout's `lib/nav/backScroll.ts` restores the place it saved, held while
+  the section is still building (`back-scroll.spec.ts`: Dams, Hydrological
+  units, Allocations, the section strip's arrow keys).
 - **A failed load says what failed and offers Try again.** A panel that reads
   on its own (Recent notes, Registration checks, the Outcome matrix's sweep,
   the Seasonal outlook, Automated calibration's fits) shows "Couldn’t look

@@ -3,7 +3,7 @@
 // farmer view (/farm, FarmShell), so their account pages sit in that frame
 // too, translated, rather than in the workspace's English sidebar.
 import { getContext, setContext } from 'svelte';
-import type { Role } from '$lib/api/types';
+import type { Role } from '#lib/api/types.js';
 
 /** Every membership is `farmer` (and there is at least one). */
 export function isFarmerOnly(roles: readonly Role[]): boolean {

@@ -10,14 +10,15 @@
 	// readers at developer documents they can't open.
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
-	import RichText from '$lib/components/help/RichText.svelte';
-	import { hashId, holdAnchor } from '$lib/help/anchor';
-	import { CATEGORY_TITLES, HELP, countryNames, helpFor } from '$lib/help/content';
-	import { glossaryPath, topicForSlug } from '$lib/help/glossaryLinks';
-	import { currentSection } from '$lib/help/spy';
+	import HelpCrumbs from '#lib/components/help/HelpCrumbs.svelte';
+	import RichText from '#lib/components/help/RichText.svelte';
+	import { hashId, focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { CATEGORY_TITLES, HELP, countryNames, helpFor } from '#lib/help/content.js';
+	import { glossaryPath, topicForSlug } from '#lib/help/glossaryLinks.js';
+	import { currentSection } from '#lib/help/spy.js';
 
 	const category = $derived(topicForSlug(page.params.topic ?? ''));
 	const entries = $derived(category ? HELP.filter((e) => e.category === category) : []);
@@ -36,7 +37,7 @@
 		const here = entries.some((e) => e.id === id);
 		if (!here) {
 			const e = helpFor(id);
-			if (e && e.id === id) goto(`${base}${glossaryPath(e)}`, { replaceState: true });
+			if (e && e.id === id) goto(`${basePath()}${glossaryPath(e)}`, { replace: true });
 			return;
 		}
 		let live = true;
@@ -45,7 +46,7 @@
 			const el = live ? document.getElementById(id) : null;
 			if (!el) return;
 			release = holdAnchor(el);
-			el.focus({ preventScroll: true });
+			focusAnchor(el);
 		});
 		return () => {
 			live = false;
@@ -107,17 +108,17 @@
 	<HelpCrumbs
 		trail={category
 			? [
-					{ label: 'Help', href: `${base}/help` },
+					{ label: 'Help', href: resolve('help') },
 					{ label: 'Reference' },
-					{ label: 'Glossary', href: `${base}/help/glossary` },
+					{ label: 'Glossary', href: resolve('help/glossary') },
 					{ label: title }
 				]
-			: [{ label: 'Help', href: `${base}/help` }]}
+			: [{ label: 'Help', href: resolve('help') }]}
 	/>
 
 	{#if !category}
 		<h1>Topic not found</h1>
-		<p>There is no glossary topic called “{page.params.topic}”. <a href="{base}/help/glossary">See every topic</a>.</p>
+		<p>There is no glossary topic called “{page.params.topic}”. <a href={resolve('help/glossary')}>See every topic</a>.</p>
 	{:else}
 		<header class="head">
 			<h1>{title}</h1>
@@ -160,7 +161,7 @@
 									<dd>
 										{#each e.related as r, i (r)}
 											{@const rel = helpFor(r)}
-											{#if rel}<a href="{base}{glossaryPath(rel)}">{rel.term}</a>{i < e.related.length - 1 ? ', ' : ''}{/if}
+											{#if rel}<a href="{basePath()}{glossaryPath(rel)}">{rel.term}</a>{i < e.related.length - 1 ? ', ' : ''}{/if}
 										{/each}
 									</dd>
 								</div>

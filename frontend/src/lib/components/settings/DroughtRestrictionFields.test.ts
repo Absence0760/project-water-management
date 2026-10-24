@@ -8,7 +8,7 @@ import type { DroughtRestrictionRule } from '@water-management/engine';
 import DroughtRestrictionFields from './DroughtRestrictionFields.svelte';
 
 // The editor reads the published notice through the app's API only on a click; nothing here clicks.
-vi.mock('$lib/api', () => ({ api: {} }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
 
 // Comments stripped until none are left, so one split by another can't survive
 // as a fresh '<!--' (CodeQL js/incomplete-multi-character-sanitization).

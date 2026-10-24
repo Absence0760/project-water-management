@@ -19,24 +19,24 @@
 	// is chosen on the page (SummaryControls), and in print only
 	// MemberSummary shows, on A4, black on white.
 	import { flushSync, onMount } from 'svelte';
-	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { api } from '$lib/api';
-	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
-	import BrandMark from '$lib/components/layout/BrandMark.svelte';
-	import { recentMonths } from '$lib/components/share/chart';
-	import FlowChart from '$lib/components/share/FlowChart.svelte';
-	import { latestOnly, loadPackShare, loadScenarioShare, loadShare, type PackShareLoad, type ScenarioShareLoad, type ShareLoad } from '$lib/components/share/load';
-	import PackView from '$lib/components/share/PackView.svelte';
-	import { readShareKind, SHARE_RETURN_KEY } from '$lib/components/share/scenario';
-	import MemberSummary from '$lib/components/share/MemberSummary.svelte';
-	import ScenarioView from '$lib/components/share/ScenarioView.svelte';
-	import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from '$lib/components/share/share';
-	import { DEFAULT_WINDOW, type SummaryWindow } from '$lib/components/share/summary';
-	import SummaryControls from '$lib/components/share/SummaryControls.svelte';
-	import { localIsoDate } from '$lib/format/number';
-	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
-	import { t, wordsLang } from '$lib/i18n/locale.svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { api } from '#lib/api/index.js';
+	import NoticeCard from '#lib/components/farm/NoticeCard.svelte';
+	import BrandMark from '#lib/components/layout/BrandMark.svelte';
+	import { recentMonths } from '#lib/components/share/chart.js';
+	import FlowChart from '#lib/components/share/FlowChart.svelte';
+	import { latestOnly, loadPackShare, loadScenarioShare, loadShare, type PackShareLoad, type ScenarioShareLoad, type ShareLoad } from '#lib/components/share/load.js';
+	import PackView from '#lib/components/share/PackView.svelte';
+	import { readShareKind, SHARE_RETURN_KEY } from '#lib/components/share/scenario.js';
+	import MemberSummary from '#lib/components/share/MemberSummary.svelte';
+	import ScenarioView from '#lib/components/share/ScenarioView.svelte';
+	import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from '#lib/components/share/share.js';
+	import { DEFAULT_WINDOW, type SummaryWindow } from '#lib/components/share/summary.js';
+	import SummaryControls from '#lib/components/share/SummaryControls.svelte';
+	import { localIsoDate } from '#lib/format/number.js';
+	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
+	import { t, wordsLang } from '#lib/i18n/locale.svelte.js';
 
 	let token = $state<string | null>(null);
 	let kind: 'scenario' | 'pack' | null = null;
@@ -90,7 +90,7 @@
 		const hash = location.hash || returning();
 		token = readShareToken(hash);
 		kind = readShareKind(hash);
-		if (location.hash) replaceState(`${base}/share`, {});
+		if (location.hash) void goto(resolve('share'), { shallow: true, replace: true });
 		load();
 	}
 
@@ -213,7 +213,7 @@
 						<p class="fine">{t('This link works until it expires or is withdrawn.')}</p>
 						<!-- The one page that shows model results to someone who accepted no terms (a licence assessor, a neighbour): what the result is not, and the legal pages. -->
 						<p class="fine">{t('It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.')}</p>
-						<p class="fine legal-links"><a href="{base}/terms">{t('Terms of use')}</a> · <a href="{base}/privacy">{t('Privacy notice')}</a></p>
+						<p class="fine legal-links"><a href={resolve('terms')}>{t('Terms of use')}</a> · <a href={resolve('privacy')}>{t('Privacy notice')}</a></p>
 					</section>
 
 				</div>

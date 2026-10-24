@@ -8,14 +8,14 @@
 	// Send stores it, so a mail scanner that opens links answers nothing.
 	// No tracking of any kind (Privacy §3). Its words come from $lib/i18n.
 	import { onMount } from 'svelte';
-	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError, type FeedbackAnswered } from '$lib/api';
-	import { FEEDBACK_COMMENT_MAX, feedbackThanks, fragmentAnswer, fragmentToken } from '$lib/components/alerts/words';
-	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
+	import { api, ApiError, type FeedbackAnswered } from '#lib/api/index.js';
+	import { FEEDBACK_COMMENT_MAX, feedbackThanks, fragmentAnswer, fragmentToken } from '#lib/components/alerts/words.js';
+	import AuthCard, { focusAuthTitle } from '#lib/components/layout/AuthCard.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
 
 	let token = $state<string | null>(null);
 	let useful = $state<boolean | null>(null);
@@ -32,7 +32,7 @@
 		token = fragmentToken(page.url.hash);
 		useful = fragmentAnswer(page.url.hash);
 		// Out of the address bar and the history once read.
-		if (page.url.hash) replaceState(`${base}/alerts/feedback`, {});
+		if (page.url.hash) void goto(resolve('alerts/feedback'), { shallow: true, replace: true });
 		status = token ? 'ask' : 'incomplete';
 	});
 
@@ -97,10 +97,10 @@
 			</form>
 		{:else if status === 'done' && done}
 			<div class="alert alert-info" role="status">{feedbackThanks(done)}</div>
-			<a class="btn btn-primary" href="{base}/account/alerts">{t('Manage alerts')}</a>
+			<a class="btn btn-primary" href={resolve('account/alerts')}>{t('Manage alerts')}</a>
 		{:else if status === 'dead'}
 			<div class="alert alert-error" role="alert">{t('This link doesn’t work any more: it lasts 30 days, and only while you are a member of the catchment.')}</div>
-			<a class="btn btn-primary" href="{base}/account/alerts">{t('Manage alerts')}</a>
+			<a class="btn btn-primary" href={resolve('account/alerts')}>{t('Manage alerts')}</a>
 		{:else if status === 'incomplete'}
 			<div class="alert alert-error" role="alert">{t('This link is incomplete. Open it again from the email, or copy the whole link.')}</div>
 		{/if}
@@ -108,7 +108,7 @@
 </AuthCard>
 
 {#snippet manageLink()}
-	<a href="{base}/account/alerts">{t('Manage alerts')}</a>
+	<a href={resolve('account/alerts')}>{t('Manage alerts')}</a>
 {/snippet}
 
 <style>

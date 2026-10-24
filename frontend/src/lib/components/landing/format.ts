@@ -4,7 +4,7 @@
 // engine import, so the landing chunk stays small (engine/format imports
 // nothing).
 import { groupDigits } from '@water-management/engine/format';
-import { i18n, language } from '$lib/i18n/state.svelte';
+import { i18n, language } from '#lib/i18n/state.svelte.js';
 
 /** `n` to `digits` decimals, grouped in threes: 5479 → "5 479", 41.6 → "41,6" in Afrikaans. */
 export function fmt(n: number, digits = 0): string {

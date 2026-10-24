@@ -11,8 +11,8 @@
 	// like the other reference pages in this frame.
 	import { KNOWN_LIMITATIONS } from '@water-management/engine/limitations';
 	import { ENGINE_VERSION } from '@water-management/engine/version';
-	import LegalPage from '$lib/components/legal/LegalPage.svelte';
-	import { DEPARTURES, openIds } from '$lib/methods/departures';
+	import LegalPage from '#lib/components/legal/LegalPage.svelte';
+	import { DEPARTURES, openIds } from '#lib/methods/departures.js';
 
 	const sections = [
 		{ id: 'model', label: '1. What the model does' },

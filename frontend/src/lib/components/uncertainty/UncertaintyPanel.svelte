@@ -28,15 +28,15 @@
 		type EnsembleSummary,
 		type Wr2012FlagLevel
 	} from '@water-management/engine';
-	import { api, type Ensemble, type EnsembleDetail } from '$lib/api';
-	import { FitCancelled, startEnsemble, type EnsembleHandle } from '$lib/calibration/runner';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import ToolRow from '$lib/components/common/ToolRow.svelte';
-	import { fmtNum } from '$lib/format/number';
-	import { monthName } from '$lib/format/months';
+	import { api, type Ensemble, type EnsembleDetail } from '#lib/api/index.js';
+	import { FitCancelled, startEnsemble, type EnsembleHandle } from '#lib/calibration/runner.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import ToolRow from '#lib/components/common/ToolRow.svelte';
+	import { fmtNum } from '#lib/format/number.js';
+	import { monthName } from '#lib/format/months.js';
 	import BandFdcChart from './BandFdcChart.svelte';
 	import { abandonedText, bandCells, coverageText, historyRows, pct, rejectedText, shownEnsemble, sig, withheldNote } from './bands';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 
 	let {
 		projectId,

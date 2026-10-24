@@ -25,15 +25,15 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ProjectSettings } from '@water-management/engine';
-	import Sparkline from '$lib/components/charts/Sparkline.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { prefetch } from '$lib/components/common/lazy';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
-	import { fmtNum, fmtQty } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { DEMAND_TABLE_ID, TABLES_MENU, withParam, withoutParam } from '$lib/workspace/overlays';
+	import Sparkline from '#lib/components/charts/Sparkline.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { prefetch } from '#lib/components/common/lazy.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import MonthlyBars from '#lib/components/settings/MonthlyBars.svelte';
+	import { fmtNum, fmtQty } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { DEMAND_TABLE_ID, TABLES_MENU, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import {
 		cropAreaTotals,
 		cropColouring,
@@ -52,7 +52,7 @@
 	import { catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
 	import type { PlantingsApplied } from './plantingsImport';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 
 	let {
 		editor,
@@ -178,9 +178,9 @@
 	});
 	$effect(() => {
 		// Closed (Done, Esc, the ✕, the crop removed): drop `crop` in place, so Back goes to where it was opened from.
-		if (!sheetOpen && untrack(() => cropParam)) void goto(withoutParam(page.url, 'crop'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!sheetOpen && untrack(() => cropParam)) void goto(withoutParam(page.url, 'crop'), { replace: true, reset: false });
 	});
-	const openCrop = (id: string) => goto(withParam(page.url, 'crop', id), { noScroll: true, keepFocus: true });
+	const openCrop = (id: string) => goto(withParam(page.url, 'crop', id), { reset: false });
 	function add() {
 		const c = editor.addCrop();
 		void openCrop(c.id);

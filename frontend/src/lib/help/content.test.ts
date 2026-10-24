@@ -366,7 +366,7 @@ describe('the help text split', () => {
 
 	it('has HelpTip load only the tips, never the glossary text', () => {
 		const from = imports(read('../components/help/HelpTip.svelte')).map((i) => i.from);
-		expect(from).toContain('$lib/help/tips');
+		expect(from).toContain('#lib/help/tips.js');
 		expect(from.filter((f) => /^\$lib\/help\/(content|articles|articles-data|articles-ewr|articles-licensing|articles-results|articles-fit|farmer)\b/.test(f))).toEqual([]);
 	});
 

@@ -5,7 +5,7 @@
 // sets it only for members who see History (farmers and applicants don't),
 // and refreshes it after a save or a restore.
 import { getContext, setContext } from 'svelte';
-import { api, type FieldHistory } from '$lib/api';
+import { api, type FieldHistory } from '#lib/api/index.js';
 
 export class FieldHistoryStore {
 	fields = $state<Record<string, FieldHistory> | null>(null);

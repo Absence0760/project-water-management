@@ -9,9 +9,9 @@
 // A withdrawn or superseded pack shows why it no longer stands, never its
 // figures. The report's own English labels stay in the pack; the rows are
 // worded here, by their id, so the page reads in the reader's language.
-import type { SharedBand, SharePack, SharedPackRow, SharedPackSite } from '$lib/api/types';
-import { count, fmtMonthLong, fmtNumber, fmtPct, fmtStampDay, MONTHS } from '$lib/components/farm/format';
-import { t } from '$lib/i18n/locale.svelte';
+import type { SharedBand, SharePack, SharedPackRow, SharedPackSite } from '#lib/api/types.js';
+import { count, fmtMonthLong, fmtNumber, fmtPct, fmtStampDay, MONTHS } from '#lib/components/farm/format.js';
+import { t } from '#lib/i18n/locale.svelte.js';
 
 // i18n-section: share.pack
 

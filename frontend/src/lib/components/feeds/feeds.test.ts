@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '$lib/api/client';
-import { kindLabel } from '$lib/series/kinds';
-import { fmtDay } from '$lib/format/number';
+import { ApiError } from '#lib/api/client.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { fmtDay } from '#lib/format/number.js';
 import {
 	applyWords,
 	boundaryApplyBody,

@@ -4,8 +4,8 @@
 // and PBIAS cards (issue #177: a sentence repeating them put the NSE on the
 // screen three times); the printable report draws the same cards.
 import type { RunSummary } from '@water-management/engine';
-import type { EwrHeadline } from '$lib/api/types';
-import { fmtNum, fmtPct } from '$lib/format/number';
+import type { EwrHeadline } from '#lib/api/types.js';
+import { fmtNum, fmtPct } from '#lib/format/number.js';
 import { headlineSite } from './ewrAssurance';
 import { SUPPLY_TARGET } from './results';
 

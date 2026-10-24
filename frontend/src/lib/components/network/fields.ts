@@ -2,7 +2,7 @@
 // plain-language help. Percent fields are stored 0–1 and shown as %.
 import { pumpUnit, riverToDamUnit, type FlowUnit } from './flowUnit.svelte';
 import { areaMismatches, estimatedDamAreaM2, onRiverDam, RETURN_FLOW_SLACK, type FlowShareMethod, type NetworkNode, type NodeKind } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 export type NodeNumberKey =
 	| 'areaKm2'

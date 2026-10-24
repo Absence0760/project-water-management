@@ -5,8 +5,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
-import { TERRAIN_ATTRIBUTION } from '$lib/components/map/mapStyle';
-import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '$lib/components/map/delineation';
+import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
+import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
 
 const doc = (name: string) => readFileSync(new URL(`../../../../../docs/${name}`, import.meta.url), 'utf8').replace(/\s+/g, ' ');
 
@@ -71,7 +71,9 @@ describe('the data credits', () => {
 		// A traced dam's credit names JRC's source as its download page asks, and says the data was modified (1159/2013 Art. 8(3)).
 		expect(JRC_WATER_MAP_ATTRIBUTION).toContain(JRC_WATER_STATEMENT);
 		expect(JRC_WATER_MAP_ATTRIBUTION).toMatch(/modified$/);
-		// The MAP grid's credit carries its authors' line whole.
-		expect(WAAS_MAP_MAP_ATTRIBUTION).toBe(`MAP grid: ${WAAS_MAP_STATEMENT}`);
+		// The MAP grid's credit on the map is short (its link opens the authors' line whole): it names the study and the authors, as their line does.
+		expect(WAAS_MAP_MAP_ATTRIBUTION).toBe('MAP grid: WAAS (2007), Beuster Clarke & Associates');
+		for (const part of ['WAAS', 'Beuster Clarke & Associates', '2007']) expect(WAAS_MAP_STATEMENT).toContain(part);
+		expect(WAAS_MAP_MAP_ATTRIBUTION.length).toBeLessThanOrEqual(HYDRORIVERS_MAP_ATTRIBUTION.length);
 	});
 });

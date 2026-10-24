@@ -5,10 +5,10 @@
 // The SVG is decorative; the summary sentence and the "Show the numbers"
 // table carry the content, and both come from here, worded from the message
 // catalogue (the share.chart.* keys, WP-2.5).
-import type { ShareSeries } from '$lib/api/types';
-import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, niceMax } from '$lib/components/farm/chartGeometry';
-import { fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, NBSP } from '$lib/components/farm/numbers';
-import { t } from '$lib/i18n/locale.svelte';
+import type { ShareSeries } from '#lib/api/types.js';
+import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, niceMax } from '#lib/components/farm/chartGeometry.js';
+import { fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, NBSP } from '#lib/components/farm/numbers.js';
+import { t } from '#lib/i18n/locale.svelte.js';
 
 /** The most recent months drawn. */
 export const FLOW_MONTHS = 24;

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { FIXTURE_DIR, fixtureHttp, fixtureValue } from './fixtures.js';
+import { DWS_FIXTURE_LAG_DAYS, dwsFixtureLastDataDay, dwsFixtureValue, FIXTURE_DIR, fixtureHttp, fixtureValue } from './fixtures.js';
 import { writeGrid } from './sources/tiff-write.js';
 import { chirpsFinalUrl, gridMean } from './sources/chirps.js';
 import { bboxCells } from './config.js';
@@ -257,6 +257,24 @@ describe('runFetch on the fixtures', () => {
 		expect(r.values.some((v) => v === null)).toBe(true);
 		expect(r.meta).toMatchObject({ 'quality 1': expect.any(Number) });
 		expect(FetchResult.parse(r)).toEqual(r);
+	});
+
+	it('DWS: the replay ends DWS_FIXTURE_LAG_DAYS before today, and on a day that lands in a gap the last data day is earlier', async () => {
+		// 2026-10-21: 2026-07-23 (lag 90) and nothing after it has a value; 2026-07-22 does.
+		const today = '2026-10-21';
+		const r = await runFetch({ source: 'dws', config: { station: 'X0H000' }, start: '2026-07-01', end: today, today }, fixtureHttp(() => today));
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		const days = r.values.map((v, i) => ({ day: fromEpochDay(toEpochDay(r.startDate!) + i), v }));
+		expect(days.at(-1)).toEqual({ day: '2026-07-23', v: null });
+		expect(fromEpochDay(toEpochDay(today) - DWS_FIXTURE_LAG_DAYS)).toBe('2026-07-23');
+		expect(days.filter((d) => d.v !== null).at(-1)!.day).toBe('2026-07-22');
+		expect(dwsFixtureLastDataDay(today)).toBe('2026-07-22');
+		// Positive control: two days later the lag day has a value and is the last data day.
+		expect(dwsFixtureValue('2026-07-25')).not.toBeNull();
+		expect(dwsFixtureLastDataDay('2026-10-23')).toBe('2026-07-25');
+		// Every value served is the replay's value for that date.
+		for (const d of days) expect(d.v).toBe(dwsFixtureValue(d.day));
 	});
 
 	it('DWS: keeps only the days asked for, never a day after today', async () => {

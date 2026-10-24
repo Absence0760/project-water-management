@@ -8,8 +8,8 @@
 -->
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { api } from '$lib/api';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { api } from '#lib/api/index.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { describeReport, isPending, type ReportStatus, reportsApi } from './serverPdf';
 
 	let { projectId, runId, against = null }: { projectId: string; runId: string; against?: string | null } = $props();

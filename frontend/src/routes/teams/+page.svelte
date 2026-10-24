@@ -7,17 +7,17 @@
 	// counts straight away and fills in the rest when its portfolio arrives.
 	// Beside the cards, what a team is and what each role may do.
 	import { onMount } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
-	import { api, roleLabel, roleTitle, type Portfolio, type Team } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
-	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
-	import { DEFAULT_SORT, ewrWindowLabel, portfolioTotals, sortPortfolio } from '$lib/components/portfolio/portfolio';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	import { resolve } from '$app/paths';
+	import { cleanName, workspaceNameProblem } from '#lib/format/visibleName.js';
+	import { api, roleLabel, roleTitle, type Portfolio, type Team } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import StatusBar from '#lib/components/portfolio/StatusBar.svelte';
+	import StatusPill from '#lib/components/portfolio/StatusPill.svelte';
+	import { DEFAULT_SORT, ewrWindowLabel, portfolioTotals, sortPortfolio } from '#lib/components/portfolio/portfolio.js';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
 
 	let teams = $state<Team[]>([]);
 	/** Projects listed on a card (more when it's your only team: its card is the page); the rest are one click away in the project list. */
@@ -72,7 +72,7 @@
 		try {
 			const t = await api.teams.create(cleanName(name));
 			createOpen = false;
-			await goto(`${base}/teams/${t.id}`);
+			await goto(resolve(`teams/${t.id}`));
 		} catch (err) {
 			createError = msg(err);
 		} finally {
@@ -91,7 +91,7 @@
 	{@const rows = pf ? sortPortfolio(pf.projects, DEFAULT_SORT) : []}
 	<li class="card" aria-labelledby="team-{t.id}">
 		<div class="card-head">
-			<h2 id="team-{t.id}"><a href="{base}/teams/{t.id}">{t.name}</a></h2>
+			<h2 id="team-{t.id}"><a href={resolve(`teams/${t.id}`)}>{t.name}</a></h2>
 			<span class="badge" class:badge-owner={t.role === 'admin'}>{roleLabel(t.role)}</span>
 		</div>
 		<div class="card-body">
@@ -115,20 +115,20 @@
 					<ul class="plist" aria-label="Projects of {t.name}, worst first">
 						{#each rows.slice(0, LISTED) as p (p.id)}
 							<li>
-								<a href="{base}/projects/{p.id}">{p.name}</a>
+								<a href={resolve(`projects/${p.id}`)}>{p.name}</a>
 								<StatusPill {p} />
 							</li>
 						{/each}
 					</ul>
 					{#if rows.length > LISTED}
-						<p class="more small"><a href="{base}/?owner=team:{t.id}&sort=status">{plural(rows.length - LISTED, 'more project')} in the project list</a></p>
+						<p class="more small"><a href={resolve(`?owner=team:${t.id}&sort=status`)}>{plural(rows.length - LISTED, 'more project')} in the project list</a></p>
 					{/if}
 				</div>
 			{/if}
 		</div>
 		<div class="card-foot">
-			<a class="btn btn-sm" href="{base}/teams/{t.id}">Open team</a>
-			<a class="btn btn-sm" href="{base}/?owner=team:{t.id}&sort=status">Project list</a>
+			<a class="btn btn-sm" href={resolve(`teams/${t.id}`)}>Open team</a>
+			<a class="btn btn-sm" href={resolve(`?owner=team:${t.id}&sort=status`)}>Project list</a>
 		</div>
 	</li>
 {/snippet}
@@ -137,7 +137,7 @@
 	<div class="page-head">
 		<div>
 			<h1>Teams</h1>
-			<p class="muted sub">Catchments you model together, with how each is doing in its latest run. <a href="{base}/help/guides/share-with-a-team">How teams work</a></p>
+			<p class="muted sub">Catchments you model together, with how each is doing in its latest run. <a href={resolve('help/guides/share-with-a-team')}>How teams work</a></p>
 		</div>
 		<button type="button" class="btn btn-primary" onclick={openCreate}>New team</button>
 	</div>

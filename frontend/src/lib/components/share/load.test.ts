@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
-import type { SharePack, ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
+import { ApiError } from '#lib/api/client.js';
+import type { SharePack, ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '#lib/api/types.js';
 import { latestOnly, loadPackShare, loadScenarioShare, loadShare, type ShareApi } from './load';
 
 const TOKEN = 'x'.repeat(43);

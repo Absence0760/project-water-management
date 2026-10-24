@@ -3,7 +3,7 @@
 // floor, never shown as more than the object asks for (the engine's day floor
 // is MIN(floor, the day's demand)). Pure, so it is unit-tested without Svelte.
 import { basicNeedsM3Day, basicNeedsPopulation, BASIC_NEEDS_CATEGORIES, DEMAND_NORMS, objectMonthlyM3Day, type DemandObject } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 const LPD = DEMAND_NORMS.basicLitresPerPersonDay;
 

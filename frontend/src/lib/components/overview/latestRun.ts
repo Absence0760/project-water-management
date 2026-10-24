@@ -4,14 +4,14 @@
 // never disagree; the change against the previous run is formatted the way
 // the compare page does it (compare/delta.ts).
 import { fromEpochDay, metricDelta, toEpochDay, type MetricDelta, type RunSummary } from '@water-management/engine';
-import type { EwrHeadline, RunMeta } from '$lib/api/types';
-import type { MetricSpec } from '$lib/components/compare/delta';
-import { headlineSite } from '$lib/components/runs/ewrAssurance';
-import { m3DayToM3s, SUPPLY_TARGET } from '$lib/components/runs/results';
-import { agoText, daysBetween, windowText, type DataEnd } from '$lib/format/age';
-import { fmtDay, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
-import { calibrationSample } from '$lib/components/calibration/sample';
-import { ewrNotMet } from '$lib/components/ewr/notMet';
+import type { EwrHeadline, RunMeta } from '#lib/api/types.js';
+import type { MetricSpec } from '#lib/components/compare/delta.js';
+import { headlineSite } from '#lib/components/runs/ewrAssurance.js';
+import { m3DayToM3s, SUPPLY_TARGET } from '#lib/components/runs/results.js';
+import { agoText, daysBetween, windowText, type DataEnd } from '#lib/format/age.js';
+import { fmtDay, fmtNum, fmtPct, fmtQty, localIsoDate } from '#lib/format/number.js';
+import { calibrationSample } from '#lib/components/calibration/sample.js';
+import { ewrNotMet } from '#lib/components/ewr/notMet.js';
 import { AGO_DAYS, LOW_PCT, type DamsToday } from './damLevels';
 
 export interface RunPick {

@@ -7,7 +7,7 @@
 	// arithmetic, never a finding of lawfulness. In a narrow container each row
 	// is a card of label–value lines. The table grows with its rows (the page
 	// folds them, "Show all"), never scrolling inside its box.
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum } from '#lib/format/number.js';
 	import { SOURCE_LABEL, STATUS_LABEL, statusSentence, waterYearLabel, type ComparisonRow } from './allocations';
 
 	let {

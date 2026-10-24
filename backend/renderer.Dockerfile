@@ -32,7 +32,7 @@
 # (infra/scripts/smoke-renderer-image.sh) whenever the new version brings a
 # new Chromium build, which the image then lacks. CI runs both on every PR.
 
-FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 AS deps
+FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea AS deps
 # aws-lambda-ric compiles a native addon at install (its preinstall and
 # install scripts: the ones renderer-deps/package.json's allowScripts lets
 # run, since npm 11.16+ skips every other package's); its preinstall unpacks
@@ -80,7 +80,7 @@ RUN sed -i 's/^Components: .*/Components: main/' /etc/apt/sources.list.d/ubuntu.
 	&& rm -f /etc/apt/sources.list.d/nodesource.list \
 	&& printf '%s\n' 'Types: deb' 'URIs: http://archive.ubuntu.com/ubuntu/' 'Suites: noble noble-updates noble-security' 'Components: main' 'Snapshot: disable' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > /etc/apt/sources.list.d/ubuntu-live.sources \
 	&& printf '%s\n' 'Package: *' 'Pin: origin "archive.ubuntu.com"' 'Pin-Priority: 100' > /etc/apt/preferences.d/80-live-archive-fallback
-ARG APT_SNAPSHOT=20260928T000000Z
+ARG APT_SNAPSHOT=20261024T000000Z
 RUN apt-get update --snapshot "$APT_SNAPSHOT" \
 	&& apt-get install -y --no-install-recommends --snapshot "$APT_SNAPSHOT" \
 		g++=4:13.2.0-7ubuntu1 \
@@ -91,14 +91,14 @@ RUN apt-get update --snapshot "$APT_SNAPSHOT" \
 		libtool=2.4.7-7build1 \
 		python3=3.12.3-0ubuntu2.1 \
 		unzip=6.0-28ubuntu4.1 \
-		xz-utils=5.6.1+really5.4.5-1ubuntu0.3 \
-		libcurl4-openssl-dev=8.5.0-2ubuntu10.15 \
+		xz-utils=5.6.1+really5.4.5-1ubuntu0.4 \
+		libcurl4-openssl-dev=8.5.0-2ubuntu10.16 \
 	&& rm -rf /var/lib/apt/lists/*
 WORKDIR /deps
 COPY renderer-deps/package.json renderer-deps/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
 WORKDIR /var/task
 COPY --from=deps /deps/node_modules ./node_modules
 COPY dist/renderer/lambda-renderer.mjs ./lambda-renderer.mjs

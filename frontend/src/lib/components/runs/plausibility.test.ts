@@ -1,6 +1,6 @@
 import type { LowFlowCurves, PlausibilityChecks } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { breakHint, curveLabel, findings, gaugeRow, lowFlowChart, otherModelRuns, seasonText, signedPct } from './plausibility';
 
 const meta = (id: string, runoffModel?: string): RunMeta =>

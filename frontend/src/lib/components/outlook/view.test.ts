@@ -6,7 +6,7 @@
 // stores it.
 import { summariseOutlook, type OutlookMember, type ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { OutlookResult, OutlookSettings } from '$lib/api/types';
+import type { OutlookResult, OutlookSettings } from '#lib/api/types.js';
 import { outlookError, resolveOutlook } from './settings';
 import { buildOutlookView, monthlyPlanOps, outlookRequest, outlookState, parseLevels, seasonMonths } from './view';
 

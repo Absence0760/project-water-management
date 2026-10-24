@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import Landing from '$lib/components/landing/Landing.svelte';
-	import { setLocale } from '$lib/i18n/locale.svelte';
+	import Landing from '#lib/components/landing/Landing.svelte';
+	import { setLocale } from '#lib/i18n/locale.svelte.js';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

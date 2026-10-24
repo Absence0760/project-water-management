@@ -14,8 +14,8 @@
 	// for anyone, signed in or not. English only: the English text is the
 	// binding version (docs/legal-status.md).
 	import type { Snippet } from 'svelte';
-	import { base } from '$app/paths';
-	import BrandMark from '$lib/components/layout/BrandMark.svelte';
+	import { resolve } from '$app/paths';
+	import BrandMark from '#lib/components/layout/BrandMark.svelte';
 
 	let {
 		title,
@@ -33,7 +33,7 @@
 
 <div class="legal">
 	<header class="top">
-		<a class="lockup" href="{base}/" aria-label="Water Management, home">
+		<a class="lockup" href={resolve('')} aria-label="Water Management, home">
 			<BrandMark size={28} />
 			<span>Water Management</span>
 		</a>
@@ -63,13 +63,13 @@
 
 	<footer class="foot">
 		<nav aria-label="Site">
-			<a href="{base}/">Home</a>
-			<a href="{base}/privacy">Privacy notice</a>
-			<a href="{base}/terms">Terms of use</a>
-			<a href="{base}/methods">How the model is checked</a>
-			<a href="{base}/data-sources">Data sources</a>
+			<a href={resolve('')}>Home</a>
+			<a href={resolve('privacy')}>Privacy notice</a>
+			<a href={resolve('terms')}>Terms of use</a>
+			<a href={resolve('methods')}>How the model is checked</a>
+			<a href={resolve('data-sources')}>Data sources</a>
 			<!-- The address is written once, in the terms' contact section. -->
-			<a href="{base}/terms#contact">Contact</a>
+			<a href={resolve('terms#contact')}>Contact</a>
 		</nav>
 	</footer>
 </div>

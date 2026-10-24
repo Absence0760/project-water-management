@@ -1,7 +1,7 @@
 // Pure helpers for the run results dashboard: the farm table's sorting and
 // flags, grouping of output series for the pickers, and unit conversion.
 import type { FarmSummary, OutletEwrInfo } from '@water-management/engine';
-import type { RunSeriesRef } from '$lib/api/types';
+import type { RunSeriesRef } from '#lib/api/types.js';
 
 export const SUPPLY_TARGET = 0.95;
 export const SEC_PER_DAY = 86_400;

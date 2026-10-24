@@ -41,7 +41,7 @@ pnpm -C e2e e2e:list      # list the tests without running them
    emailed code it knows (`support/db.ts` `plantEmailCode`). The frontend is a **production build**, not
    the Vite dev server: `support/build-site.ts` runs `vite build` with the
    checkout's API URL (`http://localhost:3101`) baked in as `PUBLIC_API_URL` (it
-   is `$env/static/public`), written to `frontend/build-e2e/` (with
+   is `$app/env/public`, declared in `frontend/src/env.ts`), written to `frontend/build-e2e/` (with
    `frontend/.svelte-kit-e2e/` as SvelteKit's working directory, both
    gitignored; any slot but 0 uses `build-e2e-<slot>/` and
    `.svelte-kit-e2e-<slot>/`) so the production output in `frontend/build/` is never touched,

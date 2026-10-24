@@ -19,19 +19,19 @@
 	and the panel's data-state attribute says which, for the e2e spec.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import ToolRow from '$lib/components/common/ToolRow.svelte';
-	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import ToolRow from '#lib/components/common/ToolRow.svelte';
+	import { isScenarioRun, type ScenarioRunFields } from '#lib/components/runs/scenarioRun.js';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { canonicalJson, describeDroughtRestriction, DISCLAIMER, DISCLAIMER_DRAFT_NOTE, type DroughtRestrictionRule } from '@water-management/engine';
-	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type Project, type RunMeta } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type Project, type RunMeta } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { buildTriggersView, triggerRuleView } from './triggers';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { fmtDate, fmtDay } from '$lib/format/number';
-	import { monthName } from '$lib/format/months';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { monthName } from '#lib/format/months.js';
 	import { resolveOutlook } from './settings';
-	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
+	import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';
 	import {
 		buildOutlookView,
 		DEFAULT_OUTLOOK_LEVELS,

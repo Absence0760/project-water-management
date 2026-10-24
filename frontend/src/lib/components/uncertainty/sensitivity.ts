@@ -10,7 +10,7 @@ import {
 	type SiteValues,
 	type SiteVerdict
 } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 import { pct, sig } from './bands';
 
 /** What the tornado can show at a site. */

@@ -2,7 +2,7 @@
 	// "Inputs that differ" between the two runs (engine diffInputs; "What changed" until issue #466), and
 	// on the compare page who changed each line and when (issue #42).
 	import type { InputChange, InputChangeArea } from '@water-management/engine';
-	import type { HistoryRevision } from '$lib/api/types';
+	import type { HistoryRevision } from '#lib/api/types.js';
 	import { byline } from './attribution';
 
 	let {

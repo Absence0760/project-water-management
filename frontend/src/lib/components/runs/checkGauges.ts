@@ -15,8 +15,8 @@ import {
 	type GaugeFitCheck,
 	type GaugePlausibility
 } from '@water-management/engine';
-import type { ChartSeries } from '$lib/components/charts/series';
-import { fmtNum } from '$lib/format/number';
+import type { ChartSeries } from '#lib/components/charts/series.js';
+import { fmtNum } from '#lib/format/number.js';
 
 type RefLike = { key: string; nodeId: string | null };
 type Convert = (d: DailySeries) => (number | null)[];

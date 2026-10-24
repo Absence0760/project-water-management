@@ -3,8 +3,8 @@
 // the bulk invite CSV and its outcomes. Kept free of Svelte so they can be
 // unit-tested.
 import { LANGUAGES } from '@water-management/engine/languages';
-import type { FileFormat } from '$lib/components/common/formatHelp';
-import type { BulkFarmerResult, BulkFarmerRow, FarmerEntry } from '$lib/api/types';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
+import type { BulkFarmerResult, BulkFarmerRow, FarmerEntry } from '#lib/api/types.js';
 
 export interface FarmOption {
 	id: string;

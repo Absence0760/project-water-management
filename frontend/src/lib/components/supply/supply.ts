@@ -7,13 +7,13 @@
 // and the run's other uses of water, once under the run Summary (issue #137).
 // Pure, so the page stays markup and the numbers are unit-tested.
 import { fromEpochDay, toEpochDay, type RunSummary } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
-import type { NavGroup } from '$lib/components/common/sectionNav';
-import { farmSupply, LOW_SUPPLY, type SupplyBand } from '$lib/components/network/supplyColour';
-import { m3DayToMm3a, SUPPLY_TARGET } from '$lib/components/runs/results';
-import { resolveWindow, type WindowRun } from '$lib/components/runs/reportWindow';
-import { windowText, type DataEnd } from '$lib/format/age';
-import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+import type { RunMeta } from '#lib/api/types.js';
+import type { NavGroup } from '#lib/components/common/sectionNav.js';
+import { farmSupply, LOW_SUPPLY, type SupplyBand } from '#lib/components/network/supplyColour.js';
+import { m3DayToMm3a, SUPPLY_TARGET } from '#lib/components/runs/results.js';
+import { resolveWindow, type WindowRun } from '#lib/components/runs/reportWindow.js';
+import { windowText, type DataEnd } from '#lib/format/age.js';
+import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 
 /** The run before `id` by createdAt (the one its changes are against); null for the oldest or an unknown id. */
 export function previousRunOf(runs: readonly RunMeta[] | null, id: string | null): RunMeta | null {

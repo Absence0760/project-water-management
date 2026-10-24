@@ -110,10 +110,14 @@ function fingerprint(out: ModelOutput) {
 	return { series: h.digest(), sums, units, summary: new Hasher().text(JSON.stringify(rest)).digest() };
 }
 
-/** Expected fingerprints, from the engine before rainfall stations (issue #553 round 1). */
+/**
+ * Expected fingerprints, from the engine before rainfall stations (issue #553 round 1): the
+ * parent of the commit that added this file gives the same values. Print them with
+ * `GOLDEN_PRINT=1 pnpm -C packages/engine exec vitest run src/runoff/unitRain.golden.test.ts`.
+ */
 const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 	fragmentation: {
-		series: '1aefab2b479d11bc',
+		series: '102424779164e0da',
 		sums: {
 			'natural_flow@': 31197400,
 			'rain_used@': 6075.61,
@@ -127,10 +131,10 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			'runoff@E': 0
 		},
 		units: null,
-		summary: '1ec92a5ad2c2d2fb'
+		summary: '9f9a12280e29d969'
 	},
 	gaugeMap: {
-		series: '3022a0dadbffc2fd',
+		series: '370eb278c4d9bdc3',
 		sums: {
 			'natural_flow@': 42767800,
 			'rain_used@': 6837.05,
@@ -185,10 +189,10 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 0, catchment: 2192, forecast: 0, none: 0 }
 			}
 		],
-		summary: '1dc9210ee110ca9f'
+		summary: '3218f881e68dd310'
 	},
 	unitGauge: {
-		series: '6e95397828b0ddcf',
+		series: '34a6572c07845e2b',
 		sums: {
 			'natural_flow@': 40724500,
 			'rain_used@': 6668.56,
@@ -243,10 +247,10 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 0, catchment: 2192, forecast: 0, none: 0 }
 			}
 		],
-		summary: 'd16035fa3bdad933'
+		summary: 'ab52b76e25e889ef'
 	},
 	reference: {
-		series: 'c835340c71ee21a5',
+		series: 'c95d231cbe299669',
 		sums: {
 			'natural_flow@': 17320200,
 			'rain_used@': 4848.6,
@@ -301,7 +305,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 2192, catchment: 0, forecast: 0, none: 0 }
 			}
 		],
-		summary: 'c6c15081ff5f0c08'
+		summary: 'e36887de38e5aa07'
 	}
 };
 

@@ -5,7 +5,7 @@
 import { applyScenario, withMonthlyRates, type ModelInput, type ProjectModel, type ScenarioOp } from '@water-management/engine';
 import { randomInput, randomOps } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
-import { ModelEditor, newNode } from '$lib/model/editor.svelte';
+import { ModelEditor, newNode } from '#lib/model/editor.svelte.js';
 import { diffModel } from './overrideDiff';
 import { snapshotInput } from './ops';
 

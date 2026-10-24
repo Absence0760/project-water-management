@@ -22,7 +22,7 @@
 // nearest other feature's corner or edge within 12 px, by pointer or by
 // Enter; Alt held with the click (or Alt+Enter) places it exactly where it
 // is. Where it would snap shows as a ring while the pointer moves.
-import type { MapPosition } from '$lib/api/types';
+import type { MapPosition } from '#lib/api/types.js';
 import type { Draft } from './draft.svelte';
 import { DRAWN_RADIUS } from './drawLayers';
 import { midpoints } from './shape';

@@ -6,7 +6,7 @@
 // (split.test.ts), the draw bar previews it, and the server checks each part
 // again (geo/geojson.ts checkGeometry) and that their areas add up to the
 // shape's before it saves them.
-import type { MapPosition } from '$lib/api/types';
+import type { MapPosition } from '#lib/api/types.js';
 import { distinctCorners, outlineCrosses } from './shape';
 
 export type SplitResult = { parts: [MapPosition[], MapPosition[]] } | { problem: string };

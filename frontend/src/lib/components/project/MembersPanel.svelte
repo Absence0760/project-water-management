@@ -1,16 +1,16 @@
 <script lang="ts">
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, untrack } from 'svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
-	import { base } from '$app/paths';
-	import { api, roleLabel, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
-	import { emailAuthApi } from '$lib/api/emailAuth';
-	import PendingInvites from '$lib/components/auth-extras/PendingInvites.svelte';
-	import { upsertInvite } from '$lib/components/auth-extras/invites';
-	import LoadState from '$lib/components/common/LoadState.svelte';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
+	import { resolve } from '$app/paths';
+	import { api, roleLabel, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '#lib/api/index.js';
+	import { emailAuthApi } from '#lib/api/emailAuth.js';
+	import PendingInvites from '#lib/components/auth-extras/PendingInvites.svelte';
+	import { upsertInvite } from '#lib/components/auth-extras/invites.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { cached } from './cache';
-	import EmailText from '$lib/components/common/EmailText.svelte';
+	import EmailText from '#lib/components/common/EmailText.svelte';
 
 	let {
 		projectId,
@@ -166,7 +166,7 @@
 	{#if team}
 		<p class="muted small team-note">
 			Everyone in
-			{#if team.name}<a href="{base}/teams/{team.id}">{team.name}</a>{:else}the owning team{/if}
+			{#if team.name}<a href={resolve(`teams/${team.id}`)}>{team.name}</a>{:else}the owning team{/if}
 			also has access, with the role they hold in the team. Add people here to share outside the team.
 		</p>
 	{/if}

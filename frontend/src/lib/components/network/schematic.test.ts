@@ -1,6 +1,6 @@
 import type { NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { newNode } from '$lib/model/editor.svelte';
+import { newNode } from '#lib/model/editor.svelte.js';
 import {
 	arcHits,
 	arcPath,

@@ -4,8 +4,8 @@
 // into pans. The pure parts the Start and Divide sheets' area ticks and the
 // Map's Use this area share; the server works the area out itself
 // (backend/src/delineation/areaBasis.ts), this only shows the choice.
-import type { MapAreaBasis } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { MapAreaBasis } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 
 /** Whether a piece offers the choice: it has a pans figure, something drains into them, and something is left. */
 export const offersEffective = (areaM2: number | null | undefined, ncM2: number | null | undefined): boolean =>

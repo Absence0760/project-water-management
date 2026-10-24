@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Project } from '$lib/api';
+import type { Project } from '#lib/api/index.js';
 import { ProjectDetailsDraft } from './detailsDraft.svelte';
 
 const project = (over: Partial<Project> = {}) =>

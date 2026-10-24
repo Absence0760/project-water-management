@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApi } from '$lib/api/client';
+import { createApi } from '#lib/api/client.js';
 import { describeReport, describeSchedule, emptyScheduleDraft, isPending, type ReportView, reportsApi, scheduleDraftToBody, scheduleStatus } from './serverPdf';
 
 const tz = process.env.TZ;

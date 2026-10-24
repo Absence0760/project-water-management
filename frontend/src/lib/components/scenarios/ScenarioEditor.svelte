@@ -1,6 +1,6 @@
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import { baseEwrRulesLead } from './baseEwrRules';
 	// One scenario (docs/ui.md § Scenarios): the "Based on run X" banner, its
 	// changes (ops) with their class and the server's check, the red
@@ -24,13 +24,13 @@
 	// their own units and the ones their changes add.
 	import { untrack } from 'svelte';
 	import type { ScenarioOp } from '@water-management/engine';
-	import { api, scenarioProblems, SCENARIO_STATUS_MOVES, type Run, type RunMeta, type ScenarioStatus, type ScenarioWithCheck } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import { detailCache } from '$lib/components/runs/cache';
-	import { fmtStamp } from '$lib/format/number';
-	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import { explainSwitch } from '$lib/components/common/explain.svelte';
+	import { api, scenarioProblems, SCENARIO_STATUS_MOVES, type Run, type RunMeta, type ScenarioStatus, type ScenarioWithCheck } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import { detailCache } from '#lib/components/runs/cache.js';
+	import { fmtStamp } from '#lib/format/number.js';
+	import ExplainSwitch from '#lib/components/common/ExplainSwitch.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { explainSwitch } from '#lib/components/common/explain.svelte.js';
 	import ApplicationPanel from './ApplicationPanel.svelte';
 	import OpForm from './OpForm.svelte';
 	import OpList from './OpList.svelte';
@@ -40,14 +40,14 @@
 	import AskAssessors from './AskAssessors.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import { proposerSummary } from './details';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { guardUnsaved } from '$lib/nav/unsaved';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { guardUnsaved } from '#lib/nav/unsaved.js';
 	import { leavesScenario } from './leaves';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 
 	// The Yield panel (WP-3.6) and its chart load only once a dam is picked.
-	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
+	const loadYield = () => import('#lib/components/yield/YieldPanel.svelte');
 	// Override mode (the model tables recording changes) loads when opened.
 	const loadOverride = () => import('./OverrideEditor.svelte');
 

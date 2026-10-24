@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DamProposals, RegisterDamProposal } from '$lib/api';
+import type { DamProposals, RegisterDamProposal } from '#lib/api/index.js';
 import { confirmWords, damProposalRows, fmtDistance, proposalsLine, searchedFrom } from './damProposals';
 
 const reg = (registerNo: string, over: Partial<RegisterDamProposal> = {}): RegisterDamProposal => ({

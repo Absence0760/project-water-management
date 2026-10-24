@@ -9,7 +9,7 @@
 //
 // Plain msg() (no runes), so the prerendered /terms page renders the English
 // without loading the i18n module.
-import { msg } from '$lib/i18n/msg';
+import { msg } from '#lib/i18n/msg.js';
 
 // i18n-section: terms-summary
 export const SUMMARY_TITLE = msg('The main things you agree to');

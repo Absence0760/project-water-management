@@ -12,17 +12,17 @@
 	// what the comparison already gives this reader: AllocationsTab doesn't
 	// offer it to a viewer who sees totals only (D3), and no holder's name
 	// is anywhere in it.
-	import { PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
+	import { PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { withoutParam, withParam } from '$lib/workspace/overlays';
+	import { withoutParam, withParam } from '#lib/workspace/overlays.js';
 	import type { AllocationComparison } from '@water-management/engine';
-	import { api, type MapFeature } from '$lib/api';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { appIsDark, watchAppTheme } from '$lib/components/map/appTheme';
-	import { glyphsUrl } from '$lib/components/map/mapStyle';
-	import { fmtNum } from '$lib/format/number';
+	import { api, type MapFeature } from '#lib/api/index.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { appIsDark, watchAppTheme } from '#lib/components/map/appTheme.js';
+	import { glyphsUrl } from '#lib/components/map/mapStyle.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { waterYearLabel } from './allocations';
 	import { BAND_LABEL, BAND_SHORT, bandColours, useSentence, useShading, USE_BANDS, USE_SOURCES, wholeWaterYears, type UseBand, type UseSource } from './useMap';
 
@@ -90,7 +90,7 @@
 	<div class="panel-head">
 		<h2 id="alloc-map-h">On the map</h2>
 		{#if open}
-			<button type="button" class="btn btn-sm" aria-expanded="true" aria-controls="alloc-map-body" onclick={() => goto(withoutParam(url, 'map'), { noScroll: true, keepFocus: true })}>Hide the map</button>
+			<button type="button" class="btn btn-sm" aria-expanded="true" aria-controls="alloc-map-body" onclick={() => goto(withoutParam(url, 'map'), { reset: false })}>Hide the map</button>
 		{:else}
 			<a class="btn btn-sm" href={withParam(url, 'map', '1')} data-sveltekit-noscroll data-sveltekit-keepfocus aria-expanded="false" aria-controls="alloc-map-body">Show the map</a>
 		{/if}

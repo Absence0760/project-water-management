@@ -16,8 +16,8 @@
 	from until it is saved.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { MapPosition, MinOccurrence } from '$lib/api/types';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { MapPosition, MinOccurrence } from '#lib/api/types.js';
 	import { areaText, KIND_LABEL, POINT_KINDS } from '../mapData';
 	import { cutText, type Draft } from './draft.svelte';
 	import { draftProblem, DRAW_CHOICES } from './shape';

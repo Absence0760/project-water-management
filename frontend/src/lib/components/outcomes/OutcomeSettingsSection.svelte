@@ -6,11 +6,11 @@
 	// run. The cut-offs' defaults are placeholders pending the hydrologist
 	// (plan.md O1; the client agreed, issue #90), and the section says so while
 	// they are in use. The year-class method's default is confirmed (O2).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { DEFAULT_OUTCOME_RISK_CUTOFFS, YEAR_CLASS_QUINTILE_MIN_YEARS, type YearClassMethod } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import type { OutcomeSettings } from '$lib/api/types';
-	import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import type { OutcomeSettings } from '#lib/api/types.js';
+	import { dailyEwrName, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
 
 	let {
 		value = $bindable(),

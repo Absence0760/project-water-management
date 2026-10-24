@@ -4,7 +4,7 @@
 // source's label and the by-source line are the run table's
 // (runs/demandSources.ts).
 import { DEMAND_MONTHLY_UNIT_LABEL, DEMAND_MONTHLY_UNIT_SCALE, type EvidenceDemandObject } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** What the application does to it. */
 export const CHANGE_LABEL: Record<EvidenceDemandObject['change'], string> = {

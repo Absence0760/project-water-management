@@ -13,8 +13,8 @@ import DamStorageFields from './DamStorageFields.svelte';
 import SupplyFields from './SupplyFields.svelte';
 
 // The field history lines read the project's history through the app's API; nothing here needs it.
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 /** The checkbox whose label follows it, as rendered. */
 function box(html: string, label: string): string {

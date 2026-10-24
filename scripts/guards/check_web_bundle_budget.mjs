@@ -85,10 +85,13 @@
 //                   far over the per-chunk ceiling that no split can bring
 //                   under it. The guard fails if it finds no map chunk, or
 //                   finds MapLibre in the workspace page's chunk or a tab's
-//                   (it must stay lazy). MapLibre's worker entry
-//                   (workers/maplibre.worker-*.js) is a worker like the
-//                   others: it counts in totalCodeKb and largestWorkerKb, and
-//                   must import MapLibre's shared code from chunks/.
+//                   (it must stay lazy). MapLibre's worker
+//                   (workers/maplibre.worker-*.js) is map code too: since
+//                   maplibre-gl 6.13 (maplibre-gl-js #8621) it is
+//                   self-contained, a second copy of the code it used to
+//                   import from the main thread's shared chunk (~140 KB),
+//                   and it loads with the map, so it counts here and not in
+//                   totalCodeKb or largestWorkerKb.
 //   landingKb       the public landing page's own code (issue #57): every
 //                   chunk holding a module of frontend/src/lib/components/landing/,
 //                   with its CSS, summed. It is the first thing a new visitor
@@ -129,7 +132,8 @@ export const BUDGET = Object.freeze({
 	largestAssetKb: 100,
 	landingKb: 25,
 	// MapLibre + PMTiles (issue #288, roadmap D8 (b); measured 2026-10-01: 301 KB, its two chunks, the PMTiles reader and its CSS, maplibre-gl 6.10.0 + pmtiles 4.5.0).
-	mapKb: 305,
+	// 440 from maplibre-gl 6.14 (#570): its worker is self-contained since 6.13 and now counts here (bundle-budget/README.md).
+	mapKb: 440,
 });
 
 /** The entry files that raise (or lower) BUDGET.totalCodeKb, one per change. */
@@ -264,7 +268,8 @@ const WORKER = /(^|\/)workers\//;
 const PAGE_BUILD_WORKERS = [
 	{ label: 'calibration worker', file: 'workers/autocal.worker-*.js', url: 'virtual:autocal-worker-url', re: /(^|\/)workers\/autocal\.worker-[^/]*\.js$/ },
 	{ label: 'preview worker', file: 'workers/preview.worker-*.js', url: 'virtual:preview-worker-url', re: /(^|\/)workers\/preview\.worker-[^/]*\.js$/ },
-	// MapLibre's worker (issue #288): built on its own it would carry a second copy of MapLibre's shared code (~145 KB).
+	// MapLibre's worker (issue #288): an entry of the page build for its same-origin URL (CSP worker-src 'self').
+	// Self-contained since maplibre-gl 6.13, so it shares nothing with the main thread and counts under mapKb (mapChunks).
 	{ label: 'map worker', file: 'workers/maplibre.worker-*.js', url: 'virtual:maplibre-worker-url', re: /(^|\/)workers\/maplibre\.worker-[^/]*\.js$/ },
 ];
 /** A static import from the page build's shared chunks, as Rollup writes it next to workers/. */
@@ -291,7 +296,7 @@ export const kb = (bytes) => Math.ceil(bytes / 1024);
 export function tabModules(pageSource) {
 	const block = /\bconst LOAD\s*=\s*\{([\s\S]*?)\n\s*\};/.exec(pageSource);
 	if (!block) return [];
-	return [...block[1].matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1].replace(/^\$lib\//, 'src/lib/'));
+	return [...block[1].matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1].replace(/^#lib\//, 'src/lib/').replace(/\.js$/, '.ts'));
 }
 
 /**
@@ -367,7 +372,8 @@ export const MAP_PACKAGES = ['maplibre-gl', 'pmtiles'];
 
 /**
  * The map library's chunk files (JS and CSS), from the chunk map's
- * `packages`: every chunk holding code of MAP_PACKAGES, outside workers/.
+ * `packages`: every chunk holding code of MAP_PACKAGES, MapLibre's worker
+ * included (self-contained since maplibre-gl 6.13; header, mapKb).
  * @param {Record<string, { modules: string[], css?: string[], packages?: string[] }>} chunks
  * @param {string[]} tabMods tabModules(): MapLibre must share no chunk with a tab
  * @returns {{ files: Set<string>, errors: string[] }}
@@ -376,7 +382,7 @@ export function mapChunks(chunks, tabMods = []) {
 	const errors = [];
 	const files = new Set();
 	for (const [file, chunk] of Object.entries(chunks)) {
-		if (WORKER.test(file) || !(chunk.packages ?? []).some((p) => MAP_PACKAGES.includes(p))) continue;
+		if (!(chunk.packages ?? []).some((p) => MAP_PACKAGES.includes(p))) continue;
 		const eager = [WORKSPACE_PAGE, ...tabMods].filter((m) => chunk.modules.includes(m));
 		if (eager.length) {
 			errors.push(

@@ -6,10 +6,10 @@
 	// there, and this on screen), so the browser's Print or Save as PDF makes
 	// it. Its words are summary.ts's and the page's own; never the link, which
 	// is the credential.
-	import type { ShareView } from '$lib/api/types';
-	import { CHART_FONT_PX, LABEL_Y } from '$lib/components/farm/chartGeometry';
-	import type { NoticeVm } from '$lib/components/farm/notice';
-	import { t } from '$lib/i18n/locale.svelte';
+	import type { ShareView } from '#lib/api/types.js';
+	import { CHART_FONT_PX, LABEL_Y } from '#lib/components/farm/chartGeometry.js';
+	import type { NoticeVm } from '#lib/components/farm/notice.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { flowCaption, flowChart, flowVerdict, type FlowMonth } from './chart';
 	import { farmsLine, publishedLine, shareCaveat } from './share';
 	import { printedLine, summaryMonths, summaryRows, windowLine, type SummaryWindow } from './summary';

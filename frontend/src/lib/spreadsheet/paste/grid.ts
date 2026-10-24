@@ -4,8 +4,8 @@
 // the Reserve rule tables' paste. What a value means (a %, hectares) and
 // whether it applies is the grid's business: components/network/nodePaste.ts
 // and components/crops/areaPaste.ts.
-import type { FileFormat } from '$lib/components/common/formatHelp';
-import { defuse } from '$lib/spreadsheet/export/names';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
+import { defuse } from '#lib/spreadsheet/export/names.js';
 import { blockCommas, DECIMAL_COMMA_NOTE, GROUPING_COMMA_NOTE, numberReader, readPastedBlock } from './read';
 
 /** A row of the grid, matched by its name. */

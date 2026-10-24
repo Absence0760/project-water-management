@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Role } from '$lib/api/types';
+import type { Role } from '#lib/api/types.js';
 import {
 	ALL_TABS,
 	canOpenTab,

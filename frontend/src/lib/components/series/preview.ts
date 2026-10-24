@@ -29,9 +29,9 @@ import {
 	type SeriesKind,
 	type SeriesMeta
 } from '@water-management/engine';
-import { dayPrefix } from '$lib/format/number';
-import { kindLabel } from '$lib/series/kinds';
-import { firstOutletSeries } from '$lib/series/pick';
+import { dayPrefix } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
+import { firstOutletSeries } from '#lib/series/pick.js';
 import type { Daily } from './coverage';
 
 export type PreviewFlag = 'missing' | 'negative' | 'outlier' | 'flatline';

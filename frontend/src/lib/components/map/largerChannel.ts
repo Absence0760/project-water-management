@@ -4,8 +4,8 @@
 // a hillside stream beside the river meant, so the app names the larger
 // channel and offers it; the editor decides, since near a confluence it is
 // the wrong river.
-import { ApiError } from '$lib/api/client';
-import type { LargerChannel } from '$lib/api/types';
+import { ApiError } from '#lib/api/client.js';
+import type { LargerChannel } from '#lib/api/types.js';
 
 /** The channel a Delineate refusal names, or null for any other error. */
 export function largerChannelOf(err: unknown): LargerChannel | null {

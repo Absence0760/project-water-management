@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { modelDams } from '$lib/components/dams/dams';
+import { modelDams } from '#lib/components/dams/dams.js';
 import { modelFacts, otherNodesLine } from './modelFacts';
 
 type Node = Parameters<typeof modelFacts>[0]['nodes'][number];

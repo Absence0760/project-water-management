@@ -1,5 +1,5 @@
 import { GR4J_PARAMS, OBJECTIVE_LABELS, type FitRecord, type Gr4jParams, type ParamSpec } from '@water-management/engine';
-import { fmtDay, fmtNum } from '$lib/format/number';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 // The Flow calibration form (settings.calibration, settings.gr4j). GR4J is the
 // only runoff model since engine 1.0.0 removed the legacy b023 recession model

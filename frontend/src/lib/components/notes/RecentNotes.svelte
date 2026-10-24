@@ -5,9 +5,9 @@
 	or deleted in any drawer).
 -->
 <script lang="ts">
-	import { api, type Note } from '$lib/api';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { api, type Note } from '#lib/api/index.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtDate } from '#lib/format/number.js';
 	import { noteCounts } from './counts.svelte';
 	import NotesDrawer from './NotesDrawer.svelte';
 	import { noteAbout, noteHref } from './notes';

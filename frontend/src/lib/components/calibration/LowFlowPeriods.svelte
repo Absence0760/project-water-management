@@ -11,11 +11,11 @@
 -->
 <script lang="ts">
 	import { LOW_FLOW_TEXT_MAX, lowFlowPeriodsError, RATING_SOURCE_MAX, type CalibrationFlowKind, type LowFlowPeriod } from '@water-management/engine';
-	import DayInput from '$lib/components/common/DayInput.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { ratedKinds, RECORD_NAME } from '$lib/components/settings/qualityFlags';
-	import { localIsoDate } from '$lib/format/number';
+	import DayInput from '#lib/components/common/DayInput.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { ratedKinds, RECORD_NAME } from '#lib/components/settings/qualityFlags.js';
+	import { localIsoDate } from '#lib/format/number.js';
 
 	let {
 		list = $bindable([]),
@@ -70,7 +70,7 @@
 	</p>
 	{#if siteName && list.length}
 		<p class="note" data-testid="low-flow-site-note">
-			These periods apply to the outlet's records. Calibration is scored at {siteName}, so they are not used until it is scored at the outlet again.
+			These periods apply to the outlet’s records. Calibration is scored at {siteName}, so they are not used until it is scored at the outlet again.
 		</p>
 	{/if}
 	{#if list.length}

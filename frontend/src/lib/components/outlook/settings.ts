@@ -4,7 +4,7 @@
 // defaults. Small on purpose: the Settings tab imports it to block Save, and
 // its section is a lazy chunk.
 import { DEFAULT_OUTLOOK_SEASON } from '@water-management/engine';
-import type { OutlookSeasonSetting, OutlookSettings } from '$lib/api/types';
+import type { OutlookSeasonSetting, OutlookSettings } from '#lib/api/types.js';
 
 /** settings.outlook over the defaults (an older API sends none). A fresh object: the form edits it. */
 export function resolveOutlook(settings: { outlook?: Partial<OutlookSettings> } | null | undefined): OutlookSettings {

@@ -4,13 +4,13 @@
 	// verified yet (GET /auth/me → emailVerified: false). Pending project/team
 	// invitations for the address only take effect once it is confirmed.
 	// Mount once, just under the app header, in routes/+layout.svelte.
-	import { focusPageStart } from '$lib/a11y/focusPage';
-	import { api, ApiError } from '$lib/api';
-	import { emailAuthApi } from '$lib/api/emailAuth';
-	import { session } from '$lib/auth/session.svelte';
-	import EmailText from '$lib/components/common/EmailText.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
+	import { focusPageStart } from '#lib/a11y/focusPage.js';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { emailAuthApi } from '#lib/api/emailAuth.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import EmailText from '#lib/components/common/EmailText.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
 
 	const emailAuth = emailAuthApi(api);
 

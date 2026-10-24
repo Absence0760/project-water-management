@@ -2,31 +2,31 @@
 <script lang="ts">
 	// The dam page (docs/design/farmer-view.md §3 Q3, §6.3, board 3). A farm
 	// with no dam has no dam page: it says so and links back.
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import DamChart from '$lib/components/farm/DamChart.svelte';
-	import DatesLine from '$lib/components/farm/DatesLine.svelte';
-	import { farmToday } from '$lib/components/farm/numbers';
-	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
-	import FarmPage from '$lib/components/farm/FarmPage.svelte';
-	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
-	import { forecastCard } from '$lib/components/farm/forecastCard';
-	import Rich from '$lib/i18n/Rich.svelte';
-	import { datesLine, staleUntil } from '$lib/components/farm/cards';
-	import { damPage, damSource } from '$lib/components/farm/dam';
-	import { FarmState } from '$lib/components/farm/farmState.svelte';
-	import { farmHref, wordsHref } from '$lib/components/farm/load';
-	import { readUnit } from '$lib/components/farm/savedCopy';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { api } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import DamChart from '#lib/components/farm/DamChart.svelte';
+	import DatesLine from '#lib/components/farm/DatesLine.svelte';
+	import { farmToday } from '#lib/components/farm/numbers.js';
+	import EstimateNote from '#lib/components/farm/EstimateNote.svelte';
+	import FarmPage from '#lib/components/farm/FarmPage.svelte';
+	import ForecastCard from '#lib/components/farm/ForecastCard.svelte';
+	import { forecastCard } from '#lib/components/farm/forecastCard.js';
+	import Rich from '#lib/i18n/Rich.svelte';
+	import { datesLine, staleUntil } from '#lib/components/farm/cards.js';
+	import { damPage, damSource } from '#lib/components/farm/dam.js';
+	import { FarmState } from '#lib/components/farm/farmState.svelte.js';
+	import { farmHref, wordsHref } from '#lib/components/farm/load.js';
+	import { readUnit } from '#lib/components/farm/savedCopy.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
 
 	const projectId = $derived(page.params.projectId ?? '');
 	const asked = $derived(page.url.searchParams.get('node'));
 	const farm = new FarmState(api, () => session.user?.id ?? null);
 	// The account's unit (app_user.volume_unit), else this phone's.
 	const unit = $derived(session.user?.volumeUnit ?? readUnit());
-	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
+	const main = $derived(farmHref(basePath(), projectId, farm.nodeId, !!asked));
 </script>
 
 <svelte:head><title>{t('{page} · My hydrological unit', { page: t('Your dam') })}</title></svelte:head>
@@ -74,7 +74,7 @@
 			<section class="card" aria-labelledby="about-h">
 				<h2 id="about-h">{t('Where these figures come from')}</h2>
 				{#each damSource() as p (p)}<p>{p}</p>{/each}
-				<a class="link" href={wordsHref(base, page.url, 'farm-modelled')}>{t('What is “modelled”?')}</a>
+				<a class="link" href={wordsHref(basePath(), page.url, 'farm-modelled')}>{t('What is “modelled”?')}</a>
 			</section>
 		{/if}
 	{/snippet}

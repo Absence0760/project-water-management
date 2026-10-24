@@ -3,7 +3,7 @@
 // Synthetic names and values only.
 import { describe, expect, it } from 'vitest';
 import { newNetworkNode, type CropDef, type NetworkNode, type ProjectModel } from '@water-management/engine';
-import { formatPlain } from '$lib/components/common/formatHelp';
+import { formatPlain } from '#lib/components/common/formatHelp.js';
 import {
 	applyPlantingsImport,
 	PLANTING_HEADINGS,

@@ -4,7 +4,7 @@
 // that view's tiles. The request is the deps' `load`, so no API client.
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ChannelTileAnswer } from '$lib/api/types';
+import type { ChannelTileAnswer } from '#lib/api/types.js';
 import { ChannelLayer, CHANNEL_VIEW_MAX_DEG, tilesInView, type ChannelLayerDeps } from './channelLayer.svelte';
 
 const tileAnswer = (i: number, j: number): ChannelTileAnswer => ({

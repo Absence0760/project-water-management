@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { soleHoldingsOf } from './deleteAccount';
 
 const refused = (details: unknown, code = 'account_sole_holder', status = 409) => new ApiError(status, 'x', details, code);

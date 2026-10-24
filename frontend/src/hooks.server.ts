@@ -9,9 +9,9 @@
 // stays `en` if that language's catalogue is incomplete). Only that route:
 // the i18n state is module-wide, and another page (the fallback above all)
 // must not pick up the last landing page's language.
-import type { Handle } from '@sveltejs/kit';
-import { LANDING_ROUTE } from '$lib/auth/session.svelte';
-import { wordsLang } from '$lib/i18n/locale.svelte';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { LANDING_ROUTE } from '#lib/auth/session.svelte.js';
+import { wordsLang } from '#lib/i18n/locale.svelte.js';
 
 export const handle: Handle = ({ event, resolve }) => {
 	if (event.route.id !== LANDING_ROUTE) return resolve(event);

@@ -17,8 +17,8 @@
 	button does; the address sets the words.
 -->
 <script lang="ts">
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
+	import { api } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
 	import { i18n, isLocale, LANGUAGES, setLocale, storeLocale, t, type Locale } from './locale.svelte';
 
 	let {
@@ -54,7 +54,7 @@
 
 {#if addressOf}
 	<!-- Not preloaded on hover: the other language's catalogue loads on the click. -->
-	<div class="lang" class:compact class:segmented role="group" aria-label={t('Language')} data-sveltekit-preload-data="off">
+	<div class="lang" class:compact class:segmented role="group" aria-label={t('Language')} data-sveltekit-preload-data="false">
 		{#each LANGUAGES as l (l.code)}
 			<a
 				href={addressOf(l.code)}

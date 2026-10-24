@@ -12,7 +12,7 @@
 <script lang="ts">
 	import { DEMAND_NORMS, DEMAND_PCT_FLOOR_M3_DAY, EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
 	import { shareThePain, type StageCell } from './shareThePain';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 
 	let {
 		curtailment,

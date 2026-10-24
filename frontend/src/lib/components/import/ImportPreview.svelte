@@ -5,10 +5,10 @@
 	// source with more to show (a workbook's notes and unmapped report) passes
 	// it as `extra`, rendered after the contents and before the run choice.
 	import type { Snippet } from 'svelte';
-	import type { Team } from '$lib/api';
-	import { fmtNum } from '$lib/format/number';
-	import { kindLabel } from '$lib/series/kinds';
-	import { workspaceNameProblem } from '$lib/format/visibleName';
+	import type { Team } from '#lib/api/index.js';
+	import { fmtNum } from '#lib/format/number.js';
+	import { kindLabel } from '#lib/series/kinds.js';
+	import { workspaceNameProblem } from '#lib/format/visibleName.js';
 	import { summarizeImport, type ParsedImport } from './projectFile';
 
 	let {

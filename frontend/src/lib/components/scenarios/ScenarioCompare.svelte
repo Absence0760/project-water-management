@@ -9,20 +9,20 @@
 	// a rebased scenario's older run is still compared with its own base.
 	// Under it, the scenario run's validation statement (WP-3.13), folded shut.
 	// The head links to the run's evidence report (issue #71).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { base } from '$app/paths';
-	import { compareTabHref } from '$lib/components/compare/picker';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { resolve } from '$app/paths';
+	import { compareTabHref } from '#lib/components/compare/picker.js';
 	import { untrack } from 'svelte';
-	import { api, ApiError, type RunCompareResponse, type Scenario } from '$lib/api';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import AssuranceDeltaTable from '$lib/components/compare/AssuranceDeltaTable.svelte';
-	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
-	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
-	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { api, ApiError, type RunCompareResponse, type Scenario } from '#lib/api/index.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import AssuranceDeltaTable from '#lib/components/compare/AssuranceDeltaTable.svelte';
+	import FarmDeltaTable from '#lib/components/compare/FarmDeltaTable.svelte';
+	import HeadlineDeltas from '#lib/components/compare/HeadlineDeltas.svelte';
+	import ValidationPanel from '#lib/components/liability/ValidationPanel.svelte';
+	import { fmtDate } from '#lib/format/number.js';
 
-	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
+	const loadOverlay = () => import('#lib/components/compare/CompareOverlay.svelte');
 
 	// Only assessors see it: ScenarioEditor shows an applicant a note instead.
 	let { projectId, scenario }: { projectId: string; scenario: Scenario } = $props();
@@ -76,7 +76,7 @@
 			<span class="acts">
 				<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>
 				<!-- The licensing evidence report of this run on its base (issue #71, docs/ui.md § Evidence report). -->
-				<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(data.b.run.id)}&evidence" data-testid="scenario-evidence-link">Evidence report</a>
+				<a class="btn btn-sm" href={resolve(`projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(data.b.run.id)}&evidence`)} data-testid="scenario-evidence-link">Evidence report</a>
 			</span>
 		{/if}
 	</div>

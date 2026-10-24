@@ -5,8 +5,8 @@
 // converted: reference ET (FAO-56 ET₀) becomes GR4J's monthly PE, A-pan the
 // A-pan row. For reference ET the panel also shows ET₀ ÷ A-pan per month, the
 // pan coefficient the two rows imply, as a cross-check only.
-import type { EvaporationAccepted, EvaporationProposals, EvaporationTarget } from '$lib/api';
-import { fmtDate, fmtDay, fmtNum } from '$lib/format/number';
+import type { EvaporationAccepted, EvaporationProposals, EvaporationTarget } from '#lib/api/index.js';
+import { fmtDate, fmtDay, fmtNum } from '#lib/format/number.js';
 
 /** Where an accepted row goes, in words. */
 export const TARGET_LABEL: Record<EvaporationTarget, string> = {

@@ -7,8 +7,8 @@
 // importReport.ts), which would fail the whole import; so this trims to the
 // same caps first, clipping long strings and dropping items past the limits,
 // and records how many were dropped (`notesOmitted` / `unmappedOmitted`).
-import type { ImportReport } from '$lib/api';
-import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
+import type { ImportReport } from '#lib/api/index.js';
+import type { ImportNote, UnmappedItem } from '#lib/spreadsheet/import/report.js';
 
 /** IMPORT_REPORT_MAX_ITEMS, IMPORT_REPORT_MAX_BYTES and IMPORT_REPORT_LIMITS in backend/src/projects/importReport.ts. */
 export const REPORT_MAX_ITEMS = 500;
@@ -86,7 +86,7 @@ export function projectFileNotes(sentences: readonly string[]): ImportNote[] {
 	return sentences.map((message) => ({ code: PROJECT_FILE_NOTE_CODE as ImportNote['code'], severity: 'info', message }));
 }
 
-/** Which importer made a report: the reader and the app build it ran in (`version` from $app/environment). */
+/** Which importer made a report: the reader and the app build it ran in (`version` from $app/env). */
 export function importerVersion(source: ImportReport['source'], build: string): string {
 	return `${source === 'b023-workbook' ? 'workbook browser importer' : 'project file'} (web build ${build})`;
 }

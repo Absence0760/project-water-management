@@ -5,7 +5,7 @@
 // is the deps' `load`, so the test needs no API client (and no SvelteKit $env).
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MapGridLayer as Answer } from '$lib/api/types';
+import type { MapGridLayer as Answer } from '#lib/api/types.js';
 import { MapGridLayer } from './mapGridLayer.svelte';
 import { mapGridViewBbox } from './mapLayers';
 

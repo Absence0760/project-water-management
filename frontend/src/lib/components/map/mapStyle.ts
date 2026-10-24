@@ -16,7 +16,7 @@
 // relief (shaded from a DEM, PUBLIC_TERRAIN_URL: Terrarium tiles in one more
 // PMTiles file) sits over the land and under the water, only while the tab's
 // Relief layer is on.
-import type { MapFeature, MapGeometry, MapPosition } from '$lib/api/types';
+import type { MapFeature, MapGeometry, MapPosition } from '#lib/api/types.js';
 import type { ProposalPiece } from './pieces';
 
 /** Shown on the map whenever the basemap is (the Protomaps / OSM licence). */

@@ -8,7 +8,7 @@
 //
 // Unlike a drawing, a measurement has nothing to lose, so Escape ends it at
 // once without asking (`unsaved` is always false).
-import type { MapPosition } from '$lib/api/types';
+import type { MapPosition } from '#lib/api/types.js';
 import { Draft } from '../draw/draft.svelte';
 import { DRAW_CHOICES } from '../draw/shape';
 import { measureText } from './measure';

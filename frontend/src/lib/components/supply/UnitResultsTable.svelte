@@ -1,12 +1,12 @@
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	// The per-unit table of one run: whole-record demand, supply, deficit,
 	// share supplied (with its bar) and EWR charge, sortable, with the totals.
 	// Moved from the Runs tab's summary to Hydrological units (issue #17); the
 	// printable report still shows it under the run summary.
 	import type { FarmSummary } from '@water-management/engine';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
-	import { m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from '$lib/components/runs/results';
+	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
+	import { m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from '#lib/components/runs/results.js';
 
 	let {
 		farms,

@@ -1,6 +1,6 @@
 // Shared by the map layer state classes' tests (riverLayer, quaternaryLayer):
 // a promise the test settles by hand, and a square feature at a spot.
-import type { MapFeature } from '$lib/api/types';
+import type { MapFeature } from '#lib/api/types.js';
 
 export function deferred<T>() {
 	let resolve!: (v: T) => void;

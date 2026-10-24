@@ -1,5 +1,5 @@
 // Builds the site under test: `vite build` output with this checkout's e2e API
-// URL baked in (PUBLIC_API_URL is `$env/static/public`), into its own
+// URL baked in (PUBLIC_API_URL is `$app/env/public`, static), into its own
 // directories so frontend/build and frontend/.svelte-kit are left alone.
 //
 //   node support/build-site.ts        (from e2e/; Node 24 runs the .ts as is)

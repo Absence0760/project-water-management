@@ -8,7 +8,7 @@
 // section menu (NetworkTab.svelte, the shared common/SectionNav, issue #462)
 // lists the same sections, so the two never disagree.
 import type { NetworkNode } from '@water-management/engine';
-import type { NavGroup } from '$lib/components/common/sectionNav';
+import type { NavGroup } from '#lib/components/common/sectionNav.js';
 import { GROUPS, hasDam, hasDamDevelopment, NODE_FIELDS, type NodeField } from './fields';
 import { hasSupplySettings } from './supply';
 

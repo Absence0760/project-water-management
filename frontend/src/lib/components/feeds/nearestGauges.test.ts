@@ -1,6 +1,6 @@
 // The nearest-gauging-stations proposal's words (nearestGauges.ts, issue #326 B-gauge).
 import { describe, expect, it } from 'vitest';
-import type { GaugeStationLookup } from '$lib/api/types';
+import type { GaugeStationLookup } from '#lib/api/types.js';
 import { distanceText, emptyLine, pointLine, recordText } from './nearestGauges';
 
 const lookup = (over: Partial<GaugeStationLookup> = {}): GaugeStationLookup => ({

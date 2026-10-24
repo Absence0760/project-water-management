@@ -2,8 +2,8 @@
 // second factor (205_mfa_recovery; docs/ui.md § Account, § Sign-in;
 // docs/security.md § Two-step sign-in → Recovery). Pure helpers, so the
 // Account page and the sign-in page share them and the tests reach them.
-import { ApiError } from '$lib/api/client';
-import type { MfaStatus } from '$lib/api/types';
+import { ApiError } from '#lib/api/client.js';
+import type { MfaStatus } from '#lib/api/types.js';
 
 /** The file "Download the codes" saves. */
 export const RECOVERY_CODES_FILE = 'water-management-recovery-codes.txt';

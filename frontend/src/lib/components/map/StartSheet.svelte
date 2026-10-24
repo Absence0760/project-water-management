@@ -15,12 +15,12 @@
 	opens here at its card (`focusKey`).
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { tick } from 'svelte';
-	import { api, type MapFeature, type StartProposal, type StartState, type StartTicks } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { api, type MapFeature, type StartProposal, type StartState, type StartTicks } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { featureName } from './mapList';
 	import AreaBasisChoice from './AreaBasisChoice.svelte';
 	import { offersEffective } from './areaBasis';

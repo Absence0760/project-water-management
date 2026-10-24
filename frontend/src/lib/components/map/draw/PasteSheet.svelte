@@ -6,9 +6,9 @@
 	any drawing is; nothing is saved here.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import type { MapGeometry } from '$lib/api';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { MapGeometry } from '#lib/api/index.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { parseShape } from './parseShape';
 	import { draftProblem, editableCorners, shapeOf, type DraftShape } from './shape';
 

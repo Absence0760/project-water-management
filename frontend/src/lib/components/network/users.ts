@@ -1,7 +1,7 @@
 // Other water users (WP-1.33) in the Network tab: their monthly demand as
 // the form edits it, and the one-line description the users panel shows.
 import { userPriorityWord, type NetworkNode } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** A user's 12 monthly demands (m³/day, water-year months); zeros when it has none yet. */
 export function userDemandOf(n: Pick<NetworkNode, 'userDemandM3Day'>): number[] {

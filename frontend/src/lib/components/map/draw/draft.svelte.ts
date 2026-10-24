@@ -11,8 +11,8 @@
 // corners between them along it; `split` draws the line a polygon is cut
 // along (draw/split.ts); `trace` holds a dam outline proposed from the water
 // occurrence data as a drawing to adjust, with how it was made.
-import type { DamTraceProposal, MapFeature, MapFeatureKind, MapGeometry, MapPosition } from '$lib/api/types';
-import { confirmDialog, type ConfirmOptions } from '$lib/components/common/confirm.svelte';
+import type { DamTraceProposal, MapFeature, MapFeatureKind, MapGeometry, MapPosition } from '#lib/api/types.js';
+import { confirmDialog, type ConfirmOptions } from '#lib/components/common/confirm.svelte.js';
 import { areaText, positionText } from '../mapData';
 import { shapeAreaM2 } from '../measure/measure';
 import { canFinish, CORNER, distinctCorners, DRAW_CHOICES, type DrawChoice, type DraftShape, editableCorners, geometryOf, shapeOf, withoutCorner } from './shape';

@@ -3,9 +3,9 @@
 	// app actually does with personal information, written from docs/security.md
 	// § Personal information (POPIA): change the two together. Draft before
 	// counsel review: docs/legal-status.md tracks what is open.
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { legalEffective } from '@water-management/engine/legal';
-	import LegalPage from '$lib/components/legal/LegalPage.svelte';
+	import LegalPage from '#lib/components/legal/LegalPage.svelte';
 
 	const sections = [
 		{ id: 'who', label: '1. Who we are' },
@@ -330,5 +330,5 @@
 		<a href="https://inforegulator.org.za" rel="noopener noreferrer">inforegulator.org.za</a>,
 		<a href="mailto:POPIAComplaints@inforegulator.org.za">POPIAComplaints@inforegulator.org.za</a>.
 	</p>
-	<p>See also our <a href="{base}/terms">Terms of use</a>.</p>
+	<p>See also our <a href={resolve('terms')}>Terms of use</a>.</p>
 </LegalPage>

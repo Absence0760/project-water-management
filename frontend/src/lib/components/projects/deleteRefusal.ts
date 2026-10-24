@@ -2,7 +2,7 @@
 // (issue #43, docs/api.md): 409 with `details.evidenceRun` naming the current
 // nomination (null when a nomination landed mid-request). This reads that
 // answer so the projects page can explain it instead of showing the raw error.
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 
 export interface EvidenceRefusal {
 	/** The project's current evidence run, or null when the server couldn't name it. */

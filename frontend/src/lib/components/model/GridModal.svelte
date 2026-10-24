@@ -6,15 +6,15 @@
 	// ModelEditor, like the tab the grid comes from, and carries the save row,
 	// since the modal makes the page's save bar unreachable.
 	import type { ProjectSettings } from '@water-management/engine';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import CropsTab from '$lib/components/crops/CropsTab.svelte';
-	import IrrigationSystemsPanel from '$lib/components/crops/IrrigationSystemsPanel.svelte';
-	import DemandsTable from '$lib/components/network/DemandsTable.svelte';
-	import NetworkTab from '$lib/components/network/NetworkTab.svelte';
-	import type { RunMeta } from '$lib/api';
-	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GRIDS, type GridId } from '$lib/workspace/overlays';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import CropsTab from '#lib/components/crops/CropsTab.svelte';
+	import IrrigationSystemsPanel from '#lib/components/crops/IrrigationSystemsPanel.svelte';
+	import DemandsTable from '#lib/components/network/DemandsTable.svelte';
+	import NetworkTab from '#lib/components/network/NetworkTab.svelte';
+	import type { RunMeta } from '#lib/api/index.js';
+	import TransfersTab from '#lib/components/transfers/TransfersTab.svelte';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { GRIDS, type GridId } from '#lib/workspace/overlays.js';
 	import IssueList from './IssueList.svelte';
 	import ModelSaveRow from './ModelSaveRow.svelte';
 

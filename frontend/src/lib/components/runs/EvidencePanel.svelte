@@ -8,9 +8,9 @@
 -->
 <script lang="ts">
 	import { tick } from 'svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { api, NOMINATION_REASON_MAX, type Nomination, type RunMeta } from '$lib/api';
-	import { fmtStamp } from '$lib/format/number';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { api, NOMINATION_REASON_MAX, type Nomination, type RunMeta } from '#lib/api/index.js';
+	import { fmtStamp } from '#lib/format/number.js';
 	import { currentNomination, evidenceKindBlocker, evidenceLine, historyEntries, nominateBlocker } from './evidence';
 
 	let {

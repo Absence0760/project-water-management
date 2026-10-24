@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CalibrationStats } from '@water-management/engine';
 import { describeWindow, isLegacyStats, isPartYear, kgeComponents, metricRows, volumeBiasText, waterYearLabel, windowError } from './metrics';
-import { tipFor } from '$lib/help/tips';
+import { tipFor } from '#lib/help/tips.js';
 
 const base: CalibrationStats = {
 	days: 100,

@@ -5,7 +5,7 @@
 	// no-publication states (design §6.5, §9). The page renders its figures in
 	// `children`, given the view.
 	import { onMount, untrack, type Snippet } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import type { FarmView } from '@water-management/engine';
 	import { previewBanner, savedStrip } from './cards';
 	import FarmNoticeGate from './FarmNoticeGate.svelte';
@@ -50,7 +50,7 @@
 	);
 	const preview = $derived(
 		farm.preview && farm.farmName
-			? { text: previewBanner(farm.farmName), href: `${base}/projects/${encodeURIComponent(projectId)}?tab=network` }
+			? { text: previewBanner(farm.farmName), href: resolve(`projects/${encodeURIComponent(projectId)}?tab=network`) }
 			: null
 	);
 </script>

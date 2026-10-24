@@ -1660,4 +1660,19 @@ ceilings still append here.
             import worker reads the optional [EWR options] sheet
             (frontend/src/lib/spreadsheet/import/ewrOptions.ts, ~1 KB
             gzipped, no library); measured 33 KB locally.
+2026-10-23  mapKb 305 → 440 KB (#570, maplibre-gl 6.12.0 → 6.14.0, from
+            Dependabot #546). Since 6.13 MapLibre's worker is
+            self-contained (maplibre-gl-js #8621, a fix for a stale cached
+            worker crashing the map after an upgrade): maplibre-gl-shared.mjs
+            is empty and the worker carries its own copy of the code it used
+            to import from the main thread's shared chunk. Built, the worker
+            went from a 6 KB entry to 141 KB, the main thread's chunks were
+            unchanged, so the Map tab downloads ~140 KB more. The worker
+            loads only with the map, so it now counts under mapKb (mapChunks)
+            instead of totalCodeKb and largestWorkerKb, where it broke both.
+            Measured 432 KB locally (was 292), headroom ~8 KB. Taken for
+            6.14's fixes (setStyle on a lost WebGL context, a 6.12.0
+            regression; blank maps on iPadOS 16; load/idle never firing
+            after a failed tile; terrain camera jumps). Upstream removes the
+            empty shared file in its next major, so the split won't return.
 ```

@@ -1,12 +1,12 @@
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	// The human-impact tables of a run (engine ≥ 0.22.0): land cover (WP-1.35),
 	// groundwater (WP-1.34), other water users (WP-1.33) and the units' demand
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
 	// for a run that has any of them (humanImpacts.ts), on Hydrological units
 	// (issue #137) and in the printable report.
 	import { CROPS_TAKE_KEY, DEMAND_NORMS, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, USER_PRIORITY_LABEL, type RunSummary } from '@water-management/engine';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
 	import { demandBySource, sourceLabel, sourceLine } from './demandSources';

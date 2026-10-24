@@ -10,7 +10,7 @@
 // answer it had rather than asking again, and a click the server refuses
 // (off the elevation model, a catchment too large) is taken back with the
 // reason, so the clicks before it keep working.
-import type { ClickPieces, MapFeature, MapPosition } from '$lib/api/types';
+import type { ClickPieces, MapFeature, MapPosition } from '#lib/api/types.js';
 import { largerLine } from './largerChannel';
 import { interiorPoint, pieceTintsFor, type PiecesShape, type ProposalPiece } from './pieces';
 

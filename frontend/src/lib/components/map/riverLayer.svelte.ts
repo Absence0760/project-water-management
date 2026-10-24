@@ -7,7 +7,7 @@
 // in with the deps (MapTab passes api.map's), so the module never imports the
 // app-wide API client and its SvelteKit $env, and the tests can drive it.
 import { untrack } from 'svelte';
-import type { MapFeature, RiverLayer as Answer, RiverReach } from '$lib/api/types';
+import type { MapFeature, RiverLayer as Answer, RiverReach } from '#lib/api/types.js';
 import { creditedReach, reachKey, reachRef, riverBbox, riverViewBbox } from './mapLayers';
 import type { NetworkReach } from './mapStyle';
 

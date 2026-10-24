@@ -21,19 +21,19 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { blankEwrDailySource, EWR_PERCENTILE_POINTS, reserveTableOf, type EwrDailySource, type EwrReserveTable } from '@water-management/engine';
-	import Fold from '$lib/components/common/Fold.svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { latestFileText } from '$lib/files/latest';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtNum } from '$lib/format/number';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { latestFileText } from '#lib/files/latest.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import DrmFormatHelp from './DrmFormatHelp.svelte';
 	import { parseDrmFile, percentileTablesFromRul, type TabFile } from './drmFiles';
-	import { api } from '$lib/api';
-	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+	import { api } from '#lib/api/index.js';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import ScaledEwrTablesView from './ScaledEwrTablesView.svelte';
-	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
 	import { dailyCsv, planDailyPaste, type DailyTable } from './ewrPaste';
 	import { DAILY_TABLE_LABELS, dailySourceError, knownScale, lastRunScale, reserveGridRole, rulLoad, scaledEwrTables, scaleFactor, type LastRunScale } from './ewrDailySource';
 

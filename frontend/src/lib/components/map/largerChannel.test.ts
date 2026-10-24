@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { bearingWord, largerChannelOf, largerLine } from './largerChannel';
 
 const larger = { at: [21.465, -28.3845] as [number, number], distanceM: 504, km2: 619.8, pointKm2: 0.18 };

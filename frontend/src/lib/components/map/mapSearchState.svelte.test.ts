@@ -4,7 +4,7 @@
 // answer has places, list open or not. The browser flow is
 // e2e/tests/map-search.spec.ts.
 import { describe, expect, it, vi } from 'vitest';
-import type { MapSearchAnswer, MapSearchHit } from '$lib/api/types';
+import type { MapSearchAnswer, MapSearchHit } from '#lib/api/types.js';
 import { MapSearchState } from './mapSearchState.svelte';
 
 const GEONAMES = 'GeoNames (geonames.org), CC BY 4.0';

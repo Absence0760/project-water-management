@@ -8,12 +8,12 @@
 // cards.ts), never a run the farmer can't open. Everything the map shows is
 // also said here in words, so the map is never the only way to read it.
 import type { FarmProjection, ModelBand } from '@water-management/engine';
-import type { FarmMapFeature, MapFeature, MapFeatureKind } from '$lib/api/types';
-import { msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
-import type { Rich } from '$lib/i18n/rich';
-import type { MapWords } from '$lib/components/map/CatchmentMap.svelte';
-import type { MapCredit } from '$lib/components/map/mapLayers';
-import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '$lib/components/legal/dataCredits';
+import type { FarmMapFeature, MapFeature, MapFeatureKind } from '#lib/api/types.js';
+import { msg, t, tRich, type Msg } from '#lib/i18n/locale.svelte.js';
+import type { Rich } from '#lib/i18n/rich.js';
+import type { MapWords } from '#lib/components/map/CatchmentMap.svelte';
+import type { MapCredit } from '#lib/components/map/mapLayers.js';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '#lib/components/legal/dataCredits.js';
 import { bandChip } from './cards';
 import { fmtNumber } from './numbers';
 

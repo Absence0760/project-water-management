@@ -7,8 +7,8 @@
 // - the pump figure is per day the river needed it, with the season average after;
 // - the dam part is information, not an instruction (no release-works flag yet, E9).
 import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView } from '@water-management/engine';
-import { i18n, t, tRich } from '$lib/i18n/locale.svelte';
-import type { Rich } from '$lib/i18n/rich';
+import { i18n, t, tRich } from '#lib/i18n/locale.svelte.js';
+import type { Rich } from '#lib/i18n/rich.js';
 import { levelWord, pumpLessAsked, seasonSpan, splitNotice } from './cards';
 import { pickNotice } from './notice';
 import { count, DAYS, fmtDay, fmtM3Day, fmtNumber, fmtPct, joinAnd, litresPerSecond, NBSP, roundAbout } from './format';

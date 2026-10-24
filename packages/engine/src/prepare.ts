@@ -73,6 +73,7 @@ import {
 import { resolveWr2012 } from './reference/wr2012Resolve';
 import {
 	fillFlowGaps,
+	gapFillLowFlow,
 	fillSummaryInWindow,
 	flowFillWarning,
 	GAP_FILL_KINDS,
@@ -601,7 +602,8 @@ function flowFillsFor(
 			);
 			continue;
 		}
-		const f = fillFlowGaps(kind, record, spec, donor);
+		// A reading above a low-flow period's threshold anchors nothing and is out of the ratio and the clamp (issue #567).
+		const f = fillFlowGaps(kind, record, spec, donor, gapFillLowFlow(settings.qualityFlags.lowFlowPeriods, kind, record, spec.donor, donor));
 		const summary = fillSummaryInWindow(f, start, days);
 		const code = new Uint8Array(days);
 		const offset = toEpochDay(f.startDate) - start;

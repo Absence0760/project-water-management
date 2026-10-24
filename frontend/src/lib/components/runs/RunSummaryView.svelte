@@ -6,17 +6,17 @@
 	// `units`, in their old place.
 	import type { Snippet } from 'svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import type { EwrHeadline } from '$lib/api/types';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import type { EwrHeadline } from '#lib/api/types.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import WithheldUnitsNote from './WithheldUnitsNote.svelte';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, outletEwrLine, SUPPLY_TARGET } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
 	import { otherUsesLink } from './humanImpacts';
-	import { calibrationSample } from '$lib/components/calibration/sample';
+	import { calibrationSample } from '#lib/components/calibration/sample.js';
 
 	let {
 		summary,

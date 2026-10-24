@@ -1,8 +1,8 @@
 // The dam page (docs/design/farmer-view.md §3 Q3, §6.3, board 3). Pure
 // wording, from the message catalogue ($lib/i18n, WP-2.5).
 import type { FarmProjection } from '@water-management/engine';
-import { msg, t } from '$lib/i18n/locale.svelte';
-import type { Rich } from '$lib/i18n/rich';
+import { msg, t } from '#lib/i18n/locale.svelte.js';
+import type { Rich } from '#lib/i18n/rich.js';
 import { damCard, daysLeftLine, noStopLevel } from './cards';
 import { count, DAYS, daysBetween, fmtDay, fmtDayMonth, fmtMonthShort, fmtMonthYear, fmtPct, fmtVolume, joinAnd, type VolumeUnit } from './format';
 

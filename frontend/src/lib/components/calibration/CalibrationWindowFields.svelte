@@ -7,7 +7,7 @@
 	saving.
 -->
 <script lang="ts">
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import type { CalibrationFlowKind, CalibrationSite } from '@water-management/engine';
 	import { FLOW_KIND_LABEL, windowError } from './metrics';
 

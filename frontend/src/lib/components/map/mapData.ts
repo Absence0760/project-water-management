@@ -3,8 +3,8 @@
 // import's refusal says. Pure, so the list, the table and the map agree and
 // vitest covers them (mapData.test.ts). No MapLibre here: this module ships
 // in the tab's chunk; the map library loads only when the map is drawn.
-import type { DamPosition, MapAreaBasis, MapFeature, MapFeatureKind, MapGeometry, MapImportProblem, MapNodeArea, MapPosition } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import type { DamPosition, MapAreaBasis, MapFeature, MapFeatureKind, MapGeometry, MapImportProblem, MapNodeArea, MapPosition } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
 import { takenAreaM2 } from './areaBasis';
 
 export const KIND_LABEL: Record<MapFeatureKind, string> = {

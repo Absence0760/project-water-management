@@ -7,10 +7,10 @@
 	// wording the operator accepted without counsel: docs/legal-status.md
 	// tracks what is open. A material change bumps LEGAL_VERSION, which asks
 	// every account to accept again.
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { legalEffective } from '@water-management/engine/legal';
-	import LegalPage from '$lib/components/legal/LegalPage.svelte';
-	import { SUMMARY_POINTS } from '$lib/components/legal/termsSummary';
+	import LegalPage from '#lib/components/legal/LegalPage.svelte';
+	import { SUMMARY_POINTS } from '#lib/components/legal/termsSummary.js';
 
 	const sections = [
 		{ id: 'short', label: 'The short version' },
@@ -54,7 +54,7 @@
 		These terms are an agreement between <strong>Jared Howard</strong>, a sole proprietor based in Virginia, United States (“we”,
 		“us”), and you, the person using Water Management (“the service”), or the organisation you use it for. By creating an account,
 		accepting an invitation or otherwise using the service, you accept these terms and our
-		<a href="{base}/privacy">privacy notice</a>. If you use the service for an organisation, you confirm you may accept these terms
+		<a href={resolve('privacy')}>privacy notice</a>. If you use the service for an organisation, you confirm you may accept these terms
 		for it. If you don’t accept them, don’t use the service.
 	</p>
 
@@ -112,7 +112,7 @@
 		A project belongs to the person or team that owns it. Its owners decide who is invited, with which role, and which farm a
 		farmer is linked to. If you invite people or link a farmer to a farm, you confirm that you have a proper reason and the right
 		to share that information with them, and you are responsible for that under data-protection law (see the
-		<a href="{base}/privacy#roles">privacy notice</a>). If you publish results or create a share link, you decide who sees them.
+		<a href={resolve('privacy#roles')}>privacy notice</a>). If you publish results or create a share link, you decide who sees them.
 	</p>
 
 	<h2 id="content">6. Your content and data</h2>
@@ -149,7 +149,7 @@
 		The service can read public data sources, such as CHIRPS satellite rainfall and the Department of Water and Sanitation’s
 		gauging records. They are provided by others, as they are; we don’t control their accuracy, availability or terms, and your use
 		of them is also subject to their own terms. The service is hosted on Amazon Web Services. The data sources it uses, and the
-		credit each one’s licence asks for, are listed on the <a href="{base}/data-sources">data sources</a> page.
+		credit each one’s licence asks for, are listed on the <a href={resolve('data-sources')}>data sources</a> page.
 	</p>
 	<!-- Map data licensed to us (HydroRIVERS first, docs/maps.md § Sources): the end-user terms the HydroSHEDS licence
 	     asks for (§ 2.1.2, terms at least as protective as its own; § 2.1.3, no reverse engineering), written for any
@@ -159,7 +159,7 @@
 		HydroRIVERS river network from WWF’s HydroSHEDS database. You may use it within the service, and as part of your projects and
 		the results, reports and maps you make with it. You may not copy, extract or distribute that data on its own, as a stand-alone
 		dataset, and you may not decompile, reverse engineer or disassemble it. It remains the property of its licensors, who provide it
-		as it is, without any warranty, and are not liable for your use of it. The <a href="{base}/data-sources">data sources</a> page
+		as it is, without any warranty, and are not liable for your use of it. The <a href={resolve('data-sources')}>data sources</a> page
 		lists each source and its licence.
 	</p>
 

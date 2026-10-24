@@ -7,7 +7,7 @@
 	// The format is kept beside the box's parser (its tests read the example
 	// back through it) and listed in $lib/help/fileFormats.ts; a guard
 	// (fileFormats.test.ts) keeps every FormatHelp on one listed there.
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import FormatBody from './FormatBody.svelte';
 	import { formatPath, type ExampleFile, type FileFormat } from './formatHelp';
 
@@ -33,7 +33,7 @@
 	<div class="body">
 		<FormatBody {format} {extraFiles} />
 		<p class="all small">
-			<a href="{base}{formatPath(format.id)}" target="_blank" rel="noopener" data-testid="format-all-link">Every file format, with example files<span class="visually-hidden"> (opens in a new tab)</span></a>
+			<a href="{basePath()}{formatPath(format.id)}" target="_blank" rel="noopener" data-testid="format-all-link">Every file format, with example files<span class="visually-hidden"> (opens in a new tab)</span></a>
 		</p>
 	</div>
 </details>

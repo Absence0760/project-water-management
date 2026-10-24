@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { blankEwrRuleTable, type NetworkNode } from '@water-management/engine';
 import EwrRulesSection from './EwrRulesSection.svelte';
 
-vi.mock('$lib/api', () => ({ api: {} }));
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('#lib/api/index.js', () => ({ api: {} }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const text = (html: string) => {
 	let s = html;

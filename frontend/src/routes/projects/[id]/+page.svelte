@@ -5,81 +5,81 @@
 	// (docs/architecture.md § Code splitting). Module scope keeps each loader's
 	// identity stable, which is what lazy.ts memoises on.
 	const LOAD = {
-		network: () => import('$lib/components/network/NetworkTab.svelte'),
-		map: () => import('$lib/components/map/MapTab.svelte'),
-		crops: () => import('$lib/components/crops/CropsTab.svelte'),
-		transfers: () => import('$lib/components/transfers/TransfersTab.svelte'),
-		series: () => import('$lib/components/series/SeriesTab.svelte'),
-		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
-		runs: () => import('$lib/components/runs/RunsTab.svelte'),
-		river: () => import('$lib/components/river/RiverTab.svelte'),
-		supply: () => import('$lib/components/supply/SupplyTab.svelte'),
-		dams: () => import('$lib/components/dams/DamsTab.svelte'),
-		compare: () => import('$lib/components/compare/CompareView.svelte'),
-		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
-		allocations: () => import('$lib/components/allocations/AllocationsTab.svelte'),
-		project: () => import('$lib/components/project/ProjectTab.svelte'),
-		applications: () => import('$lib/components/scenarios/ApplicationsTab.svelte'),
-		history: () => import('$lib/components/history/HistoryTab.svelte')
+		network: () => import('#lib/components/network/NetworkTab.svelte'),
+		map: () => import('#lib/components/map/MapTab.svelte'),
+		crops: () => import('#lib/components/crops/CropsTab.svelte'),
+		transfers: () => import('#lib/components/transfers/TransfersTab.svelte'),
+		series: () => import('#lib/components/series/SeriesTab.svelte'),
+		settings: () => import('#lib/components/settings/SettingsTab.svelte'),
+		runs: () => import('#lib/components/runs/RunsTab.svelte'),
+		river: () => import('#lib/components/river/RiverTab.svelte'),
+		supply: () => import('#lib/components/supply/SupplyTab.svelte'),
+		dams: () => import('#lib/components/dams/DamsTab.svelte'),
+		compare: () => import('#lib/components/compare/CompareView.svelte'),
+		scenarios: () => import('#lib/components/scenarios/ScenariosTab.svelte'),
+		allocations: () => import('#lib/components/allocations/AllocationsTab.svelte'),
+		project: () => import('#lib/components/project/ProjectTab.svelte'),
+		applications: () => import('#lib/components/scenarios/ApplicationsTab.svelte'),
+		history: () => import('#lib/components/history/HistoryTab.svelte')
 	};
-	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
+	const loadAddData = () => import('#lib/components/series/AddDataDialog.svelte');
 	// The save bar's Preview of the unsaved model edits against the last run (issue #284).
-	const loadUnsavedPreview = () => import('$lib/components/preview/UnsavedPreviewDialog.svelte');
+	const loadUnsavedPreview = () => import('#lib/components/preview/UnsavedPreviewDialog.svelte');
 	// One farm's planted areas over any tab (`farm=<nodeId>`, issue #17 step 4).
-	const loadFarmDrawer = () => import('$lib/components/crops/FarmCropsDrawer.svelte');
+	const loadFarmDrawer = () => import('#lib/components/crops/FarmCropsDrawer.svelte');
 	// An existing grid, unchanged, in a full-screen modal over any tab (`grid=<id>`, issue #17).
-	const loadGridModal = () => import('$lib/components/model/GridModal.svelte');
+	const loadGridModal = () => import('#lib/components/model/GridModal.svelte');
 	// An applicant's whole view of the project (WP-3.3): the workspace's tabs all refuse them.
-	const loadApplicantView = () => import('$lib/components/scenarios/ApplicantView.svelte');
+	const loadApplicantView = () => import('#lib/components/scenarios/ApplicantView.svelte');
 </script>
 
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
-	import { chirpsSourceOf, observedOriginsOf } from '$lib/series/provenance';
-	import { api, ApiError, hasRole, type Project, type ProjectSummary, type RunMeta } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { prefetch } from '$lib/components/common/lazy';
-	import { provideUnsaved } from '$lib/components/common/chunkFailed';
-	import { guardUnsaved, listAnd } from '$lib/nav/unsaved';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { provideInvalidFields } from '$lib/components/common/invalidFields.svelte';
-	import type { PageDraft } from '$lib/components/model/pageDraft';
-	import { issueHref } from '$lib/model/validate';
-	import { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
-	import { SettingsDraft } from '$lib/components/settings/settingsDraft.svelte';
-	import { FitSession } from '$lib/calibration/fitSession.svelte';
-	import type { UnsavedEdits } from '$lib/preview/overlay';
-	import IssueList from '$lib/components/model/IssueList.svelte';
-	import SaveBar from '$lib/components/model/SaveBar.svelte';
-	import OverviewTab from '$lib/components/overview/OverviewTab.svelte';
-	import { agoText } from '$lib/format/age';
-	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
-	import type { UploadResult } from '$lib/components/series/upload';
-	import { rerunQueuedText, resolveAutoRun } from '$lib/components/autorun/autoRun';
-	import { fmtDay } from '$lib/format/number';
-	import { projectToday } from '$lib/components/projects/freshness';
-	import { kindLabel } from '$lib/series/kinds';
-	import { ModelEditor } from '$lib/model/editor.svelte';
-	import { fetchProjectPage, takeProjectPage } from '$lib/workspace/firstLoad';
-	import { compareTabHref } from '$lib/components/compare/picker';
-	import { firstOutletSeries } from '$lib/series/pick';
-	import { withoutFarm } from '$lib/components/crops/farmDrawer';
-	import { FieldHistoryStore, setFieldHistory } from '$lib/components/history/fieldHistory.svelte';
+	import { chirpsSourceOf, observedOriginsOf } from '#lib/series/provenance.js';
+	import { api, ApiError, hasRole, type Project, type ProjectSummary, type RunMeta } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { prefetch } from '#lib/components/common/lazy.js';
+	import { provideUnsaved } from '#lib/components/common/chunkFailed.js';
+	import { guardUnsaved, listAnd } from '#lib/nav/unsaved.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { provideInvalidFields } from '#lib/components/common/invalidFields.svelte.js';
+	import type { PageDraft } from '#lib/components/model/pageDraft.js';
+	import { issueHref } from '#lib/model/validate.js';
+	import { ProjectDetailsDraft } from '#lib/components/project/detailsDraft.svelte.js';
+	import { SettingsDraft } from '#lib/components/settings/settingsDraft.svelte.js';
+	import { FitSession } from '#lib/calibration/fitSession.svelte.js';
+	import type { UnsavedEdits } from '#lib/preview/overlay.js';
+	import IssueList from '#lib/components/model/IssueList.svelte';
+	import SaveBar from '#lib/components/model/SaveBar.svelte';
+	import OverviewTab from '#lib/components/overview/OverviewTab.svelte';
+	import { agoText } from '#lib/format/age.js';
+	import { freshness, newDataSinceRun, STALE_DAYS } from '#lib/components/series/freshness.js';
+	import type { UploadResult } from '#lib/components/series/upload.js';
+	import { rerunQueuedText, resolveAutoRun } from '#lib/components/autorun/autoRun.js';
+	import { fmtDay } from '#lib/format/number.js';
+	import { projectToday } from '#lib/components/projects/freshness.js';
+	import { kindLabel } from '#lib/series/kinds.js';
+	import { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { fetchProjectPage, takeProjectPage } from '#lib/workspace/firstLoad.js';
+	import { compareTabHref } from '#lib/components/compare/picker.js';
+	import { firstOutletSeries } from '#lib/series/pick.js';
+	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
+	import { FieldHistoryStore, setFieldHistory } from '#lib/components/history/fieldHistory.svelte.js';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { fillPhoneTitle, fillSidebar } from '$lib/components/layout/sidebar.svelte';
-	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
-	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
-	import RunButton from '$lib/components/workspace/RunButton.svelte';
-	import { hasForecastRain, runBlockers } from '$lib/components/runs/runReady';
-	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
-	import { sectionContext } from '$lib/components/workspace/context';
-	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '$lib/workspace/overlays';
+	import { fillPhoneTitle, fillSidebar } from '#lib/components/layout/sidebar.svelte.js';
+	import SectionHeader from '#lib/components/workspace/SectionHeader.svelte';
+	import SectionsMenu from '#lib/components/workspace/SectionsMenu.svelte';
+	import RunButton from '#lib/components/workspace/RunButton.svelte';
+	import { hasForecastRain, runBlockers } from '#lib/components/runs/runReady.js';
+	import { headerSlot } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { sectionContext } from '#lib/components/workspace/context.js';
+	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import {
 		ALL_TABS,
 		canOpenTab,
@@ -92,7 +92,7 @@
 		VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT,
 		visibleTabs,
 		type TabId
-	} from '$lib/workspace/tabs';
+	} from '#lib/workspace/tabs.js';
 
 	// Every tab the page renders; the sidebar orders them by section
 	// (navSections) and names them from TAB_LABELS, which help shares.
@@ -329,7 +329,7 @@
 		if (page.url.searchParams.get('add') !== 'data' || !project) return;
 		untrack(() => {
 			if (canEdit) openAddData();
-			void goto(withoutParam(page.url, 'add'), { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(withoutParam(page.url, 'add'), { replace: true, reset: false });
 		});
 	});
 	const carriesFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
@@ -373,7 +373,7 @@
 		if (project && r.meta.rerunQueuedFor !== undefined) project = { ...project, rerunQueuedFor: r.meta.rerunQueuedFor };
 		await loadLists();
 		// On the Data tab the upload is charted, as picking its row would (`series=`).
-		if (tab === 'series') void goto(withParam(page.url, 'series', r.meta.id), { replaceState: true, noScroll: true, keepFocus: true });
+		if (tab === 'series') void goto(withParam(page.url, 'series', r.meta.id), { replace: true, reset: false });
 		const what = r.meta.name || kindLabel(r.meta.kind);
 		banner = {
 			text: r.added || r.changed ? `${r.message.replace(/\.$/, '')}.` : `No new days for “${what}”: the file matched what is stored.`,
@@ -392,7 +392,7 @@
 			const { summary: _s, ...meta } = r;
 			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
-			await goto(`?tab=runs&run=${r.id}`, { noScroll: true });
+			await goto(`?tab=runs&run=${r.id}`, { reset: false });
 		} catch (e) {
 			rerunError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -440,7 +440,7 @@
 			if (e instanceof ApiError && e.status === 403) {
 				const here = await summaryHere();
 				if (here?.role === 'farmer') {
-					await goto(`${base}/farm/${encodeURIComponent(projectId)}`, { replaceState: true });
+					await goto(resolve(`farm/${encodeURIComponent(projectId)}`), { replace: true });
 					return;
 				}
 				if (here?.role === 'contributor') {
@@ -605,7 +605,7 @@
 				const href = saveProblems[0]!.href;
 				// A number field on this page: focus it; anything else is another page or sheet.
 				if (show && href.startsWith('#')) document.getElementById(href.slice(1))?.focus();
-				else if (show) await goto(href, { noScroll: true });
+				else if (show) await goto(href, { reset: false });
 				return false;
 			}
 			const ok = await confirmDialog({
@@ -637,7 +637,7 @@
 		drawerOpen = !!drawerFarm;
 	});
 	$effect(() => {
-		if (!drawerOpen && untrack(() => drawerFarm)) goto(withoutFarm(page.url), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!drawerOpen && untrack(() => drawerFarm)) goto(withoutFarm(page.url), { replace: true, reset: false });
 	});
 
 	// --- the grid modal: open while the URL names a grid, closed the same way --
@@ -650,12 +650,12 @@
 		gridOpen = !!openGrid;
 	});
 	$effect(() => {
-		if (!gridOpen && untrack(() => gridParam) && !isTabGridId(untrack(() => gridParam)) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!gridOpen && untrack(() => gridParam) && !isTabGridId(untrack(() => gridParam)) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replace: true, reset: false });
 	});
 	// A grid that left the modal: its old link goes where the grid is now (grid=demand → Crops & demand's table, issue #174).
 	$effect(() => {
 		const moved = movedGridHref(page.url);
-		if (moved) void goto(moved, { replaceState: true, noScroll: true });
+		if (moved) void goto(moved, { replace: true, reset: false });
 	});
 
 	// Selecting a tab keeps focus/scroll and adds a history entry so Back works.
@@ -681,7 +681,7 @@
 	}
 
 	async function onLeftProject() {
-		await goto(`${base}/`);
+		await goto(resolve(''));
 	}
 
 	// Start the open tab's chunk alongside the project fetch; warm the others
@@ -727,7 +727,7 @@
 		if (!step) return;
 		e.preventDefault();
 		const next = strip[(strip.indexOf(id) + step + strip.length) % strip.length]!;
-		goto(tabHref(next), { keepFocus: false, noScroll: true }).then(() => document.getElementById(`tab-${next}`)?.focus());
+		goto(tabHref(next), { reset: false }).then(() => document.getElementById(`tab-${next}`)?.focus());
 	}
 </script>
 
@@ -919,7 +919,7 @@
 			<!-- The same frame as every section: one title, then what happened (issue #17). -->
 			<SectionHeader title="Project not found" />
 			<div class="alert alert-error" role="alert">
-				This project doesn't exist or you don't have access to it. <a href="{base}/">Back to projects</a>
+				This project doesn't exist or you don't have access to it. <a href={resolve('')}>Back to projects</a>
 			</div>
 		{:else}
 			<div class="workspace">
@@ -942,7 +942,7 @@
 			<div class="main-col">
 			<SectionHeader
 				title={LABEL[tab]}
-				guide="{base}/help/guides/{TAB_GUIDE[tab]}"
+				guide={resolve(`help/guides/${TAB_GUIDE[tab]}`)}
 				badge={unsavedBadge}
 				context={headerSlot.context ?? (contextText ? pageContext : null)}
 				status={fresh || series || headerSlot.status ? headerStatus : null}

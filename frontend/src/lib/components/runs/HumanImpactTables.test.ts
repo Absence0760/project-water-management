@@ -8,7 +8,7 @@ import type { DemandObjectSummary, RunSummary } from '@water-management/engine';
 import HumanImpactTables from './HumanImpactTables.svelte';
 
 // HelpTip (the column headers' ⓘ) links to the glossary under the app's base path.
-vi.mock('$app/paths', () => ({ base: '' }));
+vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
 const object = (over: Partial<DemandObjectSummary> = {}): DemandObjectSummary => ({
 	id: 'v',

@@ -1,7 +1,7 @@
 // Helpers for the nominated evidence run (010_run_nomination, docs/ui.md §
 // Evidence nomination). Pure: dates are formatted by the caller's `fmt`.
-import type { Nomination, RunEvidence, RunMeta } from '$lib/api';
-import { FORMER_MEMBER } from '$lib/format/maker';
+import type { Nomination, RunEvidence, RunMeta } from '#lib/api/index.js';
+import { FORMER_MEMBER } from '#lib/format/maker.js';
 import { isScenarioRun, type ScenarioRunFields } from './scenarioRun';
 
 /** A runoff model id as people read it. */

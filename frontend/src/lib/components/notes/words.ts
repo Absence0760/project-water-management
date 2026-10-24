@@ -9,7 +9,7 @@
 // Only what a farmer's copy shows is here. The workspace-only parts (the
 // "shown to the farm" badge and checkbox, the team audience lines) stay in
 // NotesList in English.
-import type { Note } from '$lib/api/types';
+import type { Note } from '#lib/api/types.js';
 
 export interface NotesWords {
 	/** "Couldn’t load the notes: …", with the reason already worded. */

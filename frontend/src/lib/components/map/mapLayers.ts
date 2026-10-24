@@ -5,18 +5,19 @@
 // outlines and the river network are asked for around the project's
 // features, and what the units, MAP grid and CHIRPS layers draw. Pure
 // (mapLayers.test.ts).
-import type { MapFeature, MapPosition } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
-import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from '$lib/components/legal/dataCredits';
+import type { MapFeature, MapPosition } from '#lib/api/types.js';
+import { fmtNum } from '#lib/format/number.js';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from '#lib/components/legal/dataCredits.js';
 import { boundsOfAll } from './mapData';
 import { interiorPoint } from './pieces';
+import type { ReadonlyURLSearchParams } from '$app/state';
 
 /** The layers the tab can add, in the order the URL lists them. */
 export const MAP_LAYERS = ['quaternaries', 'rivers', 'relief', 'units', 'mapgrid', 'chirps', 'demgrid'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** The layers `layers=` turns on (unknown names ignored). */
-export function layersOn(params: URLSearchParams): Set<MapLayer> {
+export function layersOn(params: ReadonlyURLSearchParams): Set<MapLayer> {
 	const asked = new Set((params.get('layers') ?? '').split(',').map((s) => s.trim()));
 	return new Set(MAP_LAYERS.filter((l) => asked.has(l)));
 }

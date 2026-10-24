@@ -22,28 +22,28 @@
 	// The levels come from overview/damLevels.ts, the loader the Summary's
 	// Dams today card and the Network's colour by dam level share; the series
 	// come through the Runs tab's cache.
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { beforeForecast, type DailySeries } from '@water-management/engine';
-	import { api, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import Sparkline from '$lib/components/charts/Sparkline.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import NodeAssurance from '$lib/components/reliability/NodeAssurance.svelte';
-	import { supplyHref } from '$lib/components/supply/links';
-	import { runHref } from '$lib/components/overview/attention';
-	import { forecastBand } from '$lib/components/forecast/forecast';
-	import { AGO_DAYS, capacityOver, damsInRun, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
-	import { pickRuns, ranAgo } from '$lib/components/overview/latestRun';
-	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
-	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { fmtDay, fmtNum } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { withParam } from '$lib/workspace/overlays';
-	import { mapNodeHref } from '$lib/workspace/mapLinks';
-	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
+	import { api, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import Sparkline from '#lib/components/charts/Sparkline.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import NodeAssurance from '#lib/components/reliability/NodeAssurance.svelte';
+	import { supplyHref } from '#lib/components/supply/links.js';
+	import { runHref } from '#lib/components/overview/attention.js';
+	import { forecastBand } from '#lib/components/forecast/forecast.js';
+	import { AGO_DAYS, capacityOver, damsInRun, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '#lib/components/overview/damLevels.js';
+	import { pickRuns, ranAgo } from '#lib/components/overview/latestRun.js';
+	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '#lib/components/overview/summaryChart.js';
+	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { withParam } from '#lib/workspace/overlays.js';
+	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
+	import { MappedNodes } from '#lib/workspace/mappedNodes.svelte.js';
 	import { changeWords, DAM_CHANGED, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 	import DamProposalsBox from './DamProposalsBox.svelte';
 
@@ -207,7 +207,7 @@
 	function choose(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
-		void goto(withParam(page.url, 'dam', id), { noScroll: true, keepFocus: true }).then(() => {
+		void goto(withParam(page.url, 'dam', id), { reset: false }).then(() => {
 			if (!side) chartEl?.scrollIntoView({ block: 'start' });
 		});
 	}
@@ -246,13 +246,13 @@
 	const PROPOSALS_ID = 'dam-proposals';
 	// Dam of picked a dam: the page picks it (a step in history, as a card click is).
 	function pickFromProposals(id: string) {
-		void goto(withParam(page.url, 'dam', id), { noScroll: true, keepFocus: true });
+		void goto(withParam(page.url, 'dam', id), { reset: false });
 	}
 	// A card's Proposals: pick the dam (the box follows the pick), open the box, then bring it into view with the keyboard on its picker.
 	function toProposals(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
-		void goto(withParam(page.url, 'dam', id), { noScroll: true, keepFocus: true }).then(async () => {
+		void goto(withParam(page.url, 'dam', id), { reset: false }).then(async () => {
 			proposalsOpen = true;
 			await tick();
 			const box = document.getElementById(PROPOSALS_ID);

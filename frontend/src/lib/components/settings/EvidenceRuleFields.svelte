@@ -11,7 +11,7 @@
 	at its size ceiling.
 -->
 <script lang="ts">
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import {
 		declaredRuleText,
 		ENSEMBLE_MEMBERS_MAX,
@@ -23,8 +23,8 @@
 		type CalibrationBounds,
 		type DeclaredUncertaintyRule
 	} from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import { evidenceRuleFieldsError, RULE_BOUNDS_LABEL, RULE_WR2012_LABEL, withEvidenceRule } from './evidenceRule';
 
 	let {

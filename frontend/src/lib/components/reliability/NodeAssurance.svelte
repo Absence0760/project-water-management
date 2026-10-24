@@ -12,8 +12,8 @@
 <script lang="ts">
 	import { STRESS_LABEL, type SupplyAssurance } from '@water-management/engine';
 	import type { Snippet } from 'svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fmtNum } from '$lib/format/number';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import { fmtNum } from '#lib/format/number.js';
 	import { classCounts, nodeAssurance, notComputedText, pctText, reliabilityLine, STRESS_BIN, STRESS_ORDER, STRESS_SHORT, stressLegend } from './reliability';
 
 	let {

@@ -3,7 +3,7 @@
 	// problem about one item links to where it is fixed (the node's sheet, the
 	// crop's sheet, the transfer's card); off in scenario override mode, whose
 	// model isn't the one those pages edit.
-	import { issueHref, type ModelIssue } from '$lib/model/validate';
+	import { issueHref, type ModelIssue } from '#lib/model/validate.js';
 	let { issues, area, links = false }: { issues: ModelIssue[]; area: ModelIssue['area']; links?: boolean } = $props();
 	const mine = $derived(issues.filter((i) => i.area === area));
 </script>

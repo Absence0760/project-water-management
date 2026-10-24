@@ -9,9 +9,9 @@
 	// an email linking the pack's page (sign-in needed to download) and the
 	// verify page. Never a file, never a link that works on its own.
 	import { untrack } from 'svelte';
-	import { api, type AuthorityDelegate } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { api, type AuthorityDelegate } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
 
 	let { open = $bindable(false), projectId, packId, version, authority }: { open: boolean; projectId: string; packId: string; version: number; authority: string | null } = $props();
 

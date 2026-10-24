@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { StartPlan, StartUnit } from '$lib/api';
-import type { MapPosition } from '$lib/api/types';
+import type { StartPlan, StartUnit } from '#lib/api/index.js';
+import type { MapPosition } from '#lib/api/types.js';
 import { interiorPoint, litPieces, PIECE_TINT_COUNT, pieceTintsFor, piecesShape, proposalPieces, REST_KEY } from './pieces';
 import { unitOffers } from './startFlow';
 

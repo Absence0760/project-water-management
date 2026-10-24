@@ -16,11 +16,11 @@
 <script lang="ts">
 	import { EWR_HIGH_FLOWS_MAX, highFlowsIssue, type EwrHighFlowEvent } from '@water-management/engine';
 	import { untrack } from 'svelte';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import PasteDialogFrame from '$lib/components/model/PasteDialogFrame.svelte';
-	import { fmtNum } from '$lib/format/number';
-	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
-	import { describeMonths } from '$lib/format/months';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import PasteDialogFrame from '#lib/components/model/PasteDialogFrame.svelte';
+	import { fmtNum } from '#lib/format/number.js';
+	import { useInvalidFields } from '#lib/components/common/invalidFields.svelte.js';
+	import { describeMonths } from '#lib/format/months.js';
 	import { blankHighFlow, EXAMPLE_HIGH_FLOWS_CSV, highFlowTyped, parseHighFlows, parseMonths } from './ewrRules';
 
 	let {

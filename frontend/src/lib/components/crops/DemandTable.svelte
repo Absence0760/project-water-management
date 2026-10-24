@@ -4,8 +4,8 @@
 	// (CropGrids, the grid modal's `demand`) and behind the Crops page's
 	// "Show table" (CropsTab), from the same numbers (demand.ts).
 	import type { ProjectSettings } from '@water-management/engine';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import type { FarmDemand } from './demand';
 
 	let {

@@ -5,7 +5,7 @@
 // judges them together (a MAP needs its source; coordinates both or neither).
 // Add data's station fields are stationInput.ts.
 import { MAP_MM_MAX, MAP_MM_MIN, rainStationError, type RainStationMeta, type SeriesMeta } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 /** Whether a series is a rainfall station: catchment rain, measured at no site (a gauge's or a unit's own rain is not). */
 export const asksStation = (s: Pick<SeriesMeta, 'kind' | 'siteNodeId'>) => s.kind === 'rain_catchment_mm' && !s.siteNodeId;

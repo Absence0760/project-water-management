@@ -10,9 +10,9 @@
 // them (5 or more hydrological units), then the public comments. No other
 // unit is named: the API names only the application's own nodes.
 import { classifyOp, type OpClass, type ScenarioOp } from '@water-management/engine';
-import type { SharedEwrSite, SharedRun, ShareScenario } from '$lib/api/types';
-import { count, fmtM3Day, fmtNumber, fmtPct, fmtStampDay, MONTHS } from '$lib/components/farm/format';
-import { t } from '$lib/i18n/locale.svelte';
+import type { SharedEwrSite, SharedRun, ShareScenario } from '#lib/api/types.js';
+import { count, fmtM3Day, fmtNumber, fmtPct, fmtStampDay, MONTHS } from '#lib/components/farm/format.js';
+import { t } from '#lib/i18n/locale.svelte.js';
 
 // i18n-section: share.scenario
 

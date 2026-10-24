@@ -6,7 +6,7 @@
 	// view a farmer sees. They rise into view once, the phone a beat after the
 	// laptop, with a slight parallax; still under reduced motion.
 	import { onMount } from 'svelte';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t } from '#lib/i18n/locale.svelte.js';
 	import { ART } from './art.generated';
 	import Shot from './Shot.svelte';
 

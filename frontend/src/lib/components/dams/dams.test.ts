@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DamLevel } from '$lib/components/overview/damLevels';
+import type { DamLevel } from '#lib/components/overview/damLevels.js';
 import { changeWords, damCards, damChange, damChanges, damsSummary, fmtVolume, modelDams, pickDam, storageChartSeries, storageSpark } from './dams';
 
 const level = (nodeId: string, endPct: number, over: Partial<DamLevel> = {}): DamLevel => ({

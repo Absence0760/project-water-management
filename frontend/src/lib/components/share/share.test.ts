@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ShareView } from '$lib/api/types';
-import { setLocale } from '$lib/i18n/locale.svelte';
-import { messageId } from '$lib/i18n/msg';
-import { af } from '$lib/i18n/messages/af';
+import type { ShareView } from '#lib/api/types.js';
+import { setLocale } from '#lib/i18n/locale.svelte.js';
+import { messageId } from '#lib/i18n/msg.js';
+import { af } from '#lib/i18n/messages/af.js';
 import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from './share';
 
 /** Intl joins dates and our figures with no-break spaces; compare with plain ones. */

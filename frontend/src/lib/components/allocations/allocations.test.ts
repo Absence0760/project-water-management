@@ -1,8 +1,8 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { AllocationPreviewRow } from '$lib/api/types';
+import type { AllocationPreviewRow } from '#lib/api/types.js';
 import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, judgementSentence, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 const comparison = () =>
 	compareAllocations({

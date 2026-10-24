@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunMeta } from '$lib/api/types';
+import type { RunMeta } from '#lib/api/types.js';
 import { compareSearch, compareTabHref, defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, runOptionLabel } from './picker';
 
 const run = (id: string, label = ''): RunMeta => ({

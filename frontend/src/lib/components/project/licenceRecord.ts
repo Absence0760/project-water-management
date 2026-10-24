@@ -7,7 +7,7 @@
 // that the record is still needed. The outcomes are the authority's words
 // (D14, as an application's decision records them) and the applicant's
 // withdrawal (233_licence_record_outcome_words, issue #523 G9 (b)).
-import type { LicenceOutcome, LicenceOutcomeInput, LicenceRecord } from '$lib/api';
+import type { LicenceOutcome, LicenceOutcomeInput, LicenceRecord } from '#lib/api/index.js';
 
 export const OUTCOME_LABEL: Record<LicenceOutcome, string> = {
 	licence_issued: 'Licence issued',

@@ -12,14 +12,14 @@
 <script lang="ts">
 	import { PAN_COEFFICIENT_TYPICAL_MAX, PAN_COEFFICIENT_TYPICAL_MIN } from '@water-management/engine';
 	import { untrack } from 'svelte';
-	import { api, type EvaporationProposals } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import ProposalNoDataset from '$lib/components/proposals/ProposalNoDataset.svelte';
-	import ProposalPanel from '$lib/components/proposals/ProposalPanel.svelte';
-	import ProposalSource from '$lib/components/proposals/ProposalSource.svelte';
-	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
-	import { fmtNum } from '$lib/format/number';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import { api, type EvaporationProposals } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import ProposalNoDataset from '#lib/components/proposals/ProposalNoDataset.svelte';
+	import ProposalPanel from '#lib/components/proposals/ProposalPanel.svelte';
+	import ProposalSource from '#lib/components/proposals/ProposalSource.svelte';
+	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
+	import { fmtNum } from '#lib/format/number.js';
+	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { acceptedText, coverageText, impliedPanCoefficient, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
 
 	let {

@@ -1,7 +1,7 @@
 import { defaultProjectSettings, SERIES_KINDS, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
-import { helpFor } from '$lib/help/content';
+import { helpFor } from '#lib/help/content.js';
 import {
 	buildPreviewColumns,
 	buildPreviewRows,

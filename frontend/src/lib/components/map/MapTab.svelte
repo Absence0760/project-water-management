@@ -61,22 +61,22 @@
 	// boundaries (start-16), the dams and pumps inside each linked to it, their
 	// order proposed and ticked value by value; the empty map leads with
 	// Delineate and Draw (D4).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '$lib/api';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { prefetch } from '$lib/components/common/lazy';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { saveBlob } from '$lib/export/download';
-	import { fmtNum, localIsoDate } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { TAB_GRIDS, withParam, withoutParam } from '$lib/workspace/overlays';
+	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
+	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '#lib/api/index.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { prefetch } from '#lib/components/common/lazy.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { saveBlob } from '#lib/export/download.js';
+	import { fmtNum, localIsoDate } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { TAB_GRIDS, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import FeatureList from './FeatureList.svelte';
 	import MapChecks from './MapChecks.svelte';
@@ -106,7 +106,7 @@
 	import type { DivideDraft } from './divideFlow';
 	import { emptyPlacement } from './placement';
 	import { litPieces, piecesShape } from './pieces';
-	import type { MapAreaBasis, MapGeometry, MapPosition } from '$lib/api/types';
+	import type { MapAreaBasis, MapGeometry, MapPosition } from '#lib/api/types.js';
 	import { basisNote, basisOptions, offersEffective, takenAreaM2 } from './areaBasis';
 	import { Draft } from './draw/draft.svelte';
 	import DrawBar from './draw/DrawBar.svelte';
@@ -195,7 +195,7 @@
 		const q = new URLSearchParams(page.url.search);
 		q.set('feature', id);
 		q.delete('node');
-		return goto(`?${q}`, { noScroll: true, keepFocus: true });
+		return goto(`?${q}`, { reset: false });
 	}
 	/**
 	 * A pick from the list. Stacked (a phone, a narrow column) the card sits above the list, so bring
@@ -216,7 +216,7 @@
 		q.delete('node');
 		if (id) q.set('feature', id);
 		else q.delete('feature');
-		return goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+		return goto(`?${q}`, { replace: true, reset: false });
 	}
 
 	// --- the sheets and the grid: open while the URL names them; closing drops the param in place ---
@@ -227,7 +227,7 @@
 			open = asked;
 		});
 		$effect(() => {
-			if (!open && untrack(() => params.has(name))) void goto(withoutParam(page.url, name), { replaceState: true, noScroll: true, keepFocus: true });
+			if (!open && untrack(() => params.has(name))) void goto(withoutParam(page.url, name), { replace: true, reset: false });
 		});
 		return {
 			get open() {
@@ -283,7 +283,7 @@
 		if (params.get('checks') !== '1') return;
 		untrack(() => {
 			sideTab = 'checks';
-			void goto(withoutParam(page.url, 'checks'), { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(withoutParam(page.url, 'checks'), { replace: true, reset: false });
 		});
 	});
 	const tabEls: Record<string, HTMLButtonElement | undefined> = $state({});
@@ -379,7 +379,7 @@
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
 		delineateStep = 'ask';
-		await goto(withParam(page.url, 'delineate', '1'), { noScroll: true, keepFocus: true });
+		await goto(withParam(page.url, 'delineate', '1'), { reset: false });
 	}
 	/** A proposal came back: the drawing mode ends and the sheet (still open) shows it from the reloaded state. */
 	async function proposed() {
@@ -432,7 +432,7 @@
 		const sheet = backToSheet;
 		if (!sheet) return;
 		backToSheet = null;
-		await goto(withParam(page.url, sheet, '1'), { noScroll: true, keepFocus: true });
+		await goto(withParam(page.url, sheet, '1'), { reset: false });
 	}
 	/**
 	 * Leave the sheet for one of the map's own tools (the sheet's param goes first, in place). Every tool
@@ -440,7 +440,7 @@
 	 * delineation, never brings the sheet back.
 	 */
 	async function fromStart(start: () => unknown, back = true, sheet: 'start' | 'divide' = 'start') {
-		await goto(withoutParam(page.url, sheet), { replaceState: true, noScroll: true, keepFocus: true });
+		await goto(withoutParam(page.url, sheet), { replace: true, reset: false });
 		await start();
 		backToSheet = back ? sheet : null;
 	}
@@ -568,7 +568,7 @@
 	}
 	async function pickPiece(key: string) {
 		pieceFocus = key;
-		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { noScroll: true, keepFocus: true });
+		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { reset: false });
 	}
 	$effect(() => {
 		// A sheet closed: nothing is lit or waiting to be focused.
@@ -718,7 +718,7 @@
 			return;
 		}
 		if (draft.mode === 'place') {
-			await goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true });
+			await goto(withParam(page.url, 'place', '1'), { reset: false });
 			return;
 		}
 		const f = draft.feature;
@@ -1030,6 +1030,9 @@
 	/** The tool palette's size: the picked name and the Key panel keep clear of it. */
 	let toolsW = $state(0);
 	let toolsH = $state(0);
+	/** The map's bottom-left corner (Show everything, Key, and the Key's panel while it is open over the map), which the attribution keeps clear of (.map-body's --foot-w, --foot-h). */
+	let footW = $state(0);
+	let footH = $state(0);
 	/** The search box's height over the map's top edge, and its open list's: the picked name and the tool strip start under the box
 	    and its lines; the list covers them while it's open, as a list under a box does. */
 	let searchH = $state(0);
@@ -1082,7 +1085,7 @@
 		onsave={saveDraft}
 		onpaste={() => (pasteOpen = true)}
 		oncoords={() =>
-			tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+			tracing ? goto(withParam(page.url, 'trace', '1'), { reset: false }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { reset: false })}
 		onlocated={located}
 		{delineating}
 		{tracing}
@@ -1368,7 +1371,7 @@
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:--foot-w={footW ? `calc(${footW}px + 0.6rem + 6px)` : null} style:--foot-h={footH ? `calc(${footH}px + 0.6rem + 6px)` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
 						<!-- At least the tools' height and the key row under them, so the tool column stays inside the card while the map's chunk loads or when it fails (on a phone it ran over the Features list, issue #521). -->
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
@@ -1447,7 +1450,7 @@
 							{/if}
 						</div>
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="foot-at ov" onkeydown={(e) => panelKey(e, 'key')} style:--tools-h="{toolsH}px">
+						<div class="foot-at ov" onkeydown={(e) => panelKey(e, 'key')} style:--tools-h="{toolsH}px" bind:clientWidth={footW} bind:clientHeight={footH}>
 							<!-- The key (#326 E7, A1; a row under the map until 2026-10-02): what the areas are coloured by, which run, and what each colour means. -->
 							<!-- Focusable: it can scroll on a short map with nothing to focus inside (ui-playbook § 5). -->
 							{#if !panelsInSide}
@@ -1624,7 +1627,7 @@
 					{features}
 					info={startInfo!}
 					bind:draft={startDraft}
-					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { noScroll: true, keepFocus: true }), false)}
+					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { reset: false }), false)}
 					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
 					ondraw={() => fromStart(() => startDraw('catchment_boundary'))}
 					onplace={() => fromStart(startPlace)}
@@ -1926,6 +1929,19 @@
 		/* Clear of the tools above it. */
 		max-height: calc(100% - var(--tools-h, 0px) - 1.8rem);
 		max-width: calc(100% - 1.2rem);
+	}
+	/* MapLibre's attribution (its bottom-right group) keeps clear of the bottom-left corner (.foot-at: the buttons, and the
+	   Key's panel while open over the map): beside it on a wide map, above it on a narrow one, where beside would squeeze it
+	   into a column of one or two words a line. A long credit ran under Show everything and Key, at 1280 px as on a phone
+	   (PR #570; map-layers.spec.ts checks the boxes never meet, with the Key open too). */
+	.map-body :global(.maplibregl-ctrl-bottom-right) {
+		max-width: calc(100% - var(--foot-w, 0px));
+	}
+	@container map-body (max-width: 30rem) {
+		.map-body :global(.maplibregl-ctrl-bottom-right) {
+			max-width: none;
+			bottom: var(--foot-h, 0px);
+		}
 	}
 	.foot-row {
 		display: flex;

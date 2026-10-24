@@ -2,8 +2,8 @@
 // data → settings & EWR → run. Status is derived from data the Overview tab
 // already has (the model being edited, project settings, series + run lists).
 import type { ProjectModel, ProjectSettings, SeriesMeta } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
-import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
+import type { RunMeta } from '#lib/api/types.js';
+import { fmtDay, fmtNum, localIsoDate } from '#lib/format/number.js';
 
 export type StepId = 'network' | 'crops' | 'series' | 'settings' | 'runs';
 /** `done`; `partial` = started or has a gap worth a look; `todo`; `unknown` = still loading. */

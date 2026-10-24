@@ -3,12 +3,13 @@
 	// list in columns (the overview's guide list) so a common word's fifty
 	// terms don't run a whole page down. The search box itself heads the help
 	// layout.
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
-	import { searchHelp } from '$lib/help/content';
-	import { glossaryPath } from '$lib/help/glossaryLinks';
-	import { searchGuides } from '$lib/help/guides';
+	import HelpCrumbs from '#lib/components/help/HelpCrumbs.svelte';
+	import { searchHelp } from '#lib/help/content.js';
+	import { glossaryPath } from '#lib/help/glossaryLinks.js';
+	import { searchGuides } from '#lib/help/guides.js';
 
 	const q = $derived(page.url.searchParams.get('q')?.trim() ?? '');
 	const guides = $derived(searchGuides(q));
@@ -27,7 +28,7 @@
 
 <svelte:head><title>{q ? `“${q}”` : 'Search'} · Help · Water Management</title></svelte:head>
 
-<HelpCrumbs trail={[{ label: 'Help', href: `${base}/help` }, { label: 'Search' }]} />
+<HelpCrumbs trail={[{ label: 'Help', href: resolve('help') }, { label: 'Search' }]} />
 <header>
 	<h1>Search help</h1>
 	<p class="muted" role="status" aria-live="polite">
@@ -52,7 +53,7 @@
 			<ul class="results">
 				{#each shownGuides as g (g.id)}
 					<li>
-						<a href="{base}/help/guides/{g.id}">{g.title}</a>
+						<a href={resolve(`help/guides/${g.id}`)}>{g.title}</a>
 						<p>{g.summary}</p>
 					</li>
 				{/each}
@@ -68,7 +69,7 @@
 			<ul class="results">
 				{#each terms as e (e.id)}
 					<li>
-						<a href="{base}{glossaryPath(e)}">{e.term}</a>
+						<a href="{basePath()}{glossaryPath(e)}">{e.term}</a>
 						<p>{e.short}</p>
 					</li>
 				{/each}

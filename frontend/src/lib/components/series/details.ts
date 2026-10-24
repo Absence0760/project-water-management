@@ -4,7 +4,7 @@
 // small unlabelled selects stacked in the row's name cell, and the source sat
 // apart under the chart. The table row keeps a read-only "At gauge X".
 import type { SeriesMeta } from '@water-management/engine';
-import { asksFreeProvenance, asksProvenance, seriesProvenance } from '$lib/series/provenance';
+import { asksFreeProvenance, asksProvenance, seriesProvenance } from '#lib/series/provenance.js';
 import { SITED_KINDS } from './roles';
 
 type Gauge = { id: string; name: string };

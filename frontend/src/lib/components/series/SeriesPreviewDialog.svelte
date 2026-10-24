@@ -17,10 +17,10 @@
 	// top-layer popover, so neither the sideways scroll nor the sticky header
 	// clips it; the headers have no sort or other click behaviour to trigger.
 	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
-	import Dialog from '$lib/components/common/Dialog.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { kindLabel } from '$lib/series/kinds';
-	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
+	import Dialog from '#lib/components/common/Dialog.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { kindLabel } from '#lib/series/kinds.js';
+	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import type { Daily } from './coverage';
 	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag, type RainSource } from './preview';
 

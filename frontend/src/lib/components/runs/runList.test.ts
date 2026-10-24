@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '$lib/api/client';
+import { ApiError } from '#lib/api/client.js';
 import { defaultRunId, filterRuns, isRunGone, RUN_GONE, runErrorText, runYears } from './runList';
 
 describe('runYears', () => {

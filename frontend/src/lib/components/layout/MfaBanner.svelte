@@ -11,11 +11,11 @@
 	// - `step-up`: an authenticator, but this session signed in with the
 	//   password only (or an action was refused with 403 mfa_step_up): sign
 	//   out and back to the sign-in page, which returns here afterwards.
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { focusPageStart } from '$lib/a11y/focusPage';
-	import { dismissMfaPrompt, mfaPrompt, type MfaPromptKind } from '$lib/auth/mfaPrompt.svelte';
-	import { loginReturningTo, signOutTo } from '$lib/auth/signOut';
+	import { focusPageStart } from '#lib/a11y/focusPage.js';
+	import { dismissMfaPrompt, mfaPrompt, type MfaPromptKind } from '#lib/auth/mfaPrompt.svelte.js';
+	import { loginReturningTo, signOutTo } from '#lib/auth/signOut.js';
 
 	let { kind }: { kind: MfaPromptKind } = $props();
 
@@ -43,7 +43,7 @@
 			That needs two-step sign-in, and you haven’t set it up yet. Set it up on your Account page, then try again.
 		</p>
 		<div class="actions">
-			<a class="btn btn-sm" href="{base}/account#two-step">Set up two-step sign-in</a>
+			<a class="btn btn-sm" href={resolve('account#two-step')}>Set up two-step sign-in</a>
 			<button type="button" class="btn btn-sm btn-ghost" onclick={dismiss}>Dismiss</button>
 		</div>
 	{:else}

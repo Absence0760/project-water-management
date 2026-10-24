@@ -3,7 +3,7 @@
 // farm it can't recompute is an error that says why.
 import { describe, expect, it } from 'vitest';
 import type { ModelInput, ModelOutput } from '@water-management/engine';
-import { DownloadError } from '$lib/export/download';
+import { DownloadError } from '#lib/export/download.js';
 import type { ExportProgress } from '../export/collect';
 import { collectAudit } from './collect';
 import { auditFixture } from './fixture';

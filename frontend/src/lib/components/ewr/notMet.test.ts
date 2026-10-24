@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
-import { headlines } from '$lib/components/overview/latestRun';
-import { riverKpis } from '$lib/components/river/river';
+import { headlines } from '#lib/components/overview/latestRun.js';
+import { riverKpis } from '#lib/components/river/river.js';
 import { EACH_RUNS_DAILY_EWR, EWR_NOT_MET, dailyEwrName, dailyEwrNameOf, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
 
 describe('ewrNotMet', () => {

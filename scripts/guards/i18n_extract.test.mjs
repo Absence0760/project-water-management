@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { codeOf, extract, messageId, messagesIn, pluralId } from './i18n_extract.mjs';
 
-const IMPORT = "import { msg, plural, t, tn, tRich } from '$lib/i18n/locale.svelte';\n";
+const IMPORT = "import { msg, plural, t, tn, tRich } from '#lib/i18n/locale.svelte.js';\n";
 const english = (found) => found.map((f) => f.english ?? f.forms);
 
 test('ids are 8 hex digits of the English, and a context makes a different one', () => {

@@ -5,7 +5,7 @@
 	// "Baseline assumptions changed" callout. When the other side is the
 	// scenario's own base, each op is described against it (the value it
 	// replaced); otherwise only what it set.
-	import type { CompareSide, RunCompareResponse } from '$lib/api';
+	import type { CompareSide, RunCompareResponse } from '#lib/api/index.js';
 	import OpList from './OpList.svelte';
 	import { namesOf, opItems, snapshotInput } from './ops';
 

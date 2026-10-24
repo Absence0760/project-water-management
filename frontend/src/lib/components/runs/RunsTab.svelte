@@ -1,28 +1,28 @@
 <script lang="ts">
-	import { SearchStep } from '$lib/nav/searchStep';
-	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { compareTabHref } from '$lib/components/compare/picker';
+	import { SearchStep } from '#lib/nav/searchStep.js';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { compareTabHref } from '#lib/components/compare/picker.js';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { resolveQualityFlags, toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '#lib/series/provenance.js';
+	import { kindLabel } from '#lib/series/kinds.js';
+	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
+	import CalibrationCheck from '#lib/components/calibration/CalibrationCheck.svelte';
+	import type { CheckNode } from '#lib/components/calibration/calibrationCheck.js';
+	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
+	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
+	import EwrAgreementTable from '#lib/components/ewr/EwrAgreementTable.svelte';
+	import AgreementTable from '#lib/components/series/AgreementTable.svelte';
+	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
+	import { downloads, runDownloadItems, type FarmTableItem } from '#lib/export/index.js';
+	import { fmtDay, fmtNum, fmtStamp, fmtWhen } from '#lib/format/number.js';
+	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { dataEnd, newDataSinceRun } from '#lib/components/series/freshness.js';
 	import { runForcingOfSummary } from '@water-management/engine';
-	import { kindLabel } from '$lib/series/kinds';
-	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
-	import CalibrationCheck from '$lib/components/calibration/CalibrationCheck.svelte';
-	import type { CheckNode } from '$lib/components/calibration/calibrationCheck';
-	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
-	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
-	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
-	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
-	import { downloads, runDownloadItems, type FarmTableItem } from '$lib/export';
-	import { fmtDay, fmtNum, fmtStamp, fmtWhen } from '$lib/format/number';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { dataEnd, newDataSinceRun } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun, prefetchSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
 	import { checksOnlyGauges, recordHref } from './checkGauges';
@@ -33,22 +33,22 @@
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import { unitRainOf } from './unitRain';
+	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { stationsOf } from './stationRain';
-	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
-	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
-	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import ValidationPanel from '#lib/components/liability/ValidationPanel.svelte';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { movedHref, otherPageGroups, resultGroups } from './sections';
-	import { supplyHref } from '$lib/components/supply/links';
-	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { historyDays, ranAgo } from '$lib/components/overview/latestRun';
-	import { holdAnchor } from '$lib/help/anchor';
-	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
+	import { supplyHref } from '#lib/components/supply/links.js';
+	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
+	import { historyDays, ranAgo } from '#lib/components/overview/latestRun.js';
+	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
 	import { publishedRunIds } from './publication';
-	import { riverHref } from '$lib/components/river/links';
+	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
@@ -61,9 +61,9 @@
 	import EvidencePanel from './EvidencePanel.svelte';
 	import ReproducePanel from './ReproducePanel.svelte';
 	import PublicationPanel from './PublicationPanel.svelte';
-	import RunInputsPanel from '$lib/components/history/RunInputsPanel.svelte';
+	import RunInputsPanel from '#lib/components/history/RunInputsPanel.svelte';
 	import { runExclusions } from './exclusionShading';
-	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { FORMER_MEMBER } from '#lib/format/maker.js';
 	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
@@ -72,11 +72,11 @@
 	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
-	const loadForecastPanel = () => import('$lib/components/forecast/ForecastPanel.svelte');
+	const loadForecastPanel = () => import('#lib/components/forecast/ForecastPanel.svelte');
 	// A run judged by a DRM table: its tables × s, as it read them (issue #90 B1); its own chunk.
 	const loadRunScaledEwr = () => import('./RunScaledEwrTables.svelte');
 	// The preview of an all-farms download (Download menu → Preview): its own chunk, fetched on first use.
-	const loadTableDialog = () => import('$lib/components/export/DailyTableDialog.svelte');
+	const loadTableDialog = () => import('#lib/components/export/DailyTableDialog.svelte');
 
 	let {
 		projectId,
@@ -205,7 +205,7 @@
 		// run (and reporting window), replacing this entry so Back skips it.
 		const moved = movedHref(page.url.hash.slice(1), page.url.searchParams.get('run'), page.url.searchParams.get('window'));
 		if (moved) {
-			goto(moved, { replaceState: true, noScroll: true });
+			goto(moved, { replace: true, reset: false });
 			return;
 		}
 		load();
@@ -226,11 +226,11 @@
 	 * default pick and the fallback after a delete replace the entry, so Back never stops on them.
 	 */
 	function select(id: string | null, how: 'pick' | 'default' = 'default') {
-		const url = new URL(page.url);
+		const url = new URL(page.url.href);
 		if (id) url.searchParams.set('run', id);
 		else url.searchParams.delete('run');
 		if (url.search === page.url.search) return;
-		goto(url, { replaceState: how === 'default', noScroll: true, keepFocus: true });
+		goto(url, { replace: how === 'default', reset: false });
 	}
 
 	let detailFor = untrack(() => detail?.run.id ?? '');
@@ -295,7 +295,7 @@
 			releaseFragment = holdAnchor(el);
 			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
 			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			heading.focus({ preventScroll: true });
+			focusAnchor(heading);
 		});
 	});
 	onDestroy(() => {
@@ -425,12 +425,12 @@
 	function writeQuery() {
 		clearTimeout(queryTimer);
 		queryTimer = setTimeout(() => {
-			const url = new URL(page.url);
+			const url = new URL(page.url.href);
 			const words = runQuery.trim();
 			if (words) url.searchParams.set('q', words);
 			else url.searchParams.delete('q');
 			if (url.search === page.url.search) return;
-			void goto(url, { replaceState: queryStep.replace(), noScroll: true, keepFocus: true });
+			void queryStep.write(url.href, (replace) => goto(url, { replace, reset: false }));
 		}, 300);
 	}
 	$effect(() => () => clearTimeout(queryTimer));
@@ -731,10 +731,10 @@
 							<a class="btn btn-sm" href={compareTabHref({ projectId, runId: currentPublishedRunId }, { projectId, runId: shownRunId })}>Compare with published</a>
 						{/if}
 						<!-- The printable report of this run (routes/projects/[id]/report, docs/ui.md § Report). -->
-						<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}">Report</a>
+						<a class="btn btn-sm" href={resolve(`projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(shownRunId)}`)}>Report</a>
 						<!-- The licensing evidence report (issue #71, docs/ui.md § Evidence report): for the nominated run, or an application run on it. -->
 						{#if shownRun.evidence === 'current' || isScenarioRun(shownRun)}
-							<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}&evidence" data-testid="evidence-report-link">Evidence report</a>
+							<a class="btn btn-sm" href={resolve(`projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(shownRunId)}&evidence`)} data-testid="evidence-report-link">Evidence report</a>
 						{/if}
 						<DownloadMenu items={downloadItems} />
 					</div>

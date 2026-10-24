@@ -7,11 +7,11 @@
 	// one-minute pre-signed GET); anyone else gets the workspace's not-found
 	// message, so a forwarded email opens nothing.
 	import { onDestroy, untrack } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api';
-	import { describeReport, isPending, type ReportState, type ReportStatus, reportsApi } from '$lib/components/report/serverPdf';
-	import { fmtDate } from '$lib/format/number';
+	import { api, ApiError } from '#lib/api/index.js';
+	import { describeReport, isPending, type ReportState, type ReportStatus, reportsApi } from '#lib/components/report/serverPdf.js';
+	import { fmtDate } from '#lib/format/number.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const jobId = $derived(page.params.jobId ?? '');
@@ -64,8 +64,8 @@
 	/** The state in one word, for the pill; the status line beside it says the rest. */
 	const STATE_WORD: Record<ReportState, string> = { queued: 'Queued', rendering: 'Making', retrying: 'Retrying', done: 'Ready', failed: 'Failed' };
 	const jobState = $derived(current?.report.status ?? null);
-	const runHref = $derived(`${base}/projects/${encodeURIComponent(projectId)}?tab=runs${current?.report.runId ? `&run=${encodeURIComponent(current.report.runId)}` : ''}`);
-	const reportHref = $derived(`${base}/projects/${encodeURIComponent(projectId)}/report${current?.report.runId ? `?run=${encodeURIComponent(current.report.runId)}` : ''}`);
+	const runHref = $derived(resolve(`projects/${encodeURIComponent(projectId)}?tab=runs${current?.report.runId ? `&run=${encodeURIComponent(current.report.runId)}` : ''}`));
+	const reportHref = $derived(resolve(`projects/${encodeURIComponent(projectId)}/report${current?.report.runId ? `?run=${encodeURIComponent(current.report.runId)}` : ''}`));
 </script>
 
 <svelte:head><title>Report PDF{projectName ? ` · ${projectName}` : ''} · Water Management</title></svelte:head>
@@ -85,7 +85,7 @@
 	{:else if phase === 'not-found'}
 		<div class="alert alert-error" role="alert">
 			This report doesn't exist any more, or you don't have access to its project. PDFs are kept for 7 days.
-			<a href="{base}/">Back to projects</a>
+			<a href={resolve('')}>Back to projects</a>
 		</div>
 	{:else if phase === 'error'}
 		<div class="alert alert-error" role="alert">

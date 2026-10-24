@@ -1,8 +1,8 @@
 // URL state and default choices for the compare page's run pickers: the
 // baseline (`a`), what-if 1 (`b`) and the optional what-if 2 (`c`, issue #17 A4).
 // A run reference is "<projectId>:<runId>" — the same form GET /compare/runs takes.
-import type { RunMeta } from '$lib/api/types';
-import { runYears } from '$lib/components/runs/runList';
+import type { RunMeta } from '#lib/api/types.js';
+import { runYears } from '#lib/components/runs/runList.js';
 
 export interface RunRef {
 	projectId: string;

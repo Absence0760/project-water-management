@@ -1,7 +1,7 @@
 import { licenceImpactByYearClass, toEpochDay, type DailySeries, type EvidenceLicenceImpact, type RunSeries } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { RunCompareResponse } from '$lib/api/types';
-import { OUTLET_SITE } from '$lib/components/outcomes/matrix';
+import type { RunCompareResponse } from '#lib/api/types.js';
+import { OUTLET_SITE } from '#lib/components/outcomes/matrix.js';
 import { loadImpactSeries, type ImpactSeries } from './impactSeries';
 import { buildLicenceImpactBoard, evidenceBoard, VERDICT_LABEL } from './licenceImpact';
 

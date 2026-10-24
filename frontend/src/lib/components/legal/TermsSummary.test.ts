@@ -4,8 +4,8 @@
 import { readFileSync } from 'node:fs';
 import { render } from 'svelte/server';
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLocale, t } from '$lib/i18n/locale.svelte';
-import { af } from '$lib/i18n/messages/af';
+import { setLocale, t } from '#lib/i18n/locale.svelte.js';
+import { af } from '#lib/i18n/messages/af.js';
 import TermsSummary from './TermsSummary.svelte';
 import { SUMMARY_LANGUAGE_NOTE, SUMMARY_POINTS, SUMMARY_TITLE } from './termsSummary';
 
@@ -61,7 +61,7 @@ describe('the terms summary', () => {
 
 	it('is the short version at the top of /terms, in English', () => {
 		const terms = readFileSync(new URL('../../../routes/terms/+page.svelte', import.meta.url), 'utf8');
-		expect(terms).toContain("import { SUMMARY_POINTS } from '$lib/components/legal/termsSummary';");
+		expect(terms).toContain("import { SUMMARY_POINTS } from '#lib/components/legal/termsSummary.js';");
 		expect(terms.indexOf('id="short"')).toBeLessThan(terms.indexOf('id="agreement"'));
 		expect(terms).toMatch(/\{#each SUMMARY_POINTS as point \(point\)\}<li>\{point\}<\/li>\{\/each\}/);
 	});

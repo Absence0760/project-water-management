@@ -5,7 +5,7 @@
 // ≥ 1.91.0). Read defensively: a run from before it has none. The report's
 // inputs (report/inputs.ts) word them with the same helpers.
 import { AREAL_RAIN_FACTOR_MAX, AREAL_RAIN_FACTOR_MIN, type RainStationSummary, type StationAreaForcing, type StationPairingFit } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 export type StationsResult = RainStationSummary;
 

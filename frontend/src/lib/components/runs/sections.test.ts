@@ -1,8 +1,8 @@
 import type { FarmSummary, RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { navText } from '$lib/components/common/sectionNav';
-import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '$lib/components/river/links';
-import { supplyAnchor } from '$lib/components/supply/links';
+import { navText } from '#lib/components/common/sectionNav.js';
+import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '#lib/components/river/links.js';
+import { supplyAnchor } from '#lib/components/supply/links.js';
 import { movedHref, otherPageGroups, resultGroups, resultSections } from './sections';
 
 describe('resultGroups', () => {

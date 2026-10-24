@@ -3,7 +3,7 @@ import type { NetworkNode, ProjectModel, SeriesMeta } from '@water-management/en
 import { lakeFactorPresetFill, withMonthlyRates } from '@water-management/engine';
 import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, settingsRows, STATION_HEAD, stationPairingRows, stationRows, transferRows } from './inputs';
 import type { RainStationSummary, StationAreaForcing } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 const node = (id: string, name: string, over: Partial<NetworkNode> = {}) =>
 	({ id, name, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 1, damCapacityM3: 0, irrigationEfficiency: 0.8, ...over }) as NetworkNode;

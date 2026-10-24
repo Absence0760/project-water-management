@@ -4,7 +4,7 @@
 // the draw bar, the save sheet and the map agree. The server checks every
 // saved geometry again (backend geo/geojson.ts checkGeometry); this says the
 // same things earlier, while the shape is still being drawn.
-import type { MapFeatureKind, MapGeometry, MapPosition } from '$lib/api/types';
+import type { MapFeatureKind, MapGeometry, MapPosition } from '#lib/api/types.js';
 
 export type DraftShape = 'point' | 'line' | 'polygon';
 

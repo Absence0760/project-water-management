@@ -5,14 +5,14 @@
 	// year, a one-off date range or days around Easter, optionally on some
 	// weekdays only; the later of two windows covering a day wins. Set by date
 	// only. The object is the editor's own, so edits land in the model.
-	import DayInput from '$lib/components/common/DayInput.svelte';
+	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { tick } from 'svelte';
 	import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_MAX_EASTER_OFFSET, scheduleWindowProblem, type DemandObject, type DemandScheduleSpan } from '@water-management/engine';
 	import { moveWindow, newWindow, problemFields, SPAN_LABEL, toggleWeekday, withSpan } from './demandSchedule';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import NumberInput from '#lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { focusAfter, windowQuestion } from './removeQuestions';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 
 	let { object: o, readonly }: { object: DemandObject; readonly: boolean } = $props();
 

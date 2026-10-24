@@ -345,6 +345,22 @@ test('auto-merge: the renderer image\'s npm directory stays manual, by directory
 	assert.deepEqual(rules(inRun, file), ['auto-merge'], 'the same text past the end of the `if:` does not count');
 });
 
+test('auto-merge: gh pr merge --auto only after reading allow_auto_merge', () => {
+	const file = '.github/workflows/dependabot-auto-merge.yml';
+	const allow = `contains(fromJSON('["npm_and_yarn"]'), steps.meta.outputs.package-ecosystem) &&`;
+	const step = (...run) =>
+		good +
+		`      - name: Approve + auto-merge\n        if: >-\n          ${allow}\n${EXCLUDE_RENDERER_DEPS}          true\n        run: |\n${run.map((r) => `          ${r}\n`).join('')}`;
+	const read = `allowed=$(gh api "repos/$REPO" --jq '.allow_auto_merge')`;
+	const merge = 'gh pr merge --auto --squash "$PR_URL"';
+	assert.deepEqual(rules(step(read, '[ "$allowed" = "true" ] || exit 0', merge), file), [], 'positive control: read, then merge');
+	assert.deepEqual(rules(step(merge), file), ['auto-merge'], 'merge without reading the setting');
+	assert.deepEqual(rules(step(merge, read), file), ['auto-merge'], 'read only after the merge');
+	assert.deepEqual(rules(step(`# ${read}`, merge), file), ['auto-merge'], 'a commented-out read does not count');
+	assert.match(checkWorkflow(file, step(merge))[0].message, /allow_auto_merge/);
+	assert.deepEqual(rules(step('echo no merge here'), file), [], 'no gh pr merge --auto, nothing to check');
+});
+
 test('auto-merge: the repo workflow passes', () => {
 	const file = new URL('../../.github/workflows/dependabot-auto-merge.yml', import.meta.url);
 	assert.equal(autoMergeProblem(readFileSync(file, 'utf8')), null);

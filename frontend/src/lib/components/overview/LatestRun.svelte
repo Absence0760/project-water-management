@@ -9,13 +9,13 @@
 	// Only this section waits for the run's summary; the rest of the tab
 	// renders at once. Which run it is (label, period, engine, age, a link to
 	// it) is the section header's context line (OverviewTab, RunContext).
-	import type { Run, RunMeta } from '$lib/api';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import Delta from '$lib/components/compare/Delta.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import type { Run, RunMeta } from '#lib/api/index.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import Delta from '#lib/components/compare/Delta.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { runHref } from './attention';
-	import { dataEndOf } from '$lib/format/age';
-	import { localIsoDate } from '$lib/format/number';
+	import { dataEndOf } from '#lib/format/age.js';
+	import { localIsoDate } from '#lib/format/number.js';
 	import { damsEnd, damsHeadline, historyDays, ranAgo, summaryHeadlines, type DamsState } from './latestRun';
 
 	let {

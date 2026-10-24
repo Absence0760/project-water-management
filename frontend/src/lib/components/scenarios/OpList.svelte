@@ -6,7 +6,7 @@
 	// (docs/scenarios.md § Classification). Used by the Scenarios tab's
 	// editor (with a remove button per op) and the compare page's Scenario
 	// overrides section (read only).
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { CLASS_LABEL, type OpItem } from './ops';
 
 	let {

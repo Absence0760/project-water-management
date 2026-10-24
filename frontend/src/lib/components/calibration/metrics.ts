@@ -1,6 +1,6 @@
 // Pure helpers for the calibration panel and the calibration-window fields.
 import type { AnnualVolume, CalibrationStats } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtNum } from '#lib/format/number.js';
 
 export interface MetricRow {
 	key: string;

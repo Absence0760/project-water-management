@@ -4,17 +4,17 @@
 	// many from a CSV) and choose their farms; an address without an account
 	// waits as a pending invite, listed here for owners, until it signs up. A
 	// farmer is removed like any member (their links go with the membership).
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
-	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
-	import { api, type Farmer, type FarmerEntry, type InvitedFarmer } from '$lib/api';
-	import { emailAuthApi } from '$lib/api/emailAuth';
-	import LoadState from '$lib/components/common/LoadState.svelte';
-	import EmailText from '$lib/components/common/EmailText.svelte';
-	import { expiryText } from '$lib/components/auth-extras/invites';
-	import { fmtDate } from '$lib/format/number';
-	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
+	import { api, type Farmer, type FarmerEntry, type InvitedFarmer } from '#lib/api/index.js';
+	import { emailAuthApi } from '#lib/api/emailAuth.js';
+	import LoadState from '#lib/components/common/LoadState.svelte';
+	import EmailText from '#lib/components/common/EmailText.svelte';
+	import { expiryText } from '#lib/components/auth-extras/invites.js';
+	import { fmtDate } from '#lib/format/number.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { farmNames, toggleFarm, type FarmOption } from './farmers';
 
 	// The invite dialog (its CSV preview and pending-invite list) is its own chunk, fetched on the

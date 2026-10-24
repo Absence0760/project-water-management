@@ -11,16 +11,17 @@
 	// farmer words (farm-invitation): no workspace guide fits someone joining
 	// as a farmer.
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api, type MyInvite } from '$lib/api';
-	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
-	import { wordsHref } from '$lib/components/farm/load';
-	import { invitesChanged } from '$lib/components/auth-extras/inviteCount.svelte';
-	import { fmtDay } from '$lib/format/number';
-	import { msg, type Msg } from '$lib/i18n/msg';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { errorText } from '$lib/i18n/apiError';
+	import { api, type MyInvite } from '#lib/api/index.js';
+	import SectionHeader from '#lib/components/workspace/SectionHeader.svelte';
+	import { wordsHref } from '#lib/components/farm/load.js';
+	import { invitesChanged } from '#lib/components/auth-extras/inviteCount.svelte.js';
+	import { fmtDay } from '#lib/format/number.js';
+	import { msg, type Msg } from '#lib/i18n/msg.js';
+	import { t } from '#lib/i18n/locale.svelte.js';
+	import { errorText } from '#lib/i18n/apiError.js';
 
 	/** What an invitation makes you, in words (project and team roles alike, as roleLabels.ts reads them). */
 	const ROLE: Record<string, Msg> = {
@@ -64,7 +65,7 @@
 			const id = encodeURIComponent(joined.id);
 			done = {
 				text: t('You joined {name}.', { name: inv.name }),
-				href: joined.kind === 'team' ? `${base}/teams/${id}` : farmer ? `${base}/farm/${id}` : `${base}/projects/${id}`,
+				href: joined.kind === 'team' ? resolve(`teams/${id}`) : farmer ? resolve(`farm/${id}`) : resolve(`projects/${id}`),
 				link: farmer ? t('Open your hydrological unit') : t('Open it')
 			};
 		} catch (e) {
@@ -103,11 +104,11 @@
 		{#snippet context()}
 			<span
 				>{t('Nobody joins a catchment or team for you: you join when you accept, and whoever invited you sees only that the invitation was declined.')}
-				{#if farmerInvite}<a href={wordsHref(base, page.url, 'farm-invitation')}>{t('What does accepting mean?')}</a>{/if}</span
+				{#if farmerInvite}<a href={wordsHref(basePath(), page.url, 'farm-invitation')}>{t('What does accepting mean?')}</a>{/if}</span
 			>
 		{/snippet}
 		{#snippet actions()}
-			<a class="btn" href="{base}/account">{t('Back to your account')}</a>
+			<a class="btn" href={resolve('account')}>{t('Back to your account')}</a>
 		{/snippet}
 	</SectionHeader>
 

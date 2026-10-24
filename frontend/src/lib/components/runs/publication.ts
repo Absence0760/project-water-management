@@ -1,9 +1,9 @@
 // The Runs tab's publication panel (WP-2.3, docs/ui.md § Publishing a run):
 // pure helpers for its wording and the notice form. The panel is
 // PublicationPanel.svelte.
-import type { Publication, PublicationMeta, PublicationRestriction, RunMeta } from '$lib/api/types';
+import type { Publication, PublicationMeta, PublicationRestriction, RunMeta } from '#lib/api/types.js';
 import { LANGUAGES, LOCALES, type Locale, type NoticeText, type RestrictionLevel } from '@water-management/engine';
-import { PUBLICATION_TEXT_MAX } from '$lib/api/types';
+import { PUBLICATION_TEXT_MAX } from '#lib/api/types.js';
 import { isScenarioRun, type ScenarioRunFields } from './scenarioRun';
 
 export const LEVEL_LABEL: Record<RestrictionLevel, string> = {

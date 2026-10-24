@@ -1,7 +1,7 @@
 // The Map's search in words (mapSearch.ts; issue #523 C5): each match's name
 // and detail, the view it moves to, and the places' credits.
 import { describe, expect, it } from 'vitest';
-import type { MapSearchHit } from '$lib/api/types';
+import type { MapSearchHit } from '#lib/api/types.js';
 import { frameFor, hitDetail, hitName, placeCredits, placeWord, resultLine } from './mapSearch';
 
 const hit = (h: Partial<MapSearchHit>): MapSearchHit => ({

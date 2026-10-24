@@ -1,6 +1,6 @@
 // The Map's GeoJSON upload's Expected format (UploadSheet, issue #456; the
 // File formats help page, issue #477), with a synthetic example file.
-import type { FileFormat } from '$lib/components/common/formatHelp';
+import type { FileFormat } from '#lib/components/common/formatHelp.js';
 import EXAMPLE_GEOJSON from './example-features.geojson?raw';
 
 export const GEOJSON_FORMAT: FileFormat = {

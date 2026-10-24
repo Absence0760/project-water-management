@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
+	import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';
 	// EWR → the reserve at a glance (issue #162, item 10; the Summary's until
 	// issue #558): the days below the pragmatic EWR at the outlet in each of the
 	// run's last twelve months (reserveStrip.ts), a small bar and its count per
@@ -10,7 +10,7 @@
 	// test it counts, the pragmatic EWR, since the headline card's Reserve is
 	// the table's (reserveStrip.ts stripWords, issue #177).
 	import type { EwrCompliance } from '@water-management/engine';
-	import { bandLabels, EWR_BANDS } from '$lib/components/ewr/bands';
+	import { bandLabels, EWR_BANDS } from '#lib/components/ewr/bands.js';
 	import { monthText, recentMonths, stripSpan, stripWhat, stripWords } from './reserveStrip';
 
 	let {

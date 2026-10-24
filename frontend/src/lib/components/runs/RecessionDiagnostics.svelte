@@ -8,10 +8,10 @@
 -->
 <script lang="ts">
 	import type { DailySeries, RecessionCheck } from '@water-management/engine';
-	import { api } from '$lib/api';
-	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { api } from '#lib/api/index.js';
+	import LineChart from '#lib/components/charts/LineChart.svelte';
+	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import { cachedSeries } from './cache';
 	import { flowTick, recessionChart, recessionRows, recessionVerdict, sig3 } from './recession';
 

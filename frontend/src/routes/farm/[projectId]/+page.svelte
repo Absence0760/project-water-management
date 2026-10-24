@@ -5,39 +5,39 @@
 	// the farmer has several here (a switcher lists them). Viewer+ opening it
 	// sees it as the farmer does, under a preview banner (FarmPage).
 	import { tick } from 'svelte';
-	import { base } from '$app/paths';
+	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
-	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import CompareCard from '$lib/components/farm/CompareCard.svelte';
-	import DamCard from '$lib/components/farm/DamCard.svelte';
-	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
-	import { forecastCard } from '$lib/components/farm/forecastCard';
-	import { outlookCard } from '$lib/components/farm/outlookCard';
-	import DatesLine from '$lib/components/farm/DatesLine.svelte';
-	import { decimalMark, farmToday } from '$lib/components/farm/numbers';
-	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
-	import FarmAlerts from '$lib/components/farm/FarmAlerts.svelte';
-	import FarmNotes from '$lib/components/farm/FarmNotes.svelte';
-	import FarmMapCard from '$lib/components/farm/FarmMapCard.svelte';
-	import FarmPage from '$lib/components/farm/FarmPage.svelte';
-	import LookingBack from '$lib/components/farm/LookingBack.svelte';
-	import MonthlyChart from '$lib/components/farm/MonthlyChart.svelte';
-	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
-	import RegisteredCard from '$lib/components/farm/RegisteredCard.svelte';
-	import RiverCard from '$lib/components/farm/RiverCard.svelte';
-	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
-	import { damCard, datesLine, disclaimer, levelWord, lookingBackFolds, noRestriction, noticeCard, registeredCard, stateText, staleUntil, supplyCard } from '$lib/components/farm/cards';
-	import { FarmState } from '$lib/components/farm/farmState.svelte';
-	import { count, FARMS } from '$lib/components/farm/format';
-	import { farmCsvForReader } from '$lib/components/farm/csvNote';
-	import { farmHref, wordsHref } from '$lib/components/farm/load';
-	import { fetchDownload, saveBlob } from '$lib/export/download';
-	import { errorText } from '$lib/i18n/apiError';
-	import { readUnit } from '$lib/components/farm/savedCopy';
-	import { hashId, holdAnchor } from '$lib/help/anchor';
-	import { t, wordsLang } from '$lib/i18n/locale.svelte';
+	import { api } from '#lib/api/index.js';
+	import { session } from '#lib/auth/session.svelte.js';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import CompareCard from '#lib/components/farm/CompareCard.svelte';
+	import DamCard from '#lib/components/farm/DamCard.svelte';
+	import ForecastCard from '#lib/components/farm/ForecastCard.svelte';
+	import { forecastCard } from '#lib/components/farm/forecastCard.js';
+	import { outlookCard } from '#lib/components/farm/outlookCard.js';
+	import DatesLine from '#lib/components/farm/DatesLine.svelte';
+	import { decimalMark, farmToday } from '#lib/components/farm/numbers.js';
+	import EstimateNote from '#lib/components/farm/EstimateNote.svelte';
+	import FarmAlerts from '#lib/components/farm/FarmAlerts.svelte';
+	import FarmNotes from '#lib/components/farm/FarmNotes.svelte';
+	import FarmMapCard from '#lib/components/farm/FarmMapCard.svelte';
+	import FarmPage from '#lib/components/farm/FarmPage.svelte';
+	import LookingBack from '#lib/components/farm/LookingBack.svelte';
+	import MonthlyChart from '#lib/components/farm/MonthlyChart.svelte';
+	import NoticeCard from '#lib/components/farm/NoticeCard.svelte';
+	import RegisteredCard from '#lib/components/farm/RegisteredCard.svelte';
+	import RiverCard from '#lib/components/farm/RiverCard.svelte';
+	import SupplyCard from '#lib/components/farm/SupplyCard.svelte';
+	import { damCard, datesLine, disclaimer, levelWord, lookingBackFolds, noRestriction, noticeCard, registeredCard, stateText, staleUntil, supplyCard } from '#lib/components/farm/cards.js';
+	import { FarmState } from '#lib/components/farm/farmState.svelte.js';
+	import { count, FARMS } from '#lib/components/farm/format.js';
+	import { farmCsvForReader } from '#lib/components/farm/csvNote.js';
+	import { farmHref, wordsHref } from '#lib/components/farm/load.js';
+	import { fetchDownload, saveBlob } from '#lib/export/download.js';
+	import { errorText } from '#lib/i18n/apiError.js';
+	import { readUnit } from '#lib/components/farm/savedCopy.js';
+	import { hashId, holdAnchor } from '#lib/help/anchor.js';
+	import { t, wordsLang } from '#lib/i18n/locale.svelte.js';
 
 	const projectId = $derived(page.params.projectId ?? '');
 	const asked = $derived(page.url.searchParams.get('node'));
@@ -69,7 +69,7 @@
 			release?.();
 		};
 	});
-	const href = (sub: string) => farmHref(base, projectId, farm.nodeId, several || !!asked, sub);
+	const href = (sub: string) => farmHref(basePath(), projectId, farm.nodeId, several || !!asked, sub);
 
 	// The CSV goes through fetch so the farm disclaimer and the column names come in the reader's language,
 	// laid out for their spreadsheet (csvNote.ts, issue #124).
@@ -97,7 +97,7 @@
 			{#snippet switcher(farms: { nodeId: string; name: string }[])}
 				<nav class="switch" aria-label={t('Your hydrological units in this catchment')}>
 					{#each farms as f (f.nodeId)}
-						<a href={farmHref(base, projectId, f.nodeId, true)} aria-current={f.nodeId === farm.nodeId ? 'page' : undefined}>{f.name}</a>
+						<a href={farmHref(basePath(), projectId, f.nodeId, true)} aria-current={f.nodeId === farm.nodeId ? 'page' : undefined}>{f.name}</a>
 					{/each}
 				</nav>
 			{/snippet}
@@ -152,7 +152,7 @@
 			<!-- "This season" (issue #53 R5, E3): only while the WUA has a seasonal outlook published; its card loads only then (issue #122). -->
 			{@const seasonOutlook = outlookCard(view, farmToday(view))}
 			{#if seasonOutlook}
-				{#await import('$lib/components/farm/OutlookCard.svelte') then { default: OutlookCard }}
+				{#await import('#lib/components/farm/OutlookCard.svelte') then { default: OutlookCard }}
 					<OutlookCard vm={seasonOutlook} />
 				{:catch}
 					<!-- Without it a farmer would read a missing card as "no outlook published". -->
@@ -172,7 +172,7 @@
 				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download onclick={(e) => downloadCsv(e, api.farm.exportUrl(projectId, view.farm.nodeId))}
 					>{t('Download my figures (CSV)')}</a
 				>
-				<a href={wordsHref(base, page.url)}>{t('What do these words mean?')}</a>
+				<a href={wordsHref(basePath(), page.url)}>{t('What do these words mean?')}</a>
 			</nav>
 			{#if csvError}<p class="fine" role="alert">{csvError}</p>{/if}
 		{/if}
