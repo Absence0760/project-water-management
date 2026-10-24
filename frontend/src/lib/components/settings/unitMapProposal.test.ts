@@ -77,7 +77,7 @@ describe('Use', () => {
 		const p = props({ units: [unit('Upper', 612), unit('Lower', 540, { same: true })], withoutPolygon: [{ nodeId: 'w', name: 'W' }] });
 		expect(toChange(p).map((u) => u.name)).toEqual(['Upper']);
 		expect(useMessage(p)).toBe(
-			'1 unit gets its MAP and source from synthetic synthetic 1, replacing what its form holds, saved straight to the model as one change in History. 1 unit without a MAP from this grid keeps what it has. The MAP sets the level of each unit’s rain while Rain for each unit is on: run and refit afterwards.'
+			'1 unit gets its MAP and source from synthetic synthetic 1, replacing what its form holds, saved straight to the model as one change in History. 1 unit without a MAP from this grid keeps what it has. The MAP sets the level of each unit’s rain while flow generation is Per unit: run and refit afterwards.'
 		);
 		expect(useMessage(props())).toMatch(/^2 units get their MAP and source from synthetic synthetic 1, replacing what their forms hold/);
 		expect(appliedNotice({ dataset: 'synthetic', units: [], changed: 2, revisionId: 'r' }, 'synthetic synthetic 1')).toBe(

@@ -3183,7 +3183,7 @@ decision 2026-10-23):
   listed. Under fragmentation (catchment rain) a unit's natural runoff is
   `naturalFlow × frag[f]`, so the natural MAR shares are the flow shares:
   the run applies the flow shares and says so (`why: 'catchmentRain'`), and
-  the option matters only with Rain for each unit on, which Settings says.
+  the option matters only under Per unit flow generation, which Settings says.
 - **The MAR period** (provisional, engine-audit.md ES1): the run's complete
   water years (1 October to 30 September, every day inside the run),
   historical days only, never a forecast tail's (§2.4f); a run without one

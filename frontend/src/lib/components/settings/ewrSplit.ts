@@ -1,6 +1,6 @@
 // Settings → Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553,
 // EwrSplitFields.svelte): the options and what the hint says, by the method and whether
-// Rain for each unit is on. Pure, so the component stays a thin template.
+// flow generation is Per unit. Pure, so the component stays a thin template.
 import type { EwrSplitMethod } from '@water-management/engine';
 
 export const EWR_SPLIT_OPTIONS: readonly { value: EwrSplitMethod; label: string }[] = [
@@ -11,7 +11,7 @@ export const EWR_SPLIT_OPTIONS: readonly { value: EwrSplitMethod; label: string 
 /**
  * The field's explanation (hidden with the explanations off) and its state
  * line (always shown): under Fragmentation the two methods give the same
- * shares, so the choice matters only with Rain for each unit on.
+ * shares, so the choice matters only under Per unit.
  */
 export function ewrSplitHint(method: EwrSplitMethod, perUnit: boolean): { explain: string; state: string } {
 	const explain =
@@ -20,9 +20,9 @@ export function ewrSplitHint(method: EwrSplitMethod, perUnit: boolean): { explai
 			: 'Each unit’s share of the EWR is its flow share, from the Method above. The charge, curtailment, hands-off EWR flows and the drought restriction’s EWR trigger follow it.';
 	const state = perUnit
 		? method === 'naturalMar'
-			? 'Rain for each unit is on: each unit’s EWR share is its own GR4J runoff’s share, not its flow share.'
-			: 'Rain for each unit is on: the flow share splits the EWR, though each unit makes its own runoff.'
-		: 'Rain for each unit is off: GR4J runs once on the catchment rain, so both give the flow share. The choice matters only with Rain for each unit on.';
+			? 'Per unit: each unit’s EWR share is its own GR4J runoff’s share, not its flow share.'
+			: 'Per unit: the flow share splits the EWR, though each unit makes its own runoff.'
+		: 'Fragmentation: GR4J runs once on the catchment rain, so both give the flow share. The choice matters only under Per unit.';
 	return { explain, state };
 }
 

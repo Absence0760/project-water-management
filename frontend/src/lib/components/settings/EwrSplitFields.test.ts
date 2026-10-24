@@ -26,7 +26,7 @@ describe('EwrSplitFields', () => {
 		expect(body).toMatch(/<option value="flowShare"[^>]*selected[^>]*>The flow share<\/option>/);
 		expect(body).toContain('<option value="naturalMar">Each unit’s natural MAR</option>');
 		expect(body).toContain('data-unit-rain="off"');
-		expect(body).toContain('both give the flow share. The choice matters only with Rain for each unit on.');
+		expect(body).toContain('both give the flow share. The choice matters only under Per unit.');
 	});
 
 	it('selects the natural MAR when stored, and says it splits by each unit’s own runoff with Rain for each unit on', () => {
