@@ -2861,8 +2861,9 @@ differs. On run day *t* of calendar month *m*:
 | Otherwise | the area's next fallback: the catchment → the forecast (`rain_forecast_mm`); a unit → its own forecast (`rain_forecast_mm@<unit>`, outlook members only), then the catchment forcing (catchment ?? CHIRPS ?? forecast, × 1); else dry (0 mm, counted) |
 
 CHIRPS_area is the catchment's `rain_chirps_mm` for the catchment and the
-unit's `rain_chirps_mm@<unit>` for a unit. A negative value is a no-data
-code in every record, as in §2.4b. The ratio is clamped and banded as every
+unit's `rain_chirps_mm@<unit>` for a unit. In a station's record and in
+an area's CHIRPS, a value below 0 is not a reading: the day is a gap (the
+station's) or has no CHIRPS (the area's), and takes the next link. The ratio is clamped and banded as every
 unit factor (§2.4h): a ratio past 0.25–4 is clamped and warns; one outside
 0.5–2 warns and is used as it is.
 
@@ -2888,8 +2889,10 @@ stands in, else the catchment's CHIRPS). The catchment gauge's dated lists
 periods and the quantile map name days of the catchment gauge's record, so
 they don't apply, except to the station that **is** the catchment gauge
 (`ModelInput.stations[id].isCatchmentGauge`, set by the backend): it gets
-the catchment's full checks, periods included, so its record can reach days
-a period writes in past the stored series. Then the user's unreliable
+the catchment's full checks, periods included, compared against the
+catchment's `rain_chirps_mm` as today's run checks that record (not the
+CHIRPS at the station), so its record can reach days a period writes in
+past the stored series. Then the user's unreliable
 periods are blanked. A day either sets aside is a gap. The checks run on the
 whole stored record, so a day's value doesn't depend on the window.
 
@@ -2920,8 +2923,15 @@ where the pairing can't correct, so the forecast fills). The stored
 `rain_catchment_mm` is not read: not for the forcing, not for §2.4b's fit,
 §2.4c–§2.4e or the double-mass check (`summary.chirpsCorrection` is mode
 `none`, and the rain-source periods warn that they are not read unless the
-station is the catchment gauge). The run window follows the station's record
-in the gauge's place. The areal correction (§2.4g) is off, with a warning:
+station is the catchment gauge). The run window (§2.1) takes the station's
+record in the gauge's place: an unset start or end runs from the first to
+the last day the catchment rain has a value (a checked station day, not a
+blank, set-aside or unreliable one; a corrected CHIRPS day, none when the
+pairing is refused; or a forecast day), not the stored records' spans.
+A §2.4h reference gauge of `rain_catchment_mm` is fitted on that catchment
+rain too: station × *r* on the station's checked days (accumulation windows
+left out), not the stored gauge (`referenceGaugeRecord`); rule 2's gauge
+rain is the same station × *r*. The areal correction (§2.4g) is off, with a warning:
 × catchment MAP ÷ station MAP already takes the point rain to the
 catchment's level. **Switching the catchment to a station replaces the
 §2.4b factors with the pairing's**, even when the station is today's

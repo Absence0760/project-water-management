@@ -469,7 +469,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// score, so each evaluation stops there (a full run is tens of ms on a
 	// multi-decade record; a record that ends early saves the rest).
 	const toM3 = area * 1000;
-	const hasRain = hasRainInput(input.series, settings.rainSource);
+	const hasRain = hasRainInput(input.series, settings.rainSource, settings.rainStations);
 	const areal = arealRainFactors(settings.arealRain);
 	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(settings, { startDate, days, aligned });

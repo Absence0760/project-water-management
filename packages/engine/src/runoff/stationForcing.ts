@@ -365,6 +365,25 @@ export function catchmentStationPlan(ctx: StationContext, warnings: string[]): C
 }
 
 /**
+ * The catchment rain a reference gauge of `rain_catchment_mm` (§2.4h) is
+ * fitted on under a catchment station: what every reader of the catchment
+ * rain sees on the station's days, station × the catchment ratio, from the
+ * station's checked record with its accumulation windows left out (as the
+ * fit leaves them out on the gauge), over the record's whole span. Null
+ * without a catchment station in this input (then the stored gauge is the
+ * catchment rain, and the reference reads it as before).
+ */
+export function catchmentStationReferenceRecord(ctx: StationContext): DailySeries | null {
+	const plan = catchmentStationPlan(ctx, []);
+	if (!plan) return null;
+	const id = plan.assignment.stationId;
+	const rec = checkedStationRecord(ctx.settings, ctx.series, id, { fitExcludeAccumulations: true, name: ctx.name(id), isCatchmentGauge: ctx.stations[id]?.isCatchmentGauge === true });
+	if (!rec) return null;
+	const r = plan.ratio.ratio;
+	return { startDate: rec.record.startDate, values: rec.record.values.map((v) => (v == null ? null : v * r)) };
+}
+
+/**
  * The catchment forcing over a window: the two arrays prepareRun's `aligned`
  * returns for `rain_catchment_mm` (station × ratio on its days, else null)
  * and `rain_chirps_mm` (the catchment CHIRPS × the pairing's factors on the

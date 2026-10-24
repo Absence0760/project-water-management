@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
 import { prepareRun } from '../prepare';
-import { stationSeriesKey, type ModelInput, type RainStationSettings, type UnitRainSettings } from '../project';
+import { referenceCellSeriesKey, stationSeriesKey, type ModelInput, type RainStationSettings, type UnitRainSettings } from '../project';
 import { runModel } from '../run';
 import { applyScenario } from '../scenario/overrides';
 import { sameOutput } from '../testing/invariants';
@@ -283,6 +283,27 @@ describe('the catchment on its station', () => {
 		// Unit D, no records of its own and no gauge MAP: rule 4, the catchment forcing.
 		const d = col(out, 'rain_unit', 'D');
 		for (let t = 0; t < DAYS; t += 11) expect(d[t]).toBe(Math.max(0, c[t] ?? ch[t] ?? 0));
+	});
+
+	it('a §2.4h reference gauge of rain_catchment_mm is fitted on the station-forced catchment rain (station × r), not the stored gauge', () => {
+		const x = catchment({ unitRain: { mode: 'perUnit', reference: { gauge: 'rain_catchment_mm', unitId: 'A' } }, rainStations: { catchment: { stationId: 'S' }, sites: SITES } });
+		const cell = rainOf(0.9, 4);
+		x.series = { ...x.series, [referenceCellSeriesKey('A')]: { startDate: START, values: cell } };
+		const out = runModel(x);
+		const ratio = out.summary.stations!.catchment!.ratio;
+		expect(ratio).not.toBe(1);
+		const rec = checkedStationRecord(settingsOf(x), x.series, 'S', { fitExcludeAccumulations: true })!.record.values;
+		const stored = x.series.rain_catchment_mm!.values as number[];
+		let jan = 0;
+		let janStored = 0;
+		for (let t = 0; t < DAYS; t++) {
+			if (new Date((D0 + t) * 86_400_000).getUTCMonth() !== 0) continue;
+			if (rec[t] != null) jan += rec[t]! * ratio;
+			janStored += stored[t]!;
+		}
+		const m = out.summary.unitRain!.reference!.months[0]!;
+		expect(m.gaugeMm).toBeCloseTo(jan, 9);
+		expect(Math.abs(m.gaugeMm - janStored)).toBeGreaterThan(1);
 	});
 
 	it('a resumed run pins the catchment pairing (to the bit)', () => {

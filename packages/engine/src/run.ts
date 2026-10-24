@@ -333,7 +333,7 @@ function runNetwork(
 	const areal = arealRainFactors(settings.arealRain);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month, !!nf.unitRain);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
-	const finalRain = runRain(aligned, hasRainInput(series, settings.rainSource), days);
+	const finalRain = runRain(aligned, hasRainInput(series, settings.rainSource, settings.rainStations), days);
 	// The rain on the catchment as GR4J ran on it (engine ≥ 1.13.0, §2.4g): rain_final × the areal
 	// factor. What the catchment's own water balance reads (the WR2012 rain scaling, the water
 	// account, the plausibility checks); the same array as finalRain without a correction.
@@ -1658,7 +1658,7 @@ export function buildNetworkPlan(
 		if (nodes.some((n) => n.kind === 'farm' && n.damCapacityM3 > 0))
 			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
-	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource), days);
+	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource, settings.rainStations), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
 	// A dam with a survey curve (WP-3.5) takes its area from it; one the run can't use says why and runs on the power law.
 	for (const n of nodes) {
@@ -2653,7 +2653,7 @@ function catchmentRunoffCoefficient(
 	let rainMm = 0;
 	if (perUnit && balance) rainMm = balance.rainMm;
 	else {
-		if (!hasRainInput(input.series, settings.rainSource)) return null;
+		if (!hasRainInput(input.series, settings.rainSource, settings.rainStations)) return null;
 		const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 		for (let t = 0; t < natural.length; t++) {
 			const v = c[t] ?? ch[t] ?? f[t] ?? null;
@@ -2971,7 +2971,7 @@ function missingRainWarning(
 	warnings: string[]
 ): void {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
-	if (!hasRainInput(input.series, periods)) return;
+	if (!hasRainInput(input.series, periods, input.settings?.rainStations)) return;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	const ranges: [number, number][] = [];
 	let missing = 0;

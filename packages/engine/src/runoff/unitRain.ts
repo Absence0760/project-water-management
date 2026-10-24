@@ -75,6 +75,8 @@ import { recipeLevel } from './unitRainFingerprint';
 import { checkedReferenceGauge, checkedUnitGauge, unitGaugeCheckWarnings } from './unitGaugeChecks';
 import {
 	alignReadings,
+	catchmentStationPlan,
+	catchmentStationReferenceRecord,
 	recipePairing,
 	setAsideInWindow,
 	STATION_DAY_SOURCE,
@@ -298,6 +300,24 @@ export function referenceFit(
 	return { gauge: ref.gauge, unitId: ref.unitId, unitName, mapMm: usableMap(node.mapMm), cellKey, cellReason: 'referenceUnitCentre', gaugeChecked: checkedGauge !== undefined, pinned: !!pinned, months };
 }
 
+/**
+ * The reference gauge's checked record (checkedReferenceGauge), except that
+ * under a catchment station (engine ≥ 1.91.0, §2.4i) `rain_catchment_mm` is
+ * the catchment rain the run reads, station × the catchment ratio
+ * (catchmentStationReferenceRecord), not the stored gauge, which the run
+ * doesn't read.
+ */
+export function referenceGaugeRecord(settings: ProjectSettings, series: ModelInput['series'], gauge: string, stations: StationContext | null | undefined): DailySeries | null {
+	if (gauge === 'rain_catchment_mm' && stations) {
+		const rec = catchmentStationReferenceRecord(stations);
+		if (rec) return rec;
+	}
+	return checkedReferenceGauge(settings, series, gauge);
+}
+
+/** The catchment's station plan of a run's station context, without its warnings (the run gave them once); null without one. */
+const catchmentStationPlanOf = (sc: StationContext | null) => (sc ? catchmentStationPlan(sc, []) : null);
+
 /** The catchment's §2.4b monthly factors exist: mode 'monthly' and some month has one. */
 const biasExists = (c: ChirpsCorrection | null): boolean => !!c && c.mode === 'monthly' && c.months.some((m) => m.factor !== null);
 
@@ -322,10 +342,12 @@ export function unitRainRecipes(
 	}
 	const series = ctx.series;
 	const gaugeMap = usableMap(u.gaugeMapMm);
-	const gaugeRain = hasReading(series.rain_catchment_mm);
+	// Rule 2's catchment gauge rain: under a catchment station (engine ≥ 1.91.0, §2.4i) the station is the catchment rain.
+	const stationPlan = ctx.settings.rainStations?.catchment ? catchmentStationPlanOf(stationsOf(ctx, warnings)) : null;
+	const gaugeRain = stationPlan ? hasReading(stationPlan.record) : hasReading(series.rain_catchment_mm);
 	const period = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	const bias = biasExists(ctx.chirpsCorrection);
-	const reference = referenceFit(u, series, ctx.nodes, warnings, u.reference ? checkedReferenceGauge(ctx.settings, series, u.reference.gauge) : undefined);
+	const reference = referenceFit(u, series, ctx.nodes, warnings, u.reference ? referenceGaugeRecord(ctx.settings, series, u.reference.gauge, ctx.settings.rainStations?.catchment ? stationsOf(ctx, warnings) : null) : undefined);
 	if (fit) fit.reference = reference;
 	const refFactors = reference ? reference.months.map((x) => x.factor) : null;
 	const assigned = ctx.settings.rainStations?.units ?? null;
