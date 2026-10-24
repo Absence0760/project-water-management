@@ -222,12 +222,24 @@ export function roleBadge(
 		gaugeInUse: ReadonlySet<string>;
 		gaugeIds: ReadonlySet<string>;
 		calibrationSite: string | null;
+		/** The land units a rain series can be measured at (209_unit_rain_series): node id → name (issue #553). */
+		units?: ReadonlyMap<string, string>;
+		/** Per-unit rain is on (settings.unitRain `perUnit`): a unit's own rain is read for it. */
+		unitRainOn?: boolean;
+		/** The rainfall stations settings.rainStations assigns to an area or a pairing (issue #553). */
+		assignedStations?: ReadonlySet<string>;
 	}
 ): { label: string; unused: boolean; why: string | null } | null {
 	const role = KIND_ROLES[s.kind];
 	if (!role) return null;
 	const unused = !ctx.inUse.has(s.id) && !ctx.gaugeInUse.has(s.id);
 	const kindRead = (k: string) => ctx.list.some((x) => x.kind === k && ctx.inUse.has(x.id));
+	// A unit's own rain (its CHIRPS feed, a migration-209 gauge): read for that unit under per-unit rain, not a gauge record.
+	const unit = s.siteNodeId ? ctx.units?.get(s.siteNodeId) : undefined;
+	if (unit !== undefined)
+		return ctx.unitRainOn ? { label: `${unit}’s own rain`, unused: false, why: null } : { label: 'Not used: per-unit rain is off', unused: true, why: null };
+	// A station a run reads for an area, though not the catchment rain read by name: its row says which areas.
+	if (!s.siteNodeId && s.kind === 'rain_catchment_mm' && !ctx.inUse.has(s.id) && ctx.assignedStations?.has(s.id)) return { label: 'Rainfall station', unused: false, why: null };
 	if (s.siteNodeId) {
 		if (!ctx.gaugeInUse.has(s.id))
 			return ctx.gaugeIds.has(s.siteNodeId)

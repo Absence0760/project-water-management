@@ -9,6 +9,7 @@
 // reads are listed under it. Pure: no Svelte, no DOM.
 import { catchmentMapOf, isLandUnit, stationRatio, type NetworkNode, type ProjectSettings, type RainStationAssignment, type SeriesMeta } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
+import { kindLabel } from '#lib/series/kinds.js';
 import { asksStation } from './station';
 
 export type SeriesGroupId = 'stations' | 'catchment' | 'units' | 'flow' | 'other';
@@ -73,7 +74,13 @@ export function listedUnits(nodes: readonly NetworkNode[], settings: ProjectSett
  * groups, each in GROUP_ORDER and in `rows`' order within it, a unit's own
  * series under its unit, and empty groups left out.
  */
-export function groupSeries<T extends Meta>(rows: readonly T[], nodes: readonly NetworkNode[], settings: ProjectSettings | null | undefined): SeriesGroup<T>[] {
+export function groupSeries<T extends Meta>(
+	rows: readonly T[],
+	nodes: readonly NetworkNode[],
+	settings: ProjectSettings | null | undefined,
+	/** The series behind (freshness.ts): a unit holding one comes first in its group, as a series behind does in its own. */
+	behind: ReadonlySet<string> = new Set()
+): SeriesGroup<T>[] {
 	const units = listedUnits(nodes, settings, rows);
 	const unitIds = new Set(units.map((u) => u.id));
 	const items: Record<SeriesGroupId, GroupItem<T>[]> = { stations: [], catchment: [], units: [], flow: [], other: [] };
@@ -84,7 +91,8 @@ export function groupSeries<T extends Meta>(rows: readonly T[], nodes: readonly 
 		if (g === 'units') byUnit.get(s.siteNodeId!)!.push(s);
 		else items[g].push({ type: 'series', id: s.id, series: s });
 	}
-	for (const u of units) items.units.push({ type: 'unit', id: unitItemId(u.id), unit: u, series: byUnit.get(u.id)! });
+	const unitBehind = (u: NetworkNode) => byUnit.get(u.id)!.some((s) => behind.has(s.id));
+	for (const u of [...units.filter(unitBehind), ...units.filter((u) => !unitBehind(u))]) items.units.push({ type: 'unit', id: unitItemId(u.id), unit: u, series: byUnit.get(u.id)! });
 	return GROUP_ORDER.filter((g) => items[g].length).map((g) => ({ id: g, title: GROUP_TITLE[g], items: items[g] }));
 }
 
@@ -170,11 +178,102 @@ export function stationUses(stationId: string, settings: ProjectSettings | null 
 	return { rainFor, corrects };
 }
 
-/** A station row's line about where its rain goes: "Rain for the catchment, Unit A and Unit B. Corrects Unit C’s CHIRPS gaps." */
+/**
+ * A station row's line about where its rain goes: "Rain for the catchment and Unit A. Corrects the CHIRPS gaps of
+ * Unit C." Past three areas the units are counted ("the catchment and 15 units"), so a row stays short whatever the
+ * model's size; each unit's own row names its station.
+ */
 export function stationUsesText(uses: { rainFor: string[]; corrects: string[] }): string {
-	const list = (xs: string[]) => (xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+	const names = (xs: string[]) => (xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+	const list = (xs: string[]) => {
+		if (xs.length <= 3) return names(xs);
+		const units = xs.filter((x) => x !== 'the catchment').length;
+		return names([...(xs.includes('the catchment') ? ['the catchment'] : []), `${units} units`]);
+	};
 	const parts: string[] = [];
 	if (uses.rainFor.length) parts.push(`Rain for ${list(uses.rainFor)}.`);
 	if (uses.corrects.length) parts.push(`Corrects the CHIRPS gaps of ${list(uses.corrects)}.`);
 	return parts.length ? parts.join(' ') : 'Not assigned to the catchment or a unit.';
+}
+
+/** A derived row of the grouped list: a hydrological unit, or the catchment's average rainfall. */
+export type AreaItem<T> = Exclude<GroupItem<T>, { type: 'series' }>;
+
+/** What a derived row's words are read from. */
+export interface AreaContext {
+	settings: ProjectSettings | null | undefined;
+	nodes: readonly NetworkNode[];
+	stations: ReadonlyMap<string, StationLite>;
+	/** The series behind (freshness.ts), by id: a unit with one is marked. */
+	behind: ReadonlySet<string>;
+	/** Whether the catchment has a CHIRPS series of its own (with no site). */
+	catchmentChirps: boolean;
+}
+
+const perUnitOn = (settings: ProjectSettings | null | undefined) => settings?.unitRain?.mode === 'perUnit';
+
+/** The station a run reads for the area with the settings as saved, or null (a unit's only under per-unit rain). */
+export function areaAssignment<T>(it: AreaItem<T>, settings: ProjectSettings | null | undefined): RainStationAssignment | null {
+	const rs = settings?.rainStations;
+	if (it.type === 'catchment') return rs?.catchment ?? null;
+	return perUnitOn(settings) ? (rs?.units?.[it.unit.id] ?? null) : null;
+}
+
+/** The names an open row's chart uses; null when no run reads a station for the area (nothing to draw). */
+export function areaNames<T>(it: AreaItem<T>, ctx: Pick<AreaContext, 'settings' | 'stations'>): { name: string; stationName: string; correctingName: string } | null {
+	const a = areaAssignment(it, ctx.settings);
+	const st = a ? ctx.stations.get(a.stationId) : undefined;
+	if (!a || !st) return null;
+	return {
+		name: it.type === 'catchment' ? 'Average catchment rainfall' : it.unit.name,
+		stationName: st.name,
+		correctingName: ctx.stations.get(a.correctAgainst ?? a.stationId)?.name ?? 'a station no longer in the project'
+	};
+}
+
+/** A derived row's words: its kind, name, MAP, sentence, its series, whether one is behind, and its disclosure's label (null: none). */
+export interface AreaRowInfo {
+	kind: string;
+	name: string;
+	map: string;
+	sentence: string;
+	seriesNote: string | null;
+	behind: boolean;
+	toggle: 'rain used' | 'its series' | null;
+}
+
+export function areaRowInfo(it: AreaItem<Pick<SeriesMeta, 'id' | 'kind' | 'name'>>, ctx: AreaContext): AreaRowInfo {
+	const a = areaAssignment(it, ctx.settings);
+	const drawn = areaNames(it, ctx) !== null;
+	if (it.type === 'catchment') {
+		const m = catchmentMap(ctx.settings, ctx.nodes);
+		return {
+			kind: 'Catchment average (derived)',
+			name: 'Average catchment rainfall',
+			map: m.mapMm === null ? 'No catchment MAP' : `MAP ${mm(m.mapMm)} mm (${m.fromUnits ? 'the units’ area-weighted mean' : (m.mapSource ?? 'entered')})`,
+			sentence: areaSentence({ name: 'the catchment', mapMm: m.mapMm, catchment: true, mapFromUnits: m.fromUnits, hasChirps: ctx.catchmentChirps }, a, ctx.stations) ?? '',
+			seriesNote: null,
+			behind: false,
+			toggle: drawn ? 'rain used' : null
+		};
+	}
+	const u = it.unit;
+	const n = it.series.length;
+	const perUnit = perUnitOn(ctx.settings);
+	const sentence =
+		areaSentence({ name: u.name, mapMm: u.mapMm ?? null, catchment: false, hasChirps: it.series.some((s) => s.kind === 'rain_chirps_mm') }, a, ctx.stations) ??
+		(ctx.settings?.rainStations?.units?.[u.id] && !perUnit
+			? 'Runs split the catchment’s flow by the flow share (per-unit rain is off), so its station isn’t read.'
+			: perUnit
+				? 'No rainfall station assigned: its rain follows Rain for each unit (Settings → Flow calibration).'
+				: 'Runs split the catchment’s flow by the flow share; this unit has no rain of its own.');
+	return {
+		kind: 'Hydrological unit',
+		name: u.name,
+		map: u.mapMm != null ? `MAP ${mm(u.mapMm)} mm` : 'No MAP',
+		sentence,
+		seriesNote: n ? `${n} series measured here: ${it.series.map((s) => s.name || kindLabel(s.kind)).join(', ')}` : null,
+		behind: it.series.some((s) => ctx.behind.has(s.id)),
+		toggle: drawn ? 'rain used' : n ? 'its series' : null
+	};
 }

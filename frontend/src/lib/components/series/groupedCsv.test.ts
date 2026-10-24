@@ -1,11 +1,21 @@
 // The Data tab's CSV of the grouped series (issue #553 round 5): compact and
 // full columns, the `#` lines on each area's station, and cells that stay
 // harmless whatever a user typed. Synthetic names only.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { NetworkNode, SeriesMeta } from '@water-management/engine';
 import { BOM, commentLine, datedCsv, groupedCsv, textCell, type ExportArea } from './groupedCsv';
 import type { AreaRainLines } from './derivedRain';
 import { groupSeries } from './groups';
+
+// Rule 7: dates, so under a skewed TZ (UTC+14 would move a local-midnight date a day).
+let tz: string | undefined;
+beforeAll(() => {
+	tz = process.env.TZ;
+	process.env.TZ = 'Pacific/Kiritimati';
+});
+afterAll(() => {
+	process.env.TZ = tz;
+});
 
 const ser = (id: string, kind: string, extra: Partial<SeriesMeta> = {}) => ({ id, kind, name: id, unit: kind.endsWith('_mm') ? 'mm' : 'm³/s', startDate: '2021-01-01', length: 3, siteNodeId: null, ...extra }) as SeriesMeta;
 const NODES = [{ id: 'A', name: 'Unit A', kind: 'farm', areaKm2: 10, mapMm: 800 }] as unknown as NetworkNode[];
@@ -51,6 +61,26 @@ describe('groupedCsv', () => {
 		expect(r[6]).toBe('2021-01-03,0.5,1.5,2.5,,2,2,chirps,3.5,4.5');
 	});
 
+	it('the average catchment rainfall leads the catchment group; an area without lines adds no columns', () => {
+		const settings = { unitRain: { mode: 'perUnit' }, rainStations: { catchment: { stationId: 'Bergwater' } } } as never;
+		const g = groupSeries(LIST, NODES, settings);
+		const catchment: ExportArea = { nodeId: null, name: 'the catchment', sentence: 'Bergwater × 1.00 (…).', lines: { ...lines('2021-01-01'), chirpsCorrected: null } };
+		const compact = rows(groupedCsv('compact', g, VALUES, [catchment, { ...AREAS[0]!, lines: null }], META));
+		expect(compact.find((l) => l.startsWith('date,'))).toBe('date,Bergwater (mm),Average catchment rainfall: rain used (mm),flow (m³/s)');
+		const full = rows(groupedCsv('full', g, VALUES, [catchment], META));
+		expect(full.find((l) => l.startsWith('date,'))).toBe(
+			'date,Bergwater (mm),Average catchment rainfall: station × ratio (mm),Average catchment rainfall: rain used (mm),Average catchment rainfall: rain used from,chirps (mm),chirpsA (mm),flow (m³/s),evap (mm)'
+		);
+	});
+
+	it('a series whose values aren’t there is left out; an unnamed one goes by its kind', () => {
+		const unnamed = { ...LIST[3]!, name: '' };
+		const g = groupSeries([LIST[0]!, unnamed], NODES, null);
+		const r = rows(groupedCsv('compact', g, { Bergwater: VALUES.Bergwater!, flow: VALUES.flow! }, [], META));
+		expect(r.find((l) => l.startsWith('date,'))).toBe('date,Bergwater (mm),Flow — observed gauge (m³/s)');
+		expect(rows(groupedCsv('compact', g, { flow: VALUES.flow! }, [], META)).find((l) => l.startsWith('date,'))).toBe('date,Flow — observed gauge (m³/s)');
+	});
+
 	it('says when an area’s lines couldn’t be computed, or its pairing is refused', () => {
 		const refused = { ...lines('2021-01-01'), refused: 'fewer than 5 complete years', factors: null, chirpsCorrected: null };
 		const r = rows(groupedCsv('compact', groups, VALUES, [{ ...AREAS[0]!, lines: refused }, { nodeId: null, name: 'the catchment', sentence: null, lines: null, error: 'no model input' }], META));
@@ -64,9 +94,15 @@ describe('cells stay harmless', () => {
 		expect(textCell('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
 		expect(textCell('Kloof, upper')).toBe('"Kloof, upper"');
 		expect(textCell('-1 gauge')).toBe("'-1 gauge");
+		for (const lead of ['+', '@', '\t', '\r']) expect(textCell(`${lead}x`).replace(/^"/, '').startsWith("'")).toBe(true);
 	});
 	it('a comment line stays one cell: its commas, quotes and line breaks are percent-encoded', () => {
 		expect(commentLine('a,b "c"\nd')).toBe('# a%2Cb %22c%22%0Ad');
+		// `%` too, so the line reads back whole; and the Unicode line breaks and C1 controls.
+		const hostile = 'Dam 100% =cmd|x,"y"\u2028z\x7f\x9f';
+		const line = commentLine(hostile);
+		expect(line).not.toMatch(/[,"\u2028\x7f\x9f]/);
+		expect(decodeURIComponent(line.slice(2))).toBe(hostile);
 	});
 	it('no columns gives the header row alone', () => {
 		expect(rows(datedCsv([], []))).toEqual(['date']);

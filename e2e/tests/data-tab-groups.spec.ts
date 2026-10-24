@@ -72,9 +72,12 @@ test('the list is grouped: stations with their MAPs and areas, the catchment’s
 	await expect(seriesRow(page, 'Bergwater').getByTestId('series-station')).toHaveText('MAP 745.0 mm (Station record, 1991–2020)');
 	await expect(seriesRow(page, 'Bergwater').getByTestId('series-station-uses')).toHaveText('Rain for the catchment and Upper unit. Corrects the CHIRPS gaps of Lower unit.');
 	await expect(seriesRow(page, 'Kloof').getByTestId('series-station-uses')).toHaveText('Rain for Lower unit.');
+	// The badges agree: Bergwater is the catchment rain read by name; Kloof isn't, but a run reads it for Lower unit.
+	await expect(seriesRow(page, 'Kloof').getByTestId('series-role')).toHaveText('Rainfall station');
 
 	// The catchment's average rainfall: Bergwater × the units' area-weighted mean MAP ÷ its MAP.
 	const avg = areaRow(page, 'Average catchment rainfall');
+	await expect(avg.getByRole('rowheader')).toContainText('Catchment average (derived)');
 	await expect(avg.getByTestId('area-map')).toHaveText('MAP 731.6 mm (the units’ area-weighted mean)');
 	await expect(avg.getByTestId('area-sentence')).toHaveText(
 		'Bergwater × 0.98 (catchment MAP, the units’ area-weighted mean 731.6 mm ÷ station MAP 745.0 mm); gaps from CHIRPS corrected against Bergwater.'
@@ -98,6 +101,7 @@ test('the list is grouped: stations with their MAPs and areas, the catchment’s
 	await expect(hide).toHaveAttribute('aria-expanded', 'true');
 	await expect(hide).toHaveAttribute('aria-controls', /^area-unit-/);
 	await expect(seriesRow(page, 'CHIRPS Upper unit')).toBeVisible();
+	await expect(seriesRow(page, 'CHIRPS Upper unit').getByTestId('series-role')).toHaveText('Upper unit’s own rain');
 	const panel = page.getByTestId('area-rain');
 	await expect(panel.getByTestId('area-rain-days')).toHaveText(/^2.182 days from the station, 10 from corrected CHIRPS\. CHIRPS factors against Bergwater, January to December: Jan 2\.00, /);
 	const chart = panel.locator('figure.chart');
@@ -108,7 +112,7 @@ test('the list is grouped: stations with their MAPs and areas, the catchment’s
 	await expect(chart).toContainText('10 days from corrected CHIRPS (the station has no reading, or it was set aside)');
 	await expectNoViolations(page);
 
-	// Charting the unit's series by a link opens its unit; Hide closes it again.
+	// Hide closes it again: its series and its chart go.
 	await hide.click();
 	await expect(page.getByTestId('area-rain')).toHaveCount(0);
 	await expect(seriesRow(page, 'CHIRPS Upper unit')).toHaveCount(0);
@@ -168,4 +172,22 @@ test('a link to a unit’s series opens its unit; the grouped CSV downloads comp
 	expect(at('Bergwater (mm)')).toBe('');
 	expect(at('Upper unit: rain used from')).toBe('chirps');
 	expect(at('Upper unit: rain used (mm)')).toBe(at('Upper unit: CHIRPS corrected (mm)'));
+});
+
+test('with the model input unavailable a unit says why and offers Try again, and the CSV still downloads, saying what it couldn’t compute', async ({ page, owner }) => {
+	void owner;
+	const { project } = await seed(page.request);
+	let fail = true;
+	await page.route(`${API_URL}/projects/${project.id}/model-input`, (route) => (fail ? route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"unavailable"}' }) : route.fallback()));
+	await openData(page, project.id);
+	await areaRow(page, 'Upper unit').getByRole('button', { name: 'Show rain used: Upper unit' }).click();
+	const err = page.getByTestId('area-rain').getByRole('alert');
+	await expect(err).toContainText('Couldn’t compute the rain of Upper unit');
+	const compact = await downloaded(page, 'Compact');
+	expect(compact.lines).toContain('# Upper unit: not computed (unavailable)');
+	expect(compact.lines.find((l) => l.startsWith('date,'))).toBe('date,Bergwater (mm),Kloof (mm),Outlet weir (m³/s)');
+	// Back again: Try again computes it.
+	fail = false;
+	await err.getByRole('button', { name: 'Try again' }).click();
+	await expect(page.getByTestId('area-rain').locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 });

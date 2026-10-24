@@ -48,9 +48,8 @@
 		type RainStationMeta,
 		type SeriesMeta,
 		ENGINE_VERSION,
-		type ModelInput,
 		type NetworkNode,
-		type RainStationAssignment
+		isLandUnit
 	} from '@water-management/engine';
 	import { api, type RunMeta } from '#lib/api/index.js';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
@@ -70,18 +69,19 @@
 	import { asksStation } from './station';
 	import StationFields from './StationFields.svelte';
 	import AreaRainPanel from './AreaRainPanel.svelte';
-	import { areaRainLines, type AreaRainLines } from './derivedRain';
+	import type { AreaRainLines } from './derivedRain';
+	import { ModelInputCache } from './areaInput';
 	import { groupedCsv, type ExportArea, type ExportSize } from './groupedCsv';
 	import {
-		areaSentence,
-		catchmentMap,
+		areaNames,
+		areaRowInfo,
 		CATCHMENT_ITEM_ID,
 		groupSeries,
 		itemOfSeries,
 		stationsOf,
 		stationUses,
 		stationUsesText,
-		type GroupItem,
+		type AreaItem as GroupAreaItem,
 		type SeriesGroupId
 	} from './groups';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
@@ -561,128 +561,93 @@
 	// --- the fold: the first few rows in that order (and the charted one), the rest behind "Show all N series" ---
 	let pageW = $state(0);
 	let chartEl: HTMLElement | undefined = $state();
-	// Six rows a group and the chart's head sit on a 1440 × 960 first screen; in a column 640 px or narrower each row
-	// is a tall card (the same container width as the CSS's `@container data-page`), so four.
-	const cap = $derived(pageW > 0 && pageW <= 640 ? 4 : 6);
+	// Four rows a group (a unit's row counts once), three in a column 640 px or narrower where each row is a tall card
+	// (the same container width as the CSS's `@container data-page`): a project with every group long still lists
+	// each group's first rows before the chart, which a pick brings into view.
+	const cap = $derived(pageW > 0 && pageW <= 640 ? 3 : 4);
 
 	// --- the groups (issue #553 round 5, groups.ts): stations, catchment rainfall, hydrological units, flow, other,
 	// each in the freshness order, each folded on its own (the charted series' row always shows, its unit opened) ---
 	let openGroups = $state<Partial<Record<SeriesGroupId, boolean>>>({});
 	const GROUP_NOUN: Record<SeriesGroupId, string> = { stations: 'stations', catchment: 'catchment series', units: 'units', flow: 'flow records', other: 'series' };
-	const groups = $derived(groupSeries(rows, nodes, settings));
+	const groups = $derived(groupSeries(rows, nodes, settings, new Set(behindAge.keys())));
 	const selectedItem = $derived(itemOfSeries(groups, selectedId));
 	const grouped = $derived(groups.map((g) => ({ ...g, noun: GROUP_NOUN[g.id], fold: foldList(g.items, (i) => i.id, selectedItem, !!openGroups[g.id], cap) })));
 
-	// --- the derived rows: a unit, or the catchment's average rainfall (groups.ts areaSentence, derivedRain.ts) ---
-	type AreaItem = Exclude<GroupItem<SeriesMeta>, { type: 'series' }>;
+	// --- the derived rows: a unit, or the catchment's average rainfall (groups.ts areaRowInfo, derivedRain.ts) ---
+	type AreaItem = GroupAreaItem<SeriesMeta>;
 	// A row opened or closed by hand; otherwise open only while it holds the charted series.
 	let expanded = $state<Record<string, boolean>>({});
 	const areaOpen = (id: string) => expanded[id] ?? selectedItem === id;
-	const stationMap = $derived(stationsOf(list));
-	const catchmentMapNow = $derived(catchmentMap(settings, nodes));
-	const perUnit = $derived(settings?.unitRain?.mode === 'perUnit');
-	const nodeIdOf = (itemId: string) => (itemId === CATCHMENT_ITEM_ID ? null : itemId.slice('unit:'.length));
-	/** The station a run reads for the area with the settings as saved, or null (a unit's only under per-unit rain). */
-	function assignmentOf(it: AreaItem): RainStationAssignment | null {
+	// A newly charted series reopens its unit even if it was closed by hand (Back to a series inside it, say).
+	$effect(() => {
+		const it = selectedItem;
+		untrack(() => {
+			if (it && expanded[it] === false) {
+				const { [it]: _, ...rest } = expanded;
+				expanded = rest;
+			}
+		});
+	});
+	const areaCtx = $derived({
+		settings,
+		nodes,
+		stations: stationsOf(list),
+		behind: new Set(behindAge.keys()),
+		catchmentChirps: list.some((s) => s.kind === 'rain_chirps_mm' && !s.siteNodeId)
+	});
+	// The role badges' view of the units and the stations (roles.ts roleBadge, issue #553).
+	const unitNames = $derived(new Map(nodes.filter(isLandUnit).map((n) => [n.id, n.name])));
+	const assignedStations = $derived.by(() => {
 		const rs = settings?.rainStations;
-		if (it.type === 'catchment') return rs?.catchment ?? null;
-		return perUnit ? (rs?.units?.[it.unit.id] ?? null) : null;
-	}
-	/** The names an open row's chart and panel use; null when no run reads a station for the area (no lines to draw). */
-	function areaOf(it: AreaItem): { name: string; stationName: string; correctingName: string } | null {
-		const a = assignmentOf(it);
-		const st = a ? stationMap.get(a.stationId) : undefined;
-		if (!a || !st) return null;
-		return { name: it.type === 'catchment' ? 'Average catchment rainfall' : it.unit.name, stationName: st.name, correctingName: stationMap.get(a.correctAgainst ?? a.stationId)?.name ?? 'another station' };
-	}
-	const hasCatchmentChirps = $derived(list.some((s) => s.kind === 'rain_chirps_mm' && !s.siteNodeId));
-	function areaInfo(it: AreaItem) {
-		const a = assignmentOf(it);
-		if (it.type === 'catchment') {
-			const m = catchmentMapNow;
-			return {
-				kind: 'Fragmentation’s rain',
-				name: 'Average catchment rainfall',
-				map: m.mapMm === null ? 'No catchment MAP' : `MAP ${fmtNum(m.mapMm, 1)} mm (${m.fromUnits ? 'the units’ area-weighted mean' : (m.mapSource ?? 'entered')})`,
-				sentence: areaSentence({ name: 'the catchment', mapMm: m.mapMm, catchment: true, mapFromUnits: m.fromUnits, hasChirps: hasCatchmentChirps }, a, stationMap) ?? '',
-				seriesNote: null as string | null,
-				behind: false,
-				toggle: areaOf(it) ? 'rain used' : null,
-				controls: `area-${it.id.replace(':', '-')}`
-			};
+		const out = new Set<string>();
+		for (const a of [rs?.catchment, ...Object.values(rs?.units ?? {})]) {
+			if (!a?.stationId) continue;
+			out.add(a.stationId);
+			if (a.correctAgainst) out.add(a.correctAgainst);
 		}
-		const u = it.unit;
-		const n = it.series.length;
-		const hasChirps = it.series.some((s) => s.kind === 'rain_chirps_mm');
-		const assigned = settings?.rainStations?.units?.[u.id];
-		const sentence =
-			areaSentence({ name: u.name, mapMm: u.mapMm ?? null, catchment: false, hasChirps }, a, stationMap) ??
-			(assigned && !perUnit
-				? 'Runs split the catchment’s flow by the flow share (per-unit rain is off), so its station isn’t read.'
-				: perUnit
-					? 'No rainfall station assigned: its rain follows Settings → Rain for each unit.'
-					: 'Runs split the catchment’s flow by the flow share; this unit has no rain of its own.');
-		const area = areaOf(it);
-		return {
-			kind: 'Hydrological unit',
-			name: u.name,
-			map: u.mapMm != null ? `MAP ${fmtNum(u.mapMm, 1)} mm` : 'No MAP',
-			sentence,
-			seriesNote: n ? `${n} series measured here: ${it.series.map((s) => s.name || kindLabel(s.kind)).join(', ')}` : null,
-			behind: it.series.some((s) => behindAge.has(s.id)),
-			toggle: area ? 'rain used' : n ? 'its series' : null,
-			controls: area ? `area-${it.id.replace(':', '-')}` : `grp-units`
-		};
-	}
+		return out;
+	});
+	const areaOf = (it: AreaItem) => areaNames(it, areaCtx);
+	const areaInfo = (it: AreaItem) => areaRowInfo(it, areaCtx);
+	const areaPanelId = (itemId: string) => `area-${itemId.replace(':', '-')}`;
+	const nodeIdOf = (itemId: string) => (itemId === CATCHMENT_ITEM_ID ? null : itemId.slice('unit:'.length));
 
-	// The model input a run would read (GET …/model-input), fetched when a derived row opens or a grouped CSV is
-	// built, and dropped whenever the series or the settings change, so a derived line is never older than its inputs.
-	let modelInput: ModelInput | null = null;
-	let inputPromise: Promise<ModelInput> | null = null;
+	// The model input a run would read, fetched when a derived row opens or a grouped CSV is built (areaInput.ts),
+	// dropped whenever the series, the settings or the model change. The engine code that reads it (derivedRain.ts,
+	// the run preparation) is its own chunk, loaded then.
+	const loadDerived = () => import('./derivedRain');
+	const inputs = new ModelInputCache(() => api.runs.modelInput(projectId));
 	let areaLines = $state.raw<Record<string, AreaRainLines | null>>({});
 	let areaErrors = $state.raw<Record<string, string>>({});
 	const pending = new Set<string>();
-	let generation = 0;
 	$effect(() => {
 		void list;
 		void settings;
+		void nodes;
 		untrack(() => {
-			generation++;
-			modelInput = null;
-			inputPromise = null;
+			inputs.invalidate();
 			pending.clear();
 			areaLines = {};
 			areaErrors = {};
 		});
 	});
-	async function loadInput(): Promise<ModelInput> {
-		if (modelInput) return modelInput;
-		const gen = generation;
-		inputPromise ??= api.runs.modelInput(projectId);
-		try {
-			const x = await inputPromise;
-			if (gen === generation) modelInput = x;
-			return x;
-		} catch (e) {
-			if (gen === generation) inputPromise = null;
-			throw e;
-		}
-	}
+	/** Yield to the browser: the run preparation is main-thread work, so a "Computing…" line paints first. */
+	const yieldToPaint = () => new Promise((r) => setTimeout(r, 0));
 	async function computeArea(itemId: string) {
-		const gen = generation;
+		const gen = inputs.generation;
 		pending.add(itemId);
 		const { [itemId]: _, ...rest } = areaErrors;
 		areaErrors = rest;
 		try {
-			const x = await loadInput();
-			// The engine's prepareRun runs on the main thread: let the "Computing…" line paint first.
-			await new Promise((r) => setTimeout(r, 0));
-			const lines = areaRainLines(x, nodeIdOf(itemId));
-			if (gen === generation) areaLines = { ...areaLines, [itemId]: lines };
+			const [x, derived] = await Promise.all([inputs.get(), loadDerived()]);
+			await yieldToPaint();
+			const lines = derived.areaRainLines(x, nodeIdOf(itemId));
+			if (inputs.current(gen)) areaLines = { ...areaLines, [itemId]: lines };
 		} catch (e) {
-			if (gen === generation) areaErrors = { ...areaErrors, [itemId]: msg(e) };
+			if (inputs.current(gen)) areaErrors = { ...areaErrors, [itemId]: msg(e) };
 		} finally {
-			pending.delete(itemId);
+			if (inputs.current(gen)) pending.delete(itemId);
 		}
 	}
 	// An open derived row computes its lines once per input.
@@ -701,29 +666,34 @@
 		const missing = list.filter((s) => !values[s.id]).length;
 		if (missing) throw new Error(`the values of ${missing} series haven’t loaded yet; try again in a moment`);
 		const items = groups.flatMap((g) => g.items).filter((it): it is AreaItem => it.type !== 'series' && areaOf(it) !== null);
-		let x: ModelInput | null = null;
+		let read: ((nodeId: string | null) => AreaRainLines | null) | null = null;
 		let inputError: string | null = null;
 		if (items.length) {
 			try {
-				x = await loadInput();
+				const [x, derived] = await Promise.all([inputs.get(), loadDerived()]);
+				// One run preparation for every area's pairing (each area's rain used still prepares its own, in the engine).
+				const prep = derived.prepareFor(x);
+				read = (nodeId) => derived.areaRainLines(x, nodeId, prep);
 			} catch (e) {
 				inputError = msg(e);
 			}
 		}
-		const areas: ExportArea[] = items.map((it) => {
+		const areas: ExportArea[] = [];
+		for (const it of items) {
 			const nodeId = nodeIdOf(it.id);
 			let lines: AreaRainLines | null = null;
 			let error = inputError;
-			if (x) {
+			if (read) {
+				await yieldToPaint();
 				try {
-					lines = areaRainLines(x, nodeId);
+					lines = read(nodeId);
 					if (!lines) error = 'a run reads no station for it with the settings as saved';
 				} catch (e) {
 					error = msg(e);
 				}
 			}
-			return { nodeId, name: areaOf(it)!.name, sentence: areaInfo(it).sentence, lines, error };
-		});
+			areas.push({ nodeId, name: areaOf(it)!.name, sentence: areaInfo(it).sentence, lines, error });
+		}
 		const text = groupedCsv(size, groups, values, areas, { engineVersion: ENGINE_VERSION, exportedOn: today });
 		return { blob: new Blob([text], { type: 'text/csv;charset=utf-8' }), filename: `data-series-${size}-${today}.csv` };
 	}
@@ -796,12 +766,12 @@
 	{@const end = endDate(s)}
 	{@const span = dataSpan(s, st)}
 	{@const age = daysBetween(span.to, today)}
-	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite })}
+	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite, units: unitNames, unitRainOn: settings?.unitRain?.mode === 'perUnit', assignedStations })}
 	{@const behind = behindAge.get(s.id)}
 	{@const fed = feedMark(s.feed, st?.present)}
 	<!-- Pointer shortcut only; the View button is the accessible control. -->
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_no_redundant_roles -->
-	<tr role="row" class="pick" class:sub class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
+	<tr role="row" id="ser-row-{s.id}" class="pick" class:sub class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
 		<th scope="row" role="rowheader">
 			<span class="kind">{kindLabel(s.kind)}</span>
 			<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
@@ -901,7 +871,7 @@
 						type="button"
 						class="btn btn-sm"
 						aria-expanded={open}
-						aria-controls={open ? info.controls : undefined}
+						aria-controls={open ? [...(it.type === 'unit' ? it.series.map((x) => `ser-row-${x.id}`) : []), ...(info.toggle === 'rain used' ? [areaPanelId(it.id)] : [])].join(' ') : undefined}
 						aria-label="{open ? 'Hide' : 'Show'} {info.toggle}: {info.name}"
 						onclick={() => (expanded = { ...expanded, [it.id]: !open })}>{open ? 'Hide' : 'Show'} {info.toggle}</button
 					>
@@ -989,7 +959,7 @@
 				{#each grouped as g (g.id)}
 					<tbody role="rowgroup" id="grp-{g.id}" aria-labelledby="grp-{g.id}-h" data-group={g.id}>
 						<tr role="row" class="grp-row">
-							<td role="cell" colspan="7"><h3 id="grp-{g.id}-h" class="grp-h">{g.title}</h3></td>
+							<th scope="rowgroup" role="rowheader" colspan="7"><h3 id="grp-{g.id}-h" class="grp-h">{g.title}</h3></th>
 						</tr>
 						{#each g.fold.shown as it (it.id)}
 							{#if it.type === 'series'}
@@ -1005,7 +975,7 @@
 										<tr role="row" class="area-panel-row">
 											<td role="cell" colspan="7">
 												<AreaRainPanel
-													id="area-{it.id.replace(':', '-')}"
+													id={areaPanelId(it.id)}
 													name={a.name}
 													stationName={a.stationName}
 													correctingName={a.correctingName}
@@ -1488,12 +1458,12 @@
 	}
 	/* The groups (issue #553 round 5): a heading row over each, a unit's own series indented under it, an open
 	   derived row's chart across the table. */
-	.grp-row > td {
+	.grp-row > th {
 		padding: 0.9rem 0.5rem 0.3rem;
 		border-bottom: 1px solid var(--border);
 		background: var(--surface);
 	}
-	tbody:first-of-type .grp-row > td {
+	tbody:first-of-type .grp-row > th {
 		padding-top: 0.4rem;
 	}
 	.grp-h {
@@ -1647,7 +1617,7 @@
 		.series tr.grp-row,
 		.series tr.grp-more,
 		.series tr.area-panel-row,
-		.series tr.grp-row > td,
+		.series tr.grp-row > th,
 		.series tr.grp-more > td,
 		.series tr.area-panel-row > td {
 			display: block;
@@ -1670,6 +1640,9 @@
 		}
 		.series tr.unit-row .acts {
 			justify-content: flex-start;
+		}
+		.series tr.unit-row.is-behind {
+			box-shadow: inset 3px 0 0 var(--warning);
 		}
 		.series tr.pick.sub > th[scope='row'] {
 			padding-left: 0;

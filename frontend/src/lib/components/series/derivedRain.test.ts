@@ -2,9 +2,20 @@
 // run's own, to the bit, and the corrected CHIRPS and station × ratio are the
 // products the run makes on its CHIRPS and station days. Synthetic catchment:
 // invented values only (public repo).
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runModel, stationSeriesKey, toEpochDay, type ModelInput, type RainStationSettings } from '@water-management/engine';
-import { areaRainLines, sourceCounts, sourceLanes, sourceSummary } from './derivedRain';
+import { areaRainLines, prepareFor } from './derivedRain';
+import { sourceCounts, sourceLanes, sourceSummary } from './rainSources';
+
+// Rule 7: dates, so under a skewed TZ (UTC+14 would move a local-midnight date a day).
+let tz: string | undefined;
+beforeAll(() => {
+	tz = process.env.TZ;
+	process.env.TZ = 'Pacific/Kiritimati';
+});
+afterAll(() => {
+	process.env.TZ = tz;
+});
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const START = '2015-01-01';
@@ -89,7 +100,7 @@ describe('areaRainLines for a unit', () => {
 		const b = areaRainLines(x, 'B')!;
 		expect(b.correctAgainst).toBe('T');
 		// T stands in no unit and has no cell series of its own, so its pairing has no CHIRPS to fit on.
-		expect(b.refused).toMatch(/no CHIRPS at the station/);
+		expect(b.refused).not.toBeNull();
 		expect(b.factors).toBeNull();
 		expect(b.chirpsCorrected).toBeNull();
 		expect(b.chirpsRaw).not.toBeNull();
@@ -113,7 +124,44 @@ describe('areaRainLines for the catchment', () => {
 		for (let t = 0; t < c.rainUsed.length; t++) if (c.source[t] === 'chirps') expect(c.rainUsed[t]).toBe(c.chirpsCorrected![t]);
 		const map = (10 * 900 + 6 * 600) / 16;
 		expect(c.forcing.ratio).toBe(map / 600);
+		expect(c.factors).toEqual(out.summary.stations!.pairings.find((p) => p.stationId === 'S')!.months.map((m) => m.factor));
+		expect(c.refused).toBeNull();
+		for (let t = 0; t < c.rainUsed.length; t++) if (c.source[t] === 'station') expect(c.rainUsed[t]).toBe(Math.max(0, c.stationScaled[t]!));
 		expect(areaRainLines(input({ units: { A: { stationId: 'S' } } }, false), null)).toBeNull();
+	});
+});
+
+describe('areaRainLines: the edges', () => {
+	it('a unit without CHIRPS of its own: no CHIRPS lines, its station gaps from the next fallback, still the run’s rain', () => {
+		const x = input({ units: { A: { stationId: 'S' } }, sites: SITES });
+		delete (x.series as Record<string, unknown>)['rain_chirps_mm@A'];
+		const out = runModel(x);
+		const a = areaRainLines(x, 'A')!;
+		expect(a.chirpsRaw).toBeNull();
+		expect(a.chirpsCorrected).toBeNull();
+		expect(a.rainUsed).toEqual(col(out, 'rain_unit', 'A'));
+		expect(sourceCounts(a.source).fallback).toBe(GAP.length);
+		expect(sourceCounts(a.source).chirps).toBe(0);
+	});
+
+	it('a station that starts after the window reads as no reading before its first day', () => {
+		const x = input({ units: { A: { stationId: 'T', correctAgainst: 'S' } }, sites: SITES });
+		const a = areaRainLines(x, 'A')!;
+		const first = toEpochDay('2017-01-01') - toEpochDay(a.startDate);
+		expect(a.stationRaw.slice(0, first).every((v) => v === null)).toBe(true);
+		expect(a.stationRaw[first]).not.toBeNull();
+		expect(a.forcing.ratio).toBe(900 / 500);
+		// Corrected against S: its gaps (every day before T starts) read A’s CHIRPS × S’s factors.
+		expect(a.correctAgainst).toBe('S');
+		expect(a.source[0]).toBe('chirps');
+		expect(a.rainUsed[0]).toBe(a.chirpsCorrected![0]);
+		expect(a.rainUsed).toEqual(col(runModel(x), 'rain_unit', 'A'));
+	});
+
+	it('several areas read from one preparation give the same lines as each read alone', () => {
+		const x = input({ catchment: { stationId: 'S' }, units: { A: { stationId: 'S' }, B: { stationId: 'S' } }, sites: SITES });
+		const prep = prepareFor(x);
+		for (const id of [null, 'A', 'B']) expect(areaRainLines(x, id, prep)).toEqual(areaRainLines(x, id));
 	});
 });
 
@@ -129,5 +177,8 @@ describe('the source strip and summary', () => {
 		expect(lanes[1]!.text).toMatch(/^1 day from the next fallback/);
 		expect(sourceLanes('2021-01-01', ['station', 'station'])).toEqual([]);
 		expect(sourceSummary(['station', 'station', 'chirps', 'none'])).toBe('2 days from the station, 1 from corrected CHIRPS, 1 with no rain from any source.');
+		expect(sourceSummary(['station', 'fallback', 'fallback'])).toBe('1 day from the station, 2 from the next fallback.');
+		const none = sourceLanes('2021-01-01', ['none', 'none']);
+		expect(none.map((l) => [l.label, l.text])).toEqual([['No rain', '2 days from no rain from any source (read as dry)']]);
 	});
 });

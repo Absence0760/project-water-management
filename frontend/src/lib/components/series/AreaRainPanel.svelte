@@ -7,7 +7,8 @@
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
 	import { fmtNum } from '#lib/format/number.js';
-	import { sourceLanes, sourceSummary, type AreaRainLines } from './derivedRain';
+	import type { AreaRainLines } from './derivedRain';
+	import { sourceLanes, sourceSummary } from './rainSources';
 	import { datedCsv } from './groupedCsv';
 
 	let {
@@ -35,16 +36,18 @@
 
 	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 	const lanes = $derived(lines ? sourceLanes(lines.startDate, lines.source) : []);
+	// Rain used last, so it is drawn over the four lines behind it, and a little wider; the palette in its order,
+	// skipping --series-4 (LineChart's band colour); the strip's --series-9 / -10 stay clear of these.
 	const series = $derived.by(() => {
 		const l = lines;
 		if (!l) return [];
-		const at = (label: string, values: (number | null)[], color: string, style?: 'dashed') => ({ label, startDate: l.startDate, values, color, ...(style ? { style } : {}) });
+		const at = (label: string, values: (number | null)[], color: string, style?: 'dashed', width?: number) => ({ label, startDate: l.startDate, values, color, ...(style ? { style } : {}), ...(width ? { width } : {}) });
 		return [
-			at('Rain used', l.rainUsed, '--series-1'),
-			at(`${stationName} as recorded`, l.stationRaw, '--series-2', 'dashed' as const),
+			at(`${stationName} as recorded`, l.stationRaw, '--series-2', 'dashed'),
 			at(`${stationName} × ${fmtNum(l.forcing.ratio, 2)}`, l.stationScaled, '--series-3'),
-			...(l.chirpsRaw ? [at('CHIRPS as stored', l.chirpsRaw, '--series-4', 'dashed' as const)] : []),
-			...(l.chirpsCorrected ? [at(`CHIRPS corrected against ${correctingName}`, l.chirpsCorrected, '--series-5')] : [])
+			...(l.chirpsRaw ? [at('CHIRPS as stored', l.chirpsRaw, '--series-5', 'dashed')] : []),
+			...(l.chirpsCorrected ? [at(`CHIRPS corrected against ${correctingName}`, l.chirpsCorrected, '--series-6')] : []),
+			at('Rain used', l.rainUsed, '--series-1', undefined, 2)
 		];
 	});
 	const fileName = $derived(`${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'area'}-rain.csv`);
@@ -75,6 +78,7 @@
 	{:else if loading || !lines}
 		<p class="muted" role="status">{loading ? 'Computing the rain from the stored inputs…' : 'A run reads no station for this area with the settings as saved.'}</p>
 	{:else}
+		<div class="area-head">
 		<p class="facts" data-testid="area-rain-days">
 			{sourceSummary(lines.source)}
 			{#if lines.refused}
@@ -83,18 +87,19 @@
 				CHIRPS factors against {correctingName}, January to December: {lines.factors.map((k, m) => `${MONTHS[m]} ${fmtNum(k, 2)}`).join(', ')}.
 			{/if}
 		</p>
+		<DownloadMenu label="Rain used (CSV)" items={csvItem} align="end" />
+		</div>
 		<LineChart
 			title="{name}: rain used and the lines behind it"
 			unit="mm/day"
 			height={280}
 			{series}
-			recentDays={3 * 365}
-			recentLabel="Last 3 years"
+			recentDays={365}
+			recentLabel="Last year"
 			{lanes}
 			lanesLabel="Where the rain used came from"
 			lanesNote="no strip: the station’s own reading × its ratio"
 		/>
-		<div class="area-dl"><DownloadMenu label="CSV" items={csvItem} align="start" /></div>
 	{/if}
 </div>
 
@@ -115,7 +120,11 @@
 		margin: 0;
 		color: var(--danger);
 	}
-	.area-dl {
+	.area-head {
 		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
 	}
 </style>

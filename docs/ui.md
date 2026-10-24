@@ -5326,7 +5326,11 @@ with the table the data needs).
   automatically (CHIRPS rain, forecast, DWS flow) → Data feeds** opens
   Settings & calibration at [Data feeds](#data-feeds) (`?tab=settings#set-feeds`,
   `data-testid="data-feeds-link"`; issue #444): the feeds live there, and a
-  project that used none had no way in from the page about its data.
+  project that used none had no way in from the page about its data. After it,
+  for anyone, **Download (CSV)** offers the grouped list as one file,
+  Compact or Full (see *Groups* below); it sits with the table it
+  exports, not in the header beside Preview all data, because it is the
+  list's own (as each row's CSV is the row's).
 - **Groups** (issue #553 round 5, `series/groups.ts`): the table is split
   by what each series is, one `<tbody>` named by its heading row each:
   **Rainfall stations** (catchment rain with no site; each row adds its
@@ -5336,7 +5340,15 @@ with the table the data needs).
   unit.*), **Catchment rainfall** (CHIRPS, the alternative gauge, the
   reanalysis and the forecast with no site), **Hydrological units**,
   **Flow records** (a gauge's record too) and **Other inputs** (A-pan
-  evaporation), in that order, an empty group left out.
+  evaporation), in that order, an empty group left out. Each group's
+  heading row is a `<th scope="rowgroup">` holding its `<h3>`, which names
+  the `<tbody>`. The role badges know the groups: a unit's own CHIRPS reads
+  *Upper unit’s own rain* (*Not used: per-unit rain is off* without
+  per-unit rain), and a station a run reads for an area or a pairing,
+  though not the catchment rain read by name, reads *Rainfall station*
+  (`roles.ts roleBadge`; both read as gauge records or *Not used* before).
+  Past three areas a station's line counts the units (*Rain for the
+  catchment and 30 units.*).
   - **Derived rows.** With a station for the catchment, *Catchment
     rainfall* opens with **Average catchment rainfall** (Fragmentation's
     rain), and *Hydrological units* has one row per land unit: every one
@@ -5350,17 +5362,22 @@ with the table the data needs).
     that no station is assigned, or that per-unit rain is off so its
     station isn't read. A unit's own series (its CHIRPS feed, a
     migration-209 gauge) are listed under it, not in the groups above
-    (*1 series measured here: …*), and a series behind marks its unit.
+    (*1 series measured here: …*), and a series behind marks its unit and
+    brings it to the top of its group. The catchment row's kind reads
+    *Catchment average (derived)*.
   - **Show rain used** (`aria-expanded`; **Show its series** for a unit
     without a station) opens the row: the unit's series as indented rows,
     then `series/AreaRainPanel.svelte`: the day counts (*2 182 days from
-    the station, 10 from corrected CHIRPS.*), the pairing's twelve factors
-    or why it is refused, and one chart of the **rain used** with the four
-    lines behind it (the station as recorded, the station × the ratio, the
-    area's CHIRPS as stored and corrected against its pairing station),
-    with a strip at its foot for the days that didn't come from the
-    station (corrected CHIRPS, the next fallback, no rain), its key in
-    words, and a CSV of those lines. A `series=` link to a unit's series
+    the station, 10 from corrected CHIRPS.*) and the pairing's twelve
+    factors or why it is refused, with **Rain used (CSV)** beside them, then
+    one chart (the last year first) of the four lines behind the rain used
+    (the station as recorded, dashed; the station × the ratio; the area's
+    CHIRPS as stored, dashed, and corrected against its pairing station)
+    with the **rain used** drawn last, on top and wider, in the palette's
+    order without `--series-4`, and a strip at its foot for the days that
+    didn't come from the station (corrected CHIRPS, the next fallback, no
+    rain), its key in words. The disclosure's `aria-controls` names the
+    unit's series rows and the panel. A `series=` link to a unit's series
     opens its unit. The lines are computed when opened, never stored
     (`series/derivedRain.ts`): the rain used and its sources are the
     engine's `stationAreaRain` over `GET …/model-input` (the input a run
@@ -5380,7 +5397,9 @@ with the table the data needs).
     cells that read as a formula get an apostrophe, and a `#` line's
     commas, quotes and line breaks are percent-encoded, so it stays one
     cell. It waits for every series' values, and says so if they haven't
-    loaded. `data-tab-groups.spec.ts` covers the groups, a unit opened, a
+    loaded. Preview all data stays the stored series' table: the derived
+    lines are the panel's chart and this CSV (the operator asked for them in
+    Preview too; a follow-up). `data-tab-groups.spec.ts` covers the groups, a unit opened, a
     link to its series and both downloads.
 - **Freshness first**: within each group the table lists the series
   **behind** first, most days behind first, then the series a run reads,
@@ -5419,19 +5438,21 @@ with the table the data needs).
 - **Layout**: the page flows in the window's one scroll, and nothing on it
   scrolls inside itself (the table grows with its rows rather than the
   global 70vh table box; it would still scroll sideways if it had to). Each
-  group folds on its own: with more than seven rows (a unit's row counts
-  once) it shows the first six (four in a column 640 px or narrower, where
-  each row is a card), then **Show all N stations** / **catchment series**
+  group folds on its own: with more than five rows (a unit's row counts
+  once) it shows the first four (three in a column 640 px or narrower,
+  where each row is a card), then **Show all N stations** / **catchment series**
   / **units** / **flow records** / **series** (`aria-expanded`,
   `aria-controls` its `<tbody>`, `grp-<group>`; open, **Show only the
-  first 6 …**), which opens the rest in place (`common/fold.ts`
+  first 4 …**), which opens the rest in place (`common/fold.ts`
   `foldList`). The charted series' row always shows, after its group's
   first six when it sits further down (its unit's row, opened, for a
   unit's series), so a `series=` link or a pick never hides its row. The
   chart follows the table at a fixed 320 px plot. Until issue #553 round
   5 one fold over the whole list kept six rows, the button and the chart's
-  head on a 1440 × 960 first screen; grouped, a long project's chart sits
-  further down, and a pick brings it into view. Until 2026-09-29 a page 720 px wide and tall was fitted to
+  head on a 1440 × 960 first screen; grouped, every group shows its first
+  rows, so a long project's chart sits further down (a decision: the
+  groups' heads outrank the chart's on a first screen), and a pick or the
+  Data sections menu's **Chart** brings it into view. Until 2026-09-29 a page 720 px wide and tall was fitted to
   the window: the table took up to 55 % with its rows scrolling inside its
   box and the chart filled the rest, so the panels below went unseen
   (`data-page.spec.ts` pins the flow, the fold and no inner scroller on

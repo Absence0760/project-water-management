@@ -108,7 +108,7 @@ const innerScrollers = (page: import('@playwright/test').Page) =>
 			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
 	);
 
-test('with 30 series each group shows its first six, the rest under its own “Show all”; the charted row stays; a pick brings the chart into view; nothing scrolls inside itself', async ({ page, owner }) => {
+test('with 30 series each group shows its first four, the rest under its own “Show all”; the charted row stays; a pick brings the chart into view; nothing scrolls inside itself', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Data big');
@@ -124,11 +124,11 @@ test('with 30 series each group shows its first six, the rest under its own “S
 	await chartReady(page);
 
 	// Five stations, ten catchment series (CHIRPS and the alternative gauge), ten flow records, five A-pan: the groups
-	// of ten fold to their first six. The five behind are the A-pan's, in their own group.
+	// of ten fold to their first four (a group of five shows whole). The five behind are the A-pan's, in their own group.
 	const group = (title: string) => seriesGroup(page, title).locator('tr[data-series]');
 	await expect(group('Rainfall stations')).toHaveCount(5);
-	await expect(group('Catchment rainfall')).toHaveCount(6);
-	await expect(group('Flow records')).toHaveCount(6);
+	await expect(group('Catchment rainfall')).toHaveCount(4);
+	await expect(group('Flow records')).toHaveCount(4);
 	await expect(group('Other inputs')).toHaveCount(5);
 	for (let i = 0; i < 5; i++) await expect(group('Other inputs').nth(i).getByTestId('series-behind')).toBeVisible();
 	await expect(page.getByTestId('series-behind')).toHaveCount(5);
@@ -149,8 +149,8 @@ test('with 30 series each group shows its first six, the rest under its own “S
 	// Open one group: all ten in place, the page (not the table) growing; the other group stays folded.
 	await more.click();
 	await expect(group('Catchment rainfall')).toHaveCount(10);
-	await expect(group('Flow records')).toHaveCount(6);
-	const fewer = page.getByRole('button', { name: 'Show only the first 6 catchment series' });
+	await expect(group('Flow records')).toHaveCount(4);
+	const fewer = page.getByRole('button', { name: 'Show only the first 4 catchment series' });
 	await expect(fewer).toHaveAttribute('aria-expanded', 'true');
 	expect(await innerScrollers(page)).toEqual([]);
 
@@ -162,19 +162,20 @@ test('with 30 series each group shows its first six, the rest under its own “S
 	await expect(seriesChart(page).getByRole('figure')).toContainText(name);
 	await expect(seriesChart(page)).toBeInViewport({ ratio: 1 });
 
-	// Fold again: the picked row keeps its place after its group's first six, and a reload of the link shows it too.
+	// Fold again: the picked row keeps its place after its group's first four, and a reload of the link shows it too.
 	await fewer.click();
-	await expect(group('Catchment rainfall')).toHaveCount(7);
+	await expect(group('Catchment rainfall')).toHaveCount(5);
 	await expect(group('Catchment rainfall').last()).toContainText(name);
 	await page.reload();
-	await expect(group('Catchment rainfall')).toHaveCount(7);
+	await expect(group('Catchment rainfall')).toHaveCount(5);
 	await expect(group('Catchment rainfall').last()).toHaveClass(/selected/);
 
-	// A phone: four cards a group, then its fold (and the picked one); no inner scroll, no sideways scroll.
+	// A phone: three cards a group, then its fold (and the picked one); no inner scroll, no sideways scroll.
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect(group('Catchment rainfall')).toHaveCount(5);
-	await expect(group('Rainfall stations')).toHaveCount(5);
-	await expect(group('Flow records')).toHaveCount(4);
+	await expect(group('Catchment rainfall')).toHaveCount(4);
+	await expect(group('Rainfall stations')).toHaveCount(3);
+	await expect(group('Flow records')).toHaveCount(3);
+	await expect(page.getByRole('button', { name: 'Show all 5 stations' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Show all 10 catchment series' })).toBeVisible();
 	await chartReady(page);
 	expect(await innerScrollers(page)).toEqual([]);

@@ -13,7 +13,6 @@
 // only arithmetic here is the two products a run makes the same way: station
 // × ratio and CHIRPS × the factor of the day's month. Pure: no Svelte, no DOM.
 import {
-	fromEpochDay,
 	monthOfEpochDay,
 	prepareRun,
 	stationAreaRain,
@@ -22,10 +21,10 @@ import {
 	unitRainSeriesKey,
 	type DailySeries,
 	type ModelInput,
+	type PreparedRun,
 	type StationAreaForcing,
 	type StationRainDaySource
 } from '@water-management/engine';
-import { fmtNum } from '#lib/format/number.js';
 
 export interface AreaRainLines {
 	/** The run window's first day; every line below covers the window, one value a day. */
@@ -65,12 +64,17 @@ function align(s: DailySeries | null | undefined, start: number, days: number): 
 	return out;
 }
 
+/** The run preparation the pairings are read from: one per input, shared by every area of it (prepareRun is the costly part). */
+export const prepareFor = (input: ModelInput): PreparedRun => prepareRun(input);
+
 /**
  * The lines of the catchment (`nodeId` null) or a land unit under its station,
  * over the run window; null when the area has no station in this input (no
  * assignment, its station has no record, or, for a unit, per-unit rain off).
+ * `prep` is prepareFor(input), passed in when several areas are read from one
+ * input.
  */
-export function areaRainLines(input: ModelInput, nodeId: string | null): AreaRainLines | null {
+export function areaRainLines(input: ModelInput, nodeId: string | null, prep: PreparedRun = prepareFor(input)): AreaRainLines | null {
 	const r = stationAreaRain(input, nodeId);
 	if (!r) return null;
 	const start = toEpochDay(r.startDate);
@@ -84,7 +88,9 @@ export function areaRainLines(input: ModelInput, nodeId: string | null): AreaRai
 	const a = nodeId === null ? rs?.catchment : rs?.units?.[nodeId];
 	const correctAgainst = a?.correctAgainst ?? r.forcing.stationId;
 	// The pairing the run fits for this area (prepareRun's station context, the same fit stationAreaRain's run reads).
-	const pairing = prepareRun(input).stations?.context.pairing(correctAgainst) ?? null;
+	// A run pins a unit's factors only from settings.unitRain.pinned / rainStations.pinnedFactors, which are the
+	// engine's own (an outlook member, a resumed run) and never stored, so the model input a view reads has none.
+	const pairing = prep.stations?.context.pairing(correctAgainst) ?? null;
 	const factors = pairing && pairing.refused === null && pairing.months.length === 12 ? pairing.months.map((m) => m.factor) : null;
 	const chirpsCorrected = chirpsRaw && factors ? chirpsRaw.map((v, t) => (v === null ? null : v * factors[monthOfEpochDay(start + t) - 1]!)) : null;
 	return {
@@ -101,55 +107,4 @@ export function areaRainLines(input: ModelInput, nodeId: string | null): AreaRai
 		forcing: r.forcing,
 		warnings: r.warnings
 	};
-}
-
-/** The days by source, as the run counts them (StationAreaForcing.days). */
-export function sourceCounts(source: readonly StationRainDaySource[]): Record<StationRainDaySource, number> {
-	const n: Record<StationRainDaySource, number> = { station: 0, chirps: 0, fallback: 0, none: 0 };
-	for (const s of source) n[s]++;
-	return n;
-}
-
-/** The chart's source strip: one lane per source other than the station (the default, no strip), with its days in words. */
-export interface SourceLane {
-	label: string;
-	color: string;
-	ranges: { start: string; end: string }[];
-	text: string;
-}
-
-const SOURCE_LANES: readonly { source: Exclude<StationRainDaySource, 'station'>; label: string; color: string; what: string }[] = [
-	{ source: 'chirps', label: 'Corrected CHIRPS', color: '--series-9', what: 'corrected CHIRPS (the station has no reading, or it was set aside)' },
-	{ source: 'fallback', label: 'Next fallback', color: '--series-10', what: 'the next fallback (no corrected CHIRPS that day)' },
-	{ source: 'none', label: 'No rain', color: '--text-muted', what: 'no rain from any source (read as dry)' }
-];
-
-export function sourceLanes(startDate: string, source: readonly StationRainDaySource[]): SourceLane[] {
-	const d0 = toEpochDay(startDate);
-	const out: SourceLane[] = [];
-	for (const l of SOURCE_LANES) {
-		const ranges: { start: string; end: string }[] = [];
-		let days = 0;
-		for (let t = 0; t < source.length; t++) {
-			if (source[t] !== l.source) continue;
-			days++;
-			const last = ranges[ranges.length - 1];
-			const iso = fromEpochDay(d0 + t);
-			if (last && toEpochDay(last.end) === d0 + t - 1) last.end = iso;
-			else ranges.push({ start: iso, end: iso });
-		}
-		if (days) out.push({ label: l.label, color: l.color, ranges, text: `${fmtNum(days)} ${days === 1 ? 'day' : 'days'} from ${l.what}` });
-	}
-	return out;
-}
-
-/** One line of what the run read, in words: "4,018 days from the station, 312 from corrected CHIRPS, 2 from the next fallback." */
-export function sourceSummary(source: readonly StationRainDaySource[]): string {
-	const n = sourceCounts(source);
-	const day = (k: number) => `${fmtNum(k)} ${k === 1 ? 'day' : 'days'}`;
-	const parts = [`${day(n.station)} from the station`];
-	if (n.chirps) parts.push(`${fmtNum(n.chirps)} from corrected CHIRPS`);
-	if (n.fallback) parts.push(`${fmtNum(n.fallback)} from the next fallback`);
-	if (n.none) parts.push(`${fmtNum(n.none)} with no rain from any source`);
-	return `${parts.join(', ')}.`;
 }

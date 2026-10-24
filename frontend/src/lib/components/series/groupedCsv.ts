@@ -41,9 +41,9 @@ export function textCell(v: string): string {
 	return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** A `#` line kept to one cell: its commas, quotes and control characters percent-encoded (decodeURIComponent reads it back). */
+/** A `#` line kept to one cell: its `%`, commas, quotes and control characters percent-encoded (decodeURIComponent reads it back). */
 export function commentLine(text: string): string {
-	return `# ${text.replace(/[,"\x00-\x1f\x7f-\x9f\u2028\u2029]/g, encodeURIComponent)}`;
+	return `# ${text.replace(/[%,"\x00-\x1f\x7f-\x9f\u2028\u2029]/g, encodeURIComponent)}`;
 }
 
 const numCell = (v: number) => (Number.isFinite(v) ? String(Math.round(v * 1e6) / 1e6) : '');
