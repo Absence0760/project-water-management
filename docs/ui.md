@@ -8489,6 +8489,32 @@ read it before.
   wrap focusable so a keyboard can scroll it), **Where each unit's MAP
   comes from** and **Days by where the rain came from** (disclosures, with
   full-height targets),
+  and the **rainfall stations** (issue #553, engine ≥ 1.91.0,
+  in the same panel, helpers in `runs/stationRain.ts`; shown when the summary carries `summary.stations`,
+  so a run whose catchment ran on a station gets the panel, as **Rain from
+  rainfall stations** in the section list, without rain for each unit too):
+  the catchment MAP the ratio used (the units' area-weighted mean, or
+  entered), a warning list (a refused pairing, a ratio held at the 0.25–4
+  bound, a missing MAP leaving the ratio at 1, an area whose gaps no pairing
+  corrects and how many days fell to the next fallback), a table with one
+  row per area, the catchment first, then the units in the run's farm order
+  (its station over "× ratio (area MAP ÷ station MAP mm)" and the station
+  correcting its CHIRPS; area MAP; station MAP; days from the station, from
+  the corrected CHIRPS and from the fallback, with the dry days under it;
+  the days set aside, by the checks and as unreliable), **Where each MAP
+  comes from** (both sources per area), and a table of each station's CHIRPS
+  pairing (where its CHIRPS came from: its own cell or the CHIRPS of the
+  unit it stands in; the fit period with its complete years in common; the
+  shared days; the 12 factors, Jan–Dec, or "refused: …" with the reason).
+  The report's inputs carry the same as two tables, **Rainfall stations**
+  and **Station CHIRPS pairings** (`report/inputs.ts` `stationRows`,
+  `stationPairingRows`), with a "Rainfall stations (GR4J rain)" settings row
+  (which areas, the catchment MAP, the unreliable periods), and the summary
+  CSV a "Rain from rainfall stations" block after the per-unit rain
+  (`backend/src/export/run-tables.ts` `stationLines`: one row per area with
+  both MAPs and their sources, own and applied ratio, the correcting
+  station, the days by source and set aside; then each pairing with its fit
+  period, common years, shared days and the 12 factors, or the refusal),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping
