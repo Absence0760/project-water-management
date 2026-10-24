@@ -448,7 +448,7 @@ other signed-out route still goes to `/login?next=`.
   account). `/welcome` is also the address for a visitor whose language
   isn't known yet: once the app runs, a visitor whose choice (the
   account's, this device's, else the browser's) is another language goes on
-  to that language's address (`replaceState`). `/welcome/af` stays
+  to that language's address (`goto` with `replace`). `/welcome/af` stays
   Afrikaans whatever the browser says, and reading it becomes the device's
   choice when it has none, so the sign-in pages it leads to carry on in
   Afrikaans. A signed-out `/` switches in place, as the sign-in pages do.
@@ -5327,11 +5327,11 @@ with the table the data needs).
   and Back returns to the series before. Without `series=` (or with one that
   no longer exists) the observed flow a run reads is charted, else the main
   rainfall, else the first. Deleting the charted series drops the parameter
-  (`replaceState`); an upload through **Add data** on this tab charts the
-  uploaded series (`series=<id>`, `replaceState`, the page's `onUploaded`).
+  (`goto` with `replace`); an upload through **Add data** on this tab charts the
+  uploaded series (`series=<id>`, with `replace`, the page's `onUploaded`).
   The chart sits under the table, so after a pick it scrolls just into view
   (smoothly, unless the viewer prefers reduced motion; not at all when it is
-  already in view, and not for the upload's `replaceState` pick).
+  already in view, and not for the upload's replacing pick).
 - **Layout**: the page flows in the window's one scroll, and nothing on it
   scrolls inside itself (the table grows with its rows rather than the
   global 70vh table box; it would still scroll sideways if it had to). With
@@ -9208,7 +9208,7 @@ them scenarios).
   rows scroll inside it. The scenario is an editing page and scrolls with
   the page. Narrower, the list stacks above the scenario, capped at a few
   rows that scroll inside it. With none picked, the first (newest) opens in
-  place (`replaceState`, so Back leaves the section rather than stopping on
+  place (`goto` with `replace`, so Back leaves the section rather than stopping on
   the bare list), but only once no navigation is in flight and the URL
   doesn't ask for the create dialog, so it can't cancel a `+ New scenario`
   click made while the list was loading.
@@ -11935,8 +11935,8 @@ Share](./api.md#share), [security.md § Share links](./security.md#share-links))
 signed in or out, for someone outside the project, on a phone first.
 
 - **The token** is in the fragment (`/share#t=…`). The page reads it once,
-  strips it from the address bar (`replaceState`, as the reset pages strip
-  `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
+  strips it from the address bar (a shallow `goto` with `replace`, as the
+  reset pages strip `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
   (only the fragment changes) is picked up the same way, and only the latest
   link's answer is shown, however the two answers race (`share/load.ts latestOnly`). The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water

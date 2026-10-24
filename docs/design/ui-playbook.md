@@ -302,7 +302,7 @@ section it belongs to, with the example that taught it.
   column, its first line the old message (specs and help quote it) and a
   second line saying what a run's results hold.
 - **Pick a default rather than show an empty half.** With nothing in the
-  URL, open the first item and write it with `replaceState`, so Back leaves
+  URL, open the first item and write it with goto's `replace`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
   Hydrological units show a default without writing it). Don't start that
   write while a navigation is in flight (`navigating.to`) or while the URL
@@ -1220,11 +1220,11 @@ Interaction details that bit:
 - **A sticky element inside a scroll container covers controls** as they
   scroll, and axe fails the covered ones (target size). Put a picker in the
   Dialog `subhead` instead.
-- **Closing an overlay drops its param with `replaceState`**, so Back
+- **Closing an overlay drops its param with goto's `replace`**, so Back
   closes the overlay rather than leaving the page. A create dialog
   (Scenarios' `new=1`) that navigates on success lets the URL close it: drop
   the param in the same `goto` that picks the new item (with
-  `replaceState`), rather than setting its `open` to false first, which
+  `replace`), rather than setting its `open` to false first, which
   starts a second `goto` that races the first.
 - **When a state replaces the focused control, move focus to the title.**
   Forgot password's *Send reset link* button disappears into *Check your
@@ -1575,7 +1575,7 @@ Interaction details that bit:
   Allocations added one, so Back did different things on neighbouring pages
   (issue #521). The rule: a run, unit, dam or feature the user picks, and a
   filter or sort chosen from a control, pushes (`goto` without
-  `replaceState`), so Back returns to the pick before. A search typed into a
+  `replace`), so Back returns to the pick before. A search typed into a
   box is one step: its first change after the box takes the focus pushes,
   the rest replace (the project list, Runs' label filter, History's
   Parameter filter, one `SearchStep` each from `lib/nav/searchStep.ts`:
