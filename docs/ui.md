@@ -3032,7 +3032,7 @@ itself.
   unit's Catchment area section, after the areas, an optional **MAP**
   (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
   a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only with Settings' Rain for each unit on, where **MAP from the
+  read only under Settings' Flow generation, Per unit, where **MAP from the
   grid** can fill it and its source from a loaded MAP grid for every unit
   at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
@@ -5447,7 +5447,7 @@ which shows under the fields: *Say where the station's MAP comes from …*,
 *A station's coordinates need both a latitude and a longitude, or
 neither.*). It says *Saved the station.*, or *Not saved: &lt;reason&gt;*.
 Viewers read the MAP with its source and where it stands, or *Not
-recorded*. Settings → Rain for each unit reads the run's catchment rain
+recorded*. Settings → Flow generation, Per unit, reads the run's catchment rain
 station's MAP from here, and History says *Recorded … as a rainfall
 station: MAP 745 mm (…)*, *Changed the rainfall station details of …* or
 *Cleared …*. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
@@ -5822,8 +5822,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   `settingsNavGroups`): **Data & rain** (Simulation period `#set-period`, Rain
   gaps `#set-rain`, Data quality `#set-quality`: its zero-rain and
   low-vs-CHIRPS limits change results, issue #173), **Demand & supply**
-  (Demand `#set-demand`, Flow share `#set-share`, Drought restrictions
-  `#set-restrict`, Reporting `#set-reporting`), **Runoff & calibration** (Flow calibration `#set-flow`,
+  (Demand `#set-demand`, Drought restrictions
+  `#set-restrict`, Reporting `#set-reporting`), **Runoff & calibration** (Flow generation
+  `#set-share`, the id it had as the Flow share panel, kept so its links and notes still land, issue #553; Flow calibration `#set-flow`,
   Calibration record `#set-record`, Fit the parameters `#set-fit`, WR2012
   check `#set-wr2012`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
   tables `#set-reserve`), **Reading results** (Outcome matrix
@@ -5916,9 +5917,11 @@ section header, which it fills (`fillHeader`) like the other sections.
   each says the rest); inside the long ones each sub-group is
   an `h3` in the order shown (in its fieldset's legend where it has one), so
   heading navigation reaches them: under Flow calibration its cards, GR4J
-  parameters, Rain into GR4J (with the areal rainfall correction and rain for
-  each unit as `h4`s), GR4J potential evaporation and Evaporation from the map
-  (issue #521); under
+  parameters, Rain into GR4J (with the areal rainfall correction as an `h4`),
+  GR4J potential evaporation and Evaporation from the map
+  (issue #521); under Flow generation its cards (Per unit: Each unit's
+  rainfall station, then the Flow share card; Units without a station an `h4`
+  in its legend, issue #553); under
   Rain gaps its two cards, CHIRPS gap filling and Flagged rain, with the
   Flagged rain card's zero-rain runs, multi-day accumulations and rain
   source periods as `h4`s (issue #521); under the Calibration record the
@@ -6000,8 +6003,9 @@ two.
   (closed while it is 365). Each field's "Changed 1× · last by …" history
   line is one line here (cut with an ellipsis; the whole text is its link's
   name and title), so a changed field's cell is as tall as its neighbours'.
-  **Rain into GR4J**: the areal rainfall correction and rain for each unit,
-  each one switch while off, with the MAP-grid proposal under them.
+  **Rain into GR4J**: the areal rainfall correction, one switch while off
+  (rain for each unit and the MAP-grid proposal moved to Flow generation →
+  Per unit, issue #553).
   **GR4J potential evaporation**: the choice, the annual figure and the
   monthly row; under the pan row, **Fill or edit the row: preset, FAO-56
   helper, paste · source: …** folds the preset, the FAO-56 helper, **Paste
@@ -6044,16 +6048,16 @@ two.
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
     under ("Areal rainfall correction"), and the report's inputs table
-    shows it. With rain for each unit on, a note under it (shown even with
-    the explanations off) says it applies only to the units that fall back
+    shows it. Under Flow generation's Per unit, a note under it (shown even with
+    the explanations off, linking to Flow generation) says it applies only to the units that fall back
     to the catchment rain, and the report's inputs table adds a "Rain for
     each unit (GR4J rain)" row (`report/inputs.ts`).
-    Then **Rain for each unit** (`settings.unitRain`, issue #482,
+    **Units without a station** (`settings.unitRain`, issue #482,
     `settings/UnitRainFields.svelte`, its own chunk, helpers in
-    `settings/unitRain.ts`; [model.md §2.4h](./model.md)): a checkbox
-    "Runoff from each unit's own rain" (off: null, the catchment rain as
-    before; on: `{ mode: 'perUnit' }`, and the setting switched off comes
-    back if ticked again before saving). On, a line says how many units with
+    `settings/unitRain.ts`; [model.md §2.4h](./model.md)) was this card's
+    "Rain for each unit" until issue #553 round 3 moved it, without its
+    checkbox, to Flow generation → Per unit (below): what a land unit with no
+    rainfall station runs on, the rule from before stations. A line says how many units with
     land have a MAP ("1 of 2 units with land has a MAP."), with a link that
     opens Data feeds' Rain for each unit (`?rain=units#set-feeds`), and names
     the units without one (the first six, each a link to its form, "and N
@@ -6087,9 +6091,8 @@ two.
     reference unit the model no longer has with land says so under the
     field (runs ignore the reference until another is picked). The Settings
     tab checks it itself (`unitRainFormError`), so Save is blocked before the
-    chunk has loaded. The group's summary line adds "rain for each unit"
-    while it is on.
-    With it on, editors also get **MAP from the grid**
+    chunk has loaded; the problem is listed against Flow generation.
+    Under Per unit, editors also get **MAP from the grid**
     (`settings/UnitMapProposal.svelte`, its own chunk, helpers in
     `settings/unitMapProposal.ts`; `GET`/`POST …/map/unit-map`, [maps.md § MAP
     for each unit](./maps.md#map-for-each-unit)), a proposal panel
@@ -6678,18 +6681,66 @@ two.
   it). Unticking **Compare runs with WR2012 naturalised flow**, or the MAR
   band, and ticking it again brings back what was typed until the settings
   are saved or discarded.
-- **Flow share** (between hydrological units): the method, and the **High/low
-  MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
-  is *High/low MAP split*, the one method that reads it (issue #174); under
-  *by area* or *manual* it is hidden and its saved value kept. The line
-  under the heading follows Rain for each unit (issue #553): off, "GR4J runs
-  once on the catchment rain; this splits its flow and the EWR between
-  units. To give each unit its own runoff, see Rain for each unit." (an
-  explanation); on, "Each unit makes its own runoff; this now splits only
-  the EWR and the land cover's low-flow threshold between units, not the
-  flow." (a state line, shown with the explanations off), each with a link
-  to Rain for each unit (`#set-unit-rain`, the fieldset's id;
-  `e2e/tests/flow-share-hint.spec.ts`).
+- **Flow generation** (`#set-share`, issue #553 round 3; [model.md §2.4h,
+  §2.4i, §2.5](./model.md)): how natural flow is made, one choice, first in
+  Runoff & calibration. It replaced the Flow share panel and the
+  "Runoff from each unit's own rain" checkbox, which the operator found read as
+  two separate settings (2026-10-23). A **Method** radio pair:
+  **Fragmentation** (the default: `settings.unitRain` null, absent or
+  `catchment`; GR4J once on the catchment rain, its flow split by the flow
+  share) or **Per unit** (`{ mode: 'perUnit' }`: GR4J on each land unit's own
+  rain). The radio writes the same `settings.unitRain` the checkbox did, so no
+  stored project changes and no migration was needed; switching to
+  Fragmentation keeps the Per unit setting (`draft.kept.unitRain`) until the
+  form is saved, and the stations assigned stay stored, unused, so Per unit
+  brings them back. When the form's parameters come from a fit made under
+  the other method (`fitMethodMismatch`, the engine's `fitFlowMethod`: a fit
+  whose forcing records per-unit rain ran Per unit), an alert under the radio
+  says "Parameters not fitted for this method: the GR4J parameters were
+  fitted under Fragmentation. Fit the parameters again …", linking to
+  `#set-fit`, and the fit record lists the same caveat (`methodChanged`,
+  `fitRecordCaveats`); choosing the fit's method again clears it. The
+  summary line names the method ("Fragmentation · flow share: by catchment
+  area", "Per unit · 2 units on a rainfall station · EWR flow share: …").
+  - **Per unit** shows two cards. **Each unit's rainfall station**
+    (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
+    helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
+    [model.md §2.4i](./model.md)): a line ("1 of 2 units with land have a
+    rainfall station."), then a table, one row per land unit (a farm with an
+    area, in model order): the unit with its MAP and source; **Station**, a
+    select of the project's rainfall stations (every catchment rain series
+    with no site, by name) and *No station: as before stations* (the unit keeps
+    the §2.4h rule, so a project from before stations runs as it did).
+    Satellite rain is never an option: CHIRPS only fills a station's gaps
+    (operator, 2026-10-23). **Scale to unit MAP**, a checkbox (on by default,
+    stored as none; off stores `scaleToMap: false`) with the ratio beside it
+    (*× 1.5*, *× 4 (clamped from 6)*, *× 1: the unit has no MAP*, *× 1, as
+    recorded*); **Gaps: CHIRPS corrected against**, the station whose pairing
+    factors correct the unit's CHIRPS on the station's gaps (*Its station*
+    by default, stored as none). A unit whose station was deleted says so in
+    red and keeps its id until another is picked. Editors tick rows (or every
+    row) and give the ticked units one station with **Assign to the ticked
+    units**. Under the table, each station in use once (however many units
+    share it): its MAP and source, the units it runs, a link to edit it in
+    Series details, and either where its CHIRPS is read (its coordinates) or
+    a **Stands in** select of the land units (`settings.rainStations.sites`;
+    without either its pairing is refused). Under 40rem of width each row
+    stacks into a block with its fields labelled, so nothing scrolls sideways
+    (`flow-generation.spec.ts` at 390 px). Then **Units without a station**
+    (above, in Flow calibration's description) and, for editors, MAP from the grid.
+  - **Flow share** (Fragmentation) or **Flow share: the EWR between units**
+    (Per unit), a card: the **Flow share method** and the **High/low MAP
+    split** (High, Low, their Sum, amber unless 100 %) only while the method
+    is *High/low MAP split*, the one method that reads it (issue #174); under
+    *by area* or *manual* it is hidden and its saved value kept. The line
+    under its heading follows the method: Fragmentation, "GR4J runs once on
+    the catchment rain; the flow share splits its flow and the EWR between
+    units. To give each unit its own runoff, choose Per unit above." (an
+    explanation); Per unit, "Each unit makes its own runoff; the flow share
+    now splits only the EWR and the land cover's low-flow threshold between
+    units, not the flow." (a state line, shown with the explanations off;
+    `e2e/tests/flow-share-hint.spec.ts`). The card's foot is where #553's
+    EWR split option ("Split the EWR between units by") goes.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
@@ -10276,7 +10327,7 @@ March") is kept against what it is about.
     (the run notes stay the modeller's one explanation; these are comments
     from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
-    gaps, Calibration record, WR2012 check, Flow share, EWR, Reserve rule
+    gaps, Calibration record, WR2012 check, Flow generation (keyed `share`, its Flow share name before issue #553), EWR, Reserve rule
     tables, Drought restrictions, Reporting, Simulation period, Data quality,
     Evidence), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
   - on the **Summary**: *Recent notes*, the newest 8 across the project,

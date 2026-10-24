@@ -832,9 +832,12 @@ alongside teams, e.g. to give an outside client `viewer` access.
   most 500 units and 200 stations. The save checks each station is one of
   this project's stations and each unit one of its land units (a farm with
   an area), `400` naming which (`rainfall stations: a unit's station is not
-  a rainfall station of this project …`). `pinnedFactors` is the engine's
-  own and refused. A stored setting whose station is later deleted doesn't
-  block other saves; the run warns. With any assignment a run's input
+  a rainfall station of this project …`), but only the stations and units
+  the stored setting doesn't already name. `pinnedFactors` is the engine's
+  own and refused. A stored setting whose station is later deleted (or whose
+  unit leaves the model) doesn't block other saves, nor a save that sends the
+  setting back unchanged, as the Settings form does with every save; the run
+  warns. With any assignment a run's input
   carries every station (`stations`, and its record as
   `rain_station_mm#<id>`) and the CHIRPS at a placed station's cached cell
   (`rain_chirps_station_mm#<id>`; [data-model.md § Rainfall

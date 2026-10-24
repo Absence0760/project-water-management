@@ -2448,15 +2448,15 @@ line; **Synthetic test data, never real rainfall.** for the repo's grid.
   its centre, `rainMapToJson`) instead of loading it; the recipe is
   [deployment.md § Reference datasets](./deployment.md#reference-datasets).
   The load records the file it read (`reference_load`, migration 238).
-- **Read by the model through the units' MAP.** Under rain for each unit
-  ([model.md §2.4h](./model.md)) a unit's MAP sets the level of its rain;
+- **Read by the model through the units' MAP.** Under Settings → Flow
+  generation, Per unit ([model.md §2.4h, §2.4i](./model.md)) a unit's MAP sets the level of its rain;
   Settings can take each unit's MAP from a loaded grid ([§ MAP for each
   unit](#map-for-each-unit)). The layer shows the grid so its values can be
   checked against the units and the gauges first.
 
 ## MAP for each unit
 
-Settings → Rain for each unit → **MAP from the grid** (issue #482
+Settings → Flow generation, under Per unit, **MAP from the grid** (issue #482
 follow-up; `geo/unitMap.ts`, `geo/unitMapRoutes.ts`): each land unit's mean
 annual precipitation from one of the loaded MAP grids ([§ MAP
 grid](#map-grid)), proposed beside what its form holds, and written to the
