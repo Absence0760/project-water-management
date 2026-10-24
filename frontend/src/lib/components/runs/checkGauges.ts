@@ -3,16 +3,16 @@
 // calibration site) gets a hydrograph and a flow-duration curve under the
 // outlet's, from the run's `observed_flow_check` at the gauge (engine ≥
 // 1.90.0) against its `outflow`, with the record's NSE, KGE and PBIAS as an
-// out-of-sample check. Pure; RunCharts' GaugeCheckFlows draws it.
+// out-of-sample check, read from the run summary (plausibility.gauges[].fit,
+// computed once by the engine). Pure; RunCharts' GaugeCheckFlows draws it.
 import {
 	beforeForecast,
-	calibrationStats,
 	CHECK_GAUGE_FLOW_KEY,
 	flowDurationCurves,
 	onDaysOf,
 	type CalibrationFlowKind,
 	type DailySeries,
-	type ExclusionRange,
+	type GaugeFitCheck,
 	type GaugePlausibility
 } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
@@ -29,6 +29,8 @@ export interface CheckGauge {
 	flowKind: CalibrationFlowKind;
 	/** The run stored `observed_flow_check` at the gauge: false on a run made before engine 1.90.0. */
 	stored: boolean;
+	/** The record's fit there, from the run summary (GaugePlausibility.fit): null when no day is read, undefined on a run made before 1.90.0. */
+	fit?: GaugeFitCheck | null;
 }
 
 /**
@@ -40,7 +42,7 @@ export interface CheckGauge {
  * its `observed_flow` and which keeps its own chart.
  */
 export function checksOnlyGauges(
-	gauges: readonly Pick<GaugePlausibility, 'nodeId' | 'name' | 'flowKind'>[] | undefined,
+	gauges: readonly Pick<GaugePlausibility, 'nodeId' | 'name' | 'flowKind' | 'fit'>[] | undefined,
 	refs: readonly RefLike[],
 	siteId: string | null | undefined,
 	order: ReadonlyMap<string, number> = new Map()
@@ -48,39 +50,26 @@ export function checksOnlyGauges(
 	const rank = (id: string) => order.get(id) ?? Number.MAX_SAFE_INTEGER;
 	return (gauges ?? [])
 		.filter((g) => g.nodeId !== (siteId ?? null))
-		.map((g) => ({ nodeId: g.nodeId, name: g.name, flowKind: g.flowKind, stored: refs.some((r) => r.key === CHECK_GAUGE_FLOW_KEY && r.nodeId === g.nodeId) }))
+		.map((g) => ({
+			nodeId: g.nodeId,
+			name: g.name,
+			flowKind: g.flowKind,
+			stored: refs.some((r) => r.key === CHECK_GAUGE_FLOW_KEY && r.nodeId === g.nodeId),
+			...(g.fit !== undefined ? { fit: g.fit } : {})
+		}))
 		.sort((a, b) => rank(a.nodeId) - rank(b.nodeId));
 }
 
-/** The gauge's record against the simulated flow there, as fit statistics; null when they share no day. */
-export interface GaugeCheckStats {
-	days: number;
-	nse: number | null;
-	kge: number | null;
-	pbias: number | null;
-}
-
-/**
- * NSE, KGE and PBIAS of the gauge's record (m³/day, NaN or null on a day
- * without a reading) against its simulated outflow (m³/day), on every day
- * with a reading before a forecast run's forecast, less the run's
- * calibration exclusions (engine network/stats.ts calibrationStats, the
- * run's calibration statistics' own formulas). No calibration window: this
- * record isn't what the calibration scores. The exclusions apply, as the
- * plausibility checks and the EWR test at a gauge apply them: a period
- * whose record isn't trusted isn't evidence here either.
- */
-export function gaugeCheckStats(observed: DailySeries, simulated: DailySeries, forecastFrom: string | null = null, exclusions: readonly ExclusionRange[] = []): GaugeCheckStats | null {
-	const obs = Array.from(beforeForecast(observed.values, observed.startDate, forecastFrom), (v) => (v === null || v === undefined || !Number.isFinite(v) ? null : v / 86_400));
-	const sim = beforeForecast(simulated.values.map((v) => v ?? 0), simulated.startDate, forecastFrom);
-	const s = calibrationStats(sim, obs, exclusions.length ? { startDate: observed.startDate, exclusions } : undefined);
-	return s.days ? { days: s.days, nse: s.nse, kge: s.kge ?? null, pbias: s.pbias } : null;
-}
-
 /** The statistics in a line: "NSE 0.62 · KGE 0.71 · PBIAS −4.2 % over 1 204 days". */
-export function gaugeStatsText(s: GaugeCheckStats): string {
+export function gaugeStatsText(s: GaugeFitCheck): string {
 	const n = (v: number | null, d: number) => (v === null ? '–' : fmtNum(v, d));
 	return `NSE ${n(s.nse, 2)} · KGE ${n(s.kge, 2)} · PBIAS ${s.pbias === null ? '–' : `${fmtNum(s.pbias, 1)} %`} over ${fmtNum(s.days)} day${s.days === 1 ? '' : 's'}`;
+}
+
+/** The words after "Check, out of sample:": the summary's fit, why there is none, or that the run predates it. */
+export function gaugeStatsLine(fit: GaugeFitCheck | null | undefined): string {
+	if (fit) return `${gaugeStatsText(fit)}.`;
+	return fit === null ? 'no day of the record falls in the run outside its excluded periods.' : 'not in this run’s summary: run the model again.';
 }
 
 /** The record's legend label by instrument: "Observed gauge", "Observed logger" (the chart's title says it is checks only). */

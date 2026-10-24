@@ -130,6 +130,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Needs hydrologist (engine 1.73.0, issue #408)"
 	},
 	{
+		"id": "G2",
+		"source": "finding",
+		"severity": "Low (gauges inside the network with both a gauge and a logger record)",
+		"title": "Which of a gauge's two records its checks read was a choice, and the readers didn't agree",
+		"status": "Built (engine 1.90.0), provisionally decided 2026-10-23, pending the client's hydrologist"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

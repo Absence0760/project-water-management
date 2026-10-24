@@ -8293,10 +8293,13 @@ the run then has it as `series['<kind>@<node id>']` (`GaugeSeriesKey`), and
 the outlet's records stay the series with no site. Checks **1 and 4** run
 again at each such gauge (node-id order) and are reported per site in
 `RunSummary.plausibility.gauges`: `{ nodeId, name, flowKind, naturalShare,
-naturalised, lowFlow }`. At the gauge:
+naturalised, lowFlow, fit }` (`fit`, engine ≥ 1.90.0: the record's NSE, KGE
+and PBIAS as a check, §2.10k). At the gauge:
 
 - **O** is the gauge's record: of the run's calibration kind when it has one,
-  else its other record (`flowKind`);
+  else its other record (`flowKind`; from engine 1.90.0 the kind the run's
+  calibration statistics score, the calibration site's when it scores one,
+  `gaugeCheckKind`, engine-audit.md **G2**);
 - **S** is the simulated flow at the gauge, its outflow U;
 - **N** is the catchment's natural flow × `naturalShare`, the flow shares
   (§2.5) of the gauge and every node above it, which is what the network
@@ -9530,21 +9533,34 @@ calibration site) has that record stored at its node as
 `observed_flow_check` (`CHECK_GAUGE_FLOW_KEY`), m³/day with a blank (NaN)
 on a day without a reading, beside the node's `outflow`. It is the record
 the plausibility checks read there (`RunSummary.plausibility.gauges[].flowKind`:
-the outlet record's kind when the gauge has it, else its gauge record, else
-its logger; one rule for both, `gaugeCheckKind`), labelled by instrument with "(checks only)" after it
+the kind the run's calibration statistics score when the gauge has it, else
+its gauge record, else its logger; one rule, `gaugeCheckKind`, for these,
+the plausibility checks and the EWR test at a gauge, engine-audit.md **G2**,
+provisional), labelled by instrument with "(checks only)" after it
 (`checkGaugeFlowLabel`). Nothing scores it: the run's statistics, the fit
 and every other output are as before, and Runs & results draws it as that
-gauge's hydrograph and flow-duration curve with its NSE, KGE and PBIAS
-(`calibrationStats`' formulas, on every day with a reading, no calibration
-window, the run's calibration exclusions left out as the plausibility checks
-and the EWR test at the gauge leave them out) as an out-of-sample check
-(ui.md § Runs & results). The page computes those three from the stored
-series: they are not in the run summary, so a report, an evidence pack or
-`reproduce:pack` doesn't carry them, and they are not run results to cite. A record
+gauge's hydrograph and flow-duration curve (ui.md § Runs & results).
+
+The record's fit there is in the run summary, at every gauge the
+plausibility checks reach (the calibration site included):
+`RunSummary.plausibility.gauges[].fit` `{ days, nse, kge, pbias }`
+(`plausibility/index.ts` `gaugeFitCheck`), `calibrationStats`' formulas on
+every day with a reading outside the run's calibration exclusions (as the
+plausibility checks and the EWR test at the gauge leave them out), no
+calibration window, and none of a forecast run's forecast days; null when
+no day is read. At every other gauge it is a check out of sample, never the
+calibration score; at the calibration site it is in sample (the run is
+fitted to that record, and `RunSummary.calibration` is the score, on its
+window), and the summary CSV labels it so. Being in the summary, it is in the run's results
+digest, so an evidence pack carries it and `reproduce:pack` re-derives it;
+the summary CSV writes it under each gauge's plausibility block
+(*Fit check (out of sample)*, or *(in sample at the calibration site)*). A record
 that implies far more flow than the model has above the gauge (a unit
-error at upload, say) shows at a glance there. Only the stored series are
-new, so the bump to 1.90.0 changes no number of an earlier run; a run made
-before has no such series and the page says to re-run.
+error at upload, say) shows at a glance there. The bump to 1.90.0 adds the
+series and `fit`, and changes the EWR test at a gauge site only where G2
+picks a different record than before; a run made before has neither, and the
+page says to re-run. The page reads `fit` from the summary and computes
+none of its own.
 
 **The EWR test against observed flow.** The outlet's test (§2.9b) is
 unchanged: the outlet's record against the simulated outflow and the outlet's
@@ -9553,8 +9569,10 @@ judge a gauge's flow against the outlet's requirement. Instead, every gauge
 EWR site (§2.7b: a gauge whose `ewrSite` isn't false) with a record of its
 own gets the same test at its own point of the river
 (`RunSummary.catchment.ewrAgreementSites`, `{ nodeId, name, flowKind,
-agreement }` in node-id order): its record (of the calibration kind when it
-has one, else its other record) against its simulated outflow and its own
+agreement }` in node-id order): its record (from engine 1.90.0 the one its
+plausibility checks read, `gaugeCheckKind`, engine-audit.md **G2**,
+provisional; before, the kind asked for in Settings when it had one, else its
+first record) against its simulated outflow and its own
 pragmatic requirement (`ewr_cumulative` at the node, the requirement its EWR
 charge follows under the default `ewrChargeSource`), on every observed day
 outside the calibration exclusions, whatever the calibration site. A rule

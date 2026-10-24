@@ -1,6 +1,6 @@
-import { calibrationStats, CHECK_GAUGE_FLOW_KEY, type DailySeries } from '@water-management/engine';
+import { CHECK_GAUGE_FLOW_KEY, type DailySeries } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { checkFdc, checkHydrograph, checksOnlyGauges, gaugeCheckStats, gaugeStatsText, recordHref } from './checkGauges';
+import { checkFdc, checkHydrograph, checksOnlyGauges, gaugeStatsLine, gaugeStatsText, recordHref } from './checkGauges';
 
 const g = (nodeId: string, flowKind: 'flow_observed_m3s' | 'flow_logger_m3s' = 'flow_observed_m3s') => ({ nodeId, name: `Weir ${nodeId}`, flowKind });
 const day = (values: (number | null)[], startDate = '2020-10-01'): DailySeries => ({ startDate, values });
@@ -22,50 +22,28 @@ describe('checksOnlyGauges', () => {
 		expect(checksOnlyGauges([g('a'), g('z'), g('b')], refs, 's', order).map((x) => x.nodeId)).toEqual(['b', 'a', 'z']);
 	});
 
+	it('carries the summary’s fit, and leaves it out for a run made before it', () => {
+		const fit = { days: 3, nse: 0.5, kge: 0.6, pbias: 1 };
+		const [a, b] = checksOnlyGauges([{ ...g('a'), fit }, g('b')], [], null);
+		expect(a!.fit).toEqual(fit);
+		expect('fit' in b!).toBe(false);
+	});
+
 	it('is empty for a run without gauge checks', () => {
 		expect(checksOnlyGauges(undefined, [], null)).toEqual([]);
 	});
 });
 
-describe('gaugeCheckStats', () => {
-	it('scores the record (m³/day, gaps blank) against the simulated flow with the calibration statistics’ formulas, in m³/s', () => {
-		const obs = [86_400, null, 2 * 86_400, NaN, 3 * 86_400, 4 * 86_400];
-		const sim = [1.2, 9, 1.8, 9, 3.3, 3.5].map((v) => v * 86_400);
-		const s = gaugeCheckStats(day(obs), day(sim))!;
-		const ref = calibrationStats(sim, [1, null, 2, null, 3, 4]);
-		expect(s).toEqual({ days: 4, nse: ref.nse, kge: ref.kge, pbias: ref.pbias });
-		// The days without a reading are left out: a perfect match on the read days scores 1.
-		const perfect = gaugeCheckStats(day(obs), day([1, 9, 2, 9, 3, 4].map((v) => v * 86_400)))!;
-		expect(perfect.nse).toBeCloseTo(1, 12);
-		expect(perfect.pbias).toBeCloseTo(0, 12);
-	});
-
-	it('shows a unit error at a glance: a record 30× the simulated flow has PBIAS near −2 900 %', () => {
-		const sim = [1, 2, 3, 2, 1].map((v) => v * 86_400);
-		const s = gaugeCheckStats(day(sim.map((v) => v * 30)), day(sim))!;
-		expect(s.pbias).toBeCloseTo(100 * (30 - 1) / 30, 9); // PBIAS = 100 × Σ(o − s) / Σo
-		expect(s.nse!).toBeLessThan(0);
-	});
-
-	it('leaves out the run’s calibration exclusions, as the plausibility checks at the gauge do', () => {
-		const obs = day([86_400, 86_400, 50 * 86_400, 86_400]);
-		const sim = day([86_400, 86_400, 86_400, 86_400]);
-		const all = gaugeCheckStats(obs, sim)!;
-		const kept = gaugeCheckStats(obs, sim, null, [{ start: '2020-10-03', end: '2020-10-03', reason: 'Weir silted up' }])!;
-		expect(all.days).toBe(4);
-		expect(kept).toEqual({ days: 3, nse: null, kge: null, pbias: 0 });
-	});
-
-	it('leaves a forecast run’s forecast days out, and is null with no day read', () => {
-		const obs = day([86_400, 86_400, 50 * 86_400]);
-		const sim = day([86_400, 86_400, 86_400]);
-		expect(gaugeCheckStats(obs, sim, '2020-10-03')!.days).toBe(2);
-		expect(gaugeCheckStats(day([null, NaN]), day([1, 2]))).toBeNull();
-	});
-
+describe('gaugeStatsText', () => {
 	it('writes the line with its days', () => {
 		expect(gaugeStatsText({ days: 1204, nse: 0.6234, kge: 0.71, pbias: -4.25 })).toMatch(/^NSE 0\.62 · KGE 0\.71 · PBIAS −?-?4\.\d % over 1.204 days$/u);
 		expect(gaugeStatsText({ days: 1, nse: null, kge: null, pbias: null })).toBe('NSE – · KGE – · PBIAS – over 1 day');
+	});
+
+	it('gaugeStatsLine says why there are no statistics: no day read, or a run without them', () => {
+		expect(gaugeStatsLine({ days: 1, nse: null, kge: null, pbias: null })).toBe('NSE – · KGE – · PBIAS – over 1 day.');
+		expect(gaugeStatsLine(null)).toBe('no day of the record falls in the run outside its excluded periods.');
+		expect(gaugeStatsLine(undefined)).toBe('not in this run’s summary: run the model again.');
 	});
 });
 

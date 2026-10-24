@@ -343,7 +343,7 @@
 		{#if checkGauges.length}
 			<!-- Every other gauge with its own record (issue #554): checks only, never the calibration score. -->
 			<div class="wide slot">
-				<GaugeCheckFlows {projectId} {runId} gauges={checkGauges} {flowUnit} toolbar={unitToggle} {band} {forecastFrom} {exclusions} {recordHref} />
+				<GaugeCheckFlows {projectId} {runId} gauges={checkGauges} {flowUnit} toolbar={unitToggle} {band} {forecastFrom} {recordHref} />
 			</div>
 		{/if}
 		{#if modelTail}<div class="wide slot">{@render modelTail({ flowUnit, toolbar: unitToggle })}</div>{/if}

@@ -3,20 +3,21 @@
 	// network with a flow record of its own that the run doesn't score, its
 	// record against the simulated flow there as a hydrograph and a
 	// flow-duration curve, with the record's NSE, KGE and PBIAS as an
-	// out-of-sample check, never the calibration score. A link to the
+	// out-of-sample check, never the calibration score (the run summary's
+	// plausibility.gauges[].fit, computed once by the engine). A link to the
 	// record's Series details puts its Upload unit one click away. Built from
 	// the run's `observed_flow_check` and `outflow` at the gauge (engine ≥
 	// 1.90.0); a run made before says to run the model again. A long list
 	// folds to its first FOLD_CAP gauges, and only the gauges shown load
 	// their series. Pure parts: checkGauges.ts.
 	import type { Snippet } from 'svelte';
-	import { CHECK_GAUGE_FLOW_KEY, type DailySeries, type ExclusionRange } from '@water-management/engine';
+	import { CHECK_GAUGE_FLOW_KEY, type DailySeries } from '@water-management/engine';
 	import { api } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { fmtNum } from '$lib/format/number';
 	import { cachedSeries } from './cache';
-	import { checkFdc, checkHydrograph, gaugeCheckStats, gaugeStatsText, type CheckGauge } from './checkGauges';
+	import { checkFdc, checkHydrograph, gaugeStatsLine, type CheckGauge } from './checkGauges';
 	import { toDisplayUnit } from './results';
 
 	let {
@@ -27,7 +28,6 @@
 		toolbar,
 		band,
 		forecastFrom = null,
-		exclusions = [],
 		recordHref
 	}: {
 		projectId: string;
@@ -38,8 +38,6 @@
 		toolbar: Snippet;
 		band?: { from: string; to?: string; label: string; note: string };
 		forecastFrom?: string | null;
-		/** The run's calibration exclusions: left out of each gauge's statistics, as its plausibility checks leave them out. */
-		exclusions?: readonly ExclusionRange[];
 		/** The Data tab's Series details of a gauge's record; null when the project no longer has it. */
 		recordHref: (g: CheckGauge) => string | null;
 	} = $props();
@@ -116,7 +114,6 @@
 					<button type="button" class="btn btn-sm" onclick={() => retry(g.nodeId)}>Try again</button>
 				</div>
 			{:else}
-				{@const stats = gaugeCheckStats(f.observed, f.simulated, forecastFrom, exclusions)}
 				{@const fdc = checkFdc(f.observed, f.simulated, g.flowKind, conv, forecastFrom)}
 				<LineChart
 					title="Flow at {g.name} (checks only): simulated and observed"
@@ -144,7 +141,7 @@
 				/>
 				<p class="stats" data-testid="check-gauge-stats">
 					<strong>Check, out of sample:</strong>
-					{#if stats}{gaugeStatsText(stats)}.{:else}no day of the record falls in the run outside its excluded periods.{/if}
+					{gaugeStatsLine(g.fit)}
 				</p>
 			{/if}
 			{#if recordLink}

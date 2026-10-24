@@ -7869,9 +7869,10 @@ read it before.
      log switch and the last 3 years; then its flow-duration curve, both
      curves ranked on the record's days (before a forecast); then a
      **Check, out of sample:** line with the record's NSE, KGE and PBIAS and
-     its days (the run's calibration exclusions left out, as its
-     plausibility checks leave them; the intro says once that these are
-     never the calibration score); and a link, **Series details of
+     its days, read from the run summary (`plausibility.gauges[].fit`,
+     computed once by the engine outside the calibration exclusions, as its
+     plausibility checks leave them; the page computes none; the intro says
+     once that these are never the calibration score); and a link, **Series details of
      &lt;gauge&gt;'s record**, to that record on the Data tab
      (`?tab=series&series=<id>#data-chart`), where its **Upload unit** is.
      Each gauge has its name as a heading; they come in the network's
