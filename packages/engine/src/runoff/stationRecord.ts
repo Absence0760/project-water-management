@@ -17,6 +17,15 @@
 // blanked. The checks run first, on the record as stored, so an unreliable
 // period never looks like a blank outage to §2.4d; a day both set aside is
 // counted once, under the checks.
+//
+// The catchment's own gauge (RainStationInput.isCatchmentGauge, opts
+// `isCatchmentGauge`): the dated lists and rain-source periods were made for
+// this record, so its checks are the catchment gauge's exactly — checkedRain
+// with the catchment's full settings (only the quantile map off, as the
+// reference fit has no use for it), against the catchment's CHIRPS
+// (rain_chirps_mm), over the span ../prepare.ts checkedCatchmentRainRecord
+// reads (the stored record and every rain-source period's replacement days).
+// The unreliable periods are blanked after that, as for any station.
 import { fromEpochDay, isIsoDate, toEpochDay } from '../calendar';
 import { blankFitExcluded, checkedRain } from '../prepare';
 import { stationChirpsSeriesKey, stationSeriesKey, unitRainSeriesKey, type DailySeries, type ModelInput, type ProjectSettings } from '../project';
@@ -44,9 +53,9 @@ export function stationChirpsSource(settings: ProjectSettings, series: ModelInpu
 
 /** A station's checked record and what was set aside, by the checks and by the unreliable periods. */
 export interface CheckedStationRecord {
-	/** Over the stored record's span: null where it has no reading or a day is set aside; a spread accumulation's share on its days. */
+	/** Over the stored record's span (a catchment gauge's: also its rain-source periods' replacement days): null where it has no reading or a day is set aside; a spread accumulation's share on its days. */
 	record: DailySeries;
-	/** Days of the record with a stored reading the checks set aside (null after them), and days with a reading after the checks an unreliable period blanked. */
+	/** Days of the stored record with a reading the checks set aside (null after them), and days with a reading after the checks an unreliable period blanked. */
 	setAside: { checks: number; unreliable: number };
 	/** "station: …" warnings, naming the station, for what the checks and the periods did. */
 	warnings: string[];
@@ -80,25 +89,50 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * accumulation window's days but a kept reading's, as §2.4b's fit and the
  * reference gauge's (checkedReferenceGauge) leave them out; their spread days
  * are CHIRPS-shaped. Those days count under setAside.checks there.
+ *
+ * `isCatchmentGauge` (RainStationInput.isCatchmentGauge): the catchment
+ * gauge's full checks, see the header. Pass the same value for the forcing
+ * and the fit, so the two records agree.
  */
 export function checkedStationRecord(
 	settings: ProjectSettings,
 	series: ModelInput['series'],
 	stationId: string,
-	opts: { fitExcludeAccumulations?: boolean; name?: string } = {}
+	opts: { fitExcludeAccumulations?: boolean; name?: string; isCatchmentGauge?: boolean } = {}
 ): CheckedStationRecord | null {
 	const stored = (series as Record<string, DailySeries | undefined>)[stationSeriesKey(stationId)];
 	if (!stored || !stored.values.length) return null;
-	const d0 = toEpochDay(stored.startDate);
-	const n = stored.values.length;
-	const src = stationChirpsSource(settings, series, stationId);
-	const chirps = src.at === 'none' || !src.series ? series.rain_chirps_mm : src.series;
-	const sub: ModelInput['series'] = { rain_catchment_mm: stored, ...(chirps ? { rain_chirps_mm: chirps } : {}) };
-	const r = checkedRain(stationCheckSettings(settings), sub, d0, n);
+	const s0 = toEpochDay(stored.startDate);
+	let d0 = s0;
+	let n = stored.values.length;
+	let r: ReturnType<typeof checkedRain>;
+	if (opts.isCatchmentGauge) {
+		const full: ProjectSettings = { ...settings, chirpsQuantileMap: null };
+		const sub: ModelInput['series'] = { ...series, rain_catchment_mm: stored };
+		// checkedCatchmentRainRecord's span: the record and every rain-source period's replacement days.
+		let last = s0 + n - 1;
+		for (const p of full.rainSource) {
+			const alt = sub[p.series];
+			if (!alt || alt.values.length === 0) continue;
+			const a0 = toEpochDay(alt.startDate);
+			const a = Math.max(a0, toEpochDay(p.start));
+			const b = Math.min(a0 + alt.values.length - 1, toEpochDay(p.end));
+			if (a > b) continue;
+			d0 = Math.min(d0, a);
+			last = Math.max(last, b);
+		}
+		n = last - d0 + 1;
+		r = checkedRain(full, sub, d0, n);
+	} else {
+		const src = stationChirpsSource(settings, series, stationId);
+		const chirps = src.at === 'none' || !src.series ? series.rain_chirps_mm : src.series;
+		const sub: ModelInput['series'] = { rain_catchment_mm: stored, ...(chirps ? { rain_chirps_mm: chirps } : {}) };
+		r = checkedRain(stationCheckSettings(settings), sub, d0, n);
+	}
 	if (opts.fitExcludeAccumulations) blankFitExcluded(r, d0);
 	const values = r.catchment.map(keep);
 	let checks = 0;
-	for (let i = 0; i < n; i++) if (reading(stored.values[i]) && values[i] === null) checks++;
+	for (let i = 0; i < stored.values.length; i++) if (reading(stored.values[i]) && values[i + s0 - d0] === null) checks++;
 
 	const who = `station: "${opts.name ?? stationId}"`;
 	const warnings: string[] = [];

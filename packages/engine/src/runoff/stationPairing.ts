@@ -24,6 +24,9 @@
 // (not necessarily consecutive) the pairing is refused. The factors are still
 // fitted on every shared day, inside complete years or not.
 //
+// The station's record is checked as the forcing checks it: the catchment
+// gauge's full checks when stations[id].isCatchmentGauge, else a station's.
+//
 // Pinned factors (settings.rainStations.pinnedFactors[id], 12 positive
 // finite numbers) replace the fit, and a pinned pairing is never refused.
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
@@ -112,7 +115,7 @@ export function fitStationPairing(
 	const src = stationChirpsSource(settings, series, stationId);
 	const chirpsAt: StationPairingFit['chirpsAt'] = src.at === 'unit' ? { unitId: src.unitId, unitName: nodes.find((x) => x.id === src.unitId)?.name ?? src.unitId } : { cell: true };
 	const chirps = src.at === 'none' ? null : src.series;
-	const rec = checkedStationRecord(settings, series, stationId, { fitExcludeAccumulations: true, name: stationName })?.record ?? null;
+	const rec = checkedStationRecord(settings, series, stationId, { fitExcludeAccumulations: true, name: stationName, isCatchmentGauge: stations[stationId]?.isCatchmentGauge === true })?.record ?? null;
 	const c = rec && chirps ? common(rec, chirps) : null;
 
 	const pinnedRaw = settings.rainStations?.pinnedFactors?.[stationId];

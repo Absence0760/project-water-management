@@ -2,8 +2,9 @@
 // unit's own gauge gets, then the user's unreliable periods. Synthetic values only (public repo).
 import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
-import { mergeSettings } from '../prepare';
+import { checkedCatchmentRainRecord, mergeSettings } from '../prepare';
 import { stationChirpsSeriesKey, stationSeriesKey, type DailySeries, type ModelInput, type ProjectSettings, type RainStationSettings } from '../project';
+import { fitStationPairing } from './stationPairing';
 import { checkedStationRecord, stationChirpsSource } from './stationRecord';
 
 const START = '2015-01-01';
@@ -38,7 +39,12 @@ function withAccumulation(gauge: (number | null)[], chirps: (number | null)[]): 
 	for (let i = ACC_BLANK[0] - 1; i <= ACC_READ + 1; i++) chirps[i] = i <= ACC_BLANK[0] + 3 && i >= ACC_BLANK[0] ? 15 : 0;
 }
 
-const settingsWith = (rainStations: RainStationSettings | null = null, raw: Record<string, unknown> = {}): ProjectSettings => ({ ...mergeSettings(raw, []), rainStations });
+function settingsWith(rainStations: RainStationSettings | null = null, raw: Record<string, unknown> = {}): ProjectSettings {
+	const warnings: string[] = [];
+	const s = { ...mergeSettings(raw, warnings), rainStations };
+	expect(warnings).toEqual([]); // every listed period was taken
+	return s;
+}
 const ser = (values: (number | null)[], startDate = START): DailySeries => ({ startDate, values });
 const seriesOf = (m: Record<string, DailySeries>) => m as unknown as ModelInput['series'];
 
@@ -105,7 +111,8 @@ describe('checkedStationRecord', () => {
 
 	it('the catchment gauge’s dated lists don’t apply to a station', () => {
 		const stored = rainOf(1);
-		const s = settingsWith(null, { zeroRainRuns: { ...mergeSettings({}, []).zeroRainRuns, missing: [{ start: '2015-01-01', end: '2015-12-31' }] } });
+		const s = settingsWith(null, { zeroRainRuns: { ...mergeSettings({}, []).zeroRainRuns, missing: [{ start: '2015-01-01', end: '2015-12-31', reason: 'invented' }] } });
+		expect(s.zeroRainRuns.missing).toHaveLength(1); // the list is really there
 		const r = checkedStationRecord(s, seriesOf({ [stationSeriesKey('S1')]: ser(stored) }), 'S1')!;
 		expect(r.record.values).toEqual(stored);
 	});
@@ -166,5 +173,70 @@ describe('stationChirpsSource', () => {
 		expect(stationChirpsSource(s, seriesOf({ 'rain_chirps_mm@U': unit }), 'S1')).toEqual({ at: 'unit', unitId: 'U', key: 'rain_chirps_mm@U', series: unit });
 		expect(stationChirpsSource(s, seriesOf({}), 'S1')).toEqual({ at: 'unit', unitId: 'U', key: 'rain_chirps_mm@U', series: null });
 		expect(stationChirpsSource(settingsWith(), seriesOf({ rain_chirps_mm: unit }), 'S1')).toEqual({ at: 'none' });
+	});
+});
+
+describe('the station that is the catchment’s rain gauge (isCatchmentGauge)', () => {
+	const KEEP_DRY = { start: '2016-11-01', end: '2017-02-28', reason: 'invented' };
+	const MISSING = { start: '2018-03-01', end: '2018-03-10', reason: 'invented' };
+	const zr = () => settingsWith(null, { zeroRainRuns: { ...mergeSettings({}, []).zeroRainRuns, keepDry: [KEEP_DRY], missing: [MISSING] } });
+	const stored = () => withZeroRun(rainOf(1).map((v, i) => (i >= ZR_FROM && i <= ZR_TO ? v : v! + 1)));
+	const inputs = () => seriesOf({ [stationSeriesKey('S1')]: ser(stored()), rain_chirps_mm: ser(rainOf(0.7)) });
+
+	it('its dated keep-dry and missing lists apply, exactly as the catchment gauge’s own checks', () => {
+		const s = zr();
+		const r = checkedStationRecord(s, inputs(), 'S1', { isCatchmentGauge: true })!;
+		// Kept dry: the zero run is read as recorded (0), not set aside.
+		for (let i = ZR_FROM; i <= ZR_TO; i++) expect(r.record.values[i]).toBe(0);
+		// Missing: the listed days are blank.
+		for (let i = at(MISSING.start); i <= at(MISSING.end); i++) expect(r.record.values[i]).toBeNull();
+		expect(r.setAside.checks).toBe(10);
+		// The same as the catchment gauge's checked record on the same series.
+		const catchment = checkedCatchmentRainRecord({ ...s, chirpsQuantileMap: null }, seriesOf({ rain_catchment_mm: ser(stored()), rain_chirps_mm: ser(rainOf(0.7)) }))!;
+		expect(r.record).toEqual({ startDate: catchment.startDate, values: catchment.values.map((v) => (v !== null && v >= 0 ? v : null)) });
+	});
+
+	it('a station that isn’t the gauge doesn’t take them (positive control for the above)', () => {
+		const r = checkedStationRecord(zr(), inputs(), 'S1')!;
+		expect(r.record.values[ZR_FROM + 30]).toBeNull(); // the zero run is set aside, not kept dry
+		for (let i = at(MISSING.start); i <= at(MISSING.end); i++) expect(r.record.values[i]).toBe(stored()[i]);
+	});
+
+	it('its rain-source periods are written in, over the span the catchment gauge’s record reads', () => {
+		const s = settingsWith(null, { rainSource: [{ start: '2020-12-01', end: '2021-01-31', series: 'rain_catchment_alt_mm', factors: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], provenance: { source: 'invented', method: 'invented', fittedFrom: '2010-01-01', fittedTo: '2010-12-31' }, reason: 'invented' }] });
+		const alt = ser(Array.from({ length: 400 }, () => 7), '2020-06-01');
+		const x = seriesOf({ [stationSeriesKey('S1')]: ser(rainOf(1)), rain_catchment_alt_mm: alt });
+		const r = checkedStationRecord(s, x, 'S1', { isCatchmentGauge: true })!;
+		const catchment = checkedCatchmentRainRecord(s, seriesOf({ rain_catchment_mm: ser(rainOf(1)), rain_catchment_alt_mm: alt }))!;
+		expect(r.record.startDate).toBe(START);
+		expect(r.record.values.length).toBe(DAYS + 31); // to 2021-01-31
+		expect(r.record.values).toEqual(catchment.values);
+		expect(r.record.values[at('2020-12-15')]).toBeCloseTo(7, 9);
+		expect(r.record.values[DAYS + 10]).toBeCloseTo(7, 9);
+		// Not a gauge: the period is the catchment gauge's, not this station's.
+		const plain = checkedStationRecord(s, x, 'S1')!;
+		expect(plain.record.values.length).toBe(DAYS);
+		expect(plain.record.values[at('2020-12-15')]).toBe(rainOf(1)[at('2020-12-15')]);
+	});
+
+	it('the pairing fit reads the same record as the forcing', () => {
+		const s = zr();
+		const x = seriesOf({ ...(inputs() as Record<string, DailySeries>), [stationChirpsSeriesKey('S1')]: ser(rainOf(0.7).map((v) => v! + 0.1)) });
+		const forcing = checkedStationRecord(s, x, 'S1', { isCatchmentGauge: true })!;
+		const fitRec = checkedStationRecord(s, x, 'S1', { isCatchmentGauge: true, fitExcludeAccumulations: true })!;
+		expect(fitRec.record).toEqual(forcing.record); // no accumulations here, so the two agree day by day
+		const stations = { S1: { name: 'Gauge', mapMm: 600, mapSource: 'invented', lat: null, lon: null, isCatchmentGauge: true } };
+		const fit = fitStationPairing({ settings: s, series: x, stations, nodes: [], stationId: 'S1' }, []);
+		expect(fit.refused).toBeNull();
+		const march = forcing.record.values.filter((v, i) => v !== null && monthOf(i) === 3).length;
+		expect(fit.months[2]!.sharedDays).toBe(march);
+		// Not the gauge: the missing list doesn't apply, so March keeps its 10 days, in the forcing's record and the
+		// fit's alike (the fit is refused here, its set-aside zero run breaking two years, but still counts its days).
+		const plain = fitStationPairing({ settings: s, series: x, stations: { S1: { ...stations.S1, isCatchmentGauge: false } }, nodes: [], stationId: 'S1' }, []);
+		const plainForcing = checkedStationRecord(s, x, 'S1')!;
+		expect(plain.refused).toMatch(/4 complete calendar years/);
+		expect(plainForcing.record.values.filter((v, i) => v !== null && monthOf(i) === 3).length).toBe(march + 10);
+		expect(plain.days).toBe(plainForcing.record.values.filter((v) => v !== null).length);
+		expect(fit.days).toBe(forcing.record.values.filter((v) => v !== null).length);
 	});
 });
