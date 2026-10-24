@@ -7,13 +7,17 @@
 // the boundary's cells, and the Map tab's line goes. A viewer gets neither
 // the link nor the button. The page passes axe with the proposal open. No
 // fetch runs here (the DB tests fetch through the fixtures), and the feed is
-// removed afterwards, so the shared example stays as seeded.
+// removed afterwards, so the shared example stays as seeded. On a project of
+// its own whose runs read a CHIRPS record (issue #561), the proposal names the
+// record, keeps it for runs (the new series sorts after it, read from the
+// record's first day with rnl), and replaces it only when the owner chooses.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL, WEB_URL } from '../support/env.ts';
+import { createProject, putSeries } from '../support/api.ts';
 import { ANALYST, DEMO, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openMap } from '../support/map.ts';
+import { box, openMap } from '../support/map.ts';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -111,4 +115,70 @@ test('a viewer gets neither the map’s link nor the button', async ({ page }) =
 	await expect(panel.getByRole('button', { name: 'Refresh status' })).toBeVisible();
 	await expect(panel.getByRole('button', { name: /^(?:Attach a feed|Rain from the map)$/ })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Rain from the catchment boundary' })).toHaveCount(0);
+});
+
+test('beside a CHIRPS record runs read: the proposal names it and keeps it for runs from its first day, or replaces it when chosen (issue #561)', async ({ page, owner }) => {
+	void owner;
+	const RECORD = 'Rainfall CHIRPS satelite (mm)';
+	const { id } = await createProject(page.request, 'Boundary rain beside a record');
+	await putSeries(page.request, id, { kind: 'rain_chirps_mm', name: RECORD, unit: 'mm', startDate: '1995-01-01', values: [1, 2, 3] });
+	const made = await page.request.post(`${API_URL}/projects/${id}/map/features`, {
+		data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.26, -33.74, 0.1)] } }
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	await page.goto(`/projects/${id}?tab=settings&rain=boundary`);
+
+	const proposal = page.getByRole('region', { name: 'Rain from the catchment boundary' });
+	await expect(proposal.getByTestId('boundary-rain-run-series')).toHaveText(`“${RECORD}”, 1 Jan 1995 to 3 Jan 1995`);
+	const keep = proposal.getByRole('radio', { name: `Keep “${RECORD}” for runs, and put the boundary’s rain beside it to compare` });
+	const replace = proposal.getByRole('radio', { name: `Replace “${RECORD}” with the boundary’s rain, once its whole record is read` });
+	await expect(keep).toBeChecked();
+	await expect(replace).toBeEnabled();
+	// Read from the record's first day, with rnl (it starts before sat does); never only the last 60 days.
+	await expect(proposal.getByRole('combobox')).toHaveValue('rnl');
+	await expect(proposal.getByRole('textbox', { name: /^Start date/ })).toHaveValue('1 Jan 1995');
+	await expect(proposal.getByTestId('boundary-rain-apply-words')).toHaveText(
+		`Apply attaches a new CHIRPS feed into Rainfall — CHIRPS · ${RECORD} (boundary). Runs keep reading “${RECORD}”: the new series sorts after it, so the two sit side by side to compare. It reads the rnl product from 1 Jan 1995, then keeps up daily.`
+	);
+	await expectNoViolations(page);
+
+	// Replacing says what happens, and hides the product and start (the record's own).
+	await replace.check();
+	await expect(proposal.getByTestId('boundary-rain-apply-words')).toHaveText(
+		`Apply attaches a CHIRPS feed (rnl) that replaces “${RECORD}” with the boundary’s rain: it reads the whole record again from 1 Jan 1995 into a stage, and runs keep reading the old values until the new record is complete, then it takes their place whole (the old values stay in the series’ history).`
+	);
+	await expect(proposal.getByRole('combobox')).toHaveCount(0);
+
+	// Keep it: the feed goes into the series beside the record.
+	await keep.check();
+	await proposal.getByTestId('boundary-rain-apply').click();
+	await expect(proposal.getByTestId('boundary-rain-done')).toContainText('the CHIRPS feed now reads');
+	const { feeds } = (await (await page.request.get(`${API_URL}/projects/${id}/feeds`)).json()) as { feeds: { targetName: string; config: { product?: string; startDate?: string } }[] };
+	expect(feeds).toEqual([expect.objectContaining({ targetName: `${RECORD} (boundary)`, config: expect.objectContaining({ product: 'rnl', startDate: '1995-01-01' }) })]);
+});
+
+test('a record another feed writes can’t be replaced: the choice is off and says why, and keeping it still applies (issue #561)', async ({ page, owner }) => {
+	void owner;
+	const RECORD = 'Rainfall CHIRPS';
+	const { id } = await createProject(page.request, 'Boundary rain, record fed');
+	await putSeries(page.request, id, { kind: 'rain_chirps_mm', name: RECORD, unit: 'mm', startDate: '1995-01-01', values: [1, 2, 3] });
+	const fed = await page.request.post(`${API_URL}/projects/${id}/feeds`, {
+		data: { source: 'chirps', config: { cells: [{ lat: -33.7, lon: 21.3 }], product: 'rnl', startDate: '1995-01-01' }, targetName: RECORD, replaceSeries: true }
+	});
+	expect(fed.status(), await fed.text()).toBe(201);
+	const made = await page.request.post(`${API_URL}/projects/${id}/map/features`, {
+		data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.26, -33.74, 0.1)] } }
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`/projects/${id}?tab=settings&rain=boundary`);
+
+	const proposal = page.getByRole('region', { name: 'Rain from the catchment boundary' });
+	const replace = proposal.getByRole('radio', { name: `Replace “${RECORD}” with the boundary’s rain, once its whole record is read` });
+	await expect(replace).toBeDisabled();
+	await expect(replace).toHaveAccessibleDescription(`Can’t replace it: a feed already writes “${RECORD}”: change or remove that feed to replace its record.`);
+	await expect(proposal.getByRole('radio', { name: new RegExp(`^Keep “${RECORD}” for runs`) })).toBeChecked();
+	await expectNoViolations(page);
+	await proposal.getByTestId('boundary-rain-apply').click();
+	await expect(proposal.getByTestId('boundary-rain-done')).toContainText('the CHIRPS feed now reads');
 });

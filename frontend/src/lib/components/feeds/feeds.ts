@@ -2,7 +2,7 @@
 // feeds). The types mirror backend/src/feeds/store.ts FeedMeta; the calls go
 // through the app's API client, and the form helpers are pure so they can be
 // tested without a page.
-import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, provenanceLabel, sameProvenance, type SeriesMeta, type SeriesProvenance } from '@water-management/engine';
+import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, compareSeriesNames, provenanceLabel, sameProvenance, type SeriesMeta, type SeriesProvenance } from '@water-management/engine';
 import type { Api } from '$lib/api';
 import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '$lib/api/types';
 import { ApiError } from '$lib/api/client';
@@ -135,6 +135,14 @@ export interface BoundaryCell {
 	share: number;
 }
 
+/** The CHIRPS series a run reads now (the first by name), as the boundary proposal names it. */
+export interface RunSeriesWords {
+	name: string;
+	/** The first and last day it holds a value on; null when it holds none. */
+	firstDay: string | null;
+	lastDay: string | null;
+}
+
 /** GET …/feeds/chirps/from-boundary (backend feeds/fromBoundary.ts). */
 export interface BoundaryProposal {
 	boundary: BoundaryMark;
@@ -144,12 +152,43 @@ export interface BoundaryProposal {
 	cellsKm2: number;
 	insideKm2: number;
 	method: string;
-	/** What Apply does: nothing (a feed reads this boundary already), give an empty feed the cells, or attach a new feed. */
+	/**
+	 * What Apply does: nothing (a feed reads this boundary already), give an empty feed the cells, or attach a new
+	 * feed; with the product and first day it reads unless told otherwise (null: the last 60 days). A new series is
+	 * always named to sort after the record runs read (issue #561).
+	 */
 	apply:
 		| { action: 'none'; feedId: string }
-		| { action: 'update'; feedId: string; targetKind: string; targetName: string }
-		| { action: 'create'; targetKind: string; targetName: string };
+		| { action: 'update'; feedId: string; targetKind: string; targetName: string; product: ChirpsProduct; startDate: string | null }
+		| { action: 'create'; targetKind: string; targetName: string; product: ChirpsProduct; startDate: string | null };
+	/** The CHIRPS series runs read now; null when there is none. */
+	runSeries: RunSeriesWords | null;
+	/** Replacing that record with the boundary's instead (a staged full backfill): null when runs read no record, or nothing is left to apply. */
+	replace: null | { available: true; targetName: string; product: ChirpsProduct; startDate: string } | { available: false; targetName: string; reason: string };
 	canApply: boolean;
+}
+
+/** The owner's choices on the proposal: keep the record runs read (a new series beside it) or replace it; the product and first day ('' = the proposal's default). */
+export interface BoundaryChoice {
+	replace: boolean;
+	product: ChirpsProduct;
+	startDate: string;
+}
+
+/** The choices the proposal starts with: keep, and its product and first day. */
+export const boundaryChoice = (p: Pick<BoundaryProposal, 'apply'>): BoundaryChoice =>
+	p.apply.action === 'none' ? { replace: false, product: 'sat', startDate: '' } : { replace: false, product: p.apply.product, startDate: p.apply.startDate ?? '' };
+
+/** POST …/from-boundary's body for the proposal and the owner's choices, or what is wrong with the start date. */
+export function boundaryApplyBody(p: Pick<BoundaryProposal, 'boundary' | 'apply'>, choice: BoundaryChoice): { body: Record<string, unknown> } | { error: string } {
+	const version = { featureId: p.boundary.featureId, updatedAt: p.boundary.updatedAt };
+	// Replacing: the server backfills from the record's first day with the product the proposal named.
+	if (choice.replace) return { body: { ...version, replace: true, product: choice.product } };
+	const start = choice.startDate.trim();
+	const problem = chirpsStartProblem(choice.product, start);
+	if (problem) return { error: problem };
+	const where = p.apply.action === 'update' ? { feedId: p.apply.feedId } : p.apply.action === 'create' ? { targetName: p.apply.targetName } : {};
+	return { body: { ...version, ...where, product: choice.product, ...(start ? { startDate: start } : {}) } };
 }
 
 export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
@@ -164,19 +203,22 @@ export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
 		/** The CHIRPS cells the map's catchment boundary covers, and what applying them would do (issue #326 B-rain). */
 		boundaryProposal: () => api.request<BoundaryProposal>('GET', `${base}/chirps/from-boundary`),
 		/** Apply the proposal made from this version of the boundary (refused once the boundary has changed). */
-		applyBoundary: (p: Pick<BoundaryProposal, 'boundary' | 'apply'>) =>
-			api
-				.request<{ feed: FeedMeta }>('POST', `${base}/chirps/from-boundary`, {
-					featureId: p.boundary.featureId,
-					updatedAt: p.boundary.updatedAt,
-					...(p.apply.action === 'update' ? { feedId: p.apply.feedId } : p.apply.action === 'create' ? { targetName: p.apply.targetName } : {})
-				})
-				.then((r) => r.feed),
+		applyBoundary: (body: Record<string, unknown>) => api.request<{ feed: FeedMeta }>('POST', `${base}/chirps/from-boundary`, body).then((r) => r.feed),
 		/** Each land unit's CHIRPS cells from its parcel on the map, and its own feed (issue #482); `product`: as POST would set them up with it. */
 		unitsProposal: (product?: ChirpsProduct) => api.request<UnitRainProposal>('GET', `${base}/chirps/from-units${product ? `?product=${product}` : ''}`),
 		/** Create or update one CHIRPS feed per unit into its own rain series. */
 		applyUnits: (body: UnitRainApplyBody) => api.request<UnitRainApplyResult>('POST', `${base}/chirps/from-units`, body)
 	};
+}
+
+/** What is wrong with a CHIRPS feed's start date (trimmed, '' for none) for `product`, or null: a day, no earlier than the product's first. */
+export function chirpsStartProblem(product: ChirpsProduct, start: string): string | null {
+	const first = CHIRPS_PRODUCT_FIRST_DAY[product];
+	if (start && !ISO_DAY.test(start)) return 'The start date should be a day, YYYY-MM-DD.';
+	if (start && start < first) {
+		return product === 'sat' ? `The sat product begins on ${first}. For earlier days choose the rnl product, which reads 1981 onwards for the whole record.` : `CHIRPS begins on ${first}.`;
+	}
+	return null;
 }
 
 /** The form's state: text fields as typed. */
@@ -329,17 +371,8 @@ export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string;
 	if (d.source !== 'chirps') return { body: { ...common, config: place } };
 	// CHIRPS: one daily product end to end, from no earlier than its first day (issue #40 part c).
 	const start = d.startDate.trim();
-	const first = CHIRPS_PRODUCT_FIRST_DAY[d.product];
-	if (start && !ISO_DAY.test(start)) return { error: 'The start date should be a day, YYYY-MM-DD.', field: 'start' };
-	if (start && start < first) {
-		return {
-			error:
-				d.product === 'sat'
-					? `The sat product begins on ${first}. For earlier days choose the rnl product, which reads 1981 onwards for the whole record.`
-					: `CHIRPS begins on ${first}.`,
-			field: 'start'
-		};
-	}
+	const startProblem = chirpsStartProblem(d.product, start);
+	if (startProblem) return { error: startProblem, field: 'start' };
 	return {
 		body: {
 			...common,
@@ -500,17 +533,28 @@ export function takeoverOf<S extends Pick<SeriesMeta, 'kind' | 'name' | 'length'
 /**
  * A series name for the feed that no series or feed of that kind uses yet
  * ("CHIRPS", "CHIRPS 2", "DWS A2H012"), so the feed's values sit beside the
- * existing record instead of replacing it.
+ * existing record instead of replacing it. Never one that sorts ahead of the
+ * record runs read now (the kind's first series with no site by name, when it
+ * holds days): a run reads the first by name, so it would take over unseen,
+ * and the server refuses it (issue #561); then "<that record> (CHIRPS)".
  */
 export function separateName(
 	body: Pick<FeedBody, 'source' | 'config' | 'targetKind'>,
-	series: readonly Pick<SeriesMeta, 'kind' | 'name'>[],
+	series: readonly (Pick<SeriesMeta, 'kind' | 'name' | 'length'> & { siteNodeId?: string | null })[],
 	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[]
 ): string {
 	const base = 'station' in body.config ? `DWS ${body.config.station}` : body.source === 'chirps_gefs' ? 'CHIRPS-GEFS' : 'CHIRPS';
 	const taken = new Set([...series.filter((s) => s.kind === body.targetKind).map((s) => s.name), ...feeds.filter((f) => f.targetKind === body.targetKind).map((f) => f.targetName)]);
-	let name = base;
-	for (let i = 2; taken.has(name); i++) name = `${base} ${i}`;
+	const pick = series
+		.filter((s) => s.kind === body.targetKind && !s.siteNodeId)
+		.reduce<(typeof series)[number] | null>((a, s) => (!a || compareSeriesNames(s.name, a.name) < 0 ? s : a), null);
+	const after = (name: string) => !pick || pick.length === 0 || compareSeriesNames(name, pick.name) > 0;
+	for (let i = 1; i < 100; i++) {
+		const name = i === 1 ? base : `${base} ${i}`;
+		if (!taken.has(name) && after(name)) return name;
+	}
+	let name = `${pick!.name} (${base})`;
+	for (let i = 2; taken.has(name); i++) name = `${pick!.name} (${base} ${i})`;
 	return name;
 }
 
@@ -532,14 +576,39 @@ export function errorText(e: unknown): string {
 // Whether a CHIRPS feed reads the map's boundary: its own module, so the Map tab's link imports it without this file.
 export { boundaryFeedState } from './boundaryState';
 
-/** "Attach a new CHIRPS feed into Rainfall — CHIRPS" and the like: what Apply will do, in words. */
-export function applyWords(p: Pick<BoundaryProposal, 'apply'>, feeds: readonly Pick<FeedMeta, 'id' | 'targetKind' | 'targetName'>[]): string {
+/** A series name in words: quoted, or "the series without a name" (backend routes.ts seriesWords). */
+const seriesWords = (name: string) => (name ? `“${name}”` : 'the series without a name');
+
+/** "“Rainfall CHIRPS”, 2009-01-01 to 2025-06-30" (or "… which holds no days yet"), for the proposal. */
+export function runSeriesText(s: RunSeriesWords): string {
+	return s.firstDay && s.lastDay ? `${seriesWords(s.name)}, ${fmtDay(s.firstDay)} to ${fmtDay(s.lastDay)}` : `${seriesWords(s.name)}, which holds no days yet`;
+}
+
+/** "Attach a new CHIRPS feed into Rainfall — CHIRPS" and the like: what Apply will do with these choices, in words. */
+export function applyWords(
+	p: Pick<BoundaryProposal, 'apply'> & Partial<Pick<BoundaryProposal, 'runSeries' | 'replace'>>,
+	feeds: readonly Pick<FeedMeta, 'id' | 'targetKind' | 'targetName'>[],
+	choice: BoundaryChoice = boundaryChoice(p)
+): string {
 	const a = p.apply;
 	if (a.action === 'none') return 'A CHIRPS feed already reads this boundary: nothing to apply.';
+	const record = p.runSeries?.firstDay ? p.runSeries : null;
+	if (choice.replace && p.replace?.available && record) {
+		return (
+			`Apply attaches a CHIRPS feed (${choice.product}) that replaces ${seriesWords(record.name)} with the boundary’s rain: it reads the whole record again from ${fmtDay(p.replace.startDate)} into a stage, ` +
+			'and runs keep reading the old values until the new record is complete, then it takes their place whole (the old values stay in the series’ history).'
+		);
+	}
+	const start = choice.startDate.trim();
+	const reads = start ? `It reads the ${choice.product} product from ${fmtDay(start)}, then keeps up daily.` : 'It reads the last 60 days at its first fetch, then keeps up daily.';
 	if (a.action === 'update') {
 		const f = feeds.find((x) => x.id === a.feedId);
-		return `Apply gives the CHIRPS feed into ${describeTarget(f ?? a)} these cells in place of its own (its series holds no days yet, so nothing is spliced).`;
+		return `Apply gives the CHIRPS feed into ${describeTarget(f ?? a)} these cells in place of its own (its series holds no days yet, so nothing is spliced). ${reads}`;
 	}
-	const own = a.targetName ? ' A series of its own: the one without a name already holds a record, and a feed never splices two areas into one.' : '';
-	return `Apply attaches a new CHIRPS feed into ${describeTarget(a)}.${own} It reads the last 60 days at its first fetch, then keeps up daily.`;
+	const own = record
+		? ` Runs keep reading ${seriesWords(record.name)}: the new series sorts after it, so the two sit side by side to compare.`
+		: a.targetName
+			? ' A series of its own: the one without a name already holds a record, and a feed never splices two areas into one.'
+			: '';
+	return `Apply attaches a new CHIRPS feed into ${describeTarget(a)}.${own} ${reads}`;
 }

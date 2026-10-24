@@ -946,7 +946,7 @@ reads `bundle-1` and `bundle-2`):
 | --- | --- |
 | `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, the headline pair's two results digests (`headline`, `bundle-2`; null without a recorded pair), and the SHA-256 of every other entry |
 | `manifest.json` | the manifest as its RFC 8785 text: its SHA-256 *is* the manifest hash |
-| `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash), `<run>` `baseline` and, for an application, `application` |
+| `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash, and `seriesChoice` when the project held several CHIRPS series: the re-run passes it back to the engine, whose warning reads it, engine ≥ 1.90.0), `<run>` `baseline` and, for an application, `application` |
 | `runs/<run>/results.json` | the run's stored summary and the SHA-256 of each daily output (results `results-1`) |
 | `series/<sha256>.csv` | each input series' values, `date,value` one row a day, a missing day empty, named by the SHA-256 of the values (runs that share a series share its file) |
 | `scenario.json` | the application's scenario as its run recorded it: the ops, their hash, the base run (application packs only) |
