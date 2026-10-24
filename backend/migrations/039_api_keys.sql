@@ -36,7 +36,7 @@
 CREATE TABLE api_key (
 	id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	project_id     uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE,
-	-- The owner's name for it ("Drift logger gateway").
+	-- The owner's name for it ("Weir logger gateway").
 	name           text NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
 	-- The first 8 characters of the id: part of the key, and shown in lists.
 	prefix         text GENERATED ALWAYS AS (left(id::text, 8)) STORED UNIQUE,
