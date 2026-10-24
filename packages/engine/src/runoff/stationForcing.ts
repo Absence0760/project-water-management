@@ -296,7 +296,7 @@ export function setAsideInWindow(ctx: StationContext, stationId: string, start: 
 	let checksOnly: (number | null)[] | null = null;
 	if (hasPeriods) {
 		const rs = ctx.settings.rainStations!;
-		const without = checkedStationRecord({ ...ctx.settings, rainStations: { ...rs, unreliable: { ...rs.unreliable, [stationId]: [] } } }, ctx.series, stationId, { isCatchmentGauge: ctx.stations[stationId]?.isCatchmentGauge === true });
+		const without = checkedStationRecord({ ...ctx.settings, rainStations: { ...rs, unreliable: Object.fromEntries(Object.entries(rs.unreliable ?? {}).filter(([id]) => id !== stationId)) } }, ctx.series, stationId, { isCatchmentGauge: ctx.stations[stationId]?.isCatchmentGauge === true });
 		checksOnly = alignReadings(without?.record, start, days);
 	}
 	let checks = 0;

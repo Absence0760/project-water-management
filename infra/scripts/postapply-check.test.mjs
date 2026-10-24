@@ -245,6 +245,6 @@ test('--redirect-from: a former hostname 301s a page to the same path on the sit
 
 	// Without the flag no former hostname is called.
 	const none = run();
-	assert.ok(none.curl.every((a) => !a.at(-1).startsWith(OLD)));
+	assert.ok(none.curl.every((a) => new URL(a.at(-1)).host !== new URL(OLD).host));
 	assert.equal(none.line('redirect-page'), '');
 });

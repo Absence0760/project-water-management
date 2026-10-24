@@ -11,7 +11,7 @@ describe('basePath', () => {
 		root.value = '/';
 	});
 
-	it('is empty at the site root, so `${basePath()}/x` is "/x"', () => {
+	it('is empty at the site root, so basePath() + "/x" is "/x"', () => {
 		expect(basePath()).toBe('');
 		expect(`${basePath()}/privacy`).toBe('/privacy');
 	});

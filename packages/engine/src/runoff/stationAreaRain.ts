@@ -6,7 +6,6 @@
 import { prepareRun } from '../prepare';
 import type { ModelInput, StationAreaForcing } from '../project';
 import { forecastTail } from '../forecastTail';
-import { STATION_DAY_SOURCE } from './stationForcing';
 import { UNIT_RAIN_SOURCE, unitRainForcing, unitRainOn } from './unitRain';
 
 /** Where a day's rain came from: the station (× the MAP ratio), the area's corrected CHIRPS, the next fallback, or none (dry). */

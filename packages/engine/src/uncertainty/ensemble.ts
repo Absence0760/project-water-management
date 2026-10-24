@@ -35,7 +35,6 @@ import { ENGINE_VERSION } from '../version';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { referenceFit, referenceGaugeRecord } from '../runoff/unitRain';
 import { pairingFactors } from '../runoff/stationForcing';
-import { checkedReferenceGauge } from '../runoff/unitGaugeChecks';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';

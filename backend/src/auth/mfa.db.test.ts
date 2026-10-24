@@ -69,7 +69,7 @@ describe('adding an authenticator', () => {
 		const r = await u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' });
 		expect(r.status).toBe(200);
 		expect(r.body.secret).toMatch(/^[A-Z2-7]{32}$/);
-		expect(r.body.uri).toMatch(/^otpauth:\/\/totp\/Water%20Management:/);
+		expect(r.body.uri).toMatch(/^otpauth:\/\/totp\/IC-WBT:/);
 		expect(new URL(r.body.uri).searchParams.get('secret')).toBe(r.body.secret);
 		// Sealed: the stored bytes don't hold the secret, and open only for this account.
 		const [row] = await asOwner('SELECT secret_enc, confirmed_at FROM user_totp WHERE user_id = $1', [u.id]);
