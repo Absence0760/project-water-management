@@ -19,6 +19,7 @@
 // against the simulated flow there, reported per site in `gauges`. Checks 2
 // and 3 stay catchment-wide: the rain is the catchment's.
 import { CALIBRATION_FLOW_KINDS, gaugeCheckKind, type CalibrationFlowKind } from '../project';
+import { calibrationStats } from '../network/stats';
 import type { EwrAssuranceSite } from '../reserve/assurance';
 import type { RunoffModelId } from '../runoff/types';
 import { flowDoubleMass, flowDoubleMassWarning, type FlowDoubleMass } from './flowDoubleMass';
@@ -82,6 +83,28 @@ export interface GaugePlausibility {
 	naturalised: NaturalisedCheck | null;
 	/** Check 4 at the gauge, in the catchment's dry season; null without one. */
 	lowFlow: LowFlowCurves | null;
+	/**
+	 * The record's fit against the simulated flow at the gauge (engine ≥
+	 * 1.90.0, issue #554, docs/model.md §2.10k): NSE, KGE and PBIAS with the
+	 * run's calibration statistics' formulas (network/stats.ts
+	 * calibrationStats) on every day with a reading outside the run's
+	 * calibration exclusions and before a forecast run's forecast, no
+	 * calibration window. A check, never the
+	 * calibration score (unless this gauge is the calibration site, whose
+	 * score is RunSummary.calibration). null when no day is read; absent on a
+	 * run made before 1.90.0.
+	 */
+	fit?: GaugeFitCheck | null;
+}
+
+/** A gauge record's fit as a check (GaugePlausibility.fit). */
+export interface GaugeFitCheck {
+	/** Days with a reading outside the exclusions. */
+	days: number;
+	nse: number | null;
+	kge: number | null;
+	/** %, positive = the model under-estimates (calibrationStats). */
+	pbias: number | null;
 }
 
 /** One gauge's inputs: its records and the network's flows at it, m³/day aligned to the run. */
@@ -111,6 +134,20 @@ export interface PlausibilityInput {
 	/** Observed records present in the project, m³/s aligned to the run. */
 	observed: Partial<Record<CalibrationFlowKind, ArrayLike<number | null>>>;
 	calibrationKind: CalibrationFlowKind | null;
+	/**
+	 * The kind of the record the run's calibration statistics score, wherever
+	 * they score it (the calibration site's when the run scores one, engine ≥
+	 * 1.90.0): the gauges' checks read that kind where a gauge has it
+	 * (gaugeCheckKind, engine-audit.md G2); without a record scored, the kind
+	 * asked for in Settings, else null.
+	 */
+	scoredKind: CalibrationFlowKind | null;
+	/**
+	 * The days before a forecast run's forecast (engine-audit.md K1); absent:
+	 * every day. The gauges' fit checks (GaugePlausibility.fit) read only
+	 * these, as the flow-duration curves beside them on Runs & results do.
+	 */
+	historyDays?: number;
 	/** 1 on days the calibration exclusions leave out. */
 	excluded: Uint8Array;
 	/**
@@ -233,8 +270,8 @@ const atGauge = (name: string, w: string) => `At gauge "${name}": ${w[0]!.toLowe
 
 /** Checks 1 and 4 at one gauge, on the catchment's dry season and the run's exclusions. */
 function gaugeChecks(g: GaugePlausibilityInput, x: PlausibilityInput, season: DrySeason | null, inSeason: Uint8Array | null): GaugePlausibility {
-	const cal = x.calibrationKind;
-	// One rule with the checks-only series run.ts stores (gaugeCheckKind); a gauge here has at least one record.
+	const cal = x.scoredKind;
+	// One rule with the checks-only series and the EWR test at a gauge in run.ts (gaugeCheckKind); a gauge here has at least one record.
 	const flowKind = gaugeCheckKind(cal, CALIBRATION_FLOW_KINDS.filter((k) => g.observed[k]))!;
 	const obs = g.observed[flowKind];
 	const naturalised = obs
@@ -259,5 +296,21 @@ function gaugeChecks(g: GaugePlausibilityInput, x: PlausibilityInput, season: Dr
 		naturalM3Day: g.naturalM3Day,
 		excluded: x.excluded
 	});
-	return { nodeId: g.nodeId, name: g.name, flowKind, naturalShare: g.naturalShare, naturalised, lowFlow };
+	return { nodeId: g.nodeId, name: g.name, flowKind, naturalShare: g.naturalShare, naturalised, lowFlow, fit: obs ? gaugeFitCheck(g.simulatedM3Day, obs, x.excluded, x.historyDays) : null };
+}
+
+/**
+ * GaugePlausibility.fit: the record (m³/s, null = no reading) against the
+ * simulated flow (m³/day), the excluded days and a forecast run's forecast
+ * days (from `historyDays`) left out.
+ */
+export function gaugeFitCheck(
+	simulatedM3Day: ArrayLike<number>,
+	observedM3s: ArrayLike<number | null>,
+	excluded: ArrayLike<number> | null,
+	historyDays: number = observedM3s.length
+): GaugeFitCheck | null {
+	const obs = Array.from(observedM3s, (v, t) => (excluded?.[t] || t >= historyDays ? null : v));
+	const s = calibrationStats(simulatedM3Day, obs);
+	return s.days ? { days: s.days, nse: s.nse, kge: s.kge ?? null, pbias: s.pbias } : null;
 }

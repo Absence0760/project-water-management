@@ -478,12 +478,14 @@ function runNetwork(
 		const other = kinds.find((k) => k !== calKind);
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
 	}
+	// The kind the gauges' checks read (gaugeCheckKind, engine-audit.md G2): the scored kind, else the kind asked for.
+	const gaugeKind = calKind ?? settings.calibrationFlowKind ?? null;
 	// Every other gauge inside the network with a record of its own (engine ≥ 1.90.0, issue #554, docs/model.md
 	// §2.10k): the record its plausibility checks read (plausibility/index.ts gaugeChecks), beside the gauge's `outflow`, for its checks-only hydrograph.
 	for (const [i, node] of nodes.map((n, i) => [i, n] as const).sort(([, a], [, b]) => cmpStr(a.id, b.id))) {
 		if (node.kind !== 'gauge' || i === topo.outflow || node.id === calSite?.nodeId) continue;
-		// The record plausibility's gaugeChecks reads there (one rule, gaugeCheckKind).
-		const kind = gaugeCheckKind(observedKind, calibrationRecordsAt(series, node.id));
+		// The record plausibility's gaugeChecks reads there (one rule, gaugeCheckKind, engine-audit.md G2).
+		const kind = gaugeCheckKind(gaugeKind, calibrationRecordsAt(series, node.id));
 		if (!kind) continue;
 		const obs = alignFlow(series[calibrationSeriesKey(kind, node.id)], start, days);
 		push(node.id, CHECK_GAUGE_FLOW_KEY, checkGaugeFlowLabel(kind), 'm³/day', obs.map((x) => (x === null ? NaN : x * SEC_PER_DAY)));
@@ -1003,14 +1005,14 @@ function runNetwork(
 			? ewrAgreement(simOutflow, observedM3s, ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
 			: null;
 	// The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0, docs/model.md §2.10k):
-	// its record against its simulated outflow and its own pragmatic requirement.
+	// its record against its simulated outflow and its own pragmatic requirement. The record is the one the
+	// plausibility checks and the checks-only series read there (engine ≥ 1.90.0, gaugeCheckKind, engine-audit.md G2).
 	const ewrAgreementSites: EwrAgreementSite[] = [];
 	for (const node of [...siteNodes].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))) {
 		if (node === topo.outflow) continue;
 		const id = nodes[node]!.id;
-		const kinds = calibrationRecordsAt(series, id);
-		if (!kinds.length) continue;
-		const kind = settings.calibrationFlowKind && kinds.includes(settings.calibrationFlowKind) ? settings.calibrationFlowKind : kinds[0]!;
+		const kind = gaugeCheckKind(gaugeKind, calibrationRecordsAt(series, id));
+		if (!kind) continue;
 		const obs = alignFlow(series[calibrationSeriesKey(kind, id)], start, days);
 		const r = sim.nodes[node]!;
 		ewrAgreementSites.push({
@@ -1062,6 +1064,8 @@ function runNetwork(
 		natural,
 		simOutflow,
 		observedKind,
+		scoredKind: gaugeKind,
+		historyDays,
 		aligned,
 		accumulation,
 		finalRain: catchmentRain,
@@ -1268,6 +1272,10 @@ function runPlausibility(r: {
 	natural: Float64Array;
 	simOutflow: Float64Array;
 	observedKind: CalibrationFlowKind | null;
+	/** The kind the run's calibration statistics score (calKind), else the kind asked for in Settings: the gauges' checks read it (gaugeCheckKind). */
+	scoredKind: CalibrationFlowKind | null;
+	/** The days before a forecast tail: the gauges' fit checks read only these. */
+	historyDays: number;
 	aligned: (kind: SeriesKind) => (number | null)[];
 	accumulation: AccumulationRun | null;
 	finalRain: (number | null)[] | null;
@@ -1347,6 +1355,8 @@ function runPlausibility(r: {
 		simulatedM3Day: r.simOutflow,
 		observed,
 		calibrationKind: r.observedKind,
+		scoredKind: r.scoredKind,
+		...(r.historyDays < days ? { historyDays: r.historyDays } : {}),
 		excluded,
 		...(flowFlagged ? { flowFlagged } : {}),
 		damsM3Day: dams,

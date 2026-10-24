@@ -728,7 +728,7 @@ export type GaugeSeriesKey = `${CalibrationFlowKind}@${string}`;
 export interface EwrAgreementSite {
 	nodeId: string;
 	name: string;
-	/** The gauge's record tested: the run's calibration kind when it has one, else its other record. */
+	/** The gauge's record tested (gaugeCheckKind, engine ≥ 1.90.0, engine-audit.md G2): the kind the run's calibration statistics score (the calibration site's when it scores one; the kind asked for in Settings when nothing is scored) when the gauge has it, else its gauge record, else its logger. Before 1.90.0 the kind asked for in Settings when the gauge had it, else its first record. */
 	flowKind: CalibrationFlowKind;
 	agreement: EwrAgreement;
 }
@@ -807,18 +807,21 @@ export const OBSERVED_SERIES_LABEL: Record<CalibrationFlowKind, string> = {
  * record of its own, other than the calibration site, has that record stored
  * under this key at its node, beside the node's `outflow`, so its hydrograph
  * can be drawn without making it the calibration site. The record is the one
- * the plausibility checks read there (the run's calibration kind when the
- * gauge has it, else its other record), m³/day, NaN on a day without a
- * reading. The calibration site's record stays its node's `observed_flow`.
+ * the plausibility checks and the EWR test read there (gaugeCheckKind),
+ * m³/day, NaN on a day without a reading. The calibration site's record stays its node's `observed_flow`.
  */
 export const CHECK_GAUGE_FLOW_KEY = 'observed_flow_check';
 /**
- * Which of a gauge's records (inside the network) its checks read: the run's
- * calibration record's kind (the outlet's, as resolved) when the gauge has
- * it, else the first it has in CALIBRATION_FLOW_KINDS order (the gauge
- * record, then the logger). One rule for the plausibility checks there and
- * the checks-only series (`CHECK_GAUGE_FLOW_KEY`), so the hydrograph shows the
- * record the warnings judge. null when the gauge has none.
+ * Which of a gauge's records (inside the network) its checks read
+ * (engine-audit.md G2): `calibrationKind`, the kind the run's calibration
+ * statistics score (the outlet's as resolved, or the calibration site's
+ * when the run scores one; the kind asked for in Settings when nothing is
+ * scored), when the gauge has it, else the first it has in
+ * CALIBRATION_FLOW_KINDS order (the gauge record, then the logger). One rule
+ * for the three readers at a gauge: the plausibility checks, the EWR test
+ * against observed flow (ewrAgreementSites) and the checks-only series
+ * (`CHECK_GAUGE_FLOW_KEY`) with its fit, so they judge the same record. null
+ * when the gauge has none.
  */
 export function gaugeCheckKind(calibrationKind: CalibrationFlowKind | null | undefined, kinds: readonly CalibrationFlowKind[]): CalibrationFlowKind | null {
 	return calibrationKind && kinds.includes(calibrationKind) ? calibrationKind : (CALIBRATION_FLOW_KINDS.find((k) => kinds.includes(k)) ?? null);
