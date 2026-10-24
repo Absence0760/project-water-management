@@ -348,6 +348,38 @@ describe('the forcing rule (§2.4h)', () => {
 		expect(checkForecastPrefix({ ...withForecastTail(everyRule(), 7), forecastRainSource: 'chirps_gefs' })).toBeNull();
 	});
 
+	it('warns when a unit’s own CHIRPS is shadowed by a longer series of that unit, and computes nothing else differently; a scenario carries it (issue #561)', () => {
+		const x = everyRule();
+		// C's own CHIRPS: its last 30 days only; another series of C's (named, not read) spans the whole run.
+		const own = x.series['rain_chirps_mm@C']!;
+		const from = toEpochDay(START) + DAYS - 30 - toEpochDay(own.startDate);
+		set(x, 'rain_chirps_mm@C', own.values.slice(from, from + 30), fromEpochDay(toEpochDay(START) + DAYS - 30));
+		const seriesChoice = { unitChirps: { C: { name: 'C short', others: [{ name: 'C long', firstDay: START, lastDay: fromEpochDay(toEpochDay(START) + DAYS - 1) }] } } };
+		const told = runModel({ ...x, seriesChoice });
+		const unitWarned = (o: ReturnType<typeof runModel>) => o.summary.warnings.filter((w) => w.startsWith('for the unit'));
+		expect(unitWarned(told)).toEqual([expect.stringMatching(/^for the unit “Unit C”, the run read the CHIRPS series “C short” \(2020-12-02 to 2020-12-31\), which spans 30 of its 2192 days, but “C long” \(2015-01-01 to 2020-12-31\) spans 2192:/)]);
+		const plain = runModel(x);
+		const strip = (o: ReturnType<typeof runModel>) => ({ ...o, summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !w.startsWith('for the unit')) } });
+		expect(sameOutput(strip(plain), strip(told))).toBe(true);
+		// A scenario on it reads the same series, so it warns the same; one that removes no unit keeps C's pick.
+		expect(unitWarned(runModel(applyScenario({ ...x, seriesChoice }, []).input))).toEqual(unitWarned(told));
+	});
+
+	it('a scenario on a CHIRPS-GEFS forecast input keeps its source, so its units’ forecast days keep their CHIRPS level (engine 1.90.0, issue #561)', () => {
+		const x = everyRule();
+		const tail = Array.from({ length: 10 }, (_, i) => 5 + i);
+		set(x, 'rain_forecast_mm', tail, '2021-01-01');
+		const base = { ...x, forecastRainSource: 'chirps_gefs' as const };
+		const { input, applied } = applyScenario(base, []);
+		expect(applied).toEqual([]);
+		// Before 1.90.0 applyScenario rebuilt the input from settings, model and series only: the source was dropped, and
+		// C's forecast days fell back to its gauge MAP ratio.
+		expect(input.forecastRainSource).toBe('chirps_gefs');
+		expect(JSON.stringify(runModel(input))).toBe(JSON.stringify(runModel(base)));
+		const k = (unitOf(runModel(input), 'C').chirps as { factor: number }).factor;
+		expect(col(runModel(input), 'rain_unit', 'C')!.slice(DAYS)).toEqual(tail.map((v) => v * k));
+	});
+
 	it('a CHIRPS-GEFS forecast on a unit whose CHIRPS level is the catchment’s §2.4b factors keeps its MAP ratio on top: no step', () => {
 		// C has a MAP and a gauge MAP ratio (750 ÷ 500), but its CHIRPS holds no complete calendar year, so it is levelled by the
 		// catchment's §2.4b factors (gauge ÷ CHIRPS = 2), which bring it to the catchment gauge, not to C's MAP.

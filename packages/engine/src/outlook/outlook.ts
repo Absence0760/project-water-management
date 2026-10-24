@@ -266,6 +266,8 @@ export function outlookSeasonInput(
 	const { s, a, seasonRain } = memberSeason(input, baseRun, season, analogue);
 	const series: ModelInput['series'] = { rain_forecast_mm: { startDate: s.decisionDate, values: seasonRain }, ...unitSeasonRain(baseRun, s, a) };
 	if (input.series.evap_apan_mm) series.evap_apan_mm = { startDate: s.decisionDate, values: valuesOn(input.series.evap_apan_mm, a, s.days) };
+	// No forecastRainSource, on purpose: this member's "forecast" is an analogue season's recorded rain, not CHIRPS-GEFS,
+	// so it must not take the CHIRPS-GEFS levelling (§2.4h). Not a field to carry over from the base input.
 	return withLevel({ settings: memberSettings(input, s, s.decisionDate, start), model: input.model, series }, ops);
 }
 

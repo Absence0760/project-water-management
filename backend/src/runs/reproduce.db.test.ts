@@ -121,4 +121,31 @@ describe('GET …/runs/:runId/reproduce', () => {
 		expect(plain.has).toBe(false);
 		expect((plain.warnings as string[]).some((w) => w.startsWith('the run read the CHIRPS series'))).toBe(false);
 	});
+
+	it('under per-unit rain, warns when a land unit’s own CHIRPS is shadowed by a longer series of that unit, naming the unit, and reproduces it', async () => {
+		const u = await signUp('ReproUnitChirps');
+		const p = await importProjectData(small, u.email);
+		const rain = small.series.find((x) => x.kind === 'rain_catchment_mm')!;
+		const nodes = (await u.call('GET', `/projects/${p}/model`)).body.nodes as { id: string; name: string; kind: string; areaKm2: number }[];
+		const unit = nodes.find((n) => n.kind === 'farm' && n.areaKm2 > 0)!;
+		const put = async (name: string, startDate: string, values: number[]) => {
+			const id = (await u.call('PUT', `/projects/${p}/series`, { kind: 'rain_chirps_mm', name, unit: 'mm', startDate, values })).body.id as string;
+			expect((await u.call('PATCH', `/projects/${p}/series/${id}`, { siteNodeId: unit.id })).status).toBe(200);
+		};
+		const end = Date.parse(`${rain.startDate}T00:00:00Z`) + (rain.values.length - 30) * 86_400_000;
+		await put('A short own', new Date(end).toISOString().slice(0, 10), Array(30).fill(1));
+		await put('B long own', rain.startDate, rain.values.map(() => 1));
+		const stored = async (run: string) =>
+			(await asOwner(`SELECT summary->'warnings' AS warnings, inputs->'seriesChoice' AS choice FROM model_run WHERE id = $1`, [run]))[0] as { warnings: string[]; choice: unknown };
+		// Unit rain off: the run reads no unit's own CHIRPS, so the choice is recorded but nothing is said (the positive control below).
+		const off = await stored(await newRun(u, p, 'unit rain off'));
+		expect(off.warnings.some((w) => w.startsWith('for the unit'))).toBe(false);
+		expect((await u.call('PATCH', `/projects/${p}`, { settings: { unitRain: { mode: 'perUnit' } } })).status).toBe(200);
+		const r = await newRun(u, p, 'unit CHIRPS');
+		const row = await stored(r);
+		expect(row.choice).toEqual({ unitChirps: { [unit.id]: { name: 'A short own', others: [{ name: 'B long own', firstDay: rain.startDate, lastDay: expect.any(String) }] } } });
+		const warned = row.warnings.filter((w) => w.startsWith('for the unit'));
+		expect(warned).toEqual([expect.stringMatching(new RegExp(`^for the unit “${unit.name}”, the run read the CHIRPS series “A short own” \\(.+\\), which spans 30 of its \\d+ days, but “B long own”`))]);
+		expect((await reproduce(u, r, p)).body.status).toBe('identical');
+	});
 });

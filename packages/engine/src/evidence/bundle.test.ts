@@ -14,6 +14,7 @@ import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
 	BUNDLE_ZIP_LIMITS,
 	buildPackBundle,
+	bundleRunInput,
 	checkPackBundle,
 	HEADLINE_NOT_INCLUDED,
 	PACK_BUNDLE_VERSION,
@@ -117,6 +118,17 @@ describe('buildPackBundle + checkPackBundle', () => {
 			f.set('runs/baseline/input.json', canonicalJson(inp));
 		});
 		expect(failing(await checkPackBundle(stripped, { hash }))).toEqual(['reproduce:baseline']);
+	});
+
+	it('rebuilds a run’s input with what the engine reads beside settings and model: seriesChoice, and a forecast run’s source (issue #561)', () => {
+		const snap = { settings: {}, model: { nodes: [], crops: [], cropAreas: [], transfers: [] } } as unknown as RunInputsSnapshot;
+		const series = { rain_catchment_mm: { startDate: '2020-01-01', values: [1] } };
+		const choice = { rain_chirps_mm: { name: 'A', others: [] } };
+		expect(bundleRunInput(snap, series)).toEqual({ settings: {}, model: snap.model, series });
+		expect(bundleRunInput({ ...snap, seriesChoice: choice, forecastRainSource: 'chirps_gefs' }, series)).toEqual({ settings: {}, model: snap.model, series, seriesChoice: choice, forecastRainSource: 'chirps_gefs' });
+		expect(bundleRunInput({ ...snap, forecastRainSource: 'other' }, series).forecastRainSource).toBe('other');
+		// Anything else from an input.json no hash covers is left out.
+		for (const bad of [null, 'gefs', 3]) expect(bundleRunInput({ ...snap, forecastRainSource: bad as never }, series)).not.toHaveProperty('forecastRainSource');
 	});
 
 	it('refuses to build from input values that fail their SHA-256', async () => {

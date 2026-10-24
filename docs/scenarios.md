@@ -38,6 +38,13 @@ are empty and nothing below changes.
   (engine 0.41.0), whose node field `demandFactor` the engine had to learn
   to read (§ Demand scaling below), and its dates (engine 1.82.0, the node
   field `demandFactorWindows`); applying ops still never runs the model.
+- **The rest of the input carries over.** No op touches what the input holds
+  beside settings, model and series (`forecastRainSource`, `seriesChoice`):
+  the result keeps the base's (engine ≥ 1.90.0, issue #561). Before, the
+  result was rebuilt from those three alone, so a scenario lost the base
+  run's CHIRPS series choice (its warning) and, on a forecast input, its
+  CHIRPS-GEFS credit ([model.md § Which CHIRPS series the run
+  reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
 - **In order.** Each op sees the input the earlier ops left. An op on an
   element an earlier op removed is a problem.
 - **Problems, not exceptions.** An op is skipped, and one line added to

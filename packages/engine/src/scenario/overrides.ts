@@ -1045,10 +1045,11 @@ export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], opti
 		unmask(input.model.nodes, masked.nodes, 'node', renamed);
 		unmask(input.model.crops, masked.crops, 'crop', renamed);
 	}
-	// The CHIRPS series the base run read and the others (engine ≥ 1.90.0, issue #561): a scenario run reads the same
-	// series, so it warns as its base run does.
-	const withChoice = base.seriesChoice ? { ...input, seriesChoice: base.seriesChoice } : input;
-	return { input: withChoice, applied, problems, renamed, reIds, assessorProblems, maskedRules };
+	// What the input carries beside settings, model and series (forecastRainSource, seriesChoice, and any later field):
+	// the ops change none of it, so the scenario's input keeps the base's. Dropped before engine 1.90.0 (issue #561), a
+	// forecast input's CHIRPS-GEFS credit and the base run's CHIRPS series choice were lost on the way.
+	const { settings: _settings, model: _model, series: _series, ...carried } = base;
+	return { input: { ...carried, ...input }, applied, problems, renamed, reIds, assessorProblems, maskedRules };
 }
 
 /**

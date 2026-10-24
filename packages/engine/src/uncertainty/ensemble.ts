@@ -480,6 +480,8 @@ export function memberInput(ctx: EnsembleContext, m: EnsembleMember): ModelInput
 	if (ctx.options.model === 'gr4j') settings.gr4j = { ...((s.gr4j as object) ?? {}), ...m.params };
 	else settings.calibration = { ...((s.calibration as object) ?? {}), ...m.params };
 	if (m.panOffset !== 0) settings.panCoefficient = shiftPan(ctx.panRow, m.panOffset);
+	// Settings, model and series only, on purpose: a member runs on history (no forecast days, so no forecastRainSource to
+	// carry) and its warnings aren't shown, so seriesChoice has nothing to do. A forecast ensemble would have to carry them.
 	return { settings: settings as ModelInput['settings'], model: src.model, series: src.series };
 }
 
