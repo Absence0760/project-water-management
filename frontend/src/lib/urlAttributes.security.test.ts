@@ -327,11 +327,79 @@ function parts(value: string): { lit?: string; expr?: string }[] {
 /** `runHref(meta.id)` → `runHref`, `api.farm.exportUrl(p)` → `api.farm.exportUrl`, `data!` → `data`. */
 const headName = (expr: string) => /^[\w$.]+/.exec(expr.replace(/^\(|!$/g, ''))?.[0] ?? expr;
 
+/** The index just past the string or template literal that opens at `i` (nested `${…}` and templates skipped), or -1. */
+function literalEnd(src: string, i: number): number {
+	const q = src[i];
+	if (q !== "'" && q !== '"' && q !== '`') return -1;
+	for (let j = i + 1; j < src.length; j++) {
+		const c = src[j];
+		if (c === '\\') j++;
+		else if (c === q) return j + 1;
+		else if (q === '`' && src.startsWith('${', j)) {
+			const k = groupEnd(src, j + 1);
+			if (k < 0) return -1;
+			j = k - 1;
+		} else if (q !== '`' && c === '\n') return -1;
+	}
+	return -1;
+}
+
+/** The index just past the bracket group (`(`, `[` or `{`) that opens at `i`, strings and templates skipped, or -1. */
+function groupEnd(src: string, i: number): number {
+	const close: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+	const stack: string[] = [];
+	for (let j = i; j < src.length; j++) {
+		const c = src[j]!;
+		if (c === "'" || c === '"' || c === '`') {
+			const k = literalEnd(src, j);
+			if (k < 0) return -1;
+			j = k - 1;
+		} else if (close[c]) stack.push(close[c]);
+		else if (c === ')' || c === ']' || c === '}') {
+			if (stack.pop() !== c) return -1;
+			if (!stack.length) return j + 1;
+		}
+	}
+	return -1;
+}
+
 /**
- * `resolve('a…')`, `resolve(\`a…\`)`, `asset('a…')` (anything may follow: it comes after a
- * literal segment), or exactly `resolve('')`: `resolve('') + x` would let x start "//host".
+ * A URL attribute's expression that SvelteKit's resolve() or asset() keeps on the app's
+ * origin: exactly one `resolve(<literal>)`/`asset(<literal>)` whose path starts with a
+ * literal segment (they put the base and a '/' before it), optionally `+` more terms
+ * appended after it. A tail may hold only names, member access, calls, strings and
+ * templates joined by `+`: any other operator at its top level (`||`, `??`, `?:`, `,`,
+ * `&&`, …) binds looser than `+`, so the value could be something else entirely. The
+ * empty path counts only alone: `resolve('') + x` would let x start "//host".
  */
-const SAME_ORIGIN_PATH = /^(?:(?:resolve|asset)\(\s*['"`][\w?#.-]|resolve\(''\)$)/;
+function sameOriginPath(expr: string): boolean {
+	const call = /^(?:resolve|asset)\(\s*/.exec(expr);
+	if (!call) return false;
+	const start = call[0].length;
+	const end = literalEnd(expr, start);
+	if (end < 0) return false;
+	const after = /^\s*\)/.exec(expr.slice(end));
+	if (!after) return false;
+	const tail = expr.slice(end + after[0].length).trim();
+	const path = expr.slice(start + 1, end - 1);
+	if (path === '') return tail === '' && expr.startsWith('resolve(');
+	if (!/^[\w?#.-]/.test(path)) return false;
+	if (tail === '') return true;
+	if (!tail.startsWith('+')) return false;
+	for (let j = 1; j < tail.length; j++) {
+		const c = tail[j]!;
+		if (c === "'" || c === '"' || c === '`') {
+			const k = literalEnd(tail, j);
+			if (k < 0) return false;
+			j = k - 1;
+		} else if (c === '(' || c === '[') {
+			const k = groupEnd(tail, j);
+			if (k < 0) return false;
+			j = k - 1;
+		} else if (!/[\w$.+\s!]/.test(c)) return false;
+	}
+	return true;
+}
 
 type Verdict = { ok: true } | { ok: false; why: string } | { dynamic: string };
 
@@ -345,7 +413,7 @@ function classify(value: string): Verdict {
 	// SvelteKit's resolve() and asset() put the base and a '/' before their path, so a path
 	// that starts with a literal segment (or is empty) stays on the app's origin. One that
 	// starts with '/' or an expression could make "//host": that stays a head to review.
-	if (first.expr !== undefined && ps.length === 1 && SAME_ORIGIN_PATH.test(first.expr)) return { ok: true };
+	if (first.expr !== undefined && ps.length === 1 && sameOriginPath(first.expr)) return { ok: true };
 	if (first.expr !== undefined) return { dynamic: headName(first.expr) };
 	// What the browser reads: it drops ASCII whitespace and control characters, so "java\tscript:" is javascript:.
 	const lit = first.lit!.replace(/[\u0000- ]/g, '');
@@ -401,6 +469,11 @@ describe('URL attributes', () => {
 		expect(classify("{resolve('/x')}")).toEqual({ dynamic: 'resolve' });
 		expect(classify("{resolve('x') + y}")).toEqual({ ok: true });
 		expect(classify("{resolve('') + y}")).toEqual({ dynamic: 'resolve' });
+		expect(classify("{resolve('x') + (y ? '#a' : '')}")).toEqual({ ok: true });
+		// Anything binding looser than + after the call leaves the value to another expression.
+		for (const e of ["resolve('x') || next", "resolve('x') ?? next", "resolve('x') ? userHref : ''", "asset('a'), x", "resolve('x') + a || b", "resolve('x') + a ? b : c", "resolve('x') && x", "resolve(x)", "resolve('x', y)", "resolve('x')(y)"]) {
+			expect(classify(`{${e}}`), e).toEqual({ dynamic: e.startsWith('asset') ? 'asset' : 'resolve' });
+		}
 		expect(classify('{basePath()}/{x}')).toEqual({ dynamic: 'x' });
 		expect(classify('/{x}')).toEqual({ dynamic: 'x' });
 		// The script URLs, however they are spelled.
