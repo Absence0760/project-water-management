@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
-import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, type RainStationAssignment, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
@@ -603,6 +603,16 @@ export interface FitRecordStatus {
 	 */
 	catchmentStationChanged?: true;
 	/**
+	 * The flow generation method (Settings → Flow generation, issue #553,
+	 * docs/model.md §2.4h, §2.5) differs from the one the fit ran under:
+	 * Fragmentation (one GR4J run on the catchment rain, split by flow share;
+	 * settings.unitRain absent, null or `catchment`) or Per unit (GR4J per land
+	 * unit, `perUnit`). The parameters were not fitted for this method. Its own
+	 * caveat; also sets `forcingChanged`. Absent when not, and on a record made
+	 * before `forcing` was recorded.
+	 */
+	methodChanged?: true;
+	/**
 	 * The fitted record now comes from another source, or was given in
 	 * another unit, than when it was fitted (107_series_source.sql, engine ≥
 	 * 1.23.0): a unit conversion error or another station changes what the
@@ -782,7 +792,7 @@ function forcingDiff(
 		// Engine ≥ 1.20.0. A forcing without it ran the defaults, so a limit changed since is a change.
 		rainChecks: !sameJson(rainChecksOf(settings.dataQuality), rainChecksOf(record.forcing.rainChecks)),
 		// Engine ≥ 1.78.0. A forcing without it ran on the catchment rain, so per-unit rain turned on since is a change.
-		unitRain: unitRainSettingChanged(settings.unitRain, record.forcing.unitRain ?? null)
+		unitRain: unitRainSettingChanged(settings.unitRain, record.forcing.unitRain ?? null, settings.rainStations)
 	};
 }
 
@@ -790,9 +800,11 @@ function forcingDiff(
  * Whether settings.unitRain differs from what a fit recorded of it (engine ≥
  * 1.78.0): on one side only, or another gauge MAP or MAP period. The units'
  * rules and factors depend on the model and its series too, so a run's own
- * fingerprint (FitForcingNow.unitRain) compares those.
+ * fingerprint (FitForcingNow.unitRain) compares those. The units' station
+ * assignments (`stations`, settings.rainStations) are compared with the units
+ * the fit's fingerprint lists.
  */
-function unitRainSettingChanged(now: unknown, then: UnitRainFingerprint | null): boolean {
+function unitRainSettingChanged(now: unknown, then: UnitRainFingerprint | null, stations?: unknown): boolean {
 	const u = resolveUnitRain(now, []);
 	const on = u?.mode === 'perUnit';
 	if (!on || !then) return on !== !!then;
@@ -802,8 +814,50 @@ function unitRainSettingChanged(now: unknown, then: UnitRainFingerprint | null):
 	const ref = u.reference ?? null;
 	const was = then.reference ?? null;
 	const refChanged = !ref || !was ? !ref !== !was : ref.gauge !== was.gauge || ref.unitId !== was.unitId;
-	return gauge !== then.gaugeMapMm || period.start !== then.mapPeriod.start || period.end !== then.mapPeriod.end || refChanged;
+	return gauge !== then.gaugeMapMm || period.start !== then.mapPeriod.start || period.end !== then.mapPeriod.end || refChanged || unitStationsChanged(stations, then);
 }
+
+/**
+ * Whether the land units' rainfall stations (settings.rainStations.units,
+ * engine ≥ 1.91.0, §2.4i) differ from the stations the fit's units ran on:
+ * a unit given a station, another one, or none, or another station
+ * correcting its CHIRPS. Only units the fit's fingerprint lists are compared
+ * (a unit added or removed since changes what a run's own fingerprint
+ * compares); scaling and the ratio need a run's (FitForcingNow.unitRain).
+ */
+function unitStationsChanged(stations: unknown, then: UnitRainFingerprint): boolean {
+	const units = stations && typeof stations === 'object' ? (stations as { units?: unknown }).units : null;
+	const now = units && typeof units === 'object' && !Array.isArray(units) ? (units as Record<string, Partial<RainStationAssignment> | null>) : {};
+	for (const u of then.units) {
+		const a = now[u.nodeId];
+		const station = a && typeof a.stationId === 'string' && a.stationId ? a.stationId : null;
+		const was = u.rule === 'station' && u.rainKey?.startsWith(STATION_KEY_PREFIX) ? u.rainKey.slice(STATION_KEY_PREFIX.length) : null;
+		if (station !== was) return true;
+		if (station && u.stationCorrectAgainst !== undefined && (typeof a?.correctAgainst === 'string' && a.correctAgainst ? a.correctAgainst : station) !== u.stationCorrectAgainst) return true;
+	}
+	return false;
+}
+const STATION_KEY_PREFIX = stationSeriesKey('');
+
+/**
+ * The flow generation method a fit ran under (issue #553): its forcing records
+ * per-unit rain only under Per unit; null when it predates `forcing`. A Per
+ * unit fit on a model with no land unit records none (it ran on the catchment
+ * rain, as Fragmentation does), so it reads as Fragmentation: the settings'
+ * Per unit then says "not fitted for this method", which is what
+ * unitRainSettingChanged already said of such a fit.
+ */
+export function fitFlowMethod(record: Pick<FitRecord, 'forcing'>): FlowGenerationMethod | null {
+	if (!record.forcing) return null;
+	return record.forcing.unitRain ? 'perUnit' : 'fragmentation';
+}
+
+/** The flow generation method settings.unitRain chooses (Settings → Flow generation, issue #553): Per unit for `perUnit`, else Fragmentation. */
+export function flowMethodOf(unitRain: unknown): FlowGenerationMethod {
+	return resolveUnitRain(unitRain, [])?.mode === 'perUnit' ? 'perUnit' : 'fragmentation';
+}
+
+export type FlowGenerationMethod = 'fragmentation' | 'perUnit';
 
 /** What the settings don't hold but a fit's forcing depends on: the CHIRPS series' product and version now (omit when not known). */
 export interface FitForcingNow {
@@ -915,6 +969,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		chirpsFactorsDrifted(factorsThen, now.chirpsFactors);
 	// The units' rules, records and factors, when a run says what they are now (engine ≥ 1.78.0).
 	const unitRainChanged = !forcing?.unitRain && now.unitRain !== undefined && record.forcing !== undefined && unitRainFingerprintChanged(record.forcing.unitRain ?? null, now.unitRain);
+	// The flow generation method (issue #553): Fragmentation or Per unit, now and at the fit.
+	const fitMethod = fitFlowMethod(record);
+	const methodChanged = fitMethod !== null && fitMethod !== flowMethodOf(settings.unitRain);
 	return {
 		editedParams: editedParams(settings, record),
 		otherModel: (record.model as string) !== 'gr4j',
@@ -929,7 +986,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		flowKindChanged: kind !== null && kind !== record.flowKind,
 		siteChanged: (settings.calibrationSiteNodeId ?? null) !== (record.siteNodeId ?? null),
 		...(catchmentStationChanged ? { catchmentStationChanged: true as const } : {}),
+		...(methodChanged ? { methodChanged: true as const } : {}),
 		forcingChanged:
+			methodChanged ||
 			catchmentStationChanged ||
 			chirpsSourceChanged ||
 			apanDailyChanged ||
@@ -1029,7 +1088,12 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 			'The catchment’s rainfall station has changed since the fit: one was assigned or removed, another station or scaling chosen, or its MAP ratio or the monthly factors that correct the catchment CHIRPS on its gaps moved by more than 2 %. That changes the rain GR4J runs on: refit before relying on the parameters.'
 		);
 	}
-	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged) {
+	if (status.methodChanged) {
+		out.push(
+			'Parameters not fitted for this method: the fit ran under the other flow generation method (Settings → Flow generation: Fragmentation, one GR4J run on the catchment rain, or Per unit, GR4J on each unit’s own rain). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
+		);
+	}
+	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {
 		out.push(
 			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods, zero-rain run handling or the rain each unit runs on (runoff from each unit’s own rain, its records, MAPs and factors) has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS, rain-source and per-unit rain settings change the rain fed to it, so refit before relying on them.'
 		);

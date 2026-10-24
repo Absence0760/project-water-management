@@ -260,10 +260,31 @@ describe('rainfall stations in a run’s input', () => {
 		expect(got.series[stationSeriesKey(vlei)]).toBeUndefined();
 		const r = await call(owner, 'POST', `/projects/${pid}/runs`, { label: 'a station gone' }, 201);
 		expect((r.run.summary.warnings as string[]).join('\n')).toMatch(/the catchment’s station ".+" has no record in this run’s input/);
-		// A save that names it again is refused, until it is back.
-		expect((await save(owner, { catchment: { stationId: vlei } })).status).toBe(400);
+		// A save that keeps naming it passes (the Settings form sends the whole setting with every save, issue #553 round 3),
+		// with a unit the setting named and the model no longer has; one that names it anew is refused, until it is back.
+		expect((await save(owner, { catchment: { stationId: vlei } })).status).toBe(200);
+		expect((await save(owner, null)).status).toBe(200);
+		const anew = await save(owner, { catchment: { stationId: vlei } });
+		expect(anew.status).toBe(400);
+		expect(errorOf(anew)).toMatch(/the catchment’s station is not a rainfall station of this project/);
+		// Named where it wasn't before (a unit's correcting station), alongside the kept name: still refused.
+		expect((await save(owner, { catchment: { stationId: ridge } })).status).toBe(200);
+		expect((await save(owner, { catchment: { stationId: ridge }, units: { [units[0]!]: { stationId: ridge, correctAgainst: vlei } } })).status).toBe(400);
 		const revs = (await call(owner, 'GET', `/projects/${pid}/series/${vlei}/revisions`)).revisions as { id: string; reason: string }[];
 		await call(owner, 'POST', `/projects/${pid}/series/${vlei}/revisions/${revs[0]!.id}/restore`, {});
 		expect(Object.keys((await input()).stations!)).toContain(vlei);
+		expect((await save(owner, { catchment: { stationId: vlei } })).status).toBe(200);
+	});
+
+	it('a unit the stored setting names and the model no longer has doesn’t block a save that keeps it; a non-land unit named anew is refused', async () => {
+		// As if the unit had been deleted from the model after it was given a station (stored straight, as the form can't).
+		const gone = crypto.randomUUID();
+		await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{rainStations}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify({ units: { [gone]: { stationId: ridge } } })]);
+		const kept = await save(owner, { units: { [gone]: { stationId: ridge }, [units[0]!]: { stationId: vlei } } });
+		expect(kept.status, JSON.stringify(kept.body)).toBe(200);
+		const outletAnew = await save(owner, { units: { [gone]: { stationId: ridge }, [outlet]: { stationId: ridge } } });
+		expect(outletAnew.status).toBe(400);
+		expect(errorOf(outletAnew)).toMatch(/a unit given a station is not a land unit of this project/);
+		expect((await save(owner, null)).status).toBe(200);
 	});
 });

@@ -19,7 +19,7 @@ import { checkedStationRecord } from './stationRecord';
 import { pairingFactorOn } from './stationPairing';
 import { goldenDiff, goldenFingerprint, type GoldenFingerprint } from '../testing/golden';
 import { calibrate } from '../calibrate/calibrate';
-import { fitRecordCaveats, fitRecordFromReport, fitRecordStatus } from '../calibrate/provenance';
+import { fitFlowMethod, fitRecordCaveats, fitRecordFromReport, fitRecordStatus, flowMethodOf } from '../calibrate/provenance';
 import { catchmentStationFingerprint, catchmentStationFingerprintError } from './stationFingerprint';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary } from './unitRainFingerprint';
 
@@ -608,5 +608,55 @@ describe('fit provenance', () => {
 		a.stationFactors = a.stationFactors!.map((k, m) => (m === 0 ? k * 1.1 : k));
 		expect(unitRainFingerprintChanged(drifted, fit)).toBe(true);
 		expect(unitRainFingerprintChanged(fit, unitRainFingerprintOfSummary(runModel(x).summary.unitRain, runModel(x).summary.stations))).toBe(false);
+	});
+
+	// Settings → Flow generation (issue #553 round 3): the form has no run, so the settings alone must say a method switch and a unit's station change.
+	describe('the Flow generation form, without a run', () => {
+		const perUnit = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' } }, sites: SITES } });
+		const perUnitRecord = fitRecordFromReport(calibrate(perUnit, { budget: 10, seed: 1 }), ctxOf(perUnit));
+
+		it('names the method a fit ran under and the one the settings choose', () => {
+			expect(fitFlowMethod(plainRecord)).toBe('fragmentation');
+			expect(fitFlowMethod(perUnitRecord)).toBe('perUnit');
+			expect(fitFlowMethod({ forcing: undefined })).toBeNull();
+			expect([undefined, null, { mode: 'catchment' }, { mode: 'perUnit' }, 'nonsense'].map(flowMethodOf)).toEqual(['fragmentation', 'fragmentation', 'fragmentation', 'perUnit', 'fragmentation']);
+		});
+
+		it('switching method marks the fit "not fitted for this method", either way, and no other change does', () => {
+			for (const [settings, record] of [
+				[settingsOf(perUnit), plainRecord],
+				[settingsOf(plain), perUnitRecord]
+			] as const) {
+				const st = fitRecordStatus(settings, record);
+				expect(st.methodChanged).toBe(true);
+				expect(st.forcingChanged).toBe(true);
+				const caveats = fitRecordCaveats(st);
+				expect(caveats.filter((c) => c.startsWith('Parameters not fitted for this method'))).toHaveLength(1);
+				// Said once, by its own caveat, not again as the general forcing one.
+				expect(caveats.some((c) => c.startsWith('The potential evaporation GR4J runs on'))).toBe(false);
+			}
+			expect(fitRecordStatus(settingsOf(plain), plainRecord).methodChanged).toBeUndefined();
+			expect(fitRecordStatus(settingsOf(perUnit), perUnitRecord).methodChanged).toBeUndefined();
+			expect(fitRecordStatus(settingsOf(perUnit), perUnitRecord).forcingChanged).toBe(false);
+			// A record from before forcing was recorded can't say its method.
+			const { forcing: _f, ...bare } = plainRecord;
+			expect(fitRecordStatus(settingsOf(perUnit), bare).methodChanged).toBeUndefined();
+		});
+
+		it('a unit given another station, none, or another correcting station is a forcing change; scaling alone needs a run', () => {
+			const withUnits = (units: RainStationSettings['units']) => settingsOf(catchment({ unitRain: PER_UNIT, rainStations: { units, sites: SITES } }));
+			expect(fitRecordStatus(withUnits({ A: { stationId: 'S' } }), perUnitRecord).forcingChanged).toBe(false);
+			expect(fitRecordStatus(withUnits({ A: { stationId: 'T' } }), perUnitRecord).forcingChanged).toBe(true);
+			expect(fitRecordStatus(withUnits({}), perUnitRecord).forcingChanged).toBe(true);
+			expect(fitRecordStatus(withUnits({ A: { stationId: 'S' }, B: { stationId: 'S' } }), perUnitRecord).forcingChanged).toBe(true);
+			expect(fitRecordStatus(withUnits({ A: { stationId: 'S', correctAgainst: 'T' } }), perUnitRecord).forcingChanged).toBe(true);
+			expect(fitRecordStatus(withUnits({ A: { stationId: 'S', correctAgainst: 'S' } }), perUnitRecord).forcingChanged).toBe(false);
+			expect(fitRecordStatus(withUnits({ A: { stationId: 'S', scaleToMap: false } }), perUnitRecord).forcingChanged).toBe(false);
+			// A unit the fit never had (removed from the model since) isn't compared.
+			expect(fitRecordStatus(withUnits({ A: { stationId: 'S' }, Z: { stationId: 'T' } }), perUnitRecord).forcingChanged).toBe(false);
+			// A fit without stations, settings without stations: no change.
+			const chain = catchment({ unitRain: PER_UNIT });
+			expect(fitRecordStatus(settingsOf(chain), fitRecordFromReport(calibrate(chain, { budget: 10, seed: 1 }), ctxOf(chain))).forcingChanged).toBe(false);
+		});
 	});
 });
