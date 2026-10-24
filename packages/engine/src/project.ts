@@ -3635,10 +3635,11 @@ export interface RunoffBalance {
 /**
  * Which rule of the per-unit forcing (docs/model.md §2.4h) gave a land unit
  * its rain: its own gauge (1), the catchment gauge × unit MAP ÷ gauge MAP
- * (2), its own CHIRPS (3), or the catchment forcing as without per-unit rain
- * (4).
+ * (2), its own CHIRPS (3), the catchment forcing as without per-unit rain
+ * (4), or its rainfall station (engine ≥ 1.91.0, issue #553, §2.4i:
+ * settings.rainStations.units).
  */
-export const UNIT_RAIN_RULES = ['unitGauge', 'gaugeMap', 'unitChirps', 'catchment'] as const;
+export const UNIT_RAIN_RULES = ['unitGauge', 'gaugeMap', 'unitChirps', 'catchment', 'station'] as const;
 export type UnitRainRule = (typeof UNIT_RAIN_RULES)[number];
 
 /**
@@ -3753,7 +3754,7 @@ export interface UnitRainUnit {
 	mapMm: number | null;
 	mapSource: string | null;
 	rule: UnitRainRule;
-	/** The record the rule names: `rain_catchment_mm@<id>`, `rain_catchment_mm` (rule 2), `rain_chirps_mm@<id>`, or null (rule 4, the catchment forcing). */
+	/** The record the rule names: `rain_catchment_mm@<id>`, `rain_catchment_mm` (rule 2), `rain_chirps_mm@<id>`, `rain_station_mm#<station id>` (rule 'station', engine ≥ 1.91.0; factorSource 'gaugeMap', factor its MAP ratio), or null (rule 4, the catchment forcing). */
 	rainKey: string | null;
 	/**
 	 * The level factor on the rule's record: 1 for the unit's gauge, the MAP

@@ -40,6 +40,7 @@ import { damCapacityOn } from '../network/development';
 import { unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind, type UnitForecastSeriesKey } from '../project';
 import { prepareRun } from '../prepare';
 import { unitRainRecipes, type UnitRainRecipe } from '../runoff/unitRain';
+import { pairingFactors } from '../runoff/stationForcing';
 import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
 import { withAllocationKnownBefore, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
@@ -231,16 +232,21 @@ export function outlookMemberInput(
 	const settings = memberSettings(input, s, baseRun.startDate, start);
 	// Under per-unit rain (engine ≥ 1.78.0, §2.4h): the base input's unit rules and factors, so the history cut at the decision
 	// date runs at the levels its season (the base run's rain_unit) was made at, as a member from the snapshot does.
-	const pinned = baseUnitRecipes(input);
+	const prep = input.settings.unitRain?.mode === 'perUnit' || input.settings.rainStations ? prepareRun(input) : null;
+	const pinned = prep ? baseUnitRecipes(input, prep) : null;
 	if (pinned) settings.unitRain = { ...settings.unitRain!, pinned };
-	return withLevel({ settings, model: input.model, series }, ops);
+	// Rainfall stations (engine ≥ 1.91.0, §2.4i): the base input's pairing factors, the catchment's and the units', so the
+	// history cut at the decision date isn't corrected by a refit on a shorter record (or refused for one).
+	const factors = prep?.stations ? pairingFactors(prep.stations.context) : null;
+	if (factors && Object.keys(factors).length && settings.rainStations)
+		settings.rainStations = { ...settings.rainStations, pinnedFactors: { ...(settings.rainStations.pinnedFactors ?? {}), ...factors } };
+	return withLevel({ settings, model: input.model, series, ...(input.stations ? { stations: input.stations } : {}) }, ops);
 }
 
 /** The base input's unit rain recipes (prepareRun's CHIRPS correction for the bias sub-rule); null without per-unit rain. */
-function baseUnitRecipes(input: ModelInput): UnitRainRecipe[] | null {
+function baseUnitRecipes(input: ModelInput, prep: ReturnType<typeof prepareRun>): UnitRainRecipe[] | null {
 	if (input.settings.unitRain?.mode !== 'perUnit') return null;
-	const prep = prepareRun(input);
-	return unitRainRecipes({ settings: prep.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: prep.chirpsCorrection }, []);
+	return unitRainRecipes({ settings: prep.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: prep.chirpsCorrection, stations: prep.stations?.context ?? null, stationInputs: input.stations ?? null }, []);
 }
 
 /**
@@ -268,7 +274,8 @@ export function outlookSeasonInput(
 	if (input.series.evap_apan_mm) series.evap_apan_mm = { startDate: s.decisionDate, values: valuesOn(input.series.evap_apan_mm, a, s.days) };
 	// No forecastRainSource, on purpose: this member's "forecast" is an analogue season's recorded rain, not CHIRPS-GEFS,
 	// so it must not take the CHIRPS-GEFS levelling (§2.4h). Not a field to carry over from the base input.
-	return withLevel({ settings: memberSettings(input, s, s.decisionDate, start), model: input.model, series }, ops);
+	// The stations' details carry over (engine ≥ 1.91.0): a unit's pinned station recipe names them.
+	return withLevel({ settings: memberSettings(input, s, s.decisionDate, start), model: input.model, series, ...(input.stations ? { stations: input.stations } : {}) }, ops);
 }
 
 /**

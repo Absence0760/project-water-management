@@ -31,6 +31,13 @@
 // value lies outside 0.5–2 warns too, unchanged (engine ≥ 1.85.0). A unit
 // whose CHIRPS totals 0 mm in every complete year is unusable: not read, its
 // days fall to the next link, with a warning (engine ≥ 1.85.0).
+//
+// A land unit with a rainfall station (settings.rainStations.units[id],
+// engine ≥ 1.91.0, issue #553, docs/model.md §2.4i) takes rule 'station'
+// instead: the station × clamp(unit MAP ÷ station MAP) on the station's days,
+// its own CHIRPS × the pairing's monthly factors (as is) on the others, then
+// its own forecast, then the catchment forcing (× 1). ./stationForcing.ts has
+// the rule; a unit without a station keeps the chain above, bit for bit.
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import {
 	AREAL_RAIN_FACTOR_MAX,
@@ -66,6 +73,18 @@ import { simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate
 import { isLandUnit, MM_KM2_TO_M3 } from './area';
 import { recipeLevel } from './unitRainFingerprint';
 import { checkedReferenceGauge, checkedUnitGauge, unitGaugeCheckWarnings } from './unitGaugeChecks';
+import {
+	alignReadings,
+	recipePairing,
+	setAsideInWindow,
+	STATION_DAY_SOURCE,
+	stationAreaDays,
+	stationContext,
+	unitStationRecipe,
+	type StationContext,
+	type UnitStationRecipe
+} from './stationForcing';
+import type { RainStationInputs, StationAreaForcing } from '../project';
 
 export { isLandUnit, perUnitAreaKm2 } from './area';
 export * from './unitRainFingerprint';
@@ -78,7 +97,7 @@ export * from './unitRainFingerprint';
 export const UNIT_MAP_MIN_YEARS = 10;
 
 /** The source codes of a unit's day (UnitForcing.source): which link of the chain gave its rain. */
-export const UNIT_RAIN_SOURCE = { unitGauge: 0, gaugeMap: 1, unitChirps: 2, catchment: 3, forecast: 4 } as const;
+export const UNIT_RAIN_SOURCE = { unitGauge: 0, gaugeMap: 1, unitChirps: 2, catchment: 3, forecast: 4, station: 5, stationChirps: 6 } as const;
 
 /**
  * A unit's rule and factors, fixed for a run: everything about its forcing
@@ -97,6 +116,8 @@ export interface UnitRainRecipe {
 	/** gaugeMapOwnFactor lies outside the soft band 0.5–2 (engine ≥ 1.85.0). */
 	gaugeMapOutsideBand: boolean;
 	chirps: UnitChirpsLevel | null;
+	/** Rule 'station' (engine ≥ 1.91.0, §2.4i): the unit's station, its ratio and the pairing's factors; absent on the other rules. */
+	station?: UnitStationRecipe;
 }
 
 /** One land unit's daily forcing over the run. */
@@ -132,6 +153,17 @@ export interface UnitRainContext {
 	historyDays?: number;
 	/** ModelInput.forecastRainSource: 'chirps_gefs' levels each unit's forecast days as its CHIRPS. */
 	forecastRainSource?: ModelInput['forecastRainSource'];
+	/** The run's station records and pairings (prepareRun's, engine ≥ 1.91.0); built from `stationInputs` when absent. */
+	stations?: StationContext | null;
+	/** ModelInput.stations, for a context built here. */
+	stationInputs?: RainStationInputs | null;
+}
+
+/** The run's station context, or one built from the context's inputs; null without settings.rainStations. */
+function stationsOf(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 'startDate'>, warnings: string[]): StationContext | null {
+	if (ctx.stations) return ctx.stations;
+	if (!ctx.settings.rainStations) return null;
+	return (ctx.stations = stationContext({ settings: ctx.settings, series: ctx.series, stations: ctx.stationInputs, nodes: ctx.nodes }, warnings));
 }
 
 /** settings.unitRain is on: mode `perUnit`. */
@@ -296,9 +328,15 @@ export function unitRainRecipes(
 	const reference = referenceFit(u, series, ctx.nodes, warnings, u.reference ? checkedReferenceGauge(ctx.settings, series, u.reference.gauge) : undefined);
 	if (fit) fit.reference = reference;
 	const refFactors = reference ? reference.months.map((x) => x.factor) : null;
+	const assigned = ctx.settings.rainStations?.units ?? null;
 	return units.map((n) => {
 		const pin = pinned?.find((p) => p.nodeId === n.id);
 		if (pin) return structuredClone(pin);
+		// Rule 'station' (engine ≥ 1.91.0, §2.4i): a unit with a station whose record the input holds.
+		const a = assigned?.[n.id];
+		const sc = a ? stationsOf(ctx, warnings) : null;
+		const station = a && sc ? unitStationRecipe(sc, n, a, warnings) : null;
+		if (station) return { nodeId: n.id, rule: 'station' as const, hasGauge: false, gaugeMapFactor: null, gaugeMapOwnFactor: null, gaugeMapClamped: false, gaugeMapOutsideBand: false, chirps: null, station };
 		const map = usableMap(n.mapMm);
 		const hasGauge = hasReading(series[unitRainSeriesKey('rain_catchment_mm', n.id)]);
 		const chirpsSeries = series[unitRainSeriesKey('rain_chirps_mm', n.id)];
@@ -386,7 +424,7 @@ export function unitRainForcing(
 	ctx: UnitRainContext,
 	warnings: string[],
 	pinned?: readonly UnitRainRecipe[]
-): { units: UnitForcing[]; recipes: UnitRainRecipe[]; reference: UnitRainReferenceFit | null } | null {
+): { units: UnitForcing[]; recipes: UnitRainRecipe[]; reference: UnitRainReferenceFit | null; stations: StationAreaForcing[]; stationContext: StationContext | null } | null {
 	const fit: { reference: UnitRainReferenceFit | null } = { reference: null };
 	const recipes = unitRainRecipes(ctx, warnings, pinned, fit);
 	if (!recipes) return null;
@@ -407,12 +445,75 @@ export function unitRainForcing(
 		for (let i = Math.max(0, -off); i < Math.min(s.values.length, days - off); i++) out[i + off] = reading(s.values[i]) ? (s.values[i] as number) : null;
 		return out;
 	};
+	const stationForcings: StationAreaForcing[] = [];
 	const units = recipes.map((r) => {
 		const i = byId.get(r.nodeId)!;
 		const n = ctx.nodes[i]!;
 		const rainMm = new Float64Array(days);
 		const source = new Float64Array(days).fill(NaN);
 		const base = { node: i, nodeId: n.id, name: n.name, areaKm2: n.areaKm2, mapMm: usableMap(n.mapMm), mapSource: typeof n.mapSource === 'string' ? n.mapSource : null, recipe: r };
+		if (r.rule === 'station' && r.station) {
+			const sc = stationsOf(ctx, warnings) ?? stationContext({ settings: ctx.settings, series: ctx.series, stations: ctx.stationInputs, nodes: ctx.nodes }, warnings);
+			const st = r.station;
+			const station = alignReadings(sc.record(st.stationId)?.record, d0, days);
+			const chirpsKey = unitRainSeriesKey('rain_chirps_mm', n.id);
+			const own = ctx.series[chirpsKey] ? alignReadings(ctx.series[chirpsKey], d0, days) : null;
+			const pairing = recipePairing(sc, st);
+			const d = stationAreaDays({ start: d0, days, station, ratio: st.ratio, chirps: own, pairing });
+			const ownForecast = ctx.series[unitForecastSeriesKey(n.id)] ? align(ctx.series[unitForecastSeriesKey(n.id)]) : null;
+			const counts = { station: 0, chirps: 0, fallback: 0, none: 0 };
+			let fell = 0;
+			for (let t = 0; t < days; t++) {
+				let v: number | null = null;
+				let code: number = NaN;
+				if (d.source[t] === STATION_DAY_SOURCE.station) {
+					v = d.values[t]!;
+					code = UNIT_RAIN_SOURCE.station;
+					counts.station++;
+				} else if (d.source[t] === STATION_DAY_SOURCE.chirps) {
+					v = d.values[t]!;
+					code = UNIT_RAIN_SOURCE.stationChirps;
+					counts.chirps++;
+				} else if (ownForecast && ownForecast[t] != null) {
+					v = ownForecast[t]!;
+					code = UNIT_RAIN_SOURCE.forecast;
+					counts.fallback++;
+				} else {
+					// The catchment forcing (catchment ?? corrected CHIRPS ?? forecast) as is: the station sets the unit's level, so no areal factor.
+					const x = c[t] ?? ch[t] ?? f[t] ?? null;
+					if (x !== null) {
+						v = x;
+						code = c[t] == null && ch[t] == null ? UNIT_RAIN_SOURCE.forecast : UNIT_RAIN_SOURCE.catchment;
+						counts.fallback++;
+						if (code === UNIT_RAIN_SOURCE.catchment && t < hist) fell++;
+					} else counts.none++;
+				}
+				if (v === null) continue;
+				rainMm[t] = Math.max(0, v);
+				source[t] = code;
+			}
+			if (fell > 0)
+				warnings.push(`unit rain: "${n.name}" ran ${fell} of its ${hist} day${hist === 1 ? '' : 's'} on the catchment's rain, where its station and its corrected CHIRPS had no value`);
+			const sm = sc.map(st.stationId);
+			stationForcings.push({
+				nodeId: n.id,
+				name: n.name,
+				stationId: st.stationId,
+				stationName: sc.name(st.stationId),
+				areaMapMm: usableMap(n.mapMm),
+				areaMapSource: typeof n.mapSource === 'string' ? n.mapSource : null,
+				stationMapMm: st.stationMapMm,
+				stationMapSource: sm.mapSource,
+				ownRatio: st.ownRatio,
+				ratio: st.ratio,
+				clamped: st.clamped,
+				scaleToMap: st.scaleToMap,
+				correctedBy: own && pairing.refused === null ? pairing.stationId : null,
+				days: counts,
+				setAside: setAsideInWindow(sc, st.stationId, d0, days)
+			});
+			return { ...base, rainMm, source };
+		}
 		if (r.rule === 'catchment') {
 			// The catchment forcing as without per-unit rain (runoffForcing): catchment ?? CHIRPS ?? forecast, × the areal factor.
 			const before = areal ? new Float64Array(days) : null;
@@ -505,7 +606,7 @@ export function unitRainForcing(
 			);
 		return { ...base, rainMm, source };
 	});
-	return { units, recipes, reference: fit.reference };
+	return { units, recipes, reference: fit.reference, stations: stationForcings, stationContext: ctx.stations ?? null };
 }
 
 /** GR4J over each unit's forcing (one parameter set, the catchment PE); the per-unit simulateRunoff traces, in `units` order. */
@@ -554,8 +655,9 @@ export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing
 			for (let t = 0; t < x.source.length; t++) {
 				const s = x.source[t]!;
 				if (s === UNIT_RAIN_SOURCE.unitGauge) days.unitGauge++;
-				else if (s === UNIT_RAIN_SOURCE.gaugeMap) days.gaugeMap++;
-				else if (s === UNIT_RAIN_SOURCE.unitChirps) days.unitChirps++;
+				// A station's day is a gauge × MAP ratio, as rule 2's; its corrected CHIRPS the unit's own CHIRPS (§2.4i).
+				else if (s === UNIT_RAIN_SOURCE.gaugeMap || s === UNIT_RAIN_SOURCE.station) days.gaugeMap++;
+				else if (s === UNIT_RAIN_SOURCE.unitChirps || s === UNIT_RAIN_SOURCE.stationChirps) days.unitChirps++;
 				else if (s === UNIT_RAIN_SOURCE.catchment) days.catchment++;
 				else if (s === UNIT_RAIN_SOURCE.forecast) days.forecast++;
 				else days.none++;

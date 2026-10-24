@@ -109,6 +109,7 @@ import type { AllocationLimitBound, DemandPart } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
+import { pairingFactors, rainStationSummary } from './runoff/stationForcing';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn, entersServiceAfter } from './network/development';
 import { forecastTail } from './forecastTail';
 import { chirpsChoiceWarnings } from './seriesChoice';
@@ -320,13 +321,15 @@ function runNetwork(
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h) holds one state per land unit, catchment rain one.
 	if (resume && !!resume.runoff.units !== (perUnitAreaKm2(input) !== null))
 		throw new ModelStateMismatchError('input', resume.runoff.units ? 'the snapshot holds each unit’s runoff state (runoff from each unit’s own rain); this run forces the catchment rain' : 'the snapshot holds the catchment’s one runoff state; this run forces each unit with its own rain');
-	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, chirpsCorrection, ...(runoffWarm ? { warm: runoffWarm } : {}) });
+	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, chirpsCorrection, stations: prepared.stations?.context ?? null, ...(runoffWarm ? { warm: runoffWarm } : {}) });
 	if (nf.naturalFlowM3Day.length !== days) {
 		throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	}
 	if (capturing && !nf.state && !nf.unitStates) throw new Error('this natural flow has no state to capture (only the engine\u2019s own runoff models can be captured)');
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
+	// Rainfall stations (engine ≥ 1.91.0, §2.4i): the catchment's forcing, the units' and every pairing used.
+	const stationSummary = prepared.stations ? rainStationSummary(prepared.stations.context, prepared.stations.catchment, nf.stationUnits ?? [], prepared.stations.plan?.map ?? null) : null;
 	const areal = arealRainFactors(settings.arealRain);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month, !!nf.unitRain);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
@@ -1204,7 +1207,12 @@ function runNetwork(
 				...(outletEwr ? { outletEwr: (({ pinned: _, ...rest }) => rest)(outletEwr) } : {}),
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
 				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.53.0).
-				fits: { ...prepared.fits!, chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!) }
+				fits: {
+					...prepared.fits!,
+					chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!),
+					// Every pairing the run used, the units' included (engine ≥ 1.91.0, §2.4i).
+					...(prepared.stations ? { stationFactors: pairingFactors(prepared.stations.context) } : {})
+				}
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: [],
@@ -1243,6 +1251,7 @@ function runNetwork(
 			},
 			...(nf.balance ? { runoff: nf.balance } : {}),
 			...(nf.unitRain ? { unitRain: nf.unitRain } : {}),
+			...(stationSummary ? { stations: stationSummary } : {}),
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,

@@ -10,6 +10,8 @@
 import type { ModelInput, ProjectSettings, RunoffBalance, SeriesKind, UnitRainSummary } from '../project';
 import type { ChirpsCorrection } from '../rain';
 import type { UnitRainRecipe } from './unitRain';
+import type { StationContext } from './stationForcing';
+import type { StationAreaForcing } from '../project';
 
 /**
  * Runoff models a run can use (settings.runoffModel). GR4J only since engine
@@ -113,6 +115,8 @@ export interface NaturalFlowInput {
 	unitRecipes?: UnitRainRecipe[];
 	/** Each unit's GR4J state at `ctx.warm.captureAt` (in place of `state`), when asked. */
 	unitStates?: { id: string; state: number[] }[];
+	/** The land units on rule 'station' (engine ≥ 1.91.0, §2.4i), as summary.stations.units reports them; with unitRunoff. */
+	stationUnits?: StationAreaForcing[];
 }
 
 export interface RunContext {
@@ -146,6 +150,8 @@ export interface RunContext {
 	 * these (engine ≥ 1.28.0), so a forecast tail can't change it.
 	 */
 	historyDays?: number;
+	/** The run's rainfall station records and pairings (prepareRun's, engine ≥ 1.91.0, §2.4i); null without settings.rainStations. */
+	stations?: StationContext | null;
 }
 
 /** Produces a run's natural flow. */
