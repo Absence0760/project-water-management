@@ -555,7 +555,7 @@ mapMm, mapSource, lat, lon }`):
   when a feed of any project covers it (a boundary or unit feed); without
   it the engine pairs the station against the CHIRPS of the unit it stands
   in (`rainStations.sites`), else refuses the pairing. A station's record
-  names its series in `run_input_series.series_id` (240_station_input_series:
+  names its series in `run_input_series.series_id` (241_station_input_series:
   `run_input_series_series_kind` takes `rain_station_mm#<id>` naming that
   very `rain_catchment_mm` series), so a manual run is a person accepting
   every station it read, as the API-key ingest hold reads it

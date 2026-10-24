@@ -161,7 +161,7 @@ describe('rainfall stations in a run’s input', () => {
 		expect(row!.stations).toEqual((await input()).stations);
 		expect(Object.keys(row!.series)).toEqual(expect.arrayContaining([stationSeriesKey(gauge), stationSeriesKey(ridge), stationSeriesKey(vlei), stationChirpsSeriesKey(ridge)]));
 		const refs = (await asOwner(`SELECT kind, series_id FROM run_input_series WHERE run_id = $1 AND kind LIKE '%#%' ORDER BY kind`, [runId])) as { kind: string; series_id: string | null }[];
-		// Each station's record names its series (240), so a manual run is a person accepting it (series/hold.ts);
+		// Each station's record names its series (241), so a manual run is a person accepting it (series/hold.ts);
 		// the CHIRPS at the ridge's cell is no series.
 		expect(refs).toEqual(
 			[

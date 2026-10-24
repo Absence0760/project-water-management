@@ -1,4 +1,4 @@
--- 240_station_input_series — a run's rainfall station inputs name the series
+-- 241_station_input_series — a run's rainfall station inputs name the series
 -- they were read from (issue #553 round 2; docs/data-model.md § Rainfall
 -- stations, § Stored run inputs).
 --

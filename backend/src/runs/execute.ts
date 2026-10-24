@@ -143,7 +143,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	if (cell) (series as Record<string, DailySeries>)[cell.key] = cell.series;
 	// The rainfall stations (engine ≥ 1.91.0, issue #553, runs/stationInput.ts): each station's record, the CHIRPS at its
 	// own cell where the cache holds it, and its details; only when settings.rainStations assigns one, so other inputs are
-	// as before. A station's record names its series (240_station_input_series), so a manual run counts as a person
+	// as before. A station's record names its series (241_station_input_series), so a manual run counts as a person
 	// accepting it (series/hold.ts) and its download shows the run; the cell's CHIRPS is no series and names none.
 	const stationed = await stationInputs(db, projectId, settings.rainStations, read?.id ?? null);
 	if (stationed) {
