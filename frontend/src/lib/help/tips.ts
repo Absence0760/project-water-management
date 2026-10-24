@@ -723,7 +723,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'unit-map',
 		term: 'Unit rainfall level',
-		short: 'The unit’s own MAP in mm and its source: with rain for each unit, it sets the level of the unit’s CHIRPS rain.',
+		short: 'The unit’s own MAP in mm and its source: under Per unit flow generation, it sets the level of the unit’s rain.',
 		units: 'mm/year',
 		category: 'farm',
 		fields: ['node.mapMm', 'node.mapSource']
@@ -1141,11 +1141,19 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'unit-rain',
-		term: 'Runoff from each unit’s own rain',
-		short: 'GR4J runs once per unit with land on that unit’s own rain (its gauge, the catchment gauge × MAP ratio, or its CHIRPS) and sums the flow.',
+		term: 'Flow generation: fragmentation or per unit',
+		short: 'Fragmentation runs GR4J once on the catchment rain; Per unit runs it on each unit’s rain (its station × MAP ratio) and sums the flow.',
 		units: 'mm/day',
 		category: 'flow',
 		fields: ['settings.unitRain']
+	},
+	{
+		id: 'rain-stations',
+		term: 'A unit’s rainfall station',
+		short: 'Per unit, a unit runs on its station’s rain × unit MAP ÷ station MAP; on the station’s gaps its CHIRPS, corrected against a station.',
+		units: 'mm/day',
+		category: 'flow',
+		fields: ['settings.rainStations']
 	},
 	{
 		id: 'actual-evaporation',

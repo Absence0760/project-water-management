@@ -145,6 +145,14 @@ describe('fitValidationRows', () => {
 		});
 		// Assigned since a fit without one: said from the settings alone.
 		expect(row(fitValidationRows(withForcing, null, withStation, null), 'Forcing changed since fit').a).toBe('yes (the catchment’s rainfall station changed)');
+		// Issue #553 round 3: a run under Per unit on a fit made under Fragmentation (its forcing records no unitRain), and the other way round.
+		const perUnit = { ...settings, unitRain: { mode: 'perUnit' } } as unknown as Partial<ProjectSettings>;
+		expect(row(fitValidationRows(withForcing, withForcing, perUnit, settings), 'Forcing changed since fit')).toMatchObject({
+			a: 'yes (fitted under the other flow generation method)',
+			b: 'no'
+		});
+		const unitFit = record({ ...withForcing, forcing: { ...withForcing.forcing!, unitRain: { mode: 'perUnit', gaugeMapMm: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [] } } });
+		expect(row(fitValidationRows(unitFit, null, settings, null), 'Forcing changed since fit').a).toBe('yes (fitted under the other flow generation method)');
 	});
 });
 

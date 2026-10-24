@@ -67,7 +67,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	evidenceRunHref: { why: 'EvidencePanel: a literal "?tab=runs&run=" + encodeURIComponent(the current evidence run id from the API) + "#res-evidence", or null (issue #521)', in: ['lib/components/runs/EvidencePanel.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
-	stationHref: { why: 'BUILDER: "?tab=series&series=" + encoded series id + "#data-chart" (settings/unitRain.ts, issue #553)', in: ['lib/components/settings/UnitRainFields.svelte'] },
+	stationHref: { why: 'BUILDER: "?tab=series&series=" + encoded series id + "#data-chart" (settings/unitRain.ts, issue #553)', in: ['lib/components/settings/UnitRainFields.svelte', 'lib/components/settings/FlowGenerationUnits.svelte'] },
 	packHref: {
 		why: 'BUILDER: "<base>/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',
 		in: ['lib/components/packs/PackActions.svelte', 'lib/components/report/evidence/EvidencePage.svelte', 'lib/components/scenarios/ApplicationPanel.svelte', 'lib/components/scenarios/ApplicationsTab.svelte']

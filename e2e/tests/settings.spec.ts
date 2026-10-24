@@ -40,7 +40,7 @@ test('the high/low MAP split shows only while that flow-share method is chosen',
 	void owner;
 	const project = await createProject(page.request, 'Settings hi/lo');
 	await page.goto(`/projects/${project.id}?tab=settings`);
-	const method = page.getByLabel('Method', { exact: true });
+	const method = page.getByLabel('Flow share method', { exact: true });
 	const split = page.getByRole('group', { name: /^High\/low MAP split/ });
 
 	// By area (the default) and manual shares don't read the split: no dead control, no amber Sum.
@@ -145,9 +145,9 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Rain gaps',
 		'Data quality',
 		'Demand',
-		'Flow share',
 		'Drought restrictions',
 		'Reporting',
+		'Flow generation',
 		'Flow calibration',
 		'Calibration record',
 		'Fit the parameters',

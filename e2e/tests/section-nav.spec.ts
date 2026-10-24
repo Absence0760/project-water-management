@@ -18,9 +18,9 @@ const SETTINGS_LINKS = [
 	'Rain gaps',
 	'Data quality',
 	'Demand',
-	'Flow share',
 	'Drought restrictions',
 	'Reporting',
+	'Flow generation',
 	'Flow calibration',
 	'Calibration record',
 	'Fit the parameters',
@@ -36,8 +36,8 @@ const SETTINGS_LINKS = [
 /** The side index's groups at 1440 px (issue #468): every panel, under its task. */
 const SETTINGS_RAIL: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
-	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions', 'Reporting']],
-	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
+	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automation & access', ['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']]

@@ -988,6 +988,7 @@
 								apanSeries={series ? (firstOutletSeries(series, 'evap_apan_mm') ?? null) : undefined}
 								flowRecordId={series ? ((firstOutletSeries(series, 'flow_observed_m3s') ?? firstOutletSeries(series, 'flow_logger_m3s'))?.id ?? null) : null}
 								catchmentRain={series ? (firstOutletSeries(series, 'rain_catchment_mm') ?? null) : undefined}
+								rainSeries={series?.filter((x) => x.kind === 'rain_catchment_mm' && !x.siteNodeId)}
 								readonly={!canEdit}
 								{onProjectChange}
 								onModelChanged={reloadInputs}

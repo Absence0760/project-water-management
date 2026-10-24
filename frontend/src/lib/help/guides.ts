@@ -518,7 +518,7 @@ export const GUIDES: Guide[] = [
 							'Give each hydrological unit its parcel on the **Map** (delineate, draw or upload it, and link it to the unit).',
 							'Open **Settings & calibration → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
 							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create the feed** (**Create 4 feeds** for four units; **Update** where a unit has one already). Units without a parcel are listed, with a link to the map.',
-							'Give each unit its MAP and source on its form, then switch on **Settings & calibration → Flow calibration → Rain into GR4J → Rain for each unit**, and refit.'
+							'Give each unit its MAP and source on its form, then choose **Per unit** under **Settings & calibration → Flow generation**, give each unit its rainfall station, and refit.'
 						]
 					},
 					{
@@ -1380,8 +1380,8 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
-							'**Natural flow.** The [[runoff-model]] (GR4J) turns rain and evaporation into the flow the catchment would produce with no hydrological units. With [[unit-rain|Rain for each unit]] on, it runs once for each unit with land instead, each on its own rain: the unit’s own gauge; else the catchment gauge × unit MAP ÷ gauge MAP; else the unit’s own CHIRPS, levelled to its MAP; else the catchment rain. The outlet’s natural flow is then their routed sum.',
-							'**Shares.** Natural flow and the EWR are split between the hydrological units by fixed [[flow-share|flow shares]] (with Rain for each unit on, each unit’s runoff is its own, and the shares still split the EWR).',
+							'**Natural flow.** The [[runoff-model]] (GR4J) turns rain and evaporation into the flow the catchment would produce with no hydrological units. With [[unit-rain|flow generation]] set to **Per unit**, it runs once for each unit with land instead, each on its own rain: its rainfall station × unit MAP ÷ station MAP when it has one; else the unit’s own gauge; else the catchment gauge × unit MAP ÷ gauge MAP; else the unit’s own CHIRPS, levelled to its MAP; else the catchment rain. The outlet’s natural flow is then their routed sum.',
+							'**Shares.** Natural flow and the EWR are split between the hydrological units by fixed [[flow-share|flow shares]] (under Per unit, each unit’s runoff is its own, and the shares still split the EWR).',
 							'**Demand.** Crops, A-pan and effective rain give each hydrological unit’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the hydrological unit takes from its dam and the river.',
 							'**Hydrological unit balance.** Upstream first, each hydrological unit fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one hydrological unit]].',
 							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge ticked as an **EWR site** (the default) is checked too, and a shortfall at any EWR site is charged to the hydrological units upstream of it ([[ewr-charge]]); a gauge unticked only measures.'
@@ -1662,7 +1662,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'With [[unit-rain|Rain for each unit]] on (**Settings & calibration → Flow calibration → Rain into GR4J**), each unit with land also gets a rain series of its own, in this order: its **own gauge**, with the same zero-run and accumulation checks, its gaps and set-aside days taking its CHIRPS levelled to its MAP; else the **catchment gauge × unit MAP ÷ gauge MAP**, when the gauge’s MAP is set and the unit has one; else its **own CHIRPS**, levelled by its MAP ÷ the CHIRPS mean over the MAP period; else the catchment rain, with a warning. Demand, rain on the dams and the WR2012 check keep the catchment rain. A seasonal outlook, the uncertainty ensemble’s CHIRPS-only member and a run resumed from a saved state keep each unit’s rule and factors **pinned** as the base run had them, rather than refitting them on a shorter record; the run’s Rain for each unit panel then says its factors are pinned.'
+						text: 'With [[unit-rain|flow generation]] set to **Per unit** (**Settings & calibration → Flow generation**), each unit with land also gets a rain series of its own: its [[rain-stations|rainfall station]] × unit MAP ÷ station MAP when it is given one, its gaps filled by its CHIRPS corrected against a station; else, in this order, its **own gauge**, with the same zero-run and accumulation checks, its gaps and set-aside days taking its CHIRPS levelled to its MAP; else the **catchment gauge × unit MAP ÷ gauge MAP**, when the gauge’s MAP is set and the unit has one; else its **own CHIRPS**, levelled by its MAP ÷ the CHIRPS mean over the MAP period; else the catchment rain, with a warning. Demand, rain on the dams and the WR2012 check keep the catchment rain. A seasonal outlook, the uncertainty ensemble’s CHIRPS-only member and a run resumed from a saved state keep each unit’s rule and factors **pinned** as the base run had them, rather than refitting them on a shorter record; the run’s Rain for each unit panel then says its factors are pinned.'
 					}
 				]
 			},

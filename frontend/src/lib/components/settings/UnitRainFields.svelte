@@ -1,14 +1,12 @@
 <!--
-	Settings → Flow calibration → Rain into GR4J → Rain for each unit (settings.unitRain, issue
-	#482, docs/model.md §2.4h, docs/ui.md § Settings & calibration): the switch
-	that runs GR4J once per unit with land on its own rain, the catchment rain
-	gauge's MAP (a read-out of the catchment rain station's since issue #553, edited
-	in the Data tab's Series details), the MAP period the CHIRPS factors compare
-	over, and the reference gauge and unit whose monthly factors level every
-	unit's CHIRPS (issue #500, docs/model.md §2.4h *Reference gauge*). Bind the setting (null = off); `last` keeps the one switched off until
-	the form is saved. The parent works out `error` (unitRainProblem), which
-	blocks Save; it shows under the field it is fixed in. Its own chunk: the
-	Settings tab chunk sits at its size ceiling.
+	Settings → Flow generation → Per unit → Units without a station (settings.unitRain, issue #482, issue #553 round 3,
+	docs/model.md §2.4h, docs/ui.md § Settings & calibration): what a land unit with no rainfall station runs on, the
+	rule from before stations. The catchment rain gauge's MAP (a read-out of the catchment rain station's since issue
+	#553, edited in the Data tab's Series details), the MAP period the CHIRPS factors compare over, and the reference
+	gauge and unit whose monthly factors level every such unit's CHIRPS (issue #500, docs/model.md §2.4h *Reference
+	gauge*). The Flow generation radio switches settings.unitRain on and off (SettingsTab.svelte); this shows only
+	while it is Per unit. The parent works out `error` (unitRainProblem), which blocks Save; it shows under the field
+	it is fixed in. Its own chunk: the Settings tab chunk sits at its size ceiling.
 -->
 <script lang="ts">
 	import { fmtNum, localIsoDate } from '#lib/format/number.js';
@@ -29,20 +27,16 @@
 		withMapPeriodYears,
 		withReferenceGauge,
 		withReferenceUnit,
-		withUnitRain,
 		type CatchmentStation
 	} from './unitRain';
 
 	let {
 		value = $bindable(),
-		// No fallback: bound to an unset draft.kept key, a fallback would throw (props_invalid_value).
-		last = $bindable(),
 		readonly = false,
 		nodes = [],
 		catchmentRain
 	}: {
 		value: UnitRainSettings | null | undefined;
-		last?: unknown;
 		readonly?: boolean;
 		/** The model's units, to say how many with land have a MAP. */
 		nodes?: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'areaKm2' | 'mapMm'>[];
@@ -69,23 +63,13 @@
 	const FIRST_YEAR = 1900;
 	const errId = `${uid}-err`;
 	const describe = (field: 'period' | 'reference', hint: string) => (problem?.field === field ? `${hint} ${errId}` : hint);
-
-	function setOn(next: boolean) {
-		if (!next && value) last = $state.snapshot(value);
-		value = withUnitRain(next, (last as UnitRainSettings | null) ?? null);
-	}
 </script>
 
 <fieldset class="plain unit-rain" id="set-unit-rain" data-testid="unit-rain-settings">
-	<legend><h4 class="sub">Rain for each unit <HelpTip key="settings.unitRain" /></h4></legend>
-	<label class="check">
-		<input type="checkbox" disabled={readonly} checked={on} onchange={(e) => setOn(e.currentTarget.checked)} aria-describedby="{uid}-h" />
-		Runoff from each unit’s own rain
-	</label>
+	<legend><h4 class="sub">Units without a station <HelpTip key="settings.unitRain" /></h4></legend>
 	<span class="hint explain" id="{uid}-h">
-		Off, GR4J runs once on the catchment rain and the units share its flow. On, it runs once for each unit with land, on that unit’s own gauge, the
-		catchment gauge × the unit’s MAP ÷ the gauge’s MAP, or the unit’s own CHIRPS scaled to its MAP; a unit with none of them falls back to the catchment
-		rain and the run says so. Demand and the dams keep the catchment rain. Switching it on changes the flow: refit afterwards.
+		A unit given no station above runs as before stations: on its own gauge, the catchment gauge × the unit’s MAP ÷ the gauge’s MAP, or its own CHIRPS
+		scaled to its MAP; a unit with none of them falls back to the catchment rain and the run says so.
 	</span>
 	{#if on && value}
 		<p class="hint coverage" data-testid="unit-rain-coverage">
@@ -234,16 +218,6 @@
 	}
 	legend :global(.helptip) {
 		margin-left: 0.15rem;
-	}
-	.check {
-		display: inline-flex;
-		align-items: center;
-		min-height: 36px;
-	}
-	@media (pointer: coarse), (max-width: 640px) {
-		.check {
-			min-height: var(--tap);
-		}
 	}
 	.fields {
 		display: grid;

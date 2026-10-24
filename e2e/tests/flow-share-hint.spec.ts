@@ -1,10 +1,10 @@
 // Rainfall stations and what Flow share splits (issue #553; docs/ui.md §
 // Settings & calibration, § Data; docs/model.md §2.4h, §2.5). On the sample
 // model and its catchment rain series (synthetic):
-// - Settings → Flow share's line follows Rain for each unit: off, GR4J's one
-//   run's flow and the EWR; on, only the EWR and the land cover's low-flow
-//   threshold. Both link to Rain for each unit.
-// - Rain for each unit reads the gauge's MAP from the catchment rain station:
+// - Settings → Flow generation's flow-share line follows the method:
+//   Fragmentation, GR4J's one run's flow and the EWR; Per unit, only the EWR
+//   and the land cover's low-flow threshold (issue #553 round 3).
+// - Units without a station reads the gauge's MAP from the catchment rain station:
 //   an older project's settings gaugeMapMm until the station has one, then
 //   the station's. Its link opens the series in Series details, where an
 //   editor sets the station's MAP, source and place (checked before Save),
@@ -14,7 +14,7 @@ import { addMember, seedRunnableProject, updateSettings } from '../support/api.t
 import { expect, test } from '../support/fixtures.ts';
 import { openSettings, saveSettings, showExplanations } from '../support/settings.ts';
 
-test('Flow share says what it splits, by whether each unit makes its own runoff, with a link to Rain for each unit', async ({ page, owner }) => {
+test('Flow generation’s flow share says what it splits, by the method, and stays as a state line under Per unit', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Flow share hint');
 	await openSettings(page, project.id);
@@ -23,26 +23,20 @@ test('Flow share says what it splits, by whether each unit makes its own runoff,
 	const hint = share.getByTestId('share-hint');
 	await expect(hint).toHaveAttribute('data-unit-rain', 'off');
 	await expect(hint).toHaveText(
-		'GR4J runs once on the catchment rain; this splits its flow and the EWR between units. To give each unit its own runoff, see Rain for each unit.'
+		'GR4J runs once on the catchment rain; the flow share splits its flow and the EWR between units. To give each unit its own runoff, choose Per unit above.'
 	);
-	await expect(hint.getByRole('link', { name: 'Rain for each unit' })).toHaveAttribute('href', '#set-unit-rain');
 
-	// Switched on (unsaved is enough: the line reads the form), it says the flow is no longer split.
-	const group = page.getByTestId('unit-rain-settings');
-	await group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' }).check();
+	// Per unit (unsaved is enough: the line reads the form), it says the flow is no longer split.
+	await share.getByRole('radio', { name: 'Per unit' }).check();
 	await expect(hint).toHaveAttribute('data-unit-rain', 'on');
-	await expect(hint).toHaveText(
-		'Each unit makes its own runoff; this now splits only the EWR and the land cover’s low-flow threshold between units, not the flow. See Rain for each unit.'
-	);
+	await expect(hint).toHaveText('Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.');
 	await saveSettings(page);
 	await page.reload();
 	await expect(hint).toHaveAttribute('data-unit-rain', 'on');
 	// A state line: it stays with the explanations off.
 	await page.getByRole('checkbox', { name: 'Explain each setting under its field' }).uncheck();
 	await expect(hint).toBeVisible();
-	await hint.getByRole('link', { name: 'Rain for each unit' }).click();
-	await expect(page).toHaveURL(/#set-unit-rain$/);
-	await expect(group).toBeInViewport();
+	await expect(share.getByTestId('unit-rain-settings')).toBeVisible();
 	await expectNoViolations(page, { include: '#set-share' });
 });
 

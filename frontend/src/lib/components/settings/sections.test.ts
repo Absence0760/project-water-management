@@ -11,9 +11,10 @@ describe('SETTINGS_SECTIONS', () => {
 			'set-rain',
 			'set-quality',
 			'set-demand',
-			'set-share',
 			'set-restrict',
 			'set-reporting',
+			// Flow generation (issue #553 round 3) keeps the Flow share panel's id and leads Runoff & calibration.
+			'set-share',
 			'set-flow',
 			'set-record',
 			'set-fit',

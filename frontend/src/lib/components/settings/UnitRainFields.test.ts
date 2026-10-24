@@ -1,8 +1,11 @@
-// Settings → Flow calibration → Rain into GR4J → Rain for each unit (UnitRainFields.svelte,
-// issue #482), rendered with Svelte's server renderer: off shows the switch
-// alone; on shows the coverage, the gauge MAP read from the catchment rain
-// station (issue #553) with a link to edit it, and the MAP period; a problem sits under its field, named by aria-describedby. The
-// browser flow is pinned by e2e/tests/unit-rain.spec.ts.
+// Settings → Flow generation → Per unit → Units without a station (UnitRainFields.svelte,
+// issues #482 and #553 round 3), rendered with Svelte's server renderer: with
+// Fragmentation (settings.unitRain off) only its heading and line show; under
+// Per unit the coverage, the gauge MAP read from the catchment rain station
+// (issue #553) with a link to edit it, and the MAP period; a problem sits under
+// its field, named by aria-describedby. The switch is the Flow generation
+// radio's (SettingsTab.svelte); the browser flow is pinned by
+// e2e/tests/flow-generation.spec.ts and e2e/tests/unit-rain.spec.ts.
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import UnitRainFields from './UnitRainFields.svelte';
@@ -28,10 +31,11 @@ const nodes = [
 ];
 
 describe('UnitRainFields', () => {
-	it('shows only the switch while off', () => {
+	it('has no switch of its own (the Flow generation radio is), and shows none of its fields while off', () => {
 		const { body } = render(UnitRainFields, { props: { value: null, nodes } });
-		expect(body).toContain('Runoff from each unit’s own rain');
-		expect(body).not.toContain('checked');
+		expect(body).toContain('Units without a station');
+		expect(body).not.toContain('type="checkbox"');
+		expect(body).not.toContain('Runoff from each unit’s own rain');
 		expect(body).not.toContain('MAP period');
 		expect(body).not.toContain('Rain gauge’s MAP');
 		expect(body).toContain('id="set-unit-rain"');
@@ -39,7 +43,6 @@ describe('UnitRainFields', () => {
 
 	it('on, says how many units have a MAP and shows the gauge MAP and the default period', () => {
 		const { body } = render(UnitRainFields, { props: { value: { mode: 'perUnit' }, nodes } });
-		expect(body).toMatch(/<input type="checkbox"[^>]*checked/);
 		expect(body).toContain('1 of 2 units with land has a MAP.');
 		// The one without is named, linked to its form's Catchment area card (section=area).
 		expect(body).toMatch(/Without a MAP:.*<a href="\?tab=network&amp;edit=b&amp;section=area">Lower unit<\/a>/s);
@@ -92,10 +95,10 @@ describe('UnitRainFields', () => {
 		expect(gone).toContain('data-testid="unit-rain-reference-gone"');
 	});
 
-	it('for a viewer, the switch is disabled and the gauge MAP’s link only shows it', () => {
+	it('for a viewer, the fields are disabled and the gauge MAP’s link only shows it', () => {
 		const catchmentRain = { id: 'r1', name: 'Gauge A', station: { mapMm: 745, mapSource: 'station record', lat: null, lon: null } };
 		const { body } = render(UnitRainFields, { props: { value: { mode: 'perUnit' }, nodes, catchmentRain, readonly: true } });
-		expect(body).toMatch(/<input type="checkbox"[^>]*disabled/);
+		expect(body).toMatch(/<select[^>]*disabled/);
 		expect(body).toContain('>See it in Series details</a>');
 	});
 });
