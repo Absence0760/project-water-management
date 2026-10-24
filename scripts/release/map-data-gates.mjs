@@ -19,7 +19,8 @@
 //     (the workflow's inputs) must have the shapes the migrate Lambda accepts
 //     (backend/src/geo/referenceLoad.ts parseLoadRequest checks them again),
 //     the kind must be one the Sources table allows (land-cover,
-//     evaporation, rivers, gazetteer), and
+//     evaporation, rivers, gazetteer, map-grid), a MAP grid must name a
+//     dataset whose licence is recorded (DATASETS) and give no source, and
 //     rivers need HydroSHEDS' Exhibit B statement in the app's legal text
 //     first (the HydroSHEDS licence, § 2.2), and the Terms' clause on map
 //     data licensed to us (§9: no stand-alone redistribution, no reverse
@@ -46,7 +47,14 @@ export const REQUIRED_TEXT = {
 };
 
 /** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones; referenceLoad.test.ts keeps the two in step). */
-export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer'];
+export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid'];
+
+/**
+ * The kinds allowed dataset by dataset, and the labels each may load as
+ * (REFERENCE_KINDS' `datasets`, the allowed ones; referenceLoad.test.ts keeps
+ * the two in step). MAP grids: each surface's terms are its owner's.
+ */
+export const DATASETS = { 'map-grid': ['WAAS-SWCape-2007'] };
 
 const ARCHIVE = /^\/tiles\/[a-z0-9-]+\.pmtiles$/;
 const GLYPHS = '/tiles/fonts/{fontstack}/{range}.pbf';
@@ -97,8 +105,12 @@ export function loadProblems(env, hasText = legalTextHas) {
 	if (!/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,49}$/.test(env.LOAD_DATASET ?? '') || env.LOAD_DATASET === 'synthetic') {
 		problems.push('the dataset must be a label of 1–50 letters, digits, spaces, dots, dashes or underscores, not "synthetic"');
 	}
+	if (Object.hasOwn(DATASETS, kind) && !DATASETS[kind].includes(env.LOAD_DATASET ?? '')) {
+		problems.push(`${kind} loads only the datasets whose licence is recorded: ${DATASETS[kind].join(', ')} (docs/maps.md § Sources)`);
+	}
 	const source = env.LOAD_SOURCE ?? '';
 	if (source.length > 500 || /[\u0000-\u001f]/.test(source)) problems.push('the source is at most 500 characters on one line');
+	if (Object.hasOwn(DATASETS, kind) && source.trim()) problems.push(`${kind} takes no source: the dataset's source and credit are the ones recorded with its licence`);
 	if (kind === 'rivers' && !source.trim()) problems.push('rivers need a source: the attribution stored on every reach');
 	const order = env.LOAD_MIN_ORDER ?? '1';
 	if (!/^([1-9]|1[0-5])$/.test(order)) problems.push('min_order is a Strahler order, 1 to 15');

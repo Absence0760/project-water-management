@@ -4160,18 +4160,33 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `gauge-stations` kind on the production path (`geo/referenceLoad.ts`,
       `scripts/release/map-data-gates.mjs`, the workflow's choices), which
       refuses it until then.
-- [ ] **Decision: the MAP grids' licences** (operator; maps.md § MAP grid,
-      § Sources, decision D-B). The MAP grid layer shows a mean annual
-      precipitation grid the operator loads (`pnpm import:map-grid`): the
-      Lynch (2004) national grid from the WRC's Atlas of Climatology and
-      Agrohydrology (its portal lists CC BY-SA 4.0 and "No License Provided"
-      at once; share-alike may reach a map of it), or a provincial ~100 m
-      surface whose terms are its owner's. Ask the WRC (and each surface's
-      owner) in writing whether the grid may be shown in a commercial
-      service; until then they are loaded locally only and production loads
-      refuse the `map-grid` kind (`geo/referenceLoad.ts`). On a yes: record
-      it in the sources table and allow the kind (with an `--out` file form
-      for the reference bucket, as the evaporation grid has).
+- [ ] **Decision: the Lynch (2004) MAP grid's licence** (operator; maps.md §
+      MAP grid, § Sources, decision D-B). The Lynch (2004) national grid
+      from the WRC's Atlas of Climatology and Agrohydrology: its portal
+      lists CC BY-SA 4.0 and "No License Provided" at once, and share-alike
+      may reach a map of it. Ask the WRC in writing whether the grid may be
+      shown in a commercial service; until then it is loaded locally only
+      and a production load naming `Lynch-2004` is refused
+      (`geo/referenceLoad.ts` `REFERENCE_KINDS['map-grid'].datasets`). On a
+      yes: record it in the sources table and in
+      legal/map-data-licences.md, set its entry to allowed with its source,
+      version and attribution, add the label to the release gate's
+      `DATASETS` (`scripts/release/map-data-gates.mjs`), and give it a credit
+      like the Southwestern Cape surface's. Any other provincial surface is
+      the same, with its own owner. The Southwestern Cape surface (WAAS,
+      2007) is decided: the operator's decision of 2026-10-23 (terms not
+      stated) allows it, issue #560, legal/map-data-licences.md § 3.3b.
+- [ ] **Load the Southwestern Cape MAP surface in production** (operator;
+      issue #560; deployment.md § Reference datasets). The code allows it
+      as dataset `WAAS-SWCape-2007`; nothing is loaded yet, so production's
+      MAP grid layer and *MAP from the grid* have no grid. Steps: cut the
+      grid to the client's area with `pnpm import:map-grid … --bbox … --out`,
+      upload it to the reference bucket, run `load-reference.yml` with
+      `kind=map-grid`. Then, in the app, check the typed unit MAPs against it
+      with *MAP from the grid*, and read it at the rain station for the gauge
+      MAP once the station's coordinates are known. Trigger: the first
+      backend release that carries migration 238 (the loader runs in the
+      migrate Lambda that release ships).
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
       on two conditions, both met. The HydroSHEDS Exhibit B statement

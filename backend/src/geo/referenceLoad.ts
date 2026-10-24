@@ -11,8 +11,12 @@
 //
 // Only kinds whose licence docs/maps.md § Sources marks allowed load
 // (decision D-B in #326); the rest are refused here, by name, with the
-// decision that would unblock them. referenceLoad.test.ts checks this table
-// against the Sources table, so the two can't drift.
+// decision that would unblock them. A kind whose datasets have licences of
+// their own (MAP grids: each surface is its owner's) is allowed dataset by
+// dataset: the load must name one of its listed labels, an allowed one, and
+// is stored with the source lines recorded here, never the file's.
+// referenceLoad.test.ts checks this table against the Sources table, so the
+// two can't drift.
 //
 // What a load trusts: the object must hash to the SHA-256 the operator gave
 // (the file they prepared, not whatever sits under that key), stay under a
@@ -27,7 +31,14 @@ import { DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationData
 import { replaceRivers, riverRecords } from './loadRivers.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
+import { rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { referenceLoadOf, type ReferenceLoadRecord } from './referenceOrigin.js';
+
+/** One dataset of a kind allowed dataset by dataset: its own Sources row, and what a load stores with it. */
+export type ReferenceDataset = {
+	/** The docs/maps.md § Sources row that decides it (its Dataset cell starts with this). */
+	sourcesRow: string;
+} & ({ status: 'allowed'; source: string; version: string; attribution: string } | { status: 'blocked'; why: string });
 
 /** One kind of reference dataset, and whether production may load it. */
 export type ReferenceKind = {
@@ -40,6 +51,8 @@ export type ReferenceKind = {
 			what: string;
 			/** A smaller cap than MAX_OBJECT_BYTES / MAX_TEXT_BYTES, for a kind whose real file is far smaller (a bigger one is a wrong file). */
 			limits?: { object: number; text: number };
+			/** The labels a load may name, each with its own licence status (every other label is refused); absent: any label. */
+			datasets?: Readonly<Record<string, ReferenceDataset>>;
 	  }
 	| { status: 'blocked'; why: string }
 );
@@ -92,9 +105,25 @@ export const REFERENCE_KINDS = {
 		why: "the DWS station catalogue's licence is unconfirmed (followups.md, Decision: the DWS station catalogue's licence)"
 	},
 	'map-grid': {
-		status: 'blocked',
-		sourcesRows: ['Lynch (2004) mean annual precipitation', 'Provincial MAP surfaces'],
-		why: "the MAP grids' licences are unconfirmed (followups.md, Decision: the MAP grids' licences)"
+		status: 'allowed',
+		sourcesRows: ['Mean annual rainfall surface for the Southwestern Cape'],
+		file: /\.json(\.gz)?$/,
+		what: 'the cut grid `pnpm import:map-grid <grid.asc> … --bbox w,s,e,n --out <file>` writes',
+		// Dataset by dataset: each MAP surface's terms are its own owner's (docs/maps.md § MAP grid, Licences).
+		datasets: {
+			[WAAS_MAP.dataset]: {
+				status: 'allowed',
+				sourcesRow: 'Mean annual rainfall surface for the Southwestern Cape',
+				source: WAAS_MAP.source,
+				version: WAAS_MAP.version,
+				attribution: WAAS_MAP.attribution
+			},
+			'Lynch-2004': {
+				status: 'blocked',
+				sourcesRow: 'Lynch (2004) mean annual precipitation',
+				why: "the Lynch (2004) grid's licence is unconfirmed (followups.md, Decision: the Lynch (2004) MAP grid's licence)"
+			}
+		}
 	}
 } as const satisfies Record<string, ReferenceKind>;
 
@@ -122,7 +151,7 @@ export interface LoadRequest {
 	sha256: string;
 	/** The dataset label it loads as (a load replaces that dataset). */
 	dataset: string;
-	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. Gazetteer: the credit stored on every place (GeoNames' attribution when null). */
+	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. Gazetteer: the credit stored on every place (GeoNames' attribution when null). MAP grid: always null (the dataset's recorded lines are stored). */
 	source: string | null;
 	/** Rivers: leave out reaches below this Strahler order. */
 	minOrder: number;
@@ -170,6 +199,15 @@ export function parseLoadRequest(raw: unknown): LoadRequest {
 	if (source !== null && (typeof source !== 'string' || source.length > 500 || /[\u0000-\u001f]/.test(source))) {
 		throw refused('source is at most 500 characters on one line');
 	}
+	if (spec.datasets) {
+		const listed = Object.entries(spec.datasets);
+		const allowed = listed.filter(([, d]) => d.status === 'allowed').map(([label]) => label);
+		const named = Object.hasOwn(spec.datasets, dataset) ? spec.datasets[dataset]! : null;
+		// Fixed text: the label is echoed only once it is one of the table's own.
+		if (!named) throw refused(`${kind} loads only the datasets whose licence is recorded: ${allowed.join(', ')} (docs/maps.md § Sources)`);
+		if (named.status === 'blocked') throw refused(`${kind} dataset ${dataset} is blocked in production: ${named.why}; docs/maps.md § Sources`);
+		if (source !== null) throw refused(`${kind} takes no source: the dataset's source and credit are the ones recorded with its licence`);
+	}
 	if (kind === 'rivers' && source === null) throw refused('rivers need a source: the attribution stored on every reach');
 	const minOrder = r.minOrder === undefined || r.minOrder === null ? 1 : r.minOrder;
 	if (!Number.isInteger(minOrder) || (minOrder as number) < 1 || (minOrder as number) > 15) throw refused('minOrder is a Strahler order, 1 to 15');
@@ -212,7 +250,7 @@ export async function readReferenceText(req: LoadRequest, read: ReadObject, limi
 export interface LoadResult {
 	kind: AllowedKind;
 	dataset: string;
-	/** Rows written (reaches, cells with cropland, evaporation cells, or places). */
+	/** Rows written (reaches, cells with cropland, evaporation cells, places, or MAP grid cells). */
 	written: number;
 	/** Features or cells the file had that the load couldn't take (their reasons are in CloudWatch). */
 	skipped: number;
@@ -282,6 +320,27 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		try {
 			const written = await replaceEvaporationDataset(client, meta, c, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
+	if (req.kind === 'map-grid') {
+		// parseLoadRequest let only an allowed, listed label through; its recorded lines are what is stored.
+		const spec: ReferenceKind = REFERENCE_KINDS['map-grid'];
+		const named = spec.status === 'allowed' ? spec.datasets?.[req.dataset] : undefined;
+		if (named?.status !== 'allowed') throw refused(`map-grid dataset ${req.dataset} is not allowed`);
+		try {
+			doc = JSON.parse(text);
+		} catch {
+			throw new LoadError(`${req.key} is not JSON`, 'unreadable', 'the file is not JSON');
+		}
+		const got = rainMapFromJson(doc);
+		if (typeof got === 'string') throw new LoadError(`${req.key}: ${got}`, 'unreadable', 'the file is not a MAP grid (cellDeg and cells of [lon, lat, mapMm])');
+		if (got.meta.attribution && got.meta.attribution !== named.attribution) log(`the file's own attribution is replaced by the recorded one`);
+		const meta = { dataset: req.dataset, source: named.source, version: named.version, attribution: named.attribution };
+		try {
+			const written = await replaceRainMapDataset(client, meta, got.grid, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: 0, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
 		}

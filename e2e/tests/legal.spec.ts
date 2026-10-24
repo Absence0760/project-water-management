@@ -233,7 +233,9 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 		'© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium',
 		'© Protomaps © OpenStreetMap contributors',
 		'Source: EC JRC/Google',
-		'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0.'
+		'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0.',
+		// The Southwestern Cape MAP surface's credit line (issue #560; HTML-escaped as prerendered).
+		'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke &amp; Associates. March 2007, Version 1.1.'
 	])
 		expect(html, text).toContain(text);
 	await page.goto('/terms');
@@ -244,6 +246,10 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 	await expect(page.locator('#third-party ~ p').filter({ hasText: 'Map data licensed to us.' }).getByRole('link', { name: 'data sources' })).toHaveAttribute('href', /^(\.)?\/data-sources$/);
 	await page.locator('#third-party + p').getByRole('link', { name: 'data sources' }).click();
 	await expect(page).toHaveURL('/data-sources');
+	// A dataset whose copy came with no licence terms names that, with no link (issue #560).
+	const waasLicence = page.locator('#waas-map ~ p').filter({ hasText: 'Licence:' }).first();
+	await expect(waasLicence).toContainText('No licence terms came with the copy used');
+	await expect(waasLicence.getByRole('link')).toHaveCount(0);
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
 		for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {

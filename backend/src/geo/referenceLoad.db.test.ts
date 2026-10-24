@@ -15,6 +15,10 @@
 //  - gazetteer: the synthetic GeoNames-format places (gzipped) load with
 //    GeoNames' attribution unless a source is given, the kinds the search
 //    leaves out dropped;
+//  - MAP grid: the synthetic grid through `pnpm import:map-grid --out`
+//    (writeMapGridJson, gzipped) loads as the one allowed dataset
+//    (WAAS-SWCape-2007), cell for cell the same as the direct load, stored
+//    with the recorded credit line, never the file's own;
 //  - a file with nothing loadable fails and leaves the dataset as it was;
 //  - each load records the file's key and SHA-256 with the dataset
 //    (reference_load, 192), returns the one it replaced, keeps it on a failed
@@ -30,6 +34,8 @@ import { loadSyntheticEvaporation, parseEvaporationArgs, writeEvaporationJson } 
 import { loadSyntheticLandCover, parseLandCoverArgs, writeLandCoverJson } from '../../scripts/import-land-cover.js';
 import { SYNTHETIC_RIVERS_FILE } from '../../scripts/import-rivers.js';
 import { SYNTHETIC_GAZETTEER_FILE } from '../../scripts/import-gazetteer.js';
+import { loadSyntheticMapGrid, parseMapGridArgs, writeMapGridJson } from '../../scripts/import-map-grid.js';
+import { replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { asOwner } from '../__tests__/helpers.js';
 import { replaceCroplandDataset } from './croplandGrid.js';
@@ -40,6 +46,8 @@ const RV = 'test-reference-load-rv';
 const EV = 'test-reference-load-ev';
 const GZ = 'test-reference-load-gz';
 const GZN = 'test-reference-load-gz-neighbours';
+// The one MAP grid label production allows (REFERENCE_KINDS['map-grid'].datasets): only this file writes it in water_test.
+const MG = WAAS_MAP.dataset;
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const object = (bytes: Uint8Array): ReadObject => async () => ({ contentLength: bytes.byteLength, bytes: async () => bytes });
 let dir: string;
@@ -59,6 +67,7 @@ beforeAll(async () => {
 	dir = mkdtempSync(join(tmpdir(), 'reference-load-'));
 	await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
 	await loadSyntheticEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
+	await loadSyntheticMapGrid(process.env.TEST_MIGRATION_DATABASE_URL!);
 	client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 	await client.connect();
 });
@@ -68,7 +77,8 @@ afterAll(async () => {
 	await client.query('DELETE FROM river_reference WHERE dataset = $1', [RV]);
 	await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', [EV]);
 	await client.query('DELETE FROM gazetteer_reference WHERE dataset = ANY($1::text[])', [[GZ, GZN]]);
-	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN]]);
+	await client.query('DELETE FROM rain_map_dataset WHERE dataset = $1', [MG]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -242,5 +252,40 @@ describe('gazetteer', () => {
 		expect((err as LoadError).code).toBe('empty');
 		expect((err as LoadError).publicReason).toMatch(/South Africa and its neighbours/);
 		expect(await asOwner('SELECT count(*)::int AS n FROM gazetteer_reference WHERE dataset = $1', [GZN])).toEqual([{ n: 2 }]);
+	});
+});
+
+describe('MAP grid, from the file `import:map-grid --out` writes (issue #560)', () => {
+	it('loads cell for cell what the direct load of the same grid holds, stored with the recorded credit line, not the file’s', async () => {
+		const args = parseMapGridArgs([]);
+		if (typeof args === 'string') throw new Error(args);
+		const out = join(dir, 'map-grid.json.gz');
+		const wrote = await writeMapGridJson({ ...args, out });
+		const bytes = readFileSync(out);
+		const result = await load({ kind: 'map-grid', key: 'reference/map-grid/waas.json.gz', dataset: MG }, bytes);
+		expect(result).toEqual({ kind: 'map-grid', dataset: MG, written: wrote, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('map-grid', MG)).toEqual({ key: 'reference/map-grid/waas.json.gz', sha256: sha(bytes) });
+
+		const cells = async (dataset: string) =>
+			(await asOwner('SELECT row_idx, col_idx, map_mm FROM rain_map_cell_reference WHERE dataset = $1 ORDER BY row_idx, col_idx', [dataset])).map((r) => `${r.row_idx}:${r.col_idx}:${r.map_mm}`);
+		const loaded = await cells(MG);
+		expect(loaded.length).toBe(wrote);
+		expect(loaded).toEqual(await cells('synthetic'));
+		const [d] = await asOwner('SELECT source, version, attribution, cell_deg, origin_lon, origin_lat, cell_count FROM rain_map_dataset WHERE dataset = $1', [MG]);
+		const [s] = await asOwner(`SELECT cell_deg, origin_lon, origin_lat, cell_count FROM rain_map_dataset WHERE dataset = 'synthetic'`);
+		// The file carries the synthetic grid's own lines; the load stores the recorded ones.
+		expect(d).toEqual({ ...s, source: WAAS_MAP.source, version: WAAS_MAP.version, attribution: WAAS_MAP.attribution });
+	});
+
+	it('a file that is not a MAP grid fails and leaves the dataset as it was; a local replace clears the record', async () => {
+		const before = await asOwner('SELECT count(*)::int AS n FROM rain_map_cell_reference WHERE dataset = $1', [MG]);
+		const err = await load({ kind: 'map-grid', key: 'reference/map-grid/bad.json.gz', dataset: MG }, gzipSync(JSON.stringify({ cellDeg: 0.01, cells: [] }))).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(LoadError);
+		expect((err as LoadError).code).toBe('unreadable');
+		expect(await asOwner('SELECT count(*)::int AS n FROM rain_map_cell_reference WHERE dataset = $1', [MG])).toEqual(before);
+		expect(await recorded('map-grid', MG)).toMatchObject({ key: 'reference/map-grid/waas.json.gz' });
+		// A local import of the same label names no file: the record goes.
+		await replaceRainMapDataset(client, { dataset: MG, source: 'local', version: 'local', attribution: 'local' }, { cellDeg: 0.01, originLon: 0.005, originLat: 0.005, cells: [{ row: 1, col: 1, mapMm: 500 }] });
+		expect(await recorded('map-grid', MG)).toBeUndefined();
 	});
 });

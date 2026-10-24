@@ -1,7 +1,8 @@
 // Which file a reference dataset was loaded from (192_feature_names_reference_load,
 // docs/deployment.md § Reference datasets, Which file is loaded). A production
 // load (referenceLoad.ts) names the object it read and its SHA-256; the replace
-// functions (croplandGrid.ts, evaporationGrid.ts, loadRivers.ts) write that in
+// functions (croplandGrid.ts, evaporationGrid.ts, loadRivers.ts,
+// loadGazetteer.ts, rainMap.ts) write that in
 // the same transaction as the data, and any other replace of the dataset (a
 // local `pnpm import:*`, which names no bucket file) deletes it, so the record
 // never outlives the data it describes. Schema owner only: the app never reads
@@ -9,7 +10,7 @@
 import type pg from 'pg';
 
 /** The kinds a production load takes (referenceLoad.ts REFERENCE_KINDS' allowed ones). */
-export type ReferenceLoadKind = 'land-cover' | 'evaporation' | 'rivers' | 'gazetteer';
+export type ReferenceLoadKind = 'land-cover' | 'evaporation' | 'rivers' | 'gazetteer' | 'map-grid';
 
 /** The object a load read: its key in the reference bucket and the SHA-256 it was checked against. */
 export interface ReferenceOrigin {

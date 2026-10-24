@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseMapGridArgs, SYNTHETIC_MAP_GRID_FILE } from '../../scripts/import-map-grid.js';
-import { cellRange, rainMapFromAscii, rainMapFromJson } from './rainMap.js';
+import { cellRange, rainMapFromAscii, rainMapFromJson, rainMapToJson } from './rainMap.js';
 
 /** A 3 × 2 grid of 0.5° cells, south-west corner (20, −34), one NODATA cell. */
 const ascii = (head: string[] = ['xllcorner 20', 'yllcorner -34']) => ['ncols 3', 'nrows 2', ...head, 'cellsize 0.5', 'NODATA_value -9999', '100 200 -9999', '400 500 600'];
@@ -97,7 +97,37 @@ describe('parseMapGridArgs', () => {
 			source: 'Lynch (2004)',
 			version: null,
 			attribution: null,
-			bbox: { w: 19, s: -33, e: 19.5, n: -32.5 }
+			bbox: { w: 19, s: -33, e: 19.5, n: -32.5 },
+			out: null
 		});
+	});
+
+	it('--out names the JSON file a production load reads, resolved from where the command was typed', () => {
+		const args = ['grid.asc', '--dataset', 'WAAS-SWCape-2007', '--source', 's', '--bbox', '18,-34,19,-33'];
+		expect(parseMapGridArgs([...args, '--out', 'waas.json.gz'], { INIT_CWD: '/tmp' })).toMatchObject({ out: '/tmp/waas.json.gz', dataset: 'WAAS-SWCape-2007' });
+		expect(parseMapGridArgs([...args, '--out', 'waas.json'], { INIT_CWD: '/tmp' })).toMatchObject({ out: '/tmp/waas.json' });
+		expect(parseMapGridArgs([...args, '--out', 'waas.asc'])).toMatch(/--out takes a \.json/);
+	});
+});
+
+describe('rainMapToJson', () => {
+	it('writes the grid in the form rainMapFromJson reads, cell for cell, with its source lines', async () => {
+		const grid = await rainMapFromAscii(ascii(), null);
+		const meta = { source: 'S', version: 'V', attribution: 'A' };
+		const back = rainMapFromJson(JSON.parse(rainMapToJson(meta, grid)));
+		if (typeof back === 'string') throw new Error(back);
+		expect(back.grid).toEqual(grid);
+		expect(back.meta).toEqual(meta);
+	});
+
+	it('keeps a fine grid’s cells on their indices (centres rounded to 1e-7°)', () => {
+		// 3 arc seconds, an origin that isn't a round number: rounding must never move a cell.
+		const cellDeg = 1 / 1200;
+		const grid = { cellDeg, originLon: 0.0003, originLat: 0.0002, cells: [{ row: -40_123, col: 22_456, mapMm: 812 }, { row: -40_122, col: 22_457, mapMm: 790.5 }] };
+		const back = rainMapFromJson(JSON.parse(rainMapToJson({ source: 'S', version: 'V', attribution: 'A' }, grid)));
+		if (typeof back === 'string') throw new Error(back);
+		expect(back.grid.cells).toEqual(grid.cells);
+		expect(back.grid.originLon).toBeCloseTo(grid.originLon, 6);
+		expect(back.grid.originLat).toBeCloseTo(grid.originLat, 6);
 	});
 });

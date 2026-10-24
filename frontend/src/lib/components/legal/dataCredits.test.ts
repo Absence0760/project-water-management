@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT } from './dataCredits';
+import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
 import { TERRAIN_ATTRIBUTION } from '$lib/components/map/mapStyle';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '$lib/components/map/delineation';
 
@@ -19,6 +19,9 @@ describe('the data credits', () => {
 		expect(maps).toContain(`"${JRC_WATER_STATEMENT}"`);
 		expect(maps).toContain(`"${DPET_STATEMENT}"`);
 		expect(maps).toContain(`"${GEONAMES_STATEMENT}"`);
+		expect(maps).toContain(`"${WAAS_MAP_STATEMENT}"`);
+		// The operator's decision behind the Southwestern Cape surface's use is on record with its credit line.
+		expect(doc('legal/map-data-licences.md')).toContain(`"${WAAS_MAP_STATEMENT}"`);
 		expect(doc('followups.md')).toContain(`"${COPERNICUS_LIABILITY}"`);
 		// Each credit's read date is one the Sources table records, and the page's "Licences last read" is the latest.
 		for (const c of DATA_CREDITS) expect(maps, c.name).toContain(`read ${c.read}`);
@@ -37,7 +40,9 @@ describe('the data credits', () => {
 		expect(new Set(DATA_CREDITS.map((c) => c.id)).size).toBe(DATA_CREDITS.length);
 		for (const c of DATA_CREDITS) {
 			expect(c.id, c.name).toMatch(/^[a-z][a-z-]*$/);
-			expect(c.licenceUrl, c.name).toMatch(/^https:\/\//);
+			// A link wherever terms are published; only a dataset published with no terms names none, and says so.
+			if (c.licenceUrl === undefined) expect(c.licence, c.name).toMatch(/^No licence terms came with/);
+			else expect(c.licenceUrl, c.name).toMatch(/^https:\/\//);
 			expect(c.statements.length, c.name).toBeGreaterThan(0);
 		}
 		// The map's credit links here by this id.
@@ -53,6 +58,8 @@ describe('the data credits', () => {
 		expect(tiles).toContain(`m.attribution="${JRC_WATER_STATEMENT}"`);
 		// The backend's copy, which flags a traced dam for the farm map's credit (geo/credits.ts).
 		expect(backend('geo/credits.ts')).toContain(`JRC_WATER_STATEMENT = '${JRC_WATER_STATEMENT}'`);
+		// The Southwestern Cape MAP surface's credit line, which a production load stores as the grid's attribution (the layer's credit keys on it).
+		expect(backend('geo/rainMap.ts')).toContain(`WAAS_MAP_ATTRIBUTION = '${WAAS_MAP_STATEMENT}'`);
 		// GeoNames' attribution, stored on every place a load takes without a source of its own (the Map's search shows it).
 		expect(backend('geo/gazetteer.ts')).toContain(`GEONAMES_SOURCE = '${GEONAMES_STATEMENT}'`);
 	});
@@ -64,5 +71,7 @@ describe('the data credits', () => {
 		// A traced dam's credit names JRC's source as its download page asks, and says the data was modified (1159/2013 Art. 8(3)).
 		expect(JRC_WATER_MAP_ATTRIBUTION).toContain(JRC_WATER_STATEMENT);
 		expect(JRC_WATER_MAP_ATTRIBUTION).toMatch(/modified$/);
+		// The MAP grid's credit carries its authors' line whole.
+		expect(WAAS_MAP_MAP_ATTRIBUTION).toBe(`MAP grid: ${WAAS_MAP_STATEMENT}`);
 	});
 });

@@ -9,10 +9,12 @@ name: Load a reference dataset
 #
 # Only the kinds docs/maps.md § Sources marks allowed load: land-cover (ESA
 # WorldCover), evaporation (dPET's reference ET), gazetteer (GeoNames' South
-# Africa dump, CC BY 4.0, for the Map's search) and rivers (HydroRIVERS, once
+# Africa dump, CC BY 4.0, for the Map's search), rivers (HydroRIVERS, once
 # HydroSHEDS' Exhibit B statement and the Terms' clause on map data licensed to
-# us are in the app's legal text, scripts/release/map-data-gates.mjs).
-# Quaternaries, the register of dams and the gauging
+# us are in the app's legal text, scripts/release/map-data-gates.mjs) and
+# map-grid (the Southwestern Cape MAP surface only, as dataset
+# WAAS-SWCape-2007, stored with its recorded credit; the Lynch grid stays
+# blocked). Quaternaries, the register of dams and the gauging
 # stations stay blocked by their licences; the input offers only the allowed
 # kinds, the check job refuses the rest, and so does the Lambda.
 #
@@ -40,6 +42,7 @@ name: Load a reference dataset
 #   gh workflow run load-reference.yml -f kind=land-cover -f key=reference/land-cover/worldcover-2021.json.gz -f sha256=<hex> -f dataset=WorldCover-2021-v200
 # Evaporation the same way, from `pnpm import:evaporation <years> --dataset <label> --out dpet.json.gz`.
 # The gazetteer from GeoNames' ZA.zip, unzipped and gzipped: gzip -k ZA.txt, then key reference/gazetteer/za-<date>.txt.gz.
+# The MAP grid from `pnpm import:map-grid <grid.asc> --dataset WAAS-SWCape-2007 --source "…" --bbox w,s,e,n --out waas.json.gz`, then -f dataset=WAAS-SWCape-2007 and no source.
 
 on:
   workflow_dispatch:
@@ -53,6 +56,7 @@ on:
           - evaporation
           - rivers
           - gazetteer
+          - map-grid
       key:
         description: 'Object key in the reference bucket: reference/<kind>/<file>'
         required: true
@@ -66,7 +70,7 @@ on:
         required: true
         type: string
       source:
-        description: 'Rivers: the attribution stored on every reach (required). Land cover, evaporation: overrides the file’s own. Gazetteer: the credit on every place (default GeoNames’ CC BY 4.0 attribution)'
+        description: 'Rivers: the attribution stored on every reach (required). Land cover, evaporation: overrides the file’s own. Gazetteer: the credit on every place (default GeoNames’ CC BY 4.0 attribution). MAP grid: leave empty (its recorded credit is stored)'
         required: false
         type: string
         default: ''
@@ -207,8 +211,8 @@ jobs:
             echo "::error::The load failed; the dataset is as it was."
             exit 1
           fi
-          jq -r "$defs"'"Loaded \(.written | count) row(s) of \(.kind | safe("^(land-cover|evaporation|rivers|gazetteer)$")) as dataset \(.dataset | safe("^[A-Za-z0-9][A-Za-z0-9 ._-]{0,49}$"))",
+          jq -r "$defs"'"Loaded \(.written | count) row(s) of \(.kind | safe("^(land-cover|evaporation|rivers|gazetteer|map-grid)$")) as dataset \(.dataset | safe("^[A-Za-z0-9][A-Za-z0-9 ._-]{0,49}$"))",
             "Skipped (reasons in CloudWatch): \(.skipped | count)", "Below the Strahler order: \(.belowOrder | count)",
-            "Loaded from: \(env.LOAD_KEY | safe("^reference/(land-cover|evaporation|rivers|gazetteer)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")) (SHA-256 \(env.LOAD_SHA256 | safe("^[0-9a-f]{64}$"))), recorded with the dataset (reference_load)",
+            "Loaded from: \(env.LOAD_KEY | safe("^reference/(land-cover|evaporation|rivers|gazetteer|map-grid)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")) (SHA-256 \(env.LOAD_SHA256 | safe("^[0-9a-f]{64}$"))), recorded with the dataset (reference_load)",
             (if (.replaced | type) != "object" then "Replaced: no file recorded for this dataset before (a new dataset, or one a local import wrote)"
-             else "Replaced the file loaded \(.replaced.loadedAt | safe("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$")): \(.replaced.key | safe("^reference/(land-cover|evaporation|rivers|gazetteer)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")) (SHA-256 \(.replaced.sha256 | safe("^[0-9a-f]{64}$"))); to undo this load, load that file again (the bucket version with that SHA-256)" end)' load-result.json
+             else "Replaced the file loaded \(.replaced.loadedAt | safe("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$")): \(.replaced.key | safe("^reference/(land-cover|evaporation|rivers|gazetteer|map-grid)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")) (SHA-256 \(.replaced.sha256 | safe("^[0-9a-f]{64}$"))); to undo this load, load that file again (the bucket version with that SHA-256)" end)' load-result.json

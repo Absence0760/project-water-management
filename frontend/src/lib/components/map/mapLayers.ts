@@ -7,7 +7,7 @@
 // (mapLayers.test.ts).
 import type { MapFeature, MapPosition } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
-import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '$lib/components/legal/dataCredits';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from '$lib/components/legal/dataCredits';
 import { boundsOfAll } from './mapData';
 import { interiorPoint } from './pieces';
 
@@ -131,26 +131,31 @@ export const jrcCreditedFeature = (f: Pick<MapFeature, 'properties'>) => {
 };
 
 /** A licensed source the map credits while its data is drawn; its id is also its section on the data sources page (`/data-sources#<id>`). */
-export type MapCredit = 'hydrorivers' | 'jrc-water';
+export type MapCredit = 'hydrorivers' | 'jrc-water' | 'waas-map';
 
 /** Each credit's line on the map's attribution control (English: the workspace's map; the farm map words its own, farmMap.ts). */
 export const MAP_CREDIT_TEXT: Readonly<Record<MapCredit, string>> = {
 	hydrorivers: HYDRORIVERS_MAP_ATTRIBUTION,
-	'jrc-water': JRC_WATER_MAP_ATTRIBUTION
+	'jrc-water': JRC_WATER_MAP_ATTRIBUTION,
+	'waas-map': WAAS_MAP_MAP_ATTRIBUTION
 };
 
 /**
  * The licence credits a map must show for what it draws, in a fixed order
  * (docs/maps.md § Sources): HydroRIVERS while the River network layer draws
  * its reaches (`riversDrawn`) or a river added from one is drawn, then JRC
- * Global Surface Water while a traced outline is. Empty when nothing drawn
- * is licensed data. The basemap's and the relief's credits are their own
- * sources' and are not listed here.
+ * Global Surface Water while a traced outline is, then the Southwestern Cape
+ * MAP surface while the MAP grid layer draws points of a grid stored with its
+ * credit line (`mapGridAttribution`: the drawn grid's attribution, null while
+ * the layer draws nothing). Empty when nothing drawn is licensed data. The
+ * basemap's and the relief's credits are their own sources' and are not
+ * listed here.
  */
-export function mapCredits(features: readonly Pick<MapFeature, 'kind' | 'properties'>[], riversDrawn = false): MapCredit[] {
+export function mapCredits(features: readonly Pick<MapFeature, 'kind' | 'properties'>[], riversDrawn = false, mapGridAttribution: string | null = null): MapCredit[] {
 	const out: MapCredit[] = [];
 	if (riversDrawn || features.some(creditedFeature)) out.push('hydrorivers');
 	if (features.some(jrcCreditedFeature)) out.push('jrc-water');
+	if (mapGridAttribution === WAAS_MAP_STATEMENT) out.push('waas-map');
 	return out;
 }
 

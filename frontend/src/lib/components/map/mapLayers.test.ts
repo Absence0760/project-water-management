@@ -221,6 +221,17 @@ describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
 		expect(mapCredits([{ kind: 'dam', properties: { credit: 'jrc-water' } }, { kind: 'river', properties: { credit: 'hydrorivers' } }])).toEqual(['hydrorivers', 'jrc-water']);
 	});
 
+	it('credits the Southwestern Cape MAP surface while the MAP grid layer draws a grid stored with its credit line (issue #560)', () => {
+		const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+		expect(mapCredits([], false, waas)).toEqual(['waas-map']);
+		expect(mapCredits([dam, reach], false, waas)).toEqual(['hydrorivers', 'jrc-water', 'waas-map']);
+		// No grid drawn, the synthetic grid, or another grid's line: no credit.
+		expect(mapCredits([], false, null)).toEqual([]);
+		expect(mapCredits([], false, 'Synthetic MAP grid (invented rainfall over region Z), water-management test fixture')).toEqual([]);
+		expect(mapCredits([], false, `${waas} (edited)`)).toEqual([]);
+		expect(MAP_CREDIT_TEXT['waas-map']).toBe(`MAP grid: ${waas}`);
+	});
+
 	it('words each credit for the attribution control: the JRC line names the source as JRC asks and says the outline was modified', () => {
 		expect(MAP_CREDIT_TEXT['jrc-water']).toBe('Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified');
 		expect(MAP_CREDIT_TEXT.hydrorivers).toMatch(/^Rivers: HydroRIVERS/);
