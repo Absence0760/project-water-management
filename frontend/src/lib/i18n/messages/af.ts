@@ -1153,8 +1153,8 @@ export const af: Catalogue = {
 	'133225ef': 'Hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, van die oorsprong tot by die uitloop.',
 	// The river against its ecological reserve, day by day, with the days below it marked.
 	'a67f5236': 'Die rivier teenoor sy ekologiese reserwe, dag vir dag, met die dae daaronder gemerk.',
-	// River and reserve
-	'18beff9c': 'Rivier en reserwe',
+	// Ecological reserve (EWR)
+	'2f4d9410': 'Ekologiese reserwe (EWR)',
 	// Flow at every gauge against the reserve, and which hydrological units’ use it falls short by.
 	'1030414c': 'Vloei by elke meetstasie teenoor die reserwe, en aan watter hidrologiese eenhede se gebruik die tekort toegeskryf word.',
 	// From rainfall to river

@@ -135,8 +135,8 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByText('Reserve rules met')).toBeVisible();
 	await expect(summary.getByText('33 of 36 months at the outlet')).toBeVisible();
-	// The plain-words summary above the cards leads with the same measure.
-	await expect(summary.getByText(/^The Reserve rules were met in 91\.7% of months at the outlet \(33 of 36\)\./)).toBeVisible();
+	// The plain-words summary above the cards names the same measure, after the units' supply (issue #558).
+	await expect(summary.getByText(/hydrological units? got .*\. The Reserve rules were met in 91\.7% of months at the outlet \(33 of 36\)\.$/)).toBeVisible();
 	await expect(summary.getByText('Days below the pragmatic EWR')).toBeVisible();
 
 	// "by month of the year" opens the panel, on EWR for this run (issue #17).
@@ -384,7 +384,7 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	// The same run, now headed by the pragmatic EWR: Runs & results and the EWR page.
 	await page.goto(`/projects/${id}?tab=runs`);
 	const summary = page.getByRole('region', { name: 'Run summary' });
-	await expect(summary.getByText(/^Flow at the outflow gauge was below the EWR on/)).toBeVisible();
+	await expect(summary.getByText(/\. Flow at the outflow gauge was below the EWR on [\d.]+% of days \([\d\s]+ days\)\.$/)).toBeVisible();
 	await expect(summary.getByText('Reserve rules met')).toHaveCount(0);
 	await page.goto(`/projects/${id}?tab=river`);
 	await expect(judged).toHaveText(/^Results are judged by the pragmatic EWR at the outflow gauge\. Change$/);
