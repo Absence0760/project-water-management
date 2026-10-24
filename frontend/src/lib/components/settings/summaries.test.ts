@@ -60,7 +60,7 @@ describe('settingsSummaries', () => {
 				calibrationStart: '2001-10-01',
 				calibrationEnd: null,
 				calibrationExclusions: [{ waterYear: 2004, reason: 'Gauge washed away' }] as never,
-				qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [2, 3, 4] },
+				qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [2, 3, 4], lowFlowPeriods: [{ kind: 'flow_logger_m3s', start: '2003-01-01', end: '2003-06-30', maxM3s: 1, reason: 'r', source: 's' }] },
 				autoRun: { enabled: true, debounceMinutes: 30, publish: 'never' }
 			}),
 			siteName: 'Melkhout Gauge'
@@ -71,7 +71,7 @@ describe('settingsSummaries', () => {
 		// The rain threshold for demand lives in Demand (issue #521), so its line names it.
 		expect(s['set-demand']).toMatch(/ · rain threshold \d+(\.\d)? mm · /);
 		expect(s['set-share']).toBe('High/low MAP split, 60% / 40%');
-		expect(s['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · river stops Feb, Mar, Apr');
+		expect(s['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · low flows only in 1 period · river stops Feb, Mar, Apr');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 

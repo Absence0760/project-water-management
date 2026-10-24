@@ -82,6 +82,7 @@
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
+	import LowFlowPeriods from '$lib/components/calibration/LowFlowPeriods.svelte';
 	import { qualityFlagsAtDefaults, qualityFlagsSummary } from './qualityFlagsLine';
 	import MarPenaltyFields from './MarPenaltyFields.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
@@ -265,6 +266,7 @@
 		saveBlockers([
 			{ id: 'set-record', message: errs.calWindow },
 			{ id: 'set-record', message: errs.exclusions },
+			{ id: 'set-record', message: errs.lowFlow },
 			{ id: 'set-record', message: errs.qualityFlags },
 			{ id: 'set-fit', message: errs.rules },
 			{ id: 'set-rain', message: errs.fitPeriod },
@@ -1210,6 +1212,15 @@
 			dataHref={flowRecordId ? `?tab=series&series=${encodeURIComponent(flowRecordId)}#data-chart` : null}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
+		<!-- Periods in which only a record's low flows are valid (issue #557): stored with the quality flags, shown beside the exclusions. -->
+		<LowFlowPeriods
+			bind:list={() => s.qualityFlags.lowFlowPeriods ?? [], (v) => (s.qualityFlags = { ...s.qualityFlags, lowFlowPeriods: v.length ? v : undefined })}
+			bind:error={draft.errors.lowFlow}
+			{readonly}
+			{seriesKinds}
+			flowKind={s.calibrationFlowKind ?? null}
+			siteName={s.calibrationSiteNodeId ? (nodeName(s.calibrationSiteNodeId) ?? 'a gauge inside the network') : null}
+		/>
 		<!-- Rarely changed: the gauged ranges, the day rules, the river-stop months and gap filling, folded into one line of
 		     their values (ui-playbook.md § 2, "Rarely changed settings fold into their values"). -->
 		<Fold

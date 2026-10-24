@@ -312,6 +312,17 @@ describe('fit record', () => {
 		// The river-stops months (engine ≥ 1.81.0) decide which zero-flow days are suspect: listing some is a change; none is not.
 		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, zeroFlowMonths: [2, 3, 4] } }, rec).qualityFlagsChanged).toBe(true);
 		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, zeroFlowMonths: [] } }, rec).qualityFlagsChanged).toBe(false);
+		// A low-flow period (engine ≥ 1.90.0, issue #557) leaves days out: adding one is a change, an empty list is not;
+		// at an inner gauge the periods, like the gauged ranges, don't apply.
+		const lowFlowPeriods = [{ kind: 'flow_logger_m3s' as const, start: '2013-01-01', end: '2013-06-30', maxM3s: 2, reason: 'r', source: 's' }];
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, lowFlowPeriods } }, rec).qualityFlagsChanged).toBe(true);
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, lowFlowPeriods: [] } }, rec).qualityFlagsChanged).toBe(false);
+		const withPeriods = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, qualityFlags: { ...qualityFlags, lowFlowPeriods } } });
+		const reworded = [{ ...lowFlowPeriods[0]!, reason: 'reworded', source: 'another note' }];
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, lowFlowPeriods: reworded } }, withPeriods).qualityFlagsChanged).toBe(false);
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, lowFlowPeriods: [{ ...lowFlowPeriods[0]!, maxM3s: 3 }] } }, withPeriods).qualityFlagsChanged).toBe(true);
+		const siteRec = { ...rec, siteNodeId: 'G1' };
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, lowFlowPeriods } }, siteRec).qualityFlagsChanged).toBe(false);
 		expect(calibrationFitStatus({ ...s, qualityFlags: moved, fitRecord: rec }, 'flow_logger_m3s')).toBe('otherPeriod');
 		// Settings without the field run the defaults: the same as a record made under them.
 		const plain = fitRecordFromReport(report(), ctx);

@@ -829,10 +829,18 @@ function flowFillDiffers(record: FitRecord, settings: Partial<ProjectSettings>, 
 	return !sameJson(record.flowGapFill?.spec ?? null, fillSpecOf(settings.flowGapFill, kind));
 }
 
-/** Quality-flag settings as a fit at the record's site scored with them: a gauge's record has no gauged range. */
+const cmpKey = (p: { kind: string; start: string; end: string; maxM3s: number }) => `${p.kind}/${p.start}/${p.end}/${p.maxM3s}`;
+
+/** Quality-flag settings as a fit at the record's site scored with them: a gauge's record has no gauged range and no low-flow periods. */
 function flagsAsScored(q: unknown, record: FitRecord): QualityFlagSettings {
-	const r = resolveQualityFlags(q, []);
-	return record.siteNodeId ? { ...r, ratings: {} } : r;
+	const { lowFlowPeriods, ...rest } = resolveQualityFlags(q, []);
+	// The low-flow periods (engine ≥ 1.90.0) are the outlet records', as the gauged ranges are. What scores days is
+	// each period's record, dates and threshold: a reworded reason or source, or another order, is no change.
+	if (record.siteNodeId) return { ...rest, ratings: {} };
+	const periods = (lowFlowPeriods ?? [])
+		.map((p) => ({ kind: p.kind, start: p.start, end: p.end, maxM3s: p.maxM3s, reason: '', source: '' }))
+		.sort((a, b) => cmpKey(a).localeCompare(cmpKey(b)));
+	return periods.length ? { ...rest, lowFlowPeriods: periods } : rest;
 }
 
 /** Compare a fit record with the settings (the form, or a run's snapshot), and with the CHIRPS series' version when `now` gives it. */
@@ -939,7 +947,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.exclusionsChanged) out.push('The calibration exclusions have changed since the fit.');
 	if (status.ruleYearsScored) out.push('The automated fit left some water years out by its rules, and the settings don’t exclude them, so the run’s statistics also score days the fit never saw: they are not all in-sample.');
 	if (status.qualityFlagsChanged) {
-		out.push('The quality-flag settings (a gauged range, or how extrapolated, suspect or infilled days are scored) have changed since the fit, so it was fitted on other days. Refit before relying on the parameters.');
+		out.push('The quality-flag settings (a gauged range, a low-flow period, or how extrapolated, suspect or infilled days are scored) have changed since the fit, so it was fitted on other days. Refit before relying on the parameters.');
 	}
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
 	if (status.siteChanged) out.push('The calibration site has changed since the fit, so it was fitted to another gauge’s record.');

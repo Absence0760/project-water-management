@@ -895,6 +895,13 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...full, qualityFlags: oldFlags, dayQuality: oldDq })).toBe(true);
 		expect(ok({ ...full, qualityFlags: { ...settings, zeroFlowMonths: [13] } })).toBe(false);
 		expect(ok({ ...full, dayQuality: { ...dq, use: { ...dq.use, zeroFlowMonths: [2] } } })).toBe(false);
+		// Engine ≥ 1.90.0 (issue #557): the periodHigh count, absent on an older summary; the periods never in `use`.
+		expect(dq.flow.periodHigh).toBe(0);
+		const { periodHigh: _p, ...oldFlow } = dq.flow;
+		expect(ok({ ...full, dayQuality: { ...dq, flow: oldFlow } })).toBe(true);
+		const lowFlowPeriods = [{ kind: 'flow_logger_m3s', start: '2013-01-01', end: '2013-06-30', maxM3s: 2, reason: 'r', source: 's' }];
+		expect(ok({ ...full, qualityFlags: { ...settings, lowFlowPeriods } })).toBe(true);
+		expect(ok({ ...full, dayQuality: { ...dq, use: { ...dq.use, lowFlowPeriods } } })).toBe(false);
 	});
 
 	it('accepts how automated calibration chose the fit (engine ≥ 1.25.0, issue #153), and refuses a kept case that wasn’t eligible', () => {
@@ -1418,6 +1425,37 @@ describe('SettingsPatch.qualityFlags (engine ≥ 1.22.0, CR-18/19)', () => {
 			infilled: 'exclude',
 			zeroFlowMonths: [2, 3, 4]
 		});
+	});
+});
+
+describe('settings.qualityFlags.lowFlowPeriods (engine ≥ 1.90.0, issue #557)', () => {
+	const ok = (q: unknown) => SettingsPatch.safeParse({ qualityFlags: q }).success;
+	const p = { kind: 'flow_logger_m3s', start: '2019-01-01', end: '2019-06-30', maxM3s: 0.8, reason: 'high flows over-read', source: 'client, 2026-10-23' };
+
+	it('accepts a period with a record, dates, a threshold above 0, a reason and a source; refuses the rest', () => {
+		expect(ok({ lowFlowPeriods: [p] })).toBe(true);
+		expect(ok({ lowFlowPeriods: [] })).toBe(true);
+		expect(ok({ lowFlowPeriods: [p, { ...p, kind: 'flow_observed_m3s' }] })).toBe(true);
+		for (const bad of [
+			{ ...p, kind: 'flow_reference_m3s' },
+			{ ...p, start: '2019-02-30' },
+			{ ...p, start: '2019-07-01' },
+			{ ...p, maxM3s: 0 },
+			{ ...p, maxM3s: -1 },
+			{ ...p, reason: ' ' },
+			{ ...p, source: '' },
+			{ ...p, extra: 1 }
+		])
+			expect(ok({ lowFlowPeriods: [bad] }), JSON.stringify(bad)).toBe(false);
+		const r = SettingsPatch.safeParse({ qualityFlags: { lowFlowPeriods: [p, { ...p, maxM3s: 2 }] } });
+		expect(JSON.stringify(r.error!.issues)).toContain('listed twice');
+	});
+
+	it('is patched whole without touching the rest, and the engine resolves it', () => {
+		const stored = { qualityFlags: { suspect: 'include', zeroFlowMonths: [2] } };
+		const s = patchSettings(stored, { qualityFlags: { lowFlowPeriods: [p] } });
+		expect(s.qualityFlags).toMatchObject({ suspect: 'include', zeroFlowMonths: [2], lowFlowPeriods: [p] });
+		expect(patchSettings(s, { qualityFlags: { lowFlowPeriods: [] } }).qualityFlags.lowFlowPeriods ?? []).toEqual([]);
 	});
 });
 

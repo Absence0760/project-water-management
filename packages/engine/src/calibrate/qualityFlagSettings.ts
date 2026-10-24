@@ -3,6 +3,7 @@
 // days, with their resolver, validation and run-comparison lines. Kept apart
 // from ./dayFlags.ts (the per-day flags themselves) with no import of the
 // data checks, so settings, provenance and run comparison load only this.
+import { isIsoDate, toEpochDay } from '../calendar';
 import type { CalibrationFlowKind } from '../project';
 
 /** The rating curve's gauged range at one flow record: the extrapolated flags come from it. */
@@ -44,7 +45,36 @@ export interface QualityFlagSettings {
 	 * settings saved before 1.81.0: none.
 	 */
 	zeroFlowMonths?: number[];
+	/**
+	 * Periods in which only a record's low flows are valid (engine ≥ 1.90.0,
+	 * issue #557, docs/model.md §2.10h): inside one, a reading of that record
+	 * above the threshold is flagged `periodHigh` and left out of every score,
+	 * never censored (a wrong high reading says nothing about the flow being
+	 * at least that much). Like the gauged ranges they are the outlet records'
+	 * (siteQualityFlags clears them at an inner gauge). Absent (the default,
+	 * and on settings saved before 1.90.0): none.
+	 */
+	lowFlowPeriods?: LowFlowPeriod[];
 }
+
+/** A date range in which only one record's flows at or below a threshold are valid (issue #557). */
+export interface LowFlowPeriod {
+	/** The record whose high readings are wrong in the period. */
+	kind: CalibrationFlowKind;
+	/** First and last day, inclusive (YYYY-MM-DD). */
+	start: string;
+	end: string;
+	/** m³/s, > 0: a reading above it, inside the period, is left out. */
+	maxM3s: number;
+	/** Why the high flows aren't valid. */
+	reason: string;
+	/** Who or what says so (the client's note, a site visit). */
+	source: string;
+}
+
+/** Most low-flow periods a project may store. */
+export const LOW_FLOW_PERIODS_MAX = 50;
+export const LOW_FLOW_TEXT_MAX = 500;
 
 /**
  * With no settings.qualityFlags.zeroFlowMonths, a zero-flow stretch longer
@@ -68,7 +98,7 @@ export function zeroFlowMonthsError(v: unknown): string | null {
 
 export const RATING_SOURCE_MAX = 200;
 /** Records a rating can be given for. */
-const RATED_KINDS: readonly CalibrationFlowKind[] = ['flow_observed_m3s', 'flow_logger_m3s'];
+export const RATED_KINDS: readonly CalibrationFlowKind[] = ['flow_observed_m3s', 'flow_logger_m3s'];
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const bound = (v: unknown): v is number | null => v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0);
@@ -82,6 +112,36 @@ export function ratingError(r: unknown): string | null {
 	if (hi !== null && lo !== null && lo >= hi) return 'the lowest gauging must be below the highest';
 	if (typeof source !== 'string' || source.length > RATING_SOURCE_MAX) return `the source must be text of at most ${RATING_SOURCE_MAX} characters`;
 	if ((hi !== null || lo !== null) && !source.trim()) return 'a gauged range needs its source';
+	return null;
+}
+
+/** Why a low-flow period is invalid, or null. */
+export function lowFlowPeriodError(p: unknown): string | null {
+	if (!isObj(p)) return 'not a low-flow period';
+	if (!(RATED_KINDS as readonly unknown[]).includes(p.kind)) return 'the record must be the gauge or the logger record';
+	if (!isIsoDate(p.start) || !isIsoDate(p.end)) return 'dates must be YYYY-MM-DD';
+	if (p.start > p.end) return 'ends before it starts';
+	if (typeof p.maxM3s !== 'number' || !Number.isFinite(p.maxM3s) || p.maxM3s <= 0) return 'the threshold must be a flow above 0 m³/s';
+	if (typeof p.reason !== 'string' || !p.reason.trim()) return 'needs a reason';
+	if (p.reason.length > LOW_FLOW_TEXT_MAX) return `reason longer than ${LOW_FLOW_TEXT_MAX} characters`;
+	if (typeof p.source !== 'string' || !p.source.trim()) return 'needs a source';
+	if (p.source.length > RATING_SOURCE_MAX) return `source longer than ${RATING_SOURCE_MAX} characters`;
+	return null;
+}
+
+/** The first problem with a list of low-flow periods ("Low-flow period 2: needs a source"), or null. */
+export function lowFlowPeriodsError(v: unknown): string | null {
+	if (!Array.isArray(v)) return 'the low-flow periods must be a list';
+	if (v.length > LOW_FLOW_PERIODS_MAX) return `at most ${LOW_FLOW_PERIODS_MAX} low-flow periods`;
+	const seen = new Set<string>();
+	for (let i = 0; i < v.length; i++) {
+		const err = lowFlowPeriodError(v[i]);
+		if (err) return `Low-flow period ${i + 1}: ${err}`;
+		const p = v[i] as LowFlowPeriod;
+		const key = `${p.kind}/${p.start}/${p.end}`;
+		if (seen.has(key)) return `Low-flow period ${i + 1}: ${p.start} – ${p.end} is listed twice for the ${p.kind === 'flow_logger_m3s' ? 'logger' : 'gauge'} record`;
+		seen.add(key);
+	}
 	return null;
 }
 
@@ -125,13 +185,29 @@ export function resolveQualityFlags(raw: unknown, warnings: string[] = []): Qual
 		if (err) warnings.push(`quality-flag setting zeroFlowMonths: ${err}; using none`);
 		else zeroFlowMonths = [...(raw.zeroFlowMonths as number[])].sort((a, b) => a - b);
 	}
+	// Engine ≥ 1.90.0 (issue #557): set only when there are some, so settings without them resolve as before.
+	const lowFlowPeriods: LowFlowPeriod[] = [];
+	if (raw.lowFlowPeriods != null) {
+		if (!Array.isArray(raw.lowFlowPeriods)) warnings.push('quality-flag setting lowFlowPeriods is not a list; using none');
+		else
+			for (const p of raw.lowFlowPeriods) {
+				const err = lowFlowPeriodError(p);
+				if (err) {
+					warnings.push(`low-flow period ${JSON.stringify(p).slice(0, 80)}: ${err}; ignored`);
+					continue;
+				}
+				const o = p as LowFlowPeriod;
+				lowFlowPeriods.push({ kind: o.kind, start: o.start, end: o.end, maxM3s: o.maxM3s, reason: o.reason.trim(), source: o.source.trim() });
+			}
+	}
 	return {
 		ratings,
 		aboveRating: pick('aboveRating', ABOVE_RATING_USES, d.aboveRating),
 		belowRating: pick('belowRating', FLAG_USES, d.belowRating),
 		suspect: pick('suspect', FLAG_USES, d.suspect),
 		infilled: pick('infilled', FLAG_USES, d.infilled),
-		zeroFlowMonths
+		zeroFlowMonths,
+		...(lowFlowPeriods.length ? { lowFlowPeriods } : {})
 	};
 }
 
@@ -159,6 +235,46 @@ export const FLAG_USE_TEXT: Record<AboveRatingUse, string> = {
 const RATING_LABEL: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'Gauged range (gauge record)', flow_logger_m3s: 'Gauged range (logger record)' };
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const ZERO_FLOW_MONTHS_LABEL = 'Months the river stops';
+export const LOW_FLOW_PERIODS_LABEL = 'Low flows only';
+
+/** "logger record 2019-01-01 – 2019-06-30 below 0.8 m³/s". */
+export const lowFlowPeriodText = (p: LowFlowPeriod): string =>
+	`${p.kind === 'flow_logger_m3s' ? 'logger' : 'gauge'} record ${p.start} – ${p.end} at or below ${+p.maxM3s.toPrecision(4)} m³/s`;
+
+/**
+ * Each run day's threshold for one record (m³/s; NaN = no period that day),
+ * the lowest where periods overlap, or null when no period of `kind` reaches
+ * the run's days. `start` is the run's first epoch day.
+ */
+export function lowFlowThresholds(periods: readonly LowFlowPeriod[] | undefined, kind: CalibrationFlowKind, start: number, days: number): Float64Array | null {
+	let out: Float64Array | null = null;
+	for (const p of periods ?? []) {
+		if (p.kind !== kind) continue;
+		const a = Math.max(0, toEpochDay(p.start) - start);
+		const b = Math.min(days - 1, toEpochDay(p.end) - start);
+		if (a > b) continue;
+		out ??= new Float64Array(days).fill(NaN);
+		for (let t = a; t <= b; t++) if (!(out[t]! <= p.maxM3s)) out[t] = p.maxM3s;
+	}
+	return out;
+}
+
+/**
+ * The aligned record (m³/s, null = missing) with its readings above a
+ * low-flow period's threshold blanked, as the run's statistics, its EWR test
+ * on the observed record and the plausibility checks read it (issue #557).
+ * Returns `values` itself when no day is blanked.
+ */
+export function withoutPeriodHighs<T extends number | null>(values: readonly T[], periods: readonly LowFlowPeriod[] | undefined, kind: CalibrationFlowKind, start: number): (T | null)[] {
+	const thr = lowFlowThresholds(periods, kind, start, values.length);
+	if (!thr) return values as (T | null)[];
+	let out: (T | null)[] | null = null;
+	for (let t = 0; t < values.length; t++) {
+		const v = values[t];
+		if (typeof v === 'number' && v > thr[t]!) (out ??= values.slice())[t] = null;
+	}
+	return out ?? (values as (T | null)[]);
+}
 
 /** "Feb, Mar, Apr", or "none". */
 export const zeroFlowMonthsText = (months: readonly number[] | undefined): string => (months?.length ? months.map((m) => MONTH_ABBR[m - 1] ?? String(m)).join(', ') : 'none');
@@ -190,5 +306,10 @@ export function qualityFlagChanges(a: QualityFlagSettings, b: QualityFlagSetting
 	const ma = zeroFlowMonthsText(a.zeroFlowMonths);
 	const mb = zeroFlowMonthsText(b.zeroFlowMonths);
 	if (ma !== mb) out.push({ subject: ZERO_FLOW_MONTHS_LABEL, text: `${ZERO_FLOW_MONTHS_LABEL}: ${ma} → ${mb}` });
+	// Engine ≥ 1.90.0 (issue #557); absent = none.
+	const pa = (a.lowFlowPeriods ?? []).map(lowFlowPeriodText);
+	const pb = (b.lowFlowPeriods ?? []).map(lowFlowPeriodText);
+	for (const t of pa) if (!pb.includes(t)) out.push({ subject: LOW_FLOW_PERIODS_LABEL, text: `${LOW_FLOW_PERIODS_LABEL}: removed ${t}` });
+	for (const t of pb) if (!pa.includes(t)) out.push({ subject: LOW_FLOW_PERIODS_LABEL, text: `${LOW_FLOW_PERIODS_LABEL}: added ${t}` });
 	return out;
 }

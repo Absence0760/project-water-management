@@ -13,6 +13,7 @@ export const FLOW_ROWS: { flag: FlowDayFlag; label: string }[] = [
 	{ flag: 'inRange', label: 'In the gauged range' },
 	{ flag: 'aboveRating', label: 'Above the highest gauging' },
 	{ flag: 'belowRating', label: 'Below the lowest gauging' },
+	{ flag: 'periodHigh', label: 'Above a low-flow period’s threshold' },
 	{ flag: 'suspect', label: 'Suspect (outlier, flat stretch or doubtful zero flow)' },
 	{ flag: 'infilled', label: 'Infilled' },
 	{ flag: 'humanUse', label: 'Human use dominant' },
@@ -52,6 +53,8 @@ function treatment(q: DayQuality, flag: FlowDayFlag): string {
 			return 'no reading';
 		case 'aboveRating':
 			return USE_TEXT[q.use.aboveRating];
+		case 'periodHigh':
+			return 'left out';
 		default:
 			return USE_TEXT[q.use[flag]];
 	}
@@ -60,14 +63,16 @@ function treatment(q: DayQuality, flag: FlowDayFlag): string {
 /**
  * One row per flow class with days in the window. "In the gauged range"
  * reads "Not flagged" when no gauged range is recorded: nothing says those
- * days are inside it. Human-use days are listed only when there are any
- * (nothing sets them yet).
+ * days are inside it. Human-use, infilled, missing and period-high days are
+ * listed only when there are any (a report from before engine 1.90.0 has no
+ * period-high count).
  */
 export function flowRows(q: DayQuality): DayQualityRow[] {
-	return FLOW_ROWS.filter((r) => q.flow[r.flag] > 0 || (r.flag !== 'humanUse' && r.flag !== 'infilled' && r.flag !== 'missing')).map((r) => ({
+	const n = (flag: FlowDayFlag) => q.flow[flag] ?? 0;
+	return FLOW_ROWS.filter((r) => n(r.flag) > 0 || (r.flag !== 'humanUse' && r.flag !== 'infilled' && r.flag !== 'missing' && r.flag !== 'periodHigh')).map((r) => ({
 		label: r.flag === 'inRange' && !q.rating ? 'Not flagged (no gauged range recorded)' : r.label,
-		days: fmtNum(q.flow[r.flag]),
-		share: shareText(q.flow[r.flag], q.windowDays),
+		days: fmtNum(n(r.flag)),
+		share: shareText(n(r.flag), q.windowDays),
 		treatment: treatment(q, r.flag)
 	}));
 }

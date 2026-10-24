@@ -8842,6 +8842,7 @@ applies, in this order:
 | --- | --- | --- |
 | missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10) | never scored |
 | infilled | a gap-filled value, not a reading (`observedInfillMask`) | left out |
+| periodHigh | inside one of the record's low-flow periods, above its threshold (engine ≥ 1.90.0, below) | always left out |
 | suspect | an outlier or inside a non-zero flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a), or inside a zero-flow stretch the river-stops rule doesn't trust (engine ≥ 1.81.0, below) | left out |
 | aboveRating | above the record's highest field gauging | censored |
 | belowRating | above zero but below its lowest gauging | left out |
@@ -8903,8 +8904,10 @@ class is treated: `aboveRating` `'censor'` (default) | `'exclude'` |
   the calibration window's.
 - **The run's calibration statistics** (§2.10) still score every observed
   day: they describe the record as it is, and a run doesn't fit anything.
-  The exception is an infilled day (engine ≥ 1.23.0, §2.10i): it is not a
-  reading, so it counts only when the infilled treatment scores it.
+  The exceptions are an infilled day (engine ≥ 1.23.0, §2.10i): it is not a
+  reading, so it counts only when the infilled treatment scores it; and a
+  reading above a low-flow period's threshold (engine ≥ 1.90.0, below),
+  which is wrong, not uncertain.
   So a run's in-sample scores (`fitStatus` `fitted`) include the days the
   fit left out; the fit panel's "all days" column is the comparable figure.
 - **The recession diagnostics** (§2.10d, CR-13) leave out every day flagged
@@ -8923,6 +8926,61 @@ filled-in gap?". Censoring rather than dropping flood days keeps the
 information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
 steering the low-flow parameters.
+
+**Low flows only in a date range (engine ≥ 1.90.0, issue #557).** A logger
+can have periods in which only its low flows are valid: the high flows are
+wrong there, in either direction. An exclusion period drops whole days, and
+the gauged range is one range for the whole record whose days above it are
+censored, which is wrong here: a wrong high reading doesn't say the flow was
+at least that much. `settings.qualityFlags.lowFlowPeriods` lists periods,
+each `{ kind, start, end, maxM3s, reason, source }`: the record
+(`flow_observed_m3s` or `flow_logger_m3s`), the inclusive dates, the
+threshold in m³/s (> 0) and a required reason and source (Settings →
+*Calibration record* → *Low flows only*). Inside a period, a reading of
+that record above the threshold is flagged `periodHigh`; a reading at or
+below it is classed as usual. Where periods of one record overlap, the
+lowest threshold applies (`lowFlowThresholds`).
+- `periodHigh` ranks above the gauged-range classes and `suspect`, and
+  below `infilled` and `missing` (`FLOW_FLAG_PRECEDENCE`): a wrong high
+  reading is just what trips the outlier check, and with suspect days
+  scored (`suspect: 'include'`) it must still be left out. It is stored as code 7
+  in `observed_flow_quality`: the codes are stored in runs, so a class is
+  only appended, and the order of `FLOW_DAY_FLAGS` is no longer the
+  precedence.
+- It is **always left out**, never censored, whatever the treatments say
+  (`scoringDays`): so every score of the fit, the split-sample and dry →
+  wet tests, the benchmarks and the WR2012 window read only the other days
+  (`calibration.dataquality.e2e.test.ts` pins that two
+  records differing only above the threshold inside the period give the
+  same parameters). The run's calibration statistics, the EWR test on the
+  observed record and the plausibility checks leave out every reading above
+  the threshold in the period (`withoutPeriodHighs`), and
+  `flaggedDayMask` marks the days for the recession segments.
+- Automated calibration's flagged-share rule (issue #153) counts a
+  `periodHigh` day as neither observed nor flagged, as it does a day in a
+  stored exclusion: it is a person's choice, and counting it could drop the
+  whole year, low flows and all.
+- Like the gauged ranges, the periods are the outlet records': a fit or run
+  scored at an inner gauge ignores them (`siteQualityFlags`), and Settings
+  says so under the list.
+- The fit record compares periods by record, dates and threshold only: a
+  reworded reason or source, or another order, doesn't mark the fit stale.
+- **Gap filling still reads the record as stored** (§2.10i): an
+  interpolation next to a period can be anchored on a wrong high reading,
+  and the donor ratio and the clamp are taken over every reading. With
+  `infilled: 'exclude'` (the default) no filled day is scored, so this only
+  matters under `'include'`; the durable fix (the fill reading the record
+  without the period's high readings) is issue #567.
+- The threshold is in m³/s only. A percentile of the period's flows was
+  considered and left out of this first cut: it would move with the record
+  it is meant to judge.
+- Settings JSON only, no migration. A project without periods resolves
+  without the key, so its runs are bit-identical (guard test). The periods
+  are part of the quality-flag settings, so a fit made under others is
+  flagged "Quality flags changed since fit", run comparison lists each
+  period added or removed ("Low flows only: added logger record 2019-01-01
+  – 2019-06-30 at or below 0.8 m³/s"), and the data-quality panel counts
+  the days and names the periods in a note.
 
 **Zero flow: the river-stops rule (engine ≥ 1.81.0, issue #507 item 2;
 revised engine 1.84.0, issue #523 A1; engine-audit C3, QF-3).** A zero-flow reading is either the river stopping

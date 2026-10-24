@@ -94,6 +94,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			span ?? 'The whole flow record',
 			i.siteName ? `at ${i.siteName}` : 'at the outlet',
 			exclusions ? `${plural(exclusions, 'period')} left out` : null,
+			// Engine ≥ 1.90.0 (issue #557): named only when set.
+			s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
 			// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
 			s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
 		]

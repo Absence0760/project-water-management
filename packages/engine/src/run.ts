@@ -23,7 +23,7 @@ import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirps
 import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
-import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
+import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags, withoutPeriodHighs } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
@@ -953,9 +953,14 @@ function runNetwork(
 	// Gauge and logger records measure the impacted river (farms, dams,
 	// abstraction), so they are compared with the simulated outflow: the
 	// outlet's, or the calibration site's (engine ≥ 1.41.0).
+	// Inside a low-flow period (engine ≥ 1.90.0, issue #557, settings.qualityFlags.lowFlowPeriods) a reading above
+	// its threshold is wrong, so the statistics, the EWR test on the observed record and the plausibility checks
+	// leave it out. The periods are the outlet records', as the gauged ranges are.
+	const lowFlowPeriods = settings.qualityFlags.lowFlowPeriods;
+	const calScored = calKind && !calSite ? withoutPeriodHighs(calObserved, lowFlowPeriods, calKind, start) : calObserved;
 	const calibration = calKind
 		? {
-				...calibrationStats(calSim, calObserved, {
+				...calibrationStats(calSim, calScored, {
 					startDate,
 					windowStart: settings.calibrationStart,
 					windowEnd: settings.calibrationEnd,
@@ -987,7 +992,7 @@ function runNetwork(
 	// isn't evidence here either.
 	const ewrObserved =
 		observedKind
-			? ewrAgreement(simOutflow, observedM3s, ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
+			? ewrAgreement(simOutflow, withoutPeriodHighs(observedM3s, lowFlowPeriods, observedKind, start), ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
 			: null;
 	// The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0, docs/model.md §2.10k):
 	// its record against its simulated outflow and its own pragmatic requirement.
@@ -1064,7 +1069,7 @@ function runNetwork(
 		// The scored record (engine ≥ 1.55.0): the validation signatures follow the calibration site.
 		scored:
 			calKind && scoredFlowFlags
-				? { kind: calKind, observedM3s: calObserved, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
+				? { kind: calKind, observedM3s: calScored, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
 				: null
 	});
 	if (checked) warnings.push(...checked.warnings);
@@ -1287,7 +1292,8 @@ function runPlausibility(r: {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
 	const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
-	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = r.aligned(kind);
+	// A reading above a low-flow period's threshold (engine ≥ 1.90.0, issue #557) misleads the checks as it would the scores.
+	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = withoutPeriodHighs(r.aligned(kind), settings.qualityFlags.lowFlowPeriods, kind, start);
 	const excluded = new Uint8Array(days);
 	for (const x of exclusionRanges(settings.calibrationExclusions)) {
 		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;

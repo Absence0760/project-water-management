@@ -80,6 +80,7 @@ export function rebaseSettings(draft: EditableSettings, before: EditableSettings
 export const CHILD_ERRORS = [
 	'calWindow',
 	'exclusions',
+	'lowFlow',
 	'qualityFlags',
 	'rules',
 	'zeroRain',

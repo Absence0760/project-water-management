@@ -21,7 +21,7 @@ export interface FlagLane {
 }
 
 /** The classes drawn, top strip first; in range and missing are not (the line itself shows a missing day as a gap). */
-export const LANE_FLAGS: readonly FlowDayFlag[] = ['aboveRating', 'belowRating', 'suspect', 'infilled', 'humanUse'];
+export const LANE_FLAGS: readonly FlowDayFlag[] = ['aboveRating', 'periodHigh', 'belowRating', 'suspect', 'infilled', 'humanUse'];
 
 const LANE_COLOR: Record<FlowDayFlag, string> = {
 	aboveRating: '--series-9',
@@ -30,12 +30,15 @@ const LANE_COLOR: Record<FlowDayFlag, string> = {
 	infilled: '--series-8',
 	humanUse: '--series-6',
 	inRange: '--series-3',
-	missing: '--text-muted'
+	missing: '--text-muted',
+	periodHigh: '--series-7'
 };
 
 /** What Fit automatically does with a class's days under the quality-flag settings, in the engine's words (FLAG_USE_TEXT); '' without them. */
 export function flagUseText(flag: FlowDayFlag, use: Omit<QualityFlagSettings, 'ratings'> | null | undefined): string {
 	if (!use) return '';
+	// A period-high day (engine ≥ 1.90.0, issue #557) is always left out.
+	if (flag === 'periodHigh') return 'left out of Fit automatically and the run’s statistics';
 	const u = flag === 'aboveRating' ? use.aboveRating : flag === 'belowRating' ? use.belowRating : flag === 'suspect' ? use.suspect : flag === 'infilled' ? use.infilled : 'include';
 	return `Fit automatically: ${FLAG_USE_TEXT[u]}`;
 }
