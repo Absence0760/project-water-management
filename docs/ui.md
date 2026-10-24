@@ -5425,7 +5425,10 @@ at each site, by name, so a new name that changes which one they read asks
 first, *Change which series runs read?* "Runs will read “Bergwater gauge”
 instead of “Average” for Rainfall — catchment …" (`lib/series/pick.ts`
 `renamePickChange`); Cancel puts the old name back. A series a data feed or
-an API key writes into keeps its name: the server refuses it with why.
+an API key writes into, or whose name a live key's series list holds, keeps
+its name, and a new name a feed or a key's list already uses is refused too:
+the server refuses it with why, shown under the box as *Not saved: …* (the
+feed case reads as words with why up front).
 Viewers read the name in the table row), **Product**, **Measured at**, **Source**,
 **Upload unit** and **Edited by hand** (the days typed in, "2021-10-02,
 2021-10-04 to 2021-10-06"), each only where it applies, wrapping to one
@@ -5520,7 +5523,9 @@ record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were
 interpolated and how many came from the donor record × its ratio, why a donor
-was refused, and how many gaps stay open (`series/flowFill.ts`). **Quality
+was refused, and how many gaps stay open (`series/flowFill.ts`). It reads
+past a low-flow period's high readings as a run does (engine ≥ 1.90.0, issue
+#567): they anchor nothing and are out of the donor's ratio and the clamp. **Quality
 flags**: on a flow record a run reads (the outlet's gauge or logger record,
 or the calibration site's record when calibration scores a gauge inside the
 network), the days Fit automatically would flag (above
@@ -6334,8 +6339,9 @@ two.
   records, the logger first), **From** and **To**, **Valid up to (m³/s)**
   and a required **Reason** and **Source**. Inside the dates a reading
   above the threshold is left out of Fit automatically, the run's
-  statistics, its EWR test on the record and the plausibility checks;
-  readings at or below it are scored. A blank reason or source, a reversed
+  statistics, its EWR test on the record and the plausibility checks, and
+  the flow gap fill reads past it (issue #567, model.md §2.10i); readings
+  at or below it are scored. A blank reason or source, a reversed
   range, a threshold not above 0 or the same record and range twice shows
   an alert and blocks Save (the save bar links here); the section's summary
   line adds "low flows only in N periods". Under them, **Quality flags for Fit

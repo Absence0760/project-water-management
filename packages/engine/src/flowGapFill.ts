@@ -21,6 +21,14 @@
 //     is clamped to the record's own highest reading: a donor's flood scaled
 //     past anything the gauge has measured is outside its rating.
 //
+// A reading above a low-flow period's threshold (settings.qualityFlags
+// .lowFlowPeriods, engine ≥ 1.90.0, issue #567) is wrong, so the fill reads
+// past it: it is no anchor for an interpolation (a short gap beside one is
+// left to the donor), it is in neither side of the donor's ratio and its
+// correlation (as this record or as the donor), the donor never fills a day
+// from one, and it is not the clamp. It stays in the record as stored, and
+// is never itself filled: the quality flags leave it out as periodHigh.
+//
 // Filled values never touch the stored series. The result carries a per-day
 // method code (FLOW_FILL_CODE), which the run exports as its own column and
 // the per-day quality flags (CR-18, ./calibrate/dayFlags.ts
@@ -31,6 +39,7 @@
 // observed record and the plausibility checks too; 'include' scores them
 // everywhere. Filled days are always shown, exported and warned about.
 import { toEpochDay } from './calendar';
+import { lowFlowThresholds, type LowFlowPeriod } from './calibrate/qualityFlagSettings';
 import type { DailySeries, SeriesKind } from './project';
 
 /** The records a spec can fill: the observed gauge and the logger (CALIBRATION_FLOW_KINDS). */
@@ -183,6 +192,38 @@ export interface FlowFill {
 /** A flow reading as a run reads it: finite and not negative, else missing (engine 1.16.0, prepare.ts alignFlow). */
 const reading = (v: number | null | undefined): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
 
+/**
+ * Each record day's low-flow threshold (m³/s, NaN = none), from that record's
+ * first day (lowFlowThresholds over the record), for the record a fill fills
+ * and for its donor; null where no period reaches the record. A reading above
+ * its day's threshold is wrong (issue #567).
+ */
+export interface GapFillLowFlow {
+	record: Float64Array | null;
+	donor: Float64Array | null;
+}
+
+/** A reading above its day's low-flow threshold: wrong, so the fill reads past it. */
+const wrong = (thr: Float64Array | null | undefined, i: number, v: number): boolean => !!thr && v > thr[i]!;
+
+/**
+ * The thresholds a fill of `record` (of `kind`) from `donor` (of `donorKind`)
+ * reads, from settings.qualityFlags.lowFlowPeriods; null when no period
+ * reaches either record, which fills exactly as with no periods at all.
+ */
+export function gapFillLowFlow(
+	periods: readonly LowFlowPeriod[] | undefined,
+	kind: GapFillKind,
+	record: DailySeries,
+	donorKind: GapFillDonor | null,
+	donor: DailySeries | null
+): GapFillLowFlow | null {
+	if (!periods?.length) return null;
+	const r = lowFlowThresholds(periods, kind, toEpochDay(record.startDate), record.values.length);
+	const d = donor && donorKind && isGapFillKind(donorKind) ? lowFlowThresholds(periods, donorKind, toEpochDay(donor.startDate), donor.values.length) : null;
+	return r || d ? { record: r, donor: d } : null;
+}
+
 function pearson(x: number[], y: number[]): number | null {
 	const n = x.length;
 	if (n < 2) return null;
@@ -207,8 +248,12 @@ function pearson(x: number[], y: number[]): number | null {
 	return sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : null;
 }
 
-/** The donor's ratio and correlation over the days both records have a reading. */
-export function fitDonor(record: DailySeries, donor: DailySeries, kind: GapFillDonor): DonorFit {
+/**
+ * The donor's ratio and correlation over the days both records have a reading,
+ * a reading above its day's low-flow threshold (either record's) not counting
+ * as one.
+ */
+export function fitDonor(record: DailySeries, donor: DailySeries, kind: GapFillDonor, lowFlow: GapFillLowFlow | null = null): DonorFit {
 	const r0 = toEpochDay(record.startDate);
 	const d0 = toEpochDay(donor.startDate);
 	const x: number[] = [];
@@ -217,9 +262,10 @@ export function fitDonor(record: DailySeries, donor: DailySeries, kind: GapFillD
 	let sd = 0;
 	for (let i = 0; i < record.values.length; i++) {
 		const a = reading(record.values[i]);
-		if (a === null) continue;
-		const b = reading(donor.values[r0 + i - d0]);
-		if (b === null) continue;
+		if (a === null || wrong(lowFlow?.record, i, a)) continue;
+		const j = r0 + i - d0;
+		const b = reading(donor.values[j]);
+		if (b === null || wrong(lowFlow?.donor, j, b)) continue;
 		x.push(a);
 		y.push(b);
 		sr += a;
@@ -232,15 +278,26 @@ const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1
 
 /**
  * Fill a record's interior gaps by `spec` (see the module comment). `donor`
- * is the donor record when the spec names one and the project has it. The
+ * is the donor record when the spec names one and the project has it, and
+ * `lowFlow` the low-flow thresholds of both (gapFillLowFlow; null = none). The
  * stored values are never changed: the result is a new array.
  */
-export function fillFlowGaps(kind: GapFillKind, record: DailySeries, spec: FlowGapFillSpec, donor: DailySeries | null = null): FlowFill {
+export function fillFlowGaps(kind: GapFillKind, record: DailySeries, spec: FlowGapFillSpec, donor: DailySeries | null = null, lowFlow: GapFillLowFlow | null = null): FlowFill {
 	const n = record.values.length;
 	const values = Array.from({ length: n }, (_, i) => reading(record.values[i]));
 	const code = new Uint8Array(n);
+	const thr = lowFlow?.record ?? null;
+	const dThr = lowFlow?.donor ?? null;
+	// A wrong reading (above a low-flow period's threshold) is kept as stored but anchors nothing.
+	const anchor = (i: number): number | null => {
+		const v = values[i]!;
+		return wrong(thr, i, v) ? null : v;
+	};
 	let clamp: number | null = null;
-	for (const v of values) if (v !== null && (clamp === null || v > clamp)) clamp = v;
+	for (let i = 0; i < n; i++) {
+		const v = values[i] ?? null;
+		if (v !== null && !wrong(thr, i, v) && (clamp === null || v > clamp)) clamp = v;
+	}
 	const summary: FlowFillSummary = {
 		kind,
 		spec: { ...spec },
@@ -258,7 +315,7 @@ export function fillFlowGaps(kind: GapFillKind, record: DailySeries, spec: FlowG
 
 	let fit: DonorFit | null = null;
 	if (spec.donor && donor) {
-		fit = fitDonor(record, donor, spec.donor);
+		fit = fitDonor(record, donor, spec.donor, lowFlow);
 		summary.donor = fit;
 		if (fit.overlapDays < spec.donorMinOverlapDays) summary.donorRefused = `the two records share ${fit.overlapDays} days with a reading, fewer than the ${spec.donorMinOverlapDays} the ratio needs`;
 		else if (!(fit.ratio > 0) || !Number.isFinite(fit.ratio)) summary.donorRefused = 'one of the records has no flow on the days they share, so there is no ratio';
@@ -282,9 +339,9 @@ export function fillFlowGaps(kind: GapFillKind, record: DailySeries, spec: FlowG
 		if (i >= n) break; // the tail: nothing bounds it
 		const to = i - 1;
 		const len = to - from + 1;
-		const a = values[from - 1]!;
-		const b = values[to + 1]!;
-		if (len <= spec.interpolateMaxDays) {
+		const a = anchor(from - 1);
+		const b = anchor(to + 1);
+		if (len <= spec.interpolateMaxDays && a !== null && b !== null) {
 			for (let k = 1; k <= len; k++) {
 				const f = k / (len + 1);
 				values[from + k - 1] = a > 0 && b > 0 ? a * Math.pow(b / a, f) : a + (b - a) * f;
@@ -297,8 +354,9 @@ export function fillFlowGaps(kind: GapFillKind, record: DailySeries, spec: FlowG
 		let filled = 0;
 		if (useDonor && len <= spec.donorMaxDays) {
 			for (let t = from; t <= to; t++) {
-				const q = reading(donor!.values[r0 + t - d0]);
-				if (q === null) continue;
+				const j = r0 + t - d0;
+				const q = reading(donor!.values[j]);
+				if (q === null || wrong(dThr, j, q)) continue;
 				let v = q * fit!.ratio;
 				if (clamp !== null && v > clamp) {
 					v = clamp;

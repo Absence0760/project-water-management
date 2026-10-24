@@ -9055,12 +9055,16 @@ lowest threshold applies (`lowFlowThresholds`).
   says so under the list.
 - The fit record compares periods by record, dates and threshold only: a
   reworded reason or source, or another order, doesn't mark the fit stale.
-- **Gap filling still reads the record as stored** (§2.10i): an
-  interpolation next to a period can be anchored on a wrong high reading,
-  and the donor ratio and the clamp are taken over every reading. With
-  `infilled: 'exclude'` (the default) no filled day is scored, so this only
-  matters under `'include'`; the durable fix (the fill reading the record
-  without the period's high readings) is issue #567.
+- **Gap filling reads past them** (§2.10i, issue #567, from engine 1.90.0
+  too): a reading above the threshold anchors no interpolation, is in
+  neither side of the donor ratio (as the filled record or as the donor),
+  and is not the clamp. It is not a gap either: it stays as stored, is
+  never filled, and stays `periodHigh`. The other way round, a filled day
+  is no reading, so a period never leaves it out even where the filled
+  value is above the threshold: the infilled treatment decides it, in the
+  fit (where `infilled` outranks `periodHigh`) and in the run's statistics,
+  EWR test and plausibility checks alike (`withoutPeriodHighs` skips the
+  fill's days).
 - The threshold is in m³/s only. A percentile of the period's flows was
   considered and left out of this first cut: it would move with the record
   it is meant to judge.
@@ -9257,12 +9261,13 @@ lead-in and tail are never filled; nothing bounds them. Per record:
    for the gauge, or the reverse) or the reference gauge on a neighbouring
    river (`flow_reference_m3s`, otherwise never read by a run), × the ratio
    Σ record / Σ donor over every day both have a reading in the whole stored
-   records. The donor is **refused**, and the summary and warning say why,
+   records (less a low-flow period's high readings, below). The donor is **refused**, and the summary and warning say why,
    when the two share fewer than `donorMinOverlapDays` (default **365**, so
    the ratio spans the seasons) or their daily flows correlate below
    `DONOR_MIN_CORRELATION` = **0.5** (Pearson r on the shared days: the donor
    doesn't rise and fall with the river). A filled day is **clamped** to the
-   record's own highest reading: a donor's flood scaled past anything the
+   record's own highest reading (again less a low-flow period's high
+   readings): a donor's flood scaled past anything the
    gauge measured lies outside its rating. A gap day the donor has no
    reading for stays open. One ratio over the whole record, not per month
    or per flow class: see the questions below.
@@ -9270,6 +9275,41 @@ lead-in and tail are never filled; nothing bounds them. Per record:
 Interpolation runs first, on the gaps short enough for it; the donor then
 fills only the longer ones. Everything is fitted and counted over the whole
 stored record, so the Data tab shows exactly what a run would fill.
+
+**A low-flow period's high readings (engine ≥ 1.90.0, issue #567).** A
+reading above a low-flow period's threshold (`settings.qualityFlags
+.lowFlowPeriods`, §2.10h) is wrong, so the fill reads past it
+(`gapFillLowFlow` passes each record's per-day thresholds,
+`lowFlowThresholds`, into `fillFlowGaps`):
+
+- It is **no anchor**: a gap beside one is not interpolated, however short,
+  since the log-linear line would run from a value known to be wrong. The
+  donor may fill such a gap (up to `donorMaxDays`), as it fills a long one;
+  without a donor it stays open.
+- It is **out of the donor's fit**: the ratio Σ record / Σ donor, its
+  correlation and the shared-day count read only days where neither
+  record's reading is above its own period's threshold. A wrong high would
+  otherwise inflate every donor-filled value, inside the period or not, and
+  the same when this record is the donor (a reading of the gauge or logger
+  record above one of its periods is never scaled into the other's gap
+  either; that day stays open). The reference gauge has no periods.
+- It is **not the clamp**: a filled day is clamped to the record's highest
+  reading that isn't above its threshold.
+- It is **not a gap**: the reading stays in the filled record as stored,
+  is never filled, and its day stays flagged `periodHigh` and left out of
+  every score (§2.10h). Only the readings either side of real gaps change
+  role.
+- A **filled day above the threshold** is not a period high: the fill's
+  value is an estimate, not the instrument's reading, so whether it is
+  scored is the infilled treatment's call alone, in the fit and in the
+  run's statistics, EWR test and plausibility checks alike (before this
+  the run left such a day out under `'include'` while the fit scored it).
+
+A project without low-flow periods (or with periods that no reading
+exceeds, or only on a record the fill doesn't read) fills to the bit as
+before (`flowGapFill.test.ts` guards each, and checks every role above over 200 seeded records). Before this the fill read the
+record as stored; with `infilled: 'exclude'` (the default) no filled day is
+scored, so that only reached the scores under `'include'`.
 
 **A resumed run (§2.16, engine ≥ 1.48.0).** The fill reads the whole record:
 a gap's bounding readings, the highest reading it clamps to and the donor's
