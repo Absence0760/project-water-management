@@ -51,7 +51,7 @@
 		</figure>
 		<figure class="card">
 			<Shot name="river" {...screens.river} widths={[640, 1280]} sizes="(max-width: 760px) 100vw, 45vw" alt={t('The river against its ecological reserve, day by day, with the days below it marked.')} />
-			<figcaption><strong>{t('River and reserve')}</strong> {t('Flow at every gauge against the reserve, and which hydrological units’ use it falls short by.')}</figcaption>
+			<figcaption><strong>{t('Ecological reserve (EWR)')}</strong> {t('Flow at every gauge against the reserve, and which hydrological units’ use it falls short by.')}</figcaption>
 		</figure>
 	</div>
 </section>

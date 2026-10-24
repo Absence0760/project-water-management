@@ -15,17 +15,18 @@ export type SentenceInput = Pick<RunSummary, 'catchment' | 'ewrAssurance'> & {
 };
 
 /**
- * The river first, then the farms. The river measure is the one
- * the cards lead with: months meeting the Reserve rules at the headline site
- * when the project judges by a rule table, else days below the pragmatic EWR
- * at the outflow gauge. `choice`: the project's settings.ewrHeadline (issue
- * #444; absent = automatic).
+ * Irrigation supply first, then the river (issue #558: the Summary leads with
+ * irrigation, and the EWR has a page of its own), on Runs & results and the
+ * printable report's cover alike. The river measure is the EWR headline's:
+ * months meeting the Reserve rules at the headline site when the project
+ * judges by a rule table, else days below the pragmatic EWR at the outflow
+ * gauge. `choice`: the project's settings.ewrHeadline (issue #444; absent =
+ * automatic). A run without units has the river sentence alone.
  */
 export function runSentences(summary: SentenceInput, choice?: EwrHeadline | null): string[] {
-	const out = [riverSentence(summary, choice)];
 	const farms = farmSentence(summary.farms ?? []);
-	if (farms) out.push(farms);
-	return out;
+	const river = riverSentence(summary, choice);
+	return farms ? [farms, river] : [river];
 }
 
 export const runSentence = (summary: SentenceInput, choice?: EwrHeadline | null) => runSentences(summary, choice).join(' ');

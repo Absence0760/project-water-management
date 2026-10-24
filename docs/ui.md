@@ -7920,11 +7920,14 @@ read it before.
   page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
-  always agree with the cards): the river measure the cards lead with (Reserve
-  rules met in X % of months at the headline site when the results are judged
-  by a rule table (Settings → Judge results by), else the % of days below the pragmatic EWR at the outflow gauge), then the
-  farms (how many got less than 95 % of their demand and the lowest one, or
-  "Every hydrological unit got at least 95 %"; left out when the run has no farms). The
+  always agree with the cards): irrigation supply first, the units (how many
+  got less than 95 % of their demand and the lowest one, or "Every
+  hydrological unit got at least 95 %"; left out when the run has no units),
+  then the river: the EWR headline's measure (Reserve rules met in X % of
+  months at the headline site when the results are judged by a rule table
+  (Settings → Judge results by), else the % of days below the pragmatic EWR at
+  the outflow gauge). The river led until issue #558 put irrigation first, as
+  the Summary does; the printable report's cover says the same sentences. The
   calibration fit is left to the NSE and PBIAS cards (a sentence repeating
   them was dropped, issue #177; the printable report draws the same cards). Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
@@ -10182,7 +10185,8 @@ baseline card links to the published run's report (**Report**, beside
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a
   legacy-model warning for a stored run from before engine 1.0.0, the run's
-  summary sentence, for a forecast run (WP-2.12) the engine's
+  summary sentences (Runs & results' `runSentence`: irrigation supply first,
+  then the river, since issue #558), for a forecast run (WP-2.12) the engine's
   `FORECAST_RAIN_NOTE` line, "From <first forecast day>, this run uses
   forecast rain, not recorded rain. …", as a warning (`report/sections.ts`
   `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
