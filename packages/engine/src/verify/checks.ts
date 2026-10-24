@@ -31,7 +31,7 @@ import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
 import { hasPumpLimit, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES, userRestrictionShare } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
+import { CHECK_GAUGE_FLOW_KEY, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -97,7 +97,7 @@ function roomAfterExternal(room: ArrayLike<number> | undefined, ext: Float64Arra
 	if (!room || !ext) return room;
 	return Float64Array.from({ length: room.length }, (_, t) => (Number.isNaN(room[t]!) ? NaN : ext[t]! > 0 ? Math.max(0, room[t]! - ext[t]!) : room[t]!));
 }
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site', ...ALLOCATION_CAP_COLUMNS]);
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', CHECK_GAUGE_FLOW_KEY, FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site', ...ALLOCATION_CAP_COLUMNS]);
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:

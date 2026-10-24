@@ -18,7 +18,7 @@
 // observed record of its own (engine ≥ 1.4.0, a GaugeSeriesKey series),
 // against the simulated flow there, reported per site in `gauges`. Checks 2
 // and 3 stay catchment-wide: the rain is the catchment's.
-import type { CalibrationFlowKind } from '../project';
+import { CALIBRATION_FLOW_KINDS, gaugeCheckKind, type CalibrationFlowKind } from '../project';
 import type { EwrAssuranceSite } from '../reserve/assurance';
 import type { RunoffModelId } from '../runoff/types';
 import { flowDoubleMass, flowDoubleMassWarning, type FlowDoubleMass } from './flowDoubleMass';
@@ -234,8 +234,8 @@ const atGauge = (name: string, w: string) => `At gauge "${name}": ${w[0]!.toLowe
 /** Checks 1 and 4 at one gauge, on the catchment's dry season and the run's exclusions. */
 function gaugeChecks(g: GaugePlausibilityInput, x: PlausibilityInput, season: DrySeason | null, inSeason: Uint8Array | null): GaugePlausibility {
 	const cal = x.calibrationKind;
-	const flowKind: CalibrationFlowKind =
-		cal && g.observed[cal] ? cal : g.observed.flow_observed_m3s ? 'flow_observed_m3s' : 'flow_logger_m3s';
+	// One rule with the checks-only series run.ts stores (gaugeCheckKind); a gauge here has at least one record.
+	const flowKind = gaugeCheckKind(cal, CALIBRATION_FLOW_KINDS.filter((k) => g.observed[k]))!;
 	const obs = g.observed[flowKind];
 	const naturalised = obs
 		? naturalisedCheck({

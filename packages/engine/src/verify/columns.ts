@@ -313,6 +313,12 @@ export const LEGACY_RUNOFF_COLUMNS: readonly FarmColumn[] = [
 export const OBSERVED_FLOW_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'observed_flow', letter: null, formula: 'the calibration record as stored, m³/s × 86 400; blank on a day without a reading (blank, not a number, or negative), except a gap-filled day when the quality flags score infilled days, which holds the filled value' },
 	{ key: 'observed_flow_other', letter: null, formula: 'the other record (gauge or logger), shown and never scored', optional: true },
+	{
+		key: 'observed_flow_check', // CHECK_GAUGE_FLOW_KEY (project.ts); this module imports nothing
+		letter: null,
+		formula: 'at a gauge inside the network that is not the calibration site (engine ≥ 1.90.0): its own record, the one its plausibility checks read, m³/s × 86 400; blank on a day without a reading; shown and never scored',
+		optional: true
+	},
 	{ key: 'observed_flow_fill', letter: null, formula: 'gap fill per day (engine ≥ 1.23.0): 0 = measured or still missing, 1 = interpolated, 2 = from a donor record × its ratio; the outlet’s records only', optional: true },
 	{ key: 'observed_flow_filled', letter: null, formula: 'the filled value on a filled day (m³/day), blank on every other day; the stored record is never changed', optional: true },
 	{

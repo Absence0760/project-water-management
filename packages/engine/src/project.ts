@@ -801,6 +801,32 @@ export const OBSERVED_SERIES_LABEL: Record<CalibrationFlowKind, string> = {
 	flow_logger_m3s: 'Observed flow (logger)'
 };
 
+/**
+ * The run series key of a checks-only gauge's record (engine ≥ 1.90.0, issue
+ * #554, docs/model.md §2.10k): every gauge inside the network with a flow
+ * record of its own, other than the calibration site, has that record stored
+ * under this key at its node, beside the node's `outflow`, so its hydrograph
+ * can be drawn without making it the calibration site. The record is the one
+ * the plausibility checks read there (the run's calibration kind when the
+ * gauge has it, else its other record), m³/day, NaN on a day without a
+ * reading. The calibration site's record stays its node's `observed_flow`.
+ */
+export const CHECK_GAUGE_FLOW_KEY = 'observed_flow_check';
+/**
+ * Which of a gauge's records (inside the network) its checks read: the run's
+ * calibration record's kind (the outlet's, as resolved) when the gauge has
+ * it, else the first it has in CALIBRATION_FLOW_KINDS order (the gauge
+ * record, then the logger). One rule for the plausibility checks there and
+ * the checks-only series (`CHECK_GAUGE_FLOW_KEY`), so the hydrograph shows the
+ * record the warnings judge. null when the gauge has none.
+ */
+export function gaugeCheckKind(calibrationKind: CalibrationFlowKind | null | undefined, kinds: readonly CalibrationFlowKind[]): CalibrationFlowKind | null {
+	return calibrationKind && kinds.includes(calibrationKind) ? calibrationKind : (CALIBRATION_FLOW_KINDS.find((k) => kinds.includes(k)) ?? null);
+}
+
+/** The stored label of a checks-only gauge's record: "Observed flow (checks only)", "Observed flow (logger) (checks only)". */
+export const checkGaugeFlowLabel = (kind: CalibrationFlowKind): string => `${OBSERVED_SERIES_LABEL[kind]} (checks only)`;
+
 const zeros: Monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 /** The defaults of settings.februaryDays and settings.lakeEvapFactor, on their own so a reader of those two needn't load every default. */

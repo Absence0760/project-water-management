@@ -68,6 +68,9 @@ import {
 	arealRainFactors,
 	CALIBRATION_FLOW_KINDS,
 	calibrationRecordsAt,
+	CHECK_GAUGE_FLOW_KEY,
+	checkGaugeFlowLabel,
+	gaugeCheckKind,
 	calibrationSeriesKey,
 	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
@@ -474,6 +477,16 @@ function runNetwork(
 		push(calSite.nodeId, 'observed_flow', OBSERVED_SERIES_LABEL[calKind], 'm³/day', toDay(calObserved));
 		const other = kinds.find((k) => k !== calKind);
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
+	}
+	// Every other gauge inside the network with a record of its own (engine ≥ 1.90.0, issue #554, docs/model.md
+	// §2.10k): the record its plausibility checks read (plausibility/index.ts gaugeChecks), beside the gauge's `outflow`, for its checks-only hydrograph.
+	for (const [i, node] of nodes.map((n, i) => [i, n] as const).sort(([, a], [, b]) => cmpStr(a.id, b.id))) {
+		if (node.kind !== 'gauge' || i === topo.outflow || node.id === calSite?.nodeId) continue;
+		// The record plausibility's gaugeChecks reads there (one rule, gaugeCheckKind).
+		const kind = gaugeCheckKind(observedKind, calibrationRecordsAt(series, node.id));
+		if (!kind) continue;
+		const obs = alignFlow(series[calibrationSeriesKey(kind, node.id)], start, days);
+		push(node.id, CHECK_GAUGE_FLOW_KEY, checkGaugeFlowLabel(kind), 'm³/day', obs.map((x) => (x === null ? NaN : x * SEC_PER_DAY)));
 	}
 	// The scored record's per-day quality flags (engine ≥ 1.48.0, CR-18, ./calibrate/dayFlags.ts): the classes the fit
 	// reads, beside the scored `observed_flow` (the outlet's or the calibration site's), only when a day is flagged.
