@@ -329,7 +329,7 @@ MUTANTS = [
     ("a unit's gauge record of blanks and no-data codes picks rule 1", "has_g = any(valid(v) for v in own_g.values)", "has_g = bool(own_g)"),
     ("a unit's own negative gauge value is a reading", 'g = {"startDate": raw["startDate"], "values": [v if valid(v) else None for v in raw["values"]]}', 'g = {"startDate": raw["startDate"], "values": list(raw["values"])}'),
     ("a unit with CHIRPS takes it before the gauge × its MAP ratio", "        elif cond2:\n            rule = 2", "        elif cond2 and not has_c:\n            rule = 2"),
-    ("the gauge MAP ratio isn't clamped", "ratio = _clamp(map_mm / gauge_map, diag) if cond2", "ratio = map_mm / gauge_map if cond2"),
+    ("the gauge MAP ratio isn't clamped", "ratio = _clamp(map_mm / gauge_level, diag) if cond2", "ratio = map_mm / gauge_level if cond2"),
     ("the CHIRPS MAP factor isn't clamped", "lev_f = _clamp(map_mm / mean, diag)", "lev_f = map_mm / mean"),
     ("the CHIRPS MAP factor ignores the MAP period", "use = inside if len(inside) >= UNIT_MAP_MIN_YEARS else years", "use = years"),
     ("the CHIRPS MAP factor takes the period's years however few", "use = inside if len(inside) >= UNIT_MAP_MIN_YEARS else years", "use = inside or years"),
@@ -415,6 +415,10 @@ MUTANTS = [
     ("catchmentMapMm is ignored", "if isinstance(m, (int, float)) and MAP_MM_MIN <= m <= MAP_MM_MAX:", "if False:"),
     ("the run window follows the station's stored record, not its checked days", "if rec.value(o) is not None] if rec.stored else []", "if rec.stored.get(o) is not None] if rec.stored else []"),
     ("the run window counts the catchment CHIRPS a refused pairing doesn't correct", "if (h and f is not None) else []", "if h else []"),
+    ("rule 2 divides by gaugeMapMm under the catchment's station (before 3e949975f)", '        gauge_level = rain["gauge_level"]\n', "        gauge_level = gauge_map\n"),
+    ("rule 2's level under the catchment's station is the station MAP, without r", '"gauge_level": None if st_map is None else st_map * r,', '"gauge_level": None if st_map is None else st_map,'),
+    ("rule 2 applies on gaugeMapMm when the catchment's station has no MAP", '        gauge_level = rain["gauge_level"]\n', '        gauge_level = rain["gauge_level"] or gauge_map\n'),
+    ("the reference fit keeps the catchment station's accumulation windows", '"fit_window_days": rec.prep["fit_window_days"],', '"fit_window_days": set(),'),
 ]
 
 

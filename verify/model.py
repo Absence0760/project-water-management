@@ -911,9 +911,12 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
     c_raw = series.get("rain_catchment_mm")
     # "Catchment gauge rain": any reading at all in the stored catchment series (a negative one is a reading, §2.4b).
     has_catchment = bool(c_raw) and any(v is not None and math.isfinite(v) for v in c_raw["values"])
+    gauge_level = gauge_map
     if "has_catchment" in rain:
-        # §2.4i: under the catchment's station, "the catchment's rain" is the station's.
+        # §2.4i: under the catchment's station, "the catchment's rain" is the station's, at the level station MAP × r,
+        # which rule 2's MAP ratio divides by (gaugeMapMm still switches rule 2 on); no station MAP, no rule 2.
         has_catchment = rain["has_catchment"]
+        gauge_level = rain["gauge_level"]
     fac = rain["factors"]
     has_bias = any(f is not None for f in fac[1:])
     ref = reference_factors(ur, settings, series, rain, units, diag)
@@ -945,8 +948,8 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
         has_g = any(valid(v) for v in own_g.values)
         has_c = any(valid(v) for v in own_c.values)
         map_mm = u.get("mapMm")
-        cond2 = gauge_map is not None and map_mm is not None and has_catchment
-        ratio = _clamp(map_mm / gauge_map, diag) if cond2 else 1.0
+        cond2 = gauge_map is not None and gauge_level is not None and map_mm is not None and has_catchment
+        ratio = _clamp(map_mm / gauge_level, diag) if cond2 else 1.0
         # The unit's CHIRPS, levelled (rule 3, or the reference's f × k_unit); None = unusable (item 7a).
         level = unit_chirps_level(own_c, map_mm, period, ref, fac, has_bias, diag) if has_c else None
 
@@ -1174,12 +1177,13 @@ class Stations:
             self.diag["station_ratio_clamped"] += 1
         return r
 
-    def area_rain(self, a: dict, area_map, chirps: Series):
+    def area_rain(self, a: dict, area_map, chirps: Series, r: float | None = None):
         """The area's rain by §2.4i's rule, o → (value, kind) with kind
         'station' or 'chirps', or (None, None) for the area's next fallback."""
         sid = a["stationId"]
         rec = self.record(sid)
-        r = self.ratio(a, sid, area_map)
+        if r is None:
+            r = self.ratio(a, sid, area_map)
         f = self.pairing(a.get("correctAgainst") or sid)
 
         def rain(o):
@@ -1227,8 +1231,11 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
     series = st.series
     h = Series(series.get("rain_chirps_mm"))
     fc = Series(series.get("rain_forecast_mm"))
-    area = st.area_rain(a, catchment_map(st.rs, farms, st.diag), h)
+    r = st.ratio(a, a["stationId"], catchment_map(st.rs, farms, st.diag))
+    area = st.area_rain(a, None, h, r)
     rec = st.record(a["stationId"])
+    # The level the catchment rain is at, which rule 2 of §2.4h divides a unit's MAP by: station MAP × r.
+    st_map = (st.stations.get(a["stationId"]) or {}).get("mapMm")
 
     def pick(o):
         v, kind = area(o)
@@ -1258,7 +1265,9 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
         "pick": pick,
         "factors": [None] * 13,
         "fit_factors": [None] * 13,
-        "fit_window_days": set(),
+        # A §2.4h reference gauge of the catchment rain leaves the station's accumulation windows out.
+        "fit_window_days": rec.prep["fit_window_days"],
+        "gauge_level": None if st_map is None else st_map * r,
         "first": min(x for x, _ in cands) if cands else None,
         "last": max(y for _, y in cands) if cands else None,
         "chirps": h,
