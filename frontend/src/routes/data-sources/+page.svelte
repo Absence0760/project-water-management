@@ -32,7 +32,10 @@
 		<h2 id={c.id}>{i + 1}. {c.name}</h2>
 		<p><strong>Used for:</strong> {c.usedFor}</p>
 		<p><strong>Published by:</strong> {c.publisher}</p>
-		<p><strong>Licence:</strong> <a href={c.licenceUrl} rel="external">{c.licence}</a> (read on {readDay(c.read)})</p>
+		<p>
+			<strong>Licence:</strong>
+			{#if c.licenceUrl}<a href={c.licenceUrl} rel="external">{c.licence}</a> (read on {readDay(c.read)}){:else}{c.licence} (checked on {readDay(c.read)}){/if}
+		</p>
 		{#each c.statements as s (s)}
 			<blockquote class="credit">{s}</blockquote>
 		{/each}

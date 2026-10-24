@@ -24,7 +24,8 @@ export interface DataCredit {
 	publisher: string;
 	/** The licence, in a few words, and where it was read. */
 	licence: string;
-	licenceUrl: string;
+	/** Where the licence's terms are published; absent when none came with the data (the page then names the licence without a link, "checked on" its day). */
+	licenceUrl?: string;
 	/** The day the licence was read on its publisher's page, `YYYY-MM-DD` (docs/maps.md § Sources, "read <date>"). */
 	read: string;
 	/** The licensor's required notice(s), word for word. */
@@ -62,6 +63,16 @@ export const WORLDCOVER_STATEMENT = '© ESA WorldCover project 2021 / Contains m
 
 /** GeoNames' attribution (CC BY 4.0), shown under every Map search that lists a place: the backend's `GEONAMES_SOURCE` (geo/gazetteer.ts), word for word. */
 export const GEONAMES_STATEMENT = 'GeoNames (geonames.org), CC BY 4.0';
+
+/**
+ * The Southwestern Cape MAP surface's credit line, as its authors give it: the
+ * backend's `WAAS_MAP_ATTRIBUTION` (geo/rainMap.ts), word for word, which a
+ * production load stores as the grid's attribution (issue #560).
+ */
+export const WAAS_MAP_STATEMENT = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+
+/** The map's attribution control while the MAP grid layer draws that surface's points. */
+export const WAAS_MAP_MAP_ATTRIBUTION = `MAP grid: ${WAAS_MAP_STATEMENT}`;
 
 /** The map's attribution control while real HydroRIVERS reaches are drawn: short, linking to the full statement. */
 export const HYDRORIVERS_MAP_ATTRIBUTION = 'Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license';
@@ -149,6 +160,15 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licenceUrl: 'https://www.chc.ucsb.edu/data/chirps3',
 		read: '2026-10-01',
 		statements: ['Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025).']
+	},
+	{
+		id: 'waas-map',
+		name: 'Mean annual rainfall surface for the Southwestern Cape (WAAS, 2007)',
+		usedFor: 'The map’s MAP grid layer, and the mean annual rainfall a unit’s MAP is proposed from.',
+		publisher: 'Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now the Department of Water and Sanitation)',
+		licence: 'No licence terms came with the copy used; it is shown with the credit its authors give',
+		read: '2026-10-23',
+		statements: [WAAS_MAP_STATEMENT]
 	},
 	{
 		id: 'geonames',

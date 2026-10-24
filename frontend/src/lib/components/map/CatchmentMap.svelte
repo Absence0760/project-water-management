@@ -34,7 +34,8 @@
 	and leaves everything else drawn.
 	Licensed data drawn is credited on the attribution control while it is
 	drawn (mapLayers.ts mapCredits: HydroRIVERS reaches or rivers, a dam
-	traced from JRC Global Surface Water), each linking to its section of the
+	traced from JRC Global Surface Water, the Southwestern Cape MAP surface's
+	points, `mapGridAttribution`), each linking to its section of the
 	data sources page. With `attribution="outside"` the map draws no
 	attribution control: the parent shows the credits next to the map instead
 	(the farm map's line under it, farm/FarmMapCanvas.svelte), so they never
@@ -141,6 +142,7 @@
 		channels = null,
 		channelsDim = false,
 		riversCredit = false,
+		mapGridAttribution = null,
 		attribution = 'map',
 		pickedReach = null,
 		onreach,
@@ -191,6 +193,8 @@
 		channelsDim?: boolean;
 		/** Credit the river network on the map (its licence asks it: HydroRIVERS), while its reaches are drawn. */
 		riversCredit?: boolean;
+		/** The attribution of the MAP grid whose points `mapGrid` draws (null while none are drawn): a grid with a licensed credit is credited while drawn. */
+		mapGridAttribution?: string | null;
 		/**
 		 * Where the credits go: on the map's attribution control (always expanded), or `outside`, no control at all,
 		 * the parent showing the basemap's and mapCredits()' credits next to the map (the farm map, FarmMapCanvas.svelte).
@@ -419,8 +423,9 @@
 	}
 
 	// Each licensed source's credit shows while its data is drawn: HydroRIVERS while the layer draws its reaches
-	// (`riversCredit`) or a river added from one is drawn, JRC Global Surface Water while a traced dam is.
-	const credited = $derived(mapCredits(features, riversCredit));
+	// (`riversCredit`) or a river added from one is drawn, JRC Global Surface Water while a traced dam is, the
+	// Southwestern Cape MAP surface while the MAP grid layer draws its points.
+	const credited = $derived(mapCredits(features, riversCredit, mapGrid?.length ? mapGridAttribution : null));
 	const ALL_CREDITS = Object.keys(MAP_CREDIT_TEXT) as MapCredit[];
 	const creditEntries = (ids: readonly MapCredit[]) => ids.map((id) => ({ id, html: creditLink(`${base}/data-sources`, id, MAP_CREDIT_TEXT[id]) }));
 

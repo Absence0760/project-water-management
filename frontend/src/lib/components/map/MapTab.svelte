@@ -1498,6 +1498,7 @@
 									onpiecepick={canEdit && !dividing ? pickPiece : undefined}
 									units={unitsLabelled}
 									mapGrid={mapGrid.points}
+									mapGridAttribution={mapGrid.answer?.dataset?.attribution ?? null}
 									chirps={chirpsInView}
 									demGrid={demGrid.points}
 									fillScale={areaFill.scale}

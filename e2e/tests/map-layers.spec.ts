@@ -170,6 +170,37 @@ test('the hydrological units, the MAP grid and the CHIRPS grid: each a toggle in
 	await expect(page.getByTestId('map-mapgrid-summary')).toBeVisible();
 });
 
+// A grid stored with the Southwestern Cape surface's credit line (issue #560) is credited on the map while its points
+// are drawn. The e2e database keeps only the synthetic grid (a real-looking grid would become every spec's default),
+// so the answer is the synthetic grid's with that grid's lines put in its dataset row: what the map does with it is real.
+test('the MAP grid credits the Southwestern Cape surface on the map while its points are drawn', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticMapGrid();
+	const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+	await page.route(/\/map\/map-grid\?/, async (route) => {
+		const res = await route.fetch();
+		const body = (await res.json()) as { dataset: Record<string, unknown> | null };
+		if (body.dataset) body.dataset = { ...body.dataset, dataset: 'WAAS-SWCape-2007', source: waas, attribution: waas, synthetic: false };
+		await route.fulfill({ response: res, json: body });
+	});
+	const project = await seedRunnableProject(page.request, 'Map grid credit');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+	await mapReady(page);
+	const credit = page.locator('.maplibregl-ctrl-attrib').getByRole('link', { name: `MAP grid: ${waas}` });
+	await expect(credit).toHaveCount(0);
+
+	await openLayers(page);
+	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).check();
+	await expect(page.getByTestId('map-mapgrid-summary')).toContainText('points in view from WAAS-SWCape-2007');
+	await expect(page.getByTestId('map-mapgrid-source')).toHaveText(`Mean annual precipitation, mm a year. Source: ${waas}`);
+	await expect(credit).toHaveAttribute('href', '/data-sources#waas-map');
+
+	// Off again: the credit goes with the points.
+	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).uncheck();
+	await expect(credit).toHaveCount(0);
+});
+
 test('the DEM grid: every 10th elevation-model cell each way in view, with its elevation, a toggle in the URL', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Map DEM grid');
