@@ -4452,7 +4452,12 @@ ids are rejected.
   database refuses an edited file, and `pnpm dev:db:reset` rebuilds it. Each checkout migrates its own dev database (`water`, or a
   worktree's `water_w<tag>`; [run-locally.md](./run-locally.md)), so a
   branch's migration never reaches the main checkout's before it merges
-  under its final number. Production recovery: [deployment.md § Migration
+  under its final number. `pnpm check:migrations` fails a branch that edits
+  an applied file, comments included: one whose contents differ from the
+  newest `backend@*` release (or, for a file no release has shipped, from
+  `origin/main`), so a file put back as released passes even while `main`
+  still has the edit (039 was edited in #570 and would have stopped the next
+  backend release's migrate step). Production recovery: [deployment.md § Migration
   integrity](./deployment.md#migration-integrity).
 - **A migration takes its number when it merges.** Take the next free
   number after the highest on `origin/main`, and never reserve one ahead

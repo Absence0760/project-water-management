@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkOrder } from './check_migration_order.mjs';
+import { checkOrder, checkUnchanged } from './check_migration_order.mjs';
 
 const MAIN = ['001_init.sql', '175_delineation.sql', '180_evaporation_reference.sql', '181_evaporation_accepted.sql'];
 
@@ -48,4 +48,35 @@ test('files that are not migrations are ignored, as the runner ignores them', ()
 
 test('an empty base accepts anything', () => {
 	assert.deepEqual(checkOrder([], ['001_init.sql']).problems, []);
+});
+
+const blobs = (pairs) => new Map(pairs);
+
+test('applied migrations with the same contents pass, and so does one the change lacks', () => {
+	const base = blobs([['039_api_keys.sql', 'aaa'], ['040_b.sql', 'bbb']]);
+	assert.deepEqual(checkUnchanged(base, blobs([['039_api_keys.sql', 'aaa'], ['041_c.sql', 'ccc']]), base, 'backend@0.4.0'), []);
+});
+
+test('a released migration edited, even in a comment, fails against the release (039 in #570)', () => {
+	const problems = checkUnchanged(blobs([['039_api_keys.sql', 'aaa']]), blobs([['039_api_keys.sql', 'abc']]), blobs([['039_api_keys.sql', 'aaa']]), 'backend@0.4.0');
+	assert.equal(problems.length, 1);
+	assert.equal(problems[0].name, '039_api_keys.sql');
+	assert.match(problems[0].message, /differs from backend@0\.4\.0/);
+	assert.match(problems[0].message, /git checkout backend@0\.4\.0 -- backend\/migrations\/039_api_keys\.sql/);
+});
+
+test('putting an edited file back as released passes while the base still has the edit', () => {
+	assert.deepEqual(checkUnchanged(blobs([['039_api_keys.sql', 'edited']]), blobs([['039_api_keys.sql', 'aaa']]), blobs([['039_api_keys.sql', 'aaa']]), 'backend@0.4.0'), []);
+});
+
+test('a migration no release has must match the base', () => {
+	const problems = checkUnchanged(blobs([['236_new.sql', 'aaa']]), blobs([['236_new.sql', 'bbb']]), blobs([]), 'backend@0.4.0');
+	assert.equal(problems.length, 1);
+	assert.match(problems[0].message, /differs from the base/);
+	assert.deepEqual(checkUnchanged(blobs([['236_new.sql', 'aaa']]), blobs([['236_new.sql', 'aaa']]), blobs([]), 'backend@0.4.0'), []);
+});
+
+test('without a release the base is the reference, and files that are not migrations may change', () => {
+	assert.equal(checkUnchanged(blobs([['039_api_keys.sql', 'aaa']]), blobs([['039_api_keys.sql', 'b']])).length, 1);
+	assert.deepEqual(checkUnchanged(blobs([['README.md', 'aaa']]), blobs([['README.md', 'bbb']])), []);
 });
