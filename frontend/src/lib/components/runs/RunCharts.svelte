@@ -24,6 +24,8 @@
 	import { toDisplayUnit } from './results';
 	import { clipExclusions, exclusionKeyText, seriesSpan, type ExcludedPeriod } from './exclusionShading';
 	import { flowFlagLanes } from '$lib/calibration/flowFlags';
+	import GaugeCheckFlows from './GaugeCheckFlows.svelte';
+	import type { CheckGauge } from './checkGauges';
 
 	let {
 		projectId,
@@ -36,7 +38,9 @@
 		deeperLead,
 		forecastFrom = null,
 		exclusions = [],
-		flagUse = null
+		flagUse = null,
+		checkGauges = [],
+		recordHref = () => null
 	}: {
 		projectId: string;
 		runId: string;
@@ -59,6 +63,10 @@
 		exclusions?: ExcludedPeriod[];
 		/** How Fit automatically treats each flagged class, from the run's own settings snapshot (resolveQualityFlags): the flag key says so. Null: not said. */
 		flagUse?: Omit<QualityFlagSettings, 'ratings'> | null;
+		/** The gauges inside the network whose records the run checks but doesn't score (checkGauges.ts checksOnlyGauges, issue #554): a hydrograph and FDC each, after the outlet's. */
+		checkGauges?: CheckGauge[];
+		/** The Data tab's Series details of a checks-only gauge's record; null when the project no longer has it. */
+		recordHref?: (g: CheckGauge) => string | null;
 	} = $props();
 	const band = $derived(forecastBand(forecastFrom));
 
@@ -332,6 +340,12 @@
 	</section>
 
 	{#if lower}
+		{#if checkGauges.length}
+			<!-- Every other gauge with its own record (issue #554): checks only, never the calibration score. -->
+			<div class="wide slot">
+				<GaugeCheckFlows {projectId} {runId} gauges={checkGauges} {flowUnit} toolbar={unitToggle} {band} {forecastFrom} {exclusions} {recordHref} />
+			</div>
+		{/if}
 		{#if modelTail}<div class="wide slot">{@render modelTail({ flowUnit, toolbar: unitToggle })}</div>{/if}
 
 		{#if record}

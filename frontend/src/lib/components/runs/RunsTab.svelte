@@ -24,6 +24,7 @@
 	import { dataEnd, newDataSinceRun } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun, prefetchSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
+	import { checksOnlyGauges, recordHref } from './checkGauges';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
@@ -763,6 +764,8 @@
 				forecastFrom={summary.forecast?.from ?? null}
 				exclusions={runExclusions(shownSettings, summary.calibration?.exclusions)}
 				flagUse={shownSettings ? resolveQualityFlags(shownSettings.qualityFlags) : null}
+				checkGauges={checksOnlyGauges(summary.plausibility?.gauges, detail.series, summary.calibration?.siteNodeId, nodeOrder)}
+				recordHref={(g) => recordHref(series, g.nodeId, g.flowKind)}
 			>
 				{#snippet modelTail(flow)}
 					<div class="panel" id="res-calibration">

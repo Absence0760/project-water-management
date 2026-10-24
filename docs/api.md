@@ -2190,6 +2190,11 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `siteNodeId` and `siteName` (absent at the outlet): the gauge's record
   against its simulated outflow, with that record stored as the node series
   `observed_flow` (and `observed_flow_other`) beside the node's `outflow`.
+  Engine ≥ 1.90.0 (issue #554): every other gauge inside the network with a
+  record of its own has that record (the one its plausibility checks read)
+  as the node series `observed_flow_check`, m³/day, labelled "Observed flow
+  (checks only)" or "Observed flow (logger) (checks only)", beside its
+  `outflow`: shown, never scored.
   `summary.catchment.ewrAgreementSites` (engine ≥ 1.41.0, absent when none)
   is the EWR test against observed flow at each gauge EWR site with a record
   of its own, `{ nodeId, name, flowKind, agreement }[]` with `agreement`

@@ -21,7 +21,7 @@ export interface ResultGroup extends NavGroup {
 	sections: ResultSection[];
 }
 
-type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast' | 'unitRain'>;
+type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast' | 'unitRain'> & { calibration?: Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'> | null };
 
 /**
  * `rail`: the side index, with a line for each panel. On the bar (which must
@@ -30,6 +30,9 @@ type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibili
  * evidence", landing on Run notes and standing for the three (`covers`), as
  * Settings' Automation & access does.
  */
+/** The run checks a gauge inside the network that it doesn't score: GaugeCheckFlows draws it under the flow-duration curve (checkGauges.ts checksOnlyGauges, from the same summary fields). */
+const hasCheckGauges = (summary: SectionInput) => (summary.plausibility?.gauges ?? []).some((g) => g.nodeId !== (summary.calibration?.siteNodeId ?? null));
+
 export function resultGroups(summary: SectionInput, rail = false): ResultGroup[] {
 	return [
 		{
@@ -43,7 +46,13 @@ export function resultGroups(summary: SectionInput, rail = false): ResultGroup[]
 			sections: [
 				// The hydrograph and the flow-duration curve, compared on every calibration iteration: together.
 				{ id: 'res-hydrograph', label: 'Hydrograph' },
-				{ id: 'res-fdc', label: 'Flow-duration curve', bar: 'Flow duration' },
+				// The checks-only gauges' flows (issue #554), after them: a line of its own on the side index; on the bar, which
+				// must keep to two rows at 1280 px, the flow-duration link stands for it.
+				...(hasCheckGauges(summary)
+					? rail
+						? [{ id: 'res-fdc', label: 'Flow-duration curve' }, { id: 'res-gauges', label: 'Flow at gauges in the network (checks only)' }]
+						: [{ id: 'res-fdc', label: 'Flow-duration curve', bar: 'Flow duration', covers: ['res-gauges'] }]
+					: [{ id: 'res-fdc', label: 'Flow-duration curve', bar: 'Flow duration' }]),
 				// The calibration statistics and the fit record.
 				{ id: 'res-calibration', label: 'Calibration against observed flow', bar: 'Calibration' },
 				// The water balance per water year, every run (issue #137; it was only under Self-checks).

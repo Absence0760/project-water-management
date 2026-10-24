@@ -60,6 +60,19 @@ describe('resultGroups', () => {
 		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Run notes & evidence');
 	});
 
+	it('lists the checks-only gauges after the flow-duration curve: a line on the side index, under Flow duration on the bar (issue #554)', () => {
+		const model = (summary: Parameters<typeof resultGroups>[0], rail = false) => resultGroups(summary, rail).find((g) => g.label === 'Model quality')!.sections;
+		const gauge = (nodeId: string) => ({ nodeId }) as NonNullable<NonNullable<RunSummary['plausibility']>['gauges']>[number];
+		const checked = { farms: [], plausibility: { gauges: [gauge('a')] } as RunSummary['plausibility'] };
+		expect(model(checked, true).map((s) => s.id).slice(0, 3)).toEqual(['res-hydrograph', 'res-fdc', 'res-gauges']);
+		expect(model(checked).find((s) => s.id === 'res-fdc')?.covers).toEqual(['res-gauges']);
+		expect(model(checked).map((s) => s.id)).not.toContain('res-gauges');
+		// The calibration site's gauge alone has its chart under the outlet's hydrograph, not here.
+		const siteOnly = { ...checked, calibration: { siteNodeId: 'a' } };
+		expect(model(siteOnly, true).map((s) => s.id)).not.toContain('res-gauges');
+		expect(model(siteOnly).find((s) => s.id === 'res-fdc')?.covers).toBeUndefined();
+	});
+
 	it('lists a forecast run’s forecast panel right after the summary, and only for a forecast run (WP-2.12)', () => {
 		const opening = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary)[0]!.sections.map((s) => s.id);
 		expect(opening({ farms: [] })).toEqual(['res-summary']);

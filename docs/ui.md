@@ -6327,6 +6327,11 @@ two.
   number of excluded periods. With more than one start a **Starts** table
   lists each start's seed, score and fitted parameters, the kept one marked,
   and a note says when near-equal scores come with scattered parameters.
+  The Search choices (bounds, model runs per fit, starts, seed) start from
+  the project's fit record when it has one (issue #554,
+  `FitSession.searchFrom`, once per project load; a record from before
+  starts were recorded ran one start), so a re-fit repeats the last fit
+  unless they are changed; without a record they are the defaults above.
   - **Also validate against** appears only when the project has both a gauge
     and a logger record. It offers the record the fit doesn't use (the
     calibration flow series above, else the default gauge) and defaults to
@@ -7675,7 +7680,9 @@ read it before.
      gauge inside the network, engine ≥ 1.41.0, adds under the outlet's
      hydrograph "Flow at &lt;gauge&gt;, the calibration site": that gauge's
      record against the simulated flow there, `runs/RunCharts.svelte` from
-     the node's `observed_flow` and `outflow` series), calibration (its
+     the node's `observed_flow` and `outflow` series; and under the
+     flow-duration curve, **Flow at gauges in the network (checks only)**,
+     below), calibration (its
      *Compared with* and the NSE card name the gauge when scored there; with
      where the parameters came from; under its statistics the **calibration
      check**, below), the **water balance** by water year
@@ -7729,10 +7736,38 @@ read it before.
      render (after the hydrograph has painted), with a count while they load
      and a retry on failure. A run saved without its model has no network to
      sum over: the outlet's chart only, with no demand line, and its caption
-     says why. Other gauges' records aren't in the run, so they
-     get a chart only once picked as the calibration site (Settings →
-     Calibration record → Scored at). The hydrograph above keeps its own
+     says why. Other gauges with a record of their own aren't in the
+     calibration check: they have their hydrographs under the flow-duration
+     curve (next). The hydrograph above keeps its own
      lines (natural hidden at first); the check adds the use beside them.
+     **Flow at gauges in the network (checks only)** (issue #554,
+     `#res-gauges`, `runs/GaugeCheckFlows.svelte`, pure parts in
+     `runs/checkGauges.ts`), under the flow-duration curve: for every gauge
+     inside the network with its own flow record that the run doesn't score
+     (the plausibility checks' gauges less the calibration site), "Flow at
+     &lt;gauge&gt; (checks only): simulated and observed", its record against
+     the simulated `outflow` there (the run's `observed_flow_check` at the
+     node, engine ≥ 1.90.0, model.md §2.10k), in the page's flow unit with a
+     log switch and the last 3 years; then its flow-duration curve, both
+     curves ranked on the record's days (before a forecast); then a
+     **Check, out of sample:** line with the record's NSE, KGE and PBIAS and
+     its days (the run's calibration exclusions left out, as its
+     plausibility checks leave them; the intro says once that these are
+     never the calibration score); and a link, **Series details of
+     &lt;gauge&gt;'s record**, to that record on the Data tab
+     (`?tab=series&series=<id>#data-chart`), where its **Upload unit** is.
+     Each gauge has its name as a heading; they come in the network's
+     order. More than four fold to the first three with **Show all *n*
+     gauges**, and only the gauges shown load their series; a failed load
+     says so with **Try again**.
+     A record 30× the simulated flow (a unit error at upload) reads at a
+     glance as a gap between the lines and a PBIAS near 97 %. A gauge
+     scored instead, made the calibration site in Settings → Calibration
+     record → Scored at, moves to the calibration site's chart above. A run
+     made before engine 1.90.0 says once, naming the gauges, that it was
+     made before gauge records were charted and to run the model again. The side index
+     has a line for it; on the bar the **Flow duration** link stands for it.
+     `e2e/tests/gauge-check-flows.spec.ts` (a synthetic two-gauge network, and five gauges for the fold).
   3. **Record**: notes & evidence (with the run's inputs), the validation
      statement, publication: sign-off, after the results. The **validation
      statement** (`#res-validation`, menu entry **Validation**;

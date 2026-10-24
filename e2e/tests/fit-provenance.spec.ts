@@ -1,7 +1,8 @@
 // Fit provenance and calibration exclusions (issue #4, assessor review): an
 // applied fit is saved with a record of how it was made and validated, each
 // run shows the record it ran with, a hand edit after Apply marks the record,
-// and a stored exclusion leaves a trace in "Inputs that differ".
+// a stored exclusion leaves a trace in "Inputs that differ", and the Search
+// choices start from the saved record (issue #554).
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -40,6 +41,13 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await expect(definition(record, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
 	await expect(record.getByText('Parameters edited since fit')).toHaveCount(0);
 	await saveSettings(page);
+	// After a reload the Search choices start from the saved fit record, so a re-fit repeats it (issue #554).
+	await page.reload();
+	await openFold(fit, 'fit-search');
+	await expect(fit.getByLabel('Seed')).toHaveValue('7');
+	await expect(fit.getByLabel(/^Bounds/)).toHaveValue('typical');
+	await expect(fit.getByLabel('Model runs per fit')).toHaveValue('50');
+	await expect(fit.getByLabel('Starts')).toHaveValue('5');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('Fitted');

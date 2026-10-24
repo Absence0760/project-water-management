@@ -12,6 +12,7 @@ import {
 	type CalibrationFlowKind,
 	type CalibrationProgress,
 	type CalibrationReport,
+	type FitRecord,
 	type ObjectiveId,
 	type ProjectSettings,
 	type SeriesOrigin,
@@ -56,6 +57,8 @@ export class FitSession {
 	ran: FitRan | null = null;
 	#handle: FitHandle | null = null;
 	#gen = 0;
+	/** The search choices have been started from the project's fit record since the last reset (searchFrom). */
+	#searchSeeded = false;
 
 	get busy(): boolean {
 		return this.status === 'running' || this.status === 'loading';
@@ -137,5 +140,24 @@ export class FitSession {
 		this.starts = DEFAULT_STARTS;
 		this.validationRecord = null;
 		this.picked = {};
+		this.#searchSeeded = false;
+	}
+
+	/**
+	 * Start the Search choices (bounds, model runs per fit, starts, seed) from
+	 * the project's fit record, so a re-fit repeats the last one unless they
+	 * are changed (issue #554). Once per reset: the page calls it on every load,
+	 * and a reload of the same project mustn't undo a choice made since. A
+	 * record from before starts were recorded ran one start. No record (or
+	 * none yet): the defaults stay, and a later load with a record still
+	 * applies it.
+	 */
+	searchFrom(record: Pick<FitRecord, 'bounds' | 'budget' | 'starts' | 'seed'> | null | undefined): void {
+		if (this.#searchSeeded || !record) return;
+		this.#searchSeeded = true;
+		this.bounds = record.bounds;
+		this.budget = record.budget;
+		this.starts = record.starts ?? 1;
+		this.seed = record.seed;
 	}
 }

@@ -427,6 +427,8 @@
 			editor.load(m);
 			details.load(p);
 			settings.load(p.settings);
+			// Fit automatically's Search choices start from the last fit's (issue #554), once per project.
+			fit.searchFrom(p.settings.fitRecord);
 			series = sl;
 			setRuns(rl);
 		} catch (e) {

@@ -9401,6 +9401,28 @@ The outlet's own record, when it has one, is still the catchment series
 `observed_flow`: the outlet hydrograph, the recession diagnostics, the
 plausibility checks and the gauge-vs-logger agreement read it as before.
 
+**Checks-only gauges** (engine ≥ 1.90.0, issue #554). Every *other* gauge
+inside the network with a record of its own (not the outlet, not the
+calibration site) has that record stored at its node as
+`observed_flow_check` (`CHECK_GAUGE_FLOW_KEY`), m³/day with a blank (NaN)
+on a day without a reading, beside the node's `outflow`. It is the record
+the plausibility checks read there (`RunSummary.plausibility.gauges[].flowKind`:
+the outlet record's kind when the gauge has it, else its gauge record, else
+its logger; one rule for both, `gaugeCheckKind`), labelled by instrument with "(checks only)" after it
+(`checkGaugeFlowLabel`). Nothing scores it: the run's statistics, the fit
+and every other output are as before, and Runs & results draws it as that
+gauge's hydrograph and flow-duration curve with its NSE, KGE and PBIAS
+(`calibrationStats`' formulas, on every day with a reading, no calibration
+window, the run's calibration exclusions left out as the plausibility checks
+and the EWR test at the gauge leave them out) as an out-of-sample check
+(ui.md § Runs & results). The page computes those three from the stored
+series: they are not in the run summary, so a report, an evidence pack or
+`reproduce:pack` doesn't carry them, and they are not run results to cite. A record
+that implies far more flow than the model has above the gauge (a unit
+error at upload, say) shows at a glance there. Only the stored series are
+new, so the bump to 1.90.0 changes no number of an earlier run; a run made
+before has no such series and the page says to re-run.
+
 **The EWR test against observed flow.** The outlet's test (§2.9b) is
 unchanged: the outlet's record against the simulated outflow and the outlet's
 pragmatic EWR, whatever the calibration site; moving it with the site would
