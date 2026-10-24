@@ -1630,6 +1630,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		simulatedM3Day: new Array(days).fill(6_000),
 		observed: { flow_observed_m3s: new Array(days).fill(0.08) },
 		calibrationKind: 'flow_observed_m3s',
+		scoredKind: 'flow_observed_m3s',
 		excluded: new Uint8Array(days),
 		damsM3Day: new Array(days).fill(1_000),
 		landCoverM3Day: [],
@@ -1707,6 +1708,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 			simulatedM3Day: new Array(days).fill(6_000),
 			observed: { flow_observed_m3s: obs },
 			calibrationKind: 'flow_observed_m3s',
+			scoredKind: 'flow_observed_m3s',
 			excluded: new Uint8Array(days),
 			damsM3Day: new Array(days).fill(1_000),
 			landCoverM3Day: [],
@@ -1781,6 +1783,19 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(tail).toContain('Natural flow vs observed flow + net abstraction');
 		expect(tail).toContain('Water years judged,2,failed,2');
 		expect(tail).toContain('Not computed: no dry season');
+		// No fit on a run made before engine 1.90.0.
+		expect(tail).toContain('Fit check (out of sample),Run made before engine 1.90.0: not computed');
+	});
+
+	it('writes each gauge record’s fit check (engine ≥ 1.90.0), never as the calibration score', () => {
+		const gauge = { nodeId: 'g1', name: 'Upper weir', flowKind: 'flow_logger_m3s' as const, naturalShare: 0.25, naturalised: checks.naturalised, lowFlow: null };
+		const lines = [...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: { days: 120, nse: 0.62, kge: null, pbias: -4.5 } }] })];
+		expect(lines).toContain('Fit check (out of sample),Record,logger,Days,120,NSE,0.62,KGE,,PBIAS (%),-4.5');
+		expect([...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: null }] })]).toContain('Fit check (out of sample),Not computed: no day of the record outside the excluded periods');
+		// At the calibration site the run is fitted to the record: in sample, and said so.
+		const atSite = [...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: { days: 120, nse: 0.9, kge: 0.8, pbias: 1 } }] }, 'g1')];
+		expect(atSite).toContain('Fit check (in sample at the calibration site),Record,logger,Days,120,NSE,0.9,KGE,0.8,PBIAS (%),1');
+		expect(atSite.some((l) => l.startsWith('Fit check (out of sample)'))).toBe(false);
 	});
 
 	it('says what is missing, and is part of the summary sheet', () => {

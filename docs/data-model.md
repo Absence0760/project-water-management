@@ -372,7 +372,11 @@ measured at a **gauge node inside the network** (engine ≥ 1.4.0, issue #64,
   `settings.calibrationSiteNodeId` names that gauge (engine ≥ 1.41.0,
   [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410);
   the API checks a new site is such a gauge with a record, and a copy or an
-  import moves it with the node ids). The run stores it like any
+  import moves it with the node ids). From engine 1.90.0 a gauge with both
+  a gauge and a logger record is checked on one of them by every reader
+  but calibration (`gaugeCheckKind`: the kind the run's calibration scores,
+  engine-audit.md G2, provisional), and stores it as its
+  `observed_flow_check` when it isn't the calibration site. The run stores it like any
   input series (`run_input_series.kind` = that key, the values in
   `series_blob`), so `loadRunInput` reproduces it; 084 redefines
   `run_input_series_series_kind` (from 056) to compare the kind before the

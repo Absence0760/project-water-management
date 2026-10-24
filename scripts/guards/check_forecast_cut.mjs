@@ -82,9 +82,9 @@ export const INVENTORY = [
 		path: 'frontend/src/lib/components/runs/GaugeCheckFlows.svelte',
 		reads: 1,
 		how: 'cut+band',
-		evidence: ['beforeForecast(observed.values, observed.startDate, forecastFrom)', 'beforeForecast(conv(observed), observed.startDate, forecastFrom)', '{band}'],
-		in: ['frontend/src/lib/components/runs/checkGauges.ts', 'frontend/src/lib/components/runs/checkGauges.ts', 'frontend/src/lib/components/runs/GaugeCheckFlows.svelte'],
-		note: 'issue #554: the checks-only gauges’ statistics and flow-duration curves stop at the forecast; their hydrographs band it'
+		evidence: ['beforeForecast(conv(observed), observed.startDate, forecastFrom)', '{band}'],
+		in: ['frontend/src/lib/components/runs/checkGauges.ts', 'frontend/src/lib/components/runs/GaugeCheckFlows.svelte'],
+		note: 'issue #554: the checks-only gauges’ flow-duration curves stop at the forecast; their hydrographs band it (their statistics are the summary’s)'
 	},
 	{ path: 'frontend/src/lib/components/runs/RunoffPanel.svelte', reads: 1, how: 'band', evidence: ['{band}'] },
 	{ path: 'frontend/src/lib/components/runs/RunsTab.svelte', reads: 1, how: 'passes-on', evidence: ['prefetchSeries('], note: 'warms the cache the charts read' },

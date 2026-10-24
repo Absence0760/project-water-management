@@ -956,7 +956,11 @@ The **results digest** of a run is the SHA-256 of `runResultsText`: RFC 8785
 JSON of the first day, the summary as JSON stores it, and each daily output's
 node, key and values hash, sorted (labels aren't in it). Two runs with the
 same digest have the same summary and the same value on every day of every
-output. The bundle is deterministic: entries sorted, fixed timestamps, so the
+output. Everything the engine scores is in the summary and so in the digest:
+the calibration statistics and, from engine 1.90.0, each gauge record's fit
+check inside the network (`plausibility.gauges[].fit`, NSE, KGE and PBIAS,
+model.md §2.10k), so a pack carries them and `reproduce:pack` re-derives
+them with the run. The bundle is deterministic: entries sorted, fixed timestamps, so the
 same pack gives the same bytes on the same zlib.
 
 **Built at issue.** The issue route (`backend/src/evidence/bundle.ts`) reads

@@ -393,7 +393,7 @@ const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
  * 1.19.0), then the first and last of those again at each gauge node with a
  * record of its own (engine ≥ 1.4.0). Unrounded.
  */
-export function* plausibilityLines(p: RunSummary['plausibility']): Generator<string> {
+export function* plausibilityLines(p: RunSummary['plausibility'], siteNodeId: string | null = null): Generator<string> {
 	yield csvRow(['Plausibility checks']);
 	if (p === undefined) {
 		yield csvRow(['Run made before engine 0.25.0: no plausibility checks']);
@@ -420,6 +420,12 @@ export function* plausibilityLines(p: RunSummary['plausibility']): Generator<str
 	for (const g of p.gauges ?? []) {
 		yield '';
 		yield csvRow([`At gauge ${g.name}`, 'Share of the catchment natural flow above it (%)', pct(g.naturalShare) as Cell]);
+		// The record's fit against the simulated flow there (engine ≥ 1.90.0, issue #554): a check, never the calibration
+		// score. Out of sample except at the calibration site, whose record the run is fitted to (every read day, its window too).
+		const fitLabel = g.nodeId === siteNodeId ? 'Fit check (in sample at the calibration site)' : 'Fit check (out of sample)';
+		if (g.fit === undefined) yield csvRow([fitLabel, 'Run made before engine 1.90.0: not computed']);
+		else if (g.fit === null) yield csvRow([fitLabel, 'Not computed: no day of the record outside the excluded periods']);
+		else yield csvRow([fitLabel, 'Record', RECORD_TEXT[g.flowKind], 'Days', g.fit.days, 'NSE', g.fit.nse, 'KGE', g.fit.kge, 'PBIAS (%)', g.fit.pbias]);
 		yield* naturalisedLines(g.naturalised);
 		yield '';
 		yield* lowFlowLines(g.lowFlow);
@@ -1171,7 +1177,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield* doubleMassLines(summary.dataQuality ? summary.dataQuality.doubleMass : undefined);
 	yield '';
 
-	yield* plausibilityLines(summary.plausibility);
+	yield* plausibilityLines(summary.plausibility, summary.calibration?.siteNodeId ?? null);
 	yield '';
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);
