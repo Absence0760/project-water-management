@@ -1786,7 +1786,8 @@ Lambda's list against the Sources table):
 | `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
 | `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt`, and its six neighbours' (`BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`) concatenated into a second file (gzip each); the kinds the search doesn't keep (roads, schools, …), a neighbour's places outside the basemap, and any other country's are left out at load | download the seven zips from download.geonames.org/export/dump/, unzip each in its own folder, `gzip -k ZA.txt`, and `cat` the six neighbours into one file, gzipped (steps below; maps.md § Gazetteer) |
-| `quaternaries`, `dam-register`, `gauge-stations`, `map-grid` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+| `map-grid` | allowed dataset by dataset: the Southwestern Cape surface (WAAS, 2007) only, by the operator's decision of 2026-10-23 (terms not stated; legal/map-data-licences.md § 3.3b), as dataset `WAAS-SWCape-2007`, stored with its recorded source, version and credit line whatever the file says; `Lynch-2004` and any other label refused (the gate and the Lambda), and so is a `source` | the grid cut to the client's area, in the JSON form `--out` writes (gzipped), never the ASCII grid itself | `pnpm import:map-grid waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n> --out waas-swcape.json.gz` (steps below) |
+| `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
 ```bash
 sha256sum worldcover.json.gz
@@ -1844,6 +1845,44 @@ place the load can take). Approve each run in the `production`
 environment. Never load the synthetic fixtures into production (the label
 `synthetic` is refused).
 
+**The MAP grid** (issue #560; [maps.md § MAP grid](./maps.md#map-grid)).
+Needs the first backend release that carries migration 238 deployed first
+(it lets `reference_load` record a `map-grid` load; the loader runs in the
+migrate Lambda that release ships). Then, from a folder outside the repo
+with the surface as received (an ESRI grid or GeoTIFF; never commit it):
+
+1. Check its coordinate system with `gdalinfo`. If it isn't WGS84 degrees
+   (EPSG:4326), warp it to square cells of about 100 m:
+   `gdalwarp -t_srs EPSG:4326 -tr 0.001 0.001 -r bilinear waas.tif waas-4326.tif`
+   (add `-s_srs` when the file names none: `EPSG:4222` for the Cape datum).
+2. Write the ASCII form: `gdal_translate -of AAIGrid waas-4326.tif waas.asc`.
+3. Cut it to the client's area and write the load's file. The box is the
+   client's catchments with a margin of about 0.05° (west, south, east,
+   north in degrees): it keeps the load small and shows no more of the
+   surface than the client's study needs.
+   `pnpm import:map-grid ./waas.asc --dataset WAAS-SWCape-2007 --source "Mean annual rainfall surface for the Southwestern Cape" --bbox <w,s,e,n> --out ./waas-swcape.json.gz`
+   (paths resolve from the folder the command is typed in; the `--source`
+   is the file's own and the load replaces it with the recorded credit
+   line). A 1° box at 0.001° is about a million cells, some 25 MB of JSON
+   before gzip; a box past the 200 MiB caps is the wrong box.
+4. Optionally load the same file locally first to look at it on the Map
+   tab: `pnpm import:map-grid ./waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n>`.
+5. Upload and load it:
+
+```bash
+sha256sum waas-swcape.json.gz
+aws s3 cp waas-swcape.json.gz s3://<reference_bucket>/reference/map-grid/waas-swcape-2007.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=map-grid -f key=reference/map-grid/waas-swcape-2007.json.gz -f sha256=<hex> -f dataset=WAAS-SWCape-2007
+```
+
+Approve it in the `production` environment. Check on the Map tab of the
+client's project: **MAP grid** on lists "WAAS-SWCape-2007" with its source
+line, and the map's credits show "MAP grid: Mean annual rainfall surface
+for the Southwestern Cape. …". Then Settings → Rain for each unit → **MAP
+from the grid** proposes each unit's MAP from it, beside the typed values,
+to check them. A wider box later is a reload under the same label (a load
+replaces its dataset).
+
 Limits: the file at most 200 MiB as uploaded and 200 MiB of text unzipped
 (a gzip bomb is cut off, not unpacked), refused with a reason beyond that;
 the migrate Lambda has `migrate_memory_mb` (3 008 MB, the least Terraform
@@ -1854,7 +1893,8 @@ grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
 HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
 32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
 Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
-Africa about 50 MB, so anything bigger is the wrong file. So has the
+Africa about 50 MB, so anything bigger is the wrong file. The MAP grid
+takes the default caps: the file is the client's area only. So has the
 gazetteer, 64 MiB uploaded and 128 MiB unzipped: South Africa's dump is
 12 MB of text and its six neighbours' 10 MB together (2.7 MB and 2.4 MB
 gzipped, 2026-10-13), all of GeoNames' about 1.6 GB. A load costs cents (3 GB × a few

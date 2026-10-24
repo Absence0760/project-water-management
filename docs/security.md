@@ -3363,7 +3363,11 @@ placed points. The server never trusts the browser with geometry:
   schema owner). The gazetteer's read policy is `FOR SELECT USING (true)`
   with `SELECT` granted to `water_app` and no write policy or grant; it is
   written only by the operator's load (`pnpm import:gazetteer`, or
-  `load-reference.yml` in production). 225 also creates the `pg_trgm`
+  `load-reference.yml` in production). The MAP grid is loaded the same way
+  in production since issue #560, for its one allowed dataset
+  (`WAAS-SWCape-2007`; any other label refused, and a `source` too, so the
+  stored credit is the recorded one), and migration 238 adds `map-grid` to
+  `reference_load`'s kinds. 225 also creates the `pg_trgm`
   extension (trusted, as the schema owner) for its trigram index. The
   Map's search, `GET /projects/:id/map/search?q=` (issue #523 C5), is
   viewer-gated (`requireRole … 'viewer'` under `withUser`), validates `q`

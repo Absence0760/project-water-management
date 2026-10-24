@@ -167,7 +167,8 @@ pnpm import:evaporation     # load the synthetic evaporation grid Settings → E
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
 pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm setup runs it);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
-                             # in WGS84 degrees (licences unconfirmed: local only, production loads refused; maps.md § MAP grid)
+                             # in WGS84 degrees; [--out <grid.json[.gz]>] writes it for a production load instead, which takes only the
+                             # Southwestern Cape surface (WAAS-SWCape-2007; Lynch and the rest refused; maps.md § MAP grid)
 pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm setup runs it);
                              # <ZA.txt[.gz]> [<BW.txt[.gz]> …] --dataset <label> [--source "<attribution>"] loads GeoNames' dumps of South Africa and its
                              # neighbours (BW, LS, MZ, NA, SZ, ZW; theirs inside the basemap only), several files as one dataset (CC BY 4.0; maps.md § Gazetteer)

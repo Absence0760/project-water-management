@@ -4101,7 +4101,10 @@ map" card) stays the schematic; this is the geography.
   its area; a name shows its polygon. **MAP grid** (`layers=mapgrid`, the
   ramp as its swatch): on, one loaded MAP grid's points in view, each
   coloured and labelled with its MAP ("812 mm"), the box saying how many,
-  from which grid and their range, the source line, a **Grid** picker when
+  from which grid and their range, the source line (with "Credit: …" when
+  the grid's attribution differs from its source; the Southwestern Cape
+  surface's credit also goes on the map's attribution control while its
+  points are drawn), a **Grid** picker when
   more than one is loaded, and "Zoom in to see the MAP grid" or "This view
   holds more than 5 000 of the grid’s points" when the view is too wide.
   **DEM grid** (`layers=demgrid`, the elevation ramp as its swatch; not

@@ -487,6 +487,8 @@ pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB downloa
 pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
 pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Settings → Evaporation from the map averages over the boundary
 pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
+                            # or a real one: <grid.asc> --dataset <label> --source "…" [--bbox w,s,e,n]; add --out <file.json.gz> to write
+                            # the cut grid for a production load instead (deployment.md § Reference datasets; maps.md § MAP grid)
 pnpm import:gazetteer       # the synthetic place and farm names (pnpm setup runs it): what the Map's search finds after the map's own layers
                             # or the real ones: GeoNames' dumps (ZA.txt, and BW/LS/MZ/NA/SZ/ZW.txt for the towns over the border), several files
                             # as one dataset, e.g. pnpm import:gazetteer ZA.txt BW.txt LS.txt MZ.txt NA.txt SZ.txt ZW.txt --dataset GeoNames-2026-10 (maps.md § Gazetteer)
