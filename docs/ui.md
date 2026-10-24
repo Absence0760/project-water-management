@@ -5425,7 +5425,10 @@ at each site, by name, so a new name that changes which one they read asks
 first, *Change which series runs read?* "Runs will read “Bergwater gauge”
 instead of “Average” for Rainfall — catchment …" (`lib/series/pick.ts`
 `renamePickChange`); Cancel puts the old name back. A series a data feed or
-an API key writes into keeps its name: the server refuses it with why.
+an API key writes into, or whose name a live key's series list holds, keeps
+its name, and a new name a feed or a key's list already uses is refused too:
+the server refuses it with why, shown under the box as *Not saved: …* (the
+feed case reads as words with why up front).
 Viewers read the name in the table row), **Product**, **Measured at**, **Source**,
 **Upload unit** and **Edited by hand** (the days typed in, "2021-10-02,
 2021-10-04 to 2021-10-06"), each only where it applies, wrapping to one

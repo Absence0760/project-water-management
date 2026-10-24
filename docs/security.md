@@ -1511,6 +1511,15 @@ and nothing else.
   key, history or feed (`ingest.db.test.ts` checks each, with its own series
   as the positive control). It can't write a series revision either, so a
   key's merge keeps none (like a data feed's).
+- **An editor learns one bit about keys** (240_series_name_key_listed). The
+  series rename (`PATCH …/series/:id { name }`, issue #556) must refuse a
+  name a key's `allowed_series` holds, but `api_key` stays owner-only. So
+  `app_series_name_key_listed(project, kind, name)` (`SECURITY DEFINER`,
+  pinned `search_path`, `EXECUTE` to `water_app` only) answers just whether a
+  live key of the project lists that `{ kind, name }`: false unless the
+  caller is an editor of the project, false in a key's transaction, and no
+  key id, name or list comes out (`series/rename.db.test.ts`, a stranger's
+  call as the negative).
 - **Automatic re-runs from a key** (042_auto_rerun). A key's ingest that
   changes days queues the project's automatic re-run (when it has them on)
   as the key's **creator** (`api_key.created_by`), through `SECURITY DEFINER

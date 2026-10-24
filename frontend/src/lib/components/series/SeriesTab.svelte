@@ -802,7 +802,9 @@
 			{#key viewing.id}
 				<dl class="details-list">
 					<!-- The name (issue #556): editors rename it here, saved on change like the source; viewers read it. A
-					     series a data feed writes keeps its name (the feed writes by it), so it reads as words with why. -->
+					     series a data feed writes keeps its name (the feed writes by it), so it reads as words with why. One an
+					     API key writes or lists by name (which an editor can't read) is refused by the server, whose reason shows
+					     as Not saved under the box. -->
 					<div class="detail detail-name">
 						{#if readonly || viewing.feed}
 							<dt>Name</dt>
