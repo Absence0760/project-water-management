@@ -1,4 +1,4 @@
-import { DAY_BOUNDARIES, provenanceError, provenanceLabel, sameOrigin, sameProvenance, scaleValues, seriesOrigin, SERIES_KINDS, seriesUnit, sourceError, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
+import { DAY_BOUNDARIES, provenanceError, provenanceLabel, sameOrigin, sameProvenance, scaleValues, seriesOrigin, SERIES_KINDS, seriesUnit, sourceError, type RainStationMeta, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
@@ -162,6 +162,14 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 export const handDaysSql = (t: string) => `(SELECT json_agg(json_build_array(to_char(lower(r), 'YYYY-MM-DD'), to_char(upper(r) - 1, 'YYYY-MM-DD')) ORDER BY r)
 		FROM unnest(${t}.hand_days) r)`;
 
+/**
+ * A rainfall station's details (239_rain_stations.sql, series/station.ts) as a SELECT over `t` returns them
+ * (engine RainStationMeta): null when none is recorded.
+ */
+export const stationSql = (t: string) => `CASE WHEN ${t}.station_map_mm IS NULL AND ${t}.station_lat IS NULL THEN NULL
+		ELSE json_build_object('mapMm', ${t}.station_map_mm::float8, 'mapSource', ${t}.station_map_source,
+			'lat', ${t}.station_lat::float8, 'lon', ${t}.station_lon::float8) END`;
+
 const feedMarkSql = (t: string) => `(SELECT json_build_object('source', f.source, 'days', d.n)
 		FROM data_feed f, LATERAL (SELECT sum(upper(r) - lower(r))::int AS n FROM unnest(${t}.feed_days) r) d
 		WHERE f.project_id = ${t}.project_id AND f.id = ${t}.feed_id AND d.n > 0)`;
@@ -175,6 +183,7 @@ const feedMarkSql = (t: string) => `(SELECT json_build_object('source', f.source
 // series (feed_stage); the values here stay as they are until it swaps in.
 // feed: the data feed that wrote days of the series, and how many (feedMarkSql).
 // handDays: the days a person typed in by hand (212_series_hand_days.sql), as inclusive [from, to] date pairs; null: none.
+// station: a rainfall station's MAP, its source and coordinates (239_rain_stations.sql, issue #553); null: none.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
 	to_char(${lastValueDaySql('time_series')}, 'YYYY-MM-DD') AS "lastValueDate",
 	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
@@ -182,7 +191,8 @@ export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", car
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
 		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding,
 	${feedMarkSql('time_series')} AS feed,
-	${handDaysSql('time_series')} AS "handDays"`;
+	${handDaysSql('time_series')} AS "handDays",
+	${stationSql('time_series')} AS station`;
 
 export interface MergeOptions {
 	/** A null in the incoming days leaves the existing value (default: it overwrites). */
@@ -385,6 +395,8 @@ export interface SeriesMetaRow {
 	feed: SeriesFeedMark | null;
 	/** The days a person typed in by hand (212_series_hand_days.sql), inclusive [from, to] date pairs; null: none. */
 	handDays: [string, string][] | null;
+	/** A rainfall station's details (239_rain_stations.sql, issue #553); null: none (only a rain_catchment_mm series with no site has them). */
+	station: RainStationMeta | null;
 }
 
 export interface SeriesFeedMark {

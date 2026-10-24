@@ -74,6 +74,8 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		source_unit: string | null;
 		source_unit_factor: number | null;
 		dws_station: string | null;
+		station_map_mm: number | null;
+		station_map_source: string | null;
 	}>(
 		// The outlet's: the first of each kind among the series with no site. A gauge node's own
 		// flow records (084_gauge_records): the first of each kind per site, keyed `<kind>@<node id>`
@@ -81,7 +83,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		// dws_station: an outlet flow record whose every reading a DWS feed wrote, read in the same statement as the
 		// values (#523 G8, runs/publishedRecords.ts): the station, else null.
 		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id,
-			source, source_unit, source_unit_factor,
+			source, source_unit, source_unit_factor, station_map_mm, station_map_source,
 			CASE WHEN site_node_id IS NULL AND kind IN ('flow_observed_m3s', 'flow_logger_m3s') AND feed_days IS NOT NULL THEN (
 				SELECT f.config->>'station' FROM data_feed f
 				WHERE f.project_id = t.project_id AND f.id = t.feed_id AND f.source = 'dws'
@@ -123,6 +125,11 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ewrHeadline: _headline, ...settings } = mergeSettings(
 		p[0]?.settings
 	) as unknown as Record<string, unknown>;
+	// A rainfall station's MAP (239_rain_stations.sql, issue #553) is the catchment gauge's: the catchment rain
+	// series the run reads (the first rain_catchment_mm with no site, above) gives settings.unitRain its gauge MAP.
+	const read = s.find((r) => r.site_node_id === null && r.kind === 'rain_catchment_mm');
+	const unitRain = stationGaugeMap(settings.unitRain, read ? { mapMm: read.station_map_mm, mapSource: read.station_map_source } : null);
+	if (unitRain !== settings.unitRain) settings.unitRain = unitRain;
 	// Registered volumes (engine ≥ 1.18.0, issue #72): what settings.allocationMode caps or scales the run
 	// to, and what its summary compares with. Only when the project has any, so a project without them
 	// runs on the same input as before.
@@ -137,6 +144,21 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	const baseline = withoutEwrKeepingRules({ settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model }).project;
 	const seriesChoice = await chirpsSeriesChoice(db, projectId);
 	return { input: { settings: baseline.settings, model: baseline.model, series, ...(seriesChoice ? { seriesChoice } : {}) }, seriesIds, publishedRecords };
+}
+
+/**
+ * settings.unitRain with the catchment rain station's MAP and its source as
+ * its gauge MAP (issue #553): the station wins over the settings, so a run
+ * reads the MAP stored with the series it reads. 239 copied each project's
+ * gaugeMapMm / gaugeMapSource onto that series, so a run is bit-identical
+ * across it. Only a stored unitRain object takes it (absent or null is
+ * catchment rain, where no gauge MAP plays a part, and the input stays as it
+ * was); without a station MAP the setting is returned as it is (the same
+ * object).
+ */
+export function stationGaugeMap(unitRain: unknown, station: { mapMm: number | null; mapSource: string | null } | null): unknown {
+	if (!station || station.mapMm === null || unitRain === null || typeof unitRain !== 'object' || Array.isArray(unitRain)) return unitRain;
+	return { ...(unitRain as Record<string, unknown>), gaugeMapMm: station.mapMm, gaugeMapSource: station.mapSource };
 }
 
 /**
