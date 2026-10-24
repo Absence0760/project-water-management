@@ -282,8 +282,10 @@ server ([§ Delineation](#delineation)).
   (`frontend/vite.config.ts` `workerChunks`, `virtual:maplibre-worker-url`),
   served from the app's origin and passed to `setWorkerUrl`. The existing
   `worker-src 'self'` holds: no `blob:` worker, no `'unsafe-eval'`, no CSP
-  change. The guard checks the worker imports MapLibre's shared code from
-  `chunks/` rather than carrying a second copy.
+  change. Since maplibre-gl 6.13 the worker is self-contained (upstream's
+  fix for a stale cached worker, maplibre-gl-js #8621), a second copy of the
+  code the main thread's chunk holds (~140 KB gzipped); it loads only with
+  the map, so the guard counts it under `mapKb` with the rest of MapLibre.
 - Tiles and glyphs are fetched with `connect-src` (MapLibre `fetch`es glyph
   ranges; they are not CSS fonts, so `font-src` is not involved):
   same-origin in production (`/tiles/*`, `/tiles/fonts/*`), so

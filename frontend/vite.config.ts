@@ -10,10 +10,11 @@ const WORKERS = [
 	{ file: fileURLToPath(new URL('./src/lib/calibration/autocal.worker.ts', import.meta.url)), id: 'virtual:autocal-worker-url', name: 'autocal.worker' },
 	// Preview: the engine on inputs the page holds, never stored (WP-1.17; the Yield panel's preview, lib/preview/runner.ts).
 	{ file: fileURLToPath(new URL('./src/lib/preview/engine.worker.ts', import.meta.url)), id: 'virtual:preview-worker-url', name: 'preview.worker' },
-	// MapLibre's own worker (the catchment map, issue #288): its ES module build imports the code it shares with
-	// the main thread (maplibre-gl-shared.mjs), so as an entry of the page build that file is one shared chunk,
-	// not a second copy (~150 KB gzip). lib/components/map/CatchmentMap.svelte hands this URL to setWorkerUrl;
-	// same-origin, so CSP worker-src 'self' holds (no blob:).
+	// MapLibre's own worker (the catchment map, issue #288). Since maplibre-gl 6.13 (maplibre-gl-js #8621) it is
+	// self-contained, no longer importing the code it shares with the main thread (maplibre-gl-shared.mjs is
+	// empty), so it is a second copy of that code (~140 KB gzip) and the bundle budget counts it under mapKb.
+	// lib/components/map/CatchmentMap.svelte hands this URL to setWorkerUrl; same-origin, so CSP worker-src
+	// 'self' holds (no blob:).
 	{ file: realpathSync(fileURLToPath(new URL('./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs', import.meta.url))), id: 'virtual:maplibre-worker-url', name: 'maplibre.worker', vendor: true }
 ] as const satisfies readonly { file: string; id: string; name: string; vendor?: boolean }[];
 
