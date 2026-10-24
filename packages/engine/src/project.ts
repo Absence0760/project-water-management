@@ -404,6 +404,13 @@ export interface ProjectSettings {
 	 */
 	unitRain?: UnitRainSettings | null;
 	/**
+	 * Which rainfall station forces the catchment and each land unit, and
+	 * which station corrects each unit's CHIRPS (issue #553, engine ≥ 1.91.0,
+	 * docs/model.md §2.4i). Absent or null, and for every unit without an
+	 * assignment: the rain as before (§2.4, §2.4h), bit for bit.
+	 */
+	rainStations?: RainStationSettings | null;
+	/**
 	 * Bias correction of CHIRPS rain where it fills in for blank catchment rain
 	 * (engine ≥ 0.7.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
 	 */
@@ -1018,6 +1025,83 @@ export interface UnitRainSettings {
 }
 
 export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' } as const;
+
+/**
+ * `settings.rainStations` (issue #553, engine ≥ 1.91.0, docs/model.md §2.4i).
+ * A station is a catchment rain series (`rain_catchment_mm`, no site) named
+ * by its series id; its record is ModelInput.series[stationSeriesKey(id)]
+ * and its MAP ModelInput.stations[id]. One rule for the catchment and for a
+ * unit: on the station's days (a reading the station checks keep, outside
+ * its unreliable periods) the area's rain is the station's × clamp(area MAP
+ * ÷ station MAP); on the others it is the area's CHIRPS × the station
+ * pairing's monthly factors, as is (no MAP ratio on top); after that the
+ * next fallback of the area (a unit: the catchment forcing; the catchment:
+ * the forecast).
+ */
+export interface RainStationSettings {
+	/**
+	 * Fragmentation's average catchment rainfall: the station × (catchment
+	 * MAP ÷ station MAP), with the catchment CHIRPS (`rain_chirps_mm`)
+	 * corrected against `correctAgainst` (default the same station) on its
+	 * gaps. Null / absent = the catchment rain as before (§2.4).
+	 */
+	catchment?: RainStationAssignment | null;
+	/**
+	 * Under settings.unitRain `perUnit`: land unit node id → its station. A
+	 * unit without one keeps the §2.4h chain. The unit's CHIRPS is
+	 * `rain_chirps_mm@<unit>`.
+	 */
+	units?: Record<string, RainStationAssignment> | null;
+	/**
+	 * The catchment's MAP, mm, and its source, for `catchment`'s ratio. Absent
+	 * or null = the area-weighted mean of the land units' MAPs (every land
+	 * unit needs one, else the ratio is 1 and the run warns).
+	 */
+	catchmentMapMm?: number | null;
+	catchmentMapSource?: string | null;
+	/**
+	 * Station id → where its CHIRPS is read for its pairing factors when it
+	 * has no CHIRPS cell series of its own (stationChirpsSeriesKey): the land
+	 * unit it stands in. Without either, a pairing on it is refused.
+	 */
+	sites?: Record<string, { unitId: string }> | null;
+	/**
+	 * Station id → inclusive [from, to] ISO date ranges the user marks
+	 * unreliable: those days count as gaps (§2.4e's rain-source periods,
+	 * generalised to every station).
+	 */
+	unreliable?: Record<string, [string, string][]> | null;
+	/**
+	 * Engine-only (never stored by the API): pairing factors to use instead
+	 * of fitting them, as UnitRainSettings.pinned (a seasonal outlook member,
+	 * a resumed run). Station id → 12 monthly factors.
+	 */
+	pinnedFactors?: Record<string, number[]> | null;
+}
+
+/** One area's station (RainStationSettings.catchment / .units[id]). */
+export interface RainStationAssignment {
+	/** The station's series id. */
+	stationId: string;
+	/** Scale the station's rain by area MAP ÷ station MAP (clamped 0.25–4). Default true. */
+	scaleToMap?: boolean;
+	/** The station whose pairing factors correct this area's CHIRPS on gap days. Default stationId. */
+	correctAgainst?: string | null;
+}
+
+/** Complete calendar years a station and the CHIRPS at it need in common for a pairing (issue #553): fewer refuses it. */
+export const STATION_PAIRING_MIN_YEARS = 5;
+
+/** ModelInput.series key of a station's record (issue #553): `rain_station_mm#<series id>`. Not a stored kind. */
+export const stationSeriesKey = (stationId: string): StationSeriesKey => `rain_station_mm#${stationId}`;
+export type StationSeriesKey = `rain_station_mm#${string}` | `rain_chirps_station_mm#${string}`;
+/** ModelInput.series key of the CHIRPS at a station's own cell (issue #553), when the backend has it: `rain_chirps_station_mm#<series id>`. */
+export const stationChirpsSeriesKey = (stationId: string): StationSeriesKey => `rain_chirps_station_mm#${stationId}`;
+
+/** ModelInput.stations[id] (issue #553): a station's name and details as the run read them. */
+export interface RainStationInput extends RainStationMeta {
+	name: string;
+}
 
 /** `settings.unitRain.reference` (engine ≥ 1.80.0, issue #500, docs/model.md §2.4h *Reference gauge*). */
 export interface UnitRainReference {
@@ -2894,7 +2978,7 @@ export interface ModelInput {
 	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey,
 	 * and a land unit's own rain (issue #482) UnitRainSeriesKey.
 	 */
-	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries };
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries } & { [key: StationSeriesKey]: DailySeries };
 	/**
 	 * Where the forecast rain (`rain_forecast_mm`) came from (engine ≥ 1.85.0,
 	 * docs/model.md §2.4h): 'chirps_gefs' when a CHIRPS-GEFS feed wrote every
@@ -2915,7 +2999,15 @@ export interface ModelInput {
 	 * Only a warning reads it.
 	 */
 	seriesChoice?: SeriesChoice | null;
+	/** Every rainfall station by series id (issue #553, engine ≥ 1.91.0); read only under settings.rainStations. Its records are series[stationSeriesKey(id)]. */
+	stations?: RainStationInputs | null;
 }
+
+/**
+ * ModelInput.stations (issue #553, engine ≥ 1.91.0): every rainfall station
+ * of the project by series id. Only settings.rainStations reads it.
+ */
+export type RainStationInputs = Record<string, RainStationInput>;
 
 /** A series a run could have read: its name and the first and last day it holds a value (null: none). */
 export interface SeriesSpan {
@@ -3718,6 +3810,60 @@ export interface UnitRainSummary {
 	reference?: UnitRainReferenceFit;
 }
 
+/** A station pairing's fit (summary.stations.pairings, issue #553): station vs the CHIRPS at it, 12 monthly factors. */
+export interface StationPairingFit {
+	stationId: string;
+	stationName: string;
+	/** Where the CHIRPS at the station came from: its own cell, or the CHIRPS of the unit it stands in. */
+	chirpsAt: { cell: true } | { unitId: string; unitName: string };
+	/** Null = refused (too short, or no CHIRPS at the station); `refused` says why. */
+	refused: string | null;
+	/** The first and last shared day, and the count of complete calendar years in common. */
+	fitFrom: string | null;
+	fitTo: string | null;
+	commonYears: number;
+	/** Shared days with a reading in both. */
+	days: number;
+	pinned: boolean;
+	/** Same shape as the reference gauge's months (§2.4h). Empty when refused. */
+	months: UnitRainReferenceMonth[];
+}
+
+/** One area's station forcing as the run applied it (summary.stations.catchment / .units). */
+export interface StationAreaForcing {
+	/** Null = the catchment. */
+	nodeId: string | null;
+	name: string;
+	stationId: string;
+	stationName: string;
+	areaMapMm: number | null;
+	areaMapSource: string | null;
+	stationMapMm: number | null;
+	stationMapSource: string | null;
+	/** area MAP ÷ station MAP before and after the clamp; null when either MAP is missing or scaling is off (× 1). */
+	ownRatio: number | null;
+	ratio: number;
+	clamped: boolean;
+	scaleToMap: boolean;
+	/** The pairing correcting this area's CHIRPS (its station id); null when refused or absent (its gaps fall to the next fallback). */
+	correctedBy: string | null;
+	/** Run days by source: the station (× ratio), the corrected CHIRPS, the next fallback, none (dry). */
+	days: { station: number; chirps: number; fallback: number; none: number };
+	/** Station days set aside: by the station checks (zero runs, accumulations) and by the user's unreliable periods. */
+	setAside: { checks: number; unreliable: number };
+}
+
+/** RunSummary.stations (issue #553, engine ≥ 1.91.0): present when settings.rainStations assigns any area. */
+export interface RainStationSummary {
+	pairings: StationPairingFit[];
+	catchment: StationAreaForcing | null;
+	/** Land units with a station, node-id order. */
+	units: StationAreaForcing[];
+	/** The catchment MAP the ratio used and whether it is the units' area-weighted mean. */
+	catchmentMapMm: number | null;
+	catchmentMapFromUnits: boolean;
+}
+
 export interface ForecastRainDays {
 	/** Days whose rain used is the forecast. */
 	days: number;
@@ -3970,6 +4116,8 @@ export interface RunSummary {
 	 * GR4J with the catchment rain (the default).
 	 */
 	unitRain?: UnitRainSummary;
+	/** How settings.rainStations forced the catchment and the units (issue #553, engine ≥ 1.91.0). */
+	stations?: RainStationSummary;
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;
