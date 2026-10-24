@@ -209,6 +209,8 @@ export type AuditKind =
 	| 'series.deleted'
 	| 'series.labelled'
 	| 'series.site_changed'
+	// A series renamed by PATCH (issue #556): `rename: { from, to }`, `name` the new one.
+	| 'series.renamed'
 	| 'series.held'
 	// A key's push into a series too short for the outlier limit: its auto run isn't published by itself until a person runs the model.
 	| 'series.unchecked'
