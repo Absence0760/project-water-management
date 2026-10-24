@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #561: the boundary rain proposal's keep/replace choice, daily product and start date (DayInput), and the attach form's separate-series guard. Measured locally on main @ baea0fe3b: 2016 KB, this branch 2019 KB (+2.4 KB of gzipped bytes). Headroom ~3 KB after it."
+}
