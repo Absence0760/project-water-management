@@ -95,7 +95,7 @@
 
 	// A link to one of the panels (`#members-h`, or an old Summary link sent here): the panels
 	// fill in as their data arrives, after the browser's own jump, so wait for the heading, then
-	// scroll there and hold it while the page settles (as River & reserve does), focusing it.
+	// scroll there and hold it while the page settles (as EWR does), focusing it.
 	let body: HTMLDivElement | undefined = $state();
 	// Bumped by Acts for the authority after each change, so the members list's authority lines follow it (229).
 	let authorityVersion = $state(0);

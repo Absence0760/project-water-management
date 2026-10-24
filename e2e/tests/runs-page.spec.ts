@@ -52,9 +52,9 @@ test('the run header links to the river and hydrological unit pages for its run,
 	await createRun(page.request, project.id, 'Second');
 	await openRuns(page, project.id, `&run=${first}`);
 	const outcomes = page.getByRole('navigation', { name: 'Outcomes for this run' });
-	await expect(outcomes.getByRole('link', { name: 'River & reserve for this run' })).toHaveAttribute('href', `?tab=river&run=${first}`);
+	await expect(outcomes.getByRole('link', { name: 'EWR for this run' })).toHaveAttribute('href', `?tab=river&run=${first}`);
 	await expect(outcomes.getByRole('link', { name: 'Hydrological units for this run' })).toHaveAttribute('href', `?tab=supply&run=${first}`);
-	// The arrow stands a space after each link's words ("River & reserve→" when the flex item lost the space).
+	// The arrow stands a space after each link's words ("EWR→" when the flex item lost the space).
 	for (const link of await outcomes.getByRole('link').all()) {
 		const gap = await link.evaluate((a) => {
 			const range = document.createRange();

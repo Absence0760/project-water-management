@@ -113,7 +113,7 @@ export function headlineProblem(h: EwrHeadline, nodes: readonly Node[], ewrRules
 }
 
 /**
- * What a run is judged by, in words, for River & reserve's line: resolved
+ * What a run is judged by, in words, for the EWR page's line: resolved
  * from the run itself (runs/ewrAssurance.ts resolveHeadline), so it names the
  * table the cards read, with "(automatic)" when the project hasn't chosen.
  */

@@ -40,7 +40,7 @@ describe('SectionNav', () => {
 				props: {
 					groups: [
 						{ label: 'Model', sections: [{ id: 'cal', label: 'Calibration against observed flow', bar: 'Calibration' }] },
-						{ label: 'On River & reserve', sections: [{ id: 'river-w', label: 'Water account', href: '?tab=river#res-water-account', page: 'River & reserve' }] }
+						{ label: 'On EWR', sections: [{ id: 'river-w', label: 'Water account', href: '?tab=river#res-water-account', page: 'EWR' }] }
 					],
 					label: 'Test sections'
 				}
@@ -50,8 +50,8 @@ describe('SectionNav', () => {
 		// The bar's hidden measuring copy says the bar's name too, never the heading.
 		expect(html).not.toContain('Calibration against observed flow');
 		// The page it goes to is in the link's name, not a hidden span Chromium would space off ("Water account , on …").
-		expect(html).toMatch(/href="\?tab=river#res-water-account"[^>]*aria-label="Water account, on River &amp; reserve"[^>]*>Water account</);
-		expect(html).not.toContain(', on River &amp; reserve</span>');
+		expect(html).toMatch(/href="\?tab=river#res-water-account"[^>]*aria-label="Water account, on EWR"[^>]*>Water account</);
+		expect(html).not.toContain(', on EWR</span>');
 	});
 
 	it('with no sections draws no menu, only the content', () => {
@@ -72,4 +72,3 @@ describe('SectionNav', () => {
 		expect(page).not.toContain('embedded');
 	});
 });
-

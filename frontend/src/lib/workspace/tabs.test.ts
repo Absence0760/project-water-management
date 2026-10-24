@@ -230,7 +230,7 @@ describe('navSections', () => {
 		for (const role of ['contributor', 'farmer', null] as const) expect(visibleTabs(role, {}, rendered)).toEqual(['overview']);
 	});
 
-	it('puts River & reserve under Outcomes, after the Summary, for owners, editors and viewers only', () => {
+	it('puts EWR under Outcomes, after the Summary, for owners, editors and viewers only', () => {
 		const rendered: TabId[] = ['overview', 'runs', 'river'];
 		for (const role of ['owner', 'editor', 'viewer'] as const) {
 			expect(navSections(visibleTabs(role, {}, rendered))).toEqual([{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'runs'] }]);
@@ -293,4 +293,3 @@ describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
 		expect(TAB_GROUP.map).toBe('core');
 	});
 });
-

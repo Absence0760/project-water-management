@@ -224,7 +224,7 @@ test('Compare runs names each run’s daily EWR on the water-year bars when a pr
 	await expect(years.getByTestId('reserve-years-daily')).toHaveText([' (the pragmatic EWR)', ' (the daily EWR from the DRM TAB file)']);
 	await expectNoViolations(page);
 
-	// River & reserve and the printed report draw the TAB run's EWR line by its source, and the caption counts days below it.
+	// EWR and the printed report draw the TAB run's EWR line by its source, and the caption counts days below it.
 	await page.goto(`/projects/${id}?tab=river&run=${whatIf}`);
 	const flow = page.getByRole('region', { name: /^Flow vs/ });
 	await expect(flow.getByText('EWR from the DRM TAB file (scaled)').first()).toBeVisible();

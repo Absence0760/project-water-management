@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
-	// Summary → the reserve at a glance (issue #162, item 10): the days below
-	// the pragmatic EWR at the outlet in each of the run's last twelve months
-	// (reserveStrip.ts), a small bar and its count per month, and a link to
-	// River & reserve, which has the flow chart itself. Built from the run
+	// EWR → the reserve at a glance (issue #162, item 10; the Summary's until
+	// issue #558): the days below the pragmatic EWR at the outlet in each of the
+	// run's last twelve months (reserveStrip.ts), a small bar and its count per
+	// month, at the top of the EWR page over the flow chart. Built from the run
 	// summary's monthly grid, so it draws with the KPI cards (no series to
 	// fetch, no chart library). The count is always written, so the bar's
 	// height is never the only cue. Beside a rule table it is headed by the
@@ -18,7 +18,7 @@
 		forecastFrom = null,
 		ruleTable = false,
 		daily = null,
-		more
+		id
 	}: {
 		/** The run summary's monthly grid; absent on a run older than it. */
 		compliance: EwrCompliance | null | undefined;
@@ -28,8 +28,8 @@
 		ruleTable?: boolean;
 		/** The run's daily outlet EWR source (summary.catchment.outletEwr, engine ≥ 1.77.0); absent = the pragmatic EWR. */
 		daily?: DailyEwrSource;
-		/** River & reserve, for the same run. */
-		more: { href: string; label: string };
+		/** The section's id, for links into it (links.ts RIVER_ANCHORS). */
+		id?: string;
 	} = $props();
 
 	const months = $derived(compliance ? recentMonths(compliance, forecastFrom) : []);
@@ -39,11 +39,8 @@
 	const bands = $derived(bandLabels(undefined, `days below ${words.test}`));
 </script>
 
-<section class="panel strip" aria-labelledby="strip-h" data-testid="reserve-strip">
-	<div class="head">
-		<h2 id="strip-h">{words.heading}</h2>
-		<a class="small" href={more.href}>{more.label}</a>
-	</div>
+<section class="panel strip" {id} aria-labelledby="strip-h" data-testid="reserve-strip">
+	<h2 id="strip-h">{words.heading}</h2>
 	{#if !compliance}
 		<p class="muted small">This run was made before the monthly EWR record existed. Run the model again to see it by month.</p>
 	{:else if !months.length}
@@ -72,23 +69,11 @@
 <style>
 	.strip {
 		margin: 0;
-	}
-	.head {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 0.25rem 0.75rem;
-		margin: 0 0 0.25rem;
-	}
-	/* A 24 px target (WCAG 2.5.8). */
-	.head a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 24px;
+		/* Its own width decides the rows: it sits in half the EWR page's column beside the tiles (issue #558). */
+		container: reserve-strip / inline-size;
 	}
 	h2 {
-		margin: 0;
+		margin: 0 0 0.25rem;
 		font-size: 1.05rem;
 	}
 	.what {
@@ -176,8 +161,8 @@
 		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
-	/* A phone: two rows of six. */
-	@media (max-width: 520px) {
+	/* Narrow (a phone): two rows of six. */
+	@container reserve-strip (max-width: 26rem) {
 		.months {
 			grid-template-columns: repeat(6, minmax(0, 1fr));
 			row-gap: 0.6rem;

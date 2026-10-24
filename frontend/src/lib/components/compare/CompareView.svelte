@@ -56,7 +56,7 @@
 	// overlay (issue #8) and the days below the reserve each year (issue #17 A4), so they are static
 	// imports: the band sits in this chunk (tab chunks have their own ceiling,
 	// scripts/guards/check_web_bundle_budget.mjs), and the overlay and the reserve years, which the
-	// Scenarios and River & reserve tabs load lazily, stay shared chunks this one preloads.
+	// Scenarios and EWR tabs load lazily, stay shared chunks this one preloads.
 	import PairedUncertaintyPanel from '$lib/components/uncertainty/PairedUncertaintyPanel.svelte';
 	import CompareOverlay from '$lib/components/compare/CompareOverlay.svelte';
 	import ReserveYearsChart from '$lib/components/compare/ReserveYearsChart.svelte';
@@ -359,14 +359,14 @@
 				]
 			: []
 	);
-	// What the water-year bars count, named as River & reserve names it (issue #177), each run by its project's choice (#444).
+	// What the water-year bars count, named as EWR names it (issue #177), each run by its project's choice (#444).
 	const yearsBelow = $derived(
 		daysBelowTestOf(whatIfs.flatMap((s) => [cmp[s].data!.a, cmp[s].data!.b].map((x) => ({ summary: x.run.summary, choice: x.project.ewrHeadline }))))
 	);
 	const H = $derived(`h${level}`);
 
 	// The section menu (common/SectionNav, issue #462): above the comparison, or from 80rem of it (a 1440 px
-	// window) a side index on its left, as River & reserve's. Only what is drawn: the summary once a
+	// window) a side index on its left, as the EWR page's. Only what is drawn: the summary once a
 	// comparison is in, the full comparison's panels once its pair is.
 	const COMPARE_RAIL_FROM_REM = 80;
 	const navGroups = $derived(

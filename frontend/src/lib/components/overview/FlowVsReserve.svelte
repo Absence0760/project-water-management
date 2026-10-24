@@ -1,5 +1,5 @@
 <script lang="ts">
-	// River & reserve → the run's outflow against the pragmatic EWR, the Runs
+	// EWR → the run's outflow against the pragmatic EWR, the Runs
 	// tab's "EWR vs simulated outflow" chart (flowSeries.ts), with a 30 days /
 	// 1 year / All switch and the days below the pragmatic EWR shaded (the run's
 	// ewr_shortfall series, summaryChart.ts). With the outlet's Reserve rule
@@ -15,8 +15,8 @@
 	// On a forecast run they and their count are the record's (issue #51): the
 	// days before the forecast; the forecast's days at risk are the Forecast
 	// panel's, and the band marks the forecast days on the plot.
-	// The Summary drew this chart too until issue #162: it now shows the
-	// days below the reserve by month (ReserveStrip.svelte) and links here.
+	// The Summary drew this chart too until issue #162; the days below the
+	// reserve by month (river/ReserveStrip.svelte) sit above it on the EWR page.
 	import { beforeForecast, type DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';

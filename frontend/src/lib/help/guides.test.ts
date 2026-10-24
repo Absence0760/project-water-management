@@ -253,7 +253,8 @@ function stripAll(text: string, re: RegExp): string {
 }
 
 function settingsPaths(text: string): string[][] {
-	const plain = stripAll(text, /<\/?[A-Za-z][^<>]*>/g)
+	// A link's decorative arrow (aria-hidden) ends the link, not a step: "EWR →" before the next link is no path (issue #558).
+	const plain = stripAll(text.replace(/<span aria-hidden="true">→<\/span>/g, ''), /<\/?[A-Za-z][^<>]*>/g)
 		.replace(/&amp;/g, '&')
 		.replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1')
 		.replace(/\*\*?/g, '')

@@ -144,13 +144,13 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/ui.md § Alerts; docs/api.md § Alerts'
 	},
 	'ewr-traffic-light': {
-		long: 'A catchment’s EWR status is judged at the outlet over the 30 days up to the last day of its figures (the published run, or the latest run when none is published). It is green when the EWR was not met on fewer than 5 % of those days, amber fewer than 20 %, and red otherwise. Those are provisional defaults, still to be confirmed by the catchment’s hydrologist.\n\nA team’s owners can set the team’s own thresholds in Team settings, and every team project is then judged by them; a personal project uses the defaults. The status orders the project list, the team page and Needs attention. It summarises one outlet over one month: read the run’s River & reserve page for the sites and days behind it.',
+		long: 'A catchment’s EWR status is judged at the outlet over the 30 days up to the last day of its figures (the published run, or the latest run when none is published). It is green when the EWR was not met on fewer than 5 % of those days, amber fewer than 20 %, and red otherwise. Those are provisional defaults, still to be confirmed by the catchment’s hydrologist.\n\nA team’s owners can set the team’s own thresholds in Team settings, and every team project is then judged by them; a personal project uses the defaults. The status orders the teams list and the team page. The project list shows irrigation supplied instead: the share of all units’ demand supplied over the run, green from 95 %, amber from 80 %, red below (provisional too, and not yet a team setting). The EWR page lights each month of a run with the same EWR bands. The EWR status summarises one outlet over one month: read the run’s EWR page for the sites and days behind it.',
 		aliases: ['traffic lights', 'EWR status', 'red amber green', 'thresholds', 'status pill'],
 		related: ['ewr-days-not-met', 'team', 'needs-attention'],
 		source: 'docs/ui.md § Project list, § Teams (decision D11)'
 	},
 	'needs-attention': {
-		long: 'At the top of the Projects page, up to four cards name the catchments to look at first and why, most urgent first: a red EWR, hydrological units short this week, alerts firing, an amber EWR, failing or late data feeds, rain recorded after the latest figures, or figures more than 7 days old. A catchment that hasn’t run is not flagged. Show all, most urgent first sorts the whole list the same way.',
+		long: 'At the top of the Projects page, up to four cards name the catchments to look at first and why, most urgent first: red irrigation supply, hydrological units short this week, alerts firing, amber irrigation supply, failing or late data feeds, rain recorded after the latest figures, or figures more than 7 days old. A catchment that hasn’t run is not flagged. Show all, most urgent first sorts the whole list the same way.',
 		aliases: ['attention', 'urgent', 'stale figures'],
 		related: ['ewr-traffic-light', 'alert-rules'],
 		source: 'docs/ui.md § Project list (Needs attention)'

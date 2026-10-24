@@ -115,11 +115,11 @@ describe('resultGroups', () => {
 describe('otherPageGroups', () => {
 	it('lists the main moved panels under their pages, by those pages’ headings, linked with the run (issue #462)', () => {
 		const groups = otherPageGroups('r 1');
-		expect(groups.map((g) => g.label)).toEqual(['On River & reserve', 'On Hydrological units']);
+		expect(groups.map((g) => g.label)).toEqual(['On EWR', 'On Hydrological units']);
 		expect(groups.flatMap((g) => g.sections.map((s) => [s.label, s.href, s.page]))).toEqual([
-			[RESERVE_MONTHS_HEADING, '?tab=river&run=r%201#res-reserve', 'River & reserve'],
-			[EWR_MONTHS_HEADING, '?tab=river&run=r%201#res-ewr-grid', 'River & reserve'],
-			['Water account', '?tab=river&run=r%201#res-water-account', 'River & reserve'],
+			[RESERVE_MONTHS_HEADING, '?tab=river&run=r%201#res-reserve', 'EWR'],
+			[EWR_MONTHS_HEADING, '?tab=river&run=r%201#res-ewr-grid', 'EWR'],
+			['Water account', '?tab=river&run=r%201#res-water-account', 'EWR'],
 			['Curtailment targets', '?tab=supply&run=r+1#res-curtailment', 'Hydrological units'],
 			['Assurance of supply', '?tab=supply&run=r+1#res-assurance', 'Hydrological units']
 		]);

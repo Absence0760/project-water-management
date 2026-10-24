@@ -66,7 +66,7 @@
 	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
 	const loadUnitRainPanel = () => import('./UnitRainPanel.svelte');
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
-	// seasonal outlook and the water account moved to River & reserve (issue #17, river/RiverTab.svelte);
+	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
 	const loadForecastPanel = () => import('$lib/components/forecast/ForecastPanel.svelte');
@@ -196,7 +196,7 @@
 		}
 	}
 	onMount(() => {
-		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …) or Hydrological units
+		// A link to a panel that moved to EWR (#res-reserve, #res-ewr, …) or Hydrological units
 		// (#res-curtailment from a bookmarked "units short this week", …), or to the link rows those
 		// groups left here for a while (#res-river, #res-units), issue #17: there instead, for the same
 		// run (and reporting window), replacing this entry so Back skips it.
@@ -654,7 +654,7 @@
 	{#if !noRuns}
 	<div class="detail">
 		<!-- In-page menu, grouped by the question each panel answers: from 62rem of results a side index on the
-		     right (the runs list is the left column), with the main panels of River & reserve and Hydrological
+		     right (the runs list is the left column), with the main panels of EWR and Hydrological
 		     units under their pages; narrower a bar sticking under the app header above the results (issue #462). -->
 		<SectionNav groups={navGroups} label="Result sections" railFrom={RESULTS_RAIL_FROM_REM} railSide="right" bind:layout={navLayout}>
 		{#if detailError && !detail}
@@ -712,8 +712,8 @@
 							<span class="muted">For this run:</span>
 							<a
 								href={riverHref(shownRunId)}
-								aria-label="River & reserve for this run"
-								title="EWR against outflow, reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account">River &amp; reserve <span aria-hidden="true">→</span></a
+								aria-label="EWR for this run"
+								title="EWR against outflow, reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account">EWR <span aria-hidden="true">→</span></a
 							>
 							<a
 								href={supplyHref(shownRunId)}
@@ -942,7 +942,7 @@
 		gap: 0 0.9rem;
 		margin-top: 0.2rem;
 	}
-	/* A flex item drops the space before the arrow ("River & reserve→"), so the gap puts it back. */
+	/* A flex item drops the space before the arrow ("EWR→"), so the gap puts it back. */
 	.outcomes a {
 		display: inline-flex;
 		align-items: center;

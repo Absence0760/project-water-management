@@ -26,7 +26,7 @@ const OWNER_TABS = [
 	'Data',
 	'Settings & calibration',
 	'Summary',
-	'River & reserve',
+	'EWR',
 	'Hydrological units',
 	'Runs & results',
 	'Dams',
@@ -66,7 +66,7 @@ test.describe('1440×960', () => {
 		void owner;
 		const project = await seedRunnableProject(page.request, LONG_NAME);
 		await page.goto(`/projects/${project.id}?tab=river`);
-		await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
+		await expect(page.getByRole('heading', { level: 1, name: 'EWR' })).toBeVisible();
 
 		// Data's link also carries its "series behind" badge, so match each label at the start.
 		const links = nav(page).getByRole('link');
@@ -77,7 +77,7 @@ test.describe('1440×960', () => {
 		// The budget is for the worst case: every section shown.
 		await showAllSections(page.request);
 		await page.reload();
-		await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
+		await expect(page.getByRole('heading', { level: 1, name: 'EWR' })).toBeVisible();
 		await expect(links).toHaveText(OWNER_TABS.map((t) => new RegExp(`^${t}`)));
 		for (const link of await links.all()) await expect(link).toBeInViewport({ ratio: 1 });
 		await expect(account(page)).toBeInViewport({ ratio: 1 });

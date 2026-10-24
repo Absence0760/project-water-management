@@ -41,7 +41,7 @@
 		sites: EwrAssuranceSite[];
 		/** The printable report: Month by month opens (the report shows each site in its own panel). */
 		print?: boolean;
-		/** The heading. River & reserve calls it "Reserve rules met, by month", apart from its EWR grid (issue #465). */
+		/** The heading. EWR calls it "Reserve rules met, by month", apart from its EWR grid (issue #465). */
 		title?: string;
 	} = $props();
 

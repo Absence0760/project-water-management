@@ -99,7 +99,7 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	const saved = await getJson<{ project: { settings: { outlook: unknown } } }>(page.request, `/projects/${project.id}`);
 	expect(saved.project.settings.outlook).toEqual({ season: null, planningShare: 0.55, review: null });
 
-	// River & reserve: no outlook yet, then one with a monthly plan (Oct–Dec at 100 %, Jan–Apr at 80 %), queued until the worker runs it.
+	// EWR: no outlook yet, then one with a monthly plan (Oct–Dec at 100 %, Jan–Apr at 80 %), queued until the worker runs it.
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('seasonal-outlook');
 	await expect(panel).toHaveAttribute('data-state', 'empty');

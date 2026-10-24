@@ -3,10 +3,10 @@
 // control's outline and a chart's marks are held to 3:1 here by
 // support/contrast.ts, in light and dark, on the screens where the audit found
 // them under: the flow unit picker (Transfers, the node sheet) and the
-// days-below-reserve bars' part years (River & reserve). Then the dark-only
+// days-below-reserve bars' part years (EWR). Then the dark-only
 // fixes, read from computed styles: the overlay tokens, a disabled main
 // button, the map's controls, the help pictures; and a badge's case.
-// The canvas (uPlot) line charts on Runs & results, Data, River & reserve,
+// The canvas (uPlot) line charts on Runs & results, Data, EWR,
 // Compare and Hydrological units are held to the same 3:1 (series, lane
 // strips, legend swatches) and their axis labels to 4.5:1, with a positive
 // control on a real chart and one on a drawn canvas (issue #521, round 6).
@@ -133,7 +133,7 @@ test.describe('canvas charts', () => {
 				await expectNonTextContrast(page, { within: 'main', except });
 			});
 
-			test('River & reserve: the flow, the reserve and its rule are at 3:1', async ({ page, owner }) => {
+			test('EWR: the flow, the reserve and its rule are at 3:1', async ({ page, owner }) => {
 				void owner;
 				const id = await seedRiverProject(page.request, `Contrast canvas river ${colorScheme}`);
 				await createRun(page.request, id, 'Baseline');

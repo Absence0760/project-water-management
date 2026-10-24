@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { navText } from '$lib/components/common/sectionNav';
-import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
+import { RIVER_ANCHORS, riverAnchor, riverHref, summaryToRiverAnchor } from './links';
 import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
@@ -42,6 +42,20 @@ const site = (nodeId: string | null, name: string, met: number, months: number):
 	}) as EwrAssuranceSite;
 
 const tile = (ks: RiverKpi[], id: RiverKpi['id']) => ks.find((k) => k.id === id)!;
+
+describe('summaryToRiverAnchor', () => {
+	it('sends the Summary’s old reserve strip and any EWR panel to the EWR page (issue #558)', () => {
+		expect(summaryToRiverAnchor('strip-h')).toBe('res-reserve-strip');
+		expect(summaryToRiverAnchor('reserve-strip')).toBe('res-reserve-strip');
+		expect(summaryToRiverAnchor('res-reserve-strip')).toBe('res-reserve-strip');
+		expect(summaryToRiverAnchor('res-reserve')).toBe('res-reserve');
+		// The strip is linkable on the EWR page, but not in its menu (it is beside the tiles).
+		expect(riverAnchor('res-reserve-strip')).toBe(true);
+		expect(riverNavGroups(false, false).flatMap((g) => g.sections.map((x) => x.id))).not.toContain('res-reserve-strip');
+		// The Summary's own panels stay.
+		for (const id of ['', 'members-h', 'res-curtailment']) expect(summaryToRiverAnchor(id)).toBeNull();
+	});
+});
 
 describe('riverHref and riverAnchor', () => {
 	it('builds ?tab=river with the run and a panel', () => {
@@ -155,12 +169,24 @@ describe('riverKpis', () => {
 		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', '37 days in an average year']);
 		expect(tile(ks, 'outflow')).toMatchObject({ value: '0.500', unit: 'm³/s', sub: ['50% of natural'] });
 	});
-	it('adds the rule-table months to the reserve tile when the project has one, after the pragmatic lines and named as the rules', () => {
+	it('heads with Reserve rules met when a rule table judges, the Summary’s old headline card merged with EWR not met (issue #558)', () => {
 		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, null);
-		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', '37 days in an average year', 'Reserve rules: 91.7% of months']);
+		expect(ks.map((k) => k.id)).toEqual(['reserve', 'outflow']);
+		expect(tile(ks, 'reserve')).toMatchObject({ term: 'Reserve rules met', value: '91.7%', unit: 'of months', flagged: true, delta: null });
+		// The rule table's months, then the pragmatic EWR the strip and the flow chart count, named as that test.
+		expect(tile(ks, 'reserve').sub).toEqual(['33 of 36 months at the outlet', 'EWR not met (pragmatic): 10.0% of days, 73 of 730 days at the outflow gauge', '37 days in an average year']);
+	});
+	it('compares Reserve rules met with the previous run at the same site', () => {
+		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, {
+			summary: summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 30, 36)] }),
+			days
+		});
+		expect(tile(ks, 'reserve').delta?.delta).toBeCloseTo(3 / 36);
+		expect(tile(ks, 'reserve').spec.better).toBe('higher');
 	});
 	it('leaves the rule-table months off when the project judges by the pragmatic EWR (issue #444)', () => {
 		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, null, { source: 'pragmatic' });
+		expect(ks.map((k) => k.id)).toEqual(['ewr', 'outflow']);
 		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', '37 days in an average year']);
 	});
 	it('gives a short or dry run its days a year to one decimal (no trailing zero), and one day as "day"', () => {

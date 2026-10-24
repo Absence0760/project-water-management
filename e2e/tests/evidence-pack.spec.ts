@@ -59,7 +59,7 @@ interface ApiPack {
 	bundleSha256: string | null;
 }
 
-/** A nominated baseline with the declared rule, and the ensemble run to it on River & reserve (the browser runs it). */
+/** A nominated baseline with the declared rule, and the ensemble run to it on EWR (the browser runs it). */
 async function seed(page: Page, name: string) {
 	const project = await seedRunnableProject(page.request, name);
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', ewrRules: [TABLE], evidenceUncertaintyRule: RULE });

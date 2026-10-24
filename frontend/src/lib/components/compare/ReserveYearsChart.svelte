@@ -20,7 +20,7 @@
 	// reserveDaysByWaterYear, the same test as the summary's EWR days not met.
 	// Its own chunk (CompareView loads it lazily); series come through the
 	// Runs tab's cache. `below` names the test in its labels: "the reserve", or
-	// "the pragmatic EWR" on River & reserve beside a rule table (river.ts
+	// "the pragmatic EWR" on EWR beside a rule table (river.ts
 	// reserveYearsWords, issue #177); Compare passes daysBelowTestOf, and each
 	// run its own daily test (`daily` on ChartRun), named when they differ.
 	import { reserveDaysByWaterYear, waterYearLabel, type ReserveYear } from '@water-management/engine';

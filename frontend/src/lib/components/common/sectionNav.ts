@@ -1,5 +1,5 @@
 // The "On this page" menu shared by the long workspace pages (SectionNav.svelte):
-// Settings & calibration, Runs & results, River & reserve, Hydrological units, Data
+// Settings & calibration, Runs & results, EWR, Hydrological units, Data
 // and Compare runs, and the Network node sheet's form (in a box of its own, `onjump`).
 
 export interface NavSection {
@@ -20,8 +20,8 @@ export interface NavSection {
 	 */
 	href?: string;
 	/**
-	 * The page an `href` link goes to ("River & reserve"): screen readers hear
-	 * ", on River & reserve" after its name (`pageLinkName`), as its group's heading says it to the eye.
+	 * The page an `href` link goes to ("EWR"): screen readers hear
+	 * ", on EWR" after its name (`pageLinkName`), as its group's heading says it to the eye.
 	 */
 	page?: string;
 	/**
@@ -41,7 +41,7 @@ export interface NavGroup {
 /**
  * A link to another page's name for screen readers, "<what it says>, on <page>" (issue #462), carried as its
  * aria-label; null for a link on this page, which its text names. Not a hidden span after the text: the
- * hidden class positions it, and Chromium then spaces it off ("by month , on River & reserve").
+ * hidden class positions it, and Chromium then spaces it off ("by month , on EWR").
  */
 export function pageLinkName(sec: Pick<NavSection, 'label' | 'bar' | 'page' | 'problem'>, where: 'bar' | 'rail'): string | null {
 	if (!sec.page) return null;
@@ -66,7 +66,7 @@ export function navEmpty(groups: NavGroup[]): boolean {
  * followed link named (`target`, the URL's fragment) still starts on the
  * screen (its top between 0 and `viewH`): when the panels after it are
  * shorter than the window, the page ends before its top can reach the line,
- * and it is the one being read (River & reserve's `#res-outlook` once the
+ * and it is the one being read (the EWR page's `#res-outlook` once the
  * water account got shorter, issue #175). `tops` are viewport offsets in page
  * order; sections not rendered yet are simply absent.
  */

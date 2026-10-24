@@ -63,7 +63,7 @@ test('an application on the nominated run gives the full evidence report, draft 
 	void owner;
 	const { project, baseline, upper } = await seed(page, 'Evidence report');
 
-	// The ensemble, run to the declared rule on River & reserve (the server draws the seed and checks it).
+	// The ensemble, run to the declared rule on EWR (the server draws the seed and checks it).
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	await panel.getByRole('button', { name: 'Run…' }).click();

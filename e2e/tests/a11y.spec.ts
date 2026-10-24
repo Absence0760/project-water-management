@@ -21,11 +21,11 @@ const BEST_PRACTICE = { rules: ['empty-table-header', 'landmark-unique'] };
 
 // Each tab waits for the content axe should see, not just the tab shell.
 const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
-	// The first screen with its reserve strip, and the alerts and published baseline below it (issue #17, #162).
+	// The first screen with its KPI cards (irrigation first, issue #558), and the alerts and published baseline below it (issue #17, #162).
 	{
 		id: 'overview',
 		ready: async (p) => {
-			await expect(p.getByRole('region', { name: 'Days below the reserve' }).getByRole('listitem').first()).toBeVisible();
+			await expect(p.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="shortfall"]')).toBeVisible();
 			await expect(p.getByRole('region', { name: 'Supply by hydrological unit' })).toBeVisible();
 			await expect(p.getByRole('region', { name: 'Active alerts' })).toHaveAttribute('data-ready', 'true');
 			await expect(p.getByRole('region', { name: 'Published baseline' })).toHaveAttribute('aria-busy', 'false');

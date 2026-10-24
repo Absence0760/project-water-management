@@ -1,7 +1,7 @@
 <!--
 	Sensitivity runs: EWR compliance as a range (calibration research CR-21,
 	docs/ui.md § Sensitivity runs, docs/model.md §2.10g). Beside the
-	uncertainty bands on River & reserve.
+	uncertainty bands on EWR.
 
 	Run fetches the run's own inputs and runs the central case and each
 	factor's low and high (rain, pan coefficient, dam evaporation,

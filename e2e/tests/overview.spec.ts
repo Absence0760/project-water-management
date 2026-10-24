@@ -2,7 +2,7 @@
 // page loads (series, runs) and the model being edited. The headline facts, details and who has access moved to
 // the Project page (project-page.spec.ts).
 import type { Page } from '@playwright/test';
-import { createProject, createRun, putModel, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { seedSupplyProject } from '../support/supply.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { pinClockToProject } from '../support/clock.ts';
@@ -146,18 +146,24 @@ test('the latest run: its headline figures, the change from the run before, and 
 	await expect(context).toContainText('ran today');
 	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
 	const card = (term: string) => latest.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) });
-	await expect(card('EWR not met')).toContainText('of days');
 	await expect(card('Irrigation supplied')).toContainText('of demand');
+	await expect(card('Irrigation supplied')).toContainText(/(\d+ of \d+ hydrological units below 95%|all hydrological units ≥ 95%)/);
+	// The volume not supplied over the run (120 days) and in an average year (issue #558).
+	await expect(card('Shortfall')).toContainText(/[\d.]+Mm³/);
+	await expect(card('Shortfall')).toContainText('demand not supplied over the run’s 120 days');
+	// No drought restriction in this catchment: the worst-supplied unit instead of the days curtailed.
+	await expect(card('Worst-supplied unit')).toContainText(/[\d.]+%supplied/);
 	// The seeded run ends on 28 Jan 2022, long past: the card names that day, not "today" (issue #162).
 	await expect(card('Dams on 28 Jan 2022')).toContainText(/\d+%full/);
 	await expect(card('Dams today')).toHaveCount(0);
 	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
-	// Reserve · Irrigation supplied · Dams (on the run's last day) · NSE, in that order; the mean outflow is only on River & reserve
-	// (river-page.spec.ts), with its change.
-	await expect(latest.locator('dl.stats > div > dt')).toContainText(['EWR not met', 'Irrigation supplied', 'Dams on 28 Jan 2022', 'Calibration NSE']);
-	await expect(latest.locator('[data-headline="outflow"]')).toHaveCount(0);
-	// Same inputs, so every change is zero, and it says which run it is against.
+	// Irrigation first (issue #558): supplied · Shortfall · the curtailment card · Dams (on the run's last day). The EWR's
+	// headline card and the mean outflow are the EWR page's (river-page.spec.ts), the calibration NSE Runs & results'.
+	await expect(latest.locator('dl.stats > div > dt')).toHaveText(['Irrigation supplied', 'Shortfall', 'Worst-supplied unit', 'Dams on 28 Jan 2022']);
+	for (const id of ['ewr', 'reserve', 'nse', 'outflow']) await expect(latest.locator(`[data-headline="${id}"]`)).toHaveCount(0);
+	// Same inputs, so every change is zero, and it says which run it is against (the Shortfall's by the year).
 	await expect(card('Irrigation supplied')).toContainText(/0 pp\s*no change\s*vs previous run/);
+	await expect(card('Shortfall')).toContainText(/no change\s*Mm³ a year, vs previous run/);
 	await expect(latest).toContainText('Changes are against the previous run, Baseline.');
 
 	await context.getByRole('link', { name: 'Open in Runs' }).click();
@@ -188,7 +194,7 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	const project = await seedRunnableProject(page.request, 'Summary order');
 	await page.goto(`/projects/${project.id}`);
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'page');
-	// No run yet: the checklist is the first thing on the tab, and there is no KPI row or reserve strip.
+	// No run yet: the checklist is the first thing on the tab, and there is no KPI row.
 	await expect(setup(page)).toBeVisible();
 	const box = async (name: string | RegExp) => (await page.getByRole('region', { name, exact: typeof name === 'string' }).boundingBox())!;
 	expect((await box(/^Set(up| up this catchment)/)).y).toBeLessThan((await box('Needs attention')).y);
@@ -197,9 +203,12 @@ test('the Summary leads with the results once there is a run, the setup checklis
 
 	await createRun(page.request, project.id, 'Baseline');
 	await page.reload();
-	// The reserve by month, not the flow chart: that is River & reserve's alone (issue #162).
-	await expect(page.getByRole('region', { name: 'Days below the reserve' }).getByRole('listitem').first()).toBeVisible();
+	// Irrigation, not the EWR (issue #558): the reserve strip and the flow chart are the EWR page's, one link away.
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="supply"]')).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Days below the reserve' })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
+	await expect(page.getByText(/EWR not met|Reserve rules met/)).toHaveCount(0);
+	await expect(page.getByRole('link', { name: /^Reserve and EWR results\s+EWR$/ })).toHaveAttribute('href', /^\?tab=river&run=/);
 	await expect(page.getByRole('button', { name: 'Setup complete' })).toBeVisible();
 	await expect(setup(page)).toHaveCount(0);
 	// Each dam's level lives on the Dams page's cards, which the Dams today card and the sidebar open: no
@@ -210,18 +219,14 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	// The bars' % says what it measures.
 	await expect(page.getByTestId('supply-bars-what')).toHaveText("Share of each hydrological unit's irrigation demand supplied, latest run");
 
-	// First screen (issue #17 A1, #162): the KPI row, the reserve strip across the page under it, then Needs
-	// attention with the active alerts under it, beside Supply by unit (the flow chart that was here is River &
-	// reserve's alone).
+	// First screen (issue #17 A1, #162, #558): the KPI row, then Needs attention with the active alerts under it,
+	// beside Supply by unit (the reserve strip that sat under the KPIs is the EWR page's).
 	await summaryReady(page);
 	const kpis = await box('Latest run');
-	const strip = await box('Days below the reserve');
 	const attention = await box('Needs attention');
 	const supply = await box('Supply by hydrological unit');
 	const alerts = await box('Active alerts');
-	expect(strip.y).toBeGreaterThan(kpis.y + kpis.height - 1);
-	expect(Math.abs(strip.width - kpis.width)).toBeLessThan(2);
-	expect(attention.y).toBeGreaterThan(strip.y + strip.height - 1);
+	expect(attention.y).toBeGreaterThan(kpis.y + kpis.height - 1);
 	expect(Math.round(supply.y)).toBe(Math.round(attention.y));
 	expect(supply.x).toBeGreaterThan(attention.x + attention.width);
 	expect(alerts.y).toBeGreaterThan(attention.y + attention.height - 1);
@@ -234,15 +239,15 @@ test('the Summary leads with the results once there is a run, the setup checklis
 		expect(sh, name).toBeLessThanOrEqual(ch);
 	}
 
-	// Under Supply by unit, in its column (usually the shorter): the published baseline, then the link to the
-	// Project page. Nothing else: the rest is on the Project page, and a complete setup is the header's pill.
+	// Under Supply by unit, in its column (usually the shorter): the published baseline, then the links to the EWR
+	// and Project pages. Nothing else: the rest is on the Project page, and a complete setup is the header's pill.
 	await expect(page.getByRole('region', { name: 'Published baseline' })).toHaveAttribute('aria-busy', 'false');
 	const baseline = await box('Published baseline');
 	expect(baseline.y).toBeGreaterThan(supply.y + supply.height - 1);
 	expect(Math.round(baseline.x)).toBe(Math.round(supply.x));
 	expect(Math.abs(baseline.width - supply.width)).toBeLessThan(2);
-	const projectLink = page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ });
-	const links = (await projectLink.boundingBox())!;
+	const ewrLink = page.getByRole('link', { name: /^Reserve and EWR results\s+EWR$/ });
+	const links = (await ewrLink.boundingBox())!;
 	expect(links.y).toBeGreaterThan(baseline.y + baseline.height);
 	expect(Math.round(links.x)).toBe(Math.round(supply.x));
 	// So the whole Summary fits a 1440 × 960 window: no page scroll.
@@ -255,62 +260,16 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
 });
 
-test('the reserve strip: the days below the EWR in each month of the run, adding up to the KPI card, and a link to River & reserve', async ({ page, owner }) => {
+// The reserve strip and the EWR's headline card moved to the EWR page (issue #558): river-page.spec.ts.
+test('an old link to the Summary’s reserve strip opens it on the EWR page', async ({ page, owner }) => {
 	void owner;
-	const project = await seedRunnableProject(page.request, 'Summary reserve strip');
-	const run = await createRun(page.request, project.id, 'Baseline');
-	await page.goto(`/projects/${project.id}`);
-	const strip = page.getByRole('region', { name: 'Days below the reserve' });
-	// The run is 120 days (1 Oct 2021 – 28 Jan 2022): its four months, each in words for a screen reader.
-	await expect(strip.getByTestId('reserve-strip-what')).toHaveText(
-		'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2021 – Jan 2022'
-	);
-	const months = strip.getByRole('listitem');
-	await expect(months).toHaveCount(4);
-	await expect(months.nth(3)).toHaveAttribute('data-month', '2022-01');
-	await expect(months.nth(3)).toContainText(/^Jan 2022: (EWR met every day \(28 days\)|below the EWR on \d+ of 28 days)/);
-	// The months add up to the KPI card's count: the same test, one framing ("EWR not met", issue #162).
-	const counts = await months.evaluateAll((lis) => lis.map((li) => Number(li.getAttribute('data-not-met'))));
-	const card = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="ewr"]');
-	await expect(card.locator('dt')).toContainText('EWR not met');
-	const notMet = Number(/(\d+) of 120 days/.exec((await card.textContent()) ?? '')![1]);
-	expect(counts.reduce((a, b) => a + b, 0)).toBe(notMet);
-	// Each bar in the EWR traffic light's band for its month (the portfolio's: under 5 % of days green, under 20 % amber),
-	// stated in a key under the months.
-	const days = [31, 30, 31, 28];
-	const bands = await months.evaluateAll((lis) => lis.map((li) => li.getAttribute('data-band')));
-	expect(bands).toEqual(counts.map((n, i) => (n * 100 < 5 * days[i]! ? 'green' : n * 100 < 20 * days[i]! ? 'amber' : 'red')));
-	await expect(strip.getByTestId('reserve-strip-key').locator('.item')).toHaveText(['Green: under 5% of days below the EWR', 'Amber: 5% to under 20%', 'Red: 20% or more']);
-
-	await strip.getByRole('link', { name: 'More on River & reserve' }).click();
-	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));
-	await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
-});
-
-test('with a Reserve rule table the card judges the Reserve by the table, and the strip is named for the test it counts, the pragmatic EWR', async ({ page, owner }) => {
-	void owner;
-	const project = await seedRunnableProject(page.request, 'Summary strip with rules');
-	// A synthetic table that asks for nothing: the Reserve rules card is the table's, not the pragmatic EWR's.
-	const points = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
-	await updateSettings(page.request, project.id, {
-		ewrRules: [
-			{ siteNodeId: null, source: 'Synthetic rule table for tests', component: 'total', unit: 'mcm', points, ewr: Array.from({ length: 12 }, () => points.map(() => 0)), naturalSource: 'run', natural: null, scale: 1 }
-		]
-	});
-	await createRun(page.request, project.id, 'With rules');
-	await page.goto(`/projects/${project.id}`);
-	const kpis = page.getByRole('region', { name: 'Latest run', exact: true });
-	await expect(kpis.locator('[data-headline="reserve"] dt')).toContainText('Reserve rules met');
-	await expect(kpis.locator('[data-headline="ewr"]')).toHaveCount(0);
-	// No "Days below the reserve": that would call the pragmatic count the Reserve the card beside it judges.
-	await expect(page.getByRole('region', { name: 'Days below the reserve' })).toHaveCount(0);
-	const strip = page.getByRole('region', { name: 'Days below the pragmatic EWR' });
-	await expect(strip.getByRole('list', { name: 'Days below the pragmatic EWR by month, Oct 2021 – Jan 2022' })).toBeVisible();
-	await expect(strip.getByTestId('reserve-strip-what')).toHaveText(
-		'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2021 – Jan 2022. The Reserve rules card above judges whole months by the rule table instead.'
-	);
-	await expect(strip.getByRole('listitem').nth(3)).toContainText(/^Jan 2022: (pragmatic EWR met every day \(28 days\)|below the pragmatic EWR on \d+ of 28 days)/);
-	await expectNoViolations(page);
+	const project = await seedRunnableProject(page.request, 'Summary strip link');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=overview#strip-h`);
+	// For the run the Summary shows, as the strip was.
+	await expect(page).toHaveURL(/[?&]tab=river&run=[^#&]+#res-reserve-strip$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'EWR' })).toBeVisible();
+	await expect(page.locator('#res-reserve-strip').getByRole('heading', { name: 'Days below the reserve' })).toBeFocused();
 });
 
 test('needs attention cards and supply by hydrological unit: coloured by how much it matters, each hydrological unit opens its drawer, and a link to Hydrological units', async ({ page, owner }) => {
@@ -413,7 +372,7 @@ test.describe('the first screen has no accessibility violations', () => {
 			await createRun(page.request, project.id, 'Baseline');
 			await createRun(page.request, project.id, 'Second');
 			await page.goto(`/projects/${project.id}`);
-			await expect(page.getByRole('region', { name: 'Days below the reserve' }).getByRole('listitem').first()).toBeVisible();
+			await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="shortfall"]')).toContainText('Mm³');
 			await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]')).toContainText('full');
 			await expect(page.getByRole('region', { name: 'Supply by hydrological unit' })).toBeVisible();
 			if (label === 'phone') expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);

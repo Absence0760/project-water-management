@@ -4,7 +4,7 @@
 	went, the change in dam storage and the closure residual; a pair of bars
 	for one period (in vs out). Input: RunSummary.supplyAssurance.waterAccount;
 	absent on older runs. The EWR required vs met at each site, which closed
-	this panel until issue #175, is not part of the balance: River & reserve
+	this panel until issue #175, is not part of the balance: EWR
 	shows it in the EWR by month panel (ewr/EwrRequiredMet.svelte). Runs &
 	results' Water balance is the same years summed over the hydrological units
 	(with rain, the runoff coefficient and storage); each links to the other

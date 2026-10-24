@@ -32,7 +32,7 @@
 		days: number;
 		/** Drawn after the catchment cards: the printable report's unit table. */
 		units?: Snippet;
-		/** Where "by month of the year" goes: the Reserve compliance panel, on River & reserve in the workspace (issue #17). */
+		/** Where "by month of the year" goes: the Reserve compliance panel, on EWR in the workspace (issue #17). */
 		reserveHref?: string;
 		/** A link to a panel of Hydrological units by its anchor: where the land-cover, groundwater, demand-object and other-user tables are in the workspace (issue #137). */
 		otherUsesHref?: (hash: string) => string;
