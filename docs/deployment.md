@@ -785,8 +785,11 @@ Nor is anything that goes into the report renderer's image: its base image
 (`docker`) and its npm packages (the `/backend/renderer-deps` npm entry,
 aws-lambda-ric, a native module compiled in the image's build stage), which
 the workflow excludes by fetch-metadata's `directory` and, as a backstop, by
-the PR's branch name. `pnpm check:workflows` (auto-merge rule) fails if any
-of these exclusions is dropped. A
+the PR's branch name. It queues the merge only when the repository allows
+auto-merge (Settings → General → Pull Requests → Allow auto-merge, read
+from the API each run); with that off it leaves a notice and the PR waits
+for a human. `pnpm check:workflows` (auto-merge rule) fails if any of these
+exclusions, or the setting's read, is dropped. A
 security fix that can't wait the week goes under
 `minimumReleaseAgeExclude` with a comment, removed once the week is up.
 

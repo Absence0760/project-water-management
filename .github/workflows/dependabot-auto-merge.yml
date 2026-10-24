@@ -20,9 +20,11 @@ name: Dependabot auto-merge
 # same 7 days, so a version is a week old before it can land here.
 #
 # Repository setting required: "Allow auto-merge" enabled on
-# Settings → General → Pull Requests. Without it `gh pr merge --auto`
-# returns an error and the workflow no-ops; PRs sit waiting for a
-# human like before, so worst case is degenerate, not destructive.
+# Settings → General → Pull Requests. Without it the step reads the setting,
+# leaves a notice and stops, green: PRs sit waiting for a human like before,
+# so worst case is degenerate, not destructive. (It used to call
+# `gh pr merge --auto` anyway, which errors "Auto merge is not allowed for
+# this repository" and turned every Dependabot PR red, #542-#549.)
 #
 # CI gating: the squash merge waits on the required `CI gate` check
 # (ci.yml) before landing. A red CI run keeps the PR queued until a
@@ -83,8 +85,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # The setting is read, not assumed (header): with auto-merge off
+          # there is nothing to queue, so approve nothing and stop green.
+          # A failed read fails the step (set -e): it is not "off".
+          allowed=$(gh api "repos/$REPO" --jq '.allow_auto_merge')
+          if [ "$allowed" != "true" ]; then
+            echo "::notice::Auto-merge is off for this repository (Settings → General → Pull Requests → Allow auto-merge); this PR waits for a human."
+            exit 0
+          fi
           # Best-effort approval. Fails closed (`|| true`) when the
           # repo setting "Allow GitHub Actions to create and approve
           # pull requests" is off — without it, gh pr review --approve
