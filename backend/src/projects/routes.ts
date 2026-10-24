@@ -511,13 +511,14 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// A gauge record's site (084_gauge_records) follows its gauge to the copy's id; one whose
 			// node has left the model has nothing to follow, so it keeps no site in the copy. A land unit's
 			// own rain (209) follows its unit the same way, and one whose unit has gone is left out: with no
-			// site it would become the copy's catchment rain.
+			// site it would become the copy's catchment rain. A rainfall station's details (239, issue #553) copy with it
+			// (only a catchment rain series with no site has them, so its site stays null).
 			const [from, to] = [[...ids.keys()], [...ids.values()]];
 			await db.query(
 				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
-					source, source_unit, source_unit_factor, hand_days)
+					source, source_unit, source_unit_factor, hand_days, station_map_mm, station_map_source, station_lat, station_lon)
 				 SELECT $2, t.kind, t.name, t.unit, t.start_date, t."values", t.product, t.product_version, t.day_boundary, m.new_id,
-					t.source, t.source_unit, t.source_unit_factor, t.hand_days
+					t.source, t.source_unit, t.source_unit_factor, t.hand_days, t.station_map_mm, t.station_map_source, t.station_lat, t.station_lon
 				 FROM time_series t LEFT JOIN unnest($3::uuid[], $4::uuid[]) AS m(old_id, new_id) ON m.old_id = t.site_node_id
 				 WHERE t.project_id = $1 AND NOT (t.site_node_id IS NOT NULL AND m.new_id IS NULL AND t.kind = ANY($5::text[]))`,
 				[srcId, newId, from, to, [...UNIT_RAIN_KINDS]]

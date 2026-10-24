@@ -23,7 +23,7 @@
 	import RunChart from './RunChart.svelte';
 	import { toDisplayUnit } from './results';
 	import { clipExclusions, exclusionKeyText, seriesSpan, type ExcludedPeriod } from './exclusionShading';
-	import { flowFlagLanes } from '#lib/calibration/flowFlags.js';
+	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
 	import GaugeCheckFlows from './GaugeCheckFlows.svelte';
 	import type { CheckGauge } from './checkGauges';
 
@@ -257,6 +257,7 @@
 				shadeKey={excludedKey}
 				lanes={outletLanes}
 				lanesLabel={LANES_LABEL}
+				lanesNote={lanesLooksNote(outletLanes)}
 				bind:ready={hydroReady}
 				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>
@@ -280,6 +281,7 @@
 					shadeKey={excludedKey}
 					lanes={siteLanes}
 					lanesLabel={LANES_LABEL}
+					lanesNote={lanesLooksNote(siteLanes)}
 					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Settings → Calibration record → Scored at)."
 				/>
 			{:else}

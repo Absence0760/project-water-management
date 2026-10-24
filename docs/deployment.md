@@ -1881,8 +1881,9 @@ gh workflow run load-reference.yml -f kind=map-grid -f key=reference/map-grid/wa
 
 Approve it in the `production` environment. Check on the Map tab of the
 client's project: **MAP grid** on lists "WAAS-SWCape-2007" with its source
-line, and the map's credits show "MAP grid: Mean annual rainfall surface
-for the Southwestern Cape. …". Then Settings → Rain for each unit → **MAP
+line (the authors' credit line whole), and the map's credits show "MAP
+grid: WAAS (2007), Beuster Clarke & Associates", linking to
+`/data-sources#waas-map`. Then Settings → Rain for each unit → **MAP
 from the grid** proposes each unit's MAP from it, beside the typed values,
 to check them. A wider box later is a reload under the same label (a load
 replaces its dataset).

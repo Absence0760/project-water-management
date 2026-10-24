@@ -71,7 +71,9 @@ describe('the data credits', () => {
 		// A traced dam's credit names JRC's source as its download page asks, and says the data was modified (1159/2013 Art. 8(3)).
 		expect(JRC_WATER_MAP_ATTRIBUTION).toContain(JRC_WATER_STATEMENT);
 		expect(JRC_WATER_MAP_ATTRIBUTION).toMatch(/modified$/);
-		// The MAP grid's credit carries its authors' line whole.
-		expect(WAAS_MAP_MAP_ATTRIBUTION).toBe(`MAP grid: ${WAAS_MAP_STATEMENT}`);
+		// The MAP grid's credit on the map is short (its link opens the authors' line whole): it names the study and the authors, as their line does.
+		expect(WAAS_MAP_MAP_ATTRIBUTION).toBe('MAP grid: WAAS (2007), Beuster Clarke & Associates');
+		for (const part of ['WAAS', 'Beuster Clarke & Associates', '2007']) expect(WAAS_MAP_STATEMENT).toContain(part);
+		expect(WAAS_MAP_MAP_ATTRIBUTION.length).toBeLessThanOrEqual(HYDRORIVERS_MAP_ATTRIBUTION.length);
 	});
 });

@@ -71,8 +71,14 @@ export const GEONAMES_STATEMENT = 'GeoNames (geonames.org), CC BY 4.0';
  */
 export const WAAS_MAP_STATEMENT = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
 
-/** The map's attribution control while the MAP grid layer draws that surface's points. */
-export const WAAS_MAP_MAP_ATTRIBUTION = `MAP grid: ${WAAS_MAP_STATEMENT}`;
+/**
+ * The map's attribution control while the MAP grid layer draws that surface's
+ * points: short, naming the study and its authors, linking to the full line on
+ * /data-sources#waas-map (as HydroRIVERS'). The whole 150-character line wrapped
+ * to two or four lines along the map's foot, under its Show everything and Key
+ * buttons, at 1280 px as on a phone (PR #570).
+ */
+export const WAAS_MAP_MAP_ATTRIBUTION = 'MAP grid: WAAS (2007), Beuster Clarke & Associates';
 
 /** The map's attribution control while real HydroRIVERS reaches are drawn: short, linking to the full statement. */
 export const HYDRORIVERS_MAP_ATTRIBUTION = 'Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license';

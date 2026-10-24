@@ -45,6 +45,7 @@
 		type ProjectSettings,
 		type SeriesCheckKind,
 		type SeriesKind,
+		type RainStationMeta,
 		type SeriesMeta
 	} from '@water-management/engine';
 	import { api, type RunMeta } from '#lib/api/index.js';
@@ -62,6 +63,8 @@
 	import { CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote } from '#lib/series/provenance.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { asksSite, productField, rowSiteMark, siteText, uploadUnitText } from './details';
+	import { asksStation } from './station';
+	import StationFields from './StationFields.svelte';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
 	import { agoText } from '#lib/format/age.js';
 	import AgreementTable from './AgreementTable.svelte';
@@ -74,7 +77,7 @@
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
-	import { flowFlagLanes } from '#lib/calibration/flowFlags.js';
+	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 	import { foldList } from '#lib/components/common/fold.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
@@ -297,7 +300,8 @@
 		const fill = resolveFlowGapFill(settings?.flowGapFill);
 		const donorKind = fill[viewing.kind]?.donor;
 		const d = donorKind ? first(donorKind) : undefined;
-		return flowFillShading(viewing.kind, v, fill, (d && values[d.id]) || null);
+		// The low-flow periods' high readings anchor nothing and are out of the donor's ratio and the clamp, as in a run (issue #567).
+		return flowFillShading(viewing.kind, v, fill, (d && values[d.id]) || null, resolveQualityFlags(settings?.qualityFlags).lowFlowPeriods);
 	});
 
 	// The per-day quality flags of a flow record Fit automatically can score (CR-18, engine ≥ 1.48.0): the classes it
@@ -388,6 +392,15 @@
 			list = list.map((x) => (x.id === s.id ? { ...x, name: meta.name } : x));
 			onSeriesChange?.(list);
 		});
+	}
+
+	/** A rainfall station's details (issue #553), saved together; the list keeps what the API stored, so Settings reads it. */
+	async function saveStation(s: SeriesMeta, station: RainStationMeta | null): Promise<RainStationMeta | null> {
+		const meta = await api.series.station(projectId, s.id, station);
+		const stored = meta.station ?? null;
+		list = list.map((x) => (x.id === s.id ? { ...x, station: stored } : x));
+		onSeriesChange?.(list);
+		return stored;
 	}
 
 	// The charted series' days edited by hand (212_series_hand_days) that hold a value, drawn as points.
@@ -774,6 +787,7 @@
 				recentLabel="Last 3 years"
 				shade={shading?.ranges ?? flowShading?.ranges ?? []}
 				lanes={flagLanes}
+				lanesNote={lanesLooksNote(flagLanes)}
 				lanesLabel="Quality flags, as Fit automatically reads this record under the current settings"
 				caption={shading?.caption ?? flowShading?.caption ?? undefined}
 			/>
@@ -789,7 +803,9 @@
 			{#key viewing.id}
 				<dl class="details-list">
 					<!-- The name (issue #556): editors rename it here, saved on change like the source; viewers read it. A
-					     series a data feed writes keeps its name (the feed writes by it), so it reads as words with why. -->
+					     series a data feed writes keeps its name (the feed writes by it), so it reads as words with why. One an
+					     API key writes or lists by name (which an editor can't read) is refused by the server, whose reason shows
+					     as Not saved under the box. -->
 					<div class="detail detail-name">
 						{#if readonly || viewing.feed}
 							<dt>Name</dt>
@@ -899,6 +915,9 @@
 						</div>
 					{/if}
 				</dl>
+				{#if asksStation(viewing)}
+					<StationFields series={viewing} {readonly} onsave={(st) => saveStation(viewing, st)} />
+				{/if}
 				{#if !readonly}
 					<EditDay {projectId} series={viewing} values={values[viewing.id] ?? null} onsaved={() => load()} />
 				{/if}

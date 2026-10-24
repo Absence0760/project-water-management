@@ -282,6 +282,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				const o = s.origin as Record<string, unknown>;
 				return `Recorded the source of ${seriesName(s)}: ${str(o.to)} (was ${str(o.from)})`;
 			}
+			// A rainfall station's details (issue #553, series/station.ts): each side as the backend's stationLabel says it.
+			if (s.station && typeof s.station === 'object' && !s.provenance) {
+				const st = s.station as Record<string, unknown>;
+				if (str(st.to) === 'not a station') return `Cleared the rainfall station details of ${seriesName(s)} (was ${str(st.from)})`;
+				if (str(st.from) === 'not a station') return `Recorded ${seriesName(s)} as a rainfall station: ${str(st.to)}`;
+				return `Changed the rainfall station details of ${seriesName(s)}: ${str(st.to)} (was ${str(st.from)})`;
+			}
 			const p = (s.provenance ?? {}) as Record<string, unknown>;
 			return `Marked ${seriesName(s)} as ${str(p.to)} (was ${str(p.from)})`;
 		}

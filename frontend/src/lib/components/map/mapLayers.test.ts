@@ -229,7 +229,7 @@ describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
 		expect(mapCredits([], false, null)).toEqual([]);
 		expect(mapCredits([], false, 'Synthetic MAP grid (invented rainfall over region Z), water-management test fixture')).toEqual([]);
 		expect(mapCredits([], false, `${waas} (edited)`)).toEqual([]);
-		expect(MAP_CREDIT_TEXT['waas-map']).toBe(`MAP grid: ${waas}`);
+		expect(MAP_CREDIT_TEXT['waas-map']).toBe('MAP grid: WAAS (2007), Beuster Clarke & Associates');
 	});
 
 	it('words each credit for the attribution control: the JRC line names the source as JRC asks and says the outline was modified', () => {

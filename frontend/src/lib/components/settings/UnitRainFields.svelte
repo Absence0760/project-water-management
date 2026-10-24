@@ -2,7 +2,8 @@
 	Settings → Flow calibration → Rain into GR4J → Rain for each unit (settings.unitRain, issue
 	#482, docs/model.md §2.4h, docs/ui.md § Settings & calibration): the switch
 	that runs GR4J once per unit with land on its own rain, the catchment rain
-	gauge's MAP with its source, the MAP period the CHIRPS factors compare
+	gauge's MAP (a read-out of the catchment rain station's since issue #553, edited
+	in the Data tab's Series details), the MAP period the CHIRPS factors compare
 	over, and the reference gauge and unit whose monthly factors level every
 	unit's CHIRPS (issue #500, docs/model.md §2.4h *Reference gauge*). Bind the setting (null = off); `last` keeps the one switched off until
 	the form is saved. The parent works out `error` (unitRainProblem), which
@@ -10,24 +11,26 @@
 	Settings tab chunk sits at its size ceiling.
 -->
 <script lang="ts">
-	import { localIsoDate } from '#lib/format/number.js';
-	import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, type NetworkNode, type UnitRainSettings } from '@water-management/engine';
+	import { fmtNum, localIsoDate } from '#lib/format/number.js';
+	import { DEFAULT_UNIT_MAP_PERIOD, type NetworkNode, type UnitRainSettings } from '@water-management/engine';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import {
 		CATCHMENT_GAUGE,
+		gaugeMapReadout,
 		mapPeriodNote,
 		mapPeriodYears,
 		unitGaugeKey,
 		unitMapCoverage,
 		unitRainOn,
+		stationHref,
 		unitRainProblem,
-		withGaugeMap,
 		withMapPeriodYears,
 		withReferenceGauge,
 		withReferenceUnit,
-		withUnitRain
+		withUnitRain,
+		type CatchmentStation
 	} from './unitRain';
 
 	let {
@@ -35,13 +38,16 @@
 		// No fallback: bound to an unset draft.kept key, a fallback would throw (props_invalid_value).
 		last = $bindable(),
 		readonly = false,
-		nodes = []
+		nodes = [],
+		catchmentRain
 	}: {
 		value: UnitRainSettings | null | undefined;
 		last?: unknown;
 		readonly?: boolean;
 		/** The model's units, to say how many with land have a MAP. */
 		nodes?: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'areaKm2' | 'mapMm'>[];
+		/** The catchment rain series a run reads, whose station MAP is the gauge's (issue #553): null = none, undefined = not loaded. */
+		catchmentRain?: CatchmentStation | null;
 	} = $props();
 
 	const uid = $props.id();
@@ -49,6 +55,7 @@
 	const problem = $derived(unitRainProblem(value));
 	const years = $derived(mapPeriodYears(value));
 	const note = $derived(mapPeriodNote(value));
+	const gauge = $derived(gaugeMapReadout(value, catchmentRain));
 	const coverage = $derived(unitMapCoverage(nodes));
 	/** The units with land, the reference unit's choices (and each one's own gauge, the reference gauge's). */
 	const land = $derived(nodes.filter((n) => n.kind === 'farm' && n.areaKm2 > 0));
@@ -61,7 +68,7 @@
 	/** Years the fields take; one before CHIRPS (1981) saves, with a note. */
 	const FIRST_YEAR = 1900;
 	const errId = `${uid}-err`;
-	const describe = (field: 'gaugeMap' | 'gaugeSource' | 'period' | 'reference', hint: string) => (problem?.field === field ? `${hint} ${errId}` : hint);
+	const describe = (field: 'period' | 'reference', hint: string) => (problem?.field === field ? `${hint} ${errId}` : hint);
 
 	function setOn(next: boolean) {
 		if (!next && value) last = $state.snapshot(value);
@@ -69,7 +76,7 @@
 	}
 </script>
 
-<fieldset class="plain unit-rain" data-testid="unit-rain-settings">
+<fieldset class="plain unit-rain" id="set-unit-rain" data-testid="unit-rain-settings">
 	<legend><h4 class="sub">Rain for each unit <HelpTip key="settings.unitRain" /></h4></legend>
 	<label class="check">
 		<input type="checkbox" disabled={readonly} checked={on} onchange={(e) => setOn(e.currentTarget.checked)} aria-describedby="{uid}-h" />
@@ -90,47 +97,24 @@
 				{#each coverage.without.slice(0, MISSING_SHOWN) as n, i (n.id)}{i ? ', ' : ' '}<a href="?tab=network&edit={encodeURIComponent(n.id)}&section=area">{n.name}</a>{/each}{coverage.without.length > MISSING_SHOWN ? ` and ${coverage.without.length - MISSING_SHOWN} more` : ''}.
 			</p>
 		{/if}
-		<div class="fields">
-			<div class="field">
-				<span class="lbl"><label for="{uid}-gmap">Rain gauge’s MAP <span class="u">(mm)</span> <span class="muted">(optional)</span></label></span>
-				<NumberInput
-					id="{uid}-gmap"
-					min={MAP_MM_MIN}
-					max={MAP_MM_MAX}
-					step={1}
-					nullable
-					placeholder="not set"
-					disabled={readonly}
-					value={value.gaugeMapMm ?? null}
-					aria-invalid={problem?.field === 'gaugeMap' || undefined}
-					aria-describedby={describe('gaugeMap', `${uid}-gmap-h`)}
-					onchange={(v) => {
-						if (value) value = withGaugeMap(value, v);
-					}}
-				/>
-				<span class="hint explain" id="{uid}-gmap-h">The catchment rain gauge’s own mean annual rain. With it, a unit with a MAP runs on the gauge’s rain × unit MAP ÷ this.</span>
-				{#if problem?.field === 'gaugeMap'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
-			</div>
-			{#if value.gaugeMapMm !== null && value.gaugeMapMm !== undefined}
-				<div class="field source">
-					<span class="lbl"><label for="{uid}-gsrc">Source of the gauge’s MAP</label></span>
-					<input
-						id="{uid}-gsrc"
-						readonly={readonly}
-						required
-						maxlength={PE_SOURCE_MAX}
-						value={value.gaugeMapSource ?? ''}
-						placeholder="e.g. the gauge’s record 1991–2020, complete years"
-						aria-invalid={problem?.field === 'gaugeSource' || undefined}
-						aria-describedby={describe('gaugeSource', `${uid}-gsrc-h`)}
-						oninput={(e) => {
-							if (value) value = { ...value, gaugeMapSource: e.currentTarget.value };
-						}}
-					/>
-					<span class="hint" id="{uid}-gsrc-h">Required: the record or study, and its years. The run shows it beside each unit’s factor.</span>
-					{#if problem?.field === 'gaugeSource'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
-				</div>
-			{/if}
+		<!-- The gauge's MAP is the catchment rain station's (issue #553): read here, edited in the Data tab's Series details.
+		     A project from before stations still shows its settings.unitRain.gaugeMapMm until a station MAP is set. -->
+		<div class="gauge-map" role="group" aria-labelledby="{uid}-gmap-l" data-testid="unit-rain-gauge-map">
+			<span class="lbl" id="{uid}-gmap-l">Rain gauge’s MAP</span>
+			<p class="readout" data-testid="unit-rain-gauge-map-value" data-from={gauge.from ?? 'none'}>
+				{#if gauge.mm !== null}
+					<strong>{fmtNum(gauge.mm, 1, true)} mm</strong>{gauge.source ? ` (${gauge.source})` : ''}{#if gauge.from === 'station' && catchmentRain}, the station MAP of “{catchmentRain.name || 'Catchment rain'}”{:else if gauge.from === 'settings'}, kept from these settings: set it on the catchment rain station to move it there{/if}.
+				{:else if catchmentRain === null}
+					Not set: the project has no catchment rain series yet. Add one with Add data, then set its station MAP.
+				{:else}
+					Not set.
+				{/if}
+				{#if catchmentRain}
+					<a href={stationHref(catchmentRain)} data-testid="unit-rain-gauge-map-edit">{readonly ? 'See it in Series details' : gauge.mm !== null && gauge.from === 'station' ? 'Change it in Series details' : 'Set it in Series details'}</a>
+				{/if}
+			</p>
+			<span class="hint explain">The catchment rain station’s own mean annual rain. With it, a unit with a MAP runs on the station’s rain × unit MAP ÷ this.</span>
+			{#if problem?.field === 'gaugeMap' || problem?.field === 'gaugeSource'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
 		</div>
 		<fieldset class="plain period">
 			<legend>MAP period</legend>
@@ -270,16 +254,6 @@
 	.field :global(input:not([type='checkbox'])) {
 		width: 100%;
 	}
-	.lbl {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-	}
-	.lbl label {
-		font-weight: 500;
-		font-size: 0.85rem;
-		color: var(--text-2);
-	}
 	/* A block of its own: inline, the switch's explanation ran on after its label (issue #521). */
 	.hint {
 		display: block;
@@ -298,9 +272,21 @@
 		display: block;
 		margin: 0.4rem 0;
 	}
-	.source input {
-		width: 100%;
-		max-width: 60ch;
+	.gauge-map {
+		margin-top: 0.5rem;
+	}
+	.gauge-map .lbl {
+		display: block;
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.readout {
+		margin: 0.15rem 0;
+		max-width: 75ch;
+	}
+	.readout a {
+		margin-left: 0.25rem;
 	}
 	.period,
 	.reference {

@@ -1030,6 +1030,9 @@
 	/** The tool palette's size: the picked name and the Key panel keep clear of it. */
 	let toolsW = $state(0);
 	let toolsH = $state(0);
+	/** The map's bottom-left corner (Show everything, Key, and the Key's panel while it is open over the map), which the attribution keeps clear of (.map-body's --foot-w, --foot-h). */
+	let footW = $state(0);
+	let footH = $state(0);
 	/** The search box's height over the map's top edge, and its open list's: the picked name and the tool strip start under the box
 	    and its lines; the list covers them while it's open, as a list under a box does. */
 	let searchH = $state(0);
@@ -1368,7 +1371,7 @@
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:--foot-w={footW ? `calc(${footW}px + 0.6rem + 6px)` : null} style:--foot-h={footH ? `calc(${footH}px + 0.6rem + 6px)` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
 						<!-- At least the tools' height and the key row under them, so the tool column stays inside the card while the map's chunk loads or when it fails (on a phone it ran over the Features list, issue #521). -->
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
@@ -1447,7 +1450,7 @@
 							{/if}
 						</div>
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="foot-at ov" onkeydown={(e) => panelKey(e, 'key')} style:--tools-h="{toolsH}px">
+						<div class="foot-at ov" onkeydown={(e) => panelKey(e, 'key')} style:--tools-h="{toolsH}px" bind:clientWidth={footW} bind:clientHeight={footH}>
 							<!-- The key (#326 E7, A1; a row under the map until 2026-10-02): what the areas are coloured by, which run, and what each colour means. -->
 							<!-- Focusable: it can scroll on a short map with nothing to focus inside (ui-playbook § 5). -->
 							{#if !panelsInSide}
@@ -1926,6 +1929,19 @@
 		/* Clear of the tools above it. */
 		max-height: calc(100% - var(--tools-h, 0px) - 1.8rem);
 		max-width: calc(100% - 1.2rem);
+	}
+	/* MapLibre's attribution (its bottom-right group) keeps clear of the bottom-left corner (.foot-at: the buttons, and the
+	   Key's panel while open over the map): beside it on a wide map, above it on a narrow one, where beside would squeeze it
+	   into a column of one or two words a line. A long credit ran under Show everything and Key, at 1280 px as on a phone
+	   (PR #570; map-layers.spec.ts checks the boxes never meet, with the Key open too). */
+	.map-body :global(.maplibregl-ctrl-bottom-right) {
+		max-width: calc(100% - var(--foot-w, 0px));
+	}
+	@container map-body (max-width: 30rem) {
+		.map-body :global(.maplibregl-ctrl-bottom-right) {
+			max-width: none;
+			bottom: var(--foot-h, 0px);
+		}
 	}
 	.foot-row {
 		display: flex;
