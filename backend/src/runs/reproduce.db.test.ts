@@ -95,4 +95,30 @@ describe('GET …/runs/:runId/reproduce', () => {
 		expect(res.body).toMatchObject({ status: 'inconsistent', identical: false });
 		expect(res.body.message).toMatch(/fails its SHA-256 check/);
 	});
+
+	it('warns when the CHIRPS series it read spans less of the run than another, naming both, and reproduces that warning (issue #561)', async () => {
+		const u = await signUp('ReproChirps');
+		const p = await importProjectData(small, u.email);
+		const rain = small.series.find((x) => x.kind === 'rain_catchment_mm')!;
+		const put = async (name: string, startDate: string, values: number[]) =>
+			expect((await u.call('PUT', `/projects/${p}/series`, { kind: 'rain_chirps_mm', name, unit: 'mm', startDate, values })).status).toBe(200);
+		// "CHIRPS boundary" sorts first and holds 60 days at the end; the record spans the whole rain record.
+		const end = Date.parse(`${rain.startDate}T00:00:00Z`) + (rain.values.length - 60) * 86_400_000;
+		await put('CHIRPS boundary', new Date(end).toISOString().slice(0, 10), Array(60).fill(1));
+		await put('Rainfall CHIRPS', rain.startDate, rain.values.map(() => 1));
+		const r = await newRun(u, p, 'two CHIRPS');
+		const [row] = await asOwner(`SELECT summary->'warnings' AS warnings, inputs->'seriesChoice' AS choice FROM model_run WHERE id = $1`, [r]);
+		expect(row.choice).toEqual({ rain_chirps_mm: { name: 'CHIRPS boundary', others: [{ name: 'Rainfall CHIRPS', firstDay: rain.startDate, lastDay: expect.any(String) }] } });
+		const warned = (row.warnings as string[]).filter((w) => w.startsWith('the run read the CHIRPS series'));
+		expect(warned).toHaveLength(1);
+		expect(warned[0]).toMatch(/^the run read the CHIRPS series “CHIRPS boundary” \(\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}\), which spans 60 of its \d+ days, but “Rainfall CHIRPS” \(/);
+		// Reproduced from its stored inputs, the warning included.
+		expect((await reproduce(u, r, p)).body.status).toBe('identical');
+		// Positive control: one CHIRPS series, no choice recorded and no warning.
+		await asOwner(`DELETE FROM time_series WHERE project_id = $1 AND name = 'CHIRPS boundary'`, [p]);
+		const one = await newRun(u, p, 'one CHIRPS');
+		const [plain] = await asOwner(`SELECT summary->'warnings' AS warnings, inputs ? 'seriesChoice' AS has FROM model_run WHERE id = $1`, [one]);
+		expect(plain.has).toBe(false);
+		expect((plain.warnings as string[]).some((w) => w.startsWith('the run read the CHIRPS series'))).toBe(false);
+	});
 });

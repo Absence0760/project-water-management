@@ -11,7 +11,7 @@ import { enqueueJob } from '../jobs/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { provenanceLabel, sameProvenance } from '@water-management/engine';
+import { compareSeriesNames, provenanceLabel, sameProvenance } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import {
 	CHIRPS_DAILY_PRODUCTS,
@@ -26,7 +26,7 @@ import {
 	SOURCES
 } from './config.js';
 import { feedSourceMode } from './http.js';
-import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, seriesAccepts, targetSeries, updateFeed } from './store.js';
+import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, type RunSeriesPick, runSeries, seriesAccepts, targetSeries, updateFeed } from './store.js';
 
 /**
  * At most this many feeds per project: a server-side bound on one project's
@@ -120,6 +120,37 @@ export async function versionCheck(db: Db, projectId: string, input: FeedInput, 
 	);
 }
 
+/** A series name in a message: quoted, or "the series without a name" for the default one (''). */
+export const seriesWords = (name: string) => (name ? `“${name}”` : 'the series without a name');
+
+/**
+ * Whether a feed writing `name` (of the kind `pick` is) would take over from
+ * the series runs read now (issue #561): `name` is new, `pick` holds a
+ * record, and `name` sorts before it, so a run would read the new series, a
+ * few days long at first, once it holds anything.
+ */
+export const takesOver = (pick: RunSeriesPick | null, name: string, exists: boolean): pick is RunSeriesPick =>
+	!exists && !!pick && pick.firstDay !== null && name !== pick.name && compareSeriesNames(name, pick.name) < 0;
+
+/**
+ * Refuse (409 `series_takes_over`) a feed that would write a new series ahead
+ * of the record runs read now (takesOver): a new series never takes over
+ * unseen. The way out is a name that sorts after it, or replacing that series
+ * (the feed pointed at it, a staged full backfill). A unit's feed writes a
+ * series sited at its unit, which the outlet's pick never reads: not asked.
+ */
+export async function refuseTakeOver(db: Db, projectId: string, input: Pick<FeedInput, 'targetKind' | 'targetName' | 'config'>): Promise<void> {
+	if ((input.config as GridConfig).unit) return;
+	const exists = (await targetSeries(db, projectId, input.targetKind, input.targetName)) !== null;
+	const pick = await runSeries(db, projectId, input.targetKind);
+	if (!takesOver(pick, input.targetName, exists)) return;
+	throw new ApiError(
+		409,
+		`runs read the first series of a kind by name, so ${seriesWords(input.targetName)} would take over from ${seriesWords(pick.name)} (${pick.firstDay} to ${pick.lastDay}) as soon as the feed writes a day: name the new series so it sorts after ${seriesWords(pick.name)}, or point the feed at ${seriesWords(pick.name)} to replace it`,
+		{ code: 'series_takes_over', runSeries: pick.name, targetName: input.targetName }
+	);
+}
+
 /** A feed's configuration as the history records it (never its credentials: feeds carry none). */
 export const feedSubject = (
 	feedId: string,
@@ -177,6 +208,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const feed = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			await attachSlot(db, id);
+			await refuseTakeOver(db, id, input);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
 			const feed = await getFeed(db, id, fid);
@@ -214,6 +246,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 				input.targetKind !== cur.targetKind ||
 				input.targetName !== cur.targetName ||
 				!sameProvenance(feedProvenance(input.source, input.config), cur.writes);
+			// A re-target to a new series that would sort ahead of the record runs read (issue #561).
+			if (input.targetKind !== cur.targetKind || input.targetName !== cur.targetName) await refuseTakeOver(db, id, input);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, changed);
 			// replaceSeries: false withdraws a pending replacement (the trigger discards its stage); absent keeps it.
 			const replace = patch.replaceSeries === false ? null : replaceFrom;
