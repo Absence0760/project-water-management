@@ -45,6 +45,7 @@
 		type ProjectSettings,
 		type SeriesCheckKind,
 		type SeriesKind,
+		type RainStationMeta,
 		type SeriesMeta
 	} from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
@@ -62,6 +63,8 @@
 	import { CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote } from '$lib/series/provenance';
 	import { firstOutletSeries } from '$lib/series/pick';
 	import { asksSite, productField, rowSiteMark, siteText, uploadUnitText } from './details';
+	import { asksStation } from './station';
+	import StationFields from './StationFields.svelte';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
 	import { agoText } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
@@ -388,6 +391,15 @@
 			list = list.map((x) => (x.id === s.id ? { ...x, name: meta.name } : x));
 			onSeriesChange?.(list);
 		});
+	}
+
+	/** A rainfall station's details (issue #553), saved together; the list keeps what the API stored, so Settings reads it. */
+	async function saveStation(s: SeriesMeta, station: RainStationMeta | null): Promise<RainStationMeta | null> {
+		const meta = await api.series.station(projectId, s.id, station);
+		const stored = meta.station ?? null;
+		list = list.map((x) => (x.id === s.id ? { ...x, station: stored } : x));
+		onSeriesChange?.(list);
+		return stored;
 	}
 
 	// The charted series' days edited by hand (212_series_hand_days) that hold a value, drawn as points.
@@ -899,6 +911,9 @@
 						</div>
 					{/if}
 				</dl>
+				{#if asksStation(viewing)}
+					<StationFields series={viewing} {readonly} onsave={(st) => saveStation(viewing, st)} />
+				{/if}
 				{#if !readonly}
 					<EditDay {projectId} series={viewing} values={values[viewing.id] ?? null} onsaved={() => load()} />
 				{/if}

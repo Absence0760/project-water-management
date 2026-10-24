@@ -1402,6 +1402,30 @@ same way on every screen:
   whose last cell is blank (`2025-04-03<tab>`, as a spreadsheet copies or
   saves it) reads as a gap; until 2026-10-10 the trailing tab was trimmed
   away and the row refused as one column.
+- **Rainfall — station** (issue #553): a kind in the *Kind* list, after
+  *Rainfall — catchment*. A rainfall station is one gauge's daily rain record
+  with its own MAP: stored as a catchment rain series (`rain_catchment_mm`,
+  no site) with station details (`SeriesMeta.station`,
+  239_rain_stations.sql). A catchment may have several, by name, and each can
+  serve one or more hydrological units. The kind's hint says so, and that
+  until Settings has a Flow generation section runs read catchment rainfall
+  as today (the first catchment rain series by name, which may be a
+  station); *Rainfall — catchment*'s hint points to the station kind. For a
+  new station the form asks for a **Station name** (required), and in *The
+  station* group **MAP (mm)** and **Source of the MAP** (both required, as a
+  unit's MAP and its source are) and **Latitude** / **Longitude** (optional,
+  decimal degrees WGS84, a decimal comma taken; both or neither). Each
+  problem shows under its field once the field is left or the days are read,
+  and **Upload** stays off until they pass (`series/stationInput.ts`
+  `stationProblem`, worded for the field and stricter than the API's rule,
+  engine `rainStationError`, which it also applies). The details go in the
+  upload's own request: `PUT /projects/:id/series` with `station: { mapMm,
+  mapSource, lat, lon }`. A name that is already a station appends to it as
+  catchment rain does, saying its MAP ("“Bergwater” is a station: MAP 745 mm
+  (…). The days are added to it."), without the station fields; the name
+  field suggests the project's stations. A name that is a catchment rain
+  series without station details says so and appends to it too
+  (`e2e/tests/rain-station.spec.ts`).
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
   updates from its name and header (`guessSeries`). An existing series
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
@@ -5405,7 +5429,22 @@ an API key writes into keeps its name: the server refuses it with why.
 Viewers read the name in the table row), **Product**, **Measured at**, **Source**,
 **Upload unit** and **Edited by hand** (the days typed in, "2021-10-02,
 2021-10-04 to 2021-10-06"), each only where it applies, wrapping to one
-column on a phone. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
+column on a phone. A catchment rain series with no site is a **rainfall
+station** (issue #553, `series/StationFields.svelte`, helpers in
+`series/station.ts`): under the row, a group named *Rainfall station* holds
+its **MAP (mm)**, the MAP's required **Source of the MAP** once a MAP is
+typed, and an optional **Latitude** and **Longitude** (WGS84 degrees, both
+or neither), saved together with **Save the station** (`PATCH
+…/series/:id { station }`, null once every field is empty; disabled while
+nothing changes or while the engine's `rainStationError` finds a problem,
+which shows under the fields: *Say where the station's MAP comes from …*,
+*A station's coordinates need both a latitude and a longitude, or
+neither.*). It says *Saved the station.*, or *Not saved: &lt;reason&gt;*.
+Viewers read the MAP with its source and where it stands, or *Not
+recorded*. Settings → Rain for each unit reads the run's catchment rain
+station's MAP from here, and History says *Recorded … as a rainfall
+station: MAP 745 mm (…)*, *Changed the rainfall station details of …* or
+*Cleared …*. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
 editors only; recommended to the client, whose answer to the issue's
 question 1 is still open) follows: a *Day* text field read day first
 (`parseDay`: "2 Oct 2021", "2/10/2021" or "2021-10-02"; not a native date
@@ -6010,14 +6049,22 @@ two.
     land have a MAP ("1 of 2 units with land has a MAP."), with a link that
     opens Data feeds' Rain for each unit (`?rain=units#set-feeds`), and names
     the units without one (the first six, each a link to its form, "and N
-    more"); then an optional **Rain gauge's MAP**
-    (mm, 1–12 000; with it a unit with a MAP runs on the gauge's rain × unit
-    MAP ÷ gauge MAP) and, once it is set, its required **Source**; then the
+    more"); then the **Rain gauge's MAP**, a read-out since issue #553: the
+    station MAP of the catchment rain series a run reads (the first
+    `rain_catchment_mm` with no site by name, `firstOutletSeries`), with its
+    source and the series' name, and a link, *Change it in Series details*
+    (*Set it …* when none; *See it …* for a viewer), to
+    `?tab=series&series=<id>#data-chart`, where it is edited. With it a unit
+    with a MAP runs on the gauge's rain × unit MAP ÷ gauge MAP. The station
+    wins; a project whose station has no MAP still shows its older
+    `settings.unitRain.gaugeMapMm`, "kept from these settings", until one is
+    set on the station (migration 239 copied it there). Until issue #553 it
+    was an input here with its own Source; then the
     **MAP period** as a first and a last year (1 Jan to 31 Dec; 1991–2020,
     the default, is stored as none). A period under five years, or starting
-    before 1981, gets a note but saves; a gauge MAP out of range, one without
-    its source, or a first year after the last blocks Save, the message under
-    its field (named by `aria-describedby`) and in the save bar. Then
+    before 1981, gets a note but saves; a stored settings gauge MAP out of range or
+    without its source (its message under the read-out), or a first year
+    after the last blocks Save, the message under its field (named by `aria-describedby`) and in the save bar. Then
     **Reference gauge for the units' CHIRPS** (engine ≥ 1.80.0, issue #500,
     [model.md §2.4h *Reference gauge*](./model.md#reference-gauge-engine--1800-issue-500)):
     a **Reference gauge** select (None, the default: each unit's CHIRPS
@@ -6625,7 +6672,15 @@ two.
 - **Flow share** (between hydrological units): the method, and the **High/low
   MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
   is *High/low MAP split*, the one method that reads it (issue #174); under
-  *by area* or *manual* it is hidden and its saved value kept.
+  *by area* or *manual* it is hidden and its saved value kept. The line
+  under the heading follows Rain for each unit (issue #553): off, "GR4J runs
+  once on the catchment rain; this splits its flow and the EWR between
+  units. To give each unit its own runoff, see Rain for each unit." (an
+  explanation); on, "Each unit makes its own runoff; this now splits only
+  the EWR and the land cover's low-flow threshold between units, not the
+  flow." (a state line, shown with the explanations off), each with a link
+  to Rain for each unit (`#set-unit-rain`, the fieldset's id;
+  `e2e/tests/flow-share-hint.spec.ts`).
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,

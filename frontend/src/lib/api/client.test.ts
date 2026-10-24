@@ -343,6 +343,18 @@ describe('createApi', () => {
 		expect((del.mock.calls[0] as unknown as [string, RequestInit])[1].method).toBe('DELETE');
 	});
 
+	it('saves a rainfall station’s details, or clears them, with a PATCH of its station only (issue #553)', async () => {
+		const station = { mapMm: 745, mapSource: 'station record 1991–2020', lat: -33.9, lon: 18.9 };
+		const meta = { id: 's1', kind: 'rain_catchment_mm', station };
+		const patch = mockFetch(200, meta);
+		await expect(createApi('', patch).series.station('p1', 's/1', station)).resolves.toEqual(meta);
+		const [url, init] = patch.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/series/s%2F1', 'PATCH', { station }]);
+		const clear = mockFetch(200, { ...meta, station: null });
+		await createApi('', clear).series.station('p1', 's1', null);
+		expect(JSON.parse((clear.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ station: null });
+	});
+
 	it('moves a flow record to a gauge, or back to the outlet, with a PATCH of its site only', async () => {
 		const meta = { id: 's1', kind: 'flow_observed_m3s', siteNodeId: 'g1' };
 		const patch = mockFetch(200, meta);

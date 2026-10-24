@@ -21,6 +21,7 @@ import type {
 	ProjectModel,
 	ScenarioOp,
 	ProjectSettings,
+	RainStationMeta,
 	SeriesMeta
 } from '@water-management/engine';
 import type {
@@ -723,10 +724,24 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ series: SeriesMeta[] }>('GET', `${p(id)}/series`).then((r) => r.series),
 			get: (id: string, seriesId: string) =>
 				request<SeriesMeta & { values: (number | null)[] }>('GET', `${p(id)}/series/${enc(seriesId)}`),
-			/** `product` + `productVersion`: what the values are (CHIRPS 2.0 …); a replace without them stores them as not recorded. `dayBoundary`: how a sub-daily file was added up into days (033). */
+			/**
+			 * `product` + `productVersion`: what the values are (CHIRPS 2.0 …); a replace without them stores them as not recorded. `dayBoundary`: how a sub-daily file was added up into days (033).
+			 * `station`: a rainfall station's MAP, its source and its place, on a catchment rain series at no site (issue #553, 239_rain_stations.sql).
+			 */
 			put: (
 				id: string,
-				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null; dayBoundary?: DayBoundary | null; source?: string | null }
+				body: {
+					kind: string;
+					name?: string;
+					unit: string;
+					startDate: string;
+					values: (number | null)[];
+					product?: string | null;
+					productVersion?: string | null;
+					dayBoundary?: DayBoundary | null;
+					source?: string | null;
+					station?: RainStationMeta | null;
+				}
 			) => request<SeriesWriteResult>('PUT', `${p(id)}/series`, body),
 			/** Merge days into a series by date (incoming wins on overlap); creates it if missing. Days of another version than the series' are a 409. */
 			merge: (
@@ -742,6 +757,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			source: (id: string, seriesId: string, source: string | null) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { source }),
 			/** Rename a series (issue #556): unique among the project's series of its kind (409); its values and runs are untouched. */
 			rename: (id: string, seriesId: string, name: string) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { name }),
+			/** A rainfall station's MAP, its source and where it stands (issue #553): catchment rain with no site only; null clears them. */
+			station: (id: string, seriesId: string, station: RainStationMeta | null) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { station }),
 			/** Set one day of a series by hand, or clear it (null); marked as edited by hand (212_series_hand_days). `unit` defaults to the series' own. */
 			setDay: (id: string, seriesId: string, date: string, value: number | null, unit?: string) =>
 				request<SeriesWriteResult>('PUT', `${p(id)}/series/${enc(seriesId)}/days/${enc(date)}`, { value, ...(unit ? { unit } : {}) }),

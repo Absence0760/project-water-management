@@ -485,6 +485,55 @@ area-weighted CHIRPS (`rain_chirps_mm`, the from-units feeds,
   `node` and `data_feed` under the writer's RLS, and whoever may write a
   project's series may read both. No new table, grant, policy or foreign key.
 
+### Rainfall stations (239_rain_stations.sql)
+
+A **rainfall station** (issue #553) is a catchment rain series:
+`kind = 'rain_catchment_mm'` with no site (`site_node_id IS NULL`). A project
+may have several, told apart by `name`. Each carries its own MAP and,
+optionally, where it is (engine `SeriesMeta.station`, `RainStationMeta {
+mapMm, mapSource, lat, lon }`):
+
+- **`station_map_mm`** (1–12 000 mm, the engine's `MAP_MM_MIN` /
+  `MAP_MM_MAX`; NULL = none) and **`station_map_source`** (1–600
+  characters, not blank), with `time_series_station_map_needs_source` (a MAP
+  needs its source; the engine's `mapMmError`), as `node.map_mm` /
+  `map_source` above.
+- **`station_lat`** (−90..90) and **`station_lon`** (−180..180), WGS84
+  degrees, both or neither (`time_series_station_lat_lon_together`); NULL =
+  not known.
+- **Only a station has them** (`time_series_station_only`): every station
+  column is NULL unless the row is `rain_catchment_mm` with no site. A
+  unit's own gauge (209) has none, and a station can't be sited or change
+  kind while it keeps them.
+- **The gauge MAP moves onto the station.** The station's MAP replaces
+  `settings.unitRain.gaugeMapMm` / `gaugeMapSource`. 239 copied each
+  project's stored pair onto the station a run reads, the first
+  `rain_catchment_mm` by the name's bytes among the series with no site
+  ([Which series a run reads](#which-series-a-run-reads)), when the engine
+  would use it (`mapMmError` passes), whatever the mode; a project with no
+  such series copied nothing. Only `project.settings` was read: a scenario
+  can't set `unitRain`, and runs and model revisions keep the settings they
+  were made with. The settings JSON was left as it is (expand only); a later
+  migration drops the two keys once nothing reads them.
+- **Kept by a series revision** (`series_revision.station_map_mm`,
+  `station_map_source`, `station_lat`, `station_lon`, as 085 keeps the site
+  and 107 the source): `recordSeriesRevision` writes them from the row as it
+  stands before the change, and a restore (or the undo of one) puts them
+  back with the values, `null` included, clearing a station's details before
+  a site comes back. A revision has its series' kind and site, so details
+  only ever come back onto a catchment rain series with no site. 239 gave the
+  revisions of each station it filled the copied MAP, so restoring values
+  kept before it doesn't drop the station; a deleted series' older
+  revisions stay NULL.
+- Columns on `time_series` and `series_revision`: their row-level policies
+  (the viewer and editor ones, 039's API-key ones), `time_series`'s
+  same-project triggers and 001's and 030's table grants to `water_app` cover
+  them (`series_revision` stays append-only). No new table, function, policy
+  or foreign key. Tested by `series/stationMigration.db.test.ts` (the CHECKs
+  both ways, RLS, and the copy, run on a seeded transaction and rolled back)
+  and `series/station.db.test.ts` (the API, the run builder, and a restore
+  after a delete and after a replace).
+
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
 MB to a few tens of MB. The engine is deterministic, so a run saved since

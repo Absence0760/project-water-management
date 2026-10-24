@@ -8,6 +8,7 @@
 // Reached from lambda.ts through the routes: never import dotenv (or a module
 // that does) here, so esbuild keeps it out of the deployment bundle.
 import { isFlowSiteKind, isUnitRainKind, siteProblem } from '../series/site.js';
+import { stationProblem } from '../series/station.js';
 import { resolveFitRecord, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
@@ -77,6 +78,11 @@ export function projectFileProblems(data: ProjectFile): string[] {
 				if (problem) problems.push(`${what}: its site "${site.name}": ${problem}`);
 			}
 		}
+		// A rainfall station's details (239_rain_stations.sql, issue #553): only a catchment rain series with no site.
+		if (s.station) {
+			const problem = stationProblem(s.kind, s.siteNodeId ?? null);
+			if (problem) problems.push(`series ${s.kind}${s.name ? ` "${s.name}"` : ''}: station: ${problem}`);
+		}
 	}
 	return problems;
 }
@@ -117,9 +123,9 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	for (const s of data.series) {
 		await db.query(
 			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
-				source, source_unit, source_unit_factor, hand_days)
+				source, source_unit, source_unit_factor, hand_days, station_map_mm, station_map_source, station_lat, station_lon)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-				(SELECT range_agg(daterange(d0::date, d1::date, '[]')) FROM unnest($14::text[], $15::text[]) AS t(d0, d1)))`,
+				(SELECT range_agg(daterange(d0::date, d1::date, '[]')) FROM unnest($14::text[], $15::text[]) AS t(d0, d1)), $16, $17, $18, $19)`,
 			[
 				id,
 				s.kind,
@@ -140,7 +146,12 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 				s.sourceUnitFactor ?? null,
 				// The days edited by hand (212): marked in the import as in the file, so an edited record stays marked.
 				(s.handDays ?? []).map((r) => r[0]),
-				(s.handDays ?? []).map((r) => r[1])
+				(s.handDays ?? []).map((r) => r[1]),
+				// A rainfall station's details (239): as the file records them.
+				s.station?.mapMm ?? null,
+				s.station?.mapSource ?? null,
+				s.station?.lat ?? null,
+				s.station?.lon ?? null
 			]
 		);
 	}

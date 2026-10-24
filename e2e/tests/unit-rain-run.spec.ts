@@ -8,7 +8,8 @@
 //   whose fetches run offline (a scoped worker tick, FEED_SOURCE=fixtures);
 //   the panel then counts each unit's days.
 // - Each unit's form takes its MAP and source; Settings switches rain for each
-//   unit on with the gauge's MAP.
+//   unit on, and the catchment rain station's MAP (Series details, issue #553)
+//   is the gauge's MAP.
 // - A run lists each unit on Catchment gauge × MAP ratio with the factor the
 //   engine reports (unit MAP ÷ gauge MAP; the held one first, at 4), and the
 //   gap's days from each unit's own CHIRPS.
@@ -102,14 +103,19 @@ test('unit feeds fetched offline, unit MAPs and a gauge MAP give a run on each u
 	expect((await saveModelChanges(page)).status()).toBe(200);
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 
-	// Settings: rain for each unit, with the gauge's MAP.
+	// Settings: rain for each unit; the gauge's MAP is the catchment rain station's (issue #553), set in Series details.
 	await openSettings(page, id);
 	const group = page.getByTestId('unit-rain-settings');
 	await group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' }).check();
 	await expect(group.getByTestId('unit-rain-coverage')).toContainText('3 of 3 units with land have a MAP.');
-	await group.getByLabel(/^Rain gauge’s MAP/).fill(String(GAUGE_MAP));
-	await group.getByLabel('Source of the gauge’s MAP').fill('the gauge’s synthetic record, 1991–2020');
 	await saveSettings(page);
+	await group.getByRole('link', { name: 'Set it in Series details' }).click();
+	const station = page.getByRole('group', { name: 'Rainfall station' });
+	await station.getByLabel(/^MAP/).fill(String(GAUGE_MAP));
+	await station.getByLabel(/^MAP/).blur();
+	await station.getByLabel('Source of the MAP').fill('the gauge’s synthetic record, 1991–2020');
+	await station.getByRole('button', { name: 'Save the station' }).click();
+	await expect(station.getByTestId('station-saved')).toBeVisible();
 
 	// Run the model.
 	await page.goto(`/projects/${id}?tab=runs`);

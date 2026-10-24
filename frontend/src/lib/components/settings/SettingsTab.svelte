@@ -108,6 +108,7 @@
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
 	import { saveBlockers, SETTINGS_ELSEWHERE, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
+	import type { CatchmentStation } from './unitRain';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
@@ -145,6 +146,7 @@
 		observedOrigins,
 		apanSeries,
 		flowRecordId = null,
+		catchmentRain,
 		readonly,
 		onProjectChange,
 		onModelChanged = () => {}
@@ -170,6 +172,8 @@
 		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		/** A flow record the calibration can score against, for the link to where its site is set (the Data tab). */
 		flowRecordId?: string | null;
+		/** The catchment rain series a run reads, whose station MAP Rain for each unit reads (issue #553): null = none, undefined = not loaded. */
+		catchmentRain?: CatchmentStation | null;
 		readonly: boolean;
 		onProjectChange: (p: Project) => void;
 		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
@@ -804,7 +808,20 @@
 			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
 		</div>
 		<p class="summary" data-testid="summary-share">{summaries['set-share']}</p>
-		<p class="hint explain">Splits catchment natural flow and the EWR into parts per hydrological unit.</p>
+		<!-- What the shares split depends on Rain for each unit (issue #553, docs/model.md §2.4h, §2.5): off, GR4J's one
+		     run's flow and the EWR; on, each unit makes its own runoff, so they split the EWR and the land-cover low-flow threshold. -->
+		{#if s.unitRain?.mode === 'perUnit'}
+			<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
+			<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
+				Each unit makes its own runoff; this now splits only the EWR and the land cover’s low-flow threshold between units, not the flow. See
+				<a href="#set-unit-rain">Rain for each unit</a>.
+			</p>
+		{:else}
+			<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
+				GR4J runs once on the catchment rain; this splits its flow and the EWR between units. To give each unit its own runoff, see
+				<a href="#set-unit-rain">Rain for each unit</a>.
+			</p>
+		{/if}
 		<div class="fields">
 			<div class="field">
 				<span class="lbl"><label for="st-method">Method</label><HelpTip key="settings.flowShareMethod" /></span>
@@ -1027,7 +1044,7 @@
 			<!-- Rain for each unit (settings.unitRain, issue #482): GR4J per unit with land on its own rain; arealRain then applies only to units on the catchment rain. -->
 			<Lazy load={loadUnitRain}>
 				{#snippet children(UnitRainFields)}
-					<UnitRainFields bind:value={s.unitRain} bind:last={draft.kept.unitRain} {readonly} nodes={editor?.model.nodes ?? []} />
+					<UnitRainFields bind:value={s.unitRain} bind:last={draft.kept.unitRain} {readonly} nodes={editor?.model.nodes ?? []} {catchmentRain} />
 				{/snippet}
 			</Lazy>
 			{#if !readonly && editor && s.unitRain?.mode === 'perUnit'}

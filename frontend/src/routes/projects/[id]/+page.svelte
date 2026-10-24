@@ -987,6 +987,7 @@
 								observedOrigins={observedOriginsOf(series)}
 								apanSeries={series ? (firstOutletSeries(series, 'evap_apan_mm') ?? null) : undefined}
 								flowRecordId={series ? ((firstOutletSeries(series, 'flow_observed_m3s') ?? firstOutletSeries(series, 'flow_logger_m3s'))?.id ?? null) : null}
+								catchmentRain={series ? (firstOutletSeries(series, 'rain_catchment_mm') ?? null) : undefined}
 								readonly={!canEdit}
 								{onProjectChange}
 								onModelChanged={reloadInputs}

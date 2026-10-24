@@ -2315,7 +2315,14 @@ and a refit.
 **The setting.** `{ mode: 'perUnit', gaugeMapMm?, gaugeMapSource?,
 mapPeriod?, reference? }` (`reference` from engine 1.80.0,
 [below](#reference-gauge-engine--1800-issue-500)). `gaugeMapMm` is the catchment rain gauge's own MAP (mm, with
-its source), `mapPeriod` the years a unit's CHIRPS MAP factor compares over
+its source). Since issue #553 that MAP belongs to the gauge: it is the
+**station MAP** of the catchment rain series the run reads
+(`SeriesMeta.station`, a rainfall station, set in the Data tab's Series
+details), which the backend's run builder writes into `gaugeMapMm` /
+`gaugeMapSource` before the engine sees the input (the station wins;
+migration 239 copied each project's `gaugeMapMm` onto its station, so runs
+are bit-identical across it). A project whose station has no MAP still runs
+on, and Settings still shows, the stored `gaugeMapMm`. `mapPeriod` the years a unit's CHIRPS MAP factor compares over
 (ISO dates; absent = `DEFAULT_UNIT_MAP_PERIOD`, 1991-01-01 to 2020-12-31).
 Each unit's MAP is `node.mapMm` with `node.mapSource` (`mapMmError`: 1–12 000
 mm, a MAP needs its source), typed in the unit's form or proposed from a
@@ -2823,7 +2830,9 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`); under
   runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0) a land unit's runoff
-  is its own GR4J runoff instead, and the share still splits the EWR
+  is its own GR4J runoff instead, and the share still splits the EWR (and
+  the land cover's low-flow threshold, §2.5a): Settings → Flow share says
+  which, by the state of Rain for each unit (issue #553)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
 Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
