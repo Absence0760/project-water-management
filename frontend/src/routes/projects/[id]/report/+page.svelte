@@ -55,7 +55,7 @@
 	import NetworkSchematic from '$lib/components/network/NetworkSchematic.svelte';
 	import { ranAgo } from '$lib/components/network/supplyColour';
 	import { supplyColouring } from '$lib/components/network/farmColour';
-	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '$lib/components/report/inputs';
+	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, PAIRING_NUMS, settingsRows, STATION_HEAD, STATION_NUMS, stationPairingRows, stationRows, transferRows } from '$lib/components/report/inputs';
 	import { reportPageRule } from '$lib/components/report/printPage';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
 	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
@@ -440,6 +440,9 @@
 						{@render table('Hydrological units', ['Hydrological unit', 'Kind', 'Drains into', 'Area (km²)', 'Dam (m³)', 'Irrigation efficiency'], [3, 4, 5], nodeRows(model, settings.apanMm))}
 						{@render table('Crops and planted areas', ['Hydrological unit', 'Crop', 'Area (ha)', 'Irrigation system'], [2], cropAreaRows(model))}
 						{@render table('Transfers', ['From', 'To', 'Months', 'Max rate (m³/s)', 'Daily cap (m³)', 'Losses on the way', 'Seeping back to the river', 'On'], [3, 4], transferRows(model))}
+						<!-- Rainfall stations (issue #553): each area's station forcing and each station's CHIRPS pairing, from the run's summary. -->
+						{@render table('Rainfall stations', STATION_HEAD, STATION_NUMS, stationRows(summary, [...nodes].sort((a, b) => a.sortOrder - b.sortOrder).map((n) => n.id)))}
+						{@render table('Station CHIRPS pairings', PAIRING_HEAD, PAIRING_NUMS, stationPairingRows(summary))}
 						{@render table(
 							'Data coverage (the project’s input series today; the run used them up to its end date)',
 							['Series', 'Starts', 'Ends', 'Days', 'Days in the run'],

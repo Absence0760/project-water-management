@@ -10,6 +10,7 @@ import { fmtNum, fmtPct } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import { peText } from '$lib/components/settings/peInput';
 import { dataEnd } from '$lib/components/series/freshness';
+import { chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, ratioText, stationAreas, stationsOf } from '$lib/components/runs/stationRain';
 
 type RawSettings = Partial<Omit<ProjectSettings, 'runoffModel'>> & { runoffModel?: StoredRunoffModelId } & Record<string, unknown>;
 
@@ -52,6 +53,17 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 			const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 			const gauge = u.gaugeMapMm != null ? `; rain gauge’s MAP ${fmtNum(u.gaugeMapMm)} mm${u.gaugeMapSource ? ` (${u.gaugeMapSource})` : ''}` : '; no rain gauge MAP';
 			rows.push(['Rain for each unit (GR4J rain)', `on: GR4J ran once per unit with land on its own rain; MAP period ${p.start.slice(0, 4)}–${p.end.slice(0, 4)}${gauge}`]);
+		}
+		// Rainfall stations (issue #553, docs/model.md §2.4i): only on a run that assigned one; the stations tables below name them.
+		const st = s.rainStations;
+		const units = Object.keys(st?.units ?? {}).length;
+		if (st && (st.catchment || units)) {
+			const parts = [st.catchment ? 'the catchment from a station' : 'the catchment rain as before'];
+			if (units) parts.push(`${units === 1 ? '1 land unit' : `${fmtNum(units)} land units`} from ${units === 1 ? 'its' : 'their'} stations`);
+			parts.push(st.catchmentMapMm != null ? `catchment MAP ${fmtNum(st.catchmentMapMm)} mm${st.catchmentMapSource ? ` (${st.catchmentMapSource})` : ''}` : 'catchment MAP: the units’ area-weighted mean');
+			const periods = Object.values(st.unreliable ?? {}).reduce((n, r) => n + r.length, 0);
+			if (periods) parts.push(`${periods === 1 ? '1 unreliable period' : `${fmtNum(periods)} unreliable periods`} set aside`);
+			rows.push(['Rainfall stations (GR4J rain)', parts.join('; ')]);
 		}
 	}
 	rows.push(
@@ -192,4 +204,40 @@ export function coverageRows(series: readonly SeriesMeta[], run: { startDate: st
 			const inRun = Math.max(0, Math.min(s1, r1) - Math.max(s0, r0) + 1);
 			return [kindLabel(s.kind) + (s.name ? ` · ${s.name}` : ''), s.startDate, dataEnd(s), fmtNum(s.length), fmtNum(inRun)];
 		});
+}
+
+/** The report's Rainfall stations table (issue #553): its header and which of its columns are numbers. */
+export const STATION_HEAD = ['Area', 'Station', 'Area MAP (mm)', 'Station MAP (mm)', 'Ratio', 'Days from the station', 'Days from corrected CHIRPS', 'Days from the fallback', 'CHIRPS corrected against'];
+export const STATION_NUMS = [2, 3, 5, 6, 7];
+
+/**
+ * Each area the run forced from a rainfall station (summary.stations, engine
+ * ≥ 1.91.0): the catchment first, then the units in network order; its
+ * station, both MAPs with their sources, the ratio, the days by source and
+ * the pairing correcting its CHIRPS. Empty on a run without stations.
+ */
+export function stationRows(summary: unknown, order: readonly string[] = []): string[][] {
+	const s = stationsOf(summary);
+	if (!s) return [];
+	const src = (mm: number | null, source: string | null) => (mm === null ? '–' : `${fmtNum(mm)}${source ? ` (${source})` : ''}`);
+	return stationAreas(s, order).map((a) => [
+		a.nodeId === null ? `${a.name} (catchment)` : a.name,
+		a.stationName,
+		src(a.areaMapMm, a.areaMapSource),
+		src(a.stationMapMm, a.stationMapSource),
+		ratioText(a) + (a.clamped ? ', held at the bound' : ''),
+		fmtNum(a.days.station),
+		fmtNum(a.days.chirps),
+		fmtNum(a.days.fallback),
+		correctedByName(s, a) ?? 'none (gaps from the fallback)'
+	]);
+}
+
+/** The report's Station CHIRPS pairings table (issue #553): its header and number columns. */
+export const PAIRING_HEAD = ['Station', 'CHIRPS at', 'Fit period', 'Shared days', 'Monthly factors'];
+export const PAIRING_NUMS = [3];
+
+/** Each station's CHIRPS pairing: where its CHIRPS came from, the fit period, the shared days, the 12 factors or why it was refused. */
+export function stationPairingRows(summary: unknown): string[][] {
+	return (stationsOf(summary)?.pairings ?? []).map((p) => [p.stationName, chirpsAtText(p), pairingPeriodText(p), fmtNum(p.days), pairingFactorsText(p) + (p.pinned ? ' (pinned)' : '')]);
 }
