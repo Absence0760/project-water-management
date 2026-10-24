@@ -35,6 +35,18 @@
 --   only project.settings is read. The settings JSON is left as it is
 --   (expand only): today's code still reads gaugeMapMm from it, and a later
 --   migration drops it once the code reads the station.
+-- * series_revision gets the same four columns (as 085 gave it the site and
+--   107 the source), so a restore or undo puts a station's details back with
+--   its values: recordSeriesRevision (history/record.ts) writes them from the
+--   row as it stands before the change, and the series restore
+--   (history/routes.ts) sets them back with the site. No CHECKs there, as
+--   for 085's and 107's columns: a revision only copies a row that passed
+--   time_series's. A revision and its series share kind and site, so a
+--   restore never puts details on a series that can't hold them. Existing
+--   revisions get NULL, except those of a station the data step filled,
+--   which get its copied MAP (the same value their series ran on through
+--   settings), so restoring one doesn't quietly drop it; a deleted series'
+--   revisions can't be matched to a project's setting and stay NULL.
 --
 -- Columns on an existing project table (001's time_series): its RLS policies
 -- (the viewer/editor policies and 039's API-key policies, all row-level), its
@@ -69,18 +81,36 @@ COMMENT ON COLUMN time_series.station_lat IS
 COMMENT ON COLUMN time_series.station_lon IS
 	'A rainfall station''s longitude, WGS84 degrees (-180..180), with station_lat or not at all; NULL = not known.';
 
+ALTER TABLE series_revision
+	ADD COLUMN station_map_mm double precision,
+	ADD COLUMN station_map_source text,
+	ADD COLUMN station_lat double precision,
+	ADD COLUMN station_lon double precision;
+
+COMMENT ON COLUMN series_revision.station_map_mm IS
+	'The series'' station MAP when the revision was recorded (239; time_series.station_map_mm). A restore puts it back, with station_map_source, station_lat and station_lon.';
+
 -- data step: settings.unitRain gauge MAP -> the station a run reads
-UPDATE time_series t
-SET station_map_mm = g.map_mm, station_map_source = g.map_source
-FROM (
-	SELECT DISTINCT ON (s.project_id) s.id, (p.settings -> 'unitRain' ->> 'gaugeMapMm')::double precision AS map_mm, p.settings -> 'unitRain' ->> 'gaugeMapSource' AS map_source
-	FROM project p
-	JOIN time_series s ON s.project_id = p.id AND s.kind = 'rain_catchment_mm' AND s.site_node_id IS NULL
-	WHERE jsonb_typeof(p.settings -> 'unitRain' -> 'gaugeMapMm') = 'number'
-	  AND (p.settings -> 'unitRain' ->> 'gaugeMapMm')::double precision BETWEEN 1 AND 12000
-	  AND jsonb_typeof(p.settings -> 'unitRain' -> 'gaugeMapSource') = 'string'
-	  AND (p.settings -> 'unitRain' ->> 'gaugeMapSource') ~ '\S'
-	  AND char_length(p.settings -> 'unitRain' ->> 'gaugeMapSource') <= 600
-	ORDER BY s.project_id, s.name COLLATE "C"
-) g
-WHERE t.id = g.id AND t.station_map_mm IS NULL;
+-- (one statement: the copy, then the revisions of each station it filled, kept before this migration, as the header says)
+WITH copied AS (
+	UPDATE time_series t
+	SET station_map_mm = g.map_mm, station_map_source = g.map_source
+	FROM (
+		SELECT DISTINCT ON (s.project_id) s.id, (p.settings -> 'unitRain' ->> 'gaugeMapMm')::double precision AS map_mm, p.settings -> 'unitRain' ->> 'gaugeMapSource' AS map_source
+		FROM project p
+		JOIN time_series s ON s.project_id = p.id AND s.kind = 'rain_catchment_mm' AND s.site_node_id IS NULL
+		WHERE jsonb_typeof(p.settings -> 'unitRain' -> 'gaugeMapMm') = 'number'
+		  AND (p.settings -> 'unitRain' ->> 'gaugeMapMm')::double precision BETWEEN 1 AND 12000
+		  AND jsonb_typeof(p.settings -> 'unitRain' -> 'gaugeMapSource') = 'string'
+		  AND (p.settings -> 'unitRain' ->> 'gaugeMapSource') ~ '\S'
+		  AND char_length(p.settings -> 'unitRain' ->> 'gaugeMapSource') <= 600
+		ORDER BY s.project_id, s.name COLLATE "C"
+	) g
+	WHERE t.id = g.id AND t.station_map_mm IS NULL
+	RETURNING t.id, t.project_id, t.station_map_mm, t.station_map_source
+)
+UPDATE series_revision r
+SET station_map_mm = c.station_map_mm, station_map_source = c.station_map_source
+FROM copied c
+WHERE r.project_id = c.project_id AND r.series_id = c.id
+  AND r.kind = 'rain_catchment_mm' AND r.site_node_id IS NULL AND r.station_map_mm IS NULL;

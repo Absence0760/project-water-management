@@ -239,3 +239,67 @@ describe('the run builder takes the station’s MAP as the gauge MAP (runs/execu
 		expect(unitRain(await input(u, q.id))).toEqual(settings);
 	});
 });
+
+describe('a series revision keeps a station’s details, and a restore puts them back (239)', () => {
+	type Rev = { id: string; station: Station | null; siteNodeId: string | null };
+	const revisions = async (u: User, pid: string, seriesId: string) => (await u.call('GET', `/projects/${pid}/series/${seriesId}/revisions`)).body.revisions as Rev[];
+	const restore = (u: User, pid: string, seriesId: string, revId: string) => u.call('POST', `/projects/${pid}/series/${seriesId}/revisions/${revId}/restore`, {});
+
+	it('a deleted station restored from its revision is a station again; a series with none restores with none', async () => {
+		const u = await signUp('StnRestoreDel');
+		const q = await stationProject(u, 'Station restore delete');
+		expect((await patch(u, q.id, q.catchment.id, { station: STATION })).status).toBe(200);
+		expect((await u.call('DELETE', `/projects/${q.id}/series/${q.catchment.id}`)).status).toBe(204);
+		const [rev] = await revisions(u, q.id, q.catchment.id);
+		expect(rev!.station).toEqual(STATION);
+		const back = await restore(u, q.id, q.catchment.id, rev!.id);
+		expect(back.status, JSON.stringify(back.body)).toBe(200);
+		expect(back.body).toMatchObject({ kind: 'rain_catchment_mm', siteNodeId: null, station: STATION });
+		expect((await list(u, q.id)).find((s) => s.kind === 'rain_catchment_mm')!.station).toEqual(STATION);
+		// Positive control: the flow record, which is no station, comes back with none.
+		expect((await u.call('DELETE', `/projects/${q.id}/series/${q.flow.id}`)).status).toBe(204);
+		const [flowRev] = await revisions(u, q.id, q.flow.id);
+		expect(flowRev!.station).toBeNull();
+		const flowBack = await restore(u, q.id, q.flow.id, flowRev!.id);
+		expect(flowBack.status).toBe(200);
+		expect(flowBack.body.station).toBeNull();
+	});
+
+	it('restoring values from before a replace puts their station details back, and undoing it puts the later ones back', async () => {
+		const u = await signUp('StnRestoreRep');
+		const q = await stationProject(u, 'Station restore replace');
+		expect((await patch(u, q.id, q.catchment.id, { station: STATION })).status).toBe(200);
+		await q.put({ kind: 'rain_catchment_mm', name: '', values: rain(20) });
+		const later = { mapMm: 800, mapSource: 'Synthetic revised MAP', lat: null, lon: null };
+		expect((await patch(u, q.id, q.catchment.id, { station: later })).status).toBe(200);
+		const [rev] = await revisions(u, q.id, q.catchment.id);
+		expect(rev!.station).toEqual(STATION);
+		const back = await restore(u, q.id, q.catchment.id, rev!.id);
+		expect(back.status, JSON.stringify(back.body)).toBe(200);
+		expect(back.body.station).toEqual(STATION);
+		expect((await u.call('GET', `/projects/${q.id}/series/${q.catchment.id}`)).body.values).toEqual(rain(10));
+		// The restore kept what it replaced as a revision in turn: undoing it brings the later details back.
+		const [undo] = await revisions(u, q.id, q.catchment.id);
+		expect(undo!.station).toEqual(later);
+		const again = await restore(u, q.id, q.catchment.id, undo!.id);
+		expect(again.status).toBe(200);
+		expect(again.body.station).toEqual(later);
+		expect((await u.call('GET', `/projects/${q.id}/series/${q.catchment.id}`)).body.values).toEqual(rain(20));
+	});
+
+	it('a unit’s own rain restored over a station of its name comes back at its unit, without the station’s details', async () => {
+		const u = await signUp('StnRestoreSite');
+		const q = await stationProject(u, 'Station restore site');
+		const own = await q.put({ kind: 'rain_catchment_mm', name: 'Farm A gauge', values: rain(5) });
+		expect((await patch(u, q.id, own.id, { siteNodeId: q.farm.id })).status).toBe(200);
+		expect((await u.call('DELETE', `/projects/${q.id}/series/${own.id}`)).status).toBe(204);
+		// A new series of the same name, now a station.
+		const station = await q.put({ kind: 'rain_catchment_mm', name: 'Farm A gauge', values: rain(6), station: STATION });
+		expect(station.station).toEqual(STATION);
+		const rev = (await revisions(u, q.id, station.id)).find((r) => r.siteNodeId === q.farm.id)!;
+		expect(rev.station).toBeNull();
+		const back = await restore(u, q.id, station.id, rev.id);
+		expect(back.status, JSON.stringify(back.body)).toBe(200);
+		expect(back.body).toMatchObject({ siteNodeId: q.farm.id, station: null });
+	});
+});

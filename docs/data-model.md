@@ -515,11 +515,24 @@ mapMm, mapSource, lat, lon }`):
   can't set `unitRain`, and runs and model revisions keep the settings they
   were made with. The settings JSON was left as it is (expand only); a later
   migration drops the two keys once nothing reads them.
-- Columns on `time_series`: its row-level policies (the viewer and editor
-  ones, 039's API-key ones), its same-project triggers and 001's table grant
-  to `water_app` cover them. No new table, function, policy or foreign key.
-  Tested by `series/stationMigration.db.test.ts` (the CHECKs both ways, RLS,
-  and the copy, run on a seeded transaction and rolled back).
+- **Kept by a series revision** (`series_revision.station_map_mm`,
+  `station_map_source`, `station_lat`, `station_lon`, as 085 keeps the site
+  and 107 the source): `recordSeriesRevision` writes them from the row as it
+  stands before the change, and a restore (or the undo of one) puts them
+  back with the values, `null` included, clearing a station's details before
+  a site comes back. A revision has its series' kind and site, so details
+  only ever come back onto a catchment rain series with no site. 239 gave the
+  revisions of each station it filled the copied MAP, so restoring values
+  kept before it doesn't drop the station; a deleted series' older
+  revisions stay NULL.
+- Columns on `time_series` and `series_revision`: their row-level policies
+  (the viewer and editor ones, 039's API-key ones), `time_series`'s
+  same-project triggers and 001's and 030's table grants to `water_app` cover
+  them (`series_revision` stays append-only). No new table, function, policy
+  or foreign key. Tested by `series/stationMigration.db.test.ts` (the CHECKs
+  both ways, RLS, and the copy, run on a seeded transaction and rolled back)
+  and `series/station.db.test.ts` (the API, the run builder, and a restore
+  after a delete and after a replace).
 
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
