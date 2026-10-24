@@ -2931,7 +2931,15 @@ pairing is refused; or a forecast day), not the stored records' spans.
 A §2.4h reference gauge of `rain_catchment_mm` is fitted on that catchment
 rain too: station × *r* on the station's checked days (accumulation windows
 left out), not the stored gauge (`referenceGaugeRecord`); rule 2's gauge
-rain is the same station × *r*. The areal correction (§2.4g) is off, with a warning:
+rain is the same station × *r*. **Rule 2's MAP ratio** divides by the MAP
+level that rain is at: station MAP × *r* (the catchment MAP when scaled and
+unclamped, the station's MAP with `scaleToMap` false, the station's MAP ×
+the clamped *r* when clamped), not `settings.unitRain.gaugeMapMm`, which
+still switches rule 2 on. So a rule-2 unit's station days read station ×
+unit MAP ÷ station MAP, with no double division, and the same ratio fills
+a unit's gaps and scales its forecast days (§2.4h). Without the station's
+MAP the level is unknown and rule 2 doesn't apply. Without a catchment
+station, rule 2 divides by `gaugeMapMm` as before, to the bit. The areal correction (§2.4g) is off, with a warning:
 × catchment MAP ÷ station MAP already takes the point rain to the
 catchment's level. **Switching the catchment to a station replaces the
 §2.4b factors with the pairing's**, even when the station is today's

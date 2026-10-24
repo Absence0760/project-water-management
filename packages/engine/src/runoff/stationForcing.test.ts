@@ -285,6 +285,21 @@ describe('the catchment on its station', () => {
 		for (let t = 0; t < DAYS; t += 11) expect(d[t]).toBe(Math.max(0, c[t] ?? ch[t] ?? 0));
 	});
 
+	it('rule 2 under a catchment station divides by the MAP level that rain is at (station MAP × r): station × unit MAP ÷ station MAP', () => {
+		for (const scaleToMap of [true, false]) {
+			const x = catchment({ unitRain: { mode: 'perUnit', gaugeMapMm: 600, gaugeMapSource: 'the station' }, rainStations: { catchment: { stationId: 'S', scaleToMap }, sites: SITES } });
+			const out = runModel(x);
+			const r = out.summary.stations!.catchment!.ratio;
+			if (scaleToMap) expect(r).toBeCloseTo(((10 * 900 + 6 * 600 + 3 * 750 + 1.5 * 600) / 20.5) / 600, 12);
+			else expect(r).toBe(1);
+			const rec = checkedStationRecord(settingsOf(x), x.series, 'S')!.record.values;
+			const c = col(out, 'rain_unit', 'C');
+			expect(out.summary.unitRain!.units.find((u) => u.nodeId === 'C')!.rule).toBe('gaugeMap');
+			// C (MAP 750, no records of its own): rule 2 on the catchment rain station × r, × 750 ÷ (600 × r).
+			for (let t = 0; t < DAYS; t++) if (rec[t] != null) expect(c[t]).toBeCloseTo(rec[t]! * (750 / 600), 12);
+		}
+	});
+
 	it('a §2.4h reference gauge of rain_catchment_mm is fitted on the station-forced catchment rain (station × r), not the stored gauge', () => {
 		const x = catchment({ unitRain: { mode: 'perUnit', reference: { gauge: 'rain_catchment_mm', unitId: 'A' } }, rainStations: { catchment: { stationId: 'S' }, sites: SITES } });
 		const cell = rainOf(0.9, 4);

@@ -341,10 +341,15 @@ export function unitRainRecipes(
 		return null;
 	}
 	const series = ctx.series;
-	const gaugeMap = usableMap(u.gaugeMapMm);
 	// Rule 2's catchment gauge rain: under a catchment station (engine ≥ 1.91.0, §2.4i) the station is the catchment rain.
 	const stationPlan = ctx.settings.rainStations?.catchment ? catchmentStationPlanOf(stationsOf(ctx, warnings)) : null;
 	const gaugeRain = stationPlan ? hasReading(stationPlan.record) : hasReading(series.rain_catchment_mm);
+	// Rule 2's denominator is the MAP level the catchment rain is at. Under a catchment station (engine ≥ 1.91.0, §2.4i)
+	// that rain is station × r, so its level is the station's MAP × r (the catchment MAP when scaled and unclamped),
+	// not settings.unitRain.gaugeMapMm, which still switches rule 2 on; without the station's MAP the level is unknown,
+	// and rule 2 doesn't apply.
+	const setGaugeMap = usableMap(u.gaugeMapMm);
+	const gaugeMap = stationPlan ? (setGaugeMap !== null && stationPlan.stationMap.mapMm !== null ? stationPlan.stationMap.mapMm * stationPlan.ratio.ratio : null) : setGaugeMap;
 	const period = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	const bias = biasExists(ctx.chirpsCorrection);
 	const reference = referenceFit(u, series, ctx.nodes, warnings, u.reference ? referenceGaugeRecord(ctx.settings, series, u.reference.gauge, ctx.settings.rainStations?.catchment ? stationsOf(ctx, warnings) : null) : undefined);
