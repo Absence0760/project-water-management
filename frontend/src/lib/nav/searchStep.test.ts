@@ -36,6 +36,25 @@ describe('SearchStep', () => {
 		expect(calls.map((c) => c.replace)).toEqual([false, false, true]);
 	});
 
+	it('a write while a push has reached history but its goto hasn’t resolved yet replaces it, not adds a second entry', async () => {
+		let here = 'https://app.test/';
+		const step = new SearchStep(() => here);
+		const seen: boolean[] = [];
+		let finish!: () => void;
+		const first = step.write('/?q=a', (replace) => {
+			seen.push(replace);
+			here = 'https://app.test/?q=a'; // the entry is written…
+			return new Promise<void>((r) => (finish = r)); // …the page still rendering
+		});
+		await step.write('/?q=al', async (replace) => {
+			seen.push(replace);
+			here = 'https://app.test/?q=al';
+		});
+		finish();
+		await first;
+		expect(seen).toEqual([false, true]);
+	});
+
 	it('a push that lands after the box was left and focused again counts for no search', async () => {
 		const here = { href: 'https://app.test/' };
 		const step = new SearchStep(() => here.href);
