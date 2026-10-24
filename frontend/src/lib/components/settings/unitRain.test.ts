@@ -6,13 +6,14 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_UNIT_MAP_PERIOD, unitRainError, type UnitRainSettings } from '@water-management/engine';
 import {
+	gaugeMapReadout,
 	mapPeriodNote,
+	stationHref,
 	mapPeriodYears,
 	unitMapCoverage,
 	unitRainFormError,
 	unitRainOn,
 	unitRainProblem,
-	withGaugeMap,
 	withMapPeriodYears,
 	withReferenceGauge,
 	withReferenceUnit,
@@ -62,11 +63,26 @@ describe('the MAP period in whole years', () => {
 	});
 });
 
-describe('withGaugeMap', () => {
-	it('sets the MAP with an empty source to fill, and clearing it clears its source', () => {
-		expect(withGaugeMap({ mode: 'perUnit' }, 640)).toEqual({ mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: '' });
-		expect(withGaugeMap({ mode: 'perUnit', gaugeMapMm: 600, gaugeMapSource: 'kept' }, 640)).toEqual({ mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'kept' });
-		expect(withGaugeMap({ mode: 'perUnit', gaugeMapMm: 600, gaugeMapSource: 'kept' }, null)).toEqual({ mode: 'perUnit' });
+describe('gaugeMapReadout (issue #553)', () => {
+	const station = (mapMm: number | null, mapSource: string | null = null) => ({ id: 's1', name: 'Gauge A', station: { mapMm, mapSource, lat: null, lon: null } });
+	it('reads the catchment rain station’s MAP, which wins over the settings', () => {
+		expect(gaugeMapReadout({ gaugeMapMm: 640, gaugeMapSource: 'old' }, station(745, 'station record'))).toEqual({ from: 'station', mm: 745, source: 'station record' });
+	});
+
+	it('falls back to the settings’ gauge MAP while the station has none, so an older project still shows its value', () => {
+		expect(gaugeMapReadout({ gaugeMapMm: 640, gaugeMapSource: 'old' }, station(null))).toEqual({ from: 'settings', mm: 640, source: 'old' });
+		expect(gaugeMapReadout({ gaugeMapMm: 640, gaugeMapSource: 'old' }, { id: 's1', name: '', station: null })).toEqual({ from: 'settings', mm: 640, source: 'old' });
+		expect(gaugeMapReadout({ gaugeMapMm: 640 }, null)).toEqual({ from: 'settings', mm: 640, source: null });
+		expect(gaugeMapReadout({ gaugeMapMm: 640 }, undefined)).toEqual({ from: 'settings', mm: 640, source: null });
+	});
+
+	it('is none with neither', () => {
+		expect(gaugeMapReadout({ mode: 'perUnit' } as UnitRainSettings, station(null))).toEqual({ from: null, mm: null, source: null });
+		expect(gaugeMapReadout(null, null)).toEqual({ from: null, mm: null, source: null });
+	});
+
+	it('links to the series in the Data tab’s Series details', () => {
+		expect(stationHref({ id: 'a/b' })).toBe('?tab=series&series=a%2Fb#data-chart');
 	});
 });
 

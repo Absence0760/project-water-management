@@ -9,8 +9,9 @@
 //   is left to change. An editor opens it from the head's Rain from the map
 //   and sees the proposal with no button. The panel passes axe.
 // - A unit's form takes its MAP and asks for its source before Save.
-// - Settings → Flow calibration → Rain into GR4J → Rain for each unit switches it on with the
-//   gauge's MAP and its source, and keeps it after a reload; its link opens
+// - Settings → Flow calibration → Rain into GR4J → Rain for each unit switches it on, reads the
+//   gauge's MAP from the catchment rain station (issue #553; set in Series details,
+//   flow-share-hint.spec.ts), and keeps it after a reload; its link opens
 //   the Data feeds panel (?rain=units). A viewer reads it, read-only.
 // - Runs & results shows a run's Rain for each unit (a planted
 //   summary.unitRain), the unit that fell back first, and passes axe at 390.
@@ -23,7 +24,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { box } from '../support/map.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
-import { openSettings, saveChanges, saveSettings } from '../support/settings.ts';
+import { openSettings, saveSettings } from '../support/settings.ts';
 
 /** The sample model, with a parcel on the map linked to Upper farm; Lower farm has none. */
 async function seed(request: APIRequestContext, name: string) {
@@ -145,7 +146,7 @@ test('a unit’s MAP takes its source before Save, and is kept', async ({ page, 
 	await expect(page.getByTestId('unit-map')).toHaveCount(0);
 });
 
-test('Settings switches rain for each unit on, with the gauge’s MAP and its source, and keeps it', async ({ page, owner }) => {
+test('Settings switches rain for each unit on, reads the gauge’s MAP from the catchment rain station, and keeps it', async ({ page, owner }) => {
 	void owner;
 	const id = await seed(page.request, 'Unit rain settings');
 	await openSettings(page, id);
@@ -156,34 +157,25 @@ test('Settings switches rain for each unit on, with the gauge’s MAP and its so
 	await expect(group.getByTestId('unit-rain-coverage')).toContainText('0 of 2 units with land have a MAP.');
 	await expect(group.getByLabel('First year')).toHaveValue('1991');
 	await expect(group.getByLabel('Last year')).toHaveValue('2020');
-	const gauge = group.getByLabel(/^Rain gauge’s MAP/);
-	await gauge.fill('640');
-	await gauge.blur();
-	// A gauge MAP needs its source: Save is blocked, the message under the source.
-	await expect(group.getByTestId('unit-rain-error')).toHaveText('Say where the rain gauge’s MAP comes from: the source is required (the record or study, and its years).');
-	await expect(group.getByLabel('Source of the gauge’s MAP')).toHaveAttribute('aria-invalid', 'true');
-	await expect(saveChanges(page)).toBeDisabled();
-	await group.getByLabel('Source of the gauge’s MAP').fill('the gauge’s synthetic record, 1991–2020');
-	await expect(group.getByTestId('unit-rain-error')).toHaveCount(0);
-	await expect(saveChanges(page)).toBeEnabled();
-	// Switched off and on again before saving, it comes back as it was.
-	await sw.uncheck();
-	await expect(group.getByLabel(/^Rain gauge’s MAP/)).toHaveCount(0);
-	await sw.check();
-	await expect(group.getByLabel(/^Rain gauge’s MAP/)).toHaveValue('640');
-	await expect(group.getByLabel('Source of the gauge’s MAP')).toHaveValue('the gauge’s synthetic record, 1991–2020');
+	// The gauge's MAP is the station's (issue #553): a read-out with a link to Series details, not a field.
+	await expect(group.getByTestId('unit-rain-gauge-map-value')).toHaveAttribute('data-from', 'none');
+	await expect(group.getByTestId('unit-rain-gauge-map-value')).toContainText('Not set.');
+	await expect(group.getByRole('link', { name: 'Set it in Series details' })).toHaveAttribute('href', /^\?tab=series&series=[^&]+#data-chart$/);
 	// A short period notes, but saves.
 	await group.getByLabel('First year').fill('2018');
 	await group.getByLabel('First year').blur();
 	await expect(group.getByTestId('unit-rain-period-note')).toContainText('3 years: the MAP factor wants at least 10 complete years');
+	// Switched off and on again before saving, it comes back as it was.
+	await sw.uncheck();
+	await expect(group.getByLabel('First year')).toHaveCount(0);
+	await sw.check();
+	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await expectNoViolations(page, { include: '[data-testid="unit-rain-settings"]' });
 	await saveSettings(page);
 	await expect(page.getByTestId('summary-flow')).toContainText('rain for each unit');
 
 	await page.reload();
 	await expect(group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' })).toBeChecked();
-	await expect(group.getByLabel(/^Rain gauge’s MAP/)).toHaveValue('640');
-	await expect(group.getByLabel('Source of the gauge’s MAP')).toHaveValue('the gauge’s synthetic record, 1991–2020');
 	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await expect(group.getByLabel('Last year')).toHaveValue('2020');
 });

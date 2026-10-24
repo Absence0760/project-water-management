@@ -1511,7 +1511,7 @@ and nothing else.
   key, history or feed (`ingest.db.test.ts` checks each, with its own series
   as the positive control). It can't write a series revision either, so a
   key's merge keeps none (like a data feed's).
-- **An editor learns one bit about keys** (239_series_name_key_listed). The
+- **An editor learns one bit about keys** (240_series_name_key_listed). The
   series rename (`PATCH …/series/:id { name }`, issue #556) must refuse a
   name a key's `allowed_series` holds, but `api_key` stays owner-only. So
   `app_series_name_key_listed(project, kind, name)` (`SECURITY DEFINER`,

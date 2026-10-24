@@ -1,4 +1,4 @@
--- 239_series_name_key_listed — whether a live API key's series list names a
+-- 240_series_name_key_listed — whether a live API key's series list names a
 -- series, for the rename check (issue #556 follow-up; docs/api.md § Series,
 -- docs/data-model.md § API keys).
 --

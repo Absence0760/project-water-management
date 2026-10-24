@@ -2,7 +2,7 @@
 // unique among the project's series of one kind, logged as series.renamed.
 // Refused for a series a data feed or an API key writes into by its name,
 // including a key whose series list names it but which hasn't pushed yet
-// (239_series_name_key_listed).
+// (240_series_name_key_listed).
 import { describe, expect, it } from 'vitest';
 import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withApiKey, withUser } from '../db/tx.js';
