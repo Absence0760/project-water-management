@@ -2861,6 +2861,26 @@ export interface RainStationMeta {
 	lon: number | null;
 }
 
+const isCoord = (v: unknown, limit: number): boolean => typeof v === 'number' && Number.isFinite(v) && v >= -limit && v <= limit;
+
+/**
+ * Why a rainfall station's details can't be used, or null (issue #553): its
+ * MAP as mapMmError (none is fine; one needs a number in range and its
+ * source), and its coordinates both or neither, latitude −90 to 90 and
+ * longitude −180 to 180 degrees. The API's schema and the form apply it.
+ */
+export function rainStationError(station: RainStationMeta): string | null {
+	if (station === null || typeof station !== 'object' || Array.isArray(station)) return 'not a rainfall station';
+	const map = mapMmError(station.mapMm, station.mapSource);
+	if (map) return map;
+	const hasLat = station.lat !== null && station.lat !== undefined;
+	const hasLon = station.lon !== null && station.lon !== undefined;
+	if (hasLat !== hasLon) return 'a station’s coordinates need both a latitude and a longitude, or neither';
+	if (hasLat && !isCoord(station.lat, 90)) return 'latitude must be a number from −90 to 90 degrees';
+	if (hasLon && !isCoord(station.lon, 180)) return 'longitude must be a number from −180 to 180 degrees';
+	return null;
+}
+
 // ---------------------------------------------------------------------------
 // Engine I/O contract — runModel(input: ModelInput): ModelOutput.
 // ---------------------------------------------------------------------------
