@@ -8,16 +8,36 @@
 //    committed fixture's JSON form (`{ "cellDeg", "source"?, "version"?,
 //    "attribution"?, "cells": [[lon, lat, mapMm], …] }`, each cell by its
 //    centre); and the replace of a dataset, in one transaction, as the schema
-//    owner (backend/scripts/import-map-grid.ts).
+//    owner (backend/scripts/import-map-grid.ts, and a production load,
+//    referenceLoad.ts, which reads the JSON form `--out` writes).
 //
 // A grid's cells are keyed by their south-west corner's indices from the
 // dataset's origin, as the evaporation grid's are (evaporationGrid.ts
 // originOf/indexOf), so a box is a range on the primary key.
 import type pg from 'pg';
 import { indexOf, originOf } from './evaporationGrid.js';
+import { recordReferenceOrigin, type ReferenceOrigin } from './referenceOrigin.js';
 
 /** The repo's invented grid (backend/fixtures/geo/map-grid.synthetic.json): never real rainfall. */
 export const SYNTHETIC_RAIN_MAP_DATASET = 'synthetic';
+
+/** The Southwestern Cape surface's credit line, as its authors give it (issue #560): shown with the layer and in the map's credits. */
+export const WAAS_MAP_ATTRIBUTION = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+
+/**
+ * The Southwestern Cape mean annual rainfall surface (WAAS, 2007): the one
+ * real MAP grid a production load takes, under this label only, stored with
+ * these lines whatever the file says (referenceLoad.ts REFERENCE_KINDS
+ * 'map-grid'; the operator's decision of 2026-10-23,
+ * docs/legal/map-data-licences.md § 3.3b). The frontend credits the layer
+ * while it draws a grid with this attribution (dataCredits.ts).
+ */
+export const WAAS_MAP = {
+	dataset: 'WAAS-SWCape-2007',
+	source: WAAS_MAP_ATTRIBUTION,
+	version: 'v1.1 (March 2007)',
+	attribution: WAAS_MAP_ATTRIBUTION
+} as const;
 
 type Db = pg.ClientBase | pg.Pool;
 
@@ -214,10 +234,32 @@ export function rainMapFromJson(doc: unknown): { grid: RainMapGrid; meta: { sour
 	return { grid, meta: { source: text(d.source, 500), version: text(d.version, 100), attribution: text(d.attribution, 500) } };
 }
 
+/**
+ * `grid` in the JSON form rainMapFromJson reads (each cell by its centre,
+ * rounded to 1e-7°, well inside a 100 m cell), with its source lines: the file
+ * `pnpm import:map-grid … --out` writes for a production load.
+ */
+export function rainMapToJson(meta: Omit<RainMapMeta, 'dataset'>, grid: RainMapGrid): string {
+	const r7 = (x: number) => Math.round(x * 1e7) / 1e7;
+	const centre = (i: number, o: number) => r7(o + (i + 0.5) * grid.cellDeg);
+	return JSON.stringify({
+		cellDeg: grid.cellDeg,
+		source: meta.source,
+		version: meta.version,
+		attribution: meta.attribution,
+		cells: grid.cells.map((c) => [centre(c.col, grid.originLon), centre(c.row, grid.originLat), c.mapMm])
+	});
+}
+
 const BATCH = 10_000;
 
-/** Replace `meta.dataset` with `grid`'s cells, in one transaction, as the schema owner. Returns how many cells it wrote. */
-export async function replaceRainMapDataset(client: pg.ClientBase, meta: RainMapMeta, grid: RainMapGrid): Promise<number> {
+/**
+ * Replace `meta.dataset` with `grid`'s cells, in one transaction, as the
+ * schema owner. Returns how many cells it wrote. `origin` is the bucket file a
+ * production load read (recorded with the data, referenceOrigin.ts); a local
+ * import names none, which clears the dataset's record.
+ */
+export async function replaceRainMapDataset(client: pg.ClientBase, meta: RainMapMeta, grid: RainMapGrid, origin: ReferenceOrigin | null = null): Promise<number> {
 	// A dataset with no cell is a wrong box or file, not a grid to show.
 	if (!grid.cells.length) throw new Error('no cell has a value: check the file and --bbox');
 	await client.query('BEGIN');
@@ -237,6 +279,7 @@ export async function replaceRainMapDataset(client: pg.ClientBase, meta: RainMap
 				[meta.dataset, part.map((c) => c.row), part.map((c) => c.col), part.map((c) => c.mapMm)]
 			);
 		}
+		await recordReferenceOrigin(client, 'map-grid', meta.dataset, origin);
 		await client.query('COMMIT');
 		return grid.cells.length;
 	} catch (e) {

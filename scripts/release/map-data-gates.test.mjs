@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
+import { DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
 
 const has = () => true;
 const lacks = () => false;
@@ -53,7 +53,24 @@ describe('load: a reference load’s inputs', () => {
 		// GeoNames is CC BY 4.0 too: the credit is stored on every place and shown with each search that lists one (docs/maps.md § Search).
 		const gazetteer = { ...landCover, LOAD_KIND: 'gazetteer', LOAD_KEY: 'reference/gazetteer/za-2026-10.txt.gz', LOAD_DATASET: 'GeoNames-ZA-2026-10' };
 		assert.deepEqual(loadProblems(gazetteer, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer']);
+		// The Southwestern Cape MAP surface: its credit is stored with the dataset and shown with the layer (docs/maps.md § MAP grid).
+		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/waas-swcape.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
+		assert.deepEqual(loadProblems(mapGrid, lacks), []);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid']);
+	});
+
+	it('a MAP grid loads only a dataset whose licence is recorded, with no source of its own', () => {
+		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/grid.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
+		assert.deepEqual(DATASETS['map-grid'], ['WAAS-SWCape-2007']);
+		for (const dataset of ['Lynch-2004', 'Some-other-surface']) {
+			const problems = loadProblems({ ...mapGrid, LOAD_DATASET: dataset }, has);
+			assert.equal(problems.length, 1, dataset);
+			assert.match(problems[0], /only the datasets whose licence is recorded: WAAS-SWCape-2007/);
+			assert.doesNotMatch(problems[0], new RegExp(dataset));
+		}
+		assert.match(loadProblems({ ...mapGrid, LOAD_SOURCE: 'Lynch 2004' }, has).join('\n'), /takes no source/);
+		// Positive control: a kind not listed by dataset takes any well-formed label.
+		assert.deepEqual(loadProblems({ ...landCover, LOAD_DATASET: 'Some-other-surface' }, has), []);
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {

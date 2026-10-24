@@ -4,6 +4,9 @@
 //   pnpm import:map-grid                                   the committed synthetic grid (dev, e2e)
 //   pnpm import:map-grid <grid.asc> --dataset <label> --source "…" [--version "…"] [--attribution "…"] [--bbox w,s,e,n]
 //                          an ESRI ASCII grid in WGS84 degrees, cut to the box
+//   pnpm import:map-grid <grid.asc> --dataset <label> --source "…" --bbox w,s,e,n --out <file.json[.gz]>
+//                          writes the cut grid as JSON instead of loading it: the file a production
+//                          load reads (docs/deployment.md § Reference datasets; geo/referenceLoad.ts)
 //
 // Runs as the schema owner (MIGRATION_DATABASE_URL), like import-evaporation:
 // the app role only reads rain_map_dataset and rain_map_cell_reference. A load
@@ -18,12 +21,13 @@
 // (backend/fixtures/geo/); a real grid is the operator's own, never committed,
 // and its licence decides whether it may be shown (docs/maps.md § Sources).
 import { loadDevEnv } from '../src/config/devEnv.js';
-import { createReadStream, readFileSync } from 'node:fs';
+import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import pg from 'pg';
-import { rainMapFromAscii, rainMapFromJson, replaceRainMapDataset, SYNTHETIC_RAIN_MAP_DATASET, type Box, type RainMapGrid, type RainMapMeta } from '../src/geo/rainMap.js';
+import { rainMapFromAscii, rainMapFromJson, rainMapToJson, replaceRainMapDataset, SYNTHETIC_RAIN_MAP_DATASET, type Box, type RainMapGrid, type RainMapMeta } from '../src/geo/rainMap.js';
 
 /** The committed synthetic grid. */
 export const SYNTHETIC_MAP_GRID_FILE = fileURLToPath(new URL('../fixtures/geo/map-grid.synthetic.json', import.meta.url));
@@ -37,9 +41,11 @@ export interface MapGridArgs {
 	version: string | null;
 	attribution: string | null;
 	bbox: Box | null;
+	/** Write the grid to this JSON file (gzipped when it ends .gz) instead of loading it. */
+	out: string | null;
 }
 
-const FLAGS = ['--dataset', '--bbox', '--source', '--version', '--attribution'];
+const FLAGS = ['--dataset', '--bbox', '--source', '--version', '--attribution', '--out'];
 
 export function parseMapGridArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): MapGridArgs | string {
 	const flag = (name: string) => {
@@ -56,7 +62,10 @@ export function parseMapGridArgs(argv: string[], env: NodeJS.ProcessEnv = proces
 		if (![w, s, e, n].every((x) => Number.isFinite(x)) || !(w! < e! && s! < n!)) return '--bbox takes west,south,east,north in degrees';
 		bbox = { w: w!, s: s!, e: e!, n: n! };
 	}
-	const base = { source: flag('--source'), version: flag('--version'), attribution: flag('--attribution'), bbox };
+	const outText = flag('--out');
+	if (outText !== null && !/\.json(\.gz)?$/i.test(outText)) return '--out takes a .json or .json.gz file';
+	const out = outText === null ? null : cliPath(outText, env);
+	const base = { source: flag('--source'), version: flag('--version'), attribution: flag('--attribution'), bbox, out };
 	if (positional.length === 0) return { ...base, file: SYNTHETIC_MAP_GRID_FILE, dataset: SYNTHETIC_RAIN_MAP_DATASET };
 	if (positional.length > 1) return 'give one grid file';
 	const file = positional[0]!;
@@ -102,6 +111,16 @@ export async function readMapGridFile(args: MapGridArgs): Promise<{ meta: RainMa
 	};
 }
 
+/** Write `args`' grid to `args.out` as the JSON a production load reads (gzipped for .gz); returns the cells written. */
+export async function writeMapGridJson(args: MapGridArgs & { out: string }): Promise<number> {
+	const { meta, grid } = await readMapGridFile(args);
+	// A file with no cell is a wrong box or file; the load would refuse it anyway.
+	if (!grid.cells.length) throw new Error(`${args.file}: no cell has a value: check the file and --bbox`);
+	const json = rainMapToJson(meta, grid);
+	writeFileSync(args.out, /\.gz$/i.test(args.out) ? gzipSync(json) : json);
+	return grid.cells.length;
+}
+
 /** Load `args` into the database at `url`; returns the cells written. */
 export async function importMapGrid(url: string, args: MapGridArgs): Promise<number> {
 	const { meta, grid } = await readMapGridFile(args);
@@ -121,7 +140,7 @@ export const loadSyntheticMapGrid = (url: string) => {
 	return importMapGrid(url, args);
 };
 
-const USAGE = 'usage: pnpm import:map-grid [<grid.asc> --dataset <label> --source "…" [--version "…"] [--attribution "…"] [--bbox w,s,e,n]]';
+const USAGE = 'usage: pnpm import:map-grid [<grid.asc> --dataset <label> --source "…" [--version "…"] [--attribution "…"] [--bbox w,s,e,n] [--out <file.json[.gz]>]]';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
 	loadDevEnv();
@@ -130,18 +149,29 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		console.error(`${args}\n${USAGE}`);
 		process.exit(2);
 	}
-	const url = process.env.MIGRATION_DATABASE_URL;
-	if (!url) {
-		console.error('MIGRATION_DATABASE_URL is not set');
+	const fail = (err: Error) => {
+		console.error(err.message);
 		process.exit(1);
-	}
-	importMapGrid(url, args)
-		.then((written) => {
-			console.log(`${written} cell${written === 1 ? '' : 's'} loaded as "${args.dataset}"`);
-			process.exit(0);
-		})
-		.catch((err: Error) => {
-			console.error(err.message);
+	};
+	const out = args.out;
+	if (out) {
+		writeMapGridJson({ ...args, out })
+			.then((written) => {
+				console.log(`${written} cell${written === 1 ? '' : 's'} written to ${out}`);
+				process.exit(0);
+			})
+			.catch(fail);
+	} else {
+		const url = process.env.MIGRATION_DATABASE_URL;
+		if (!url) {
+			console.error('MIGRATION_DATABASE_URL is not set');
 			process.exit(1);
-		});
+		}
+		importMapGrid(url, args)
+			.then((written) => {
+				console.log(`${written} cell${written === 1 ? '' : 's'} loaded as "${args.dataset}"`);
+				process.exit(0);
+			})
+			.catch(fail);
+	}
 }
