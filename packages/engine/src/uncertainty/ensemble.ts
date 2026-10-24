@@ -482,7 +482,9 @@ export function memberInput(ctx: EnsembleContext, m: EnsembleMember): ModelInput
 	if (m.panOffset !== 0) settings.panCoefficient = shiftPan(ctx.panRow, m.panOffset);
 	// Settings, model and series only, on purpose: a member runs on history (no forecast days, so no forecastRainSource to
 	// carry) and its warnings aren't shown, so seriesChoice has nothing to do. A forecast ensemble would have to carry them.
-	return { settings: settings as ModelInput['settings'], model: src.model, series: src.series };
+	// The rainfall stations' details do force the rain (engine ≥ 1.91.0, issue #553): a member keeps them, or a station-forced
+	// project's members would lose their stations' MAPs and run on another rain than the base.
+	return { settings: settings as ModelInput['settings'], model: src.model, series: src.series, ...(src.stations ? { stations: src.stations } : {}) };
 }
 
 // ---------------------------------------------------------------------------

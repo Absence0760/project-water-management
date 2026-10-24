@@ -127,6 +127,10 @@ describe('buildPackBundle + checkPackBundle', () => {
 		expect(bundleRunInput(snap, series)).toEqual({ settings: {}, model: snap.model, series });
 		expect(bundleRunInput({ ...snap, seriesChoice: choice, forecastRainSource: 'chirps_gefs' }, series)).toEqual({ settings: {}, model: snap.model, series, seriesChoice: choice, forecastRainSource: 'chirps_gefs' });
 		expect(bundleRunInput({ ...snap, forecastRainSource: 'other' }, series).forecastRainSource).toBe('other');
+		// The rainfall stations' details (issue #553), which the station forcing reads.
+		const stations = { 'b1c3e1f0-0000-4000-8000-000000000001': { name: 'Gauge A', mapMm: 745, mapSource: 'study', lat: -33.9, lon: 18.8, isCatchmentGauge: true } };
+		expect(bundleRunInput({ ...snap, stations }, series)).toEqual({ settings: {}, model: snap.model, series, stations });
+		for (const bad of [null, [], 'x']) expect(bundleRunInput({ ...snap, stations: bad as never }, series)).not.toHaveProperty('stations');
 		// Anything else from an input.json no hash covers is left out.
 		for (const bad of [null, 'gefs', 3]) expect(bundleRunInput({ ...snap, forecastRainSource: bad as never }, series)).not.toHaveProperty('forecastRainSource');
 	});

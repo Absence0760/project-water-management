@@ -156,17 +156,21 @@ export function runResultsText(r: { startDate: string; summary: unknown; series:
  * the settings and model, and what the engine reads beside them, as the
  * backend's loadRunInput rebuilds it: `seriesChoice` (the CHIRPS series the
  * run read and the others, which a run warning reads; engine ≥ 1.90.0, issue
- * #561) and a forecast run's `forecastRainSource` (its units' forecast days,
- * engine ≥ 1.85.0), the latter only as one of its two values.
+ * #561), a forecast run's `forecastRainSource` (its units' forecast days,
+ * engine ≥ 1.85.0), the latter only as one of its two values, and `stations`
+ * (the rainfall stations' names and MAPs, engine ≥ 1.91.0, issue #553).
  */
-export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'model' | 'seriesChoice' | 'forecastRainSource'>, series: Record<string, DailySeries>): ModelInput {
+export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'model' | 'seriesChoice' | 'forecastRainSource' | 'stations'>, series: Record<string, DailySeries>): ModelInput {
 	const source = snapshot.forecastRainSource;
+	const stations = snapshot.stations;
 	return {
 		settings: snapshot.settings,
 		model: snapshot.model,
 		series,
 		...(snapshot.seriesChoice ? { seriesChoice: snapshot.seriesChoice } : {}),
-		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {})
+		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}),
+		// The rainfall stations' details (engine ≥ 1.91.0, issue #553): the station forcing reads their MAPs.
+		...(stations && typeof stations === 'object' && !Array.isArray(stations) ? { stations } : {})
 	} as ModelInput;
 }
 
