@@ -40,6 +40,8 @@ import {
 	type FdcPercentileRow,
 	type FdcPercentileTable,
 	type RunSummary,
+	type RainStationSummary,
+	type StationAreaForcing,
 	type UnitRainSummary,
 	type UnitRainUnit,
 	type WaterBalanceRow,
@@ -943,7 +945,9 @@ const UNIT_RAIN_RULE_TEXT: Record<UnitRainUnit['rule'], string> = {
 	unitGauge: "the unit's own rain gauge",
 	gaugeMap: "the catchment gauge × unit MAP ÷ gauge MAP",
 	unitChirps: "the unit's own CHIRPS",
-	catchment: 'the catchment rain (no rain of its own)'
+	catchment: 'the catchment rain (no rain of its own)',
+	// Engine ≥ 1.91.0 (issue #553): the Rain from rainfall stations block names the station.
+	station: 'its rainfall station × unit MAP ÷ station MAP'
 };
 const UNIT_RAIN_FACTOR_TEXT: Record<UnitRainUnit['factorSource'], string> = {
 	gauge: 'as recorded',
@@ -1001,8 +1005,10 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 		const level = map ?? kUnit;
 		const mean = level ?? unusable;
 		const chirpsOn = x.rule === 'unitChirps';
-		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : chirpsOn ? (map?.clamped ?? kUnit?.clamped ?? legacy?.mapClamped ?? false) : false;
-		const outside = x.rule === 'gaugeMap' ? !!x.gaugeMapOutsideBand : chirpsOn ? !!(map?.outsideBand ?? kUnit?.outsideBand) : false;
+		// A station unit's factor is its MAP ratio, recorded as rule 2's (issue #553).
+		const scaled = x.rule === 'gaugeMap' || x.rule === 'station';
+		const clamped = scaled ? x.gaugeMapClamped : chirpsOn ? (map?.clamped ?? kUnit?.clamped ?? legacy?.mapClamped ?? false) : false;
+		const outside = scaled ? !!x.gaugeMapOutsideBand : chirpsOn ? !!(map?.outsideBand ?? kUnit?.outsideBand) : false;
 		const span = mean && mean.years.length ? `${mean.years[0]}–${mean.years[mean.years.length - 1]} (${mean.years.length}` : '';
 		yield csvRow([
 			x.name,
@@ -1013,7 +1019,7 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 			x.rainKey ?? '',
 			// On the reference factors the factor varies by month: the column holds k_unit on top of them (null: no complete year yet).
 			x.factor ?? (chirpsOn && ref ? (kUnit?.factor ?? legacy?.mapRatio ?? null) : null),
-			UNIT_RAIN_FACTOR_TEXT[x.factorSource],
+			x.rule === 'station' ? 'unit MAP ÷ station MAP' : UNIT_RAIN_FACTOR_TEXT[x.factorSource],
 			clamped ? 'yes' : 'no',
 			outside ? 'yes' : 'no',
 			mean ? mean.meanAnnualMm : null,
@@ -1043,6 +1049,66 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 		yield csvRow(['Month', 'Shared days', 'Gauge (mm)', 'CHIRPS (mm)', 'Own factor', 'Factor applied', 'Clamped', 'Outside 0.5–2', 'Fitted']);
 		for (const m of r.months)
 			yield csvRow([MONTHS[m.month - 1]!, m.sharedDays, m.gaugeMm, m.chirpsMm, m.ownFactor, m.factor, m.clamped ? 'yes' : 'no', m.outsideBand ? 'yes' : 'no', m.fitted ? 'yes' : 'no (factor 1)']);
+	}
+}
+
+/**
+ * The rainfall stations block (engine ≥ 1.91.0, issue #553, docs/model.md
+ * §2.4i): the catchment MAP, one row per area the run forced from a station
+ * (the catchment first), then each station's CHIRPS pairing with its 12
+ * monthly factors or why it was refused.
+ */
+export function* stationLines(st: RainStationSummary): Generator<string> {
+	yield csvRow(['Rain from rainfall stations (docs/model.md §2.4i)']);
+	yield csvRow(['Catchment MAP (mm)', st.catchmentMapMm, st.catchmentMapMm === null ? '' : st.catchmentMapFromUnits ? "the units' area-weighted mean" : 'entered']);
+	yield csvRow([
+		'Area',
+		'Station',
+		'Area MAP (mm)',
+		'Area MAP source',
+		'Station MAP (mm)',
+		'Station MAP source',
+		'Scaled to MAP',
+		'Own ratio',
+		'Ratio applied',
+		'Clamped',
+		'CHIRPS corrected against',
+		'Days: station',
+		'Days: corrected CHIRPS',
+		'Days: fallback',
+		'Days: none',
+		'Set aside: checks',
+		'Set aside: unreliable'
+	]);
+	const name = new Map(st.pairings.map((p) => [p.stationId, p.stationName]));
+	const row = (a: StationAreaForcing) =>
+		csvRow([
+			a.nodeId === null ? `${a.name} (catchment)` : a.name,
+			a.stationName,
+			a.areaMapMm,
+			a.areaMapSource ?? '',
+			a.stationMapMm,
+			a.stationMapSource ?? '',
+			a.scaleToMap ? 'yes' : 'no',
+			a.ownRatio,
+			a.ratio,
+			a.clamped ? 'yes' : 'no',
+			a.correctedBy === null ? 'none (the next fallback)' : (name.get(a.correctedBy) ?? a.correctedBy),
+			a.days.station,
+			a.days.chirps,
+			a.days.fallback,
+			a.days.none,
+			a.setAside.checks,
+			a.setAside.unreliable
+		]);
+	if (st.catchment) yield row(st.catchment);
+	for (const a of st.units) yield row(a);
+	if (!st.pairings.length) return;
+	yield csvRow(['Station CHIRPS pairings (monthly factors: the station ÷ the CHIRPS at it on their shared days)']);
+	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Common years', 'Shared days', 'Pinned', ...MONTHS]);
+	for (const p of st.pairings) {
+		const factors = p.refused === null ? MONTHS.map((_, i) => p.months.find((m) => m.month === i + 1)?.factor ?? null) : MONTHS.map(() => null);
+		yield csvRow([p.stationName, 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell", p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);
 	}
 }
 
@@ -1104,6 +1170,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): the rule, factor and runoff per unit.
 	if (summary.unitRain) {
 		yield* unitRainLines(summary.unitRain);
+		yield '';
+	}
+	// Rain from rainfall stations (engine ≥ 1.91.0, issue #553): each area's station forcing and each station's pairing.
+	if (summary.stations) {
+		yield* stationLines(summary.stations);
 		yield '';
 	}
 
