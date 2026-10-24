@@ -397,6 +397,17 @@ runs and accumulations are real) can't be decided without the client.
       1981) where that narrows it. Trigger:
       the client's first per-unit run, or the hydrologist's review of the
       unit MAPs.
+- [ ] **The EWR split's MAR period (engine 1.94.0, issue #553,
+      engine-audit.md ES1, model.md §2.5b).** The operator chose the option
+      (split the EWR by the flow share, or by each unit's natural MAR ÷ the
+      units' total); the period the MAR is taken over is provisional: the
+      run's complete water years, or every historical day when there are
+      none. To confirm: is the run's own water years the right period, or a
+      fixed reference period (as the unit MAP period, 1991–2020); and
+      should a run without a complete water year refuse the split rather
+      than take every day? Off by default (the flow share). Durable fix:
+      the hydrologist's answer, then change `ewrSplitDays` if it differs.
+      Trigger: the client's first per-unit run split by natural MAR.
 - [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic

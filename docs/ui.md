@@ -6689,7 +6689,21 @@ two.
   the EWR and the land cover's low-flow threshold between units, not the
   flow." (a state line, shown with the explanations off), each with a link
   to Rain for each unit (`#set-unit-rain`, the fieldset's id;
-  `e2e/tests/flow-share-hint.spec.ts`).
+  `e2e/tests/flow-share-hint.spec.ts`); with the EWR split by natural MAR
+  (below) the state line says the share now splits only the land cover's
+  low-flow threshold. Under the fields, **Split the EWR between units by**
+  (`settings.ewrSplit`, engine ≥ 1.94.0, issue #553, model.md §2.5b;
+  `EwrSplitFields.svelte`, its own component so it can move with the flow
+  generation choices): *The flow share* (the default, what every earlier
+  run did) or *Each unit's natural MAR* (its own natural runoff over the
+  run's complete water years ÷ the units' total; the period is
+  provisional). Its explanation says what follows the split (the charge,
+  curtailment, hands-off EWR flows, the drought restriction's EWR
+  trigger); its state line, shown with the explanations off, follows Rain
+  for each unit: off, both give the flow share and the choice matters only
+  with Rain for each unit on; on, which share splits the EWR. A split other
+  than the flow share joins the panel's summary line, and the field has its
+  change history (`e2e/tests/ewr-split.spec.ts`).
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,

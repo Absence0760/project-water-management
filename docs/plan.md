@@ -820,6 +820,14 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     the app shows senior / junior as **Priority / Non-priority** (stored
     values unchanged; "Non-priority" pending the hydrologist's confirmation,
     model.md §2.7c).*
+21. **The EWR split's MAR period (issue #553, engine 1.94.0).** A project
+    can split the EWR between its units by each unit's natural MAR instead
+    of its flow share (the operator's option, model.md §2.5b). *Provisional
+    2026-10-24, to be confirmed by the client's hydrologist
+    (engine-audit.md ES1):* the MAR is taken over the run's complete water
+    years, or the whole run when it has none. Should it be a fixed reference
+    period instead, and should a run without a complete water year refuse
+    the split?
 
 ### Product
 
