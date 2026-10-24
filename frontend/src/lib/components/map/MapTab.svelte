@@ -299,15 +299,15 @@
 	}
 
 	async function imported(r: { fileName: string; ids: string[] }) {
-		notice = `Imported ${r.ids.length} ${r.ids.length === 1 ? 'feature' : 'features'} from ${r.fileName}.`;
 		await load();
 		await pickInPlace(r.ids[0] ?? selectedId, 'upload');
+		notice = `Imported ${r.ids.length} ${r.ids.length === 1 ? 'feature' : 'features'} from ${r.fileName}.`;
 	}
 	async function placed(f: MapFeature) {
-		notice = `Placed ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
 		draft.cancel();
 		await load();
 		await pickInPlace(f.id, 'place');
+		notice = `Placed ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
 		await returnToStart();
 	}
 
@@ -391,11 +391,13 @@
 	async function delineationAccepted(f: MapFeature, summary: string) {
 		// A boundary is a map feature only: say so, and where the next step is (its card, which Accept picks).
 		const next = f.kind === 'catchment_boundary' ? boundaryNext : null;
+		await Promise.all([load(), loadDelineation()]);
+		await pickInPlace(f.id, 'delineate');
+		// The notice says the save has landed, so it waits for the pick: shown first, a click on a side tab in between was
+		// undone when the pick then showed Details.
 		notice = next ? `Saved ${summary} on the map as the catchment boundary. It isn’t in the model yet.` : `Saved ${summary} on the map.`;
 		// The toast carries the next step too (on a phone the card is below the map); it goes with this notice.
 		noticeNext = next ? { text: notice, step: next } : null;
-		await Promise.all([load(), loadDelineation()]);
-		await pickInPlace(f.id, 'delineate');
 		await returnToStart();
 	}
 	async function delineationRejected() {
@@ -559,12 +561,12 @@
 	async function saveClicks() {
 		const r = await divider.save();
 		if (!r) return;
-		notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
 		dividing = false;
 		clickLit = null;
 		draft.cancel();
 		await load();
 		if (r.features[0]) await pickInPlace(r.features[0].id);
+		notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
 	}
 	async function pickPiece(key: string) {
 		pieceFocus = key;
@@ -635,9 +637,10 @@
 		if (draft.split(f)) void afterStart();
 	}
 	async function splitDone(parts: [MapFeature, MapFeature]) {
-		notice = `Split ${featureName(draft.feature ?? parts[0])} in two: ${parts.map((f) => (f.name ? `“${f.name}”` : KIND_LABEL[f.kind].toLowerCase())).join(' and ')}.`;
+		const whole = featureName(draft.feature ?? parts[0]);
 		await load();
 		await pickInPlace(parts[0].id);
+		notice = `Split ${whole} in two: ${parts.map((f) => (f.name ? `“${f.name}”` : KIND_LABEL[f.kind].toLowerCase())).join(' and ')}.`;
 		// As drafted(): the sheet closes once the pick has landed, so the side column doesn't change under a click.
 		splitOpen = false;
 		draft.cancel();
@@ -727,10 +730,10 @@
 		drawError = null;
 		try {
 			await api.map.update(projectId, f.id, g.type === 'Point' ? { lon: g.coordinates[0], lat: g.coordinates[1] } : { geometry: g });
-			notice = `Saved the new ${g.type === 'Point' ? 'position' : 'shape'} of ${featureName(f)}.`;
 			draft.cancel();
 			await load();
 			await pickInPlace(f.id);
+			notice = `Saved the new ${g.type === 'Point' ? 'position' : 'shape'} of ${featureName(f)}.`;
 		} catch (err) {
 			drawError = msg(err);
 		} finally {
@@ -738,9 +741,9 @@
 		}
 	}
 	async function drafted(f: MapFeature) {
-		notice = `Saved ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
 		await load();
 		await pickInPlace(f.id);
+		notice = `Saved ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
 		// Closed once the pick has landed: closing first left a moment where the side column then jumped to Details under a click.
 		draftSheetOpen = false;
 		draft.cancel();

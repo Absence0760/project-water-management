@@ -1780,6 +1780,12 @@ Interaction details that bit:
   counted River & reserve's closed *Show as a table* and *Values for* boxes.
   Filter on `el.checkVisibility()` first (`river-page.spec.ts`
   `innerScrollers`).
+- **A success notice comes last.** A spec waits on "Saved …" and then acts,
+  so the notice is the save's done signal: set it after the reload and the
+  pick it leads to, never before. The Map's save handlers set it first, and a
+  spec that clicked the Features tab on the notice lost its click when the
+  pick landed and showed Details (`map-delineate.spec.ts`, #570;
+  `MapTab.svelte` now sets every save's notice after its `pickInPlace`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card; a new tab or page joins the
