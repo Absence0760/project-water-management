@@ -4,14 +4,15 @@
 // gaps", and today's projects must run exactly as before once migrated. Each
 // case below runs one of today's forcing paths on a small synthetic catchment
 // and pins a fingerprint of what came out:
-// - `series`: a 64-bit hash over every output series' node, key and the bits
-//   of every value. The non-negotiable pin: a different value anywhere fails.
-// - `sums`: per output series of rain and flow, its sum to 6 significant
-//   digits, so a failure shows where the run moved (diff these first).
+// - `golden` (../testing/golden.ts): exact, which series exist, their
+//   lengths and the summary's text; then per output series of rain and flow,
+//   and for the rest together and the summary's numbers, a sum, sum of squares
+//   and position-weighted sum, compared at 1e-9 relative. Not a hash of every
+//   value's bits: identical code gives last-bit different floats on macOS
+//   arm64 and on CI's Linux, so a bit hash can't hold on both.
 // - `units`: per land unit, the rule, record and factor the run chose and
 //   its days by source (summary.unitRain). A station rewrite may record
 //   more (the station, both MAPs), never a different level or day count.
-// - `summary`: a hash of the rest of the summary (warnings included).
 // An intended change of the forcing updates these values in the same change
 // as its ENGINE_VERSION bump, saying why; any other difference is a bug.
 // Synthetic catchment: invented values only (public repo). Builders follow
@@ -20,7 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
 import { referenceCellSeriesKey, type ModelInput, type ModelOutput, type UnitRainSettings } from '../project';
 import { runModel } from '../run';
-import { Hasher } from '../warmstart/plain';
+import { goldenDiff, goldenFingerprint } from '../testing/golden';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
 const START = '2015-01-01';
@@ -97,232 +98,605 @@ const CASES: Record<string, () => ModelInput> = {
 const SUMMED = /^(rain_used|rain_final|rain_chirps_corrected|rain_source|rain_unit|runoff_natural|runoff|natural_flow)$/;
 
 function fingerprint(out: ModelOutput) {
-	const h = new Hasher();
-	for (const s of out.series) {
-		h.text(s.nodeId ?? '').text(s.key).number(s.values.length);
-		for (const v of s.values) h.number(v);
-	}
-	const sums: Record<string, number> = {};
-	for (const s of out.series)
-		if (SUMMED.test(s.key)) sums[`${s.key}@${s.nodeId ?? ''}`] = Number(s.values.reduce((a, v) => a + v, 0).toPrecision(6));
 	const units = out.summary.unitRain?.units.map((u) => ({ nodeId: u.nodeId, rule: u.rule, rainKey: u.rainKey, factor: u.factor === null ? null : Number(u.factor.toPrecision(9)), chirps: u.chirps?.source ?? null, days: u.days })) ?? null;
 	const { unitRain: _unitRain, ...rest } = out.summary;
-	return { series: h.digest(), sums, units, summary: new Hasher().text(JSON.stringify(rest)).digest() };
+	return { units, golden: goldenFingerprint(out, SUMMED, rest) };
 }
 
 /**
- * Expected fingerprints, from the engine before rainfall stations (issue #553 round 1): the
- * parent of the commit that added this file gives the same values. Print them with
+ * Expected fingerprints, from the engine before rainfall stations' forcing: computed on
+ * 195e66c86 (issue #553 round 1, pushed), which gives the same values on macOS and Linux. Print them with
  * `GOLDEN_PRINT=1 pnpm -C packages/engine exec vitest run src/runoff/unitRain.golden.test.ts`.
  */
 const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 	fragmentation: {
-		series: '102424779164e0da',
-		sums: {
-			'natural_flow@': 31197400,
-			'rain_used@': 6075.61,
-			'rain_final@': 6075.61,
-			'rain_chirps_corrected@': 6075.61,
-			'rain_source@': 54,
-			'runoff@A': 15218200,
-			'runoff@B': 9130940,
-			'runoff@C': 4565470,
-			'runoff@D': 2282730,
-			'runoff@E': 0
-		},
 		units: null,
-		summary: '9f9a12280e29d969'
+		golden: {
+			shape: "b007242ba2f8c5a6",
+			series: {
+				"natural_flow@": {
+					sum: 31197362.536312077,
+					sumSq: 682389166341.8011,
+					weighted: 46690807.66942088
+				},
+				"rain_used@": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9091.751153247114
+				},
+				"rain_final@": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9116.611604221993
+				},
+				"rain_chirps_corrected@": {
+					sum: 6075.6060863170915,
+					sumSq: 154584.25088477324,
+					weighted: 9099.594332462266
+				},
+				"rain_source@": {
+					sum: 54,
+					sumSq: 108,
+					weighted: 80.98116947472747
+				},
+				"runoff@A": {
+					sum: 15218225.62746929,
+					sumSq: 162376958082.52243,
+					weighted: 22867938.671876054
+				},
+				"runoff@B": {
+					sum: 9130935.376481563,
+					sumSq: 58455704909.70805,
+					weighted: 13668958.874868605
+				},
+				"runoff@C": {
+					sum: 4565467.688240781,
+					sumSq: 14613926227.427013,
+					weighted: 6853819.218362335
+				},
+				"runoff@D": {
+					sum: 2282733.8441203907,
+					sumSq: 3653481556.8567533,
+					weighted: 3418921.1872040555
+				},
+				"runoff@E": {
+					sum: 0,
+					sumSq: 0,
+					weighted: 0
+				}
+			},
+			rest: {
+				sum: 229643351.51594248,
+				sumSq: 3695731270526.909,
+				weighted: 344271323.2373167
+			},
+			summary: {
+				sum: 811622845.1103017,
+				sumSq: 37018642926996580,
+				weighted: 1162797645.542868
+			}
+		}
 	},
 	gaugeMap: {
-		series: '370eb278c4d9bdc3',
-		sums: {
-			'natural_flow@': 42767800,
-			'rain_used@': 6837.05,
-			'rain_unit@A': 7664.61,
-			'runoff_natural@A': 26747100,
-			'rain_unit@B': 6542.96,
-			'runoff_natural@B': 11043500,
-			'rain_unit@C': 5047.43,
-			'runoff_natural@C': 2694410,
-			'rain_unit@D': 6075.61,
-			'runoff_natural@D': 2282730,
-			'rain_final@': 6075.61,
-			'rain_chirps_corrected@': 6075.61,
-			'rain_source@': 54,
-			'runoff@A': 26747100,
-			'runoff@B': 11043500,
-			'runoff@C': 2694410,
-			'runoff@D': 2282730,
-			'runoff@E': 0
-		},
 		units: [
 			{
-				nodeId: 'A',
-				rule: 'gaugeMap',
-				rainKey: 'rain_catchment_mm',
+				nodeId: "A",
+				rule: "gaugeMap",
+				rainKey: "rain_catchment_mm",
 				factor: 1.26153846,
 				chirps: null,
-				days: { unitGauge: 0, gaugeMap: 2165, unitChirps: 0, catchment: 27, forecast: 0, none: 0 }
+				days: {
+					unitGauge: 0,
+					gaugeMap: 2165,
+					unitChirps: 0,
+					catchment: 27,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'B',
-				rule: 'gaugeMap',
-				rainKey: 'rain_catchment_mm',
+				nodeId: "B",
+				rule: "gaugeMap",
+				rainKey: "rain_catchment_mm",
 				factor: 1.07692308,
 				chirps: null,
-				days: { unitGauge: 0, gaugeMap: 2165, unitChirps: 0, catchment: 27, forecast: 0, none: 0 }
+				days: {
+					unitGauge: 0,
+					gaugeMap: 2165,
+					unitChirps: 0,
+					catchment: 27,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'C',
-				rule: 'gaugeMap',
-				rainKey: 'rain_catchment_mm',
+				nodeId: "C",
+				rule: "gaugeMap",
+				rainKey: "rain_catchment_mm",
 				factor: 0.830769231,
 				chirps: null,
-				days: { unitGauge: 0, gaugeMap: 2165, unitChirps: 0, catchment: 27, forecast: 0, none: 0 }
+				days: {
+					unitGauge: 0,
+					gaugeMap: 2165,
+					unitChirps: 0,
+					catchment: 27,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'D',
-				rule: 'catchment',
+				nodeId: "D",
+				rule: "catchment",
 				rainKey: null,
 				factor: null,
 				chirps: null,
-				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 0, catchment: 2192, forecast: 0, none: 0 }
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 0,
+					catchment: 2192,
+					forecast: 0,
+					none: 0
+				}
 			}
 		],
-		summary: '3218f881e68dd310'
+		golden: {
+			shape: "11ed8ec02f09d50d",
+			series: {
+				"natural_flow@": {
+					sum: 42767824.923284635,
+					sumSq: 1279086326104.07,
+					weighted: 63990839.93238497
+				},
+				"rain_used@": {
+					sum: 6837.051652106906,
+					sumSq: 195269.1811888269,
+					weighted: 10231.205143935493
+				},
+				"rain_unit@A": {
+					sum: 7664.610755046147,
+					sumSq: 245400.92299537142,
+					weighted: 11500.956177633896
+				},
+				"runoff_natural@A": {
+					sum: 26747146.119774573,
+					sumSq: 504384069508.73175,
+					weighted: 40048667.22133255
+				},
+				"rain_unit@B": {
+					sum: 6542.960400649123,
+					sumSq: 178831.72556176473,
+					weighted: 9773.51605326715
+				},
+				"runoff_natural@B": {
+					sum: 11043533.485691858,
+					sumSq: 85631781639.41232,
+					weighted: 16563680.847966172
+				},
+				"rain_unit@C": {
+					sum: 5047.426594786547,
+					sumSq: 106423.12484451124,
+					weighted: 7583.666474884545
+				},
+				"runoff_natural@C": {
+					sum: 2694411.4736978137,
+					sumSq: 5027350064.734289,
+					weighted: 4041709.402088238
+				},
+				"rain_unit@D": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9147.28358299822
+				},
+				"runoff_natural@D": {
+					sum: 2282733.844120391,
+					sumSq: 3653481556.8567533,
+					weighted: 3417865.6573240925
+				},
+				"rain_final@": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9104.409059793381
+				},
+				"rain_chirps_corrected@": {
+					sum: 6075.6060863170915,
+					sumSq: 154584.25088477324,
+					weighted: 9134.328027182208
+				},
+				"rain_source@": {
+					sum: 54,
+					sumSq: 108,
+					weighted: 82.35480673934588
+				},
+				"runoff@A": {
+					sum: 26747146.119774573,
+					sumSq: 504384069508.73175,
+					weighted: 40038296.655299865
+				},
+				"runoff@B": {
+					sum: 11043533.485691858,
+					sumSq: 85631781639.41232,
+					weighted: 16561641.0277877
+				},
+				"runoff@C": {
+					sum: 2694411.4736978137,
+					sumSq: 5027350064.734289,
+					weighted: 4040271.0797816576
+				},
+				"runoff@D": {
+					sum: 2282733.844120391,
+					sumSq: 3653481556.8567533,
+					weighted: 3419597.3679210213
+				},
+				"runoff@E": {
+					sum: 0,
+					sumSq: 0,
+					weighted: 0
+				}
+			},
+			rest: {
+				sum: 299099989.73522234,
+				sumSq: 6564622585880.288,
+				weighted: 448581011.1485276
+			},
+			summary: {
+				sum: 989767913.92053,
+				sumSq: 50607962698027100,
+				weighted: 1583024596.4515326
+			}
+		}
 	},
 	unitGauge: {
-		series: '34a6572c07845e2b',
-		sums: {
-			'natural_flow@': 40724500,
-			'rain_used@': 6668.56,
-			'rain_unit@A': 7823.41,
-			'runoff_natural@A': 28113000,
-			'rain_unit@B': 5422.2,
-			'runoff_natural@B': 6658310,
-			'rain_unit@C': 5608.25,
-			'runoff_natural@C': 3670440,
-			'rain_unit@D': 6075.61,
-			'runoff_natural@D': 2282730,
-			'rain_final@': 6075.61,
-			'rain_chirps_corrected@': 6075.61,
-			'rain_source@': 54,
-			'runoff@A': 28113000,
-			'runoff@B': 6658310,
-			'runoff@C': 3670440,
-			'runoff@D': 2282730,
-			'runoff@E': 0
-		},
 		units: [
 			{
-				nodeId: 'A',
-				rule: 'unitGauge',
-				rainKey: 'rain_catchment_mm@A',
+				nodeId: "A",
+				rule: "unitGauge",
+				rainKey: "rain_catchment_mm@A",
 				factor: 1,
-				chirps: 'map',
-				days: { unitGauge: 2165, gaugeMap: 0, unitChirps: 27, catchment: 0, forecast: 0, none: 0 }
+				chirps: "map",
+				days: {
+					unitGauge: 2165,
+					gaugeMap: 0,
+					unitChirps: 27,
+					catchment: 0,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'B',
-				rule: 'unitGauge',
-				rainKey: 'rain_catchment_mm@B',
+				nodeId: "B",
+				rule: "unitGauge",
+				rainKey: "rain_catchment_mm@B",
 				factor: 1,
 				chirps: null,
-				days: { unitGauge: 2183, gaugeMap: 0, unitChirps: 0, catchment: 9, forecast: 0, none: 0 }
+				days: {
+					unitGauge: 2183,
+					gaugeMap: 0,
+					unitChirps: 0,
+					catchment: 9,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'C',
-				rule: 'gaugeMap',
-				rainKey: 'rain_catchment_mm',
+				nodeId: "C",
+				rule: "gaugeMap",
+				rainKey: "rain_catchment_mm",
 				factor: 0.923076923,
 				chirps: null,
-				days: { unitGauge: 0, gaugeMap: 2165, unitChirps: 0, catchment: 27, forecast: 0, none: 0 }
+				days: {
+					unitGauge: 0,
+					gaugeMap: 2165,
+					unitChirps: 0,
+					catchment: 27,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'D',
-				rule: 'catchment',
+				nodeId: "D",
+				rule: "catchment",
 				rainKey: null,
 				factor: null,
 				chirps: null,
-				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 0, catchment: 2192, forecast: 0, none: 0 }
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 0,
+					catchment: 2192,
+					forecast: 0,
+					none: 0
+				}
 			}
 		],
-		summary: 'ab52b76e25e889ef'
+		golden: {
+			shape: "2acb39537e17c4be",
+			series: {
+				"natural_flow@": {
+					sum: 40724533.36977918,
+					sumSq: 1093760319015.4503,
+					weighted: 61098806.84190648
+				},
+				"rain_used@": {
+					sum: 6668.559844145411,
+					sumSq: 81873.18025691037,
+					weighted: 9951.937412450321
+				},
+				"rain_unit@A": {
+					sum: 7823.411235955126,
+					sumSq: 256506.9265408381,
+					weighted: 11714.336011193374
+				},
+				"runoff_natural@A": {
+					sum: 28113048.809715513,
+					sumSq: 567984265385.5486,
+					weighted: 42272862.909268476
+				},
+				"rain_unit@B": {
+					sum: 5422.200000000051,
+					sumSq: 123387.96000000105,
+					weighted: 8114.405748265613
+				},
+				"runoff_natural@B": {
+					sum: 6658307.448812635,
+					sumSq: 31098284961.333908,
+					weighted: 10012005.14570123
+				},
+				"rain_unit@C": {
+					sum: 5608.251771985052,
+					sumSq: 131386.5738821122,
+					weighted: 8426.296083205047
+				},
+				"runoff_natural@C": {
+					sum: 3670443.2671306105,
+					sumSq: 9416909039.3587,
+					weighted: 5505301.833079158
+				},
+				"rain_unit@D": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9147.28358299822
+				},
+				"runoff_natural@D": {
+					sum: 2282733.844120391,
+					sumSq: 3653481556.8567533,
+					weighted: 3417865.6573240925
+				},
+				"rain_final@": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9104.409059793381
+				},
+				"rain_chirps_corrected@": {
+					sum: 6075.6060863170915,
+					sumSq: 154584.25088477324,
+					weighted: 9134.328027182208
+				},
+				"rain_source@": {
+					sum: 54,
+					sumSq: 108,
+					weighted: 82.35480673934588
+				},
+				"runoff@A": {
+					sum: 28113048.809715513,
+					sumSq: 567984265385.5486,
+					weighted: 42077987.76243269
+				},
+				"runoff@B": {
+					sum: 6658307.448812635,
+					sumSq: 31098284961.333908,
+					weighted: 9961216.489551252
+				},
+				"runoff@C": {
+					sum: 3670443.2671306105,
+					sumSq: 9416909039.3587,
+					weighted: 5504596.652986572
+				},
+				"runoff@D": {
+					sum: 2282733.844120391,
+					sumSq: 3653481556.8567533,
+					weighted: 3419597.3679210213
+				},
+				"runoff@E": {
+					sum: 0,
+					sumSq: 0,
+					weighted: 0
+				}
+			},
+			rest: {
+				sum: 286829849.0081203,
+				sumSq: 6049010096767.797,
+				weighted: 430010838.6098504
+			},
+			summary: {
+				sum: 955516585.914377,
+				sumSq: 47606578153491030,
+				weighted: 1530237223.4568274
+			}
+		}
 	},
 	reference: {
-		series: 'c95d231cbe299669',
-		sums: {
-			'natural_flow@': 17320200,
-			'rain_used@': 4848.6,
-			'rain_unit@A': 5400,
-			'runoff_natural@A': 11214300,
-			'rain_unit@B': 4500,
-			'runoff_natural@B': 3840620,
-			'rain_unit@C': 3600,
-			'runoff_natural@C': 875976,
-			'rain_unit@D': 5064.18,
-			'runoff_natural@D': 1389290,
-			'rain_final@': 6075.61,
-			'rain_chirps_corrected@': 6075.61,
-			'rain_source@': 54,
-			'runoff@A': 11214300,
-			'runoff@B': 3840620,
-			'runoff@C': 875976,
-			'runoff@D': 1389290,
-			'runoff@E': 0
-		},
 		units: [
 			{
-				nodeId: 'A',
-				rule: 'unitChirps',
-				rainKey: 'rain_chirps_mm@A',
+				nodeId: "A",
+				rule: "unitChirps",
+				rainKey: "rain_chirps_mm@A",
 				factor: null,
-				chirps: 'reference',
-				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 2192, catchment: 0, forecast: 0, none: 0 }
+				chirps: "reference",
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 2192,
+					catchment: 0,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'B',
-				rule: 'unitChirps',
-				rainKey: 'rain_chirps_mm@B',
+				nodeId: "B",
+				rule: "unitChirps",
+				rainKey: "rain_chirps_mm@B",
 				factor: null,
-				chirps: 'reference',
-				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 2192, catchment: 0, forecast: 0, none: 0 }
+				chirps: "reference",
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 2192,
+					catchment: 0,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'C',
-				rule: 'unitChirps',
-				rainKey: 'rain_chirps_mm@C',
+				nodeId: "C",
+				rule: "unitChirps",
+				rainKey: "rain_chirps_mm@C",
 				factor: null,
-				chirps: 'reference',
-				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 2192, catchment: 0, forecast: 0, none: 0 }
+				chirps: "reference",
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 2192,
+					catchment: 0,
+					forecast: 0,
+					none: 0
+				}
 			},
 			{
-				nodeId: 'D',
-				rule: 'unitChirps',
-				rainKey: 'rain_chirps_mm@D',
+				nodeId: "D",
+				rule: "unitChirps",
+				rainKey: "rain_chirps_mm@D",
 				factor: null,
-				chirps: 'reference',
-				days: { unitGauge: 0, gaugeMap: 0, unitChirps: 2192, catchment: 0, forecast: 0, none: 0 }
+				chirps: "reference",
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 2192,
+					catchment: 0,
+					forecast: 0,
+					none: 0
+				}
 			}
 		],
-		summary: 'e36887de38e5aa07'
+		golden: {
+			shape: "d293db0cf2ee2bb9",
+			series: {
+				"natural_flow@": {
+					sum: 17320217.189539496,
+					sumSq: 238686148947.09683,
+					weighted: 25987194.187847637
+				},
+				"rain_used@": {
+					sum: 4848.5987944623,
+					sumSq: 41887.457682041946,
+					weighted: 7233.9949280078945
+				},
+				"rain_unit@A": {
+					sum: 5399.999999999999,
+					sumSq: 127713.53967753821,
+					weighted: 8081.963997386218
+				},
+				"runoff_natural@A": {
+					sum: 11214331.555272585,
+					sumSq: 106251452068.6369,
+					weighted: 16841814.975173954
+				},
+				"rain_unit@B": {
+					sum: 4499.999999999984,
+					sumSq: 88731.13327050027,
+					weighted: 6815.101653916233
+				},
+				"runoff_natural@B": {
+					sum: 3840622.897196889,
+					sumSq: 11843307583.487495,
+					weighted: 5753015.7441533245
+				},
+				"rain_unit@C": {
+					sum: 3599.9999999999964,
+					sumSq: 56550.02219839709,
+					weighted: 5376.749330092646
+				},
+				"runoff_natural@C": {
+					sum: 875976.2405204996,
+					sumSq: 537855973.5435629,
+					weighted: 1315078.702557115
+				},
+				"rain_unit@D": {
+					sum: 5064.183524318248,
+					sumSq: 112296.0676694329,
+					weighted: 7555.501575936826
+				},
+				"runoff_natural@D": {
+					sum: 1389286.4965494808,
+					sumSq: 1602669131.122388,
+					weighted: 2087972.8630524282
+				},
+				"rain_final@": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9104.409059793381
+				},
+				"rain_chirps_corrected@": {
+					sum: 6075.6060863170915,
+					sumSq: 154584.25088477324,
+					weighted: 9134.328027182208
+				},
+				"rain_source@": {
+					sum: 54,
+					sumSq: 108,
+					weighted: 82.35480673934588
+				},
+				"runoff@A": {
+					sum: 11214331.555272585,
+					sumSq: 106251452068.6369,
+					weighted: 16781540.532428034
+				},
+				"runoff@B": {
+					sum: 3840622.897196889,
+					sumSq: 11843307583.487495,
+					weighted: 5762422.622808372
+				},
+				"runoff@C": {
+					sum: 875976.2405204996,
+					sumSq: 537855973.5435629,
+					weighted: 1312007.6969750081
+				},
+				"runoff@D": {
+					sum: 1389286.4965494808,
+					sumSq: 1602669131.122388,
+					weighted: 2085637.663139998
+				},
+				"runoff@E": {
+					sum: 0,
+					sumSq: 0,
+					weighted: 0
+				}
+			},
+			rest: {
+				sum: 146286963.26412824,
+				sumSq: 2008003184960.1018,
+				weighted: 219270590.17158538
+			},
+			summary: {
+				sum: 572222606.251005,
+				sumSq: 21962615921885264,
+				weighted: 804403598.9802934
+			}
+		}
 	}
 };
 
-describe('the rain forcing stays bit-identical (issue #553 guard)', () => {
+describe('the rain forcing stays unchanged (issue #553 guard)', () => {
 	for (const [name, build] of Object.entries(CASES))
 		it(name, () => {
 			const got = fingerprint(runModel(build()));
 			if (process.env.GOLDEN_PRINT) console.log(name, JSON.stringify(got));
 			const want = EXPECTED[name]!;
-			// The readable parts first, so a failure shows where the run moved before the hashes say that it did.
 			expect(got.units).toEqual(want.units);
-			expect(got.sums).toEqual(want.sums);
-			expect(got.series).toBe(want.series);
-			expect(got.summary).toBe(want.summary);
+			expect(goldenDiff(got.golden, want.golden)).toEqual([]);
 		});
 
-	it('runs every case twice to the same bits (the fingerprint is deterministic)', () => {
+	it('runs every case twice to the same fingerprint (it is deterministic)', () => {
 		for (const build of Object.values(CASES)) expect(fingerprint(runModel(build()))).toEqual(fingerprint(runModel(build())));
 	});
 });

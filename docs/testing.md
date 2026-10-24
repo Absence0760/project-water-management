@@ -246,6 +246,20 @@ off-take keeps). They run in
 `pnpm test` (a few seconds in all); run one area with
 `pnpm -C packages/engine exec vitest run src/e2e/<area>`.
 
+## Golden fingerprints
+
+A test that pins a whole run's output ("this must not change") uses
+`packages/engine/src/testing/golden.ts`, not a hash of every value's bits:
+the same code gives last-bit different floats on macOS arm64 and on CI's
+Linux (the rain forcing guard of issue #553 passed on one and failed on the
+other). It keeps the shape exact (which series, their lengths, the summary's
+text) and compares the numbers by sums, sums of squares and position-weighted
+sums at 1e-9 relative: platform noise is around 1e-13, while a 0.001 mm
+change of one day's rain fails it. `runoff/unitRain.golden.test.ts` and the
+golden block of `runoff/stationForcing.test.ts` use it; `GOLDEN_PRINT=1`
+prints a test's values. Pin values on a commit from before the change they
+guard, so the pin proves "unchanged", not "the same as now".
+
 ## Why the slow ones are shaped the way they are
 
 - **Engine random soak** (`packages/engine/src/fuzz/`): checkAll on 400 seeds

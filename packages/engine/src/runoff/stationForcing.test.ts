@@ -17,7 +17,7 @@ import { stationAreaRain } from './stationAreaRain';
 import { catchmentMapOf, stationAreaDays, stationRatio, STATION_DAY_SOURCE } from './stationForcing';
 import { checkedStationRecord } from './stationRecord';
 import { pairingFactorOn } from './stationPairing';
-import { Hasher } from '../warmstart/plain';
+import { goldenDiff, goldenFingerprint, type GoldenFingerprint } from '../testing/golden';
 import { calibrate } from '../calibrate/calibrate';
 import { fitRecordCaveats, fitRecordFromReport, fitRecordStatus } from '../calibrate/provenance';
 import { catchmentStationFingerprint, catchmentStationFingerprintError } from './stationFingerprint';
@@ -361,44 +361,196 @@ describe('carry-through', () => {
 	});
 });
 
-// Golden pins of the station paths (as ./unitRain.golden.test.ts pins today's): a hash over every output series'
-// bits, the rain and flow sums, and a hash of summary.stations. An intended change of the station rule updates
-// these in the same change as its ENGINE_VERSION bump; any other difference is a bug. GOLDEN_PRINT=1 prints them.
-describe('the station paths stay bit-identical (golden)', () => {
+// Golden pins of the station paths (as ./unitRain.golden.test.ts pins today's, ../testing/golden.ts): exact
+// series shape and summary text, then the rain and flow series' moments, the rest of the output and the numbers of
+// summary.stations at 1e-9 relative (a bit hash can't hold across macOS and CI's Linux). An intended change of the
+// station rule updates these in the same change as its ENGINE_VERSION bump; any other difference is a bug.
+// GOLDEN_PRINT=1 prints them.
+describe('the station paths stay unchanged (golden)', () => {
 	const SUMMED = /^(rain_used|rain_final|rain_unit|runoff_natural|natural_flow)$/;
-	const fingerprint = (out: Out) => {
-		const h = new Hasher();
-		for (const s of out.series) {
-			h.text(s.nodeId ?? '').text(s.key).number(s.values.length);
-			for (const v of s.values) h.number(v);
-		}
-		const sums: Record<string, number> = {};
-		for (const s of out.series) if (SUMMED.test(s.key)) sums[`${s.key}@${s.nodeId ?? ''}`] = Number(s.values.reduce((a, v) => a + v, 0).toPrecision(6));
-		return { series: h.digest(), sums, stations: new Hasher().text(JSON.stringify(out.summary.stations)).digest() };
-	};
+	const fingerprint = (out: Out) => goldenFingerprint(out, SUMMED, out.summary.stations);
 	const CASES: Record<string, () => ModelInput> = {
 		units: () => catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' }, B: { stationId: 'S', correctAgainst: 'S' }, C: { stationId: 'T' } }, sites: SITES, unreliable: { S: [UNRELIABLE] } } }),
 		catchment: () => catchment({ rainStations: { catchment: { stationId: 'S' }, sites: SITES, unreliable: { S: [UNRELIABLE] } } }),
 		both: () => catchment({ unitRain: PER_UNIT, rainStations: { catchment: { stationId: 'S' }, units: { A: { stationId: 'S', scaleToMap: false } }, catchmentMapMm: 700, catchmentMapSource: 'invented', sites: SITES } })
 	};
-	const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
+	const EXPECTED: Record<string, GoldenFingerprint> = {
 		units: {
-			series: '573bb525e678a3a4',
-			sums: { 'natural_flow@': 128067000, 'rain_used@': 11708.7, 'rain_unit@A': 14499.2, 'runoff_natural@A': 87632100, 'rain_unit@B': 9664, 'runoff_natural@B': 25929600, 'rain_unit@C': 9310.8, 'runoff_natural@C': 12221000, 'rain_unit@D': 6080, 'runoff_natural@D': 2284090, 'rain_final@': 6080 },
-			stations: '877236f927ef3240'
+			shape: "d0109dbbdce02042",
+			series: {
+				"natural_flow@": {
+					sum: 128066827.65488726,
+					sumSq: 12322294468981.275,
+					weighted: 191590881.01926374
+				},
+				"rain_used@": {
+					sum: 11708.702439024437,
+					sumSq: 426076.32009518397,
+					weighted: 17526.253977616107
+				},
+				"rain_unit@A": {
+					sum: 14499.199999999877,
+					sumSq: 879677.4400000048,
+					weighted: 21776.149058473744
+				},
+				"runoff_natural@A": {
+					sum: 87632065.14679271,
+					sumSq: 6577981097196.878,
+					weighted: 131478323.7500499
+				},
+				"rain_unit@B": {
+					sum: 9664,
+					sumSq: 390843.1999999973,
+					weighted: 14484.739345887025
+				},
+				"runoff_natural@B": {
+					sum: 25929635.20352118,
+					sumSq: 489396273362.35394,
+					weighted: 38796329.666292705
+				},
+				"rain_unit@C": {
+					sum: 9310.80000000008,
+					sumSq: 382944.4800000019,
+					weighted: 13985.253121902873
+				},
+				"runoff_natural@C": {
+					sum: 12221040.651818942,
+					sumSq: 135464241181.33746,
+					weighted: 18394389.13823712
+				},
+				"rain_unit@D": {
+					sum: 6080,
+					sumSq: 154120,
+					weighted: 9143.040634291374
+				},
+				"runoff_natural@D": {
+					sum: 2284086.6527544437,
+					sumSq: 3657423148.8902645,
+					weighted: 3419851.9519126806
+				},
+				"rain_final@": {
+					sum: 6080,
+					sumSq: 154120,
+					weighted: 9102.37264618434
+				}
+			},
+			rest: {
+				sum: 939106316.3656577,
+				sumSq: 66724202343827.79,
+				weighted: 1406976650.0052392
+			},
+			summary: {
+				sum: 31724.292682926836,
+				sumSq: 32526085.046638917,
+				weighted: 49787.40681428123
+			}
 		},
-		catchment: { series: '476280e012bd33c7', sums: { 'natural_flow@': 138623000, 'rain_used@': 12378.5, 'rain_final@': 12378.5 }, stations: 'd12766e1c3b56f38' },
+		catchment: {
+			shape: "ec4d5ef6e927bac3",
+			series: {
+				"natural_flow@": {
+					sum: 138623085.4897218,
+					sumSq: 15134798380845.465,
+					weighted: 207495758.86422086
+				},
+				"rain_used@": {
+					sum: 12378.45853658533,
+					sumSq: 641135.2665318329,
+					weighted: 18534.396712514215
+				},
+				"rain_final@": {
+					sum: 12378.45853658533,
+					sumSq: 641135.2665318329,
+					weighted: 18598.527332060243
+				}
+			},
+			rest: {
+				sum: 1012560294.6910626,
+				sumSq: 67547501347099.91,
+				weighted: 1517035258.1143231
+			},
+			summary: {
+				sum: 23283.14634146342,
+				sumSq: 21200486.972575862,
+				weighted: 34815.677524233135
+			}
+		},
 		both: {
-			series: '50853c9fb516701c',
-			sums: { 'natural_flow@': 71115400, 'rain_used@': 8257.63, 'rain_unit@A': 9683.2, 'runoff_natural@A': 43411100, 'rain_unit@B': 3600, 'runoff_natural@B': 1719330, 'rain_unit@C': 11299.9, 'runoff_natural@C': 17323300, 'rain_unit@D': 11299.9, 'runoff_natural@D': 8661660, 'rain_final@': 11299.9 },
-			stations: 'a02b2b1a2b1002d3'
+			shape: "75c0ed02aeddb027",
+			series: {
+				"natural_flow@": {
+					sum: 71115359.22886102,
+					sumSq: 3682536249636.605,
+					weighted: 106451406.03283477
+				},
+				"rain_used@": {
+					sum: 8257.629268292743,
+					sumSq: 223803.0314814928,
+					weighted: 12348.901461089721
+				},
+				"rain_unit@A": {
+					sum: 9683.2,
+					sumSq: 392253.43999999727,
+					weighted: 14548.237066402382
+				},
+				"runoff_natural@A": {
+					sum: 43411054.420888096,
+					sumSq: 1375291381002.549,
+					weighted: 65109267.84987923
+				},
+				"rain_unit@B": {
+					sum: 3599.999999999979,
+					sumSq: 54216.80968071774,
+					weighted: 5423.116996600983
+				},
+				"runoff_natural@B": {
+					sum: 1719329.4970369388,
+					sumSq: 1842740815.3652272,
+					weighted: 2578325.660730049
+				},
+				"rain_unit@C": {
+					sum: 11299.866666666727,
+					sumSq: 533908.3555555585,
+					weighted: 16932.787710604553
+				},
+				"runoff_natural@C": {
+					sum: 17323316.87395721,
+					sumSq: 228273767179.6699,
+					weighted: 26053530.49314315
+				},
+				"rain_unit@D": {
+					sum: 11299.866666666727,
+					sumSq: 533908.3555555585,
+					weighted: 17045.17066402378
+				},
+				"runoff_natural@D": {
+					sum: 8661658.436978605,
+					sumSq: 57068441794.91747,
+					weighted: 12955509.454962527
+				},
+				"rain_final@": {
+					sum: 11299.866666666727,
+					sumSq: 533908.3555555585,
+					weighted: 16881.28695077635
+				}
+			},
+			rest: {
+				sum: 539877311.4503478,
+				sumSq: 18628451479368.44,
+				weighted: 809508693.7585994
+			},
+			summary: {
+				sum: 26921.133333333346,
+				sumSq: 27113181.522222236,
+				weighted: 40970.035513709954
+			}
 		}
 	};
 	for (const [name, build] of Object.entries(CASES))
 		it(name, () => {
 			const got = fingerprint(runModel(build()));
 			if (process.env.GOLDEN_PRINT) console.log(name, JSON.stringify(got));
-			expect(got).toEqual(EXPECTED[name]);
+			expect(goldenDiff(got, EXPECTED[name]!)).toEqual([]);
 		});
 });
 
