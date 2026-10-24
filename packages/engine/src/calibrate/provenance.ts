@@ -1026,7 +1026,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.rulesChanged) out.push('The calibration rules have changed since automated calibration picked this fit: run it again under the current rules.');
 	if (status.catchmentStationChanged) {
 		out.push(
-			'The catchment’s rainfall station has changed since the fit: one was assigned or removed (Settings → Flow generation), another station or scaling chosen, or its MAP ratio or the monthly factors that correct the catchment CHIRPS on its gaps moved by more than 2 %. That changes the rain GR4J runs on: refit before relying on the parameters.'
+			'The catchment’s rainfall station has changed since the fit: one was assigned or removed, another station or scaling chosen, or its MAP ratio or the monthly factors that correct the catchment CHIRPS on its gaps moved by more than 2 %. That changes the rain GR4J runs on: refit before relying on the parameters.'
 		);
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged) {

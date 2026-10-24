@@ -209,7 +209,7 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 	// The station × catchment MAP ÷ station MAP already takes the point rain to the catchment's level: the areal
 	// correction (§2.4g) on top would count that twice, so it is off under a catchment station.
 	if (plan && settings.arealRain) {
-		warnings.push(`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}" × the catchment MAP ÷ its MAP, so the areal rainfall correction (Settings → Areal rainfall) is not applied (docs/model.md §2.4i)`);
+		warnings.push(`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}" × the catchment MAP ÷ its MAP, so the areal rainfall correction (Settings → Flow calibration → Rain into GR4J → Areal rainfall correction) is not applied (docs/model.md §2.4i)`);
 		settings = { ...settings, arealRain: null };
 	}
 	const work = plan ? stationWork(settings, series, plan, input, warnings) : { settings, series };
