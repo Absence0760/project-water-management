@@ -28,25 +28,36 @@ export const LANE_FLAGS: readonly FlowDayFlag[] = ['aboveRating', 'periodHigh', 
 export const LANE_COLOR: Record<FlowDayFlag, string> = {
 	aboveRating: '--series-9',
 	belowRating: '--series-10',
-	suspect: '--series-5',
-	infilled: '--series-8',
-	humanUse: '--series-6',
-	inRange: '--series-3',
+	suspect: '--lane-suspect',
+	infilled: '--lane-infilled',
+	humanUse: '--lane-human-use',
+	// Never drawn (LANE_FLAGS): an in-range day has no strip, a missing one is a gap in the line.
+	inRange: '--text-muted',
 	missing: '--text-muted',
 	periodHigh: '--series-7'
 };
 
 /**
- * The classes drawn as a double line as well as coloured. Period-high's green
- * (--series-7) is the palette's best choice next to the above-range red and the
- * below-range aqua, but in the dark theme a protanope sees it only ΔE00 7.9
- * from the suspect strip's amber, which it sits beside whenever no day is below
- * the gauged range; the line along its middle keeps the two apart for every
- * reader, and unlike hatching it shows on a range one pixel wide (a lone day
- * on a decade's view). flowFlagColours.test.ts computes each pair;
+ * The classes drawn as a double line (a ground-coloured line along the strip's
+ * middle, the key swatch the same) rather than solid. Two looks, by what the
+ * class says: solid, a reading outside the flow it can be trusted at (above the
+ * highest gauging, above a low-flow period's threshold, below the lowest
+ * gauging); a double line, the reading itself is doubtful or not the river's
+ * own (suspect, infilled, human use dominant; their own --lane-* colours).
+ * No choice of six palette tokens keeps every pair apart for colour-blind
+ * readers, nor any with one class set apart (every choice was computed, PR
+ * #570); within each look every pair is ΔE00 ≥ 10 for normal vision,
+ * protanopia, deuteranopia and tritanopia, light and dark, every strip is
+ * ≥ 3:1 on the card, and none shares a colour with a line the flow charts draw. Not hatching: a strip's range
+ * is often one day, under a pixel on a decade's view, where a line along the
+ * middle still shows. flowFlagColours.test.ts computes every pair from app.css;
  * docs/design/ui-playbook.md § 3, Hold non-text parts to 3:1.
  */
-export const LANE_DOUBLED: ReadonlySet<FlowDayFlag> = new Set<FlowDayFlag>(['periodHigh']);
+export const LANE_DOUBLED: ReadonlySet<FlowDayFlag> = new Set<FlowDayFlag>(['suspect', 'infilled', 'humanUse']);
+
+/** The key's note on the two looks, while a strip is a double line ('' otherwise: every strip is solid). */
+export const lanesLooksNote = (lanes: readonly FlagLane[]): string =>
+	lanes.some((l) => l.doubled) ? 'solid: outside the flow the record can be trusted at; double line: a doubtful reading, or not the river’s own flow' : '';
 
 /** What Fit automatically does with a class's days under the quality-flag settings, in the engine's words (FLAG_USE_TEXT); '' without them. */
 export function flagUseText(flag: FlowDayFlag, use: Omit<QualityFlagSettings, 'ratings'> | null | undefined): string {
@@ -82,7 +93,7 @@ export function flowFlagLanes(codes: ArrayLike<number>, startDate: string, use: 
 		const how = flagUseText(flag, use);
 		const label = FLOW_FLAG_LABEL[flag];
 		const doubled = LANE_DOUBLED.has(flag);
-		out.push({ flag, label, color: LANE_COLOR[flag], doubled, ranges, days, text: `${label}${doubled ? ' (double line)' : ''}: ${fmtNum(days)} day${days === 1 ? '' : 's'}${how ? `; ${how}` : ''}` });
+		out.push({ flag, label, color: LANE_COLOR[flag], doubled, ranges, days, text: `${label}${doubled ? ', double line' : ''}: ${fmtNum(days)} day${days === 1 ? '' : 's'}${how ? `; ${how}` : ''}` });
 	}
 	return out;
 }

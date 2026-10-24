@@ -31,6 +31,7 @@
 		shadeKey,
 		lanes = [],
 		lanesLabel = 'Flagged days',
+		lanesNote = '',
 		band,
 		pannable = true,
 		print = false,
@@ -79,6 +80,8 @@
 		lanes?: readonly { label: string; color: string; doubled?: boolean; ranges: readonly { start: string; end: string }[]; text: string }[];
 		/** The lanes key's heading. */
 		lanesLabel?: string;
+		/** What the lanes' looks mean, after the heading ("solid: …; double line: …"); none when ''. */
+		lanesNote?: string;
 		/**
 		 * Daily charts: one labelled band behind the lines from `from` (to `to`,
 		 * else the end), hatched, named on the plot and in a text key under it,
@@ -587,7 +590,7 @@
 	{/if}
 	{#if lanes.length && isTime && hasData}
 		<div class="lane-key">
-			<p><strong>{lanesLabel}</strong> (strips along the foot of the plot, top to bottom)</p>
+			<p><strong>{lanesLabel}</strong> (strips along the foot of the plot, top to bottom{lanesNote ? `; ${lanesNote}` : ''})</p>
 			<ul>
 				{#each lanes as lane (lane.label)}<li data-color={lane.color} data-doubled={lane.doubled || undefined}><i aria-hidden="true" class:doubled={lane.doubled} style:background-color="var({lane.color})"></i>{lane.text}</li>{/each}
 			</ul>
@@ -727,18 +730,18 @@
 	.lane-key li {
 		display: flex;
 		gap: 0.4rem;
-		align-items: baseline;
+		align-items: flex-start;
 	}
+	/* Every swatch the strip's 5 px, solid and doubled alike, centred on the item's first line (a long item wraps). */
 	.lane-key i {
 		flex: none;
 		display: inline-block;
 		width: 1.1rem;
-		height: 0.35rem;
+		height: 5px;
+		margin-top: calc((1.45em - 5px) / 2);
 	}
 	/* The doubled strip, as drawLanes draws it: two 2 px lines with 1 px of ground between. */
 	.lane-key i.doubled {
-		height: 5px;
-		align-self: center;
 		background-image: linear-gradient(transparent 2px, var(--surface) 2px 3px, transparent 3px);
 	}
 	.band-key {

@@ -77,7 +77,7 @@
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
-	import { flowFlagLanes } from '$lib/calibration/flowFlags';
+	import { flowFlagLanes, lanesLooksNote } from '$lib/calibration/flowFlags';
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 	import { foldList } from '$lib/components/common/fold';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -786,6 +786,7 @@
 				recentLabel="Last 3 years"
 				shade={shading?.ranges ?? flowShading?.ranges ?? []}
 				lanes={flagLanes}
+				lanesNote={lanesLooksNote(flagLanes)}
 				lanesLabel="Quality flags, as Fit automatically reads this record under the current settings"
 				caption={shading?.caption ?? flowShading?.caption ?? undefined}
 			/>

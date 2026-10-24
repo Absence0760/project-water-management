@@ -51,9 +51,9 @@ test('a low-flow period needs a reason and a source, leaves its high readings ou
 	const hydro = page.locator('#res-hydrograph figure').first();
 	await expect(hydro).toHaveAttribute('data-ready', 'true');
 	await expect(hydro).toHaveAttribute('data-lanes', '1');
-	await expect(hydro.locator('.lane-key').getByRole('listitem')).toHaveText(['Above a low-flow period’s threshold (double line): 11 days; left out of Fit automatically and the run’s statistics']);
-	// Drawn as a double line, its key swatch too (calibration/flowFlagColours.test.ts says why).
-	await expect(hydro.locator('.lane-key li[data-doubled] i.doubled')).toHaveCount(1);
+	await expect(hydro.locator('.lane-key').getByRole('listitem')).toHaveText(['Above a low-flow period’s threshold: 11 days; left out of Fit automatically and the run’s statistics']);
+	// Solid, as the gauged-range strips: the double line is for doubtful readings (calibration/flowFlagColours.test.ts).
+	await expect(hydro.locator('.lane-key li[data-doubled]')).toHaveCount(0);
 
 	await page.goto(`/compare?a=${project.id}:${before}&b=${project.id}:${after}`);
 	await expect(whatChanged(page).getByText('Low flows only: added gauge record 2021-10-01 – 2021-12-31 at or below 0.3 m³/s')).toBeVisible();
@@ -106,7 +106,7 @@ test('scored at a gauge inside the network, Settings says the low-flow periods a
 	const group = page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByTestId('low-flow-period')).toHaveCount(1);
 	await expect(group.getByTestId('low-flow-site-note')).toHaveText(
-		"These periods apply to the outlet's records. Calibration is scored at Middle weir, so they are not used until it is scored at the outlet again."
+		'These periods apply to the outlet’s records. Calibration is scored at Middle weir, so they are not used until it is scored at the outlet again.'
 	);
 
 	// Back to the outlet (unsaved): the note goes, since the periods apply there.

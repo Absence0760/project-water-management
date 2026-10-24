@@ -1,7 +1,8 @@
 // The flow-quality strips' colours, computed (issue #557 follow-up, PR #570).
 // Each class has its own strip, in a fixed order the key repeats, so a class
-// reads by its place; the colours must still stay apart for colour-blind
-// readers wherever two strips can sit side by side, light and dark. Colour
+// reads by its place; the strips must still stay apart for colour-blind
+// readers, light and dark: within each look (solid, double line) by colour,
+// across the two looks by the line along the strip's middle. Colour
 // vision deficiency is simulated with Machado, Oliveira & Fernandes (2009) at
 // full severity (protanopia, deuteranopia, tritanopia), on linear sRGB; the
 // difference is CIEDE2000 (ΔE00). A strip is a non-text mark, so it holds 3:1
@@ -94,18 +95,25 @@ const contrast = (a: string, b: string) => {
 };
 
 const colour = (theme: Theme, flag: FlowDayFlag) => hex(theme, LANE_COLOR[flag]);
+
+/** The flow charts' own colours, light then dark, from LineChart's style block (its --series-4 and --chart-obs). */
+const chartCss = readFileSync(new URL('../components/charts/LineChart.svelte', import.meta.url), 'utf8');
+function chartHex(theme: Theme, token: string): string {
+	const all = [...chartCss.matchAll(new RegExp(`${token}:\\s*(#[0-9a-f]{6})\\b`, 'gi'))].map((m) => m[1]!.toLowerCase());
+	const v = theme === 'light' ? all[0] : all[1];
+	if (!v) throw new Error(`${token} has no ${theme} value in LineChart.svelte`);
+	return v;
+}
+/**
+ * Every line the hydrograph and the Data chart draw over the strips: observed (--chart-obs), the other observed record
+ * (--series-4, dashed), natural (--series-1), simulated (--series-2), and the Data chart's filled and edited dots
+ * (LineChart's fallback --series-1…4, runs/flowSeries.ts, series/SeriesTab.svelte).
+ */
+const lines = (theme: Theme) => [hex(theme, '--series-1'), hex(theme, '--series-2'), hex(theme, '--series-3'), chartHex(theme, '--series-4'), chartHex(theme, '--chart-obs')];
+/** A strip and a line are different shapes, so they need only read as different colours to normal vision. */
+const FROM_LINES = 13;
 /** Below this ΔE00, under any of the four visions, two strips side by side read as one colour. */
 const APART = 10;
-
-/**
- * Pairs of plain (not doubled) strips already closer than APART when #557 added the
- * period strip (their own place and the key's order tell them apart): listed so
- * a new pair can't join them silently. Worst ΔE00 when measured, PR #570.
- */
-const KNOWN_CLOSE: Record<Theme, Record<string, number>> = {
-	light: { 'belowRating|humanUse': 4.8, 'suspect|humanUse': 8.2 },
-	dark: { 'aboveRating|suspect': 7.6, 'aboveRating|humanUse': 5.7, 'belowRating|infilled': 8.4 }
-};
 
 describe('the flow-quality strips’ colours (issue #557, PR #570)', () => {
 	const themes: readonly Theme[] = ['light', 'dark'];
@@ -116,33 +124,42 @@ describe('the flow-quality strips’ colours (issue #557, PR #570)', () => {
 		// The palette as app.css has it (a token moved means this file's numbers need measuring again).
 		expect(hex('light', '--series-7')).toBe('#008300');
 		expect(hex('dark', '--series-9')).toBe('#e66767');
+		expect(hex('light', '--surface')).toBe('#fdfdfe');
+		expect(chartHex('light', '--series-4')).toBe('#7a4fc4');
+		expect(chartHex('dark', '--chart-obs')).toBe('#e6e8e5');
+		expect(hex('dark', '--lane-suspect')).toBe('#cc8800');
 	});
 
 	for (const theme of themes) {
-		it(`${theme}: the period strip stays apart from the strips always beside it (above-range above, below-range below) for every reader`, () => {
-			const p = colour(theme, 'periodHigh');
-			for (const n of ['aboveRating', 'belowRating'] as const) expect(worstDe(p, colour(theme, n)), `periodHigh vs ${n}`).toBeGreaterThanOrEqual(APART);
-		});
-
-		it(`${theme}: the period strip is at least 3:1 on the card and the page (WCAG 1.4.11)`, () => {
-			const p = colour(theme, 'periodHigh');
-			for (const ground of ['--surface', '--bg']) expect(contrast(p, hex(theme, ground)), ground).toBeGreaterThanOrEqual(3);
-		});
-
-		it(`${theme}: two strips that can sit side by side are ΔE00 ≥ ${APART} for every reader, or one is a double line, or the pair predates #557`, () => {
-			const close: Record<string, number> = {};
+		it(`${theme}: every two strips with the same look are ΔE00 ≥ ${APART} apart for every reader; the others differ by the double line`, () => {
+			const close: string[] = [];
 			for (let i = 0; i < LANE_FLAGS.length; i++)
 				for (let j = i + 1; j < LANE_FLAGS.length; j++) {
 					const [a, b] = [LANE_FLAGS[i]!, LANE_FLAGS[j]!];
 					const d = worstDe(colour(theme, a), colour(theme, b));
-					if (d < APART && LANE_DOUBLED.has(a) === LANE_DOUBLED.has(b)) close[`${a}|${b}`] = Math.round(d * 10) / 10;
+					if (d < APART && LANE_DOUBLED.has(a) === LANE_DOUBLED.has(b)) close.push(`${a}|${b} ${d.toFixed(1)}`);
 				}
-			expect(close).toEqual(KNOWN_CLOSE[theme]);
+			expect(close).toEqual([]);
+			// Every strip a colour of its own.
+			expect(new Set(LANE_FLAGS.map((f) => colour(theme, f))).size).toBe(LANE_FLAGS.length);
+		});
+
+		it(`${theme}: no strip shares a colour with a line the flow charts draw (ΔE00 ≥ ${FROM_LINES}, normal vision)`, () => {
+			for (const f of LANE_FLAGS)
+				for (const l of lines(theme)) expect(de00(lab(seen(colour(theme, f), 'normal')), lab(seen(l, 'normal'))), `${f} vs ${l}`).toBeGreaterThanOrEqual(FROM_LINES);
+		});
+
+		// Both flow charts sit on a card (--surface). On the page's --bg the light below-range aqua and suspect gold fall under
+		// 3:1 (2.86, 2.9), so a chart moved off its card needs this checking again.
+		it(`${theme}: every strip is at least 3:1 on the card the chart sits on (WCAG 1.4.11)`, () => {
+			for (const f of LANE_FLAGS) expect(contrast(colour(theme, f), hex(theme, '--surface')), f).toBeGreaterThanOrEqual(3);
 		});
 	}
 
-	it('draws the period strip as a double line: in the dark theme a protanope sees its green ΔE00 7.9 from the suspect strip’s amber, which it sits beside when no day is below the gauged range', () => {
-		expect(worstDe(colour('dark', 'periodHigh'), colour('dark', 'suspect'))).toBeLessThan(APART);
-		expect([...LANE_DOUBLED]).toEqual(['periodHigh']);
+	it('two looks, by what a class says: solid for a reading outside the flow it can be trusted at, a double line for a doubtful one', () => {
+		expect(LANE_FLAGS.filter((f) => !LANE_DOUBLED.has(f))).toEqual(['aboveRating', 'periodHigh', 'belowRating']);
+		expect(LANE_FLAGS.filter((f) => LANE_DOUBLED.has(f))).toEqual(['suspect', 'infilled', 'humanUse']);
+		// Why the look is needed: no six colours stay apart for every reader; here above-range red and human use rose, for a tritanope.
+		for (const theme of ['light', 'dark'] as const) expect(worstDe(colour(theme, 'aboveRating'), colour(theme, 'humanUse')), theme).toBeLessThan(APART);
 	});
 });

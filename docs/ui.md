@@ -8400,18 +8400,30 @@ read it before.
   run's `observed_flow_quality` column, stored only when a day is flagged)
   are thin strips along the foot of the plot, behind the lines, one strip
   per flagged class (above the highest gauging, above a low-flow period's
-  threshold, below the lowest, suspect, infilled; top to bottom in that order, each in its own `--series-*`
-  colour at full strength, as its key swatch), so a class reads by its place
-  as well as its colour. The low-flow period strip is also a **double line**
-  (strip and swatch: two 2 px lines with the ground between, which shows on
-  a range one pixel wide, where hatching would not; its key line says so):
-  its green (`--series-7`) keeps
-  ΔE00 ≥ 12 from the above-range red and the below-range aqua for every
-  colour-vision deficiency in both themes, but in the dark theme a
-  protanope sees it only 7.9 from the suspect strip's amber, which it sits
-  beside when no day is below the gauged range
-  (`calibration/flowFlagColours.test.ts` computes every pair, and fails on a
-  new close pair). A key under
+  threshold, below the lowest, suspect, infilled, human use dominant; top to
+  bottom in that order, each in its own colour token at full strength,
+  as its key swatch), so a class reads by its place as well as its colour.
+  The strips have **two looks**, by what the class says: **solid** for a
+  reading outside the flow it can be trusted at (above the highest gauging
+  red `--series-9`, above a low-flow period's threshold green `--series-7`,
+  below the lowest aqua `--series-10`), and a **double line** for a reading
+  that is itself doubtful or not the river's own (suspect gold, infilled
+  violet, human use rose: `--lane-suspect`, `--lane-infilled`,
+  `--lane-human-use`, the strips' own tokens): two 2 px lines with the
+  ground between, strip and swatch alike. While a strip is a double line the
+  key's heading says what the looks mean ("solid: outside the flow the
+  record can be trusted at; double line: a doubtful reading, or not the river’s own flow") and that
+  strip's line says "double line". It shows on a range one pixel wide (a
+  lone day on a decade's view), which hatching would not. No choice of six
+  palette colours keeps every pair apart for colour-blind readers; within
+  each look every pair is ΔE00 ≥ 10 under normal vision and simulated
+  protanopia, deuteranopia and tritanopia in both themes, every strip is
+  ≥ 3:1 on the card, and none is within ΔE00 13 of a line the flow charts
+  draw (`--series-1…4`, `--chart-obs`; the palette's light violet was
+  `--series-4`'s exact colour, and its yellow and pink under 3:1, which is
+  why the double-line classes have tokens of their own;
+  `calibration/flowFlagColours.test.ts` computes all of it from `app.css`
+  and `LineChart.svelte`). A key under
   the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
   with its days and what Fit automatically does with them under the run's
   own settings snapshot: "Above the highest gauging: 14 days; Fit

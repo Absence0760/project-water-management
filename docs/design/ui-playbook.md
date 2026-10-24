@@ -982,23 +982,31 @@ section it belongs to, with the example that taught it.
   (decoration, as in SVG); `LineChart`'s `shade` tint (`--warning` at 16 %)
   and a `band`'s tint and hatching, each keyed in words under the plot with a
   full-strength edge (the band's dashed `--series-4` start line is a mark and
-  passes); and, in the light theme only, the yellow and pink lane strips
-  (`--series-5`, `-6`, 2.1–2.7:1), which sit in their own keyed row with the
-  class named and its days counted. The spec passes those two lanes as an
-  explicit `except`; anything else faint fails.
+  passes). The quality strips no longer use the light theme's yellow and
+  pink (2.1–2.7:1, once an explicit `except` in the spec): every lane is
+  ≥ 3:1 on the card, `non-text-contrast.spec.ts` draws a solid and a
+  double-line strip and checks both, and anything faint fails.
   **Compute colour-blind separation; when the palette can't give it, add a
-  shape.** The low-flow period strip (issue #557) took `--series-7`, a green
-  next to the above-range red: CIEDE2000 under Machado (2009) protanopia,
-  deuteranopia and tritanopia kept it ≥ 12 from both its fixed neighbours in
-  both themes, but in the dark theme a protanope sees it 7.9 from the
-  suspect strip's amber, which it sits beside when no day is below the
-  gauged range, and no palette token did better. It is drawn as a **double
-  line** (a 1 px ground line along its middle, the key swatch the same, the
-  key line saying so). Not hatching: a strip's ranges are often one day,
-  under a pixel on a decade's view, where hatching can't show and the strip
-  would no longer match its key. `calibration/flowFlagColours.test.ts`
-  computes every lane pair from `app.css` (ΔE00 ≥ 10 for every reader, or a
-  shape apart) and lists the older close pairs, so a new one fails.
+  shape.** The flow-quality strips (issue #557) needed six colours that stay
+  apart for colour-blind readers, and no choice of six palette tokens does
+  (CIEDE2000 after Machado 2009 protanopia, deuteranopia and tritanopia, every
+  choice computed): the low-flow period's green sat 7.9 from the suspect
+  amber for a dark-theme protanope, the light theme's aqua 4.8 from the human
+  use pink, and so on. So the strips have two looks, by what the class says:
+  solid for a reading outside the flow it can be trusted at, a **double
+  line** (a 1 px ground line along the middle, the swatch the same, the
+  key's heading saying what the two looks mean) for a doubtful one; within
+  each look every pair is ≥ 10 for every reader in both themes. One cue,
+  grouped by meaning, not a pattern per lane. And a strip isn't a line: the
+  double-line classes have their own tokens (`--lane-*`), because the
+  palette's light violet was the line charts' `--series-4` exactly and
+  borrowing `--series-2`/`-3` put an orange strip under the orange simulated
+  line (the review caught both); the test also holds every strip ΔE00 ≥ 13
+  from each line the flow charts draw. Not hatching: a strip's ranges are often one day, under
+  a pixel on a decade's view, where hatching can't show and the strip would
+  no longer match its key. `calibration/flowFlagColours.test.ts` computes
+  every lane pair and each lane's contrast from `app.css`, so a token change
+  that brings two together fails.
 - **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
   the dark theme's accent into a mid teal that read as a live secondary
   button; `.btn-primary:disabled` is the plain surface, the strong border and

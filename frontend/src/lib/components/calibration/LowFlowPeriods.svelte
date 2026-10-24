@@ -70,7 +70,7 @@
 	</p>
 	{#if siteName && list.length}
 		<p class="note" data-testid="low-flow-site-note">
-			These periods apply to the outlet's records. Calibration is scored at {siteName}, so they are not used until it is scored at the outlet again.
+			These periods apply to the outlet’s records. Calibration is scored at {siteName}, so they are not used until it is scored at the outlet again.
 		</p>
 	{/if}
 	{#if list.length}
