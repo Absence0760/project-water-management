@@ -485,6 +485,42 @@ area-weighted CHIRPS (`rain_chirps_mm`, the from-units feeds,
   `node` and `data_feed` under the writer's RLS, and whoever may write a
   project's series may read both. No new table, grant, policy or foreign key.
 
+### Rainfall stations (239_rain_stations.sql)
+
+A **rainfall station** (issue #553) is a catchment rain series:
+`kind = 'rain_catchment_mm'` with no site (`site_node_id IS NULL`). A project
+may have several, told apart by `name`. Each carries its own MAP and,
+optionally, where it is (engine `SeriesMeta.station`, `RainStationMeta {
+mapMm, mapSource, lat, lon }`):
+
+- **`station_map_mm`** (1–12 000 mm, the engine's `MAP_MM_MIN` /
+  `MAP_MM_MAX`; NULL = none) and **`station_map_source`** (1–600
+  characters, not blank), with `time_series_station_map_needs_source` (a MAP
+  needs its source; the engine's `mapMmError`), as `node.map_mm` /
+  `map_source` above.
+- **`station_lat`** (−90..90) and **`station_lon`** (−180..180), WGS84
+  degrees, both or neither (`time_series_station_lat_lon_together`); NULL =
+  not known.
+- **Only a station has them** (`time_series_station_only`): every station
+  column is NULL unless the row is `rain_catchment_mm` with no site. A
+  unit's own gauge (209) has none, and a station can't be sited or change
+  kind while it keeps them.
+- **The gauge MAP moves onto the station.** The station's MAP replaces
+  `settings.unitRain.gaugeMapMm` / `gaugeMapSource`. 239 copied each
+  project's stored pair onto the station a run reads, the first
+  `rain_catchment_mm` by the name's bytes among the series with no site
+  ([Which series a run reads](#which-series-a-run-reads)), when the engine
+  would use it (`mapMmError` passes), whatever the mode; a project with no
+  such series copied nothing. Only `project.settings` was read: a scenario
+  can't set `unitRain`, and runs and model revisions keep the settings they
+  were made with. The settings JSON was left as it is (expand only); a later
+  migration drops the two keys once nothing reads them.
+- Columns on `time_series`: its row-level policies (the viewer and editor
+  ones, 039's API-key ones), its same-project triggers and 001's table grant
+  to `water_app` cover them. No new table, function, policy or foreign key.
+  Tested by `series/stationMigration.db.test.ts` (the CHECKs both ways, RLS,
+  and the copy, run on a seeded transaction and rolled back).
+
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
 MB to a few tens of MB. The engine is deterministic, so a run saved since
