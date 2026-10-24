@@ -2844,6 +2844,21 @@ export interface SeriesMeta {
 	 * checks read a gauge's record.
 	 */
 	siteNodeId?: string | null;
+	/**
+	 * A rainfall station's details (issue #553, 238_rain_stations.sql): only on
+	 * a catchment rain series (`rain_catchment_mm`, no site). A station is a
+	 * project-level rain record any unit may be assigned to; null / absent =
+	 * none recorded.
+	 */
+	station?: RainStationMeta | null;
+}
+
+/** SeriesMeta.station: a rainfall station's MAP and where it came from, and optionally where it stands (WGS84 degrees, both or neither). */
+export interface RainStationMeta {
+	mapMm: number | null;
+	mapSource: string | null;
+	lat: number | null;
+	lon: number | null;
 }
 
 // ---------------------------------------------------------------------------
