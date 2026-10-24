@@ -105,7 +105,7 @@
 			if (words) q.set('q', words);
 			else q.delete('q');
 			q.delete('entry');
-			void goto(`?${q}`, { replace: queryStep.replace(), reset: false });
+			void queryStep.write(`?${q}`, (replace) => goto(`?${q}`, { replace, reset: false }));
 		}, 400);
 	}
 	$effect(() => () => clearTimeout(queryTimer));

@@ -158,7 +158,9 @@
 		if (next.dir !== undefined) set('dir', next.dir, 'asc');
 		if (next.q !== undefined) set('q', next.q.trim(), '');
 		if (u.search === page.url.search) return;
-		goto(u.pathname + u.search, { replace: next.q !== undefined && searchStep.replace(), reset: false });
+		const href = u.pathname + u.search;
+		if (next.q !== undefined) void searchStep.write(href, (replace) => goto(href, { replace, reset: false }));
+		else goto(href, { reset: false });
 	}
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));

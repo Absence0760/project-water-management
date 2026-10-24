@@ -428,7 +428,7 @@
 			if (words) url.searchParams.set('q', words);
 			else url.searchParams.delete('q');
 			if (url.search === page.url.search) return;
-			void goto(url, { replace: queryStep.replace(), reset: false });
+			void queryStep.write(url.href, (replace) => goto(url, { replace, reset: false }));
 		}, 300);
 	}
 	$effect(() => () => clearTimeout(queryTimer));

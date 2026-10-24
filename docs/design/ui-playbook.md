@@ -1579,9 +1579,14 @@ Interaction details that bit:
   box is one step: its first change after the box takes the focus pushes,
   the rest replace (the project list, Runs' label filter, History's
   Parameter filter, one `SearchStep` each from `lib/nav/searchStep.ts`:
-  `onfocus={step.focus}`, goto's `replace: step.replace()`). A default pick, a redirect from an old link and closing an
+  `onfocus={step.focus}`, each write through `step.write(href, (replace) => goto(href, { replace }))`, which pushes until a push has landed: SvelteKit drops a navigation a newer one overtakes). A default pick, a redirect from an old link and closing an
   overlay replace. Every sort and filter is in the URL, so a reload keeps it
-  (the Applications sort `sort=status`, Runs' `q=`).
+  (the Applications sort `sort=status`, Runs' `q=`). Back also returns the
+  window to where it was on that entry, even when a pick scrolled its detail
+  into view: SvelteKit 3 skips that for `reset: false` steps, so the root
+  layout's `lib/nav/backScroll.ts` restores the place it saved, held while
+  the section is still building (`back-scroll.spec.ts`: Dams, Hydrological
+  units, Allocations, the section strip's arrow keys).
 - **A failed load says what failed and offers Try again.** A panel that reads
   on its own (Recent notes, Registration checks, the Outcome matrix's sweep,
   the Seasonal outlook, Automated calibration's fits) shows "Couldn’t look
