@@ -49,7 +49,7 @@
 			{#if rows}
 				<div class="table-wrap" data-testid={testid}>
 					<table class="data compact">
-						<caption>{label} scaled to the model <span class="u">(m³/s, × s = {s}){used === true ? ', the daily EWR' : used === false ? ', not used by the daily EWR' : ''}</span></caption>
+						<caption>{label} scaled to the model <span class="u">(m³/s, × s = {s}{used === true ? ', the daily EWR' : used === false ? ', not used by the daily EWR' : ''})</span></caption>
 						<thead>
 							<tr>
 								<th scope="col" class="sticky">Month</th>

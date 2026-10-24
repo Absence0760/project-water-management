@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "2026-10-23 total 2019 → 2021 KB locally (issue #552, the daily EWR's third .rul table and the Reserve table choice): the engine's reserve-table validation, choice and labels in reserve/dailySource.ts (shared into the chunks that import the engine), and in Settings the third percentile grid, the Reserve table select, the folded unused table and the scaled view's lead line. Measured on main @ baea0fe3b (CI 2019 KB, exactly at the ceiling) plus this."
+}
