@@ -884,7 +884,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   run's calibration statistics, the EWR test on the observed record and the
   plausibility checks (they are not readings, so they aren't scored unless
   `include`), and from engine 1.90.0 a reading above a low-flow period's
-  threshold is left out of those three as well as the fit. Settings stored
+  threshold is left out of those three as well as the fit, and the gap fill
+  reads past it (no anchor, not in the donor ratio, not the clamp; issue
+  #567, model.md §2.10i). Settings stored
   before it read back with the defaults (and no low-flow periods).
   `flowGapFill` (engine ≥ 1.23.0, issue #66) is `{ flow_observed_m3s,
   flow_logger_m3s }`: per observed record `null` (not filled,

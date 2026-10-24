@@ -8,13 +8,15 @@ import {
 	FLOW_FILL_CODE,
 	fillFlowGaps,
 	fromEpochDay,
+	gapFillLowFlow,
 	gapFillRecordLabel,
 	specFills,
 	toEpochDay,
 	type DailySeries,
 	type FlowFillSummary,
 	type FlowGapFillSettings,
-	type GapFillKind
+	type GapFillKind,
+	type LowFlowPeriod
 } from '@water-management/engine';
 
 export interface FlowFillShading {
@@ -35,12 +37,20 @@ const ratio = (v: number) => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : 
 /**
  * The shading for `record` of `kind` under the project's gap-fill settings,
  * `donor` the record its spec names (null when it names none or the project
- * has none). Null when the record isn't filled at all.
+ * has none), `lowFlowPeriods` the quality flags' low-flow periods, whose high
+ * readings the fill reads past as a run does (issue #567). Null when the
+ * record isn't filled at all.
  */
-export function flowFillShading(kind: GapFillKind, record: DailySeries, settings: FlowGapFillSettings | null | undefined, donor: DailySeries | null): FlowFillShading | null {
+export function flowFillShading(
+	kind: GapFillKind,
+	record: DailySeries,
+	settings: FlowGapFillSettings | null | undefined,
+	donor: DailySeries | null,
+	lowFlowPeriods?: readonly LowFlowPeriod[]
+): FlowFillShading | null {
 	const spec = settings?.[kind];
 	if (!specFills(spec)) return null;
-	const f = fillFlowGaps(kind, record, spec, donor);
+	const f = fillFlowGaps(kind, record, spec, donor, gapFillLowFlow(lowFlowPeriods, kind, record, spec.donor, donor));
 	const d0 = toEpochDay(record.startDate);
 	const ranges: { start: string; end: string }[] = [];
 	for (let i = 0; i < f.code.length; i++) {

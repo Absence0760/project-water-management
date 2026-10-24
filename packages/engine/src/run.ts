@@ -975,7 +975,8 @@ function runNetwork(
 	// its threshold is wrong, so the statistics, the EWR test on the observed record and the plausibility checks
 	// leave it out. The periods are the outlet records', as the gauged ranges are.
 	const lowFlowPeriods = settings.qualityFlags.lowFlowPeriods;
-	const calScored = calKind && !calSite ? withoutPeriodHighs(calObserved, lowFlowPeriods, calKind, start) : calObserved;
+	// A gap-filled day is no reading: the infilled treatment decides it, never the period (issue #567).
+	const calScored = calKind && !calSite ? withoutPeriodHighs(calObserved, lowFlowPeriods, calKind, start, flowFill?.[calKind]?.code) : calObserved;
 	const calibration = calKind
 		? {
 				...calibrationStats(calSim, calScored, {
@@ -1010,7 +1011,7 @@ function runNetwork(
 	// isn't evidence here either.
 	const ewrObserved =
 		observedKind
-			? ewrAgreement(simOutflow, withoutPeriodHighs(observedM3s, lowFlowPeriods, observedKind, start), ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
+			? ewrAgreement(simOutflow, withoutPeriodHighs(observedM3s, lowFlowPeriods, observedKind, start, flowFill?.[observedKind]?.code), ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
 			: null;
 	// The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0, docs/model.md §2.10k):
 	// its record against its simulated outflow and its own pragmatic requirement. The record is the one the
@@ -1317,7 +1318,7 @@ function runPlausibility(r: {
 	const series = input.series ?? {};
 	const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
 	// A reading above a low-flow period's threshold (engine ≥ 1.90.0, issue #557) misleads the checks as it would the scores.
-	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = withoutPeriodHighs(r.aligned(kind), settings.qualityFlags.lowFlowPeriods, kind, start);
+	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = withoutPeriodHighs(r.aligned(kind), settings.qualityFlags.lowFlowPeriods, kind, start, r.flowFill?.[kind]?.code);
 	const excluded = new Uint8Array(days);
 	for (const x of exclusionRanges(settings.calibrationExclusions)) {
 		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;
