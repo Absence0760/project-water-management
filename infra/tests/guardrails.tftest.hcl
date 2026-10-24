@@ -678,8 +678,23 @@ run "production_guardrails" {
     error_message = "API Lambda must default to 1024 MB / 30 s for model runs."
   }
   assert {
-    condition     = aws_lambda_function.backend.reserved_concurrent_executions == 10
-    error_message = "API Lambda concurrency must be capped by default (spend + DB connections)."
+    condition     = aws_lambda_function.backend.reserved_concurrent_executions == 25
+    error_message = "API Lambda concurrency must be capped at 25 by default (spend + DB connections; issue #541: the Project tab's ~10 panels throttled at 10)."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["DB_POOL_MAX"] == "2" && aws_lambda_function.worker.environment[0].variables["DB_POOL_MAX"] == "2"
+    error_message = "The API and the worker each hold a pg pool of DB_POOL_MAX = 2: a container serves one request or job at a time, and the cap x pool sums are sized on it (infra/README.md § Connections)."
+  }
+  assert {
+    # The worst case every DB-connected Lambda can open at once: each cap x its
+    # pool, plus the migrator's 2. It must leave db.t4g.micro (~80
+    # max_connections, the default class) room for the operator and RDS's own.
+    condition = (
+      aws_lambda_function.backend.reserved_concurrent_executions * tonumber(aws_lambda_function.backend.environment[0].variables["DB_POOL_MAX"]) +
+      aws_lambda_function.worker.reserved_concurrent_executions * tonumber(aws_lambda_function.worker.environment[0].variables["DB_POOL_MAX"]) +
+      aws_lambda_function.migrate.reserved_concurrent_executions * 2
+    ) <= 70
+    error_message = "API cap x pool + worker cap x pool + the migrator must stay <= 70 connections (db.t4g.micro's ~80 less headroom). Redo infra/README.md § Connections before raising a cap or a pool."
   }
   assert {
     condition     = startswith(local.runtime_secrets.api.DATABASE_URL, "postgresql://water_app:") && endswith(local.runtime_secrets.api.DATABASE_URL, "@water-management.abc123.af-south-1.rds.amazonaws.com:5432/water?sslmode=verify-full")
@@ -3359,6 +3374,43 @@ run "rejects_unreserved_api_concurrency" {
   }
 
   expect_failures = [var.lambda_reserved_concurrency]
+}
+
+# Issue #541: the cap x pool sums must fit the database on every tfvars, not
+# only at the defaults (the precondition on aws_lambda_function.backend). 30 x 2
+# + 8 x 2 + 2 = 78 > 70; 26 is the most at the default worker cap (26 x 2 + 16
+# + 2 = 70), and a worker cap of 12 is past it too (50 + 24 + 2 = 76).
+run "rejects_api_concurrency_past_the_database_connections" {
+  command = plan
+
+  variables {
+    lambda_reserved_concurrency = 30
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
+run "rejects_worker_concurrency_past_the_database_connections" {
+  command = plan
+
+  variables {
+    worker_reserved_concurrency = 12
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
+run "accepts_api_concurrency_at_the_database_connections" {
+  command = plan
+
+  variables {
+    lambda_reserved_concurrency = 26
+  }
+
+  assert {
+    condition     = aws_lambda_function.backend.reserved_concurrent_executions == 26
+    error_message = "26 x 2 + 8 x 2 + 2 = 70 connections is within the precondition (positive control)."
+  }
 }
 
 run "rejects_unreserved_migrate_concurrency" {

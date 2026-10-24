@@ -122,6 +122,13 @@ const pemPrivateKey: Check = (v) =>
 const pemPublicKey: Check = (v) =>
 	!set(v) ? 'is not set' : /^-----BEGIN PUBLIC KEY-----\r?\n[A-Za-z0-9+/=\r\n]{200,}\r?\n-----END PUBLIC KEY-----\s*$/.test(v.trim()) ? null : 'is not a PEM public key';
 
+/** A pg pool size (DB_POOL_MAX): set, and a whole number of at least 1. */
+const poolSize: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const n = Number(v.trim());
+	return Number.isInteger(n) && n >= 1 ? null : 'must be a whole number of at least 1';
+};
+
 const unset: Check = (v) => (set(v) ? 'must not be set in production' : null);
 
 /** The delineation DEM (delineation/dem.ts): empty (off) or an S3 object; never a local file or host, which a Lambda doesn't have. */
@@ -196,7 +203,10 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'Read by Node itself: the RDS CA bundle, without which sslmode=verify-full cannot connect.',
 		checks: { api: required, worker: required, migrate: required }
 	},
-	DB_POOL_MAX: { why: 'Pool size tuning; the code default (5) is safe.' },
+	DB_POOL_MAX: {
+		why: 'The pg pool per container (db/pool.ts poolMax): Terraform sets 2 for the API and the worker, and each cap × 2 is what the database’s connections are sized on (infra/README.md § Connections, issue #541). Unset would be the local default of 5, 2.5 times the sizing, so both check it.',
+		checks: { api: poolSize, worker: poolSize }
+	},
 	DB_HOST: { why: 'The migrate Lambda builds the owner URL from these.', checks: { migrate: host } },
 	DB_PORT: { why: 'Defaults to 5432.', checks: { migrate: optional(port) } },
 	DB_NAME: { why: 'The database to migrate.', checks: { migrate: required } },

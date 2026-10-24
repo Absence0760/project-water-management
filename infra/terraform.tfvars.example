@@ -48,8 +48,8 @@ budget_monthly_usd = 110
 # import it if there is one, then set 10 and apply).
 # cost_anomaly_threshold_usd = 10
 # Which CloudWatch alarms to create (variables.tf alarm_tier, alarms.tf § Alarm
-# tier). "essential" (12 alarm metrics) keeps the outage and account-risk
-# alarms inside the organization's shared 10-free CloudWatch tier at ~$0.20/month;
+# tier). "essential" (13 alarm metrics) keeps the outage and account-risk
+# alarms, ~$0.30/month past the organization's shared 10-free CloudWatch tier;
 # "full" (the default, ~50) adds the latency, RDS CPU/memory, request-flood,
 # login and per-feature failure alarms at ~$5/month in af-south-1.
 alarm_tier = "essential"
@@ -60,10 +60,12 @@ budget_alert_email = "you+aws-alerts@example.com"
 
 # Lambda concurrency caps. A new account's concurrency quota is 10 and AWS
 # keeps 10 unreserved, so ANY reservation fails until the quota is raised:
-# raise it BEFORE the first apply to at least the sum of these + 10 (33 at the
+# raise it BEFORE the first apply to at least the sum of these + 10 (48 at the
 # defaults; ask for 1000: infra/README.md § Operator steps). -1 (unreserved)
-# is refused: it lifts the spend and DB-connection caps.
-lambda_reserved_concurrency  = 10
+# is refused: it lifts the spend and DB-connection caps. The API's 25 x its
+# pool of 2 = 50 DB connections; raise it only with infra/README.md
+# § Connections redone (issue #541).
+lambda_reserved_concurrency  = 25
 migrate_reserved_concurrency = 1
 # worker_reserved_concurrency   = 8 # at least 8: its four SQS triggers x 2
 # fetcher_reserved_concurrency  = 2

@@ -197,8 +197,12 @@ current prices (us-east-1; free tiers apply first):
 
 The first thing to outgrow is the database instance class, not Lambda or
 bandwidth: watch the RDS CPU, memory and burst-credit alarms. The Lambda
-reserved-concurrency caps (`lambda_reserved_concurrency` 10, worker 8,
-migrate 1, fetcher 2, renderer 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job,
+reserved-concurrency caps (`lambda_reserved_concurrency` 25, worker 8,
+migrate 1, fetcher 2, renderer 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job
+(the API's 25 × 1 GB busy all month is about 65 M GB-s, ≈ $1 150 at af-south-1's
+arm price, ≈ $1 320 with request charges; it was ≈ $530 at the old cap of 10,
+issue #541; `lambda-throttles` pages on saturation and the daily budget a day later;
+[infra/README.md § Cost](../infra/README.md#cost)),
 and the budgets page on a day over the daily amount, at 80% and 100% of the
 month and on a forecast over 100% (after ~5 weeks of history), plus Cost
 Anomaly Detection once it is turned on after the first apply

@@ -432,7 +432,9 @@ The worker (`infra/jobs.tf`) also gets `OPERATOR_EMAIL`, set to
 ([evidence-pack.md § Retention](./evidence-pack.md#retention)).
 
 Besides the email settings, `lambda.tf` sets `ALLOWED_ORIGINS` (the site
-origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle) and
+origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle),
+`DB_POOL_MAX=2` (the `pg` pool per container; the config check refuses a
+missing one or one that isn't a whole number of at least 1) and
 `RUNTIME_SECRET_ARN` / `RUNTIME_SECRET_VERSION`, which name the API's runtime
 secret: `DATABASE_URL` (as `water_app`, `sslmode=verify-full`),
 `AUTH_JWT_SECRET`, `CLOUDFRONT_SHARED_SECRET` and `CLOUDFRONT_PRIVATE_KEY`
@@ -637,7 +639,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   S3; no NAT), the **migrate Lambda** being what the deploy runs before
   publishing new code and what `load-reference.yml` invokes.
 - The API Lambda: runtime `nodejs24.x`, 30 s timeout, 1024 MB, reserved
-  concurrency 10, with `DATABASE_URL`, `AUTH_JWT_SECRET` and its other
+  concurrency 25 (`lambda_reserved_concurrency`; with `DB_POOL_MAX=2`, at
+  most 50 database connections, infra/README.md § Connections), with `DATABASE_URL`, `AUTH_JWT_SECRET` and its other
   secrets from sops (`scripts/tf.sh`, ephemeral variables, `secrets.tf`), in
   its runtime secret in Secrets Manager, written write-only: not in its
   environment, not in Terraform state. The worker and migrate Lambdas have
@@ -692,7 +695,9 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   § Alarm tier). Production runs `"essential"`: SES bounce and complaint
   rates, the jobs / mail-events / fetch-requests / ingest-results DLQ
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
-  Lambda errors, `unhandled_error` and `mail_send_failed`, 12 alarm metrics.
+  Lambda errors and throttles (`lambda-throttles`: the API at its reserved
+  concurrency, issue #541), `unhandled_error` and `mail_send_failed`, 13
+  alarm metrics.
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
   prod tfvars to page on all of it (~$5/month in af-south-1). The RDS event
@@ -961,7 +966,7 @@ answers one JSON chunk as before. Locally the Node server streams the same
   higher; raise the timeout with it. The CSV is measured and loaded inside
   the route's transaction and written after it ends, so a slow download
   holds no database connection, but it does hold one of the API's reserved
-  concurrent executions (10 by default) while it runs. Lambda keeps
+  concurrent executions (25 by default) while it runs. Lambda keeps
   streaming, and billing, even if the client goes away.
 - **A failure partway** fails the invocation (the `Errors` alarm counts it)
   and cuts the response off, so the browser reports a failed download

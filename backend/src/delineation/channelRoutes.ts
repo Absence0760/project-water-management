@@ -77,9 +77,13 @@ export const channelRoutes = new Hono<AuthEnv>().get('/:id/map/channels', async 
 			await requireRole(db, id, 'editor');
 			return beginDemAttempt(db, 'delineation');
 		});
-		work = channelTile(dem, tile).finally(() => {
+		// The attempt is finished before `work` settles, so before the response:
+		// a transaction left running after it would hold one of the container's
+		// two pooled connections (DB_POOL_MAX, issue #541) while Lambda freezes
+		// it, into the next request. finishDemAttempt logs, never throws.
+		work = channelTile(dem, tile).finally(async () => {
 			pending.delete(key);
-			void finishDemAttempt(userId, attempt);
+			await finishDemAttempt(userId, attempt);
 		});
 		pending.set(key, work);
 	}

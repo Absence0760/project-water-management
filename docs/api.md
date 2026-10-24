@@ -305,8 +305,9 @@ for `POST /projects/import`), a series over 60 000 days, or an export over its c
 address moments ago, or sign-in is locked for this address (with
 `Retry-After`). In production a `429` **without** `{ error }` is not the
 API's: Lambda refused the request at the API's reserved concurrency
-(`lambda_reserved_concurrency`, 10) before it ran, which a screen that loads
-several panels at once can meet on a cold start. Nothing ran, so the client
+(`lambda_reserved_concurrency`, 25 since issue #541; it was 10) before it
+ran. At 10, a screen that loads several panels at once met it on a cold
+start; at 25 it takes several people loading at once. Nothing ran, so the client
 (`frontend/src/lib/api/client.ts` `isLambdaThrottle`) sends it again, up to
 three times about 0.3, 0.6 and 1.2 s apart, whatever the method, and only
 then shows "The server is busy". Database errors are mapped to fixed messages and anything

@@ -219,8 +219,9 @@ type FetchFn = typeof fetch;
 
 /**
  * A 429 the API never wrote: Lambda throttled the request at the API's
- * reserved concurrency (infra lambda_reserved_concurrency) before it ran,
- * which a screen that loads several panels at once can meet on a cold start.
+ * reserved concurrency (infra lambda_reserved_concurrency, 25) before it ran,
+ * which several people loading at once can meet; at the old cap of 10 one
+ * cold load of the Project tab did (issue #541).
  * The API's own 429s (a lockout, a throttle) always carry `{ error }`.
  * Nothing ran, so resending is safe whatever the method.
  */

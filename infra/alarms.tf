@@ -140,11 +140,12 @@ resource "aws_sns_topic_policy" "alerts" {
 # Every CloudWatch alarm in this root (here, feeds.tf, jobs.tf, reports.tf,
 # ses.tf) is created per var.alarm_tier. The CloudWatch free tier is 10 alarm
 # metrics shared across the whole AWS Organization, and "full" is ~50 here.
-# "essential" keeps the 12 that catch a client-visible outage or a risk to the
+# "essential" keeps the 13 that catch a client-visible outage or a risk to the
 # account: SES reputation (AWS pauses sending past its bounce/complaint
 # limits), dead-lettered work on the jobs, mail-events and feed queues, the
-# worker going quiet, RDS running out of disk, the site 5xxing, API errors and
-# mail that failed after the user was told it was sent. A dropped alarm takes
+# worker going quiet, RDS running out of disk, the site 5xxing, API errors,
+# the API at its reserved concurrency (throttles: saturation, and spend at
+# the cap) and mail that failed after the user was told it was sent. A dropped alarm takes
 # its log metric filter with it: a filter with default_value publishes a
 # custom metric, which has its own 10-metric free tier.
 locals {
@@ -289,8 +290,18 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   }
 }
 
+# Any throttle at all: Lambda refused a request at lambda_reserved_concurrency
+# before the API ran it. Essential tier (production's), since it is the one
+# page that the API is saturated: an attack at the cap costs ~$44 a day
+# (docs/deployment-tiers.md) and the daily budget reports it a day late. The client resends a throttled request
+# (frontend/src/lib/api/client.ts isLambdaThrottle), so users rarely see one,
+# which is why this alarm and not a complaint is what tells you. At 25 one
+# person's cold load of the busiest screen (the Project tab, ~10 panels) is
+# far inside the cap (issue #541), so a throttle now means several people
+# loading at once or a burst past the WAF: look at ConcurrentExecutions
+# before raising the cap, and redo infra/README.md § Connections if you do.
 resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
-  count               = local.alarms_full ? 1 : 0
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-lambda-throttles"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -299,7 +310,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "Backend Lambda hit reserved_concurrent_executions — investigate."
+  alarm_description   = "Backend Lambda hit reserved_concurrent_executions (lambda_reserved_concurrency, ${var.lambda_reserved_concurrency}): Lambda refused requests with a 429 before the API ran them. Check ConcurrentExecutions and the WAF before raising the cap (infra/README.md § Connections)."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
@@ -727,12 +738,14 @@ resource "aws_cloudwatch_metric_alarm" "rds_connections" {
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Maximum"
-  # db.t4g.micro allows ~80 connections. The API can open at most
-  # reserved concurrency (10) x pool max (5) = 50, the worker 8 x 2 = 16 and
-  # the migrator 1. Both saturated for 15 minutes is itself worth a look; above
-  # 60 otherwise, something is leaking or a cap was raised without resizing the DB.
+  # db.t4g.micro allows ~80 connections, db.t4g.small ~180. The API can open
+  # at most reserved concurrency (25) x pool max (DB_POOL_MAX 2) = 50, the
+  # worker 8 x 2 = 16 and the migrator 2 (infra/README.md § Connections).
+  # Each API request uses one connection unless it nests a transaction, so
+  # past 60 for 15 minutes the pools are saturated or leaking, or a cap was
+  # raised without redoing that sum.
   threshold          = 60
-  alarm_description  = "RDS connections above 60 (t4g.micro max is ~80)."
+  alarm_description  = "RDS connections above 60 (the stack's worst case is 68; t4g.micro max is ~80, t4g.small ~180)."
   alarm_actions      = [aws_sns_topic.alerts.arn]
   treat_missing_data = "notBreaching"
 

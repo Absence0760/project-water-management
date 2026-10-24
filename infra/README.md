@@ -120,8 +120,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   and configuration set only, and only with `From = no-reply@<domain>`.
   Leaving the SES sandbox is a manual step ([Operator steps](#operator-steps)).
 - **Five Lambdas.** `water-management-backend` is the API. It connects as the
-  RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout and reserved
-  concurrency 10. `water-management-migrate` (`backend/src/lambda-migrate.ts`)
+  RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout, reserved
+  concurrency 25 and a pool of 2 connections (§ Connections). `water-management-migrate` (`backend/src/lambda-migrate.ts`)
   reads the owner credentials at run time, creates or re-passwords
   `water_app`, and applies `backend/migrations/*.sql`; `load-reference.yml`
   invokes it for a reference dataset load too. It has `migrate_memory_mb`
@@ -279,10 +279,19 @@ Multi-AZ (`db_multi_az`) doubles the instance cost. Single-AZ recovery after
 an AZ failure means a restore (minutes to about an hour), which is acceptable
 here.
 
-**Connections.** max_connections on t4g.micro is ~80. The API is capped at
-10 concurrent containers × a `pg` pool of 5 = 50, the worker at 8 × a pool of
-2 = 16, plus the migrator: 67 at the very worst, under the limit with room for
-RDS's own. Raising a reserved concurrency means redoing this sum. RDS
+**Connections.** RDS sets max_connections from the instance's memory
+(`DBInstanceClassMemory / 9531392`): ~80 on the default `db.t4g.micro`, ~180
+on the `db.t4g.small` production runs (`prod.tfvars`); `SHOW max_connections`
+gives the exact figure. A Lambda container serves one request at a time, so
+every request path holds at most one pooled connection at a time (audited
+for issue #541; docs/architecture.md § Connections per request), and the
+second is headroom: the API is capped at 25 concurrent containers ×
+a `pg` pool of 2 (`DB_POOL_MAX`, `lambda.tf`) = 50, the worker at 8 × a pool
+of 2 = 16, plus the migrator's 2: 68 at the very worst, under the micro's
+limit with room for the operator and RDS's own, and a third of the small's.
+Before issue #541 the API was 10 × a pool of 5, the same 50, and a single
+cold load of the Project tab (about 10 panels at once) hit the cap of 10.
+Raising a reserved concurrency or a pool means redoing this sum. RDS
 Proxy isn't used: its minimum bill (~$22/month) is more than the DB at this
 scale. An alarm fires at 60 connections.
 
@@ -501,6 +510,15 @@ Idle to light use, on-demand, us-east-1:
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $63** (list prices checked 2026-10-04; the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
 
+**The API Lambda's ceiling.** Reserved concurrency (`lambda_reserved_concurrency`,
+25) bounds it: 25 containers × 1 GB busy all month is 64.8 M GB-s, ≈ $1,146 at
+af-south-1's arm price ($0.00001768/GB-s), plus up to ≈ $175 of request
+charges (Lambda's 10 requests a second per unit of concurrency, $0.27/M), so
+≈ $1,320 a month, ≈ $44 a day (≈ $530 at the old cap of 10; issue #541). One
+IP at the WAF's `/api/*` limit can keep all 25 busy only with requests of 7.5 s
+or more. `lambda-throttles` (essential tier) pages once the API is saturated;
+the daily budget reports the spend a day later.
+
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
 at Africa's), $1.60–2.80 per million; one it blocks costs the WAF's $0.60/M
@@ -622,9 +640,18 @@ Claude does not run any of these, and none of them print a secret. Replace
 3. **Lambda concurrency quota, before the first apply.** A new account's
    concurrent-executions quota is 10 and AWS keeps 10 unreserved, so any
    reservation fails until it is raised. The quota must cover the sum of the
-   reservations plus 10: at the defaults 10 (API) + 1 (migrate) + 8 (worker)
-   + 2 (fetcher) + 2 (renderer) + 10 = **33**. Ask for 1000 (the usual
+   reservations plus 10: at the defaults 25 (API) + 1 (migrate) + 8 (worker)
+   + 2 (fetcher) + 2 (renderer) + 10 = **48**. Ask for 1000 (the usual
    default) and wait for it to be granted before planning the first apply.
+   **Raising a reservation on a live account** (issue #541 took the API
+   from 10 to 25, so 33 → 48) needs the same check first: an apply asking
+   for more than the quota leaves unreserved fails, and the function keeps
+   its old cap. Read the quota and what is reserved now, before the plan:
+   `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`
+   and `aws lambda get-account-settings --region <region> --profile water-management --query AccountLimit.UnreservedConcurrentExecutions`
+   (the unreserved part must stay at least 10 after the raise, so it must
+   be at least 10 + the increase now; `scripts/preapply-check.sh` does the
+   sum).
    `-1` (unreserved) is refused by the variables' validation: it would lift
    the spend and DB-connection caps.
    `aws service-quotas request-service-quota-increase --service-code lambda --quota-code L-B99A9384 --desired-value 1000 --region <region> --profile water-management`
@@ -1086,7 +1113,9 @@ when set. A positive control (`accepts_real_alert_mailboxes`) accepts a
 domain that only contains "example". The suite's own address is at the
 site's domain, since the rule refuses every reserved one. Six more refuse an unreserved (`-1`) concurrency on each
 Lambda and a worker cap below the sum of its SQS triggers'
-`maximum_concurrency`; `worker_sqs_triggers` pins that sum against the planned
+`maximum_concurrency`; two refuse an API or worker cap whose cap × pool sum
+passes 70 database connections (§ Connections), with 26 accepted as the
+positive control; `worker_sqs_triggers` pins that sum against the planned
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker
 throttles alarm; and `waf_auth_rule_matches_decoded_path` pins the auth rate
 limit's `URL_DECODE` → `NORMALIZE_PATH` → `LOWERCASE` transformations (so

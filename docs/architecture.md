@@ -649,6 +649,34 @@ stores while the ensemble is still `started`, so of two posts only one
 stores). `connection.db.test.ts` pins it with a pool of **one** connection
 and an injected engine: another query succeeds while a run computes.
 
+### Connections per request
+
+A Lambda container serves one request at a time, so the API's pool is small:
+`DB_POOL_MAX=2` (`infra/lambda.tf`, read by `db/pool.ts` `poolMax`, which
+refuses anything but a whole number of at least 1; the production config
+check requires it on the API and the worker). Production's database
+connections are sized on the API's reserved concurrency × that pool (25 × 2
+= 50; [infra/README.md § Connections](../infra/README.md#database-rds-postgresql-17-not-aurora-serverless-v2)). That
+holds because **a request holds at most one connection at a time**: the
+routes run their transactions one after another (a model run's read, then
+the engine with none, then the store), no transaction callback opens
+another (`withUser`, `withoutUser`, `queryWithoutUser`), the auth middleware
+releases its session check before the handler runs, and a `Promise.all`
+inside a transaction (the split shape's `loadFeature`s) queues on its one
+client. Nothing may outlive the response either: Lambda freezes the
+container with it, still holding a connection, into the next request. The
+channels route awaits finishing its elevation-model attempt before it
+answers for that reason (`delineation/channelRoutes.ts`). The second
+connection is headroom, not a budget: a route that nested a transaction, or
+ran two in parallel, would need it, and a third would wait. In Lambda that
+wait fails after 10 s (`db/pool.ts` `acquireTimeoutMs`, an error the
+`lambda-errors` alarm counts) rather than holding the container until its
+30 s timeout; off Lambda the pool waits, since many requests share it.
+
+The worker does nest: a job's transaction stays open while its progress
+(`jobs/runner.ts` `reportProgress`, a `withoutUser`) or a render handler's
+`withUser` runs, so a job holds two at once, which its pool of 2 allows.
+
 **Jobs keep the engine inside their transaction.** The `rerun`, `yield`,
 `sweep` and `outlook` handlers run in the job's `withUser` transaction (`executeRun`, one
 transaction). A job's writes must commit together with its `done` (see

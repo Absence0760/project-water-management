@@ -3989,7 +3989,10 @@ key there would let any read-only principal forge any user's session.
   start on a missing or local-default setting, a `dev-only-`/`test-only-`
   placeholder anywhere (the committed dev JWT secret), a non-https or localhost
   URL, a `DATABASE_URL` without `sslmode=verify-full` or with a short (dev)
-  password, `VITEST`, or no explicit `ALERTS_ENABLED` on the worker. The error
+  password, `VITEST`, no explicit `ALERTS_ENABLED` on the worker, or a
+  `DB_POOL_MAX` on the API or the worker that is missing or not a whole
+  number of at least 1 (the database's connections are sized on it,
+  infra/README.md § Connections). The error
   names settings, never values. `config/production.security.test.ts` bundles
   each entry point and fails on any `process.env` read that `SETTINGS` doesn't
   classify, checks each Lambda's Terraform environment block (or, for a secret,
@@ -4068,7 +4071,9 @@ key there would let any read-only principal forge any user's session.
   now" is a token bucket per feed (6, then one every 10 minutes;
   111_feed_daily_only, `app_feed_take_run_now`), so an editor can't turn a
   feed into a request loop.
-- **Blast radius:** Lambda reserved concurrency is capped. There are monthly
+- **Blast radius:** Lambda reserved concurrency is capped (the API at 25,
+  which with its pool of 2 also caps its database connections at 50;
+  infra/README.md § Connections), and `-1` (unreserved) is refused. There are monthly
   and daily budgets and Cost Anomaly Detection (off until the operator turns
   it on after the first apply; deployment.md § Budget alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
   (`unhandled_error`) and CloudFront 5xx. Both alert topics admit only this

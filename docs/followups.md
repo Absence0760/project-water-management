@@ -105,7 +105,7 @@ The checklist for these is issue #62; the history scrub is #63.
       10 unreserved, so every reserved concurrency fails to apply until it is
       raised, and `-1` (unreserved) is now refused by the variables'
       validation. In af-south-1 request at least the sum of the reservations
-      + 10 (33 at the defaults; ask for 1000) and wait for the grant:
+      + 10 (48 at the defaults; ask for 1000) and wait for the grant:
       infra/README.md § Operator steps, step 3. Then run
       `infra/scripts/preapply-check.sh` (step 7a: the quota, the us-east-1
       state bucket and sops key, the SES endpoint service, the RDS class,
