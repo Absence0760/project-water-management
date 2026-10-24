@@ -47,7 +47,7 @@ export function ewrNotMet(c: Pick<RunSummary['catchment'], 'ewrDaysNotMet' | 'ew
 }
 
 /** The outlet's daily EWR, as settings.ewrDailySource or a run's summary.catchment.outletEwr has it (engine ≥ 1.77.0). */
-export type DailyEwrSource = { method: 'pragmatic' | 'tab' | 'percentile' } | null | undefined;
+export type DailyEwrSource = { method: 'pragmatic' | 'tab' | 'percentile'; reserveTable?: 'total' | 'withoutHighFlows' } | null | undefined;
 
 /**
  * What the outlet's daily EWR test is called (engine ≥ 1.77.0, issue #455):
@@ -57,7 +57,9 @@ export type DailyEwrSource = { method: 'pragmatic' | 'tab' | 'percentile' } | nu
  */
 export function dailyEwrName(daily: DailyEwrSource): string {
 	if (!daily || daily.method === 'pragmatic') return 'the pragmatic EWR';
-	return daily.method === 'tab' ? 'the daily EWR from the DRM TAB file' : 'the daily EWR from the DRM percentile tables';
+	if (daily.method === 'tab') return 'the daily EWR from the DRM TAB file';
+	// The Reserve flows without high flows, by choice (engine ≥ 1.90.0, issue #552).
+	return daily.reserveTable === 'withoutHighFlows' ? 'the daily EWR from the DRM percentile tables without high flows' : 'the daily EWR from the DRM percentile tables';
 }
 
 /**

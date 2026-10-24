@@ -1,6 +1,6 @@
 // The catchment flow charts' series, shared by the Runs tab (RunCharts) and
 // the printable report: which lines, in which colour, width and style.
-import { OBSERVED_SERIES_LABEL, OUTLET_EWR_LABELS, type DailySeries } from '@water-management/engine';
+import { OBSERVED_SERIES_LABEL, outletEwrSeriesLabel, type DailySeries } from '@water-management/engine';
 import type { DailyEwrSource } from '$lib/components/ewr/notMet';
 import type { ChartSeries } from '$lib/components/charts/series';
 import { fmtNum } from '$lib/format/number';
@@ -123,10 +123,11 @@ export function ewrChartSeries(c: CatchmentFlows, conv: Convert, daily?: DailyEw
 /**
  * The outlet `ewr` line's legend label: the run's daily EWR (engine ≥ 1.77.0,
  * summary.catchment.outletEwr), the engine's own label for the series
- * (OUTLET_EWR_LABELS), or "Pragmatic EWR" without a DRM source.
+ * (outletEwrSeriesLabel: the table it read, issue #552), or "Pragmatic EWR"
+ * without a DRM source.
  */
 export function ewrLineLabel(daily?: DailyEwrSource): string {
-	return daily && daily.method !== 'pragmatic' ? OUTLET_EWR_LABELS[daily.method] : 'Pragmatic EWR';
+	return outletEwrSeriesLabel(daily);
 }
 
 /**

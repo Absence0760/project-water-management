@@ -16,7 +16,7 @@ export const m3DayToM3s = (v: number) => v / SEC_PER_DAY;
  */
 export function outletEwrLine(info: OutletEwrInfo | undefined): string {
 	if (!info) return 'EWR: the pragmatic EWR';
-	const what = info.method === 'tab' ? 'the DRM TAB file' : 'the DRM percentile tables';
+	const what = info.method === 'tab' ? 'the DRM TAB file' : info.reserveTable === 'withoutHighFlows' ? 'the DRM percentile tables (Reserve flows without high flows)' : 'the DRM percentile tables';
 	const sig = (v: number) => String(Number(v.toPrecision(4)));
 	const how =
 		info.scaling === 'mar'

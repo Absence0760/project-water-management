@@ -1,7 +1,7 @@
 // Settings → the daily EWR at the outlet (engine ≥ 1.77.0, issue #455): the form's helpers.
 import { blankEwrDailySource, type EwrDailySource } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { dailySourceError, exampleDailyCsv, knownScale, lastRunScale, parseMonthlyRow, rulLoad, scaledEwrTables, scaleFactor } from './ewrDailySource';
+import { dailySourceError, exampleDailyCsv, knownScale, lastRunScale, parseMonthlyRow, reserveGridRole, rulLoad, scaledEwrTables, scaleFactor } from './ewrDailySource';
 import { parseGrid } from './ewrRules';
 
 // The MAR ratio by default here; a new source scales by area (issue #90 B2), which the area tests set.
@@ -49,7 +49,7 @@ describe('scaledEwrTables (issue #90 B1 gap a)', () => {
 	const row = [10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.5];
 	it('the TAB flows × s; only the tables the method reads', () => {
 		const t = scaledEwrTables(tab({ tabM3s: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24], naturalPctM3s: [row] }), 0.5);
-		expect(t).toEqual({ method: 'tab', scale: 0.5, tabM3s: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], naturalPctM3s: null, reservePctM3s: null });
+		expect(t).toEqual({ method: 'tab', scale: 0.5, tabM3s: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], naturalPctM3s: null, reservePctM3s: null, lowFlowPctM3s: null, reserveTable: 'total' });
 	});
 	it('both percentile tables × s, a blank cell staying blank', () => {
 		const nat = new Array(12).fill(row);
@@ -61,6 +61,18 @@ describe('scaledEwrTables (issue #90 B1 gap a)', () => {
 		expect(t.naturalPctM3s![11]).toEqual(row.map((v) => v * 2));
 		expect(t.reservePctM3s![0]![0]).toBeNull();
 		expect(t.reservePctM3s![5]).toEqual(row);
+		// No third table entered: none shown, and the total is the EWR.
+		expect(t.lowFlowPctM3s).toBeNull();
+		expect(t.reserveTable).toBe('total');
+	});
+	it('all three .rul tables × s, naming the Reserve table the daily EWR reads (issue #552)', () => {
+		const nat = new Array(12).fill(row);
+		const t = scaledEwrTables({ ...blankEwrDailySource(), method: 'percentile', naturalPctM3s: nat, reservePctM3s: nat, lowFlowPctM3s: new Array(12).fill(row.map((v) => v / 4)), reserveTable: 'withoutHighFlows', tableAreaKm2: 40 }, 2)!;
+		expect(t.lowFlowPctM3s![3]).toEqual(row.map((v) => v / 2));
+		expect(t.reservePctM3s![3]).toEqual(row.map((v) => v * 2));
+		expect(t.reserveTable).toBe('withoutHighFlows');
+		// The third table alone is enough to show.
+		expect(scaledEwrTables({ ...blankEwrDailySource(), method: 'percentile', lowFlowPctM3s: nat }, 1)?.lowFlowPctM3s).toHaveLength(12);
 	});
 	it('null for the pragmatic EWR, an unknown s, or tables not yet entered', () => {
 		expect(scaledEwrTables(null, 1)).toBeNull();
@@ -69,6 +81,16 @@ describe('scaledEwrTables (issue #90 B1 gap a)', () => {
 		expect(scaledEwrTables(tab(), Number.NaN)).toBeNull();
 		expect(scaledEwrTables(tab({ tabM3s: null }), 1)).toBeNull();
 		expect(scaledEwrTables({ ...blankEwrDailySource(), method: 'percentile' }, 1)).toBeNull();
+	});
+});
+
+describe('reserveGridRole (issue #552)', () => {
+	it('marks the Reserve grid the daily EWR reads and the one it doesn’t; the natural table has no role', () => {
+		expect(reserveGridRole('naturalPctM3s', 'total')).toBeNull();
+		expect(reserveGridRole('reservePctM3s', 'total')).toBe('the daily EWR');
+		expect(reserveGridRole('lowFlowPctM3s', 'total')).toBe('not used by the daily EWR');
+		expect(reserveGridRole('reservePctM3s', 'withoutHighFlows')).toBe('not used by the daily EWR');
+		expect(reserveGridRole('lowFlowPctM3s', 'withoutHighFlows')).toBe('the daily EWR');
 	});
 });
 
@@ -102,21 +124,30 @@ it('the example CSV reads as a percentile table of the ten points', () => {
 });
 
 describe('rulLoad: a .rul fills the percentile tables and never changes the method', () => {
-	const tables = { naturalPctM3s: [[1]], reservePctM3s: [[0.5]] };
+	const tables = { naturalPctM3s: [[1]], reservePctM3s: [[0.5]], lowFlowPctM3s: [[0.25]] };
 	it('under the TAB file: the tables only, the TAB file still in use, the switch offered', () => {
 		const out = rulLoad('tab', tables, 'x.rul', 'm3s');
 		expect(out.patch).toEqual(tables);
 		expect('method' in out.patch).toBe(false);
+		expect('reserveTable' in out.patch).toBe(false);
 		expect(out.offerPercentile).toBe(true);
 		expect(out.text).toBe(
-			'Read x.rul (DRM rule curves, m³/s): filled the two percentile tables (the total Reserve and the natural duration curve). The daily EWR still comes from the DRM TAB file; the tables are used only once you pick them.'
+			'Read x.rul (DRM rule curves, m³/s): the natural duration curves, the total Reserve and the Reserve flows without high flows fill the three tables. The daily EWR still comes from the DRM TAB file; the tables are used only once you pick them.'
 		);
 	});
 	it('under the percentile tables: the tables, no switch to offer; an Mm³ file says it was converted', () => {
 		const out = rulLoad('percentile', tables, 'x.rul', 'mcm');
 		expect(out.patch).toEqual(tables);
 		expect(out.offerPercentile).toBe(false);
-		expect(out.text).toBe('Read x.rul (DRM rule curves, converted from Mm³ a month to m³/s, February 28 days): the total Reserve and the natural duration curve fill the two tables.');
+		expect(out.text).toBe('Read x.rul (DRM rule curves, converted from Mm³ a month to m³/s, February 28 days): the natural duration curves, the total Reserve and the Reserve flows without high flows fill the three tables.');
+	});
+	it('a file without the Reserve Flows without High Flows block clears that table, and says so when the daily EWR reads it (issue #552)', () => {
+		const two = { naturalPctM3s: [[1]], reservePctM3s: [[0.5]], lowFlowPctM3s: null };
+		const out = rulLoad('percentile', two, 'x.rul', 'm3s');
+		expect(out.patch).toEqual(two);
+		expect(out.text).toBe('Read x.rul (DRM rule curves, m³/s): the natural duration curves and the total Reserve fill two tables; the file has no Reserve Flows without High Flows block, so that table is empty.');
+		expect(rulLoad('percentile', two, 'x.rul', 'm3s', 'withoutHighFlows').text).toMatch(/empty\. The daily EWR reads the Reserve flows without high flows, which this file lacks: pick the total Reserve flows, or load a file with that block\.$/);
+		expect(rulLoad('percentile', tables, 'x.rul', 'm3s', 'withoutHighFlows').text).not.toMatch(/lacks/);
 	});
 	it('names the pragmatic EWR when that is the method', () => {
 		expect(rulLoad('pragmatic', tables, 'x.rul', 'm3s').text).toContain('still comes from the pragmatic EWR');

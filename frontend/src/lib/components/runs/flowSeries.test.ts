@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVED_SERIES_LABEL } from '@water-management/engine';
-import { calibrationSiteOf, ewrChartCaption, ewrChartSeries, ewrLineWords, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
+import { calibrationSiteOf, ewrChartCaption, ewrChartSeries, ewrLineLabel, ewrLineWords, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
 
 const d = (v: number) => ({ startDate: '2020-01-01', values: [v, v] });
 const conv = (s: { values: (number | null)[] }) => s.values.map((v) => (v == null ? null : v * 10));
@@ -123,5 +123,14 @@ describe('the EWR line follows the run’s daily EWR (engine ≥ 1.77.0, issue #
 		expect(ewrChartCaption()).toBe('Days the outflow dips below the pragmatic EWR line count as EWR not met.');
 		expect(ewrChartCaption({ method: 'percentile' })).toBe('Days the outflow dips below the daily EWR line (from the DRM percentile tables) count as EWR not met.');
 		expect(ewrLineWords({ method: 'tab' })).toBe('the daily EWR line (from the DRM TAB file)');
+	});
+});
+
+describe('ewrLineLabel (the engine’s own series label)', () => {
+	it('names the DRM table the run read, the Reserve flows without high flows included (issue #552)', () => {
+		expect(ewrLineLabel(undefined)).toBe('Pragmatic EWR');
+		expect(ewrLineLabel({ method: 'tab' })).toBe('EWR from the DRM TAB file (scaled)');
+		expect(ewrLineLabel({ method: 'percentile' })).toBe('EWR from the DRM percentile tables (scaled)');
+		expect(ewrLineLabel({ method: 'percentile', reserveTable: 'withoutHighFlows' })).toBe('EWR from the DRM percentile tables, without high flows (scaled)');
 	});
 });

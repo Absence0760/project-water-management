@@ -85,5 +85,8 @@ describe('dailyEwrName (engine ≥ 1.77.0, issue #455)', () => {
 		expect(dailyEwrName({ method: 'tab' })).toBe('the daily EWR from the DRM TAB file');
 		expect(daysBelowTest(true, { method: 'percentile' })).toBe('the daily EWR from the DRM percentile tables');
 		expect(daysBelowTest(false, { method: 'percentile' })).toBe('the reserve');
+		// The Reserve table it reads (issue #552): named when it isn't the total.
+		expect(dailyEwrName({ method: 'percentile', reserveTable: 'withoutHighFlows' })).toBe('the daily EWR from the DRM percentile tables without high flows');
+		expect(dailyEwrName({ method: 'percentile', reserveTable: 'total' })).toBe('the daily EWR from the DRM percentile tables');
 	});
 });
