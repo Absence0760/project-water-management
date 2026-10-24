@@ -1,6 +1,7 @@
 import type { SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { dataEnd, freshness, freshnessOrder, guessSeries, headerLine, newDataSinceRun } from './freshness';
+import { coverageStats } from './coverage';
+import { dataEnd, dataSpan, freshness, freshnessOrder, guessSeries, headerLine, newDataSinceRun } from './freshness';
 
 const meta = (id: string, kind: string, name: string, startDate: string, length: number, updatedAt?: string) =>
 	({ id, kind, name, unit: '', startDate, length, ...(updatedAt ? { updatedAt } : {}) }) as SeriesMeta & { updatedAt?: string };
@@ -60,6 +61,21 @@ describe('freshness', () => {
 
 	it('is stale with no date when there is no recorded rain at all', () => {
 		expect(freshness([meta('fc', 'rain_forecast_mm', '', '2025-04-01', 30)], '2025-04-12')).toMatchObject({ latest: null, age: null, stale: true });
+	});
+});
+
+describe('dataSpan (issue #556)', () => {
+	it('runs from the first to the last day with a value, past leading and trailing blank days', () => {
+		// A logger column imported from 1 Oct 2009 whose first reading is 3 Oct and last 5 Oct, blank on 6 Oct.
+		const values = [null, null, 4, null, 5, null];
+		const s = meta('l', 'flow_logger_m3s', 'Drift Logger', '2009-10-01', values.length);
+		expect(dataSpan(s, coverageStats({ startDate: s.startDate, values }, s.kind))).toEqual({ from: '2009-10-03', to: '2009-10-05' });
+	});
+
+	it('falls back to the stored ends before the values load, and for a series with no value', () => {
+		const s = meta('l', 'flow_logger_m3s', '', '2009-10-01', 6);
+		expect(dataSpan(s)).toEqual({ from: '2009-10-01', to: '2009-10-06' });
+		expect(dataSpan(s, coverageStats({ startDate: s.startDate, values: [null, null] }, s.kind))).toEqual({ from: '2009-10-01', to: '2009-10-06' });
 	});
 });
 

@@ -598,7 +598,7 @@ test('the Series details row labels the charted series’ product, where measure
 
 	await flow.getByRole('button', { name: 'View', exact: true }).click();
 	const details = page.getByRole('group', { name: 'Series details' });
-	await expect(details.getByRole('term')).toHaveText(['Measured at', 'Source', 'Upload unit']);
+	await expect(details.getByRole('term')).toHaveText(['Name', 'Measured at', 'Source', 'Upload unit']);
 	// The upload records the unit it was given in (here m³/s, no conversion).
 	await expect(details.getByTestId('series-given-unit')).toHaveText('m³/s');
 	const site = details.getByRole('combobox', { name: 'Measured at' });
@@ -613,7 +613,7 @@ test('the Series details row labels the charted series’ product, where measure
 
 	// Rain has no Measured at; its details say only the source and unit.
 	await region.getByRole('row').filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: 'View', exact: true }).click();
-	await expect(details.getByRole('term')).toHaveText(['Source', 'Upload unit']);
+	await expect(details.getByRole('term')).toHaveText(['Name', 'Source', 'Upload unit']);
 	await expectNoViolations(page);
 
 	// A viewer reads the same details as words, with the same labels.
@@ -625,8 +625,8 @@ test('the Series details row labels the charted series’ product, where measure
 	await expect(vFlow.getByTestId('series-site')).toHaveText('At gauge Middle weir');
 	await vFlow.getByRole('button', { name: 'View', exact: true }).click();
 	const vDetails = v.getByRole('group', { name: 'Series details' });
-	await expect(vDetails.getByRole('term')).toHaveText(['Measured at', 'Source', 'Upload unit']);
-	await expect(vDetails.getByRole('definition')).toHaveText(['Gauge Middle weir', 'DWS X1H001', 'm³/s']);
+	await expect(vDetails.getByRole('term')).toHaveText(['Name', 'Measured at', 'Source', 'Upload unit']);
+	await expect(vDetails.getByRole('definition')).toHaveText(['Weir', 'Gauge Middle weir', 'DWS X1H001', 'm³/s']);
 	await expect(vDetails.getByRole('combobox')).toHaveCount(0);
 	await expect(vDetails.getByRole('textbox')).toHaveCount(0);
 	await expectNoViolations(v);

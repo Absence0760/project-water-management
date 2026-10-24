@@ -227,6 +227,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('series.site_changed', { kind: 'flow_observed_m3s', name: 'Weir', site: { from: 'Upper weir', to: 'the outlet' } }))).toMatch(
 			/to the outlet \(was gauge Upper weir\)$/
 		);
+		// Issue #556: a series renamed in Series details, or named for the first time.
+		expect(eventLine(ev('series.renamed', { kind: 'flow_logger_m3s', name: 'Drift Logger', rename: { from: 'Logger A1', to: 'Drift Logger' } }))).toMatch(
+			/^Renamed the .* series “Logger A1” → “Drift Logger”$/
+		);
+		expect(eventLine(ev('series.renamed', { kind: 'flow_logger_m3s', name: 'Drift Logger', rename: { from: '', to: 'Drift Logger' } }))).toMatch(
+			/^Named the .* series “Drift Logger”$/
+		);
 		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', replaceSeries: 'CHIRPS/2.0' }))).toBe(
 			'Confirmed that the CHIRPS feed replaces the Rainfall — CHIRPS series at its next fetch'
 		);

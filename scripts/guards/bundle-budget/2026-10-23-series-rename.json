@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "issue #556: Series details' Name field, its rename question (pick.ts renamePickChange/renamePickText) and the Data table's dataSpan; measured 2020 KB vs 2019 KB"
+}
