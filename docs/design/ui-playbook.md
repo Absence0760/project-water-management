@@ -1786,6 +1786,14 @@ Interaction details that bit:
   spec that clicked the Features tab on the notice lost its click when the
   pick landed and showed Details (`map-delineate.spec.ts`, #570;
   `MapTab.svelte` now sets every save's notice after its `pickInPlace`).
+- **Reading a control's state doesn't wait for a modal to close.**
+  `getAttribute` acts on the inert page behind an open sheet, where a click
+  would wait. Placing a map's first point loads the list (the side tabs
+  appear on Features) and only then picks the point (Details), closing the
+  sheet in that same URL change; `showTab` read Features as already chosen
+  in between, skipped its click, and lost to the pick under CI load
+  (`map-draw.spec.ts`, phone). After a save from a sheet, wait for the sheet
+  to be hidden before choosing a side tab.
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card; a new tab or page joins the
