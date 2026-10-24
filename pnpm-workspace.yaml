@@ -13,3 +13,8 @@ packages:
 # fix can't wait a week, name that version under minimumReleaseAgeExclude
 # with a comment and remove it once the week has passed.
 minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  # Fixes GHSA-85x2-q946-cp5h, GHSA-8c8m-p3m8-cjg8 and GHSA-m943-m63m-w62w
+  # (address parsing) for backend@0.5.0; published 2026-10-18, so remove this
+  # entry after 2026-10-25.
+  - nodemailer@10.1.4
