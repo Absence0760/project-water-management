@@ -568,7 +568,9 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 			if (!sameJson(snapshot.model, want.model)) problems.push(`its model isn't the manifest's (${differingPaths(snapshot.model, want.model).join(', ')})`);
 		}
 		const ok = add(`inputs:${r}`, problems.length === 0, problems.join('; ') || `${mine.length === 1 ? '1 input series matches its hash' : `${mine.length} input series match their hashes`} and the manifest${r === 'baseline' ? ', and so do the settings and model' : ''}`);
-		inputs[r] = { snapshot, values, input: ok ? ({ settings: snapshot.settings, model: snapshot.model, series } as ModelInput) : null };
+		// seriesChoice: the CHIRPS series the run read and the others, which a run warning reads (engine ≥ 1.90.0, issue #561).
+		const choice = snapshot.seriesChoice ? { seriesChoice: snapshot.seriesChoice } : {};
+		inputs[r] = { snapshot, values, input: ok ? ({ settings: snapshot.settings, model: snapshot.model, series, ...choice } as ModelInput) : null };
 	}
 
 	// The application: its inputs are the baseline's with the changes the manifest lists, from the scenario it names.

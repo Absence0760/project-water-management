@@ -56,6 +56,7 @@ import {
 	type PeInput,
 	type ProjectModel,
 	type ProjectSettings,
+	type SeriesChoice,
 	type RunSummary,
 	type Transfer
 } from './project';
@@ -76,6 +77,8 @@ export interface RunInputsSnapshot {
 	settings: Partial<ProjectSettings> & Record<string, unknown>;
 	model: ProjectModel;
 	series: Partial<Record<string, RunSeriesSnapshot>>;
+	/** The CHIRPS series the run read and the others (engine ≥ 1.90.0, ModelInput.seriesChoice); absent when there were no others. */
+	seriesChoice?: SeriesChoice | null;
 }
 
 export interface RunSeriesSnapshot {

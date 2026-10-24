@@ -104,6 +104,21 @@ describe('buildPackBundle + checkPackBundle', () => {
 		expect(r.checks.some((c) => c.id.startsWith('reproduce:'))).toBe(false);
 	});
 
+	it('re-runs a run with its CHIRPS series choice from input.json, whose warning is in its results (issue #561)', async () => {
+		const withChoice = packBundleFixture(hash, { application: false, seriesChoice: true });
+		expect((withChoice.baseline.summary as { warnings: string[] }).warnings.some((w) => w.startsWith('the run read the CHIRPS series “CHIRPS boundary”'))).toBe(true);
+		const built = await buildPackBundle(withChoice, hash);
+		const r = await checkPackBundle(built.bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		// Without it the re-run has no warning, so its results differ: the re-run read it.
+		const stripped = await rezip(built.bytes, (f) => {
+			const inp = JSON.parse(f.get('runs/baseline/input.json')!) as RunInputsSnapshot;
+			delete inp.seriesChoice;
+			f.set('runs/baseline/input.json', canonicalJson(inp));
+		});
+		expect(failing(await checkPackBundle(stripped, { hash }))).toEqual(['reproduce:baseline']);
+	});
+
 	it('refuses to build from input values that fail their SHA-256', async () => {
 		const bad = structuredClone(input);
 		bad.baseline.values = { ...bad.baseline.values, rain_catchment_mm: [99, ...bad.baseline.values.rain_catchment_mm!.slice(1)] };
