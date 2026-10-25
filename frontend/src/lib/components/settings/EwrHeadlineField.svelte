@@ -1,8 +1,9 @@
 <!--
 	Settings → Judge results by (issue #444): which EWR test the results are
 	judged by, the first thing on the page. Bind `value` (settings.ewrHeadline).
-	Changes no result: it decides which test the Summary's headline card, the
-	run sentence, the EWR page's tiles and the "days below" wording report.
+	Changes no result: it decides which test the EWR page's headline tile (the
+	Summary's card until issue #558), the run sentence, the printable report and
+	the "days below" wording report.
 	Without a rule table there is nothing to choose, so it says so instead.
 	Helpers in $lib/components/ewr/headline.ts.
 -->
@@ -58,7 +59,7 @@
 			</select>
 		</div>
 		<p class="hint muted explain" id="judge-hint">
-			Which EWR the Summary’s headline, the run sentence and EWR report against. It changes no result: save it and no
+			Which EWR the headline on the EWR page, the run sentence and the printable report are judged by. It changes no result: save it and no
 			re-run is needed. The pragmatic EWR and the Reserve rule tables are set under <a href="#set-ewr">EWR</a> and
 			<a href="#set-reserve">Reserve rules</a>.
 		</p>

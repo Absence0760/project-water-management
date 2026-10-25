@@ -374,6 +374,10 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 		'The pragmatic EWR at the outflow gauge',
 		'The Reserve rule table at the outlet, Outflow gauge'
 	]);
+	// What it decides, read with the select: the EWR page's headline, not the Summary's, which has had none since issue #558.
+	await expect(page.locator('#judge-hint')).toHaveText(
+		/^Which EWR the headline on the EWR page, the run sentence and the printable report are judged by\. It changes no result/
+	);
 	// Automatic judges by the rule table while the charge follows the pragmatic EWR (its default): said under the select.
 	await expect(page.getByTestId('judge-charge-note')).toContainText('follow the pragmatic EWR');
 	await pick.selectOption({ label: 'The pragmatic EWR at the outflow gauge' });

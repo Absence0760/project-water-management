@@ -5890,10 +5890,13 @@ section header, which it fills (`fillHeader`) like the other sections.
   EWR at the outflow gauge**, when some month of it is above 0; and **The
   Reserve rule table at …** for each site with a table (the outlet first, a
   table keyed by the outlet node counting as the outlet, then gauges in
-  network order). It decides which test the Summary's headline card, the run
-  sentence (Runs & results, the printable report), the EWR page's tiles
-  and line, and the "days below" wording report (`runs/ewrAssurance.ts`
-  `resolveHeadline`). It changes no result, so it needs no re-run and saving
+  network order). It decides which test the EWR page's headline tile and
+  judged-by line (the Summary's headline card until issue #558), the run
+  sentence (Runs & results, the printable report) and the "days below"
+  wording report (`runs/ewrAssurance.ts` `resolveHeadline`); the line under
+  the select says so ("Which EWR the headline on the EWR page, the run
+  sentence and the printable report are judged by"; it named the Summary's
+  headline until the ad hoc fixes of 2026-10-24). It changes no result, so it needs no re-run and saving
   it alone doesn't put the latest run out of date: every run, old ones
   included, is read by the project's current choice (runs don't record it).
   That is deliberate (decided for issue #444): the choice picks which of the
