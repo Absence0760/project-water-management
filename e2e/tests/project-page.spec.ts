@@ -366,10 +366,11 @@ test.describe('the page’s side index and bar', () => {
 		const project = await seedRunnableProject(page.request, 'Project side index');
 		await openProject(page, project.id);
 		const nav = sections(page);
-		await expect(nav.getByRole('list', { name: 'The project' }).getByRole('link')).toHaveText(['Project details', 'Recent notes', 'The model']);
+		await expect(nav.getByRole('list', { name: 'The project' }).getByRole('link')).toHaveText(['Project details', 'Recent notes', 'The model', 'Scheduled reports']);
 		await expect(nav.getByRole('list', { name: 'People and access' }).getByRole('link').first()).toHaveText('Team');
 		const headings = await panelHeadings(page);
-		expect(headings).toEqual(expect.arrayContaining(['Project details', 'Members', 'Farmers', 'Share links', 'Two-step sign-in', 'Licence record']));
+		// API keys and Scheduled reports came from Settings (issue #586 R1-B) and got their links with no other change.
+		expect(headings).toEqual(expect.arrayContaining(['Project details', 'Scheduled reports', 'Members', 'Farmers', 'Share links', 'API keys', 'Two-step sign-in', 'Licence record']));
 		expect(await menuLinks(page)).toEqual(headings);
 
 		// Beside the page, not above it: the details start level with the index, and the whole index is in the window.
