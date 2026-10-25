@@ -1,7 +1,7 @@
 // A rainfall station's checked record (issue #553, docs/model.md §2.4i): the §2.4c/§2.4d checks a
 // unit's own gauge gets, then the user's unreliable periods. Synthetic values only (public repo).
 import { describe, expect, it } from 'vitest';
-import { monthOfEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { checkedCatchmentRainRecord, mergeSettings } from '../prepare';
 import { stationChirpsSeriesKey, stationSeriesKey, type DailySeries, type ModelInput, type ProjectSettings, type RainStationSettings } from '../project';
 import { fitStationPairing } from './stationPairing';
@@ -252,11 +252,18 @@ describe('the forcing’s record holds every day the fit’s record holds (RS6, 
 	// seeded generator (a failure names its seed): multi-day accumulations, outages past the 7 blank days a window may
 	// hold, gaps, unreliable periods (one always across a window §2.4d may spread), either accumulation mode, gauge or not.
 	const SEEDS = 60;
-	const iso = (i: number) => new Date((D0 + i) * 86_400_000).toISOString().slice(0, 10);
+	const iso = (i: number) => fromEpochDay(D0 + i);
+	// The engine exports no days-in-year helper (stationPairing.ts keeps its own, unexported); this is the same
+	// definition, read through the engine's calendar.
+	const daysInYear = (y: number) => toEpochDay(`${y + 1}-01-01`) - toEpochDay(`${y}-01-01`);
 	const completeYears = (a: (number | null)[], b: (number | null)[]) => {
 		const per = new Map<number, number>();
-		for (let i = 0; i < DAYS; i++) if (a[i] != null && b[i] != null) per.set(Number(iso(i).slice(0, 4)), (per.get(Number(iso(i).slice(0, 4))) ?? 0) + 1);
-		return [...per].filter(([y, n]) => n === toEpochDay(`${y + 1}-01-01`) - toEpochDay(`${y}-01-01`)).length;
+		for (let i = 0; i < DAYS; i++) {
+			if (a[i] == null || b[i] == null) continue;
+			const y = Number(iso(i).slice(0, 4));
+			per.set(y, (per.get(y) ?? 0) + 1);
+		}
+		return [...per].filter(([y, n]) => n === daysInYear(y)).length;
 	};
 
 	function station(seed: number) {
@@ -284,6 +291,7 @@ describe('the forcing’s record holds every day the fit’s record holds (RS6, 
 		for (let k = rng.int(0, 6); k > 0; k--) gauge[rng.int(0, DAYS - 1)] = null;
 		// Across one window §2.4d may spread (3–7 blank days), part of it or all and past it.
 		const short = windows.filter((v) => v.read - v.first >= 3 && v.read - v.first <= 7);
+		expect(short.length, `seed ${seed}: no window of 3–7 blank days`).toBeGreaterThan(0);
 		const w = short[rng.int(0, short.length - 1)]!;
 		const unreliable: [string, string][] = [[iso(w.first + rng.int(0, 1)), iso(w.read + rng.int(-1, 2))]];
 		for (let k = rng.int(0, 3); k > 0; k--) {
