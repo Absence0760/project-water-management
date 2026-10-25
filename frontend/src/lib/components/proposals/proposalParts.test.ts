@@ -1,5 +1,5 @@
 // The shared pieces of the map-proposal panels (ProposalPanel.svelte's
-// siblings): the no-dataset notice naming the operator's loader, the
+// siblings): the no-dataset notice in plain words (no operator command), the
 // synthetic-data warning and the collapsed citation. The panels' e2e specs
 // load the synthetic datasets, so the no-dataset wording is pinned here.
 import { render } from 'svelte/server';
@@ -22,11 +22,13 @@ const text = (html: string) => {
 };
 
 describe('the map-proposal panels’ shared pieces', () => {
-	it('no dataset: says what is missing, what follows, and the operator’s command', () => {
-		const html = render(ProposalNoDataset, { props: { testid: 'x-no-dataset', what: 'evaporation grid', consequence: 'nothing is proposed', command: 'pnpm import:evaporation' } }).body;
+	it('no dataset: says what is missing, what follows and what to do by hand, with no operator command', () => {
+		const html = render(ProposalNoDataset, {
+			props: { testid: 'x-no-dataset', what: 'evaporation map', consequence: 'nothing can be proposed', instead: 'Enter the A-pan and pan coefficient by hand.' }
+		}).body;
 		expect(html).toContain('data-testid="x-no-dataset"');
-		expect(html).toContain('<code>pnpm import:evaporation</code>');
-		expect(text(html)).toBe('No evaporation grid is loaded, so nothing is proposed. The operator loads one with pnpm import:evaporation (docs/maps.md).');
+		expect(html).not.toContain('<code>');
+		expect(text(html)).toBe('There’s no evaporation map on this server yet, so nothing can be proposed. Enter the A-pan and pan coefficient by hand.');
 	});
 
 	it('synthetic data: a warning naming the real dataset it is not', () => {

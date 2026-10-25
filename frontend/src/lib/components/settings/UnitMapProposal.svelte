@@ -116,7 +116,7 @@
 
 	{#if data && view}
 		{#if view.kind === 'no-dataset'}
-			<ProposalNoDataset testid="unit-map-no-dataset" what="MAP grid" consequence="no unit’s MAP is proposed" command="pnpm import:map-grid" />
+			<ProposalNoDataset testid="unit-map-no-dataset" what="MAP grid" consequence="no unit’s MAP can be proposed" instead="Enter each unit’s MAP by hand." />
 		{:else}
 			{#if data.candidates.length > 1}
 				<div class="field">
