@@ -14,6 +14,16 @@ export const RUN_TABS: readonly TabId[] = ['runs', 'river', 'supply', 'allocatio
 
 export const isRunTab = (id: string): boolean => (RUN_TABS as readonly string[]).includes(id);
 
+/**
+ * What a run tab's `?run=` says about the reader's pick, read once when the run in the URL changes: the
+ * run itself when it isn't the default, null (no pick) when it is. A tab writes the default into the URL
+ * on its own (RunsTab's `select(…, 'default')`), so that is never kept as a pick: a run made later must
+ * still open first, rather than lose to the run that was merely the newest when the tab opened.
+ */
+export function pickOf(id: string, runs: readonly { id: string; published?: boolean }[], role: Role | null | undefined): string | null {
+	return id === defaultRunId(runs, role) ? null : id;
+}
+
 /** The run a sidebar link carries: the one picked, while it is still a run of the project and isn't the default anyway. */
 export function carriedRun(picked: string | null, runs: readonly { id: string; published?: boolean }[] | null, role: Role | null | undefined): string | null {
 	if (!picked || !runs?.some((r) => r.id === picked)) return null;

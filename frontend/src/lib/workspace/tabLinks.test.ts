@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { carriedRun, RUN_TABS, tabHref } from './tabLinks';
+import { carriedRun, pickOf, RUN_TABS, tabHref } from './tabLinks';
 
 const runs = [{ id: 'new' }, { id: 'mid', published: true }, { id: 'old' }];
 
@@ -31,5 +31,19 @@ describe('tabHref', () => {
 	it('keeps the picked run on every tab that shows one', () => {
 		for (const id of RUN_TABS) expect(tabHref(id, '/projects/p', 'old')).toBe(`?tab=${id}&run=old`);
 		expect(tabHref('runs', '/projects/p', null)).toBe('?tab=runs');
+	});
+});
+
+describe('pickOf', () => {
+	it('keeps no pick for the default a tab writes on opening, so a run made later still opens first', () => {
+		// Runs opened while A was the newest: ?run=A written in place, not a pick.
+		expect(pickOf('a', [{ id: 'a' }], 'editor')).toBeNull();
+		// B made since: the sidebar carries nothing, and Runs opens on B.
+		expect(carriedRun(pickOf('a', [{ id: 'a' }], 'editor'), [{ id: 'b' }, { id: 'a' }], 'editor')).toBeNull();
+	});
+
+	it('keeps a run that is not the default, which the links then carry past a newer run', () => {
+		expect(pickOf('old', runs, 'editor')).toBe('old');
+		expect(carriedRun(pickOf('old', runs, 'editor'), [{ id: 'newer' }, ...runs], 'editor')).toBe('old');
 	});
 });

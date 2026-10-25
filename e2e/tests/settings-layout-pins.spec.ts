@@ -223,6 +223,28 @@ test('a viewer sees which radio option is chosen: the read-only form keeps a rad
 	}
 });
 
+test('a click on the sidebar link of the page already shown sets no title focus for a later link (issue #586)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Settings pins active tab');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
+	await openSettings(page, project.id);
+	const sidebar = page.getByRole('navigation', { name: 'Project sections' });
+	// Settings is the page shown: the link goes nowhere.
+	await sidebar.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(page).toHaveURL(/\?tab=settings$/);
+	// A link in the page to Data is not a sidebar link: Data's title doesn't take the focus.
+	const link = page.getByTestId('rules-run-why').getByRole('link', { name: 'Add one on Data' });
+	await link.click();
+	await expect(page).toHaveURL(/\?tab=series$/);
+	const data = page.getByRole('heading', { level: 1, name: 'Data', exact: true });
+	await expect(data).toBeVisible();
+	await expect(data).not.toBeFocused();
+	// A sidebar link still focuses the title it goes to.
+	await sidebar.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(pageTitle(page)).toBeFocused();
+});
+
 test('?tab=calibration opens Settings & calibration under its own sidebar row at Flow calibration, and lands its anchors', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });

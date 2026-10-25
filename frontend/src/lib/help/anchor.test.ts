@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hashId, holdAnchor, landOnAnchor, READER_INPUT, type AnchorEnv, type LandEnv } from './anchor';
+import { hashId, holdAnchor, LAND_WAIT_MS, landOnAnchor, READER_INPUT, type AnchorEnv, type LandEnv } from './anchor';
 
 describe('hashId', () => {
 	it('decodes the id, and gives none for no hash or a malformed one', () => {
@@ -74,7 +74,13 @@ function landSetup() {
 	let onReader = () => {};
 	const stopWatch = vi.fn();
 	const release = vi.fn();
+	const timers: { ms: number; fn: () => void; live: boolean }[] = [];
 	const env: LandEnv = {
+		after(ms, fn) {
+			const t = { ms, fn, live: true };
+			timers.push(t);
+			return () => (t.live = false);
+		},
 		find: (id) => (found.get(id) as Element) ?? null,
 		watch(change, reader) {
 			onChange = change;
@@ -84,7 +90,14 @@ function landSetup() {
 		hold: vi.fn(() => release),
 		focus: vi.fn()
 	};
-	return { found, env, stopWatch, release, change: () => onChange(), reader: () => onReader() };
+	/** Runs the wait's live timer as if its time had passed. */
+	const elapse = () => {
+		for (const t of timers.filter((x) => x.live)) {
+			t.live = false;
+			t.fn();
+		}
+	};
+	return { found, env, stopWatch, release, timers, elapse, change: () => onChange(), reader: () => onReader() };
 }
 
 describe('landOnAnchor', () => {
@@ -149,5 +162,48 @@ describe('landOnAnchor', () => {
 		(found.get('res-forecast') as ReturnType<typeof panel>).heading = h;
 		change();
 		expect(env.focus).not.toHaveBeenCalled();
+	});
+
+	it('gives up on a panel that never comes, after LAND_WAIT_MS: a late one neither moves the page nor takes the focus', () => {
+		const { found, env, stopWatch, timers, elapse, change } = landSetup();
+		landOnAnchor('no-such-panel', {} as Node, env);
+		expect(timers.filter((t) => t.live).map((t) => t.ms)).toEqual([LAND_WAIT_MS]);
+		elapse();
+		expect(stopWatch).toHaveBeenCalledTimes(1);
+		found.set('no-such-panel', panel(h));
+		change();
+		expect(env.hold).not.toHaveBeenCalled();
+		expect(env.focus).not.toHaveBeenCalled();
+	});
+
+	it('lets go of a panel whose heading never comes, after a fresh LAND_WAIT_MS from when the panel was drawn', () => {
+		const { found, env, stopWatch, release, timers, elapse, change } = landSetup();
+		landOnAnchor('set-feeds', {} as Node, env);
+		const p = panel();
+		found.set('set-feeds', p);
+		change();
+		expect(env.hold).toHaveBeenCalledTimes(1);
+		// The first wait was cancelled and a new one started for the heading.
+		expect(timers.map((t) => t.live)).toEqual([false, true]);
+		elapse();
+		expect(stopWatch).toHaveBeenCalledTimes(1);
+		expect(release).toHaveBeenCalledTimes(1);
+		p.heading = h;
+		change();
+		expect(env.focus).not.toHaveBeenCalled();
+	});
+
+	it('follows a placeholder replaced by the drawn panel under the same id, holding the new one', () => {
+		const { found, env, release, timers, change } = landSetup();
+		found.set('res-forecast', panel());
+		landOnAnchor('res-forecast', {} as Node, env);
+		expect(env.hold).toHaveBeenCalledTimes(1);
+		found.set('res-forecast', panel(h));
+		change();
+		expect(release).toHaveBeenCalledTimes(1);
+		expect(env.hold).toHaveBeenCalledTimes(2);
+		expect(env.focus).toHaveBeenCalledWith(h);
+		// Landed: no wait left running.
+		expect(timers.every((t) => !t.live)).toBe(true);
 	});
 });

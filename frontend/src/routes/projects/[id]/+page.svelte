@@ -68,7 +68,7 @@
 	import { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { fetchProjectPage, takeProjectPage } from '#lib/workspace/firstLoad.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
-	import { carriedRun, isRunTab, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
+	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
 	import { focusPageStart } from '#lib/a11y/focusPage.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
@@ -663,9 +663,18 @@
 	// Selecting a tab keeps the scroll and adds a history entry so Back works. The tabs that show
 	// a run keep the one the reader picked on any of them (issue #586, workspace/tabLinks.ts).
 	let pickedRun = $state<{ projectId: string; id: string } | null>(null);
+	// Read once each time the run in the URL changes (not on a #hash or another param), against the runs as
+	// they are then: the default a tab writes in place on opening is no pick (tabLinks.ts pickOf).
+	let seenRun: string | null = null;
+	const runsLoaded = $derived(runs !== null);
 	$effect(() => {
 		const id = isRunTab(tab) ? page.url.searchParams.get('run') : null;
-		if (id) untrack(() => (pickedRun = { projectId, id }));
+		if (!id || !runsLoaded || id === seenRun) return;
+		seenRun = id;
+		untrack(() => {
+			const pick = pickOf(id, runs ?? [], project?.role);
+			pickedRun = pick ? { projectId, id: pick } : null;
+		});
 	});
 	const carried = $derived(carriedRun(pickedRun?.projectId === projectId ? pickedRun.id : null, runs, project?.role));
 	function tabHref(id: TabId) {
@@ -675,15 +684,19 @@
 	// Following a sidebar link puts the focus on the new page's title (its h1, focusPageStart), so Tab
 	// carries on in the page, not from the top of the sidebar (issue #586; ui-playbook.md § 4). The arrow
 	// keys between the links keep it on the link instead (tabKeydown).
-	let focusTitle = false;
-	function followTab(e: MouseEvent) {
+	// The flag names the URL the link goes to: only the navigation to it focuses the title, and any
+	// navigation clears it. A click on the page already shown navigates nowhere, so it sets none (else a
+	// later Back or in-page link would take the focus to the title).
+	let focusTitleFor: string | null = null;
+	function followTab(e: MouseEvent & { currentTarget: HTMLAnchorElement }) {
 		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-		focusTitle = true;
+		const to = e.currentTarget.href;
+		focusTitleFor = to === location.href ? null : to;
 	}
-	afterNavigate(() => {
-		if (!focusTitle) return;
-		focusTitle = false;
-		void focusPageStart();
+	afterNavigate((nav) => {
+		const wanted = focusTitleFor;
+		focusTitleFor = null;
+		if (wanted && nav.to?.url.href === wanted) void focusPageStart();
 	});
 
 	function onProjectChange(p: Project) {

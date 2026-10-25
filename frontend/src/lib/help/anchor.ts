@@ -9,7 +9,7 @@
 // through the one scroll hold (lib/nav/scrollHold.ts: until the reader scrolls
 // themselves, the page settles, another step or #hash, or the caller releases
 // it), which also makes an anchor yield to Back returning the reader's place.
-import { anchorYields, holdScroll, READER_INPUT, type HoldEnv } from '#lib/nav/scrollHold.js';
+import { anchorYields, holdScroll, READER_INPUT, SETTLE_MS, type HoldEnv } from '#lib/nav/scrollHold.js';
 
 /**
  * The id a URL's #hash names, decoded; '' for no hash or one that isn't
@@ -69,7 +69,17 @@ export interface LandEnv {
 	watch: (onChange: () => void, onReader: () => void) => () => void;
 	hold: (el: Element) => () => void;
 	focus: (heading: HTMLElement) => void;
+	/** Calls `fn` after `ms`; returns a cancel function. */
+	after: (ms: number, fn: () => void) => () => void;
 }
+
+/**
+ * How long landOnAnchor waits for the panel, and again for its heading once the panel is drawn: the
+ * hold's settle time and a few seconds for a lazy chunk to load. A panel that never comes (an unknown
+ * id, one this reader isn't shown) or one with no heading then stops the wait, so a late heading can't
+ * take the focus from someone already reading.
+ */
+export const LAND_WAIT_MS = SETTLE_MS + 5000;
 
 const READER_STEPS = [...READER_INPUT, 'popstate', 'hashchange'] as const;
 
@@ -86,7 +96,11 @@ function pageEnv(root: Node): LandEnv {
 			};
 		},
 		hold: (el) => holdAnchor(el),
-		focus: focusHeading
+		focus: focusHeading,
+		after(ms, fn) {
+			const t = setTimeout(fn, ms);
+			return () => clearTimeout(t);
+		}
 	};
 }
 
@@ -95,27 +109,49 @@ function pageEnv(root: Node): LandEnv {
  * heading may be a lazy chunk drawn after the page mounts: once the panel is
  * on the page, scroll there and hold it while the page settles (holdAnchor),
  * and once its heading is drawn (anchorHeading), focus it. Waits for each
- * with one observer of `root`'s content, until the reader takes over (then a
- * late chunk neither moves the page nor takes the focus). Returns the stop
- * function: it ends the wait and releases the hold (call it when the page goes).
+ * with one observer of `root`'s content, for at most LAND_WAIT_MS each, and
+ * never once the reader takes over (then a late chunk neither moves the page
+ * nor takes the focus). The panel is looked up again at each change, so a
+ * lazy placeholder replaced by the drawn panel under the same id is followed.
+ * Returns the stop function: it ends the wait and releases the hold (call it
+ * when the page goes).
  */
 export function landOnAnchor(id: string, root: Node = document.body, env: LandEnv = pageEnv(root)): () => void {
 	let release = () => {};
 	let el: Element | null = null;
+	let waiting = true;
+	let stopWatching: (() => void) | undefined;
+	let cancelDeadline = () => {};
+	const deadline = () => {
+		cancelDeadline();
+		cancelDeadline = env.after(LAND_WAIT_MS, () => {
+			// The panel (or its heading) never came: stop waiting, and let go of a panel held without one.
+			end();
+			release();
+		});
+	};
 	const step = (): boolean => {
-		if (!el) {
-			el = env.find(id);
+		const now = env.find(id);
+		if (now !== el) {
+			release();
+			release = () => {};
+			el = now;
 			if (!el) return false;
 			release = env.hold(el);
+			if (stopWatching) deadline();
 		}
+		if (!el) return false;
 		const heading = anchorHeading(el);
 		if (!heading) return false;
 		env.focus(heading);
 		return true;
 	};
+	function end() {
+		waiting = false;
+		cancelDeadline();
+		stopWatching?.();
+	}
 	if (step()) return () => release();
-	let waiting = true;
-	let stopWatching: (() => void) | undefined;
 	stopWatching = env.watch(
 		() => {
 			if (waiting && step()) end();
@@ -123,10 +159,7 @@ export function landOnAnchor(id: string, root: Node = document.body, env: LandEn
 		() => end()
 	);
 	if (!waiting) stopWatching();
-	function end() {
-		waiting = false;
-		stopWatching?.();
-	}
+	else deadline();
 	return () => {
 		end();
 		release();

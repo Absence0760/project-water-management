@@ -897,7 +897,11 @@ units, Allocations) keep the run picked on any of them (`&run=<id>`,
 one shown after a visit to Settings, and EWR opens on it. Only a pick is
 carried: while the run shown is the default (the newest, or a viewer's
 published baseline), the links carry none, so a run made since still opens
-first; a run deleted since is dropped (issue #586).
+first. The run a tab writes into the URL by itself on opening (the default
+then) is no pick either, so a run made after it still opens first; a run
+deleted since is dropped (issue #586, `tabLinks.ts` `pickOf`). Only a link
+followed to another page focuses its title: a click on the page already
+shown sets nothing for a later Back or link.
 
 | Tab | `?tab=` | Aliases | Code |
 | --- | --- | --- | --- |
@@ -5977,7 +5981,8 @@ section header, which it fills (`fillHeader`) like the other sections.
   of their own (Evaporation from the map, Data feeds, API keys, Scheduled
   reports) are waited for, then their heading (`landOnAnchor`, help/anchor.ts;
   a card's h4, as Units without a station's in its legend, counts), until the
-  reader scrolls, types or clicks (issue #586). Before, the browser's own jump
+  reader scrolls, types or clicks, or for at most about six seconds each
+  (`LAND_WAIT_MS`; issue #586). Before, the browser's own jump
   ran before the lazy tab existed and the page opened at the top.
 - **On this page** (issue #468). A **Settings sections** menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu))

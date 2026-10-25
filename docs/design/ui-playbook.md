@@ -1468,7 +1468,8 @@ Interaction details that bit:
   (Settings' API keys and Evaporation from the map, Runs' Forecast) or a box
   without its heading yet: wait with `landOnAnchor(id)`, which holds the
   panel once drawn and focuses its heading once that is (an h2–h4), giving up
-  when the reader takes over. A link to a panel the page doesn't draw for this
+  when the reader takes over or after `LAND_WAIT_MS` (a panel or heading that
+  never comes must not take the focus late). A link to a panel the page doesn't draw for this
   item says so in a focused line, not silently at the top (Runs'
   `missingPanel.ts`). Test a fragment link by *loading* it,
   not only by clicking the in-page menu. And a `page.goto` that changes only
