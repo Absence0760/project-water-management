@@ -554,9 +554,13 @@ mapMm, mapSource, lat, lon }`):
   place in `ModelInput.stations` (`isCatchmentGauge` on the one read as
   `rain_catchment_mm`), and, for a station an assignment reads that has
   coordinates, the CHIRPS of the 0.05° cell holding it from the shared cell
-  cache (208) as `rain_chirps_station_mm#<series id>`, in the product of the
-  feed of the first unit it corrects (else the catchment's feed, else
-  `rnl`). Nothing fetches a station's cell on its own: the cache holds it
+  cache (208) as `rain_chirps_station_mm#<series id>`, in the CHIRPS v3
+  product of the series the run itself reads for the area it corrects (the
+  first unit it corrects, by node id, whose own CHIRPS is v3, else the
+  catchment's `rain_chirps_mm` when it corrects the catchment, else `rnl`;
+  [§ Which series a run reads](#which-series-a-run-reads)). Never a feed's
+  product on its own: a feed whose series sorts after the record runs read
+  (issue #561) isn't what the factors correct. Nothing fetches a station's cell on its own: the cache holds it
   when a feed of any project covers it (a boundary or unit feed); without
   it the engine pairs the station against the CHIRPS of the unit it stands
   in (`rainStations.sites`), else refuses the pairing. A station's record

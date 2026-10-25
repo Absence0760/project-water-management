@@ -287,4 +287,26 @@ describe('rainfall stations in a run’s input', () => {
 		expect(errorOf(outletAnew)).toMatch(/a unit given a station is not a land unit of this project/);
 		expect((await save(owner, null)).status).toBe(200);
 	});
+
+	it('reads a station’s cell in the product of the CHIRPS series the run reads, not of the first catchment feed (issue #561)', async () => {
+		// A `sat` feed added first writes "CHIRPS boundary"; an uploaded `rnl` record, "CHIRPS (uploaded)", sorts ahead of
+		// it, so the run reads the record and never the feed's series (feeds/fromBoundary.ts).
+		const feed = (await call(owner, 'POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [{ lat: PLACE.lat, lon: PLACE.lon }], product: 'sat' }, targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary', enabled: false }, 201)).feed as { id: string };
+		const values = Array.from({ length: 366 }, (_, t) => t % 5);
+		const record = (await call(owner, 'PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'CHIRPS (uploaded)', unit: 'mm', startDate: '2012-01-01', values, product: 'CHIRPS rnl', productVersion: '3.0' })).id as string;
+		try {
+			expect((await save(owner, { catchment: { stationId: ridge } })).status).toBe(200);
+			// The record the run reads is `rnl`, which this file cached: the ridge's cell is read in it.
+			const got = await input();
+			expect(got.series.rain_chirps_mm!.provenance).toEqual({ product: 'CHIRPS rnl', version: '3.0' });
+			expect(got.series[stationChirpsSeriesKey(ridge)]?.startDate).toBe(`${CACHE_YEAR}-01-01`);
+			// The positive control: the record relabelled `sat`, the cell is read in `sat`, which the cache doesn't hold.
+			await asOwner(`UPDATE time_series SET product = 'CHIRPS sat' WHERE id = $1`, [record]);
+			expect((await input()).series[stationChirpsSeriesKey(ridge)]).toBeUndefined();
+		} finally {
+			await call(owner, 'DELETE', `/projects/${pid}/series/${record}`, undefined, 204);
+			await call(owner, 'DELETE', `/projects/${pid}/feeds/${feed.id}`, undefined, 204);
+			expect((await save(owner, null)).status).toBe(200);
+		}
+	});
 });
