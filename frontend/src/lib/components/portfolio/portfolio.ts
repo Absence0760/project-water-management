@@ -65,6 +65,14 @@ export const IRRIGATION_RULE = 'green from 95 % of demand supplied over the run,
 /** Why a run's use share and dam levels aren't shown (PortfolioProject.figuresWithheld, #523 I). */
 const WITHHELD_WHY = 'the run caps use at, or scales demand to, the registered water volumes, which this project shows to its editors and owners only';
 
+/**
+ * Why a row's figures are withheld, short enough for the line under its pill
+ * (the project list) or its Lowest dam (the team page), so each row says it
+ * once; null when nothing is withheld.
+ */
+export const withheldText = (p: Pick<PortfolioProject, 'figuresWithheld'>): string | null =>
+	p.figuresWithheld ? 'Uses registered volumes, shown to editors and owners only' : null;
+
 /** "3 of 5 units below 95%", or null when none is (or the figure is unknown). */
 export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): string | null {
 	const r = p.irrigation;
@@ -132,10 +140,10 @@ export function farmsUnknownText(p: Pick<PortfolioProject, 'source'>): string {
 	return p.source === 'published' ? 'Unknown: publish again to count them' : 'Unknown until a run is published';
 }
 
-/** "Kareebos 18 %", "No farm dams", or why it is unknown. */
+/** "Kareebos 18 %", "No dams", "Withheld" (`withheldText` says why), or why it is unknown. */
 export function damText(p: Pick<PortfolioProject, 'lowestDamPct' | 'damsKnown' | 'figuresWithheld'>): string {
 	if (!p.damsKnown) return 'Unknown until a run is published';
-	if (p.figuresWithheld) return `Withheld: ${WITHHELD_WHY}`;
+	if (p.figuresWithheld) return 'Withheld';
 	if (!p.lowestDamPct) return 'No dams';
 	return `${p.lowestDamPct.nodeName} ${fmtNum(p.lowestDamPct.pct * 100)} %`;
 }

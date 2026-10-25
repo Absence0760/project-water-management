@@ -25,7 +25,8 @@
 		feedsText,
 		last30Text,
 		restrictionText,
-		type SortDir
+		type SortDir,
+		withheldText
 	} from '#lib/components/portfolio/portfolio.js';
 	import { agoText } from '#lib/format/age.js';
 	import { fmtDate, fmtDay } from '#lib/format/number.js';
@@ -182,8 +183,9 @@
 	{/if}
 {/snippet}
 
+<!-- Muted unless there is a level, as on the team page: "No dams", or "Withheld" (the line under the pill says why). -->
 {#snippet dam(o: PortfolioProject)}
-	{#if o.damsKnown}{damText(o)}{:else}<span class="muted">Not published</span>{/if}
+	{#if !o.damsKnown}<span class="muted">Not published</span>{:else if o.lowestDamPct && !o.figuresWithheld}{damText(o)}{:else}<span class="muted">{damText(o)}</span>{/if}
 {/snippet}
 
 <!-- The published restriction (the team portfolio's column): only with a publication, where the dam's "Not published" already says why there's none. -->
@@ -236,6 +238,7 @@
 						<!-- Narrow tables: the columns that fold away, as lines under the name. -->
 						<span class="meta meta-narrow">
 							{#if o}<StatusPill p={o} kind="irrigation" />{:else}<span class="muted">{noFigures(p)}</span>{/if}
+							{#if o && withheldText(o)}<span class="line">{withheldText(o)}</span>{/if}
 							{#if o}<span class="line">{#if !farmsShortText(o)}Hydrological units short:{' '}{/if}{@render units(o)}</span>{/if}
 						</span>
 						<span class="meta meta-narrow">
@@ -251,6 +254,8 @@
 					<td class="wide c-status">
 						{#if o}
 							<StatusPill p={o} kind="irrigation" />
+							<!-- Why the pill and Lowest dam say Withheld, once for the row (#523 I). -->
+							{#if withheldText(o)}<span class="sub withheld">{withheldText(o)}</span>{/if}
 							<!-- Over the whole run, as the pill: not the week the next column counts. -->
 							{#if irrigationUnitsText(o)}<span class="sub">{irrigationUnitsText(o)} over the run</span>{/if}
 							{#if sourceShort(o)}<span class="sub">{sourceShort(o)}{#if ageText(o)}{' '}· {ageText(o)}{/if}</span>{/if}

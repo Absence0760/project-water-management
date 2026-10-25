@@ -22,7 +22,8 @@ import {
 	statusSummary,
 	thresholdsError,
 	thresholdsRule,
-	thresholdsSource
+	thresholdsSource,
+	withheldText
 } from './portfolio';
 
 const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
@@ -103,7 +104,10 @@ describe('wording: every status is words, every unknown says why', () => {
 		expect(damText(row({ lowestDamPct: null }))).toBe('No dams');
 		expect(damText(row({ damsKnown: false, lowestDamPct: null }))).toBe('Unknown until a run is published');
 		// A cap or full-allocation run, to a reader kept from the registered volumes (#523 I).
-		expect(damText(row({ figuresWithheld: true, lowestDamPct: null }))).toMatch(/^Withheld: the run caps use at/);
+		// Short: the reason is said once per row, by withheldText.
+		expect(damText(row({ figuresWithheld: true, lowestDamPct: null }))).toBe('Withheld');
+		expect(withheldText(row({ figuresWithheld: true, lowestDamPct: null }))).toBe('Uses registered volumes, shown to editors and owners only');
+		expect(withheldText(row())).toBeNull();
 		expect(restrictionText(row())).toBe('Advisory · 12.5 %');
 		expect(restrictionText(row({ restriction: { level: 'restricted', pct: null } }))).toBe('Restricted');
 		expect(restrictionText(row({ restriction: { level: 'none', pct: null } }))).toBe('None');
