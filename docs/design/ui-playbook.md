@@ -1358,7 +1358,12 @@ Interaction details that bit:
   `min`/`max` (YYYY-MM-DD), and it keeps text it can't read with its message
   at the field, joins the owner's `invalidFields` (the save bar's list and
   the leave guard, as `NumberInput` does), and sets the input's custom
-  validity, so a form without `novalidate` refuses to submit it. A form
+  validity, so a form without `novalidate` refuses to submit it. Its
+  blank hint is an example, "e.g. 15 Nov 2021", never a bare day: a bare
+  "15 Nov 2021" in Settings' blank Simulation start and end read as a stored
+  period. Where blank means something, say that instead (Simulation start's
+  "First day with rain", end's "Last day with rain"; `DayInput.test.ts`,
+  `day-input.spec.ts`). A form
   with `novalidate` that checks its own dates looks for
   `validity.customError` on the field before it submits
   (`feeds/DataFeedsPanel.svelte`, `feeds/UnitRain.svelte`), and leaves the

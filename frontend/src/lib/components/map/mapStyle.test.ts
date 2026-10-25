@@ -49,6 +49,9 @@ import {
 	unitsData,
 	mapGridData,
 	mapGridLayers,
+	mapGridLabelMinZoom,
+	MAP_GRID_LABEL_CLEARANCE_PX,
+	MAP_GRID_LABEL_LAYER,
 	MAP_RAMP,
 	chirpsData,
 	chirpsColour,
@@ -605,6 +608,26 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 				expect(Math.max(...ends.map((c) => contrast(c, halo)), contrast(halo, g)), `ramp on ${g}`).toBeGreaterThanOrEqual(3);
 			}
 		}
+	});
+
+	it('labels the MAP points only from the zoom where a label clears the next row’s dots', () => {
+		// Where one cell is MAP_GRID_LABEL_CLEARANCE_PX tall at the equator (512 px tiles: 512 × 2^z ÷ 360 px a degree).
+		for (const cellDeg of [0.01, 1 / 60, 0.0009]) {
+			const z = mapGridLabelMinZoom(cellDeg);
+			expect(Math.abs(cellDeg * ((512 * 2 ** z) / 360) - MAP_GRID_LABEL_CLEARANCE_PX), `${cellDeg}°`).toBeLessThan(MAP_GRID_LABEL_CLEARANCE_PX * 0.04);
+		}
+		expect([0.01, 1 / 60, 0.0009].map(mapGridLabelMinZoom)).toEqual([11.1, 10.4, 14.6]);
+		// The finer the grid, the closer in its labels start; no grid known: at every zoom.
+		expect(mapGridLabelMinZoom(0.0009)).toBeGreaterThan(mapGridLabelMinZoom(0.01));
+		for (const none of [null, undefined, 0, -1, Number.NaN]) expect(mapGridLabelMinZoom(none)).toBe(0);
+		// The label layer carries it; the dots draw at every zoom.
+		const { over, labels } = mapGridLayers(false, true, 11.1);
+		expect(labels[0]).toMatchObject({ id: MAP_GRID_LABEL_LAYER, minzoom: 11.1 });
+		expect(over[0]).not.toHaveProperty('minzoom');
+		expect(mapGridLayers(false, true).labels[0]).not.toHaveProperty('minzoom');
+		// And the style built for a grid passes it on (a theme switch rebuilds the style).
+		const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', false, overlayData([], null), { glyphs: 'https://x/{fontstack}/{range}.pbf', mapGridCellDeg: 0.01 });
+		expect(s.layers.find((l) => l.id === MAP_GRID_LABEL_LAYER)).toMatchObject({ minzoom: 11.1 });
 	});
 
 	it('feeds the CHIRPS source each cell’s square and its centre, in an orange that stands out from the land (3:1)', () => {

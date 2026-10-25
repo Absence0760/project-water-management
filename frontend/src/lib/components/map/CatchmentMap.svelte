@@ -101,6 +101,8 @@
 		unitsData,
 		type UnitLabelData,
 		mapGridData,
+		mapGridLabelMinZoom,
+		MAP_GRID_LABEL_LAYER,
 		type MapGridPointData,
 		chirpsData,
 		demGridData,
@@ -154,6 +156,7 @@
 		onpiecepick,
 		units = null,
 		mapGrid = null,
+		mapGridCellDeg = null,
 		chirps = null,
 		demGrid = null,
 		fillScale = 1
@@ -223,6 +226,8 @@
 		units?: readonly UnitLabelData[] | null;
 		/** The MAP grid layer's points, each labelled with its MAP; null or empty: none. */
 		mapGrid?: readonly MapGridPointData[] | null;
+		/** The cell size of the grid `mapGrid` is from, degrees: its values are labelled only once its points are far enough apart for them (mapStyle.ts mapGridLabelMinZoom); null: at every zoom. */
+		mapGridCellDeg?: number | null;
 		/** The CHIRPS grid layer's cells and points (mapLayers.ts chirpsCells); null or empty: none. */
 		chirps?: readonly ChirpsCellData[] | null;
 		/** The DEM grid layer's sampled cells, each labelled with its elevation; null or empty: none. */
@@ -480,6 +485,7 @@
 						proposal: proposalData(proposal),
 						units: unitsData(units, features),
 						mapGrid: mapGridData(mapGrid),
+						mapGridCellDeg,
 						chirps: chirpsData(chirps),
 						demGrid: demGridData(demGrid),
 						fillScale
@@ -651,6 +657,13 @@
 		void mapGrid;
 		void status;
 		syncMapGrid();
+	});
+	// The grid drawn sets the zoom its labels start at (a theme switch's new style carries it from styleNow).
+	$effect(() => {
+		const z = mapGridLabelMinZoom(mapGridCellDeg);
+		void status;
+		if (!map || status !== 'ready' || !map.getLayer(MAP_GRID_LABEL_LAYER)) return;
+		map.setLayerZoomRange(MAP_GRID_LABEL_LAYER, z, 24);
 	});
 	$effect(() => {
 		void chirps;

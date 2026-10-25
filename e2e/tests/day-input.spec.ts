@@ -22,7 +22,9 @@ test('a typed day reads day first or ISO, shows back day first and saves as YYYY
 	const start = page.getByLabel('Simulation start');
 	const end = page.getByLabel('Simulation end');
 	await expect(start).toHaveAttribute('type', 'text');
-	await expect(start).toHaveAttribute('placeholder', '15 Nov 2021');
+	// Blank runs over the whole rain record, and the blank fields say so (a bare example day read as a stored period).
+	await expect(start).toHaveAttribute('placeholder', 'First day with rain');
+	await expect(end).toHaveAttribute('placeholder', 'Last day with rain');
 
 	// Text that isn't a day: kept after leaving the field, marked, with its message at the field.
 	await start.fill('soon');
