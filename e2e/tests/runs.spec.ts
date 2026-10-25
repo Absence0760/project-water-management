@@ -155,6 +155,10 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 	const range = async () => ({ start: (await chart.getAttribute('data-view-start'))!, end: (await chart.getAttribute('data-view-end'))! });
 	const daysBetween = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
 
+	// A mouse is told about the zoom box and Shift+drag; the touch words stay hidden (issue #586).
+	await expect(chart.locator('[data-hint="fine"]')).toBeVisible();
+	await expect(chart.locator('[data-hint="touch"]')).toBeHidden();
+
 	// Opens on the last 3 years, at the end of the record: nothing later.
 	const opened = await range();
 	expect(daysBetween(opened.start, opened.end)).toBeCloseTo(3 * 365, -1);
@@ -555,4 +559,21 @@ test('a run deleted while the list is still loading stays deleted', async ({ pag
 	await expect(list.getByRole('listitem')).toHaveCount(0);
 	await expect(page.getByRole('alert').filter({ hasText: /not found|no longer exists/ })).toHaveCount(0);
 	await expect(page.getByText('No runs yet. Run the model to see results.')).toBeVisible();
+});
+
+test.describe('on a touch screen', () => {
+	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+	test('a chart’s hint says what touch can do: no Shift+drag or zoom box, Earlier / Later through the record (issue #586)', async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, 'Touch hint');
+		await createRun(page.request, project.id, 'Touch');
+		await page.goto(`/projects/${project.id}?tab=runs`);
+		const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+		await expect(chart.locator('canvas')).toBeVisible();
+		await expect(chart.locator('[data-hint="touch"]')).toHaveText('Tap the chart to read its values; Earlier / Later move through the record.');
+		await expect(chart.locator('[data-hint="fine"]')).toBeHidden();
+		// What it reads (innerText leaves out the hidden mouse words).
+		expect(await chart.locator('.hint').innerText()).not.toMatch(/shift|drag|double/i);
+	});
 });
