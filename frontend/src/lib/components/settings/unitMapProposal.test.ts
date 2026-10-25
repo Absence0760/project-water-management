@@ -5,7 +5,7 @@
 // e2e/tests/unit-map.spec.ts.
 import { describe, expect, it } from 'vitest';
 import type { UnitMapProposal } from '#lib/api/index.js';
-import { appliedNotice, candidateLabel, cellText, coverageLine, coveredText, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
+import { appliedNotice, candidateLabel, cellText, coverageLine, coveredText, currentSourceText, currentText, gridCitation, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
 
 const unit = (name: string, mapMm: number, patch: Partial<UnitMapProposal['units'][number]> = {}): UnitMapProposal['units'][number] => ({
 	nodeId: `n-${name}`,
@@ -54,6 +54,12 @@ describe('the coverage sentence and the picker', () => {
 	it('words what each unit holds now and how much of a parcel has values', () => {
 		expect(currentText(unit('A', 600))).toBe('None');
 		expect(currentText(unit('A', 600, { current: { mapMm: 812, mapSource: 's' } }))).toBe('812 mm');
+		// As stored, never rounded to the proposal's whole mm: 855.5 beside a proposed 855 is 0.5 mm apart, not "856".
+		expect(currentText(unit('A', 855, { current: { mapMm: 855.5, mapSource: 's' } }))).toBe('855.5 mm');
+		expect(currentText(unit('A', 855, { current: { mapMm: 1234.25, mapSource: 's' } }))).toBe('1 234.25 mm');
+		// Its source in words (a title reached neither keyboard nor touch).
+		expect(currentSourceText(unit('A', 600, { current: { mapMm: 812, mapSource: 'A study, 2019' } }))).toBe('A study, 2019');
+		expect(currentSourceText(unit('A', 600))).toBe('–');
 		expect(pctText(0.5)).toBe('50 %');
 		// Floored, so a unit just short of the rule never reads as 90 %.
 		expect(pctText(0.8999)).toBe('89.9 %');
@@ -69,6 +75,19 @@ describe('a proposal’s coverage (issue #500 answer 8)', () => {
 		expect(coveredText(unit('A', 712))).toBeNull();
 		// Float error on a parcel the grid covers whole is not a gap.
 		expect(coveredText(unit('A', 712, { coveredShare: 1 - 1e-12 }))).toBeNull();
+	});
+});
+
+describe('the grid’s citation', () => {
+	const grid = { source: 'Invented MAP grid', version: '1', label: 'synthetic', cellDeg: 0.01 };
+	it('cites the attribution only when it adds to the source', () => {
+		expect(gridCitation({ ...grid, attribution: 'CC BY 4.0, the authors' })).toBe('Invented MAP grid (1; dataset “synthetic”, 0.01° cells). CC BY 4.0, the authors');
+		// The importer stores the source as the attribution when none is given, and the WAAS surface carries its credit line as both: once, not twice.
+		expect(gridCitation({ ...grid, attribution: 'Invented MAP grid' })).toBe('Invented MAP grid (1; dataset “synthetic”, 0.01° cells).');
+		const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+		expect(gridCitation({ ...grid, source: waas, attribution: waas }).match(/Mean annual rainfall surface/g)).toHaveLength(1);
+		expect(gridCitation({ ...grid, attribution: ' Invented MAP grid. ' })).toBe('Invented MAP grid (1; dataset “synthetic”, 0.01° cells).');
+		expect(gridCitation({ ...grid, attribution: '' })).toBe('Invented MAP grid (1; dataset “synthetic”, 0.01° cells).');
 	});
 });
 

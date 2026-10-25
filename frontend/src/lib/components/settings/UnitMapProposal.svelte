@@ -20,7 +20,7 @@
 	import ProposalSource from '#lib/components/proposals/ProposalSource.svelte';
 	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
 	import { fmtNum } from '#lib/format/number.js';
-	import { appliedNotice, candidateLabel, coverageLine, coveredText, currentText, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
+	import { appliedNotice, candidateLabel, coverageLine, coveredText, currentSourceText, currentText, gridCitation, pctText, toChange, unitMapView, useMessage } from './unitMapProposal';
 
 	let {
 		projectId,
@@ -100,6 +100,7 @@
 	variant="inline"
 	title="MAP from the grid"
 	helpKey="unit-map"
+	helpLabel="About MAP from the grid"
 	what="units’ MAP from the grid"
 	bodyGrid
 	{notice}
@@ -142,13 +143,14 @@
 				<p class="small" data-testid="unit-map-coverage">{coverageLine(data)}</p>
 				<div class="table-wrap">
 					<table class="data compact" data-testid="unit-map-rows">
-						<caption class="visually-hidden">Each unit’s MAP proposed from the grid, beside its form’s</caption>
+						<caption class="visually-hidden">Each unit’s MAP proposed from the grid, beside the MAP its form holds now and where that came from</caption>
 						<thead>
 							<tr>
 								<th scope="col">Unit</th>
 								<th scope="col" class="num">Proposed MAP <span class="u">mm</span></th>
 								<th scope="col" class="num">Cells</th>
 								<th scope="col" class="num">Now <span class="u">mm</span></th>
+								<th scope="col">Its source now</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -158,7 +160,9 @@
 									<th scope="row"><a href="?tab=network&edit={encodeURIComponent(u.nodeId)}&section=area">{u.name}</a></th>
 									<td class="num">{fmtNum(u.mapMm)}{#if cov}<span class="cov" data-testid="unit-map-covered"><span class="visually-hidden">{', '}</span>{cov}</span>{/if}</td>
 									<td class="num">{fmtNum(u.cells)}</td>
-									<td class="num" title={u.current.mapSource ?? undefined}>{currentText(u)}{#if u.same}<span class="visually-hidden">, the same</span>{/if}</td>
+									<td class="num">{currentText(u)}{#if u.same}<span class="visually-hidden">, the same</span>{/if}</td>
+									<!-- In words, not a title: keyboard and touch can't reach a title (as the Data page's role tips say, series/SeriesTab.svelte). -->
+									<td class="src">{currentSourceText(u)}</td>
 								</tr>
 							{/each}
 						</tbody>
@@ -207,7 +211,7 @@
 			{#if data.dataset}
 				<ProposalSource
 					testid="unit-map-source"
-					citation="{data.dataset.source} ({data.dataset.version}; dataset “{data.dataset.label}”, {fmtNum(data.dataset.cellDeg, 4, true)}° cells). {data.dataset.attribution}"
+					citation={gridCitation(data.dataset)}
 					method="Each unit’s MAP is the mean of the grid cells its parcel touches, each weighted by the share of the cell inside the parcel × the cell’s area, rounded to whole mm; cells without a value are left out, and a unit with values over less than 90 % of its parcel is not covered. Written as the unit’s MAP with the source “<grid> <version>, area-weighted mean over the unit’s parcel, <n> cells”."
 				/>
 			{/if}
@@ -231,6 +235,14 @@
 	/* The coverage under its MAP, so the number column stays narrow. */
 	.cov {
 		display: block;
+		font-size: var(--font-xs);
+		color: var(--text-2);
+	}
+	/* The source line wraps in its own narrow column, so the numbers stay on one line. */
+	.src {
+		min-width: 12rem;
+		max-width: 22rem;
+		overflow-wrap: anywhere;
 		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
