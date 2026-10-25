@@ -292,5 +292,15 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"appliesWhen": "A CHIRPS value below 0 (the product's −9999 no-data value, from an upload or a direct input; the feed drops it) on a day with no catchment rain",
 		"summary": "It counted as CHIRPS rain: the day ran as 0 mm instead of falling through to forecast rain, and rain_final showed the negative value × the factor",
 		"source": "model.md §2.4b"
+	},
+	{
+		"id": "ER-30",
+		"keyedOn": "run",
+		"firstAffected": "1.78.0",
+		"fixedIn": "1.95.0",
+		"severity": "Low",
+		"appliesWhen": "Runoff from each unit's own rain (settings.unitRain perUnit) with an uncertainty ensemble that varies the rain source (its CHIRPS-only members), and a unit on the gauge MAP ratio (rule 2, or a unit gauge or CHIRPS whose gaps it fills) or one whose own CHIRPS the catchment's §2.4b factors level",
+		"summary": "The CHIRPS-only members re-derived each unit's rule without the gauges: a unit on the gauge MAP ratio ran on the catchment CHIRPS without the ratio, and a unit levelled by the §2.4b factors ran its CHIRPS raw, so those members' rain on such a unit was off by the ratio or the factors, and the ensemble's spread carried that",
+		"source": "model.md §2.4h, §2.10e"
 	}
 ];

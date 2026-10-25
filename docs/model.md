@@ -2762,7 +2762,17 @@ runs' rain factor (§2.10g) therefore scales every rain record and, under
 per-unit rain, every unit's MAP and the gauge MAP by the same factor, so
 every unit's rain moves by it and the MAP ratios stay put. The uncertainty
 ensemble's CHIRPS-only member (§2.10e) drops the unit gauges as it drops the
-catchment gauge. A seasonal outlook's member (§2.15) runs each land unit's
+catchment gauge. From engine 1.95.0 each unit keeps the base run's rule and
+factors, pinned (`unitRain.pinned`) as a seasonal outlook's member pins them:
+its gauge MAP ratio still takes the member's catchment CHIRPS (at the gauge's
+level, §2.4b) to the unit's MAP, and its own gauge's days fall to the next
+link of its rule. The member's catchment CHIRPS carries the base run's §2.4b
+factors with the correction then off, so a unit the base run levels by those
+factors (level `bias`) carries them the same way: the member's copy of the
+unit's CHIRPS is × the base run's factor of the day. Before 1.95.0 the
+member re-derived each unit's rule without the gauges, so a rule-2 unit lost
+its MAP ratio and a `bias` unit read its CHIRPS raw (engine-errata.md ER-30).
+A seasonal outlook's member (§2.15) runs each land unit's
 season on that unit's own forcing: the base run's `rain_unit` on the
 analogue's days goes in as the unit's own forecast,
 `rain_forecast_mm@<unit>` (`unitForecastSeriesKey`, engine-only: the API
