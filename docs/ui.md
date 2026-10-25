@@ -3568,7 +3568,7 @@ map" card) stays the schematic; this is the geography.
   **Rain from the boundary** (issue #326 B-rain: "No rain feed reads this
   catchment boundary yet." with **Set up the rain feed from the boundary**,
   or "The boundary changed since the rain feed took its cells." with
-  **Propose its cells again**; both open Settings → Data feeds with the
+  **Propose its cells again**; both open Data → Data feeds with the
   proposal showing). `MapRainLink.svelte` reads the feed list (its hidden
   marker's `data-state`, `loading`, `current`, `changed`, `none`, `error`,
   says when it is in). The pill goes once both are done, and doesn't show
@@ -5375,10 +5375,11 @@ with the table the data needs).
   recorded rain up to …" repeated the context line and the pill, and was
   folded into the context (issue #174); the table's key says what *behind*
   means. Beside the panel's heading, for editors, **Fetch data
-  automatically (CHIRPS rain, forecast, DWS flow) → Data feeds** opens
-  Settings & calibration at [Data feeds](#data-feeds) (`?tab=settings#set-feeds`,
-  `data-testid="data-feeds-link"`; issue #444): the feeds live there, and a
-  project that used none had no way in from the page about its data. After it,
+  automatically (CHIRPS rain, forecast, DWS flow) → Data feeds** goes down
+  the page to [Data feeds](#data-feeds) (`#data-feeds`, landing on its
+  heading; `data-testid="data-feeds-link"`; issue #444, when the feeds were
+  on Settings and a project that used none had no way in from the page about
+  its data). After it,
   for anyone, **Download (CSV)** offers the grouped list as one file,
   Compact or Full (see *Groups* below); it sits with the table it
   exports, not in the header beside Preview all data, because it is the
@@ -5526,7 +5527,8 @@ with the table the data needs).
   window) a side index on the left of the panels, narrower a bar under the
   header, above the table, that sticks down the whole page as it scrolls:
   **Input time series** (`#data-series`; **Series** on the bar), **Series
-  chart** (`#data-chart`, with a series picked; **Chart**), **Gauge vs logger
+  chart** (`#data-chart`, with a series picked; **Chart**), **Data feeds**
+  (`#data-feeds`, always), **Gauge vs logger
   agreement** (`#data-agreement`; **Gauge vs logger**), **Double mass:
   catchment rain vs CHIRPS** (`#data-double-mass`; **Double mass**), **Data
   checks** (`#data-checks`) and **What the model uses** (`#data-uses`), each
@@ -5535,7 +5537,8 @@ with the table the data needs).
   Reference), named on the bar too. The table's widths (`data-page`) are
   the column beside the index. A loaded
   `?tab=series#data-…` link lands on its panel once it is drawn, held there
-  (`holdAnchor`) with focus on its heading. The retired `#upload-csv` (the
+  with focus on its heading (`landOnAnchor`, `help/anchor.ts`, which also
+  waits for Data feeds' lazy chunk). The retired `#upload-csv` (the
   Upload CSV panel's id, `retiredDataAnchor`) opens Add data for an editor,
   dropping the fragment, and lands anyone else on the series.
 - **Add data from the header** is the page's one upload form (the
@@ -5916,6 +5919,242 @@ that changes over the run) gets "Workbook
 failed: The audit workbook can't recompute *unit* yet: …" naming each, never a
 file whose numbers disagree.
 
+### Data feeds
+
+On the Data page, after the series and their chart, is **Data feeds**
+(`?tab=series#data-feeds`; `lib/components/feeds/DataFeedsPanel.svelte`, its
+own lazy chunk; WP-2.10,
+[architecture.md § Data feeds](./architecture.md#data-feeds)). Until issue
+#586 it sat after the Settings & calibration form; it moved beside the series
+it fills. Every reader sees it: owners attach, switch off and remove feeds,
+editors run one now and read the map's proposals, viewers read.
+
+- **Saves as you change it.** Under the head, for an owner, one line: "Feeds
+  save as you change them: attaching, switching off or removing one needs no
+  Save changes." (`data-testid="feeds-saves"`, issue #586 E13). Nothing in
+  the panel goes through the workspace's save bar.
+- **Links into it.** The section menu's **Data feeds** (its heading, word for
+  word; group Series, after Series chart), the series panel's **Fetch data
+  automatically … → Data feeds** (in-page, `#data-feeds`), the Map's
+  Getting started step and the Start sheet's data step
+  (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
+  `?tab=series#data-feeds`), Settings' Rain for each unit line
+  (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
+  with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
+  through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
+  is drawn, it is scrolled to the top and held while the page settles, and
+  focused. `?rain=boundary` and `?rain=units` then open the add card on that
+  proposal once per arrival (closing it while the URL still asks doesn't
+  open it again; a reload does), its heading taking the focus once loaded;
+  a viewer gets neither, and lands on the panel's heading. The old
+  `?tab=settings#set-feeds` links are forwarded here by Settings (issue #586,
+  Round 1).
+
+- **The head** (issue #521): the heading with its ⓘ (what a feed is; the
+  paragraph that was under the heading is the glossary's **Data feeds**
+  entry, behind the tip's link), the **Sample data** badge, and on the right
+  **Refresh status** and the add action: **Attach a feed** for an owner,
+  **Rain from the map** for an editor. It opens the add card above the list,
+  with its own action row; the button is hidden while the card is open and
+  takes the focus back when it closes. The field help in the card follows
+  Settings' "Explain each setting under its field" switch where that page
+  had it (`.explain`); the Data page has no switch, so it is always shown: a line that states the format or a value ("The gauge code,
+  e.g. A2H012.", "“south, west, north, east” in degrees.", the sample grid's
+  extent) stays, the reasoning behind it is hidden and still the field's
+  description.
+
+- **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
+  **Failing**, **Waiting**, **Off**; colour is never the only signal, and the
+  card carries `data-state`), the source, the series it writes ("→ Rainfall —
+  forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
+  what a CHIRPS feed writes ("· CHIRPS sat v3.0"), the schedule and who it
+  runs as, the health sentence ("The last fetch
+  failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.",
+  written by the panel from the server's reason code and days, `healthMessage`
+  in `feeds.ts`, its days like the rest of the app's calendar days; a source
+  that answered HTTP 403 reads "the source refused this server’s requests
+  (HTTP 403): it may have blocked this server’s address, so the feed waits
+  hours before asking again", architecture.md § Data feeds → Throttling), and
+  "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
+  calendar day, never shifted by the time zone). CHIRPS says how many of the
+  days are preliminary.
+- **A version conflict** (issue #40 part c): when the feed's series holds
+  another CHIRPS product or version, or an unrecorded one, the card says
+  every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed
+  writes CHIRPS sat v3.0 …"), and owners get **Replace the series** (after a
+  confirm naming the full backfill, the History tab keeping the old values,
+  and the refit). Once confirmed the card says the feed backfills the new
+  record and then replaces the series whole, with **Withdraw the
+  replacement** (discards what was backfilled). While it backfills, the
+  health sentence says how far it has got ("Replacing the series: the new
+  record runs 1 Jan 2001 to 30 Apr 2001 so far …"), or that it stalled; the
+  Data tab marks the series **Being replaced** and both the Data and Runs
+  tabs note that runs use the current series until it completes.
+- **A warning** above the list counts the feeds that are stale or failing
+  ("1 feed needs attention: …", `role="alert"`).
+- **Run now** (editors) queues a fetch at once and says so; the status
+  updates once the background worker has run it (**Refresh status**).
+  Pressed too often (6 fetches, then one every 10 minutes per feed), the
+  section's error line shows the server's words, with the wait in whole
+  minutes and a reminder that the feed also runs daily.
+  **Switch off / on** and **Remove** (with a confirm; the series keeps its
+  days) are for owners.
+- **Area: The catchment boundary, from the map** (editors and owners; issue
+  #326 B-rain, `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)). Until issue #521 this and
+  the next were two unlabelled buttons under the list; now they are choices
+  of the card's **Area** for CHIRPS (an editor's card, **Rain from the
+  map**, has only these two, the boundary first). Picking one replaces the
+  series fields, the typed area and **Attach feed** with the proposal and its
+  own action row; the focus stays on the Area choice. It shows **Rain from the
+  catchment boundary** (a heading in the card) with the proposal: the boundary (name,
+  area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
+  in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
+  source, "Runs read" (the CHIRPS series runs read now, with its first and
+  last day, when there is one), what **Apply** does (attach a new feed, or
+  give an empty feed the cells), and **The cells** (a disclosure with a table: latitude, longitude,
+  share inside, weight). Owners also choose (issue #561): where runs read a
+  CHIRPS record, **The CHIRPS series runs read** (radios): *Keep “…” for
+  runs, and put the boundary’s rain beside it to compare* (the default; the
+  new series sorts after it) or *Replace “…” with the boundary’s rain, once
+  its whole record is read* (disabled, with the reason, when it can't be
+  replaced); while keeping, **Daily product** (rnl / sat) and **Start date**
+  (a day field), set to the record's first day and rnl when it starts
+  before 1998, else sat and empty (the last 60 days). The Apply sentence
+  follows the choices ("Runs keep reading “…”: the new series sorts after
+  it …", or the replacement's backfill and swap). Owners get **Apply**;
+  editors read "An owner of the project applies it"; **Close** closes the card. What Apply did, or the
+  error, sits above that row. The applied feed's card reads "14 cells of the
+  catchment boundary “…”, area weighted". The Map tab's link (`?rain=boundary`)
+  opens the card on it at once, its heading focused (`DataFeedsPanel` reads
+  the parameter, once per arrival, also when the link is followed on the
+  page; never for a viewer). Without a boundary the error says so, with a
+  link to the map.
+- **Area: Each unit’s parcel: a feed per unit** (editors see it, owners
+  act; issue #482, `feeds/UnitRain.svelte`, helpers in `feeds/unitRain.ts`,
+  [maps.md § Rain for each unit](./maps.md)): shows **Rain for each unit** in
+  the card with the server's proposal (`GET …/feeds/chirps/from-units`): a table of
+  each unit with land and a parcel on the map (unit, area, "3 cells, 75 %
+  of their area inside", and its feed's state chip and health sentence from
+  the feeds list, or "No feed yet"; the units that need something first, no
+  feed, failing, stale, and the first eight shown, the rest behind **Show
+  all N units**), **The cells** (a disclosure: unit,
+  latitude, longitude, share inside, weight), the units without a parcel
+  (named, with **Open the map**) and the units the server can't set up,
+  each with its reason (several parcels and none accepted, a parcel changed
+  after its feed fetched, a series in the way). Owners get **Daily product**
+  (*rnl*, from 1981, by default; changing it asks the server again with
+  `?product=`, keeping the panel shown, `aria-busy`, since the server says
+  which units that would refuse), an optional **Start date** (checked
+  against the product's first day; without one the feeds read from it), a
+  sentence of what the button does, and the button itself, named by what it
+  does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**
+  (from each unit's `action`), in the panel's action row with Close. When
+  the new feeds would pass the project's feed cap (the proposal's `maxFeeds`, 60; the catchment's
+  included) a warning says so plainly, with the room left, before the button
+  is pressed (`feedLimitNote`; the server refuses it, `feed_limit`). With
+  every feed up to date it says so and offers no button; editors read "An
+  owner of the project creates the feeds". After the POST the panel says
+  what it did ("Created 3 feeds. They run on the next schedule …", and how
+  many units were left out), reloads the feeds list and the proposal, and
+  moves focus to its heading when the button has gone. A refusal because
+  the proposal moved (`unit_refused`, `feed_changed`, `feed_fetching`)
+  shows the server's words and reloads the proposal. A unit's feed is found
+  by its site, never by its series name (`CHIRPS v3 (<product>) <unit>`).
+  History reads "Set up rain for each unit: CHIRPS rnl feeds for 4 units
+  (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1981-01-01"
+  (`history/timeline.ts`). A unit's feed card reads "3 cells of a
+  unit's parcel (12.35 km²), area weighted" (`describePlace`). The card
+  opens on it at once on `?rain=units` (Settings' Rain for each unit link),
+  its heading focused; **Close** closes the card. Tested by `e2e/tests/unit-rain.spec.ts`, and
+  end to end (the unit feeds fetched offline, the units' MAPs, the switch, a
+  run's Rain for each unit) by `e2e/tests/unit-rain-run.spec.ts`.
+- **Attach a feed** (owners): source and **Area** in the first row, then
+  **Into series** (the kinds that source
+  may write; CHIRPS into the catchment rain series gets a hint under the
+  select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
+  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). Above the
+  station field, **Nearest gauging stations** (`NearestGauges.svelte`,
+  `nearestGauges.ts`; issue #326 B-gauge, [maps.md § Gauging
+  stations](./maps.md#gauging-stations)) lists the river gauges within 50 km
+  of the catchment's outlet, nearest first: a sentence names the point used
+  (the outflow gauge's point on the map, else the boundary's centre, else it
+  asks for either on the Map tab), then a table of station (code, name and
+  source), river, distance, record (years and span) and **Use** (named "Use
+  Z1H001"). **Use** fills the station field and moves focus there; the row
+  then reads "In the field". Nothing is attached until **Attach feed**. A
+  synthetic list is badged **Sample stations**; no list loaded, or none in
+  range, says so and points back to typing the code. The area is
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 100 in 25 grid rows; the
+  rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
+  east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
+  area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
+  rows, the server's limits mirrored so a box too big is explained before
+  anything is sent), with **Leave out sea cells** under it (`skipNoData`, for
+  a box on the coast; its hint says a land cell losing its data, or a box with
+  no land, still fails; the card then adds "· 3 of 4 cells with data",
+  `cellsUsedNote`). The card says where a feed reads: "cell -20.12, 25.17",
+  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (", sea cells left out"
+  with the option; `describePlace`). The panel is its own lazy chunk inside
+  the Data tab (`Lazy`, with the standard loading state); its
+  `#data-feeds` anchor sits on the wrapper in `series/SeriesTab.svelte`, so
+  the section menu and a link find it while the chunk loads.
+  CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
+  days*, the default, or *rnl: from 1981, final days only*: one product end
+  to end, never one spliced onto the other) and an optional **Start date**,
+  checked against the product's first day (a sat date before 1998 says to
+  choose rnl). The
+  form explains a bad cell or code before anything is sent, and a second feed
+  for the same series is refused.
+- **Attaching to a series that has data.** A feed keeps the values already
+  in its series, uploaded or imported ones included, and fills only the days
+  without one ([architecture.md § Data feeds](./architecture.md#data-feeds),
+  #30), so the series would mix two records. So when the chosen series already
+  holds data (read from the project's series list), **Attach feed** first
+  asks, inline (`role="alertdialog"`, named and described by its text):
+  "“Rainfall — catchment” already has data (1,200 days)", that the values
+  already there stay and the records would mix, and a suggested separate
+  series name no series or feed of that kind uses ("CHIRPS", "CHIRPS 2",
+  "DWS A2H012"), and never one that sorts ahead of the record runs read
+  (then "<that record> (CHIRPS)": a run reads the first series by name, and
+  the server refuses a new series that would take over, 409
+  `series_takes_over`, whose message the form shows; issue #561). Focus lands on **Use a separate series: CHIRPS**, which
+  fills the name and focuses the name field; **Fill its empty days**
+  attaches into the existing series; Escape backs out to the name field.
+  Changing the series drops the question. Once it runs, the card says how
+  many days the last fetch left alone ("· 12 days kept your own values",
+  `keptNote` from `last_meta.kept`). When the series holds another CHIRPS
+  product or version (or an unrecorded one), filling it would splice two
+  records, so the question says so instead ("It holds CHIRPS v2.0, and this
+  feed writes CHIRPS sat v3.0 … never splices one onto the other"), and the
+  second button is **Replace the series with CHIRPS sat v3.0**: the feed is
+  attached with the replacement confirmed (`replaceSeries`), backfills the
+  new record from the series' first day in a stage, and swaps it in whole
+  when caught up.
+- **Keyboard and screen readers**: opening the card focuses **Source** (an
+  editor's, **Area**), and closing it (Cancel, a proposal's Close, or a
+  successful attach) returns focus to the head's **Attach a feed** (or **Rain
+  from the map**); the attach status line sits under the head; a bad cell or code marks its field `aria-invalid`, describes it by
+  the message and focuses it (the bounding box too); busy buttons are `aria-disabled` so they keep
+  focus; after **Remove**, focus goes to the section heading. Messages land
+  in a live region that is always in the page. A failed action re-reads the
+  list (it was usually changed elsewhere), and a failed refresh keeps the
+  list shown.
+- When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
+  default in dev and CI), a **Sample data** badge says so, and the cells and box hints
+  name the sample grid's extent (the box hint with a sample box inside it).
+- Viewers see the list and the health, with no buttons. Tested by
+  `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
+  feed and the form open), `e2e/tests/data-page.spec.ts` (the section, its
+  menu entry and links landing on its heading past 30 series, the saves line
+  by role, and the `?rain=units#data-feeds` arrival),
+  `e2e/tests/rain-from-boundary.spec.ts` (the Map's link landing) and `e2e/tests/settings-after-form-layout.spec.ts`
+  (the head's actions, the card above the list with its action in a 1440×900
+  window, the Area's choices by source and role, the explain switch, an
+  editor's card, `?rain=boundary`, and the open cards at 390 and 320 px with
+  nothing scrolling sideways).
+
 ## Settings & calibration
 
 A reading page (issue #17, option A): the long form scrolls under the
@@ -6247,7 +6486,8 @@ two.
     checkbox, to Flow generation → Per unit (below): what a land unit with no
     rainfall station runs on, the rule from before stations. A line says how many units with
     land have a MAP ("1 of 2 units with land has a MAP."), with a link that
-    opens Data feeds' Rain for each unit (`?rain=units#set-feeds`), and names
+    opens Data feeds' Rain for each unit on the Data page
+    (`?tab=series&rain=units#data-feeds`), and names
     the units without one (the first six, each a link to its form, "and N
     more"); then the **Rain gauge's MAP**, a read-out since issue #553: the
     station MAP of the catchment rain series a run reads (the first
@@ -7286,216 +7526,6 @@ two.
   and Compare runs use the same words. An invalid rule blocks
   Save (the engine's `declaredRuleError`, as the API checks it). Viewers see
   it read-only.
-
-### Data feeds
-
-Below the settings form (it saves on its own, never through the save bar) is
-**Data feeds** (`#set-feeds`; `lib/components/feeds/DataFeedsPanel.svelte`,
-part of the Settings tab's chunk; WP-2.10,
-[architecture.md § Data feeds](./architecture.md#data-feeds)).
-
-- **The head** (issue #521): the heading with its ⓘ (what a feed is; the
-  paragraph that was under the heading is the glossary's **Data feeds**
-  entry, behind the tip's link), the **Sample data** badge, and on the right
-  **Refresh status** and the add action: **Attach a feed** for an owner,
-  **Rain from the map** for an editor. It opens the add card above the list,
-  with its own action row; the button is hidden while the card is open and
-  takes the focus back when it closes. The field help in the card follows
-  the page's "Explain each setting under its field" switch (`.explain`; the
-  panels after the form sit in `.settings-after`, which follows the switch
-  like the form): a line that states the format or a value ("The gauge code,
-  e.g. A2H012.", "“south, west, north, east” in degrees.", the sample grid's
-  extent) stays, the reasoning behind it is hidden and still the field's
-  description.
-
-- **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
-  **Failing**, **Waiting**, **Off**; colour is never the only signal, and the
-  card carries `data-state`), the source, the series it writes ("→ Rainfall —
-  forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
-  what a CHIRPS feed writes ("· CHIRPS sat v3.0"), the schedule and who it
-  runs as, the health sentence ("The last fetch
-  failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.",
-  written by the panel from the server's reason code and days, `healthMessage`
-  in `feeds.ts`, its days like the rest of the app's calendar days; a source
-  that answered HTTP 403 reads "the source refused this server’s requests
-  (HTTP 403): it may have blocked this server’s address, so the feed waits
-  hours before asking again", architecture.md § Data feeds → Throttling), and
-  "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
-  calendar day, never shifted by the time zone). CHIRPS says how many of the
-  days are preliminary.
-- **A version conflict** (issue #40 part c): when the feed's series holds
-  another CHIRPS product or version, or an unrecorded one, the card says
-  every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed
-  writes CHIRPS sat v3.0 …"), and owners get **Replace the series** (after a
-  confirm naming the full backfill, the History tab keeping the old values,
-  and the refit). Once confirmed the card says the feed backfills the new
-  record and then replaces the series whole, with **Withdraw the
-  replacement** (discards what was backfilled). While it backfills, the
-  health sentence says how far it has got ("Replacing the series: the new
-  record runs 1 Jan 2001 to 30 Apr 2001 so far …"), or that it stalled; the
-  Data tab marks the series **Being replaced** and both the Data and Runs
-  tabs note that runs use the current series until it completes.
-- **A warning** above the list counts the feeds that are stale or failing
-  ("1 feed needs attention: …", `role="alert"`).
-- **Run now** (editors) queues a fetch at once and says so; the status
-  updates once the background worker has run it (**Refresh status**).
-  Pressed too often (6 fetches, then one every 10 minutes per feed), the
-  section's error line shows the server's words, with the wait in whole
-  minutes and a reminder that the feed also runs daily.
-  **Switch off / on** and **Remove** (with a confirm; the series keeps its
-  days) are for owners.
-- **Area: The catchment boundary, from the map** (editors and owners; issue
-  #326 B-rain, `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
-  boundary](./maps.md#rain-from-the-boundary)). Until issue #521 this and
-  the next were two unlabelled buttons under the list; now they are choices
-  of the card's **Area** for CHIRPS (an editor's card, **Rain from the
-  map**, has only these two, the boundary first). Picking one replaces the
-  series fields, the typed area and **Attach feed** with the proposal and its
-  own action row; the focus stays on the Area choice. It shows **Rain from the
-  catchment boundary** (a heading in the card) with the proposal: the boundary (name,
-  area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
-  in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
-  source, "Runs read" (the CHIRPS series runs read now, with its first and
-  last day, when there is one), what **Apply** does (attach a new feed, or
-  give an empty feed the cells), and **The cells** (a disclosure with a table: latitude, longitude,
-  share inside, weight). Owners also choose (issue #561): where runs read a
-  CHIRPS record, **The CHIRPS series runs read** (radios): *Keep “…” for
-  runs, and put the boundary’s rain beside it to compare* (the default; the
-  new series sorts after it) or *Replace “…” with the boundary’s rain, once
-  its whole record is read* (disabled, with the reason, when it can't be
-  replaced); while keeping, **Daily product** (rnl / sat) and **Start date**
-  (a day field), set to the record's first day and rnl when it starts
-  before 1998, else sat and empty (the last 60 days). The Apply sentence
-  follows the choices ("Runs keep reading “…”: the new series sorts after
-  it …", or the replacement's backfill and swap). Owners get **Apply**;
-  editors read "An owner of the project applies it"; **Close** closes the card. What Apply did, or the
-  error, sits above that row. The applied feed's card reads "14 cells of the
-  catchment boundary “…”, area weighted". The Map tab's link (`?rain=boundary`)
-  opens the card on it at once, its heading focused (`DataFeedsPanel` reads
-  the parameter, once per arrival, also when the link is followed on the
-  page; never for a viewer). Without a boundary the error says so, with a
-  link to the map.
-- **Area: Each unit’s parcel: a feed per unit** (editors see it, owners
-  act; issue #482, `feeds/UnitRain.svelte`, helpers in `feeds/unitRain.ts`,
-  [maps.md § Rain for each unit](./maps.md)): shows **Rain for each unit** in
-  the card with the server's proposal (`GET …/feeds/chirps/from-units`): a table of
-  each unit with land and a parcel on the map (unit, area, "3 cells, 75 %
-  of their area inside", and its feed's state chip and health sentence from
-  the feeds list, or "No feed yet"; the units that need something first, no
-  feed, failing, stale, and the first eight shown, the rest behind **Show
-  all N units**), **The cells** (a disclosure: unit,
-  latitude, longitude, share inside, weight), the units without a parcel
-  (named, with **Open the map**) and the units the server can't set up,
-  each with its reason (several parcels and none accepted, a parcel changed
-  after its feed fetched, a series in the way). Owners get **Daily product**
-  (*rnl*, from 1981, by default; changing it asks the server again with
-  `?product=`, keeping the panel shown, `aria-busy`, since the server says
-  which units that would refuse), an optional **Start date** (checked
-  against the product's first day; without one the feeds read from it), a
-  sentence of what the button does, and the button itself, named by what it
-  does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**
-  (from each unit's `action`), in the panel's action row with Close. When
-  the new feeds would pass the project's feed cap (the proposal's `maxFeeds`, 60; the catchment's
-  included) a warning says so plainly, with the room left, before the button
-  is pressed (`feedLimitNote`; the server refuses it, `feed_limit`). With
-  every feed up to date it says so and offers no button; editors read "An
-  owner of the project creates the feeds". After the POST the panel says
-  what it did ("Created 3 feeds. They run on the next schedule …", and how
-  many units were left out), reloads the feeds list and the proposal, and
-  moves focus to its heading when the button has gone. A refusal because
-  the proposal moved (`unit_refused`, `feed_changed`, `feed_fetching`)
-  shows the server's words and reloads the proposal. A unit's feed is found
-  by its site, never by its series name (`CHIRPS v3 (<product>) <unit>`).
-  History reads "Set up rain for each unit: CHIRPS rnl feeds for 4 units
-  (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1981-01-01"
-  (`history/timeline.ts`). A unit's feed card reads "3 cells of a
-  unit's parcel (12.35 km²), area weighted" (`describePlace`). The card
-  opens on it at once on `?rain=units` (Settings' Rain for each unit link),
-  its heading focused; **Close** closes the card. Tested by `e2e/tests/unit-rain.spec.ts`, and
-  end to end (the unit feeds fetched offline, the units' MAPs, the switch, a
-  run's Rain for each unit) by `e2e/tests/unit-rain-run.spec.ts`.
-- **Attach a feed** (owners): source and **Area** in the first row, then
-  **Into series** (the kinds that source
-  may write; CHIRPS into the catchment rain series gets a hint under the
-  select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
-  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
-  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). Above the
-  station field, **Nearest gauging stations** (`NearestGauges.svelte`,
-  `nearestGauges.ts`; issue #326 B-gauge, [maps.md § Gauging
-  stations](./maps.md#gauging-stations)) lists the river gauges within 50 km
-  of the catchment's outlet, nearest first: a sentence names the point used
-  (the outflow gauge's point on the map, else the boundary's centre, else it
-  asks for either on the Map tab), then a table of station (code, name and
-  source), river, distance, record (years and span) and **Use** (named "Use
-  Z1H001"). **Use** fills the station field and moves focus there; the row
-  then reads "In the field". Nothing is attached until **Attach feed**. A
-  synthetic list is badged **Sample stations**; no list loaded, or none in
-  range, says so and points back to typing the code. The area is
-  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 100 in 25 grid rows; the
-  rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
-  east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
-  area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
-  rows, the server's limits mirrored so a box too big is explained before
-  anything is sent), with **Leave out sea cells** under it (`skipNoData`, for
-  a box on the coast; its hint says a land cell losing its data, or a box with
-  no land, still fails; the card then adds "· 3 of 4 cells with data",
-  `cellsUsedNote`). The card says where a feed reads: "cell -20.12, 25.17",
-  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (", sea cells left out"
-  with the option; `describePlace`). The panel is its own lazy chunk inside
-  the Settings tab (`Lazy`, with the standard loading state); its
-  `#set-feeds` anchor sits on the wrapper, so the section menu and a link
-  find it while the chunk loads.
-  CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
-  days*, the default, or *rnl: from 1981, final days only*: one product end
-  to end, never one spliced onto the other) and an optional **Start date**,
-  checked against the product's first day (a sat date before 1998 says to
-  choose rnl). The
-  form explains a bad cell or code before anything is sent, and a second feed
-  for the same series is refused.
-- **Attaching to a series that has data.** A feed keeps the values already
-  in its series, uploaded or imported ones included, and fills only the days
-  without one ([architecture.md § Data feeds](./architecture.md#data-feeds),
-  #30), so the series would mix two records. So when the chosen series already
-  holds data (read from the project's series list), **Attach feed** first
-  asks, inline (`role="alertdialog"`, named and described by its text):
-  "“Rainfall — catchment” already has data (1,200 days)", that the values
-  already there stay and the records would mix, and a suggested separate
-  series name no series or feed of that kind uses ("CHIRPS", "CHIRPS 2",
-  "DWS A2H012"), and never one that sorts ahead of the record runs read
-  (then "<that record> (CHIRPS)": a run reads the first series by name, and
-  the server refuses a new series that would take over, 409
-  `series_takes_over`, whose message the form shows; issue #561). Focus lands on **Use a separate series: CHIRPS**, which
-  fills the name and focuses the name field; **Fill its empty days**
-  attaches into the existing series; Escape backs out to the name field.
-  Changing the series drops the question. Once it runs, the card says how
-  many days the last fetch left alone ("· 12 days kept your own values",
-  `keptNote` from `last_meta.kept`). When the series holds another CHIRPS
-  product or version (or an unrecorded one), filling it would splice two
-  records, so the question says so instead ("It holds CHIRPS v2.0, and this
-  feed writes CHIRPS sat v3.0 … never splices one onto the other"), and the
-  second button is **Replace the series with CHIRPS sat v3.0**: the feed is
-  attached with the replacement confirmed (`replaceSeries`), backfills the
-  new record from the series' first day in a stage, and swaps it in whole
-  when caught up.
-- **Keyboard and screen readers**: opening the card focuses **Source** (an
-  editor's, **Area**), and closing it (Cancel, a proposal's Close, or a
-  successful attach) returns focus to the head's **Attach a feed** (or **Rain
-  from the map**); the attach status line sits under the head; a bad cell or code marks its field `aria-invalid`, describes it by
-  the message and focuses it (the bounding box too); busy buttons are `aria-disabled` so they keep
-  focus; after **Remove**, focus goes to the section heading. Messages land
-  in a live region that is always in the page. A failed action re-reads the
-  list (it was usually changed elsewhere), and a failed refresh keeps the
-  list shown.
-- When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
-  default in dev and CI), a **Sample data** badge says so, and the cells and box hints
-  name the sample grid's extent (the box hint with a sample box inside it).
-- Viewers see the list and the health, with no buttons. Tested by
-  `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
-  feed and the form open) and `e2e/tests/settings-after-form-layout.spec.ts`
-  (the head's actions, the card above the list with its action in a 1440×900
-  window, the Area's choices by source and role, the explain switch, an
-  editor's card, `?rain=boundary`, and the open cards at 390 and 320 px with
-  nothing scrolling sideways).
 
 ### API keys
 

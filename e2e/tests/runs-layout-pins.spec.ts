@@ -259,7 +259,7 @@ test('a link to a panel this run doesn’t have says what the panel needs, with 
 	for (const [anchor, needs, href] of [
 		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=settings#set-wr2012'],
 		['res-gauges', 'It needs a flow record at a gauge that is not the calibration site', '?tab=series'],
-		['res-forecast', 'A forecast run needs forecast rain', '?tab=settings#set-feeds'],
+		['res-forecast', 'A forecast run needs forecast rain', '?tab=series#data-feeds'],
 		['res-unit-rain', 'It needs Per unit flow generation', '?tab=settings#set-share']
 	] as const) {
 		await page.goto(`/projects/${project.id}?tab=overview`);

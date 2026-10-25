@@ -1,4 +1,4 @@
-// Settings → Data feeds (docs/ui.md § Data feeds; API: docs/api.md § Data
+// Data → Data feeds (docs/ui.md § Data feeds; API: docs/api.md § Data
 // feeds). The types mirror backend/src/feeds/store.ts FeedMeta; the calls go
 // through the app's API client, and the form helpers are pure so they can be
 // tested without a page.

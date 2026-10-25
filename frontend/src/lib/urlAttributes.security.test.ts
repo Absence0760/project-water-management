@@ -136,7 +136,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'missingLink.panel.link.href': { why: 'RunsTab: the line for a linked panel the run doesn\'t have, a literal "?tab=…" constant (runs/missingPanel.ts NEEDS, issue #586)', in: ['lib/components/runs/RunsTab.svelte'] },
 	'moved.href': { why: 'SectionNav: a moved setting\'s link from the page\'s `elsewhere` list, a literal "?tab=…#…" constant (settings/sections.ts SETTINGS_ELSEWHERE, issue #521)', in: ['lib/components/common/SectionNav.svelte'] },
 	hrefOf: { why: 'SectionNav: a section\'s `href` (a literal "?tab=…" from the page that lists it) or "#" + its id', in: ['lib/components/common/SectionNav.svelte'] },
-	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=settings&rain=boundary#set-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
+	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=series&rain=boundary#data-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
 	reportHref: { why: 'report job page: `<base>/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'register.registerUrl': {
 		why: 'SignoffSection, the public verify page, the registration checks panel: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',

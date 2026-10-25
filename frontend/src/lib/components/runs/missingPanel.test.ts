@@ -23,6 +23,8 @@ describe('missingPanel', () => {
 		}
 		expect(missingPanel('res-wr2012', bare)!.link).toEqual({ href: '?tab=settings#set-wr2012', label: 'WR2012 check' });
 		expect(missingPanel('res-gauges', bare)!.link?.href).toBe('?tab=series');
+		// Data feeds is on the Data page (issue #586), not Settings.
+		expect(missingPanel('res-forecast', bare)!.link).toEqual({ href: '?tab=series#data-feeds', label: 'Data feeds' });
 	});
 
 	it('is null for a panel the run draws', () => {

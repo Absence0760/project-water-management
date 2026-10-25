@@ -1355,7 +1355,7 @@ saved before 0.7.0 used raw CHIRPS; run comparison flags the engine version
 change, and compares a stored run without the setting as the default.
 
 **Where the CHIRPS and forecast series come from.** Uploaded, or from a data
-feed (Settings → Data feeds, [architecture.md § Data feeds](./architecture.md#data-feeds)):
+feed (Data → Data feeds, [architecture.md § Data feeds](./architecture.md#data-feeds)):
 a CHIRPS feed writes CHIRPS v3 **as published**, the weighted mean of the
 configured 0.05° cells (or the area-weighted mean of the cells a bounding box
 overlaps), into `rain_chirps_mm` (preliminary days first, then
@@ -1378,7 +1378,7 @@ stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
 
 **A CHIRPS feed into the catchment rain series** (issue #51). The feed may
-also target `rain_catchment_mm` (Settings → Data feeds, *Into series*; a
+also target `rain_catchment_mm` (Data → Data feeds, *Into series*; a
 series that already holds data is replaced only after an owner confirms).
 Then CHIRPS *is* the catchment rain, and everything above that treats CHIRPS
 as the gap-filler stops applying to it:

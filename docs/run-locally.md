@@ -480,7 +480,7 @@ work. Optional pieces:
 
 ```bash
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
-pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
+pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Data → Data feeds → DWS proposes as the nearest stations
 pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
 pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
 pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal, or docker), cut to South Africa and loaded as HydroRIVERS-v10
@@ -535,7 +535,7 @@ The synthetic quaternaries are six invented cells in region Z covering 21.0–21
 33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
 proposal; anywhere else says no quaternary contains the point. The
 synthetic gauging stations (`Z1H001`–`Z1H005` and a reservoir `Z1R001`) sit
-round the Sandspruit example's outlet, so its Settings → Data feeds →
+round the Sandspruit example's outlet, so its Data → Data feeds →
 **Attach a feed** → DWS lists them nearest first; a real station list loads
 the same way once its licence allows ([maps.md § Gauging-station
 dataset](./maps.md#gauging-station-dataset)).

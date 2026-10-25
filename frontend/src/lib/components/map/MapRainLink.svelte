@@ -4,7 +4,7 @@
 	feed list and says (`reads`) whether a CHIRPS feed reads the boundary
 	(`current`), read it before it was redrawn (`changed`), none does (`none`)
 	or the list couldn't be read (`error`). The Map's Getting started pill
-	(MapSetupPill) shows the step and its link to Settings → Data feeds; until
+	(MapSetupPill) shows the step and its link to Data → Data feeds; until
 	2026-10-02 this drew its own line above the map.
 -->
 <script lang="ts">

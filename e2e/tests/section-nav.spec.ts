@@ -369,7 +369,7 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const menu = page.getByRole('navigation', { name: 'Data sections' });
 	// Rain and observed flow, no logger or CHIRPS: no agreement table and no double mass.
-	await expect(menu.getByRole('link')).toHaveText(['Series', 'Chart', 'Data checks', 'What the model uses']);
+	await expect(menu.getByRole('link')).toHaveText(['Series', 'Chart', 'Data feeds', 'Data checks', 'What the model uses']);
 	await expectNamedGroups(menu, ['Series', 'Checks', 'Reference']);
 
 	await menu.getByRole('link', { name: 'What the model uses' }).click();
@@ -391,7 +391,7 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	await expectRail(
 		menu,
 		[
-			['Series', ['Input time series', 'Series chart']],
+			['Series', ['Input time series', 'Series chart', 'Data feeds']],
 			['Checks', ['Data checks']],
 			['Reference', ['What the model uses']]
 		],

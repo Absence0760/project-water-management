@@ -1,5 +1,7 @@
 <script module lang="ts">
 	const loadPreviewDialog = () => import('./SeriesPreviewDialog.svelte');
+	// Data feeds (issue #586: moved here from Settings) is its own chunk, as it was there.
+	const loadDataFeeds = () => import('#lib/components/feeds/DataFeedsPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -12,12 +14,13 @@
 	// page flows in the window's one scroll: the first few rows show, the rest
 	// behind "Show all N series" (series/fold.ts; the charted row always
 	// shows), and nothing scrolls inside itself. The chart follows the table,
-	// and a pick brings it into view. The checks and the reference follow.
+	// and a pick brings it into view. Data feeds (`#data-feeds`, the feeds
+	// that fill series daily, issue #586) follows, then the checks and the reference.
 	// Uploading is the header's Add data (series/AddDataDialog.svelte): the
 	// page charts what it uploaded (`series=`), and the empty state's button
 	// opens the same dialog (`onadddata`).
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
-	import { onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -100,7 +103,7 @@
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 	import { foldList } from '#lib/components/common/fold.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { anchorHeading, focusHeading, landOnAnchor } from '#lib/help/anchor.js';
 
 	let {
 		projectId,
@@ -754,9 +757,10 @@
 	const navGroups = $derived(
 		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
 	);
-	// A link to a panel (`?tab=series#data-checks`, the menu's own links reloaded): the tab is a lazy
-	// chunk and most panels wait for the series, so land on it once drawn and hold it while the page
-	// settles (as Settings, Runs and EWR do), with focus on its heading.
+	// A link to a panel (`?tab=series#data-checks`, `?rain=units#data-feeds`, the menu's own links reloaded):
+	// the tab is a lazy chunk, most panels wait for the series and Data feeds is a chunk of its own, so land on
+	// it once drawn and hold it while the page settles, with focus on its heading (help/anchor.ts landOnAnchor,
+	// as Settings does).
 	onMount(() => {
 		let hash = page.url.hash.slice(1);
 		// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in
@@ -771,26 +775,31 @@
 			hash = moved;
 		}
 		if (!dataAnchor(hash)) return;
-		let release = () => {};
-		const land = () => {
-			const el = document.getElementById(hash);
-			if (!el) return false;
-			release = holdAnchor(el);
-			const heading = el.querySelector<HTMLElement>('h2, h3');
-			if (heading) {
-				if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-				focusAnchor(heading);
-			}
-			return true;
-		};
-		if (land()) return () => release();
-		const mo = new MutationObserver(() => land() && mo.disconnect());
-		mo.observe(document.body, { childList: true, subtree: true });
-		return () => {
-			mo.disconnect();
-			release();
-		};
+		return landOnAnchor(hash);
 	});
+
+	// The series panel's link to Data feeds, further down: the browser jumps to the fragment, then the
+	// heading takes the focus, so Tab carries on from there (as SectionNav's links do; the fragment already
+	// in the URL makes no hashchange, so then at once).
+	let stopFeedsFocus = () => {};
+	function toFeeds(e: MouseEvent) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		stopFeedsFocus();
+		const el = document.getElementById('data-feeds');
+		const heading = el && anchorHeading(el);
+		if (!heading) return;
+		if (location.hash === '#data-feeds') {
+			focusHeading(heading);
+			return;
+		}
+		const land = () => {
+			stopFeedsFocus();
+			if (location.hash === '#data-feeds') focusHeading(heading);
+		};
+		window.addEventListener('hashchange', land);
+		stopFeedsFocus = () => window.removeEventListener('hashchange', land);
+	}
+	onDestroy(() => stopFeedsFocus());
 </script>
 
 <!-- Saving…, Saved or why not, beside a control that saves on change (a polite live region, always there so it is announced). -->
@@ -957,10 +966,10 @@
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
 		<div class="head-tools">
-			<!-- The feeds that fill series daily live in Settings → Data feeds; a project that has none had no way to
-			     find them from here (issue #444). -->
+			<!-- The feeds that fill series daily are Data feeds, further down this page (issue #586; before, Settings, and a
+			     project with none had no way to find them from here, issue #444). Followed, it lands on its heading. -->
 			{#if !readonly}
-				<a class="small feeds-link" href="?tab=settings#set-feeds" data-testid="data-feeds-link">Fetch data automatically (CHIRPS rain, forecast, DWS flow) <span aria-hidden="true">→</span> Data feeds</a>
+				<a class="small feeds-link" href="#data-feeds" data-testid="data-feeds-link" onclick={toFeeds}>Fetch data automatically (CHIRPS rain, forecast, DWS flow) <span aria-hidden="true">→</span> Data feeds</a>
 			{/if}
 			<!-- The grouped list as one CSV (issue #553 round 5): Compact or Full, each with what every area's rain is made of. -->
 			{#if list.length}
@@ -1212,6 +1221,14 @@
 		</div>
 	</section>
 {/if}
+</div>
+
+<!-- Data feeds (issue #586, from Settings): every reader, as there (owners attach, editors run one now, viewers read).
+     The id sits outside the lazy panel, so a #data-feeds link and the section menu find it while the chunk loads. -->
+<div id="data-feeds">
+	<Lazy load={loadDataFeeds}>
+		{#snippet children(DataFeedsPanel)}<DataFeedsPanel {projectId} />{/snippet}
+	</Lazy>
 </div>
 
 {#if agreement}

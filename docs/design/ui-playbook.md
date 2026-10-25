@@ -760,6 +760,13 @@ section it belongs to, with the example that taught it.
   the glossary entry already says it. `settings-after-form-layout.spec.ts`
   pins the actions in the window at 1440×900 and the open cards at 390 and
   320 px.
+- **A panel that saves on its own says so itself, not its host page.**
+  Settings had one line after its form ("Data feeds, API keys and scheduled
+  reports save as you change them…") for three panels; moving Data feeds to
+  the Data page (issue #586, E13) would have left the line behind and the
+  panel silent beside a page whose save bar still shows. The line is the
+  panel's (`feeds/DataFeedsPanel.svelte`, `data-testid="feeds-saves"`, for
+  the role that can change it), so it travels with every mount.
 - **A long form of sections folds each section to a card of its values.**
   The node sheet held 72 fields, 13 checkboxes and 48 always-on help
   paragraphs in 13 sections: 5,768 px for one unit, 9 screens, with Save
