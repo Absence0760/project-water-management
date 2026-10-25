@@ -11,7 +11,7 @@
 // farms/invites.db.test.ts (e2e mail goes to the server log), and the alert
 // email through Mailpit by alerts-mailpit.spec.ts.
 import { readFile } from 'node:fs/promises';
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Page, Route } from '@playwright/test';
 import { acceptInvites, createRun, register, seedRunnableProject } from '../support/api.ts';
 import { words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -76,6 +76,27 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	await expect(page).toHaveURL(new RegExp(`/farm/${project.id}$`));
 	const projectId = project.id;
 	const supply = page.getByRole('region', { name: either('Water you received this season') });
+	// A quick ML → m³ with ML's save still on its way: the saves reach the
+	// server in order and m³ is kept (ui-playbook § 5, a control that saves behind it).
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => (release = resolve));
+	const sent: string[] = [];
+	const holdMl = async (route: Route) => {
+		if (route.request().method() !== 'PATCH') return route.fallback();
+		const { volumeUnit } = route.request().postDataJSON() as { volumeUnit?: string };
+		if (volumeUnit === 'ML') await held;
+		sent.push(String(volumeUnit));
+		await route.fallback();
+	};
+	await page.route(`${API_URL}/auth/me`, holdMl);
+	await supply.getByRole('button', { name: 'ML' }).click();
+	await expect(supply.getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
+	await supply.getByRole('button', { name: 'm³' }).click();
+	await expect(supply.getByRole('button', { name: 'm³' })).toHaveAttribute('aria-pressed', 'true');
+	release();
+	await expect.poll(() => sent).toEqual(['ML', 'm3']);
+	await expect.poll(async () => (await me(page.request)).volumeUnit).toBe('m3');
+	await page.unroute(`${API_URL}/auth/me`, holdMl);
 	await supply.getByRole('button', { name: 'ML' }).click();
 	await expect(supply.getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
 	await expect.poll(async () => (await me(page.request)).volumeUnit).toBe('ML');
@@ -147,4 +168,40 @@ test('the account page sets the language and the farm view’s volume unit', asy
 	await expect(prefs.getByRole('button', { name: 'Afrikaans' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(prefs.getByLabel(words('Megalitres (ML)'))).toBeChecked();
 	await expectNoViolations(page);
+});
+
+// Two choices in quick succession, the first one's save still on its way
+// when the second is made: the saves reach the server one after the other,
+// and the later choice is the one kept, on the account and on the page. The
+// earlier save answering late never turns the page back. (The flake behind
+// alerts.spec.ts's farm frame test: Afrikaans then English, and the account
+// came back Afrikaans after a reload.)
+test('a later language choice wins over an earlier one whose save is still on its way', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/account');
+	const prefs = page.getByRole('region', { name: either('Language and units') });
+	await expect(prefs).toBeVisible();
+	// Hold the Afrikaans save at the network until English has been chosen.
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => (release = resolve));
+	const sent: string[] = [];
+	await page.route(`${API_URL}/auth/me`, async (route) => {
+		if (route.request().method() !== 'PATCH') return route.fallback();
+		const { locale } = route.request().postDataJSON() as { locale?: string };
+		if (locale === 'af') await held;
+		sent.push(String(locale));
+		await route.fallback();
+	});
+	await prefs.getByRole('button', { name: 'Afrikaans' }).click();
+	await expect(page.locator('html')).toHaveAttribute('lang', 'af');
+	await prefs.getByRole('button', { name: 'English' }).click();
+	await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+	release();
+	await expect.poll(() => sent).toEqual(['af', 'en']);
+	await expect.poll(async () => (await me(page.request)).locale).toBe('en');
+	await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+	await expect(prefs.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();
+	await expect(prefs.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
 });

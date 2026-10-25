@@ -1794,6 +1794,19 @@ Interaction details that bit:
   in between, skipped its click, and lost to the pick under CI load
   (`map-draw.spec.ts`, phone). After a save from a sheet, wait for the sheet
   to be hidden before choosing a side tab.
+- **A control that applies at once and saves behind it must order its
+  saves.** The language switch changes the page on the click and sends the
+  account save after it, so a spec (or a person) can choose again before the
+  first save has answered. Sent side by side, the two saves reached the
+  server in either order, and the account came back Afrikaans after a
+  switch back to English and a reload (`alerts.spec.ts`'s farm frame test,
+  #577's CI); the first save's late answer would also have set
+  `session.user` back, turning the page with it. Chain such saves and keep
+  only the latest choice's answer (`LanguageSwitch.svelte`, the farm view's
+  unit switch in `SupplyCard.svelte`, as the account page's unit radios and
+  `SectionsMenu.svelte` already did); pin it by holding the first save at
+  the network with `page.route` until the second choice is made, and
+  checking the order the saves were sent in (`language.spec.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card; a new tab or page joins the
