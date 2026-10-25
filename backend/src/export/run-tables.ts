@@ -1108,7 +1108,7 @@ export function* stationLines(st: RainStationSummary): Generator<string> {
 	for (const a of st.units) yield row(a);
 	if (!st.pairings.length) return;
 	yield csvRow(['Station CHIRPS pairings (monthly factors: the station ÷ the CHIRPS at it on their shared days)']);
-	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Common years', 'Shared days', 'Pinned', ...MONTHS]);
+	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Complete years (accumulations counted)', 'Shared days', 'Pinned', ...MONTHS]);
 	for (const p of st.pairings) {
 		const factors = p.refused === null ? MONTHS.map((_, i) => p.months.find((m) => m.month === i + 1)?.factor ?? null) : MONTHS.map(() => null);
 		yield csvRow([p.stationName, 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell", p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);

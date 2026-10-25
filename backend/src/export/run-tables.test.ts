@@ -169,7 +169,7 @@ describe('summary sheet', () => {
 			'Lower unit,Short station,860,invented isohyet,745,station record,yes,5,4,yes,none (the next fallback),2000,0,80,0,0,0'
 		]);
 		expect(lines[at + 6]).toMatch(/^Station CHIRPS pairings/);
-		expect(lines[at + 7]).toBe('Station,CHIRPS at,Refused,Fit from,Fit to,Common years,Shared days,Pinned,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec');
+		expect(lines[at + 7]).toBe('Station,CHIRPS at,Refused,Fit from,Fit to,Complete years (accumulations counted),Shared days,Pinned,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec');
 		expect(lines[at + 8]).toBe("Hill station,the station's own CHIRPS cell,,1995-01-01,2020-12-31,26,9400,no,1,1.01,1.02,1.03,1.04,1.05,1.06,1.07,1.08,1.09,1.1,1.11");
 		expect(lines[at + 9]).toBe('Short station,the CHIRPS of Lower unit,only 3 complete years in common (5 needed),,,3,1000,no,,,,,,,,,,,,');
 		expect(lines[at + 10]).toBe('');

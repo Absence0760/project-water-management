@@ -8757,7 +8757,10 @@ read it before.
   the days set aside, by the checks and as unreliable), **Where each MAP
   comes from** (both sources per area), and a table of each station's CHIRPS
   pairing (where its CHIRPS came from: its own cell or the CHIRPS of the
-  unit it stands in; the fit period with its complete years in common; the
+  unit it stands in; the fit period, then its complete years in common,
+  "…; N complete years (accumulations counted)", since the years count a
+  §2.4d accumulation's days as read and the period leaves them out, model.md
+  §2.4i; the
   shared days; the 12 factors, Jan–Dec, or "refused: …" with the reason).
   The report's inputs carry the same as two tables, **Rainfall stations**
   and **Station CHIRPS pairings** (`report/inputs.ts` `stationRows`,
@@ -8768,7 +8771,8 @@ read it before.
   (`backend/src/export/run-tables.ts` `stationLines`: one row per area with
   both MAPs and their sources, own and applied ratio, the correcting
   station, the days by source and set aside; then each pairing with its fit
-  period, common years, shared days and the 12 factors, or the refusal),
+  from and to, "Complete years (accumulations counted)", shared days and the
+  12 factors, or the refusal),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping

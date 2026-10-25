@@ -317,7 +317,7 @@ describe('stationRows and stationPairingRows (issue #553)', () => {
 	it('lists each pairing’s CHIRPS, fit period, days and factors, or why it was refused', () => {
 		const rows = stationPairingRows({ stations });
 		expect(rows.every((r) => r.length === PAIRING_HEAD.length)).toBe(true);
-		expect(rows[0]!.slice(0, 4)).toEqual(['Hill station', 'its own CHIRPS cell', '1995-01-01 to 2020-12-31 (26 complete years)', fmtNum(9_400)]);
+		expect(rows[0]!.slice(0, 4)).toEqual(['Hill station', 'its own CHIRPS cell', '1995-01-01 to 2020-12-31; 26 complete years (accumulations counted)', fmtNum(9_400)]);
 		expect(rows[0]![4]).toMatch(/^Jan 1\.1, Feb 1\.1, .*Dec 1\.1$/);
 		expect(rows[1]).toEqual(['Short station', 'the CHIRPS of Lower farm', '–', fmtNum(1_000), 'refused: only 3 complete years in common (5 needed)']);
 	});

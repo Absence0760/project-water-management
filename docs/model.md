@@ -8958,7 +8958,9 @@ it never changes a run's results.
     **CHIRPS alone**, every day bias-corrected by the run's own monthly
     factors, and with the CHIRPS quantile map on (engine ≥ 1.53.0, §2.4b)
     mapped as the run maps its gap days (the station series dropped,
-    correction and map then off, the run window pinned). The spread between them is the rain-data uncertainty
+    correction and map then off, the run window pinned; under per-unit rain
+    each land unit keeps the base run's rule, MAP ratio and CHIRPS level,
+    pinned, as §2.4h says, engine ≥ 1.95.0, ER-30). The spread between them is the rain-data uncertainty
     the record can't settle.
   - **Observed record**, when both a gauge and a logger record have at least
     30 scored days: half the members are judged against each. A record that
