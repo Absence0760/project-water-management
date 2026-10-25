@@ -109,7 +109,9 @@
 				...(c.featureId ? { featureId: c.featureId } : {})
 			});
 			notice = `${r.name}’s planted area on ${d.nodeName} is now ${fmtHa(res.areaM2)}, from land cover.`;
-			await Promise.all([load(d.nodeId), onModelChanged()]);
+			// Reload the unit the drawer shows now, not d's: Back or a farm= link may have moved it on while the save was out,
+			// and loading d's would put its parcels under another unit's name.
+			await Promise.all([load(nodeId), onModelChanged()]);
 			await frame?.focusNotice();
 		} catch (e) {
 			rowError = { key: r.cropId, text: msg(e) };
