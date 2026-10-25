@@ -2321,10 +2321,19 @@ run "data_feeds" {
   assert {
     condition = (
       aws_lambda_function.worker.environment[0].variables["FEED_FETCHER"] == "sqs" &&
-      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests.url &&
-      !contains(keys(aws_lambda_function.worker.environment[0].variables), "FEED_SOURCE")
+      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests.url
     )
     error_message = "The worker hands fetches to the fetcher (it has no internet) and never fetches itself."
+  }
+  # FEED_SOURCE is also which CHIRPS cell cache a process reads (cellCacheStore.ts
+  # cacheOrigin): the API and the worker run models from it, so both read the live
+  # `chc` rows, never the fixtures' (unset on the API served runs no CHIRPS cells).
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["FEED_SOURCE"] == "live" &&
+      aws_lambda_function.worker.environment[0].variables["FEED_SOURCE"] == "live"
+    )
+    error_message = "The API and the worker read the live CHIRPS cell cache (FEED_SOURCE = live), as the fetcher fills it."
   }
   assert {
     condition = (

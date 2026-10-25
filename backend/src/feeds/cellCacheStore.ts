@@ -17,6 +17,10 @@ import { feedSourceMode } from './http.js';
  * (lambda-fetcher.ts refuses to start on the fixtures, config/production.ts),
  * so its answers are merged as `chc` (feed-ingest.ts) whatever the worker's
  * own FEED_SOURCE; an inline fetch reads what FEED_SOURCE says.
+ * Readers ask it too (runs/referenceCell.ts, on the API as well as the
+ * worker), so every production Lambda that reaches it must be `chc`:
+ * config/production.ts refuses an API or worker without FEED_SOURCE=live,
+ * which otherwise read the fixtures' rows, empty in production.
  */
 export type CacheOrigin = 'chc' | 'fixtures';
 export const cacheOrigin = (): CacheOrigin => (feedFetcher() === 'sqs' || feedSourceMode() === 'live' ? 'chc' : 'fixtures');

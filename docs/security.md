@@ -3990,7 +3990,10 @@ key there would let any read-only principal forge any user's session.
   start on a missing or local-default setting, a `dev-only-`/`test-only-`
   placeholder anywhere (the committed dev JWT secret), a non-https or localhost
   URL, a `DATABASE_URL` without `sslmode=verify-full` or with a short (dev)
-  password, `VITEST`, no explicit `ALERTS_ENABLED` on the worker, or a
+  password, `VITEST`, a `FEED_SOURCE` other than `live` on the API, worker or
+  fetcher (on the API and worker it picks the CHIRPS cell cache a run reads,
+  so the fixtures' default would read rows production never fills), no
+  explicit `ALERTS_ENABLED` on the worker, or a
   `DB_POOL_MAX` on the API or the worker that is missing or not a whole
   number of at least 1 (the database's connections are sized on it,
   infra/README.md § Connections). The error

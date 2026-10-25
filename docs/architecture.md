@@ -1192,7 +1192,11 @@ merges into:
   keeps the fixtures' synthetic values (`FEED_SOURCE=fixtures`) apart from
   the real files' (`chc`), so a database that ran on the fixtures never
   serves them to a live feed: an inline fetch merges as what `FEED_SOURCE`
-  reads, and the production fetcher's answers (always live) as `chc`. Lazy
+  reads, and the production fetcher's answers (always live) as `chc`.
+  Readers (a run's reference cell and rainfall stations, runs/referenceCell.ts,
+  on the API and the worker alike) read the origin `FEED_SOURCE` names, so
+  every production Lambda that reads the cache sets `FEED_SOURCE=live`, and
+  the production check refuses one that doesn't (config/production.ts). Lazy
   and global: any cell in 60° S – 60° N fills on first use. Because unit
   feeds over shared cells cost almost no download, a project may have 60
   feeds (`MAX_FEEDS`, feeds/routes.ts; 20 before the cache), enough for a

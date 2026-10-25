@@ -1292,6 +1292,16 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 - **The worker** (`FEED_FETCHER=sqs`) never fetches: a `feed_fetch` job sends
   a versioned request to the `fetch-requests` queue
   (`FETCH_REQUESTS_QUEUE_URL`) and is done.
+- **The API and the worker** both set `FEED_SOURCE=live`, though neither
+  fetches: it is also which CHIRPS cell cache a process reads
+  (`cacheOrigin`, `backend/src/feeds/cellCacheStore.ts`). The fetcher's
+  answers are merged as `chc`; a process left on the default (`fixtures`)
+  reads the fixtures' rows, which production never fills, so a run started
+  on the API would get no CHIRPS for its reference cell or rainfall stations,
+  and the Data feeds panel would call the live feeds sample data. Until
+  2026-10-25 the API had it unset; the backend's production check now refuses
+  an API or worker without it (`config/production.ts`), so apply the
+  Terraform that sets it before releasing a backend that checks it.
 - **Fetcher Lambda** (`backend/src/lambda-fetcher.ts`, handler
   `lambda-fetcher.handler`): **no VPC** (it is the only Lambda with internet
   access, which is what keeps the feeds from needing a NAT), 512 MB, 120 s,
