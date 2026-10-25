@@ -66,6 +66,10 @@ test('a chart per gauge with a record: observed, simulated, natural and upstream
 		await expect(figure(img).locator('.u-legend tr.u-series.u-off')).toHaveCount(0);
 		await expect(figure(img).getByRole('button', { name: 'Log scale' })).toBeVisible();
 	}
+	// Each chart's switches are a group named by its chart, so the repeated names can be told apart (issue #586, D13).
+	for (const name of ['the outflow gauge', 'Middle weir']) {
+		await expect(check.getByRole('group', { name: `Calibration check at ${name} controls`, exact: true }).getByRole('button', { name: 'Log scale' })).toBeVisible();
+	}
 	// What each line sums: the whole catchment at the outlet, only what is above the weir there.
 	await expect(figure(outletChart)).toContainText('Upstream demand: the demand (before any drought restriction, boreholes\' share included) of 2 hydrological units and water users above the gauge.');
 	await expect(figure(weirChart)).toContainText('Natural: the natural runoff of the hydrological units above this gauge, before land cover takes its share.');

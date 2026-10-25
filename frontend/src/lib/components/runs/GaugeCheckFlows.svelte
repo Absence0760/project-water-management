@@ -117,6 +117,7 @@
 				{@const fdc = checkFdc(f.observed, f.simulated, g.flowKind, conv, forecastFrom)}
 				<LineChart
 					title="Flow at {g.name} (checks only): simulated and observed"
+					toolsLabel="Flow at {g.name} controls"
 					unit={flowUnit}
 					series={checkHydrograph(f.observed, f.simulated, g.flowKind, conv)}
 					logToggle
@@ -128,6 +129,7 @@
 				/>
 				<LineChart
 					title="Flow-duration curve at {g.name} (checks only)"
+					toolsLabel="Flow-duration curve at {g.name} controls"
 					unit={flowUnit}
 					height={220}
 					series={fdc.series}

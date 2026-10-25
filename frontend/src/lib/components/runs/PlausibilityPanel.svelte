@@ -272,6 +272,7 @@
 		{/if}
 		<LineChart
 			title="Dry-season flow duration"
+			toolsLabel="Dry-season flow duration controls"
 			unit="m³/s"
 			height={260}
 			series={chart.series}

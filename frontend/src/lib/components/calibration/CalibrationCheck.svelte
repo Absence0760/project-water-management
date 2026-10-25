@@ -129,6 +129,7 @@
 			{#each charts as c (c.gauge ?? 'outlet')}
 				<LineChart
 					title="Calibration check at {c.name}: observed, simulated, natural and upstream demand{c.reaches ? ', with bed losses' : ''}"
+					toolsLabel="Calibration check at {c.name} controls"
 					unit={flowUnit}
 					series={c.series}
 					logToggle
