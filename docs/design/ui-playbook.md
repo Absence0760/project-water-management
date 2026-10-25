@@ -1754,6 +1754,21 @@ Interaction details that bit:
   Data kept its own copy of the series (`untrack(() => initial)`), so a file
   added through the header's Add data didn't show until a reload. Sync from
   the prop when it changes to an array that isn't the tab's own.
+- **Keep the previous record on screen while the next loads; snapshot what
+  labels it, and make its actions inert.** A page that unmounts its panels
+  while another record loads gets shorter, and a reader scrolled down loses
+  their place. The EWR page keeps the run before on screen, its body
+  `aria-busy="true"` (`data-run` names the run drawn), until the picked
+  run's record is in. Two traps came with it. Words drawn from the new
+  props next to data still the old run's: the flow chart headed and
+  captioned the old run's lines from the new run's props, so keep the props
+  that label a drawing (heading, shading, caption) in the same state as its
+  data, set together when the data arrive (`FlowVsReserve`'s `drawn`,
+  `ReserveYearsChart`'s `drawnRuns`/`drawnKey`). And actions keyed on the
+  record drawn: the tools' Run buttons would start a job on a run the
+  header no longer names, so their section is `inert` (and dimmed) while
+  busy, not removed, so the page keeps its height. A record that fails to
+  load clears the page to its error, so nothing stale stays.
 
 ## 5. Testing
 

@@ -7534,6 +7534,13 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   run's series load (`FlowVsReserve`, `ReserveYearsChart`, which Compare
   runs shares), instead of falling back to a short Loading… line; the flow
   chart keeps the window you were looking at when the next run covers it.
+  Each chart keeps the props that label it (the flow chart's heading,
+  forecast band, shading and caption; the bars' names) with the lines it
+  draws, so the run before's lines never carry the next run's words. The
+  tools under *How sure, and what if* are the run on screen's, so while
+  busy their section is `inert` and dimmed (the body shows a progress
+  cursor): a Run there can't start a job on a run the header no longer
+  names (`river-page.spec.ts`).
 - **Header.** The shared section header (`workspace/SectionHeader`, title
   from `TAB_LABELS`); the tab fills its context line (`fillHeader`): the run's
   label (with the *Workbook comparison* and *Evidence* badges), its period,

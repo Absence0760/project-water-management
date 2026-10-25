@@ -64,17 +64,23 @@
 	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte).
 	let flows = $state.raw<CatchmentFlows & { shortfall?: DailySeries }>({});
 	let loading = $state(true);
-	/** A run's flows have been drawn: another run's keep the chart on screen (aria-busy) until they are in, so EWR's page
-	 *  doesn't lose the chart's height under a reader scrolled down when the run picker changes the run. */
-	let drawn = $state(false);
+	/** The run drawn, set with its flows: another run's keep the chart on screen (aria-busy) until they are in, so EWR's
+	 *  page doesn't lose the chart's height under a reader scrolled down when the run picker changes the run. The props
+	 *  that label the lines (heading, forecast band, shading, caption) are kept with them, so the old run's lines never
+	 *  carry the next run's words (as compare/ReserveYearsChart's drawnRuns). */
+	type Drawn = { runId: string; refs: RunSeriesRef[]; forecastFrom: string | null; ruleTable: boolean; daily: DailyEwrSource | undefined };
+	let drawn = $state.raw<Drawn | null>(null);
+	/** The props the chart is labelled by: the run drawn's until the next run's flows are in, then the props as they are now. */
+	const view = $derived<Omit<Drawn, 'runId'>>(drawn && drawn.runId !== runId ? drawn : { refs, forecastFrom, ruleTable, daily });
 	let error = $state<string | null>(null);
 	let log = $state(true);
 	let attempt = $state(0);
 
 	$effect(() => {
 		const id = runId;
+		const these = refs;
 		void attempt;
-		const present = SLOTS.filter(([, key]) => refs.some((r) => r.key === key && r.nodeId === null));
+		const present = SLOTS.filter(([, key]) => these.some((r) => r.key === key && r.nodeId === null));
 		loading = true;
 		error = null;
 		Promise.all(
@@ -86,7 +92,7 @@
 			.then((pairs) => {
 				if (id === runId) {
 					flows = Object.fromEntries(pairs);
-					drawn = true;
+					drawn = { runId: id, refs: these, forecastFrom, ruleTable, daily };
 				}
 			})
 			.catch((e) => {
@@ -99,18 +105,18 @@
 
 	let unit = $state<'m³/s' | 'm³/day'>('m³/s');
 	const conv = (d: DailySeries) => toDisplayUnit(d.values, 'm³/day', unit).values;
-	const series = $derived(ewrChartSeries(flows, conv, daily));
-	const band = $derived(forecastBand(forecastFrom));
-	const record = (d: DailySeries) => ({ startDate: d.startDate, values: Array.from(beforeForecast(d.values, d.startDate, forecastFrom)) });
+	const series = $derived(ewrChartSeries(flows, conv, view.daily));
+	const band = $derived(forecastBand(view.forecastFrom));
+	const record = (d: DailySeries) => ({ startDate: d.startDate, values: Array.from(beforeForecast(d.values, d.startDate, view.forecastFrom)) });
 	const shade = $derived(flows.shortfall ? belowReserve(record(flows.shortfall)) : []);
 	const shortDays = $derived(shade.reduce((n, r) => n + (Date.parse(r.end) - Date.parse(r.start)) / 86_400_000 + 1, 0));
-	const before = $derived(forecastFrom ? ' before the forecast' : '');
+	const before = $derived(view.forecastFrom ? ' before the forecast' : '');
 	const pragmatic = $derived(
 		flows.shortfall && shortDays === 0
-			? `The outflow never fell below ${ewrLineWords(daily)}${before}: the EWR was met every day.`
+			? `The outflow never fell below ${ewrLineWords(view.daily)}${before}: the EWR was met every day.`
 			: flows.shortfall
-			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'}${before} the outflow was below ${ewrLineWords(daily)} (EWR not met).`
-			: ewrChartCaption(daily)
+			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'}${before} the outflow was below ${ewrLineWords(view.daily)} (EWR not met).`
+			: ewrChartCaption(view.daily)
 	);
 	const caption = $derived(flows.ewrRule ? `${pragmatic} ${EWR_RULE_CAPTION}` : pragmatic);
 </script>
@@ -124,7 +130,7 @@
 
 <section class="panel flow" aria-labelledby="flow-h" aria-busy={loading}>
 	<div class="head">
-		<h2 id="flow-h">{flowHeading(ruleTable, hasRuleLine(refs), daily)}</h2>
+		<h2 id="flow-h">{flowHeading(view.ruleTable, hasRuleLine(view.refs), view.daily)}</h2>
 	</div>
 	<LoadState loading={loading && !drawn} {error} retry={() => attempt++}>
 		{#if series.length === 0}

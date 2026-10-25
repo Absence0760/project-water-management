@@ -371,6 +371,13 @@ test('another run: the page stays, marked busy, while its record loads, then swa
 	await expect(account).toBeInViewport();
 	await expect(riverTiles(page)).toHaveCount(2);
 	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+	// The tools are the newest run's, not the first's the header now names: inert until the swap, so none of their
+	// Run buttons can start a job on the wrong run (a click can't reach one, nor can focus).
+	const tools = page.locator('section[aria-labelledby="river-tools-h"]');
+	const ensemble = page.getByTestId('uncertainty-panel').locator('button', { hasText: 'Run…' });
+	const takesFocus = () => ensemble.evaluate((b: HTMLElement) => (b.focus({ preventScroll: true }), document.activeElement === b));
+	await expect(tools).toHaveAttribute('inert', '');
+	expect(await takesFocus()).toBe(false);
 	release();
 	await expect(body).toHaveAttribute('data-run', first);
 	await expect(body).toHaveAttribute('aria-busy', 'false');
@@ -378,6 +385,12 @@ test('another run: the page stays, marked busy, while its record loads, then swa
 	// The first run: nothing before it, so no change line (the newest run's would be stale).
 	await expect(riverTile(page, 'ewr')).not.toContainText('vs previous run');
 	await expect(page.getByRole('region', { name: 'Days below the reserve, each water year' }).getByRole('img', { name: /^Days below the reserve per water year\. First:/ })).toBeVisible();
+	await expect(page.locator('#res-ewr figure.chart')).toHaveAttribute('data-ready', 'true');
+	// Swapped and drawn: the panels' remount (keyed on the run) didn't move the page, and the tools are the first run's, usable.
+	await expect(account).toBeInViewport();
+	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+	await expect(tools).not.toHaveAttribute('inert');
+	expect(await takesFocus()).toBe(true);
 
 	// A record that fails: the error, and nothing of the run before it.
 	await page.route(`**/projects/${id}/runs/${second}`, (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Something went wrong' }) }));
@@ -590,6 +603,64 @@ test('with a Reserve rule table the panels that count the pragmatic EWR name it,
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
 	await expect(menu.getByRole('link', { name: 'Flow vs pragmatic EWR' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' }).getByRole('img')).toBeVisible();
+});
+
+test('another run: the flow chart keeps the run before’s heading and caption with its lines until the next run’s are in', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River flow swap');
+	const table = (siteNodeId: string | null) => ({
+		siteNodeId,
+		source: 'Synthetic rule table',
+		component: 'total',
+		unit: 'mcm',
+		points: POINTS,
+		ewr: MONTHS.map((m) => POINTS.map(() => (m === 'Jan' ? 1000 : 0))),
+		naturalSource: 'run',
+		natural: null,
+		scale: 1
+	});
+	// The first run draws the outlet's rule requirement ("Flow vs reserve"); the newest, with the table moved to a gauge
+	// upstream, only the pragmatic EWR ("Flow vs pragmatic EWR"): the two runs' charts are labelled apart.
+	await updateSettings(page.request, id, { ewrRules: [table(null)] });
+	const outlet = await createRun(page.request, id, 'At the outlet');
+	const model = sampleModel();
+	const gauge = { ...model.nodes[0]!, id: crypto.randomUUID(), name: 'Upper gauge', downstreamNodeId: model.nodes[0]!.id, sortOrder: 4 };
+	model.nodes[1]!.downstreamNodeId = gauge.id;
+	model.nodes.push(gauge);
+	await putModel(page.request, id, model);
+	await updateSettings(page.request, id, { ewrRules: [table(gauge.id)] });
+	await createRun(page.request, id, 'At the gauge');
+	// Not openRiver: it waits on the chart named Flow vs reserve.
+	await page.goto(`/projects/${id}?tab=river`);
+	await expect(page.getByTestId('river-context')).toContainText('At the gauge');
+	const flow = page.locator('#res-ewr section.flow');
+	const fig = flow.locator('figure.chart');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs pragmatic EWR');
+	await expect(fig).toHaveAttribute('data-ready', 'true');
+	await expect(fig).not.toContainText('Reserve rule requirement');
+
+	// The first run's series are slow to come: its record is in (the newest run's previous), so the page swaps, but the
+	// chart keeps the newest run's lines, and with them their heading and caption, never the first run's words on them.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let holding!: () => void;
+	const isHeld = new Promise<void>((r) => (holding = r));
+	await page.route(`**/projects/${id}/runs/${outlet}/series**`, async (route) => {
+		holding();
+		await held;
+		await route.continue();
+	});
+	await page.getByLabel('Run', { exact: true }).selectOption(outlet);
+	await isHeld;
+	await expect(page.getByTestId('river-body')).toHaveAttribute('data-run', outlet);
+	await expect(flow).toHaveAttribute('aria-busy', 'true');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs pragmatic EWR');
+	await expect(fig).not.toContainText('Reserve rule requirement');
+	release();
+	await expect(flow).toHaveAttribute('aria-busy', 'false');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs reserve');
+	await expect(fig).toContainText('The Reserve rule requirement line');
 });
 
 test('with a Reserve rule table the headline tile is Reserve rules met, with the pragmatic EWR’s days under it, and the strip is named for the test it counts (issue #558)', async ({ page, owner }) => {

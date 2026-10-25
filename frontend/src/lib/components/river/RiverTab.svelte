@@ -399,8 +399,10 @@
 		</div>
 		{/key}
 		<!-- The run-it-yourself tools, under the menu's name for them (issue #465). Each is one row (name, purpose, ⓘ,
-		     Run) until it has a result or an editor opens its form (common/ToolRow). -->
-		<section class="tools" aria-labelledby="river-tools-h">
+		     Run) until it has a result or an editor opens its form (common/ToolRow). Inert (and dimmed) while another
+		     run's record loads: they are the run on screen's, so a Run there would start a job on a run the header no
+		     longer names. Kept in place rather than hidden, so the page keeps its height under a reader scrolled down. -->
+		<section class="tools" aria-labelledby="river-tools-h" inert={busy}>
 			<h2 id="river-tools-h">How sure, and what if</h2>
 			<div class="panels">
 				<!-- The uncertainty bands (issue #4 phase 9) qualify the EWR and Reserve findings above, and after
@@ -599,6 +601,14 @@
 	.tools h2 {
 		margin: 1.5rem 0 0.75rem;
 		font-size: 1.05rem;
+	}
+	/* Another run's record is loading: the page on screen is the run before's (aria-busy). The tools can't be used
+	   meanwhile (inert), and look it; the rest stays readable, so a quick swap doesn't flash the page. */
+	.river-body[aria-busy='true'] {
+		cursor: progress;
+	}
+	.tools[inert] {
+		opacity: 0.55;
 	}
 	.run-pick select {
 		max-width: min(34rem, 60vw);
