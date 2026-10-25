@@ -335,6 +335,61 @@ test('the run picker: another run is a URL, Back returns, a reload keeps it', as
 	await expect(page.getByRole('note').filter({ hasText: 'no longer exists' })).toHaveCount(0);
 });
 
+test('another run: the page stays, marked busy, while its record loads, then swaps; a record that fails leaves nothing stale', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River switch');
+	const first = await createRun(page.request, id, 'First');
+	const second = await createRun(page.request, id, 'Second');
+	await createRun(page.request, id, 'Third');
+	const newest = await createRun(page.request, id, 'Newest');
+	await openRiver(page, id);
+	const body = page.getByTestId('river-body');
+	await expect(body).toHaveAttribute('data-run', newest);
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+
+	// Scrolled down to the water account, the reader picks the first run, whose record is slow to come.
+	const account = page.getByRole('region', { name: 'Water account' });
+	await account.scrollIntoViewIfNeeded();
+	await expect(account).toBeInViewport();
+	const scrolled = await page.evaluate(() => scrollY);
+	expect(scrolled).toBeGreaterThan(0);
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let holding!: () => void;
+	const isHeld = new Promise<void>((r) => (holding = r));
+	await page.route(`**/projects/${id}/runs/${first}`, async (route) => {
+		holding();
+		await held;
+		await route.continue();
+	});
+	await page.getByLabel('Run', { exact: true }).selectOption(first);
+	await isHeld;
+	// Until it is in, the newest run's panels stay where they were, marked busy: the page doesn't empty or get shorter.
+	await expect(body).toHaveAttribute('aria-busy', 'true');
+	await expect(body).toHaveAttribute('data-run', newest);
+	await expect(account).toBeInViewport();
+	await expect(riverTiles(page)).toHaveCount(2);
+	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+	release();
+	await expect(body).toHaveAttribute('data-run', first);
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+	await expect(page.getByTestId('river-context')).toContainText('First');
+	// The first run: nothing before it, so no change line (the newest run's would be stale).
+	await expect(riverTile(page, 'ewr')).not.toContainText('vs previous run');
+	await expect(page.getByRole('region', { name: 'Days below the reserve, each water year' }).getByRole('img', { name: /^Days below the reserve per water year\. First:/ })).toBeVisible();
+
+	// A record that fails: the error, and nothing of the run before it.
+	await page.route(`**/projects/${id}/runs/${second}`, (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Something went wrong' }) }));
+	await page.getByLabel('Run', { exact: true }).selectOption(second);
+	await expect(page.getByRole('alert')).toBeVisible();
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+	await expect(body).not.toHaveAttribute('data-run');
+	await expect(riverTiles(page)).toHaveCount(0);
+	await expect(page.locator('#res-water-account')).toHaveCount(0);
+	await expect(page.locator('#res-ewr')).toHaveCount(0);
+});
+
 test('Runs & results links here for its run, and an old link to a moved panel lands on it here', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River from runs');

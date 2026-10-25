@@ -64,6 +64,9 @@
 	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte).
 	let flows = $state.raw<CatchmentFlows & { shortfall?: DailySeries }>({});
 	let loading = $state(true);
+	/** A run's flows have been drawn: another run's keep the chart on screen (aria-busy) until they are in, so EWR's page
+	 *  doesn't lose the chart's height under a reader scrolled down when the run picker changes the run. */
+	let drawn = $state(false);
 	let error = $state<string | null>(null);
 	let log = $state(true);
 	let attempt = $state(0);
@@ -81,7 +84,10 @@
 			})
 		)
 			.then((pairs) => {
-				if (id === runId) flows = Object.fromEntries(pairs);
+				if (id === runId) {
+					flows = Object.fromEntries(pairs);
+					drawn = true;
+				}
 			})
 			.catch((e) => {
 				if (id === runId) error = e instanceof Error ? e.message : String(e);
@@ -120,7 +126,7 @@
 	<div class="head">
 		<h2 id="flow-h">{flowHeading(ruleTable, hasRuleLine(refs), daily)}</h2>
 	</div>
-	<LoadState {loading} {error} retry={() => attempt++}>
+	<LoadState loading={loading && !drawn} {error} retry={() => attempt++}>
 		{#if series.length === 0}
 			<p class="muted">This run stored no outflow or EWR series.</p>
 		{:else}

@@ -7500,6 +7500,21 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   (`runOptionLabel`, the compare picker's labels); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
+  While the picked run's record loads, the page keeps the run before it on
+  screen, its body `aria-busy="true"`, then swaps (a cached record at once):
+  until 2026-10-24 every panel unmounted for at least a render on each pick,
+  so the page got shorter and a reader scrolled down lost their place. The
+  body's `data-run` names the run whose record is on screen (the tests'
+  readiness signal, with `aria-busy="false"`). A record that fails to load
+  clears the page to its error and **Try again**, so nothing of the run
+  before stays. The findings panels are keyed on the run, so their own
+  state (the EWR grid's site, measure and focused month, Reserve
+  compliance's site and Show all, the water account's year) starts afresh
+  with each run, as the tools' always have. The flow chart and the
+  water-year bars keep the run before drawn (`aria-busy`) while the next
+  run's series load (`FlowVsReserve`, `ReserveYearsChart`, which Compare
+  runs shares), instead of falling back to a short Loading… line; the flow
+  chart keeps the window you were looking at when the next run covers it.
 - **Header.** The shared section header (`workspace/SectionHeader`, title
   from `TAB_LABELS`); the tab fills its context line (`fillHeader`): the run's
   label (with the *Workbook comparison* and *Evidence* badges), its period,
