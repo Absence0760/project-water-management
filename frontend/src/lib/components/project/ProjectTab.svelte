@@ -16,7 +16,8 @@
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { downloads } from '#lib/export/index.js';
 	import { fmtNum } from '#lib/format/number.js';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import Lazy from '#lib/components/common/Lazy.svelte';
+	import { landOnAnchor } from '#lib/help/anchor.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import type { ProjectDetailsDraft } from './detailsDraft.svelte';
 	import AuthorityPanel from './AuthorityPanel.svelte';
@@ -32,6 +33,9 @@
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
 	import TwoStepPanel from './TwoStepPanel.svelte';
+	// Moved here from Settings (issue #586), each its own chunk: API keys load for an owner only.
+	const loadApiKeys = () => import('#lib/components/apiKeys/ApiKeysPanel.svelte');
+	const loadReportSchedules = () => import('#lib/components/report/ReportSchedulesPanel.svelte');
 
 	let {
 		project,
@@ -94,33 +98,18 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 
 	// A link to one of the panels (`#members-h`, or an old Summary link sent here): the panels
-	// fill in as their data arrives, after the browser's own jump, so wait for the heading, then
-	// scroll there and hold it while the page settles (as EWR does), focusing it.
+	// fill in as their data arrives, after the browser's own jump, and API keys and Scheduled
+	// reports are lazy chunks, so wait for the panel's heading (landOnAnchor), then scroll there
+	// and hold it while the page settles, focusing it.
 	let body: HTMLDivElement | undefined = $state();
 	// Bumped by Acts for the authority after each change, so the members list's authority lines follow it (229).
 	let authorityVersion = $state(0);
-	let releaseAnchor = () => {};
-	let stopWaiting = () => {};
+	let stopLanding = () => {};
 	onMount(() => {
 		const hash = page.url.hash.slice(1);
-		if (!projectAnchor(hash) || !body) return;
-		const land = () => {
-			const heading = document.getElementById(hash);
-			if (!heading) return false;
-			releaseAnchor = holdAnchor(heading);
-			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			focusAnchor(heading);
-			return true;
-		};
-		if (land()) return;
-		const mo = new MutationObserver(() => land() && mo.disconnect());
-		mo.observe(body, { childList: true, subtree: true });
-		stopWaiting = () => mo.disconnect();
+		if (projectAnchor(hash) && body) stopLanding = landOnAnchor(hash, body);
 	});
-	onDestroy(() => {
-		stopWaiting();
-		releaseAnchor();
-	});
+	onDestroy(() => stopLanding());
 </script>
 
 {#snippet headerContext()}<span data-testid="project-context">{context}</span>{/snippet}
@@ -184,6 +173,13 @@
 					<div class="stat"><dt><a href="?tab=network">Outflow gauge</a></dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
 				</dl>
 			</section>
+			<!-- Report PDFs emailed to members on a schedule (WP-2.15; moved from Settings, issue #586): every member reads
+			     them, editors change them. The anchor is this wrapper, outside the lazy chunk, so a link finds it at once. -->
+			<div id="project-report-schedules">
+				<Lazy load={loadReportSchedules}>
+					{#snippet children(Schedules)}<Schedules projectId={project.id} {canEdit} />{/snippet}
+				</Lazy>
+			</div>
 		</div>
 
 		<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->
@@ -198,6 +194,15 @@
 			<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 			<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
 			{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}
+			<!-- Keys a logger gateway pushes readings with (WP-2.9; moved from Settings, issue #586): owners only. The anchor
+			     is this wrapper, outside the lazy chunk. -->
+			{#if isOwner}
+				<div id="project-api-keys">
+					<Lazy load={loadApiKeys}>
+						{#snippet children(Keys)}<Keys projectId={project.id} />{/snippet}
+					</Lazy>
+				</div>
+			{/if}
 			<!-- Whether its owners' actions need two-step sign-in (204_mfa_opt_in): owners only. -->
 			{#if isOwner}<TwoStepPanel {project} {onProjectChange} />{/if}
 			<!-- How long the licence record (and the names it keeps) is kept (161): editors read it, owners record the outcome. -->

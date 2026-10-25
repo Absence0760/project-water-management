@@ -97,7 +97,7 @@ export const INGEST_EXAMPLE_BODY = JSON.stringify(
 export const INGEST_FORMAT: FileFormat = {
 	id: 'ingest-request',
 	title: 'Logger readings sent with an API key',
-	where: 'Settings & calibration → API keys',
+	where: 'Project → API keys',
 	accepts: 'JSON (Content-Type: application/json), sent with POST to /ingest/v1/series/merge with the key as Authorization: Bearer <key>.',
 	rules: [
 		`\`kind\`: one of ${SERIES_KINDS.map((k) => `\`${k}\``).join(', ')}.`,

@@ -1,5 +1,5 @@
 // Per-project API keys and the ingest endpoint (WP-2.9, docs/ui.md § API
-// keys): an owner makes a key under Settings, copies it once, and the push
+// keys): an owner makes a key on the Project page (Settings until issue #586), copies it once, and the push
 // script (scripts/ingest/push-fixture.mjs, the local stand-in for a logger
 // gateway) sends the synthetic logger CSV with it. The days appear on the Data
 // tab, History shows the change by the key's name, and after a revoke the same
@@ -33,7 +33,7 @@ async function push(key: string): Promise<{ code: number; out: string }> {
 test('an owner makes a key, a gateway pushes days with it, History names the key, and a revoked key is refused', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Logger catchment');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 
 	const panel = page.getByRole('region', { name: 'API keys' });
 	await expect(panel.getByText('No API keys yet.')).toBeVisible();
@@ -70,7 +70,7 @@ test('an owner makes a key, a gateway pushes days with it, History names the key
 	const lastUsed = row.getByRole('cell').nth(3);
 	await expect(ends).toHaveText('Never');
 	await expect(lastUsed).toHaveText('Never');
-	await expectNoViolations(page, { include: '#set-api-keys' });
+	await expectNoViolations(page, { include: '#project-api-keys' });
 
 	const pushed = await push(secret);
 	expect(pushed.out).toContain('pushed 7 days from 2024-01-01');
@@ -96,7 +96,7 @@ test('an owner makes a key, a gateway pushes days with it, History names the key
 	await expect(entries.nth(1)).toContainText('Owner');
 
 	// The list shows it was used; a revoke stops the next push.
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	await expect(lastUsed).not.toHaveText('Never');
 	await row.getByRole('button', { name: 'Revoke Weir gateway' }).click();
 	await answerConfirm(page, true, 'Revoke the API key “Weir gateway”?');
@@ -107,16 +107,20 @@ test('an owner makes a key, a gateway pushes days with it, History names the key
 	expect(refused.out).toContain('ingest answered 401: invalid or missing API key');
 });
 
-test('an editor sees the data feeds but no API keys panel (the owner does)', async ({ page, owner, signIn }) => {
+test('an editor sees the Project page’s scheduled reports but no API keys panel (the owner does)', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await createProject(page.request, 'Owners only');
 	const editor = await signIn('Keys editor');
 	await addMember(page.request, project.id, editor.user.email, 'editor');
 
-	await editor.page.goto(`/projects/${project.id}?tab=settings`);
-	await expect(editor.page.getByRole('region', { name: 'Data feeds' })).toBeVisible();
+	await editor.page.goto(`/projects/${project.id}?tab=project`);
+	await expect(editor.page.getByRole('region', { name: 'Scheduled reports' })).toBeVisible();
 	await expect(editor.page.getByRole('region', { name: 'API keys' })).toHaveCount(0);
+	// A link to the panel finds nothing to land on, and leaves the page where it is.
+	await editor.page.goto(`/projects/${project.id}?tab=project#project-api-keys`);
+	await expect(editor.page.getByRole('heading', { level: 2, name: 'Project details' })).toBeInViewport();
+	await expect(editor.page.locator('#project-api-keys')).toHaveCount(0);
 	// Positive control.
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	await expect(page.getByRole('region', { name: 'API keys' })).toBeVisible();
 });

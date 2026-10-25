@@ -23,19 +23,23 @@ describe('projectContext', () => {
 
 describe('Project page links', () => {
 	it('knows every panel, and nothing else', () => {
-		for (const id of ['details-h', 'members-h', 'farmers-h', 'share-h', 'team-h', 'recent-notes-h', 'import-record-h', 'model-h', 'licence-record']) {
+		for (const id of ['details-h', 'members-h', 'farmers-h', 'share-h', 'team-h', 'recent-notes-h', 'import-record-h', 'model-h', 'licence-record', 'project-api-keys', 'project-report-schedules']) {
 			expect(projectAnchor(id)).toBe(true);
 		}
 		expect(projectAnchor('res-ewr')).toBe(false);
 		expect(projectAnchor('setup-h')).toBe(false);
+		// The panels' old Settings ids are Settings' to forward, not this page's.
+		expect(projectAnchor('set-api-keys')).toBe(false);
+		expect(projectAnchor('set-report-schedules')).toBe(false);
 		expect(projectAnchor('')).toBe(false);
 	});
 
 	it('lists every panel heading the page draws, in page order (a link to one lands on it, issue #586)', () => {
-		// The page's panels, in the order ProjectTab draws them, and each one's h2 id read from its source.
+		// The page's panels, in the order ProjectTab draws them, and each one's h2 id read from its source;
+		// a lazy panel (API keys, Scheduled reports) by its wrapper's id, which is on the page while its chunk loads.
 		const src = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 		const tab = src('./ProjectTab.svelte');
-		const own = [...tab.matchAll(/<h2 id="([^"]+)"/g)].map((m) => [tab.indexOf(m[0]), m[1]!] as const);
+		const own = [...tab.matchAll(/<(?:h2|div) id="([^"]+)"/g)].map((m) => [tab.indexOf(m[0]), m[1]!] as const);
 		const panels = [...tab.matchAll(/<(\w+Panel|RecentNotes) /g)].map((m) => {
 			const file = m[1] === 'RecentNotes' ? '../notes/RecentNotes.svelte' : `./${m[1]}.svelte`;
 			const id = /<h2 id="([^"]+)"/.exec(src(file))?.[1];

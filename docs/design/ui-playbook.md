@@ -1964,6 +1964,11 @@ Interaction details that bit:
   (`scrollable-region-focusable`): the Download → Preview table has only
   text, so a keyboard user couldn't scroll it. Give the box `tabindex="0"`,
   `role="region"` and a name, and a `:focus-visible` outline.
+  A box that is short enough to read whole needn't scroll at all: API keys'
+  example request fitted Settings' full width but scrolled sideways once the
+  panel moved into the Project page's narrower column (issue #586), so it
+  wraps instead (`white-space: pre-wrap; overflow-wrap: anywhere`). A panel
+  that moves to a narrower home gets its axe scan re-run there.
 - **Virtualised rows must be exactly the height the spacers assume.** The
   preview table's rows were ~29 px (the table's padding) against a
   `ROW_H` of 28, and its empty top spacer still had padding, so an 11 px gap

@@ -257,7 +257,8 @@ test('revoking an API key, removing a scheduled report and withdrawing a share l
 	for (const hour of [6, 7]) await post('report-schedules', { frequency: 'weekly', weekday: 1, hour, timezone: 'UTC', recipients: [owner.id] });
 	for (const label of ['Forum A', 'Forum B']) await post('share-links', { label, expiresInDays: 7 });
 
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	// All three are on the Project page (API keys and Scheduled reports moved from Settings, issue #586).
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const keys = page.getByRole('region', { name: 'API keys' });
 	const revokes = keys.getByRole('button', { name: /^Revoke Gate / });
 	await expect(revokes).toHaveCount(2);
@@ -282,7 +283,6 @@ test('revoking an API key, removing a scheduled report and withdrawing a share l
 	await expect(removes).toHaveCount(0);
 	await expect(schedules.getByRole('button', { name: 'Add a schedule' })).toBeFocused();
 
-	await page.goto(`/projects/${project.id}?tab=project`);
 	const links = page.getByRole('region', { name: 'Share links' });
 	const withdraws = links.getByRole('button', { name: /^Withdraw Forum / });
 	await expect(withdraws).toHaveCount(2);

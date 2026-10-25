@@ -1,10 +1,13 @@
 <!--
-	Settings → Scheduled reports (WP-2.15 Phase B; docs/ui.md § Scheduled
+	Project → Scheduled reports (WP-2.15 Phase B; docs/ui.md § Scheduled
 	reports): email the latest run's report PDF to chosen project members
 	every week or month. Editors and owners add, pause and remove schedules;
 	viewers read. "Add a schedule" sits in the panel's head and opens the form
 	as a card above the list, with its own action row (issue #521); the words
-	under the heading are the (i)'s. Its own chunk. Helpers in ./serverPdf.ts.
+	under the heading are the (i)'s. Its own chunk, on the Project page since
+	issue #586 (it was on Settings), whose wrapper carries its anchor,
+	#project-report-schedules. It saves as it changes, unlike the page's
+	details (the save bar), and says so to those who can change it. Helpers in ./serverPdf.ts.
 -->
 <script lang="ts">
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
@@ -144,6 +147,8 @@
 			<button type="button" class="btn btn-sm btn-primary" bind:this={addButton} onclick={startAdding}>Add a schedule</button>
 		{/if}
 	</div>
+	<!-- Each add, pause and remove saves at once, unlike the page's fields that wait for the save bar (issue #586, E13). -->
+	{#if canEdit}<p class="muted small saves-note" data-testid="schedules-saves">Saves as you change it, not with Save changes at the foot of the page.</p>{/if}
 
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
@@ -238,6 +243,9 @@
 </section>
 
 <style>
+	.saves-note {
+		margin: 0 0 0.5rem;
+	}
 	.hint {
 		font-size: var(--font-sm);
 		max-width: 75ch;

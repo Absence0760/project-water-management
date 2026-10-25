@@ -1,5 +1,4 @@
-// The panels after the Settings form (issue #521 § 11; docs/ui.md § Data feeds, § API keys, § Scheduled
-// reports): each has its add action in its head, which opens an inline card with its own action row above
+// The panels after the Settings form (issue #521 § 11; docs/ui.md § Data feeds): its add action is in its head, which opens an inline card with its own action row above
 // the list, and the words that were a paragraph under the heading are the (i)'s. Data feeds' card holds
 // the map's two proposals as Area options, and an editor opens them from the head's "Rain from the map".
 // Find a setting still finds the registered-volumes comparison band, which moved to Allocations, and its
@@ -66,30 +65,7 @@ test('each panel after the form has its add action in its head, opening a card a
 	await expect(card).toHaveCount(0);
 	await expect(attach).toBeFocused();
 
-	// API keys: the make form is closed until Make a key, in the head; its action row in the window.
-	const keys = page.getByRole('region', { name: 'API keys' });
-	const make = keys.getByRole('button', { name: 'Make a key' });
-	await landOn(page, 'set-api-keys', make);
-	await expect(keys.getByRole('form', { name: 'Make an API key' })).toHaveCount(0);
-	await make.click();
-	await expect(keys.getByRole('button', { name: 'Make key' })).toBeInViewport();
-	await expect(keys.getByRole('button', { name: 'Cancel' })).toBeInViewport();
-
-	// Scheduled reports: Add a schedule in the head, its card above the empty list, its action in the window.
-	const schedules = page.getByRole('region', { name: 'Scheduled reports' });
-	const add = schedules.getByRole('button', { name: 'Add a schedule' });
-	await landOn(page, 'set-report-schedules', add);
-	await expect(schedules.getByRole('heading', { name: 'Scheduled reports', level: 2 }).getByRole('button', { name: 'About report PDFs and schedules' })).toBeVisible();
-	await add.click();
-	const form = schedules.getByRole('form', { name: 'Add a schedule' });
-	await expect(form.getByLabel('Every', { exact: true })).toBeFocused();
-	await expect(form.getByRole('button', { name: 'Add schedule' })).toBeInViewport();
-	expect((await form.boundingBox())!.y).toBeLessThan((await schedules.getByText('No scheduled reports.').boundingBox())!.y);
-	await form.getByRole('button', { name: 'Cancel' }).click();
-	await expect(add).toBeFocused();
-
 	// The field help in these panels follows the explain switch: hidden, it is still the field's description.
-	await keys.getByRole('button', { name: 'Cancel' }).click();
 	await attach.click();
 	await card.getByLabel('Area').selectOption('bbox');
 	await expect(card.getByText(/^The rainfall is the area-weighted mean/)).toBeHidden();
@@ -99,15 +75,13 @@ test('each panel after the form has its add action in its head, opening a card a
 	await page.getByRole('checkbox', { name: 'Explain each setting under its field' }).uncheck();
 });
 
-test('on a phone the three panels and their open cards fit the screen with nothing scrolling sideways', async ({ page, owner }) => {
+test('on a phone the panel and its open card fit the screen with nothing scrolling sideways', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'After the form phone');
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openSettings(page, project.id);
 	const feeds = page.getByRole('region', { name: 'Data feeds' });
 	await feeds.getByRole('button', { name: 'Attach a feed' }).click();
-	await page.getByRole('region', { name: 'API keys' }).getByRole('button', { name: 'Make a key' }).click();
-	await page.getByRole('region', { name: 'Scheduled reports' }).getByRole('button', { name: 'Add a schedule' }).click();
 	for (const area of ['cells', 'boundary', 'units'] as const) {
 		await feeds.getByLabel('Area').selectOption(area);
 		for (const width of [390, 320]) {
@@ -197,13 +171,14 @@ test('Data feeds, API keys and Scheduled reports show an empty list the same way
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const project = await createProject(page.request, 'Empty after the form');
-	await openSettings(page, project.id);
 	const looks: string[] = [];
-	for (const [region, words] of [
-		['Data feeds', 'No feeds yet.'],
-		['API keys', 'No API keys yet.'],
-		['Scheduled reports', 'No scheduled reports.']
+	// API keys and Scheduled reports are on the Project page (issue #586).
+	for (const [tab, region, words] of [
+		['settings', 'Data feeds', 'No feeds yet.'],
+		['project', 'API keys', 'No API keys yet.'],
+		['project', 'Scheduled reports', 'No scheduled reports.']
 	] as const) {
+		await page.goto(`/projects/${project.id}?tab=${tab}`);
 		const empty = page.getByRole('region', { name: region }).locator('.state.empty');
 		await expect(empty, region).toHaveText(words);
 		looks.push(await empty.evaluate((el) => { const c = getComputedStyle(el); return `${c.borderStyle} ${c.borderRadius} ${c.textAlign}`; }));

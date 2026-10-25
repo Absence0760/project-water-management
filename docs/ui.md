@@ -1967,11 +1967,30 @@ it scrolls, and isn't fitted to the window.
   line splits them, and the Dams page's dams (`modelDams`: a farm with at
   least 1 m³).
 - **Fragments**: `?tab=project#members-h` (any id in `PROJECT_ANCHORS`:
-  every panel's heading, `project.test.ts` checks the list against the
-  page's) waits for that panel's heading, scrolls it to the top and holds it
-  while the page settles (`holdAnchor`), with focus on the heading. History's
-  "farmers to link again" notes link to `#farmers-h`, and the licence record
-  review email to `#licence-record` (issue #586).
+  every panel's heading, or a lazy panel's wrapper, `project.test.ts` checks
+  the list against the page's) waits for that panel's heading
+  (`landOnAnchor`, `lib/help/anchor.ts`: a lazy chunk's heading comes after
+  the page mounts), scrolls it to the top and holds it while the page
+  settles, with focus on the heading. History's "farmers to link again" notes
+  link to `#farmers-h`, and the licence record review email to
+  `#licence-record` (issue #586). A link to a panel this reader isn't shown
+  (`#project-api-keys` for an editor) leaves the page at its top.
+- **Scheduled reports** (`#project-report-schedules`, at the foot of the left
+  column under The model) and **API keys** (`#project-api-keys`, owners
+  only, in the right column between Share links and Two-step sign-in) moved
+  here from Settings (issue #586 Round 1): they are about who gets the
+  project's output and who may write to it, not the model's settings. Each
+  is its own lazy chunk, and its anchor is a wrapper outside the chunk, so a
+  link finds it while the chunk loads (the old `#set-api-keys` id was inside
+  the lazy panel). Both save as they change, unlike Project details (the
+  save bar), and say so under their heading: "Saves as you change it, not
+  with Save changes at the foot of the page." (finding E13; schedules show
+  it to editors and owners only). Settings forwards its old
+  `#set-api-keys` and `#set-report-schedules` links here. Tested by
+  `e2e/tests/project-keys-schedules.spec.ts` (placement, the saves line and
+  a schedule saved while the details are unsaved, each anchor landing,
+  the phone at 390 and 320 px, thirty keys scrolling inside their card, a
+  viewer, axe at desktop and phone).
 - **Headline facts** each link to the tab where they are edited or looked at
   (farms, area, dams and the outflow gauge to Network, irrigated area to
   Crops, transfers to Transfers, time series to Data, runs to Runs). The
@@ -6001,8 +6020,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   `#set-outcomes`, Seasonal outlook `#set-outlook`, Evidence
   `#set-evidence`: they change no result) and **Automation & access**
   (Automatic runs `#set-auto`, last in the form, then after it Data feeds
-  `#set-feeds`, API keys `#set-api-keys` for owners and Scheduled reports
-  `#set-report-schedules`). Judge results by (`#set-judge`) heads the form
+  `#set-feeds`; API keys and Scheduled reports moved to the Project page,
+  `?tab=project#project-api-keys` and `#project-report-schedules`, issue
+  #586, [§ Project](#project)). Judge results by (`#set-judge`) heads the form
   above them all, as the client asked (issue #444), and isn't in the menu.
   The panels sit in that order on the page, so the marked link moves down the
   column as you read. Beside the index, every 12-month row still fits (the
@@ -7485,9 +7505,9 @@ part of the Settings tab's chunk; WP-2.10,
 
 ### API keys
 
-Below Data feeds, for **owners only**, **API keys** (`#set-api-keys`;
-`lib/components/apiKeys/ApiKeysPanel.svelte`, part of the Settings tab's
-chunk; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
+On the Project page, for **owners only**, **API keys**
+(`?tab=project#project-api-keys`, after Share links; on Settings until issue
+#586; `lib/components/apiKeys/ApiKeysPanel.svelte`, its own chunk; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
 or a script uses to push daily readings into the project's series.
 
 - **Make a key**, in the panel's head beside the heading and its ⓘ (what a
@@ -7503,6 +7523,12 @@ or a script uses to push daily readings into the project's series.
 - **The new key** is shown once, in a highlighted box with **Copy** and the
   warning that it won't be shown again, above a copyable `curl` example that
   pushes one day with a `$WM_INGEST_KEY` placeholder (never the key itself).
+  The example wraps its long lines rather than scrolling sideways in the
+  Project page's column (a scroll box with nothing focusable fails axe).
+- "Saves as you change it, not with Save changes at the foot of the page."
+  under the head: a key is made and revoked at once.
+- **The list** scrolls inside its card past 70 % of the window's height
+  (`.table-wrap`), so thirty keys don't push the page's other panels away.
 - **Expected format of a request**, under the panel's head, before any key
   exists: the body's fields, the units, that a `null` clears its day there
   (unlike an upload's Append / update), when a new series is refused (`409`)
@@ -7517,15 +7543,17 @@ or a script uses to push daily readings into the project's series.
 - Tested by `e2e/tests/api-keys.spec.ts` (make a key, push the fixture with
   `scripts/ingest/push-fixture.mjs`, the series on the Data tab and the key
   in History, a revoked key refused, axe on the panel, no panel for an
-  editor) and `apiKeys/apiKeys.test.ts`.
+  editor), `e2e/tests/project-keys-schedules.spec.ts` and
+  `apiKeys/apiKeys.test.ts`.
 
 ### Scheduled reports
 
-Below Data feeds (and API keys, for an owner), **Scheduled reports** (`#set-report-schedules`;
+On the Project page, under The model, **Scheduled reports**
+(`?tab=project#project-report-schedules`; on Settings until issue #586;
 `lib/components/report/ReportSchedulesPanel.svelte`, its own chunk since
-issue #521, loaded when the Settings tab draws, as Data feeds is, so the tab's
-chunk keeps room under its ceiling; the anchor's id sits on a wrapper outside
-the lazy panel; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
+issue #521, loaded when the page draws; the anchor's id sits on a wrapper
+outside the lazy panel; it saves as it changes and says so to editors and
+owners; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
 run's report to chosen members every week or month.
 
 - **The list**, one card per schedule: "Every Monday at 07:00
@@ -7549,8 +7577,8 @@ run's report to chosen members every week or month.
   **Pause / Resume** and **Remove** (with a confirm) on each card.
 - Viewers see the list, with no buttons.
 - Tested by `e2e/tests/server-report.spec.ts` and
-  `e2e/tests/settings-after-form-layout.spec.ts` (the head's action and the
-  card's in a 1440×900 window, the phone).
+  `e2e/tests/project-keys-schedules.spec.ts` (the head's action and the
+  card's in a 1440×900 window, the phone, a viewer).
 
 ## EWR
 

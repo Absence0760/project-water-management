@@ -377,10 +377,13 @@ export const PAGE_GUIDES: Guide[] = [
 						items: [
 							'**The model**: headline facts (units, gauges, catchment area, dams, irrigated area, transfers, series, runs), each linking to where it is edited.',
 							'**Download** in the header: the whole project as one JSON file (model, settings and input series), for every member.',
+							'**Scheduled reports**, under the model: the latest run’s report PDF emailed to chosen members every week or month. Editors and owners add, pause and remove schedules; viewers read them.',
 							'**Members**: who can open the project and with which [[roles|role]]. Owners add people and change roles.',
 							'**Farmers**: which hydrological units each farmer is linked to; a farmer reads only their own.',
 							'**Share links** (owners only): read-only links for people outside the project, to the published baseline; the list also holds every link to an application, so an owner can withdraw any of them from one place.',
-							'**Two-step sign-in** (owners only): **Require two-step sign-in** for the project’s owners and signers ([[guide:two-step-sign-in|Sign in with two steps]]).'
+							'**API keys** (owners only): keys a logger gateway or a script sends daily readings with ([[guide:push-logger-data|Push logger data with an API key]]).',
+							'**Two-step sign-in** (owners only): **Require two-step sign-in** for the project’s owners and signers ([[guide:two-step-sign-in|Sign in with two steps]]).',
+							'Scheduled reports and API keys save as you change them; the project’s details wait for **Save changes** at the foot of the page.'
 						]
 					}
 				]

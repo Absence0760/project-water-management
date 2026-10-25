@@ -2,8 +2,10 @@
 	// Per-project API keys (WP-2.9, docs/ui.md § API keys): the owner makes a
 	// key for a logger gateway or a script, copies it once (only its hash is
 	// kept, so it can't be shown again), sees when each was last used, and
-	// revokes one. Owners only: SettingsTab renders this for an owner, and the
-	// API answers anyone else 403. "Make a key" in the panel's head opens the
+	// revokes one. Owners only: the Project page renders this for an owner (issue
+	// #586: it was on Settings), and the API answers anyone else 403. Its anchor,
+	// #project-api-keys, is the page's wrapper outside the lazy chunk, so the
+	// section has no id of its own. "Make a key" in the panel's head opens the
 	// make form as a card with its own action row (issue #521: it was always
 	// open above the list); the words under the heading are the (i)'s.
 	import { localIsoDate } from '#lib/format/number.js';
@@ -126,7 +128,7 @@
 			await api.apiKeys.revoke(projectId, id);
 			if (fresh?.id === id) fresh = null;
 			keys = await api.apiKeys.list(projectId);
-			await focusAfterRemove(at, '#set-api-keys td.act button.btn-danger', makeButton ?? 'api-keys-h');
+			await focusAfterRemove(at, '[aria-labelledby="api-keys-h-t"] td.act button.btn-danger', makeButton ?? 'api-keys-h');
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -135,12 +137,14 @@
 	}
 </script>
 
-<section class="panel" id="set-api-keys" aria-labelledby="api-keys-h-t">
+<section class="panel" aria-labelledby="api-keys-h-t">
 	<!-- The add action in the head (issue #521); what a key may do is the (i)'s, with the rest in the glossary. -->
 	<div class="panel-head">
 		<h2 id="api-keys-h"><span id="api-keys-h-t">API keys</span> <HelpTip key="api-key" label="About API keys" /></h2>
 		{#if !making}<button type="button" class="btn btn-sm btn-primary" bind:this={makeButton} onclick={startMaking}>Make a key</button>{/if}
 	</div>
+	<!-- Keys are made and revoked at once, unlike the page's fields that wait for the save bar (issue #586, E13). -->
+	<p class="muted small saves-note" data-testid="api-keys-saves">Saves as you change it, not with Save changes at the foot of the page.</p>
 	<FormatHelp summary="Expected format of a request" format={INGEST_FORMAT} />
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
@@ -232,6 +236,9 @@
 </section>
 
 <style>
+	.saves-note {
+		margin: 0 0 0.5rem;
+	}
 	/* The make card: bordered, under the head, its action row at its foot. */
 	.add {
 		margin: 0.5rem 0 0.75rem;
@@ -299,10 +306,14 @@
 	.example-h {
 		margin-top: 0.75rem !important;
 	}
+	/* Wrapped, not scrolled: in the Project page's column the request is wider than its box, and a box that
+	   scrolls with nothing focusable in it fails axe (scrollable-region-focusable; issue #586). Its lines stay
+	   its lines; a long one wraps. Copy example copies it as written. */
 	.example {
 		margin: 0 0 0.5rem;
 		padding: 0.5rem;
-		overflow-x: auto;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 		font-size: var(--font-xs);
 		background: var(--surface);
 		border: 1px solid var(--border);

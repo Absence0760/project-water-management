@@ -1190,7 +1190,7 @@ export const GUIDES: Guide[] = [
 		title: 'Push logger data with an API key',
 		summary: 'Let a logger gateway or a script add daily readings to a project’s series without signing in, and keep an eye on it.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'project',
 		sections: [
 			{
 				heading: 'Make a key',
@@ -1199,7 +1199,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Make sure the series exists: upload its record once on the **Data** tab, with the name the gateway will send. A key creates a series only when the project has none of that kind.',
-							'As an owner, open **Settings & calibration** and go to **API keys**.',
+							'As an owner, open the **Project** page and go to **API keys**.',
 							'Give the key a **Name** that says where it runs (“Drift logger gateway”), choose how long it **Works for**, and under **What it may write** choose **Only these series** and tick the ones it feeds.',
 							'Press **Make key** and copy the key at once: it is shown only this once. Store it in the gateway’s own settings, never in a shared file.'
 						]
