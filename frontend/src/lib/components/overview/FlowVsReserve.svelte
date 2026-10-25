@@ -96,7 +96,13 @@
 				}
 			})
 			.catch((e) => {
-				if (id === runId) error = e instanceof Error ? e.message : String(e);
+				// The error is this run's: drop the run before's lines, so the heading (view) follows this run's props
+				// and the error never sits under the run before's words.
+				if (id === runId) {
+					error = e instanceof Error ? e.message : String(e);
+					drawn = null;
+					flows = {};
+				}
 			})
 			.finally(() => {
 				if (id === runId) loading = false;

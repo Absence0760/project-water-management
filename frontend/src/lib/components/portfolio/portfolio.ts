@@ -62,16 +62,19 @@ export const IRRIGATION_LABEL = 'Irrigation supplied';
 /** The irrigation traffic light's rule (backend portfolio/status.ts IRRIGATION_THRESHOLDS; provisional, no team setting yet). */
 export const IRRIGATION_RULE = 'green from 95 % of demand supplied over the run, amber from 80 %, red below';
 
-/** Why a run's use share and dam levels aren't shown (PortfolioProject.figuresWithheld, #523 I). */
-const WITHHELD_WHY = 'the run caps use at, or scales demand to, the registered water volumes, which this project shows to its editors and owners only';
+/**
+ * Why a run's use share and dam levels aren't shown (PortfolioProject.figuresWithheld, #523 I): the run caps use at, or
+ * scales demand to, the registered water volumes, which the project shows to its editors and owners only. The one
+ * wording: `withheldText` says it, and `irrigationText`'s long form after "Withheld: ".
+ */
+const WITHHELD_WHY = 'Run uses registered water volumes; figures for editors and owners only';
 
 /**
  * Why a row's figures are withheld, short enough for the line under its pill
  * (the project list) or its Lowest dam (the team page), so each row says it
  * once; null when nothing is withheld.
  */
-export const withheldText = (p: Pick<PortfolioProject, 'figuresWithheld'>): string | null =>
-	p.figuresWithheld ? 'Uses registered volumes, shown to editors and owners only' : null;
+export const withheldText = (p: Pick<PortfolioProject, 'figuresWithheld'>): string | null => (p.figuresWithheld ? WITHHELD_WHY : null);
 
 /** "3 of 5 units below 95%", or null when none is (or the figure is unknown). */
 export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): string | null {
@@ -88,7 +91,7 @@ export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): st
 export function irrigationText(p: Pick<PortfolioProject, 'irrigation'>, short = false): string {
 	const r = p.irrigation;
 	if (r.status === 'unknown' || r.fractionSupplied == null) {
-		if (r.reason === 'withheld') return short ? 'Withheld' : `Withheld: ${WITHHELD_WHY}`;
+		if (r.reason === 'withheld') return short ? 'Withheld' : `Withheld: ${WITHHELD_WHY.charAt(0).toLowerCase()}${WITHHELD_WHY.slice(1)}`;
 		const why = r.reason === 'no-units' ? 'no hydrological units in the run' : r.reason === 'no-demand' ? 'no irrigation demand in the run' : 'no run yet';
 		return `Unknown: ${why}`;
 	}

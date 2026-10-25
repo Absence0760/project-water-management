@@ -1905,7 +1905,11 @@ for every workspace tab. Its own chunk.
   model and the proposals. If Dam of moved to another unit while the save
   was out, the box reloads the unit Dam of now names, and the notice still
   says what was saved (it names its unit, and a screen reader announces
-  it) but leaves the keyboard where the user put it. The frame is shared with land cover and
+  it) but leaves the keyboard where the user put it. A save that fails
+  after Dam of moved on is reported there too, as an error naming its unit
+  ("Couldn’t save Upper farm’s full-supply area: …"), not on the row of the
+  unit now shown, whose map row has the same key; a save that fails on the
+  unit still shown says so under its Use. The frame is shared with land cover and
   evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
   has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
   editor can use a value."). Other states: no dam on the map linked to the
@@ -2222,8 +2226,8 @@ then on a line under it the units below 95 % of their demand over the run
 ("3 of 14 units below 95% over the run", `irrigationUnitsText`: the whole
 run, not the week the next column counts), and *Published* or *Latest run* with the figures'
 age, "to 31 Dec 2024 (20 months ago)"; a pill that is *Withheld* says why on
-the line under it, "Uses registered volumes, shown to editors and owners
-only", `withheldText`, below), **Hydrological units short** ("2 of 8 units
+the line under it, "Run uses registered water volumes; figures for editors
+and owners only", `withheldText`, below), **Hydrological units short** ("2 of 8 units
 short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
 *Not published* until a run is published; under it the count over 30 days,
 "1 in the last 30 days"), **Lowest dam** ("Kareebos 18 %"; muted *No dams*, or
@@ -4777,7 +4781,10 @@ saves the catchment's model, and override mode there edits the scenario's
   to another unit while the save was out, the box reloads the unit it now
   shows, and the notice still says what was saved (it names its unit, and
   a screen reader announces it) but leaves the keyboard where the user put
-  it. Use is disabled while the model has
+  it. A save that fails after the drawer moved on is reported there too, as
+  an error naming its unit ("Couldn’t save Orchard’s planted area on Upper
+  farm: …"), not on the shown unit's row of the same crop; one that fails on
+  the unit still shown says so under its Use. Use is disabled while the model has
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
@@ -7536,7 +7543,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   chart keeps the window you were looking at when the next run covers it.
   Each chart keeps the props that label it (the flow chart's heading,
   forecast band, shading and caption; the bars' names) with the lines it
-  draws, so the run before's lines never carry the next run's words. The
+  draws, so the run before's lines never carry the next run's words. If the
+  next run's series fail, the flow chart drops the run before's lines and
+  shows the error under the next run's heading. The
   tools under *How sure, and what if* are the run on screen's, so while
   busy their section is `inert` and dimmed (the body shows a progress
   cursor): a Run there can't start a job on a run the header no longer

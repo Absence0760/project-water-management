@@ -186,7 +186,7 @@ test('a viewer kept from the registered volumes reads a cap run’s row as withh
 	const viewer = await signIn('Withheld viewer');
 	expect((await page.request.post(`${API_URL}/teams/${a.team.id}/members`, { data: { email: viewer.user.email, role: 'viewer' } })).status()).toBe(201);
 	await acceptInvites(viewer.user.email, a.team.id);
-	const why = 'Uses registered volumes, shown to editors and owners only';
+	const why = 'Run uses registered water volumes; figures for editors and owners only';
 
 	// Positive control: the owner reads the run's figures.
 	await page.goto(`/?owner=team:${a.team.id}`);

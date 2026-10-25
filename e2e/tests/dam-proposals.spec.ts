@@ -195,6 +195,46 @@ test('a Use that answers after Dam of moved on leaves the box, and the keyboard,
 	await expect(panel(page).locator('caption')).toHaveCount(0);
 });
 
+test('a Use that fails after Dam of moved on reports it in the notice, naming its unit, not on the other unit’s map row', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dam proposals use fails');
+	// A dam on the map for both units, so Lower farm's box has a map row too: its key is 'area' on every unit.
+	for (const [unit, name, x] of [['Upper farm', 'Upper dam', 21.32], ['Lower farm', 'Lower dam', 21.34]] as const) {
+		const node = project.model.nodes.find((n) => n.name === unit)!;
+		const made = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, {
+			data: { kind: 'dam', name, nodeId: node.id, geometry: { type: 'Polygon', coordinates: [box(x, -33.68, 0.004)] } }
+		});
+		expect(made.status(), await made.text()).toBe(201);
+	}
+	// Hold the save until Dam of has moved to Lower farm and its proposals are in, then fail it.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let posted!: () => void;
+	const arrived = new Promise<void>((r) => (posted = r));
+	await page.route(/\/dam-area-from-map$/, async (route) => {
+		posted();
+		await held;
+		await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Something went wrong' }) });
+	});
+
+	await openProposals(page, project.id, 'Upper farm');
+	await rowOf(page, 'area').getByRole('button', { name: 'Use the map’s area' }).click();
+	await answerConfirm(page, true, /Set Upper farm’s full-supply area from the map\?/);
+	await arrived;
+	await panel(page).getByLabel('Dam of').selectOption({ label: 'Lower farm' });
+	await expect(panel(page).getByTestId('dam-proposals-body')).toHaveAttribute('data-ready', 'true');
+	await expect(rowOf(page, 'area')).toContainText('Lower dam');
+	await expect(panel(page)).toHaveAttribute('data-saving', 'true');
+	release();
+	await expect(panel(page)).not.toHaveAttribute('data-saving');
+	// Lower farm's map row (the same key) carries no error; the notice names the unit the failure was for.
+	await expect(rowOf(page, 'area').getByRole('alert')).toHaveCount(0);
+	const notice = panel(page).getByTestId('dam-proposals-notice');
+	await expect(notice).toHaveText('Couldn’t save Upper farm’s full-supply area: Something went wrong');
+	await expect(notice).toHaveClass(/alert-error/);
+	await expect(panel(page).getByLabel('Dam of')).toHaveValue(project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string);
+});
+
 test('with a run the box is the picked dam’s, folded in its chart panel; Dam of moves the pick, keeps units with no dam, and a card’s Proposals opens it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Dam proposals follow');

@@ -605,10 +605,11 @@ test('with a Reserve rule table the panels that count the pragmatic EWR name it,
 	await expect(page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' }).getByRole('img')).toBeVisible();
 });
 
-test('another run: the flow chart keeps the run before’s heading and caption with its lines until the next run’s are in', async ({ page, owner }) => {
-	void owner;
+/** Two runs whose flow charts are labelled apart: the first (`outlet`) draws the outlet's rule requirement ("Flow vs
+ *  reserve"), the newest only the pragmatic EWR ("Flow vs pragmatic EWR"). Opens EWR on the newest, drawn. */
+async function seedFlowSwap(page: Page, name: string) {
 	await page.setViewportSize({ width: 1440, height: 960 });
-	const id = await seedRiverProject(page.request, 'River flow swap');
+	const id = await seedRiverProject(page.request, name);
 	const table = (siteNodeId: string | null) => ({
 		siteNodeId,
 		source: 'Synthetic rule table',
@@ -639,6 +640,12 @@ test('another run: the flow chart keeps the run before’s heading and caption w
 	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs pragmatic EWR');
 	await expect(fig).toHaveAttribute('data-ready', 'true');
 	await expect(fig).not.toContainText('Reserve rule requirement');
+	return { id, outlet, flow, fig };
+}
+
+test('another run: the flow chart keeps the run before’s heading and caption with its lines until the next run’s are in', async ({ page, owner }) => {
+	void owner;
+	const { id, outlet, flow, fig } = await seedFlowSwap(page, 'River flow swap');
 
 	// The first run's series are slow to come: its record is in (the newest run's previous), so the page swaps, but the
 	// chart keeps the newest run's lines, and with them their heading and caption, never the first run's words on them.
@@ -661,6 +668,32 @@ test('another run: the flow chart keeps the run before’s heading and caption w
 	await expect(flow).toHaveAttribute('aria-busy', 'false');
 	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs reserve');
 	await expect(fig).toContainText('The Reserve rule requirement line');
+});
+
+test('another run whose series fail: the error sits under that run’s heading, not the run before’s', async ({ page, owner }) => {
+	void owner;
+	const { id, outlet, flow, fig } = await seedFlowSwap(page, 'River flow swap fails');
+	// The first run's series are held (the chart keeps the newest run's lines and heading), then fail.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let holding!: () => void;
+	const isHeld = new Promise<void>((r) => (holding = r));
+	await page.route(`**/projects/${id}/runs/${outlet}/series**`, async (route) => {
+		holding();
+		await held;
+		await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Something went wrong' }) });
+	});
+	await page.getByLabel('Run', { exact: true }).selectOption(outlet);
+	await isHeld;
+	await expect(page.getByTestId('river-body')).toHaveAttribute('data-run', outlet);
+	await expect(flow).toHaveAttribute('aria-busy', 'true');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs pragmatic EWR');
+	release();
+	await expect(flow).toHaveAttribute('aria-busy', 'false');
+	// The error is the first run's, so it sits under the first run's heading, and no line of the newest run's is left.
+	await expect(flow.getByRole('alert')).toContainText('Something went wrong');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs reserve');
+	await expect(fig).toHaveCount(0);
 });
 
 test('with a Reserve rule table the headline tile is Reserve rules met, with the pragmatic EWR’s days under it, and the strip is named for the test it counts (issue #558)', async ({ page, owner }) => {

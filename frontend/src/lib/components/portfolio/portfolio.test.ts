@@ -106,7 +106,7 @@ describe('wording: every status is words, every unknown says why', () => {
 		// A cap or full-allocation run, to a reader kept from the registered volumes (#523 I).
 		// Short: the reason is said once per row, by withheldText.
 		expect(damText(row({ figuresWithheld: true, lowestDamPct: null }))).toBe('Withheld');
-		expect(withheldText(row({ figuresWithheld: true, lowestDamPct: null }))).toBe('Uses registered volumes, shown to editors and owners only');
+		expect(withheldText(row({ figuresWithheld: true, lowestDamPct: null }))).toBe('Run uses registered water volumes; figures for editors and owners only');
 		expect(withheldText(row())).toBeNull();
 		expect(restrictionText(row())).toBe('Advisory · 12.5 %');
 		expect(restrictionText(row({ restriction: { level: 'restricted', pct: null } }))).toBe('Restricted');
@@ -228,7 +228,7 @@ describe('irrigation (the project list’s status, issue #558)', () => {
 	it('says why it is unknown', () => {
 		const u = (reason: 'no-figures' | 'no-units' | 'no-demand' | 'withheld') => irr({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason });
 		expect(irrigationText(u('no-figures'))).toBe('Unknown: no run yet');
-		expect(irrigationText(u('withheld'))).toMatch(/^Withheld: the run caps use at, or scales demand to, the registered water volumes/);
+		expect(irrigationText(u('withheld'))).toBe('Withheld: run uses registered water volumes; figures for editors and owners only');
 		// The pill's short form.
 		expect(irrigationText(u('withheld'), true)).toBe('Withheld');
 		expect(irrigationText(u('no-units'))).toBe('Unknown: no hydrological units in the run');
