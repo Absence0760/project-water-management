@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "PR #576 (EWR page busy swap and inert tools, FlowVsReserve label snapshot, portfolio Withheld wording, proposals focus): the PR's merge ref measures 2068 KB in CI (run 40216649015) against main's 2067 KB (main CI run 40198788338, at its ceiling); 2065 KB locally. +1 KB growth, ~1 KB headroom."
+}

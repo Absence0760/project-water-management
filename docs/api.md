@@ -1379,7 +1379,7 @@ left out, so nobody gets a catchment roll-up of their neighbours.
   traffic-light cut-offs every `ewr.status` below was judged by, in percent,
   and `source` says whether they are the team's (`team`) or the defaults
   (`default`), so the page can say which apply.
-- `PortfolioProject = { id, name, role, timeZone, today, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, irrigation, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, feeds, alertsFiring, restriction }`, by name:
+- `PortfolioProject = { id, name, role, timeZone, today, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, irrigation, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, figuresWithheld, feeds, alertsFiring, restriction }`, by name:
   - `timeZone` / `today`: the project's time zone and the calendar day
     there when the server answered. `figuresAgeDays`, `stale` and the feeds'
     health count to that day, so a team with catchments in several zones
@@ -1423,8 +1423,9 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     not a team setting): **green** from 95 % supplied, **amber** from 80 %,
     **red** below; a boundary is inclusive (exactly 95 % is green). `unknown`
     carries `reason`: `no-figures` (no run), `no-units` (the run has no
-    hydrological units) or `no-demand` (they asked for no water). It doesn't
-    move with the team's EWR `thresholds`.
+    hydrological units), `no-demand` (they asked for no water) or `withheld`
+    (`figuresWithheld`, below). It doesn't move with the team's EWR
+    `thresholds`.
   - `farmsShort7` / `farmsShort30`: farms short at least one day in the 7 /
     30 days to `figuresUntil`, stored with the publication
     (`catchmentView.recent`); `null` without a publication, or for one made
@@ -1433,6 +1434,14 @@ left out, so nobody gets a catchment roll-up of their neighbours.
   - `lowestDamPct = { nodeName, pct }`: the farm dam lowest on
     `figuresUntil` (0–1), from the farm projections; `null` with no dams.
     `damsKnown` is false without a publication (then `null` means unknown).
+  - `figuresWithheld`: the source run caps use at, or scales demand to, the
+    registered volumes (a published run from before 213, or the newest run
+    when none is published) and the caller is
+    kept from each volume (a viewer, `allocations_viewer_units` off): both
+    rest on those volumes, so `irrigation` is `unknown` (`withheld`) and
+    `lowestDamPct` is `null`, as that viewer's farm previews of such a
+    publication are refused (#523 I; security.md § Allocations). The EWR
+    counts and the farms-short counts stay.
   - `feeds = { total, ok, failing }`: `failing` counts failing **and** stale
     feeds (`feeds/health.ts`); pending and disabled ones count in neither.
   - `alertsFiring`: the alerts firing now (`alert_event` rows in state

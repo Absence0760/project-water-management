@@ -82,8 +82,10 @@ export const UNIT_SUPPLY_TARGET = 0.95;
  *   no-figures  nothing to read: no run
  *   no-units    the source run has no hydrological units
  *   no-demand   its units asked for no water (nothing planted), so a share supplied means nothing
+ *   withheld    the source run caps use at, or scales demand to, the registered volumes, and the
+ *               reader is kept from each one (portfolio.ts figuresWithheld, #523 I)
  */
-export type IrrigationUnknownReason = 'no-figures' | 'no-units' | 'no-demand';
+export type IrrigationUnknownReason = 'no-figures' | 'no-units' | 'no-demand' | 'withheld';
 
 export interface IrrigationFigure {
 	status: EwrStatus;
@@ -107,11 +109,12 @@ export function irrigationStatus(fraction: number, t: IrrigationThresholds = IRR
 
 /** The irrigation figure from what the query read: the source run's units, their summed mean demand and supply, and how many fell short. */
 export function irrigationFigure(
-	input: { hasFigures: boolean; units: number; demandM3Day: number; suppliedM3Day: number; unitsBelow: number },
+	input: { hasFigures: boolean; withheld?: boolean; units: number; demandM3Day: number; suppliedM3Day: number; unitsBelow: number },
 	thresholds: IrrigationThresholds = IRRIGATION_THRESHOLDS
 ): IrrigationFigure {
 	const unknown = (reason: IrrigationUnknownReason): IrrigationFigure => ({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason });
 	if (!input.hasFigures) return unknown('no-figures');
+	if (input.withheld) return unknown('withheld');
 	if (!input.units) return unknown('no-units');
 	if (!(input.demandM3Day > 0)) return unknown('no-demand');
 	const fractionSupplied = Math.min(1, Math.max(0, input.suppliedM3Day / input.demandM3Day));

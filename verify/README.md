@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 171 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 172 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -325,7 +325,10 @@ network so some pairings have their five years):
   the days both have a reading (accumulation windows out), whole records,
   90 days and 50 mm else 1, clamped; refused with no record, no CHIRPS at the
   station (never the catchment's), or fewer than 5 complete calendar years in
-  common (a window day or an unreliable day makes its year incomplete).
+  common, counted on the record as the forcing reads it (engine 1.96.0,
+  engine-audit.md RS6): a spread accumulation's days count as read, while
+  an unreliable day, a blank outage and the reading set aside after it, or
+  a window's blank days run as recorded make the year incomplete.
 - **The catchment under its station**: the stored gauge unread, no §2.4b
   factors, the catchment MAP `catchmentMapMm` (when in 1–12 000 mm) else the
   land units' area-weighted mean (none, so r = 1, when a land unit has no
@@ -352,9 +355,11 @@ without CHIRPS, a unit without a MAP, a unit without a station; gap,
 no-data, zero-run and unreliable days on the corrected CHIRPS; a pairing on
 a site unit's CHIRPS with a month under 50 mm, one on a cell with a clamped
 month; the catchment's missing list not applied), `station-pairing-refused`
-(five complete years fitted, four refused, a year made incomplete by an
-accumulation window, a station with no CHIRPS at it, `correctAgainst` a
-refused pairing), `station-catchment` (Fragmentation on a station that is
+(five complete years fitted, four refused, a spread accumulation window
+counted as read so its year is complete, a station with no CHIRPS at it,
+`correctAgainst` a refused pairing), `station-pairing-as-recorded` (the same
+with accumulations run as recorded: the window's blank days make its year
+incomplete, so that pairing is refused), `station-catchment` (Fragmentation on a station that is
 the catchment gauge: the units' mean MAP, its missing list, its zero run
 checked against the catchment's CHIRPS, a refused pairing falling to the
 forecast), `station-catchment-map` (an entered catchment MAP, clamped; the
@@ -453,7 +458,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (171
+`test_verify.py` breaks `model.py` one documented rule at a time (172
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -511,11 +516,12 @@ one levelled too, a unit's gauge read as recorded or its accumulations not
 spread, the catchment's missing periods blanking a unit's gauge, a unit
 gauge without CHIRPS checked against none, the reference fit reading the
 gauge as stored, and it keeping the catchment's or a unit gauge's
-accumulation windows. Rainfall stations' 24 (engine 1.91.0): the MAP ratio
+accumulation windows. Rainfall stations' 25 (engine 1.91.0, one added on 1.96.0): the MAP ratio
 unclamped, or 1 whatever the MAPs, `scaleToMap` false ignored; gap days ×
 the MAP ratio too, or on raw CHIRPS; a unit's last gaps dry rather than the
 catchment forcing; `correctAgainst` ignored; the pairing's five years at 4
-or 6, its windows kept, a month without the 50 mm test, a factor unclamped,
+or 6, its windows kept, its complete years leaving a spread window's days
+out (before RS6), a month without the 50 mm test, a factor unclamped,
 a station without CHIRPS at it paired with the catchment's; unreliable
 periods read, the checks skipped, a negative value a reading; every station
 given the catchment's dated lists, the catchment gauge's station without
@@ -710,6 +716,13 @@ output, one of them an engine fix:
   (86b2b80dc, fitting on station × r), and with it rule 2's MAP ratio now
   divides by the station rain's level, station MAP × r, not `gaugeMapMm`
   (3e949975f; probes `station-catchment-rule2` and `-no-map`).
+
+Engine 1.96.0 (engine-audit.md RS6, provisional) counts a pairing's
+complete years on the station's record as the forcing reads it, so a spread
+accumulation's days count as read; the factors still leave the window out.
+`model.py` follows model.md § Accumulations and complete years, and station
+E of `station-pairing-refused` (one accumulation in 2014) moved from refused
+to fitted; `station-pairing-as-recorded` keeps a window-broken year refused.
 
 §2.4i also said a negative value is a no-data code "as in §2.4b", where
 §2.4b reads a negative catchment reading as a reading; it now says a value

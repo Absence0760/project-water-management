@@ -32,12 +32,12 @@
 
 	// The chart fills the height its box gives it (a flex column), at least `minHeight` px.
 	// `daily`: the outlet's daily test the bars count, by name (ewr/notMet.ts dailyEwrName; engine ≥ 1.77.0 it can be a DRM table).
-	let { runs, minHeight = 240, below = 'the reserve', daily = 'the pragmatic EWR' }: { runs: ChartRun[]; minHeight?: number; below?: string; daily?: string } = $props();
+	let { runs: wanted, minHeight = 240, below = 'the reserve', daily = 'the pragmatic EWR' }: { runs: ChartRun[]; minHeight?: number; below?: string; daily?: string } = $props();
 
-	// The runs' own daily tests (Compare runs): one name when they agree, else "each run's daily EWR" with each run's named in the legend.
-	const dailies = $derived([...new Set(runs.map((r) => r.daily).filter((d): d is string => !!d))]);
-	const mixed = $derived(dailies.length > 1);
-	const dailyName = $derived(mixed ? EACH_RUNS_DAILY_EWR : (dailies[0] ?? daily));
+	// The runs drawn, set with their years: when the runs change (EWR's run picker, Compare's), the bars drawn stay on
+	// screen (aria-busy) until the next runs' are in, rather than giving way to a short Loading… line.
+	let drawnRuns = $state.raw<ChartRun[]>([]);
+	let drawnKey = $state<string | null>(null);
 
 	// $state.raw: plain arrays, no deep proxies.
 	let years = $state.raw<(ReserveYear[] | null)[]>([]);
@@ -45,10 +45,17 @@
 	let error = $state<string | null>(null);
 	let attempt = $state(0);
 
-	const key = $derived(runs.map((r) => `${r.projectId}:${r.runId}:${r.forecastFrom ?? ''}`).join('|'));
+	const key = $derived(wanted.map((r) => `${r.projectId}:${r.runId}:${r.forecastFrom ?? ''}`).join('|'));
+	// The same runs as drawn take their names and colours from the props as they are now; others wait for their years.
+	const runs = $derived(drawnKey === key ? wanted : drawnRuns);
+
+	// The runs' own daily tests (Compare runs): one name when they agree, else "each run's daily EWR" with each run's named in the legend.
+	const dailies = $derived([...new Set(runs.map((r) => r.daily).filter((d): d is string => !!d))]);
+	const mixed = $derived(dailies.length > 1);
+	const dailyName = $derived(mixed ? EACH_RUNS_DAILY_EWR : (dailies[0] ?? daily));
 	$effect(() => {
 		const k = key;
-		const list = runs;
+		const list = wanted;
 		void attempt;
 		loading = true;
 		error = null;
@@ -59,6 +66,8 @@
 			const failed = res.find((x): x is PromiseRejectedResult => x.status === 'rejected' && !(x.reason instanceof ApiError && x.reason.status === 404));
 			if (failed) error = failed.reason instanceof Error ? failed.reason.message : String(failed.reason);
 			years = res.map((x, i) => (x.status === 'fulfilled' ? reserveDaysByWaterYear(x.value.startDate, x.value.values, list[i]!.forecastFrom ?? null) : null));
+			drawnRuns = list;
+			drawnKey = k;
 			loading = false;
 		});
 	});
@@ -98,11 +107,11 @@
 	);
 </script>
 
-<LoadState {loading} {error} retry={() => attempt++}>
+<LoadState loading={loading && drawnKey === null} {error} retry={() => attempt++}>
 	{#if allYears.length === 0}
 		<p class="muted">These runs stored no reserve shortfall series to count.</p>
 	{:else}
-		<div class="chart">
+		<div class="chart" aria-busy={loading}>
 		<ul class="legend" aria-label="Runs">
 			{#each runs as r (r.name)}<li><span class="swatch" style:background={r.colour} aria-hidden="true"></span>{r.name}{#if mixed && r.daily}<span class="muted" data-testid="reserve-years-daily">{` (${r.daily})`}</span>{/if}</li>{/each}
 		</ul>

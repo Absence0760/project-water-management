@@ -22,7 +22,8 @@ import {
 	statusSummary,
 	thresholdsError,
 	thresholdsRule,
-	thresholdsSource
+	thresholdsSource,
+	withheldText
 } from './portfolio';
 
 const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
@@ -48,6 +49,7 @@ const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
 	farmCount: 14,
 	lowestDamPct: { nodeName: 'Kareebos', pct: 0.183 },
 	damsKnown: true,
+	figuresWithheld: false,
 	feeds: { total: 0, ok: 0, failing: 0 },
 	alertsFiring: 0,
 	restriction: { level: 'advisory', pct: 12.5 },
@@ -101,6 +103,11 @@ describe('wording: every status is words, every unknown says why', () => {
 		expect(damText(row())).toBe('Kareebos 18 %');
 		expect(damText(row({ lowestDamPct: null }))).toBe('No dams');
 		expect(damText(row({ damsKnown: false, lowestDamPct: null }))).toBe('Unknown until a run is published');
+		// A cap or full-allocation run, to a reader kept from the registered volumes (#523 I).
+		// Short: the reason is said once per row, by withheldText.
+		expect(damText(row({ figuresWithheld: true, lowestDamPct: null }))).toBe('Withheld');
+		expect(withheldText(row({ figuresWithheld: true, lowestDamPct: null }))).toBe('Run uses registered water volumes; figures for editors and owners only');
+		expect(withheldText(row())).toBeNull();
 		expect(restrictionText(row())).toBe('Advisory · 12.5 %');
 		expect(restrictionText(row({ restriction: { level: 'restricted', pct: null } }))).toBe('Restricted');
 		expect(restrictionText(row({ restriction: { level: 'none', pct: null } }))).toBe('None');
@@ -219,8 +226,11 @@ describe('irrigation (the project list’s status, issue #558)', () => {
 		expect(irrigationText(irr({ status: 'red', fractionSupplied: 0.5, units: 1, unitsBelow: 1 }))).toBe('Red: 50.0% supplied, 1 of 1 unit below 95%');
 	});
 	it('says why it is unknown', () => {
-		const u = (reason: 'no-figures' | 'no-units' | 'no-demand') => irr({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason });
+		const u = (reason: 'no-figures' | 'no-units' | 'no-demand' | 'withheld') => irr({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason });
 		expect(irrigationText(u('no-figures'))).toBe('Unknown: no run yet');
+		expect(irrigationText(u('withheld'))).toBe('Withheld: run uses registered water volumes; figures for editors and owners only');
+		// The pill's short form.
+		expect(irrigationText(u('withheld'), true)).toBe('Withheld');
 		expect(irrigationText(u('no-units'))).toBe('Unknown: no hydrological units in the run');
 		expect(irrigationText(u('no-demand'))).toBe('Unknown: no irrigation demand in the run');
 	});

@@ -51,10 +51,15 @@ export function pairingFactorsText(p: Pick<StationPairingFit, 'refused' | 'month
 	return p.months.map((m) => `${MONTHS[m.month - 1]} ${fmtNum(m.factor, 2, true)}`).join(', ');
 }
 
-/** "1995-01-01 to 2020-12-31 (26 complete years)", or "–" without a shared day. */
+/**
+ * "1995-01-01 to 2020-12-31; 26 complete years (accumulations counted)", or "–" without a shared day. The dates are
+ * the fit's first and last shared day, with the §2.4d accumulation windows left out; the complete years are counted
+ * with those windows' days read (engine ≥ 1.96.0, model.md §2.4i), so they may cover a year the dates don't, and the
+ * two are not written as one period.
+ */
 export function pairingPeriodText(p: Pick<StationPairingFit, 'fitFrom' | 'fitTo' | 'commonYears'>): string {
 	if (!p.fitFrom || !p.fitTo) return '–';
-	return `${p.fitFrom} to ${p.fitTo} (${p.commonYears === 1 ? '1 complete year' : `${fmtNum(p.commonYears)} complete years`})`;
+	return `${p.fitFrom} to ${p.fitTo}; ${p.commonYears === 1 ? '1 complete year' : `${fmtNum(p.commonYears)} complete years`} (accumulations counted)`;
 }
 
 /** The name of the station whose pairing corrects an area's CHIRPS, or null when none does. */

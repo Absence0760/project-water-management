@@ -17,6 +17,7 @@
 	// met per site and water year under its grid) and the water account; then, under "How sure, and
 	// what if", the run-it-yourself tools, each one row until it has run (common/ToolRow): the
 	// uncertainty bands, the sensitivity runs, the outcome matrix and the seasonal outlook.
+	// Another run picked keeps the page on screen, aria-busy, until its record is in (docs/ui.md § EWR).
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { goto } from '$app/navigation';
@@ -88,8 +89,11 @@
 	}
 
 	// --- the run's record and the one before it, through the Runs tab's cache ---
+	// `detail` is the record on screen. Another run picked keeps it there (marked busy) until the next one is in,
+	// so the page never empties under a reader scrolled down; a record that fails clears it, so nothing stale stays.
 	type Detail = { run: Run; series: RunSeriesRef[] };
 	let detail = $state.raw<Detail | null>(null);
+	/** The run before the one on screen, for the tiles' changes. */
 	let previous = $state.raw<Run | null>(null);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -107,16 +111,27 @@
 	let loadKey = '';
 	async function load(runId: string, previousId: string | null) {
 		const key = (loadKey = `${runId}|${previousId ?? ''}`);
-		detail = detailCache.get(runId) ?? null;
-		previous = previousId ? (detailCache.get(previousId)?.run ?? null) : null;
+		const hit = detailCache.get(runId) ?? null;
+		const previousHit = previousId ? (detailCache.get(previousId)?.run ?? null) : null;
 		error = previousError = null;
-		loading = !detail;
-		const prev = previousId && !previous ? fetchDetail(previousId) : null;
+		// A cached record swaps in at once; otherwise the one on screen stays, busy, until this one is in.
+		if (hit) {
+			detail = hit;
+			previous = previousHit;
+		}
+		loading = !hit;
+		const prev = previousId && !previousHit ? fetchDetail(previousId) : null;
 		try {
 			const d = await fetchDetail(runId);
-			if (loadKey === key) detail = d;
+			if (loadKey === key && !hit) {
+				detail = d;
+				previous = previousHit;
+			}
 		} catch (e) {
-			if (loadKey === key) error = msg(e);
+			if (loadKey === key) {
+				error = msg(e);
+				detail = previous = null;
+			}
 		} finally {
 			if (loadKey === key) loading = false;
 		}
@@ -141,8 +156,15 @@
 		});
 	});
 
-	/** The record shown: only once it is the run picked, never a stale one while the next loads. */
-	const shown = $derived(detail && detail.run.id === pick?.run.id ? detail : null);
+	/** The record shown: the run picked, or the one before it while the picked one's record loads. */
+	const shown = $derived(detail);
+	/** The run picked isn't the one on screen yet: its record is loading (the panels are aria-busy meanwhile). */
+	const busy = $derived(!!pick && (loading || (!!shown && shown.run.id !== pick.run.id)));
+	/** The run before the one on screen, from the list (the change line names it). */
+	const shownPrevious = $derived.by(() => {
+		const p = shown ? pickRiverRun(runs, shown.run.id) : null;
+		return p && !p.gone ? p.previous : null;
+	});
 	const summary = $derived(shown?.run.summary ?? null);
 	// What the results are judged by: the project's choice (settings.ewrHeadline, issue #444) applied to this run.
 	const headline = $derived(project.settings.ewrHeadline ?? null);
@@ -159,7 +181,7 @@
 	const yearsWords = $derived(reserveYearsWords(ruleTable, summary?.catchment.outletEwr));
 	const reserveStub = $derived(reserveStubText(!!project.settings.ewrRules?.length, canEdit));
 	const kpis = $derived(
-		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: historyDays(previous) } : null, headline) : []
+		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === shownPrevious?.id ? { summary: previous.summary, days: historyDays(previous) } : null, headline) : []
 	);
 
 	// --- a link to one of the panels (`#res-reserve`, or an old Runs & results link sent here):
@@ -218,7 +240,7 @@
 			{#if pick.run.evidence === 'current'}<span class="badge badge-owner">Evidence</span>{/if}
 			<span>· {fmtDay(pick.run.startDate)} – {fmtDay(pick.run.endDate)}</span>
 			<span>· engine {pick.run.engineVersion}</span>
-			{#if summary}<span>· {ewrRuleText(summary)}</span>{/if}
+			{#if summary && !busy}<span>· {ewrRuleText(summary)}</span>{/if}
 		</span>
 	{:else}
 		<span>Whether enough water stays in the river for its Ecological Reserve, run by run.</span>
@@ -256,7 +278,12 @@
 	     its links; narrower a bar under the header, its links evenly spaced (issue #162, #462). The
 	     page's own widths are read from river-body, the column beside the index. -->
 	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="EWR sections" railFrom={RIVER_RAIL_FROM_REM}>
-	<div class="river-body">
+	<!-- data-run: the run whose record is on screen; aria-busy while another run picked is loading (both for the tests). -->
+	<div class="river-body" data-testid="river-body" data-run={shown?.run.id} aria-busy={busy}>
+	{#if pick.gone}
+		<!-- `run=` names a run that's gone (deleted since the link was made): the newest is shown, and said (as Hydrological units). -->
+		<p class="alert alert-info" role="note">That run no longer exists, so this shows the newest run.</p>
+	{/if}
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
 	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
@@ -284,12 +311,12 @@
 					</div>
 				{/each}
 			</dl>
-			{#if pick.previous}
+			{#if shownPrevious}
 				<p class="muted small after">
-					{#if previousError}
+					{#if previousError && !busy}
 						The previous run couldn’t be loaded ({previousError}), so no changes are shown.
 					{:else}
-						Changes are against the previous run, <a href="?tab=river&run={encodeURIComponent(pick.previous.id)}">{name(pick.previous)}</a>.
+						Changes are against the previous run, <a href="?tab=river&run={encodeURIComponent(shownPrevious.id)}">{name(shownPrevious)}</a>.
 					{/if}
 				</p>
 			{/if}
@@ -334,40 +361,48 @@
 	{#if shown && summary}
 		{@const shownRun = shown.run}
 		{@const runSeries = shown.series}
-		<div class="panels">
+		<!-- The findings are the page's own sections, h2 as the flow chart and the water-year bars are: as h3s a screen
+		     reader's outline put them under the bars' heading. Keyed on the run: their own state (the EWR grid's
+		     focused cell and site, Reserve compliance's site and Show all, the water account's year) is the run's, and
+		     starts afresh with the next run's record. -->
+		{#key shownRun.id}
+		<div class="panels findings">
 			{#if summary.ewrAssurance?.length}
 				<div class="panel" id="res-reserve">
 					<Lazy load={loadAssurancePanel}>
 						{#snippet children(EwrAssurancePanel)}
-							<EwrAssurancePanel sites={summary.ewrAssurance ?? []} title={RESERVE_MONTHS_HEADING} />
+							<EwrAssurancePanel sites={summary.ewrAssurance ?? []} title={RESERVE_MONTHS_HEADING} headingLevel={2} />
 						{/snippet}
 					</Lazy>
 				</div>
 			{:else}
 				<!-- Without a rule table this panel was simply absent and nothing said why (issue #465): one line saying what it needs. -->
 				<section class="panel stub" id="res-reserve" aria-labelledby="reserve-stub-h" data-testid="reserve-stub">
-					<h3 id="reserve-stub-h">{RESERVE_MONTHS_HEADING}</h3>
+					<h2 id="reserve-stub-h">{RESERVE_MONTHS_HEADING}</h2>
 					<p>{reserveStub.lead}{#if reserveStub.link}{' '}<a href="?tab=settings#set-reserve">{reserveStub.link}</a>.{/if}</p>
 				</section>
 			{/if}
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}
-					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} title={EWR_MONTHS_HEADING} />
+					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} title={EWR_MONTHS_HEADING} headingLevel={2} />
 				{:else}
-					<h3>{EWR_MONTHS_HEADING}</h3>
+					<h2>{EWR_MONTHS_HEADING}</h2>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 				{/if}
 				<!-- The volume side of compliance, per site and water year (the water account's tail until issue #175). -->
-				<EwrRequiredMet assurance={summary.supplyAssurance} />
+				<EwrRequiredMet assurance={summary.supplyAssurance} headingLevel={3} />
 			</div>
 			<!-- The last finding, straight after the EWR by month: it sat below the three tools until issue #465. -->
 			<div class="panel" id="res-water-account">
-				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" />
+				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" headingLevel={2} />
 			</div>
 		</div>
+		{/key}
 		<!-- The run-it-yourself tools, under the menu's name for them (issue #465). Each is one row (name, purpose, ⓘ,
-		     Run) until it has a result or an editor opens its form (common/ToolRow). -->
-		<section class="tools" aria-labelledby="river-tools-h">
+		     Run) until it has a result or an editor opens its form (common/ToolRow). Inert (and dimmed) while another
+		     run's record loads: they are the run on screen's, so a Run there would start a job on a run the header no
+		     longer names. Kept in place rather than hidden, so the page keeps its height under a reader scrolled down. -->
+		<section class="tools" aria-labelledby="river-tools-h" inert={busy}>
 			<h2 id="river-tools-h">How sure, and what if</h2>
 			<div class="panels">
 				<!-- The uncertainty bands (issue #4 phase 9) qualify the EWR and Reserve findings above, and after
@@ -538,6 +573,10 @@
 	.panels > .panel {
 		min-width: 0;
 	}
+	/* The findings' headings are h2 (the page's sections), sized as the charts' above them. */
+	.findings :global(h2) {
+		font-size: 1.05rem;
+	}
 	/* Nor do the panels' tables scroll in a box of their own (the app's 70vh cap, the EWR grid's): they
 	   grow with the page and scroll only sideways when they are wide. Long ones fold instead
 	   (Reserve compliance's month by month shows its first rows, then Show all). */
@@ -551,7 +590,7 @@
 		align-items: baseline;
 		gap: 0.25rem 1rem;
 	}
-	.stub h3,
+	.stub h2,
 	.stub p {
 		margin: 0;
 	}
@@ -562,6 +601,14 @@
 	.tools h2 {
 		margin: 1.5rem 0 0.75rem;
 		font-size: 1.05rem;
+	}
+	/* Another run's record is loading: the page on screen is the run before's (aria-busy). The tools can't be used
+	   meanwhile (inert), and look it; the rest stays readable, so a quick swap doesn't flash the page. */
+	.river-body[aria-busy='true'] {
+		cursor: progress;
+	}
+	.tools[inert] {
+		opacity: 0.55;
 	}
 	.run-pick select {
 		max-width: min(34rem, 60vw);

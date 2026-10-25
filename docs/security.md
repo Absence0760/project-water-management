@@ -3214,7 +3214,9 @@ database:
   report `withheld`, and the run pages, the report, the outlook and the
   yield panel say so. Such a run can't be published, nor an outlook started
   from it (only one from before 213 can be one); for one published or
-  outlooked before, a farm preview by that viewer is refused (`403`), its
+  outlooked before, a farm preview by that viewer is refused (`403`), the
+  team portfolio and the project list's outcome columns give no use share
+  or farm dam level of it (`figuresWithheld`, `portfolio/portfolio.ts`), its
   farm history drops those publications, and the outlook is served without
   its result (a linked farmer keeps their own farm). On **every** report
   such a viewer reads, the licence-impact boards (the modelled one and the

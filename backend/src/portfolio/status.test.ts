@@ -101,6 +101,10 @@ describe('irrigationFigure', () => {
 		expect(irrigationFigure({ ...known, units: 0 })).toMatchObject({ status: 'unknown', reason: 'no-units' });
 		expect(irrigationFigure({ ...known, demandM3Day: 0, suppliedM3Day: 0 })).toMatchObject({ status: 'unknown', reason: 'no-demand' });
 	});
+	it('withholds the share of a cap or full-allocation run from a reader kept from the volumes (#523 I), with nothing of it', () => {
+		expect(irrigationFigure({ ...known, withheld: true })).toEqual({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'withheld' });
+		expect(irrigationFigure({ ...known, withheld: false })).toEqual(irrigationFigure(known));
+	});
 	it('a known figure carries the share supplied and the units short, and no reason', () => {
 		expect(irrigationFigure(known)).toEqual({ status: 'red', fractionSupplied: 0.75, units: 4, unitsBelow: 2 });
 	});
@@ -151,6 +155,7 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 	irr_demand: 2000,
 	irr_supplied: 1800,
 	irr_below: 3,
+	figures_withheld: false,
 	alerts_firing: 0,
 	feeds: [],
 	...over
@@ -184,6 +189,7 @@ describe('toPortfolioProject', () => {
 			farmCount: 12,
 			lowestDamPct: { nodeName: 'Kareebos', pct: 0.18 },
 			damsKnown: true,
+			figuresWithheld: false,
 			feeds: { total: 0, ok: 0, failing: 0 },
 			alertsFiring: 0,
 			restriction: { level: 'advisory', pct: 12.5 }
@@ -239,6 +245,13 @@ describe('toPortfolioProject', () => {
 		expect(none.irrigation).toEqual({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'no-figures' });
 		// pg returns a float8 sum as a number, a numeric as a string: either reads.
 		expect(toPortfolioProject(row({ irr_demand: '2000' as unknown as number, irr_supplied: '1960' as unknown as number }), today).irrigation.status).toBe('green');
+	});
+
+	it('a cap or full-allocation source run, to a reader kept from the volumes: no use share and no farm dam level (#523 I)', () => {
+		const p = toPortfolioProject(row({ figures_withheld: true }), today);
+		expect(p.irrigation).toEqual({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'withheld' });
+		expect([p.lowestDamPct, p.figuresWithheld, p.damsKnown]).toEqual([null, true, true]);
+		expect(toPortfolioProject(row(), today).figuresWithheld).toBe(false);
 	});
 
 	it('a run whose outlet series is missing is unknown (no-series)', () => {

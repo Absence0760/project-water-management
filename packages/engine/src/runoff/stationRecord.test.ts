@@ -1,11 +1,12 @@
 // A rainfall station's checked record (issue #553, docs/model.md §2.4i): the §2.4c/§2.4d checks a
 // unit's own gauge gets, then the user's unreliable periods. Synthetic values only (public repo).
 import { describe, expect, it } from 'vitest';
-import { monthOfEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { checkedCatchmentRainRecord, mergeSettings } from '../prepare';
 import { stationChirpsSeriesKey, stationSeriesKey, type DailySeries, type ModelInput, type ProjectSettings, type RainStationSettings } from '../project';
 import { fitStationPairing } from './stationPairing';
 import { checkedStationRecord, stationChirpsSource } from './stationRecord';
+import { Rng } from '../random';
 
 const START = '2015-01-01';
 const D0 = toEpochDay(START);
@@ -104,6 +105,9 @@ describe('checkedStationRecord', () => {
 		expect(fit.record.values[ACC_BLANK[0] - 1]).toBe(0);
 		expect(fit.record.values[ACC_READ + 1]).toBe(gauge[ACC_READ + 1]);
 		expect(fit.setAside.checks).toBe(1); // the 60 mm reading
+		// Beside it, the record as the forcing reads it (the pairing's complete years count on it); none without the option.
+		expect(fit.forcing).toEqual(run.record);
+		expect(run.forcing).toBeUndefined();
 		// Positive control: read against the catchment's CHIRPS (no cell), the reading is one day's rain, kept.
 		const noCell = checkedStationRecord(settingsWith(), seriesOf({ [stationSeriesKey('S1')]: ser(gauge), rain_chirps_mm: ser(catchmentChirps) }), 'S1')!;
 		expect(noCell.record.values[ACC_READ]).toBe(60);
@@ -238,5 +242,99 @@ describe('the station that is the catchment’s rain gauge (isCatchmentGauge)', 
 		expect(plainForcing.record.values.filter((v, i) => v !== null && monthOf(i) === 3).length).toBe(march + 10);
 		expect(plain.days).toBe(plainForcing.record.values.filter((v) => v !== null).length);
 		expect(fit.days).toBe(forcing.record.values.filter((v) => v !== null).length);
+	});
+});
+
+describe('the forcing’s record holds every day the fit’s record holds (RS6, model.md §2.4i)', () => {
+	// The pairing counts its complete years on `forcing` and fits its factors on `record` (stationPairing.ts), which
+	// is sound only if `forcing` reads every day `record` does, with the same value: the fit's record is the forcing's
+	// with the accumulation windows left out, and the user's unreliable periods blank both. Random stations from a
+	// seeded generator (a failure names its seed): multi-day accumulations, outages past the 7 blank days a window may
+	// hold, gaps, unreliable periods (one always across a window §2.4d may spread), either accumulation mode, gauge or not.
+	const SEEDS = 60;
+	const iso = (i: number) => fromEpochDay(D0 + i);
+	// The engine exports no days-in-year helper (stationPairing.ts keeps its own, unexported); this is the same
+	// definition, read through the engine's calendar.
+	const daysInYear = (y: number) => toEpochDay(`${y + 1}-01-01`) - toEpochDay(`${y}-01-01`);
+	const completeYears = (a: (number | null)[], b: (number | null)[]) => {
+		const per = new Map<number, number>();
+		for (let i = 0; i < DAYS; i++) {
+			if (a[i] == null || b[i] == null) continue;
+			const y = Number(iso(i).slice(0, 4));
+			per.set(y, (per.get(y) ?? 0) + 1);
+		}
+		return [...per].filter(([y, n]) => n === daysInYear(y)).length;
+	};
+
+	function station(seed: number) {
+		const rng = new Rng(seed);
+		const gauge: (number | null)[] = rainOf(rng.float(0.6, 1.6), rng.int(0, 12)).map((v) => v! + (rng.bool(0.3) ? rng.float(0, 3) : 0));
+		const cell: (number | null)[] = rainOf(rng.float(0.4, 1), rng.int(0, 12)).map((v) => v! + (rng.bool(0.3) ? rng.float(0, 2) : 0));
+		const windows: { first: number; read: number }[] = [];
+		for (let at0 = rng.int(20, 80); at0 < DAYS - 30; at0 += rng.int(25, 160)) {
+			// 1–10 blank days, then a reading: 3–7 make a window §2.4d spreads (its CHIRPS wet over the run, dry the day
+			// before the reading, on it and after, as §2.4d looks for), fewer just a gap and a reading, more an outage
+			// whose reading is set aside.
+			const blanks = rng.int(1, 10);
+			const read = at0 + blanks;
+			gauge[at0 - 1] = 0;
+			cell[at0 - 1] = 0;
+			for (let i = at0; i < read; i++) {
+				gauge[i] = null;
+				cell[i] = i < read - 1 ? rng.float(15, 30) : 0;
+			}
+			gauge[read] = rng.float(20, 50);
+			cell[read] = 0;
+			cell[read + 1] = 0;
+			windows.push({ first: at0, read });
+		}
+		for (let k = rng.int(0, 6); k > 0; k--) gauge[rng.int(0, DAYS - 1)] = null;
+		// Across one window §2.4d may spread (3–7 blank days), part of it or all and past it.
+		const short = windows.filter((v) => v.read - v.first >= 3 && v.read - v.first <= 7);
+		expect(short.length, `seed ${seed}: no window of 3–7 blank days`).toBeGreaterThan(0);
+		const w = short[rng.int(0, short.length - 1)]!;
+		const unreliable: [string, string][] = [[iso(w.first + rng.int(0, 1)), iso(w.read + rng.int(-1, 2))]];
+		for (let k = rng.int(0, 3); k > 0; k--) {
+			const a = rng.int(0, DAYS - 1);
+			unreliable.push([iso(a), iso(Math.min(a + rng.int(0, 40), DAYS - 1))]);
+		}
+		const base = mergeSettings({}, []);
+		const s: ProjectSettings = { ...base, zeroRainRuns: { ...base.zeroRainRuns, accumulationMode: rng.bool() ? 'spread' : 'asRecorded' }, rainStations: { unreliable: { S1: unreliable } } };
+		return { s, gauge, cell, unreliable, isCatchmentGauge: rng.bool(0.3) };
+	}
+
+	it('on every seed: forcing ⊇ record day by day, both blank on the unreliable days, and forcing is the run’s own record', () => {
+		let wider = 0;
+		let cut = 0;
+		for (let seed = 1; seed <= SEEDS; seed++) {
+			const { s, gauge, cell, unreliable, isCatchmentGauge } = station(seed);
+			const x = seriesOf({ [stationSeriesKey('S1')]: ser(gauge), [stationChirpsSeriesKey('S1')]: ser(cell), rain_chirps_mm: ser(cell) });
+			const fit = checkedStationRecord(s, x, 'S1', { fitExcludeAccumulations: true, isCatchmentGauge })!;
+			const run = checkedStationRecord(s, x, 'S1', { isCatchmentGauge })!;
+			const rec = fit.record.values;
+			const forcing = fit.forcing!;
+			expect(forcing.startDate, `seed ${seed}`).toBe(fit.record.startDate);
+			expect(forcing.values.length, `seed ${seed}`).toBe(rec.length);
+			for (let i = 0; i < rec.length; i++) if (rec[i] !== null) expect(forcing.values[i], `seed ${seed} day ${i}`).toBe(rec[i]);
+			expect(forcing, `seed ${seed}`).toEqual(run.record);
+			const d0 = toEpochDay(forcing.startDate);
+			for (const [from, to] of unreliable) for (let d = toEpochDay(from); d <= toEpochDay(to); d++) expect(forcing.values[d - d0], `seed ${seed} ${iso(d - D0)}`).toBeNull();
+			// The pairing reads them so: its complete years on the forcing's record, never fewer than the fit's, and its
+			// shared days on the fit's.
+			const stations = { S1: { name: 'S1', mapMm: 600, mapSource: 'invented', lat: null, lon: null, ...(isCatchmentGauge ? { isCatchmentGauge: true } : {}) } };
+			const pairing = fitStationPairing({ settings: s, series: x, stations, nodes: [], stationId: 'S1' }, []);
+			expect(pairing.commonYears, `seed ${seed}`).toBe(completeYears(forcing.values, cell));
+			expect(pairing.commonYears, `seed ${seed}`).toBeGreaterThanOrEqual(completeYears(rec, cell));
+			expect(pairing.days, `seed ${seed}`).toBe(rec.filter((v, i) => v !== null && cell[i] != null).length);
+			if (forcing.values.filter((v) => v !== null).length > rec.filter((v) => v !== null).length) wider++;
+			// An unreliable period across a window: without the periods, days the forcing's record reads and the fit's
+			// leaves out (a spread day, or an as-recorded reading) that the period covers; the forcing above was blank on them.
+			const free = checkedStationRecord({ ...s, rainStations: null }, x, 'S1', { fitExcludeAccumulations: true, isCatchmentGauge })!;
+			const inPeriod = (i: number) => unreliable.some(([from, to]) => d0 + i >= toEpochDay(from) && d0 + i <= toEpochDay(to));
+			if (free.forcing!.values.some((v, i) => v !== null && free.record.values[i] === null && inPeriod(i))) cut++;
+		}
+		// Positive controls: the property bit on stations where the two records really differ, spread windows and all.
+		expect(wider).toBeGreaterThan(SEEDS / 2);
+		expect(cut).toBeGreaterThan(SEEDS / 2);
 	});
 });

@@ -36,13 +36,16 @@
 	let {
 		sites,
 		print = false,
-		title = 'Reserve compliance by month'
+		title = 'Reserve compliance by month',
+		headingLevel = 3
 	}: {
 		sites: EwrAssuranceSite[];
 		/** The printable report: Month by month opens (the report shows each site in its own panel). */
 		print?: boolean;
 		/** The heading. EWR calls it "Reserve rules met, by month", apart from its EWR grid (issue #465). */
 		title?: string;
+		/** Its heading's level: 3 under a page's h2 (Runs & results, the report); EWR's panels are h2, peers of its charts. */
+		headingLevel?: 2 | 3;
 	} = $props();
 
 	const uid = $props.id();
@@ -71,7 +74,7 @@
 </script>
 
 <section aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">{title} <HelpTip key="reserve-compliance" /></h3>
+	<svelte:element this={`h${headingLevel}`} id="{uid}-h">{title} <HelpTip key="reserve-compliance" /></svelte:element>
 	{#if sites.length > 1}
 		<div class="field site">
 			<label for="{uid}-site">EWR site</label>

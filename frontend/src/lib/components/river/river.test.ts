@@ -145,14 +145,16 @@ describe('pickRiverRun', () => {
 		expect(pickRiverRun([], 'a')).toBeNull();
 	});
 	it('defaults to the newest run by createdAt, compared with the one before', () => {
-		expect(pickRiverRun([a, b, c], null)).toEqual({ run: b, previous: c });
+		expect(pickRiverRun([a, b, c], null)).toEqual({ run: b, previous: c, gone: false });
 	});
 	it('shows the run the URL names, compared with the run made before it', () => {
-		expect(pickRiverRun([a, b, c], 'c')).toEqual({ run: c, previous: a });
-		expect(pickRiverRun([a, b, c], 'a')).toEqual({ run: a, previous: null });
+		expect(pickRiverRun([a, b, c], 'c')).toEqual({ run: c, previous: a, gone: false });
+		expect(pickRiverRun([a, b, c], 'a')).toEqual({ run: a, previous: null, gone: false });
 	});
-	it('falls back to the newest run when the URL names a run that is gone', () => {
-		expect(pickRiverRun([a, b, c], 'deleted')).toEqual({ run: b, previous: c });
+	it('falls back to the newest run when the URL names a run that is gone, and says it is gone (the page notes it)', () => {
+		expect(pickRiverRun([a, b, c], 'deleted')).toEqual({ run: b, previous: c, gone: true });
+		// No `run=`, or an empty one, isn't a gone run: there was nothing to find.
+		expect(pickRiverRun([a, b, c], '')?.gone).toBe(false);
 	});
 });
 

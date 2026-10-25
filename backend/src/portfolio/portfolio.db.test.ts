@@ -179,6 +179,7 @@ describe('the figures, and where they come from', () => {
 			farmCount: 0,
 			lowestDamPct: null,
 			damsKnown: false,
+			figuresWithheld: false,
 			feeds: { total: 0, ok: 0, failing: 0 },
 			alertsFiring: 0,
 			restriction: null

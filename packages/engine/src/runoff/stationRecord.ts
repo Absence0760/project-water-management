@@ -59,6 +59,12 @@ export interface CheckedStationRecord {
 	setAside: { checks: number; unreliable: number };
 	/** "station: …" warnings, naming the station, for what the checks and the periods did. */
 	warnings: string[];
+	/**
+	 * With `fitExcludeAccumulations` only: the record as the forcing reads it, the
+	 * accumulation windows' spread days kept (unreliable periods blanked as in
+	 * `record`). The pairing counts its complete years on it (model.md §2.4i).
+	 */
+	forcing?: DailySeries;
 }
 
 /** The settings the station checks run with: the catchment's, without the catchment gauge's dated lists, rain-source periods or quantile map. */
@@ -88,7 +94,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * `fitExcludeAccumulations` (the pairing fit's record): also blank every
  * accumulation window's days but a kept reading's, as §2.4b's fit and the
  * reference gauge's (checkedReferenceGauge) leave them out; their spread days
- * are CHIRPS-shaped. Those days count under setAside.checks there.
+ * are CHIRPS-shaped. Those days count under setAside.checks there. The
+ * record as the forcing reads it comes back beside it, as `forcing`.
  *
  * `isCatchmentGauge` (RainStationInput.isCatchmentGauge): the catchment
  * gauge's full checks, see the header. Pass the same value for the forcing
@@ -129,6 +136,8 @@ export function checkedStationRecord(
 		const sub: ModelInput['series'] = { rain_catchment_mm: stored, ...(chirps ? { rain_chirps_mm: chirps } : {}) };
 		r = checkedRain(stationCheckSettings(settings), sub, d0, n);
 	}
+	// The forcing's record, before the fit's exclusions (a copy: blankFitExcluded writes r.catchment in place).
+	const forcing = opts.fitExcludeAccumulations ? r.catchment.map(keep) : null;
 	if (opts.fitExcludeAccumulations) blankFitExcluded(r, d0);
 	const values = r.catchment.map(keep);
 	let checks = 0;
@@ -147,6 +156,7 @@ export function checkedStationRecord(
 		const a = Math.max(toEpochDay(from) - d0, 0);
 		const b = Math.min(toEpochDay(to) - d0, n - 1);
 		for (let i = a; i <= b; i++) {
+			if (forcing) forcing[i] = null;
 			if (values[i] === null) continue;
 			values[i] = null;
 			unreliable++;
@@ -168,5 +178,5 @@ export function checkedStationRecord(
 		warnings.push(`${who} has ${plural(asRecorded, 'multi-day accumulation')} run as recorded, because Settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)".`);
 	if (unreliable > 0) warnings.push(`${who} is treated as missing on ${plural(unreliable, 'day')} the user marked unreliable. The stored series is unchanged.`);
 
-	return { record: { startDate: fromEpochDay(d0), values }, setAside: { checks, unreliable }, warnings };
+	return { record: { startDate: fromEpochDay(d0), values }, setAside: { checks, unreliable }, warnings, ...(forcing ? { forcing: { startDate: fromEpochDay(d0), values: forcing } } : {}) };
 }

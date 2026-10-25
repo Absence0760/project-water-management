@@ -1103,7 +1103,9 @@ def fit_station_pairing(rec: StationRecord, diag: dict):
     accumulation windows left out), over their whole records; 1 without 90
     shared days and 50 mm of CHIRPS; clamped to 0.25–4. None (refused) with
     no CHIRPS at the station or fewer than 5 complete calendar years in
-    common (every day of the year a reading in both)."""
+    common (every day of the year a reading in both, the station's record
+    as the forcing reads it: a spread accumulation's days count as read,
+    engine 1.96.0, engine-audit.md RS6)."""
     h = rec.at
     if h is None or not h or not rec.stored:
         diag["station_pairings_refused"] += 1
@@ -1120,6 +1122,9 @@ def fit_station_pairing(rec: StationRecord, diag: dict):
             n[m] += 1
             g[m] += sv
             c[m] += cv
+        # The complete years count on the forcing's record, the factors on the fit's (RS6).
+        yv = rec.value(o)
+        if valid(yv) and valid(cv):
             y = _dt.date.fromordinal(o).year
             per_year[y] = per_year.get(y, 0) + 1
     complete = sum(1 for y, k in per_year.items() if k == (_dt.date(y, 12, 31) - _dt.date(y, 1, 1)).days + 1)

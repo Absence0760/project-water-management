@@ -60,8 +60,15 @@ export interface PortfolioProject {
 	/** A baseline run newer than the published one exists (not published yet). */
 	newerRun: boolean;
 	ewr: EwrFigure;
-	/** Irrigation supplied over the source run, judged by status.ts IRRIGATION_THRESHOLDS (issue #558). */
+	/** Irrigation supplied over the source run, judged by status.ts IRRIGATION_THRESHOLDS (issue #558); unknown ('withheld') when figuresWithheld. */
 	irrigation: IrrigationFigure;
+	/**
+	 * The source run caps use at, or scales demand to, the registered volumes
+	 * and the user is kept from each one (a viewer, 162; #523 I): its use
+	 * share and the lowest farm dam rest on those volumes, so neither is given
+	 * (irrigation unknown, lowestDamPct null), as its farm previews are refused.
+	 */
+	figuresWithheld: boolean;
 	/** Farms short at least one day in the 7 / 30 days to figuresUntil; null when unknown (not published, or published before the counts existed). */
 	farmsShort7: number | null;
 	farmsShort30: number | null;
@@ -107,6 +114,8 @@ export interface PortfolioRow {
 	run_days30: number | null;
 	run_not_met30: number | null;
 	live_farm_count: number;
+	/** The source run caps or fully allocates and the user doesn't read each registered volume (PortfolioProject.figuresWithheld); null without a run. */
+	figures_withheld: boolean | null;
 	/** The source run's units, their summed mean demand and supply (m³/day) and those below UNIT_SUPPLY_TARGET; 0 without a run. */
 	irr_units: number;
 	irr_demand: number;
@@ -157,6 +166,9 @@ const portfolioSql = (projects: string) => `
 		rew.days AS run_days30, rew.not_met AS run_not_met30,
 		(SELECT count(*)::int FROM node n WHERE n.project_id = pr.id AND n.kind = 'farm') AS live_farm_count,
 		irr.units AS irr_units, irr.demand AS irr_demand, irr.supplied AS irr_supplied, irr.below AS irr_below,
+		-- The source run caps use at, or scales demand to, the registered volumes, and the user isn't one who reads each
+		-- (231, app_reads_allocation_units): its use share and farm dam levels rest on those volumes (#523 I).
+		(src.verdicts_only AND NOT app_reads_allocation_units(pr.id)) AS figures_withheld,
 		-- Firing alerts (051_alerts; alert_event_project_idx covers it).
 		(SELECT count(*)::int FROM alert_event e WHERE e.project_id = pr.id AND e.state = 'firing') AS alerts_firing,
 		fd.feeds
@@ -182,6 +194,10 @@ const portfolioSql = (projects: string) => `
 		CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(r.summary->'farms') = 'array' THEN r.summary->'farms' ELSE '[]'::jsonb END) f
 		WHERE r.id = COALESCE(pub.run_id, lr.id)
 	) irr ON true
+	LEFT JOIN LATERAL (
+		SELECT COALESCE(r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation'), false) AS verdicts_only
+		FROM model_run r WHERE r.id = COALESCE(pub.run_id, lr.id)
+	) src ON true
 	LEFT JOIN LATERAL (
 		SELECT f.view->>'name' AS name, (f.view->'dam'->>'pct')::float8 AS pct
 		FROM publication_farm f WHERE f.publication_id = pub.id AND jsonb_typeof(f.view->'dam') = 'object'
@@ -230,8 +246,10 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 			: source === 'run'
 				? ewrFigure({ hasFigures: true, ewrSet: r.run_ewr_set ?? false, daysNotMet: r.run_days30 ? r.run_not_met30 : null, days: r.run_days30 || null }, thresholds)
 				: ewrFigure({ hasFigures: false, ewrSet: false, daysNotMet: null, days: null }, thresholds);
+	const figuresWithheld = source !== null && r.figures_withheld === true;
 	const irrigation = irrigationFigure({
 		hasFigures: source !== null,
+		withheld: figuresWithheld,
 		units: r.irr_units ?? 0,
 		demandM3Day: Number(r.irr_demand ?? 0),
 		suppliedM3Day: Number(r.irr_supplied ?? 0),
@@ -265,7 +283,8 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 		farmsShort7: published ? (r.pub_recent?.farmsShort7 ?? null) : null,
 		farmsShort30: published ? (r.pub_recent?.farmsShort30 ?? null) : null,
 		farmCount: published ? (r.pub_farm_count ?? 0) : r.live_farm_count,
-		lowestDamPct: published && r.dam_name !== null && r.dam_pct !== null ? { nodeName: r.dam_name, pct: r.dam_pct } : null,
+		figuresWithheld,
+		lowestDamPct: published && !figuresWithheld && r.dam_name !== null && r.dam_pct !== null ? { nodeName: r.dam_name, pct: r.dam_pct } : null,
 		damsKnown: published,
 		feeds: { total: r.feeds.length, ok, failing },
 		alertsFiring: r.alerts_firing,

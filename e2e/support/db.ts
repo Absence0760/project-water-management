@@ -255,6 +255,25 @@ export async function plantLegacyRun(runId: string): Promise<void> {
 }
 
 /**
+ * Mark a run as one that caps use at (`cap`), or scales demand to
+ * (`fullAllocation`), the registered volumes, as the engine's summary records
+ * it (`summary.allocations.mode`), so a viewer kept from those volumes is
+ * served its verdicts only (#523 I; docs/security.md § Allocations). Planted
+ * on an already published run, as one published before 213 is (such a run
+ * can't be published now), and without a project's registered volumes to cap
+ * by. Its run stamp no longer matches (it reads as unverified).
+ */
+export async function plantAllocationMode(runId: string, mode: 'cap' | 'fullAllocation'): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(`UPDATE model_run SET summary = jsonb_set(summary, '{allocations}', $2::jsonb) WHERE id = $1`, [
+			runId,
+			JSON.stringify({ mode, tolerance: 0.1, used: 1, notMatched: 0, nodes: [] })
+		]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}
+
+/**
  * A run's summary with `unitRain` (issue #482, engine with settings.unitRain
  * per unit): the Runs page's Rain for each unit panel reads it. Planted so
  * the panel's spec doesn't hang on the engine's per-unit forcing to make one;

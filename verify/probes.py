@@ -1324,8 +1324,12 @@ def station_pairing_refused() -> dict:
     forcing too. Unit d on D: its gaps (before 2013) D's corrected CHIRPS.
     Station E (MAP 700) is D's record with an accumulation in June 2014:
     four blank days, then 60 mm. Spread, the blanks hold rain in the checked
-    record, but the pairing leaves the window out, so 2014 isn't complete:
-    four years, refused. Unit e on E: its gaps the catchment forcing.
+    record, so 2014 is complete (the window's days count as read, engine
+    1.96.0, engine-audit.md RS6): five years, fitted, though the factors
+    leave the window out (up to engine 1.95.0 it was refused). Unit e on E:
+    its gaps (before 2013) E's corrected CHIRPS.
+    station-pairing-as-recorded runs the same with the window run as
+    recorded, so E is refused there.
     Station F (MAP 450) has neither a cell nor a site, so no CHIRPS at it:
     refused, though seven complete years (2011–2017) would fit it on the
     catchment's CHIRPS; unit f on it fills its gaps (four days of 2010)
@@ -1379,6 +1383,19 @@ def station_pairing_refused() -> dict:
     rs = {"units": {"p": {"stationId": "C"}, "q": {"stationId": "D", "correctAgainst": "C"}, "d": {"stationId": "D"}, "e": {"stationId": "E"}, "f": {"stationId": "F"}}}
     doc = _net(nodes, series, unitRain={"mode": "perUnit", "gaugeMapMm": 640, "gaugeMapSource": "invented"}, rainStations=rs)
     doc["stations"] = {"C": _station("C", 500), "D": _station("D", 800), "E": _station("E", 700), "F": _station("F", 450)}
+    return doc
+
+
+def station_pairing_as_recorded() -> dict:
+    """station-pairing-refused with accumulations run as recorded (§2.4d
+    "Run as recorded (one day)"): station E's 60 mm stays on its day and
+    the window's four blank days stay blank, so the station doesn't supply
+    them and 2014 isn't complete (RS6: only a spread total counts as read):
+    four years, refused. Unit e's gaps fall to the catchment forcing."""
+    doc = station_pairing_refused()
+    doc["settings"]["zeroRainRuns"] = {
+        "mode": "missing", "keepDry": [], "missing": [], "accumulationMode": "asRecorded", "keepReadings": [], "addAccumulations": [],
+    }
     return doc
 
 
@@ -1643,6 +1660,7 @@ PROBES = {
     # Rainfall stations (issue #553).
     "station-units": station_units(),
     "station-pairing-refused": station_pairing_refused(),
+    "station-pairing-as-recorded": station_pairing_as_recorded(),
     "station-catchment": station_catchment(),
     "station-catchment-map": station_catchment_map(),
     "station-catchment-window": station_catchment_window(),
