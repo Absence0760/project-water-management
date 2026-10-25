@@ -46,8 +46,9 @@
 <section class="panel judge" id="set-judge" aria-labelledby="judge-h">
 	{#if nothing}
 		<h2 id="judge-h">Judge results by</h2>
-		<p class="hint muted" data-testid="judge-nothing">
-			Results are judged by the pragmatic EWR at the outflow gauge. Add a Reserve rule table under <a href="#set-reserve">Reserve rules</a> to
+		<!-- The panel's one line, at the summary line's size like the other panels' (issue #586, C16); the link named as the heading it goes to. -->
+		<p class="summary" data-testid="judge-nothing">
+			Results are judged by the pragmatic EWR at the outflow gauge. Add a Reserve rule table under <a href="#set-reserve">Reserve rule tables</a> to
 			choose another test here.
 		</p>
 	{:else}
@@ -60,12 +61,12 @@
 		<p class="hint muted explain" id="judge-hint">
 			Which EWR the Summary’s headline, the run sentence and EWR report against. It changes no result: save it and no
 			re-run is needed. The pragmatic EWR and the Reserve rule tables are set under <a href="#set-ewr">EWR</a> and
-			<a href="#set-reserve">Reserve rules</a>.
+			<a href="#set-reserve">Reserve rule tables</a>.
 		</p>
 		{#if problem}<p class="alert alert-warning small" role="status" id="judge-problem" data-testid="judge-problem">{problem}</p>{/if}
 		{#if differs}
 			<p class="hint muted" id="judge-charge" data-testid="judge-charge-note">
-				The daily EWR charge and curtailment follow {chargeSource === 'ruleTable' ? 'the rule tables' : 'the pragmatic EWR'} (Reserve rules → EWR charge follows), a different test.
+				The daily EWR charge and curtailment follow {chargeSource === 'ruleTable' ? 'the rule tables' : 'the pragmatic EWR'} (Reserve rule tables → EWR charge follows), a different test.
 			</p>
 		{/if}
 	{/if}

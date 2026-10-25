@@ -192,3 +192,22 @@ test('the high flows’ paste is a dialog: its preview lists the rows, and Fill 
 	await expect(dialog.getByRole('button', { name: 'Replace with 1 high flow' })).toBeInViewport();
 	await expectNoSidewaysScroll(page);
 });
+
+test('Data feeds, API keys and Scheduled reports show an empty list the same way, LoadState’s dashed box (issue #586, C17)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const project = await createProject(page.request, 'Empty after the form');
+	await openSettings(page, project.id);
+	const looks: string[] = [];
+	for (const [region, words] of [
+		['Data feeds', 'No feeds yet.'],
+		['API keys', 'No API keys yet.'],
+		['Scheduled reports', 'No scheduled reports.']
+	] as const) {
+		const empty = page.getByRole('region', { name: region }).locator('.state.empty');
+		await expect(empty, region).toHaveText(words);
+		looks.push(await empty.evaluate((el) => { const c = getComputedStyle(el); return `${c.borderStyle} ${c.borderRadius} ${c.textAlign}`; }));
+	}
+	expect(looks[0]).toMatch(/^dashed /);
+	expect(new Set(looks).size).toBe(1);
+});

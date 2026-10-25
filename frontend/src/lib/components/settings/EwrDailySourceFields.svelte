@@ -383,7 +383,7 @@
 			{@const used = reserveTable === 'withoutHighFlows' ? 'lowFlowPctM3s' : 'reservePctM3s'}
 			{@const unused = used === 'lowFlowPctM3s' ? 'reservePctM3s' : 'lowFlowPctM3s'}
 			{@render grid(used)}
-			<Fold name="{DAILY_TABLE_LABELS[unused]}:" line="not used by the daily EWR · {src[unused] ? 'entered' : 'empty'}" open={false} body="none" spaced testid="ewr-unused-reserve">
+			<Fold {readonly} name="{DAILY_TABLE_LABELS[unused]}:" line="not used by the daily EWR · {src[unused] ? 'entered' : 'empty'}" open={false} body="none" spaced testid="ewr-unused-reserve">
 				{@render grid(unused)}
 			</Fold>
 		{/if}

@@ -83,7 +83,13 @@ export const SETTING_NOTE_GROUPS = {
 	reserve: 'Reserve rule tables',
 	restrict: 'Drought restrictions',
 	reporting: 'Reporting',
-	evidence: 'Evidence'
+	evidence: 'Evidence',
+	// Every Settings panel has Notes (issue #586, C12), but Judge results by: one pick of how results are read, not
+	// in the index, and a note on that choice belongs with the EWR or Reserve rule table it names.
+	fit: 'Fit the parameters',
+	outcomes: 'Outcome matrix',
+	outlook: 'Seasonal outlook',
+	auto: 'Automatic runs'
 } as const;
 export type SettingNoteGroup = keyof typeof SETTING_NOTE_GROUPS;
 

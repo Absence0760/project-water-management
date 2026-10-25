@@ -20,7 +20,7 @@
 		type ProjectModel,
 		type ProjectSettings
 	} from '@water-management/engine';
-	import { untrack, type Snippet } from 'svelte';
+	import { tick, untrack, type Snippet } from 'svelte';
 	import { apanDailyOfValues, chirpsSourceOfInput } from '#lib/series/provenance.js';
 	import { api } from '#lib/api/index.js';
 	import {
@@ -166,6 +166,15 @@
 		);
 	}
 
+	let heading = $state<HTMLElement | null>(null);
+
+	/** Discard takes the result, and the button with it: the focus goes to the card's heading (ui-playbook.md § 4; issue #586, C18). */
+	async function discard() {
+		session.discard();
+		await tick();
+		heading?.focus();
+	}
+
 	function apply() {
 		const { report: r, ran } = session;
 		if (!r || !ran) return;
@@ -178,9 +187,12 @@
 </script>
 
 <section class="fit" aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Fit automatically <HelpTip key="auto-calibration" /></h3>
+	<h3 id="{uid}-h" tabindex="-1" bind:this={heading}>Fit automatically <HelpTip key="auto-calibration" /></h3>
+	<!-- One status line when a result arrives, not the whole result read out (issue #586, C18). In the page from
+	     the start, so a screen reader hears it change. -->
+	<p class="visually-hidden" role="status" data-testid="fit-status">{report ? `Fit finished: ${objectiveName(report.objective)}, ${fmtNum(report.evaluations)} runs. The result is below.` : ''}</p>
 	{#if !hasObserved}
-		<p class="muted small">Upload an observed or logger flow record (Data) to fit the parameters to it.</p>
+		<p class="muted small" data-testid="fit-no-record">Add an observed or logger flow record on <a href="?tab=series">Data</a> to fit the parameters to it.</p>
 		<!-- A saved setting, so it shows (and can be read) before there is a record to fit to. -->
 		{@render penaltyFields?.()}
 	{:else}
@@ -293,7 +305,7 @@
 		{/if}
 
 		{#if report}
-			<div class="result" aria-live="polite">
+			<div class="result">
 				<h4>Result</h4>
 				<p class="small muted">
 					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed}{report.starts > 1 ? ` · ${report.starts} starts` : ''} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
@@ -449,11 +461,11 @@
 						<p class="muted small">{representativenessKey(rep)} Any limit this implies is listed with the notes above.</p>
 					</section>
 				{/if}
-				<div class="row">
+				<div class="action-row" data-testid="fit-result-actions">
 					{#if !readonly}
 						<button type="button" class="btn btn-primary" onclick={apply}>{session.applied ? 'Apply to form again' : 'Apply to form'}</button>
 					{/if}
-					<button type="button" class="btn" onclick={() => session.discard()}>Discard result</button>
+					<button type="button" class="btn" onclick={discard}>Discard result</button>
 					{#if !readonly}
 						<span class="muted small" data-testid="fit-apply-hint">
 							{session.applied
@@ -525,13 +537,6 @@
 		align-items: center;
 		gap: 0 0.25rem;
 		min-height: 24px;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.6rem;
-		margin: 0.5rem 0;
 	}
 	.progress {
 		max-width: 520px;

@@ -43,7 +43,8 @@
 		error = $bindable(null),
 		lastShare = $bindable(),
 		readonly = false,
-		headAction
+		headAction,
+		headNote
 	}: {
 		value: CalibrationRules;
 		error?: string | null;
@@ -52,6 +53,8 @@
 		readonly?: boolean;
 		/** The card's main action, in the head beside the fit count: Run the calibration rules (AutoFitPanel's); not for a viewer. */
 		headAction?: Snippet;
+		/** Why that action can't run now, as a line under it (issue #586, C3); not for a viewer. */
+		headNote?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -91,6 +94,7 @@
 				{#if headAction && !readonly}<div class="run" data-testid="rules-run">{@render headAction()}</div>{/if}
 				<p class="hint fits" data-testid="rules-fits">{fits} fit{fits === 1 ? '' : 's'}, each with the split-sample and dry → wet tests (at most {RULE_CASES_MAX}).</p>
 			</div>
+			{#if headNote && !readonly}{@render headNote()}{/if}
 		</div>
 		{#if !readonly}
 			<div class="sign" data-testid="rules-sign-off">
@@ -236,7 +240,7 @@
 
 		<!-- Rarely changed: folded into its values, opened in place (a closed <details> keeps its fields in the page,
 		     so Find a setting still reaches them and opens it). -->
-		<Fold name="Search budget per fit:" line={searchSummary({ budget: value.run.budget, starts: value.run.starts, seed: value.run.seed })} body="none" class="group" testid="rules-search" lineTestid="rules-search-summary">
+		<Fold {readonly} name="Search budget per fit:" line={searchSummary({ budget: value.run.budget, starts: value.run.starts, seed: value.run.seed })} body="none" class="group" testid="rules-search" lineTestid="rules-search-summary">
 			<fieldset class="plain">
 				<legend class="visually-hidden">Search budget</legend>
 				<div class="fold-body">

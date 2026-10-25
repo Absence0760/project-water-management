@@ -230,7 +230,7 @@
 		{#if err('monthlyMm3')}<p class="err" id="{uid}-monthly-e">{err('monthlyMm3')}</p>{/if}
 
 		<!-- How the check judges: rarely changed, so one line of its values that opens to edit them. -->
-		<Fold testid="wr2012-judging" name="How the check judges:" line={wr2012JudgingLine(value)} atDefaults={wr2012JudgingAtDefaults(value)} body="stack" spaced>
+		<Fold testid="wr2012-judging" name="How the check judges:" line={wr2012JudgingLine(value)} atDefaults={wr2012JudgingAtDefaults(value)} {readonly} body="stack" spaced>
 		<div class="fields first">
 			<div class="field">
 				<label for="{uid}-scale">Scale the reference by <HelpTip key="wr2012-check" label="About scaling the reference" /></label>
@@ -414,10 +414,12 @@
 	   keys still step). When the row is still short of room the label wraps
 	   before the page scrolls sideways. */
 	.monthly td {
-		/* A preferred width, so spare room keeps the label on one line first. */
+		/* A preferred width, so spare room keeps the label on one line first. The padding is slim, as on
+		   Settings' other monthly rows, so twelve months and the Sum fit beside the side index at 1440 px
+		   (issue #586, C8; it cut the Sum off there). */
 		width: calc(6.5ch + 0.7rem + 2px + 0.4rem);
-		padding-left: 0.2rem;
-		padding-right: 0.2rem;
+		padding-left: 0.1rem;
+		padding-right: 0.1rem;
 	}
 	table.data.monthly td :global(input) {
 		min-width: calc(6.5ch + 0.7rem + 2px);

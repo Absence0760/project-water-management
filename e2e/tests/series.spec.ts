@@ -455,9 +455,11 @@ test('a daily A-pan file uploads as its own kind, and Settings says evaporation 
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const source = page.getByTestId('apan-source');
 	await expect(source).toHaveAttribute('data-daily', 'false');
-	await expect(source).toHaveText('A-pan comes from these monthly means on every day. A daily A-pan record can be added on the Data tab.');
+	await expect(source).toHaveText('A-pan comes from these monthly means on every day. Add a daily A-pan record on Data.');
 
-	await page.goto(`/projects/${project.id}?tab=series`);
+	// The note links to Data, where the record is added (issue #586, C4).
+	await source.getByRole('link', { name: 'Add a daily A-pan record on Data' }).click();
+	await expect(page).toHaveURL(/\?tab=series$/);
 	const form = await openAddData(page);
 	await form.getByLabel('CSV file').setInputFiles(fixture('apan-daily.csv'));
 	await expect(form.getByLabel('Kind')).toHaveValue('evap_apan_mm');
@@ -469,7 +471,8 @@ test('a daily A-pan file uploads as its own kind, and Settings says evaporation 
 
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	await expect(source).toHaveAttribute('data-daily', 'true');
-	await expect(source).toContainText('A-pan comes from the daily A-pan series (Data tab) on the days it has a value');
+	await expect(source).toContainText('A-pan comes from the daily A-pan series on the days it has a value');
+	await expect(source.getByRole('link', { name: 'See the series on Data' })).toHaveAttribute('href', '?tab=series');
 });
 
 // Issue #45: a DWS hydrology export loads as it is. The synthetic fixture is the

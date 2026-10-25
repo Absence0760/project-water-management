@@ -7,6 +7,8 @@
 	// (plan.md O1; the client agreed, issue #90), and the section says so while
 	// they are in use. The year-class method's default is confirmed (O2).
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '#lib/components/notes/notes.js';
 	import { DEFAULT_OUTCOME_RISK_CUTOFFS, YEAR_CLASS_QUINTILE_MIN_YEARS, type YearClassMethod } from '@water-management/engine';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import type { OutcomeSettings } from '#lib/api/types.js';
@@ -17,7 +19,8 @@
 		readonly,
 		error,
 		summary = null,
-		daily
+		daily,
+		projectId
 	}: {
 		value: OutcomeSettings;
 		readonly: boolean;
@@ -25,6 +28,8 @@
 		summary?: string | null;
 		/** settings.ewrDailySource: the daily EWR the days below are counted against, by name (engine ≥ 1.77.0). */
 		daily?: DailyEwrSource;
+		/** The project, for the panel's Notes (issue #586, C12). */
+		projectId?: string;
 	} = $props();
 	const dailyName = $derived(dailyEwrName(daily));
 
@@ -62,6 +67,7 @@
 <section class="panel" aria-labelledby="out-h-t" data-testid="outcome-settings">
 	<div class="panel-head">
 		<h2 id="out-h"><span id="out-h-t">Outcome matrix</span> <HelpTip key="outcome-matrix" /></h2>
+		{#if projectId}<NotesDrawer {projectId} target={settingTarget('outcomes')} />{/if}
 	</div>
 	{#if summary}<p class="summary" data-testid="summary-outcomes">{summary}</p>{/if}
 	<p class="hint muted explain">How the Runs tab reads a demand sweep by class of year.</p>

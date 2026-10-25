@@ -1,7 +1,7 @@
 import { defaultCalibrationRules } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AutoCalibration, AutoCalibrationCase } from '#lib/api/types.js';
-import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from './autoFit';
+import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, runBlocker, selectionText, triggerText } from './autoFit';
 
 const kase = (over: Partial<AutoCalibrationCase> = {}): AutoCalibrationCase => ({
 	label: 'x',
@@ -89,6 +89,16 @@ describe('a server run of the calibration rules, in the page', () => {
 		expect(applyBlocker(run(), { ...ok, rulesUnsaved: true })).toBe('Save the calibration rules first.');
 		expect(applyBlocker(run(), { ...ok, formDirty: true })).toMatch(/^Save or discard the other changes/);
 		expect(applyBlocker(run(), { ...ok, readonly: true })).toBe('Only an editor can apply a fit.');
+	});
+
+	it('says why the rules can’t run, in the order a user settles it, and nothing once they can (issue #586, C3)', () => {
+		const ok = { hasObserved: true, readonly: false, rulesUnsaved: false, running: false, busy: false };
+		expect(runBlocker(ok)).toBeNull();
+		expect(runBlocker({ ...ok, readonly: true, hasObserved: false })?.kind).toBe('viewer');
+		expect(runBlocker({ ...ok, hasObserved: false, rulesUnsaved: true })).toEqual({ kind: 'record', text: 'There’s no observed or logger flow record to calibrate against yet.' });
+		expect(runBlocker({ ...ok, rulesUnsaved: true, running: true })?.kind).toBe('unsaved');
+		expect(runBlocker({ ...ok, running: true, busy: true })?.kind).toBe('running');
+		expect(runBlocker({ ...ok, busy: true })?.kind).toBe('busy');
 	});
 
 	it('compares the saved and form rules whatever order their keys are in', () => {

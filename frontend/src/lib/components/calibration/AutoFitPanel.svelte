@@ -13,7 +13,7 @@
 	import { rulesLines, waterYearLabel, type CalibrationRules } from '@water-management/engine';
 	import { api } from '#lib/api/index.js';
 	import { AutoCalibrationFollower } from '#lib/calibration/autoFollow.svelte.js';
-	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from '#lib/calibration/autoFit.js';
+	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, runBlocker as runBlockerOf, selectionText, triggerText, type RunBlocker } from '#lib/calibration/autoFit.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '#lib/format/number.js';
 
@@ -53,7 +53,8 @@
 	const unsaved = $derived(rulesUnsaved(savedRules, formRules));
 	const runState = $derived(latest ? autoState(latest) : null);
 	const running = $derived(runState?.kind === 'running');
-	const canStart = $derived(hasObserved && !readonly && !unsaved && !busy && !running);
+	const blocked = $derived(runBlockerOf({ hasObserved, readonly, rulesUnsaved: unsaved, running, busy }));
+	const canStart = $derived(blocked === null);
 	const rows = $derived(latest ? autoCaseRows(latest) : []);
 	const kept = $derived(latest && latest.chosen !== null ? latest.cases[latest.chosen]! : null);
 	const blocker = $derived(latest ? applyBlocker(latest, { rulesUnsaved: unsaved, formDirty, readonly }) : null);
@@ -65,6 +66,10 @@
 	/** Whether the rules can run now: a record, an editor, the rules saved, no run going. */
 	export function canRun(): boolean {
 		return canStart;
+	}
+	/** Why they can't, for the line beside the button (issue #586, C3), or null. */
+	export function runBlocker(): RunBlocker | null {
+		return blocked;
 	}
 
 	function apply() {
@@ -81,7 +86,7 @@
 <section class="auto" aria-labelledby="{uid}-h">
 	<h3 id="{uid}-h">Automated calibration <HelpTip key="calibration-rules" label="About automated calibration" /></h3>
 	{#if !hasObserved}
-		<p class="muted small">Upload an observed or logger flow record (Data) to calibrate against it.</p>
+		<p class="muted small" data-testid="auto-no-record">Add an observed or logger flow record on <a href="?tab=series">Data</a> to calibrate against it.</p>
 	{:else}
 		<p class="muted small">
 			The server runs the saved calibration rules below from start to finish, one background job per fit: no one chooses after the scores are seen.

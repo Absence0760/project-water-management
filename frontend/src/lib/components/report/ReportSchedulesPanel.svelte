@@ -11,6 +11,7 @@
 	import { onMount, tick } from 'svelte';
 	import { api, type Member } from '#lib/api/index.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { session } from '#lib/auth/session.svelte.js';
 	import {
 		describeSchedule,
@@ -63,7 +64,10 @@
 		formError = null;
 		adding = true;
 		await tick();
-		document.getElementById(`${uid}-freq`)?.focus();
+		document.getElementById(`${uid}-freq`)?.focus({ preventScroll: true });
+		// The whole card, its action row included, in the window: focusing the first field scrolled only as far as
+		// that field, so at the foot of the page Add schedule could sit under the window's edge (issue #586).
+		document.getElementById(`${uid}-add-h`)?.closest('form')?.scrollIntoView({ block: 'nearest' });
 	}
 
 	async function closeForm() {
@@ -203,9 +207,8 @@
 			</form>
 		{/if}
 
-		{#if schedules.length === 0}
-			<p class="muted">No scheduled reports{canEdit ? '.' : '. An editor can add one.'}</p>
-		{:else}
+		<!-- The app's one empty state (LoadState's dashed box), as API keys and Data feeds show theirs (issue #586, C17). -->
+		<LoadState loading={false} empty={schedules.length === 0} emptyText="No scheduled reports{canEdit ? '.' : '. An editor can add one.'}">
 			<ul class="schedules" aria-label="Scheduled reports">
 				{#each schedules as s (s.id)}
 					<li class="schedule" data-enabled={s.enabled}>
@@ -225,7 +228,7 @@
 					</li>
 				{/each}
 			</ul>
-		{/if}
+		</LoadState>
 	{/if}
 </section>
 

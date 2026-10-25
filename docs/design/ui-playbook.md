@@ -676,7 +676,11 @@ section it belongs to, with the example that taught it.
   values ("Search: Wide bounds · 1 500 runs × 5 starts · seed 1", from a pure
   helper such as `calibration/fit.ts` `searchSummary`, unit-tested), with
   **Change** at its end (`aria-hidden`, since the summary already announces
-  expanded/collapsed; **Hide** while open), and the fields open in place. The
+  expanded/collapsed; **Hide** while open; **Show** for a viewer, who can
+  change nothing inside: pass `readonly`), and the fields open in place. The
+  values shrink and wrap in their own box (`.fold-line`), so a long line
+  keeps its name and action on its row instead of dropping under the name
+  and orphaning the action (issue #586; `expectFoldOnOneRow`). The
   line shows **needs fixing** while any field inside is `aria-invalid`
   (`.fold:has([aria-invalid='true'])`), so a closed fold never hides a
   problem. A native `<details>` keeps its fields in the page, so Find a
@@ -1206,7 +1210,7 @@ section it belongs to, with the example that taught it.
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
-| Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
+| Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `readonly`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
 | A group that usually stays at its defaults, as one line that opens | `common/Fold.svelte` with `atDefaults` (and `body="stack"`, `spaced`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
 | A paste dialog | `model/GridPasteDialog.svelte` for a grid of numbers (Now/Pasted preview); a list of rows uses its frame, `model/PasteDialogFrame.svelte`, with its own preview table (§ 4 "A paste box that replaces a whole table is the shared paste dialog") |
 | A typed date | `common/DayInput.svelte`: a text field read by `parseDay`, shown back day first, with `min`/`max`, its message at the field and its place in the save bar's invalid list (§ 2 "A typed date is day first too"), never `<input type="date">` |

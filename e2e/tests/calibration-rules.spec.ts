@@ -2,7 +2,7 @@
 // #153): the rules are saved before any fit is seen, the server fits them one
 // background job per fit (run here by the job tick), and applying the kept
 // fit is the server's too, saved with a record of how the rules chose it.
-import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { addMember, createProject, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { anySaveBar, saveSettings, openFold } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
@@ -26,9 +26,15 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	await rules.getByLabel('Starts per fit').fill('1');
 	await rules.getByLabel('After a kept fit is applied, run the model and the uncertainty ensemble around it').uncheck();
 	await expect(auto.getByTestId('auto-rules-unsaved')).toBeVisible();
-	await expect(page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeDisabled();
+	const runButton = page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' });
+	await expect(runButton).toBeDisabled();
+	// Its reason beside it, as its description, not at the card's foot (issue #586, C3).
+	const why = rules.getByTestId('rules-run-why');
+	await expect(why).toHaveText('Save the calibration rules first: the server only runs saved rules.');
+	await expect(runButton).toHaveAccessibleDescription('Save the calibration rules first: the server only runs saved rules.');
 	await saveSettings(page);
 	await expect(rules.getByTestId('rules-status')).toContainText('Revision 2');
+	await expect(why).toHaveCount(0);
 	await expect(auto.getByTestId('auto-rules')).toContainText('seed 1, 1 start per fit, 50 model runs per optimisation');
 
 	await page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' }).click();
@@ -213,4 +219,26 @@ test('a running run of the rules stays with its project: another project never s
 	await page.clock.runFor(1_600);
 	await expect(auto.getByRole('table', { name: 'Fits the rules tried' })).toBeVisible();
 	await expect(fitting).toHaveCount(0);
+});
+
+test('with no flow record, the rules’ run says why beside it, and it and Fit automatically link to Data (issue #586, C3, C4)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Calibration rules, no record');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const rules = page.getByTestId('calibration-rules');
+	const run = rules.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' });
+	await expect(run).toBeDisabled();
+	const why = rules.getByTestId('rules-run-why');
+	await expect(why).toHaveText('There’s no observed or logger flow record to calibrate against yet. Add one on Data.');
+	await expect(run).toHaveAccessibleDescription(/^There’s no observed or logger flow record/);
+	// The reason sits straight under the button, not hundreds of pixels down.
+	const [b, w] = [(await run.boundingBox())!, (await why.boundingBox())!];
+	expect(w.y - (b.y + b.height)).toBeLessThan(40);
+	await expect(why.getByRole('link', { name: 'Add one on Data' })).toHaveAttribute('href', '?tab=series');
+	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await expect(fit.getByTestId('fit-no-record').getByRole('link', { name: 'Data', exact: true })).toHaveAttribute('href', '?tab=series');
+	const auto = page.getByRole('region', { name: /^Automated calibration/ });
+	await auto.getByTestId('auto-no-record').getByRole('link', { name: 'Data', exact: true }).click();
+	await expect(page).toHaveURL(/\?tab=series$/);
 });

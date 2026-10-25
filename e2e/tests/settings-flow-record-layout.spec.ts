@@ -9,7 +9,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, layoutSettled, resizeTo, squashedChecks } from '../support/reflow.ts';
-import { openFold, settingsMenu, showExplanations } from '../support/settings.ts';
+import { expectFoldOnOneRow, openFold, settingsMenu, showExplanations } from '../support/settings.ts';
 
 const flow = (page: Page) => page.locator('#set-flow');
 const record = (page: Page) => page.locator('#set-record');
@@ -183,6 +183,17 @@ test('Fit automatically holds the WR2012 MAR penalty beside its choices, and the
 	expect((await box(run)).y).toBeLessThan((await box(page.getByTestId('rules-try'))).y);
 });
 
+test('at 1440 beside the index, the long fold lines keep their name, values and action on one row (issue #586, C14)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await openProject(page, 'Fold rows');
+	await expect(settingsMenu(page)).toBeVisible();
+	for (const fold of [record(page).getByTestId('record-flags'), page.locator('#set-quality').getByTestId('quality-limits')]) {
+		await expect(fold).not.toHaveAttribute('open', '');
+		await expectFoldOnOneRow(fold);
+	}
+});
+
 test('a viewer sees no Exclude… or Use buttons, and can open the folds to read the values', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await openProject(page, 'Flow record viewer');
@@ -192,6 +203,17 @@ test('a viewer sees no Exclude… or Use buttons, and can open the folds to read
 	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
 	await expect(record(viewer.page).getByRole('button', { name: 'Exclude a water year' })).toHaveCount(0);
 	await expect(viewer.page.getByRole('button', { name: 'Run the calibration rules' })).toHaveCount(0);
+	// No jump to a fit a viewer can't make, in the GR4J card's head as in the header (issue #586, C11).
+	await expect(flow(viewer.page).getByTestId('flow-gr4j-card')).toBeVisible();
+	await expect(flow(viewer.page).getByTestId('flow-fit-link')).toHaveCount(0);
+	// A fold offers a viewer "Show", never "Change", since nothing inside can be changed (issue #586, C10).
+	for (const [scope, id] of [
+		[record(viewer.page), 'record-flags'],
+		[flow(viewer.page), 'flow-more'],
+		[flow(viewer.page), 'pan-tools']
+	] as const) {
+		await expect(scope.getByTestId(id).locator(':scope > summary .fold-change')).toHaveText('Show');
+	}
 	await openFold(record(viewer.page), 'record-flags');
 	await expect(record(viewer.page).getByLabel('Suspect days')).toBeDisabled();
 	await openFold(flow(viewer.page), 'flow-more');
