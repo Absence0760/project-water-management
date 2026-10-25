@@ -1057,7 +1057,7 @@
 	);
 	const rainLink = $derived(
 		boundary && (rainReads === 'none' || rainReads === 'changed')
-			? { href: '?tab=settings&rain=boundary#set-feeds', text: rainReads === 'none' ? 'Set up the rain feed from the boundary' : 'Propose its cells again' }
+			? { href: '?tab=series&rain=boundary#data-feeds', text: rainReads === 'none' ? 'Set up the rain feed from the boundary' : 'Propose its cells again' }
 			: null
 	);
 

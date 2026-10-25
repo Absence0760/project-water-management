@@ -1,4 +1,4 @@
-// Settings → Data feeds → Rain for each unit (issue #482): the proposal in
+// Data → Data feeds → Rain for each unit (issue #482): the proposal in
 // words, the button, the product and start-date checks, and the calls. The
 // browser flow is pinned by e2e/tests/unit-rain.spec.ts.
 import { describe, expect, it, vi } from 'vitest';

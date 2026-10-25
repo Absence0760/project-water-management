@@ -19,7 +19,7 @@ export interface MissingPanel {
 const NEEDS: Record<string, MissingPanel> = {
 	'res-forecast': {
 		text: 'This run is not a forecast, so it has no forecast panel. A forecast run needs forecast rain: upload it, or turn on the CHIRPS-GEFS feed, then use Run forecast.',
-		link: { href: '?tab=settings#set-feeds', label: 'Data feeds' }
+		link: { href: '?tab=series#data-feeds', label: 'Data feeds' }
 	},
 	'res-gauges': {
 		text: 'This run checks no gauge inside the network. It needs a flow record at a gauge that is not the calibration site.',

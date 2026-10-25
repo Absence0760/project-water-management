@@ -1,12 +1,13 @@
 // The Data page's "On this page" menu (common/SectionNav): its panels run to
 // two or three screens under the table and the chart (double mass, data
 // checks, what the model uses). The ids are set on the panels in
-// SeriesTab.svelte. Uploading is the header's Add data dialog; the Upload CSV
+// SeriesTab.svelte. Data feeds (feeds/DataFeedsPanel.svelte, moved here from
+// Settings in issue #586) is always drawn: it is how series fill themselves. Uploading is the header's Add data dialog; the Upload CSV
 // panel that repeated it is gone, and its `#upload-csv` is a retired id.
 import type { NavGroup } from '#lib/components/common/sectionNav.js';
 
 /** Every panel id, in page order. */
-export const DATA_ANCHORS = ['data-series', 'data-chart', 'data-agreement', 'data-double-mass', 'data-checks', 'data-uses'] as const;
+export const DATA_ANCHORS = ['data-series', 'data-chart', 'data-feeds', 'data-agreement', 'data-double-mass', 'data-checks', 'data-uses'] as const;
 
 /** True for a fragment (without the `#`) naming one of the Data page's panels. */
 export function dataAnchor(hash: string): boolean {
@@ -42,7 +43,9 @@ export function dataNavGroups(p: DataPanels): NavGroup[] {
 			// Each link says its panel's heading; the bar the long ones shorter (issue #462).
 			sections: [
 				{ id: 'data-series', label: 'Input time series', bar: 'Series' },
-				...(p.chart ? [{ id: 'data-chart', label: 'Series chart', bar: 'Chart' }] : [])
+				...(p.chart ? [{ id: 'data-chart', label: 'Series chart', bar: 'Chart' }] : []),
+				// The feeds that fill the series daily (issue #586: from Settings); its heading word for word.
+				{ id: 'data-feeds', label: 'Data feeds' }
 			]
 		},
 		{

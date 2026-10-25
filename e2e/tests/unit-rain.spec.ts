@@ -1,7 +1,7 @@
 // Rain for each hydrological unit (issue #482; docs/ui.md § Data feeds, §
 // Settings & calibration, § Network; docs/maps.md § Rain for each unit). On
 // the sample model with an invented parcel linked to one unit:
-// - Settings → Data feeds → Attach a feed, Area "Each unit's parcel" (Rain for
+// - Data → Data feeds → Attach a feed, Area "Each unit's parcel" (Rain for
 //   each unit, issue #521: an option of the attach card) proposes that unit's CHIRPS
 //   cells, names the unit without a parcel, checks the start date before
 //   anything is sent, and the owner's Create makes one feed into the unit's
@@ -39,9 +39,9 @@ async function seed(request: APIRequestContext, name: string) {
 
 const unitRain = (page: Page) => page.getByTestId('unit-rain');
 
-/** Settings → Data feeds: the head's add action (Attach a feed; Rain from the map for an editor), Area: each unit's parcel. */
+/** Data → Data feeds: the head's add action (Attach a feed; Rain from the map for an editor), Area: each unit's parcel. */
 async function openUnitRain(page: Page, projectId: string, opener: 'Attach a feed' | 'Rain from the map' = 'Attach a feed') {
-	await page.goto(`/projects/${projectId}?tab=settings`);
+	await page.goto(`/projects/${projectId}?tab=series`);
 	const feeds = page.getByRole('region', { name: 'Data feeds' });
 	await feeds.getByRole('button', { name: opener }).click();
 	const area = feeds.getByLabel('Area');
@@ -191,7 +191,8 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	await expect(group.getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', /^\?tab=network&edit=[^&]+&section=area$/);
 	await saveSettings(page);
 	await group.getByRole('link', { name: 'Data feeds → Rain for each unit' }).click();
-	await expect(page).toHaveURL(/[?&]rain=units/);
+	// Data feeds is on the Data page (issue #586): the link goes there, with the proposal open.
+	await expect(page).toHaveURL(/\?tab=series&rain=units#data-feeds$/);
 	await expect(unitRain(page).getByTestId('unit-rain-row')).toHaveCount(1);
 
 	const viewer = await signIn('Unit rain viewer');
@@ -202,6 +203,7 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	await expect(seen).toBeDisabled();
 	await expect(viewer.page.getByTestId('unit-rain-settings')).toBeVisible();
 	// Data feeds' proposals are for editors: a viewer has no button to open them, and the link opens nothing.
+	await viewer.page.goto(`/projects/${id}?tab=series&rain=units#data-feeds`);
 	const viewerFeeds = viewer.page.getByRole('region', { name: 'Data feeds' });
 	await expect(viewerFeeds.getByRole('button', { name: 'Refresh status' })).toBeVisible();
 	await expect(viewerFeeds.getByRole('button', { name: /^(?:Attach a feed|Rain from the map)$/ })).toHaveCount(0);

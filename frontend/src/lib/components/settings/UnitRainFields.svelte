@@ -73,7 +73,7 @@
 	</span>
 	{#if on && value}
 		<p class="hint coverage" data-testid="unit-rain-coverage">
-			{coverage.text} Set each unit’s MAP on its form in Network or from the MAP grid below, and its CHIRPS under <a href="?tab=settings&rain=units#set-feeds">Data feeds → Rain for each unit</a>.
+			{coverage.text} Set each unit’s MAP on its form in Network or from the MAP grid below, and its CHIRPS under <a href="?tab=series&rain=units#data-feeds">Data feeds → Rain for each unit</a>.
 		</p>
 		{#if coverage.without.length}
 			<p class="hint coverage" data-testid="unit-rain-without-map">

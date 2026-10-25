@@ -1,5 +1,6 @@
 <!--
-	Settings → Data feeds (roadmap WP-2.10; docs/ui.md § Data feeds): the
+	Data → Data feeds (roadmap WP-2.10; docs/ui.md § Data feeds; on Settings
+	until issue #586 moved it beside the series it fills): the
 	project's scheduled feeds (CHIRPS rainfall, the CHIRPS-GEFS forecast, DWS
 	gauge flow) with their health, "Run now", and a card to attach one. Owners
 	attach, switch off and remove feeds; editors can run one now; viewers read.
@@ -145,9 +146,9 @@
 		if (formField === 'cells' || formField === 'bbox') formError = formField = null;
 	}
 
-	// ?rain=boundary (the Map tab's link) and ?rain=units (Settings' Rain for each unit) open the card on
-	// that proposal, also when the link is followed on this page; once per arrival, so closing it while
-	// the URL still asks doesn't open it again. Not for a viewer, who has neither.
+	// ?rain=boundary (the Map tab's link) and ?rain=units (Settings' Rain for each unit), both links to
+	// ?tab=series…#data-feeds, open the card on that proposal, also when the link is followed on this page;
+	// once per arrival, so closing it while the URL still asks doesn't open it again. Not for a viewer, who has neither.
 	const rainAsked = $derived.by(() => {
 		const r = page.url.searchParams.get('rain');
 		return r === 'boundary' || r === 'units' ? r : null;
@@ -313,7 +314,7 @@
 	}
 </script>
 
-<!-- Its #set-feeds anchor is on the wrapper in SettingsTab.svelte, which lazy-loads this panel. -->
+<!-- Its #data-feeds anchor is on the wrapper in series/SeriesTab.svelte, which lazy-loads this panel. -->
 <section class="panel" aria-labelledby="{uid}-h">
 	<!-- The panel's actions in its head (issue #521): Refresh status, and the add action that opens the card. The words
 	     that were a paragraph under the heading are the (i)'s, with the rest in the glossary. -->
@@ -331,6 +332,11 @@
 			</div>
 		{/if}
 	</div>
+
+	<!-- Feeds save on their own, never through the workspace's save bar: say so where the changes are made (issue #586, E13). -->
+	{#if data?.canEdit}
+		<p class="muted small saves" data-testid="feeds-saves">Feeds save as you change them: attaching, switching off or removing one needs no Save changes.</p>
+	{/if}
 
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
@@ -602,6 +608,9 @@
 	.hint {
 		font-size: var(--font-sm);
 		max-width: 75ch;
+	}
+	.saves {
+		margin: 0 0 0.6rem;
 	}
 	.feeds {
 		list-style: none;

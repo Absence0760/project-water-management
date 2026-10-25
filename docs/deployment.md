@@ -2183,7 +2183,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
       revisions (180 days / 5 versions).
    4. Run the model (this also ends a hold). If the bad days reached a
       publication, publish the corrected run and say so in the notice.
-2. **A feed failing.** Settings → Data feeds shows the error and the
+2. **A feed failing.** Data → Data feeds shows the error and the
    consecutive failures; `feed.failed` is in History. Check the source's
    status (CHIRPS / DWS sites) and the parser error. Switch the feed off
    while it's broken (its days so far stay), tell the modeller, and switch

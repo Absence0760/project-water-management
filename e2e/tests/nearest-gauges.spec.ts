@@ -1,6 +1,6 @@
 // The nearest gauging stations, proposed as the observed-flow source (issue
 // #326 Part B "B-gauge"; docs/ui.md § Data feeds, docs/maps.md § Gauging
-// stations). In Settings → Data feeds, choosing DWS lists the river gauges
+// stations). In Data → Data feeds, choosing DWS lists the river gauges
 // nearest the catchment's outlet from the synthetic station list (region Z,
 // invented): on the seeded Sandspruit, measured from its outlet gauge's point,
 // nearest first; "Use" fills the station field and nothing is attached until
@@ -30,9 +30,9 @@ async function signInAs(page: Page, who: { email: string; password: string }) {
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 }
 
-/** Settings → Data feeds → Attach a feed → DWS, once the proposal has loaded. */
+/** Data → Data feeds → Attach a feed → DWS, once the proposal has loaded. */
 async function openDwsForm(page: Page, projectId: string) {
-	await page.goto(`/projects/${projectId}?tab=settings`);
+	await page.goto(`/projects/${projectId}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
 	await panel.getByLabel('Source').selectOption({ label: 'DWS gauge flow' });
@@ -58,7 +58,7 @@ test('on the seeded Sandspruit, the stations nearest its outlet gauge are listed
 	await expect(first.getByRole('cell').nth(2)).toHaveText('1968–2024 (56 years)');
 	await expect(first.getByRole('rowheader')).toContainText('SYNTHETIC');
 
-	await expectNoViolations(page, { include: '#set-feeds' });
+	await expectNoViolations(page, { include: '#data-feeds' });
 
 	// Use fills the field and moves focus to it; the row says it's in the field. Nothing is attached.
 	const station = panel.getByLabel('DWS station');

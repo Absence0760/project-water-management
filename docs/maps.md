@@ -915,13 +915,13 @@ Issue #326 B-rain (WP-2.10 × WP-3.12): the catchment's CHIRPS rain feed set
 up from the map's boundary in one action, averaging the rain over the
 boundary itself rather than over a box around it.
 
-- **Where.** Settings → Data feeds → **Attach a feed** (an editor: **Rain
+- **Where.** Data → Data feeds → **Attach a feed** (an editor: **Rain
   from the map**) → **Area**: *The catchment boundary, from the map*
   (`feeds/BoundaryRain.svelte`, a choice of the attach card since issue
   #521), for editors and owners. The Map tab shows one
   line, for editors, while a boundary exists and no CHIRPS feed reads it, or
   one read it before it was redrawn (`map/MapRainLink.svelte`); its link
-  opens the proposal (`?tab=settings&rain=boundary#set-feeds`).
+  opens the proposal (`?tab=series&rain=boundary#data-feeds`).
 - **The proposal** (`GET /projects/:id/feeds/chirps/from-boundary`, editor):
   the boundary (name, area, when it was last changed), the CHIRPS v3 cells
   it covers with how much of them lies inside, the method ("area-weighted
@@ -1152,7 +1152,7 @@ as the schema owner; the app never writes it.
 
 ## Gauging stations
 
-Settings → Data feeds → **Attach a feed** → source **DWS gauge flow** shows
+Data → Data feeds → **Attach a feed** → source **DWS gauge flow** shows
 **Nearest gauging stations** above the station field (issue #326 Part B,
 "B-gauge"; `NearestGauges.svelte`, `GET /projects/:id/map/stations`): the
 river gauges within 50 km of the catchment's outlet, nearest first, at most

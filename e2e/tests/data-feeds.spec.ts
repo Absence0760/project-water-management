@@ -69,7 +69,7 @@ async function attachFeed(request: APIRequestContext, projectId: string): Promis
 test('an owner attaches a forecast feed on fixtures, runs it, and the status panel shows it OK', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Feeds');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
@@ -121,7 +121,7 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area’s rainfall', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Box feed');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
@@ -156,7 +156,7 @@ test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area�
 test('a coastal box leaves out its sea cells when asked, and fetches the land’s rainfall', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Coastal box');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
@@ -184,7 +184,7 @@ test('a coastal box leaves out its sea cells when asked, and fetches the land’
 test('a feed that fails shows as failing, with the warning above the list', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Failing feed');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
@@ -205,7 +205,7 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
 	await panel.getByLabel('Source').selectOption({ label: 'DWS gauge flow' });
 	await expect(panel.getByLabel('DWS station')).toBeVisible();
-	await expectNoViolations(page, { include: '#set-feeds' });
+	await expectNoViolations(page, { include: '#data-feeds' });
 	await panel.getByRole('button', { name: 'Cancel' }).click();
 
 	// Switching it off clears the warning.
@@ -226,7 +226,7 @@ test('attaching a feed to a series that already has data asks first, and offers 
 		product: 'CHIRPS sat',
 		productVersion: '3.0'
 	});
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
@@ -240,7 +240,7 @@ test('attaching a feed to a series that already has data asks first, and offers 
 	const separate = ask.getByRole('button', { name: 'Use a separate series: CHIRPS' });
 	await expect(separate).toBeFocused();
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
-	await expectNoViolations(page, { include: '#set-feeds' });
+	await expectNoViolations(page, { include: '#data-feeds' });
 
 	// Escape backs out to the name field.
 	await page.keyboard.press('Escape');
@@ -277,7 +277,7 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 	const project = await createProject(page.request, 'Feed version');
 	const v2 = { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2001-01-01', values: [1, 2, 3], product: 'CHIRPS', productVersion: '2.0' };
 	await putSeries(page.request, project.id, v2);
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
@@ -288,7 +288,7 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — CHIRPS” already has data (3 days).' });
 	await expect(ask).toHaveAccessibleDescription(/It holds CHIRPS v2\.0, and this feed writes CHIRPS sat v3\.0\..*never splices one onto the other.*such as “CHIRPS”/);
 	await expect(ask.getByRole('button', { name: 'Use a separate series: CHIRPS' })).toBeFocused();
-	await expectNoViolations(page, { include: '#set-feeds' });
+	await expectNoViolations(page, { include: '#data-feeds' });
 
 	// Replacing: the feed is attached with the replacement confirmed, waiting for its first fetch.
 	await ask.getByRole('button', { name: 'Replace the series with CHIRPS sat v3.0' }).click();
@@ -311,7 +311,7 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 	await expect(page.getByTestId('series-rebuilding')).toHaveText('Being replaced');
 
 	// Withdrawing discards what was staged; the card then says every fetch is refused and offers the replacement again.
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	await feed.getByRole('button', { name: 'Withdraw the replacement: Rainfall — CHIRPS' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Replacement withdrawn' })).toBeVisible();
 	await expect(feed.getByTestId('feed-version-conflict')).toHaveText(/^The series holds CHIRPS v2\.0 and this feed writes CHIRPS sat v3\.0, so every fetch is refused/);
@@ -326,7 +326,7 @@ test('an action on a feed changed elsewhere says why it failed and shows the lis
 	void owner;
 	const project = await createProject(page.request, 'Feed changed elsewhere');
 	const feedId = await attachFeed(page.request, project.id);
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await expect(feed).toHaveAttribute('data-state', 'pending');
@@ -351,7 +351,7 @@ test('an action on a feed changed elsewhere says why it failed and shows the lis
 test('the panel works from the keyboard: focus follows the form, a bad field is marked and focused, and a pressed button keeps focus', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Feeds keyboard');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	const attach = panel.getByRole('button', { name: 'Attach a feed' });
 
@@ -406,7 +406,7 @@ test('what each role sees: editors can only run a feed, viewers only read', asyn
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 
 	// Editor: Run now (the API lets editors queue a fetch), nothing that changes the feed.
-	await editor.page.goto(`/projects/${project.id}?tab=settings`);
+	await editor.page.goto(`/projects/${project.id}?tab=series`);
 	let panel = editor.page.getByRole('region', { name: 'Data feeds' });
 	let feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await expect(feed).toHaveAttribute('data-state', 'pending');
@@ -416,7 +416,7 @@ test('what each role sees: editors can only run a feed, viewers only read', asyn
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
 
 	// Viewer: the list and its health, with no buttons on the feed and no form.
-	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${project.id}?tab=series`);
 	panel = viewer.page.getByRole('region', { name: 'Data feeds' });
 	feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await expect(feed).toHaveAttribute('data-state', 'pending');
@@ -428,7 +428,7 @@ test('what each role sees: editors can only run a feed, viewers only read', asyn
 	// With no feeds, a non-owner is told who can attach one.
 	const empty = await createProject(page.request, 'Feed roles empty');
 	await addMember(page.request, empty.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${empty.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${empty.id}?tab=series`);
 	await expect(viewer.page.getByRole('region', { name: 'Data feeds' }).getByText('No feeds yet. An owner can attach one.')).toBeVisible();
 });
 
@@ -437,7 +437,7 @@ test('on a phone the panel, its feed card and the open form fit the screen', asy
 	const project = await createProject(page.request, 'Feeds phone');
 	await attachFeed(page.request, project.id);
 	await page.setViewportSize({ width: 320, height: 800 });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	await expect(panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem')).toHaveCount(1);
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
