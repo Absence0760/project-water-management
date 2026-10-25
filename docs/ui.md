@@ -7713,8 +7713,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   heading; **Days below, by year** on the bar), **Reserve rules met, by
   month** (always, as its stub says what it needs without a table; **Reserve
   rules met**), **Days below the EWR, by month** (**Days below, by month**),
-  **Water account**, **Uncertainty bands** (**Uncertainty**), **Outcome
-  matrix** and **Seasonal outlook**, in three groups: The reserve; Water
+  **Water account**, **Uncertainty bands** (**Uncertainty**), **Sensitivity
+  runs** (**Sensitivity**), **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
   balance; How sure, and what if. On the bar the groups are named for screen
   readers only, its links evenly spaced (issue #162: the wider gaps between
   unnamed groups read as spacing bugs, and the names on the bar take it to
