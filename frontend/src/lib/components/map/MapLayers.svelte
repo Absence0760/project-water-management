@@ -343,7 +343,7 @@
 						<p class="muted" data-testid="map-mapgrid-empty">The grid has no point in this view.</p>
 					{:else}
 						<p class="muted" data-testid="map-mapgrid-summary">
-							{mgSummary}{#if mg.dataset.synthetic}{' '}<strong>Synthetic test data, never real rainfall.</strong>{/if}{labels ? '' : ' The map has no fonts for labels here, so it shows the points without their values.'}
+							{mgSummary}{#if mg.dataset.synthetic}{' '}<strong>Synthetic test data, never real rainfall.</strong>{/if}{labels ? ' Each point’s value shows under it once you zoom in far enough for it to clear the next row of points.' : ' The map has no fonts for labels here, so it shows the points without their values.'}
 						</p>
 					{/if}
 					<p class="muted" data-testid="map-mapgrid-source">

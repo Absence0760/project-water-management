@@ -1505,6 +1505,7 @@
 									units={unitsLabelled}
 									mapGrid={mapGrid.points}
 									mapGridAttribution={mapGrid.answer?.dataset?.attribution ?? null}
+									mapGridCellDeg={mapGrid.answer?.dataset?.cellDeg ?? null}
 									chirps={chirpsInView}
 									demGrid={demGrid.points}
 									fillScale={areaFill.scale}

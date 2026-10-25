@@ -2084,7 +2084,10 @@ keep `water-management` (identifiers nobody sees).
 delegated child zone (`route53_zone_id`). `redirect_domains` maps each former
 hostname to its zone: each stays a CloudFront alias and a SAN on the
 certificate, with A/AAAA records in its zone, and `spa_rewrite` answers its
-pages with a **301** to the same path and query on the new host (any host
+pages with a **301** to the same path and query on the new host (the query
+byte for byte as the viewer sent it, from `rawQueryString()`: CloudFront's
+parsed `request.querystring` doesn't keep the order of distinct names, which
+the first live `postapply-check.sh --redirect-from` caught; any host
 but `domain_name` is redirected, the distribution's `*.cloudfront.net` name
 included). `/api/*`, `/reports/*`, `/packs/*` and `/tiles/*` don't redirect
 and keep answering on a former hostname, so a mail client's one-click

@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "#579 adds the MAP from the grid table's source column, gridCitation() and the date fields' 'e.g.' placeholder and Simulation period hints: CI measured 2067 KB against main's 2066 KB at 66c4aae52 (run 40152453170)."
+}

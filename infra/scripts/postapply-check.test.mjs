@@ -240,6 +240,10 @@ test('--redirect-from: a former hostname 301s a page to the same path on the sit
 	assert.match(served.line('redirect-page'), /^FAIL .*answers 200, expected 301/);
 	const elsewhere = run({ args, curl: { [`${OLD}${probe}`]: { status: 301, location: `${OLD}/` }, [`${OLD}/api/health`]: { status: 200 } } });
 	assert.match(elsewhere.line('redirect-page'), /^FAIL /);
+	// The query rebuilt from CloudFront's parsed querystring, as spa_rewrite once
+	// did: names reordered (seen live 2026-10-25). The check wants it byte for byte.
+	const reordered = run({ args, curl: { [`${OLD}${probe}`]: { status: 301, location: `${SITE}/wm-postapply-check/page?n=1&n=2&probe=a%26b%20c` }, [`${OLD}/api/health`]: { status: 200 } } });
+	assert.match(reordered.line('redirect-page'), /^FAIL .*answers 301 \S+\?n=1&n=2&probe=a%26b%20c, expected 301 to \S+\?probe=a%26b%20c&n=1&n=2$/);
 	const apiMoved = run({ args, curl: { [`${OLD}${probe}`]: { status: 301, location: `${SITE}${probe}` }, [`${OLD}/api/health`]: { status: 301 } } });
 	assert.match(apiMoved.line('redirect-api'), /^FAIL .*answers 301, expected 200/);
 

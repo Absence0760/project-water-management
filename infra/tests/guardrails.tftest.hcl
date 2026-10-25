@@ -834,9 +834,10 @@ run "production_guardrails" {
       "var SITE_HOST = 'icwbt.jaredhoward.com';",
       "if (host && host !== SITE_HOST) return moved(request);",
       "statusCode: 301",
-      "location: { value: 'https://' + SITE_HOST + request.uri + query(request.querystring) }",
+      "var qs = request.rawQueryString();",
+      "location: { value: 'https://' + SITE_HOST + request.uri + (qs === undefined ? '' : '?' + qs) }",
     ] : strcontains(aws_cloudfront_function.spa_rewrite.code, s)])
-    error_message = "spa_rewrite must 301 any other host to the same path on the site's hostname (infra/scripts/cloudfront-functions.test.mjs runs it)."
+    error_message = "spa_rewrite must 301 any other host to the same path and the query as sent (rawQueryString) on the site's hostname (infra/scripts/cloudfront-functions.test.mjs runs it)."
   }
   assert {
     condition     = alltrue([for f in [aws_cloudfront_function.api_strip_prefix, aws_cloudfront_function.tiles_range] : !strcontains(f.code, "SITE_HOST")])

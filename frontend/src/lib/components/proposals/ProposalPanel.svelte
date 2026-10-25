@@ -25,6 +25,7 @@
 		variant,
 		title,
 		helpKey,
+		helpLabel,
 		what,
 		intro,
 		controls,
@@ -50,6 +51,8 @@
 		title: string;
 		/** A glossary id for a HelpTip beside the heading, if any. */
 		helpKey?: string;
+		/** The tip button's name when the glossary term doesn't name the heading (default "About <term>"): it should match what the heading says. */
+		helpLabel?: string;
 		/** What failed to load, in "The <what> couldn’t be loaded". */
 		what: string;
 		intro: Snippet;
@@ -101,14 +104,14 @@
 
 <section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
 	{#if variant === 'page'}
-		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h2>{@render actions?.()}</div>
+		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h2>{@render actions?.()}</div>
 	{:else if actions}
 		<div class="head">
-			<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
+			<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h3>
 			<div class="actions">{@render actions()}</div>
 		</div>
 	{:else}
-		<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
+		<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h3>
 	{/if}
 	{#if fold}
 		<Fold name={fold.name} line={fold.line} change={fold.change} problem={false} body="stack" class="proposal-fold" lineTestid="{prefix}-line" bind:open>
