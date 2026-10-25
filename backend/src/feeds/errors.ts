@@ -7,7 +7,8 @@
 //   FeedUnavailableError — the source didn't answer usefully (network error,
 //                          timeout, HTTP 5xx, a response too large). Nothing is
 //                          written; the next scheduled fetch tries again.
-//                          FeedThrottledError is the HTTP 429 / 503 case.
+//                          FeedThrottledError is the HTTP 429 / 503 case,
+//                          FeedRefusedError the HTTP 403 one.
 //
 // Either way the feed's health records the failure (feeds/store.ts), and a
 // feed that keeps failing shows as failing, then stale.
@@ -41,6 +42,30 @@ export class FeedThrottledError extends FeedUnavailableError {
 	}
 }
 
+/**
+ * The source answered HTTP 403: it refuses this server's requests. CHC's
+ * nginx does that to an address it has banned for volume (each fetcher
+ * Lambda environment has its own outbound address), and the DWS site to
+ * addresses outside South Africa. Unlike a 429 it says nothing of when to
+ * come back, so the live client leaves the host alone for REFUSED_PAUSE_SECONDS
+ * (http.ts), and the stored message starts with FEED_REFUSED_PREFIX, which
+ * the scheduler reads to back the feed off for hours, not minutes
+ * (242_feed_refused_backoff.sql app_feed_is_due).
+ */
+export class FeedRefusedError extends FeedUnavailableError {
+	readonly status = 403;
+	constructor() {
+		super('HTTP 403');
+	}
+}
+
+/**
+ * How a refused fetch's stored message starts. app_feed_is_due
+ * (242_feed_refused_backoff.sql) matches this exact text: change both
+ * together (feeds.db.test.ts pins them to each other).
+ */
+export const FEED_REFUSED_PREFIX = 'the source refused this server’s requests';
+
 /** The longest stored feed error (018_feeds.sql CHECK). */
 export const FEED_ERROR_MAX = 500;
 
@@ -48,6 +73,7 @@ export const FEED_ERROR_MAX = 500;
 export function feedErrorMessage(err: unknown): string {
 	const clip = (s: string) => (s.length > FEED_ERROR_MAX ? `${s.slice(0, FEED_ERROR_MAX - 1)}…` : s);
 	if (err instanceof FeedFormatError) return clip(`the source’s data could not be read: ${err.message}`);
+	if (err instanceof FeedRefusedError) return `${FEED_REFUSED_PREFIX} (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again`;
 	if (err instanceof FeedUnavailableError) return clip(`the source is unreachable: ${err.message}`);
 	return 'the fetch failed with an internal error';
 }

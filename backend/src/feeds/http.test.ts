@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FeedThrottledError, FeedUnavailableError } from './errors.js';
-import { feedHttp, feedSourceMode, fileTag, liveHttp, retryAfterSeconds, THROTTLE_DEFAULT_SECONDS, THROTTLE_MAX_SECONDS, type ThrottleState } from './http.js';
+import { FeedRefusedError, FeedThrottledError, FeedUnavailableError, feedErrorMessage } from './errors.js';
+import { feedHttp, feedSourceMode, fileTag, liveHttp, REFUSED_PAUSE_SECONDS, retryAfterSeconds, THROTTLE_DEFAULT_SECONDS, THROTTLE_MAX_SECONDS, type ThrottleState } from './http.js';
 
 describe('feedSourceMode', () => {
 	it('defaults to fixtures (local-first: no network in dev or CI)', () => {
@@ -44,7 +44,7 @@ describe('liveHttp', () => {
 
 	it('turns other statuses, network errors and timeouts into FeedUnavailableError with our own message', async () => {
 		await expect(liveHttp(respond(502, '<h1>secret stack</h1>')).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(new FeedUnavailableError('HTTP 502'));
-		await expect(liveHttp(respond(403)).text('https://data.chc.ucsb.edu/p')).rejects.toThrow('HTTP 403');
+		await expect(liveHttp(respond(500)).text('https://data.chc.ucsb.edu/p')).rejects.toThrow('HTTP 500');
 		await expect(liveHttp(vi.fn(async () => { throw new TypeError('fetch failed: getaddrinfo ENOTFOUND'); })).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(
 			new FeedUnavailableError('the request failed')
 		);
@@ -69,6 +69,40 @@ describe('liveHttp', () => {
 		throttle.get('data.chc.ucsb.edu')!.until = Date.now() - 1;
 		expect(new TextDecoder().decode((await liveHttp(ok, throttle).range('https://data.chc.ucsb.edu/b.tif', 0, 1))!)).toBe('ab');
 		expect(throttle.has('data.chc.ucsb.edu')).toBe(false);
+	});
+
+	it('reads HTTP 403 as refused, not throttled, and stops asking that host for an hour, whatever Retry-After says (positive control: another host is asked)', async () => {
+		const throttle: ThrottleState = new Map();
+		const banned = vi.fn(async () => new Response('<h1>403 Forbidden</h1>', { status: 403, headers: { 'retry-after': '5' } }));
+		const err = await liveHttp(banned, throttle).range('https://data.chc.ucsb.edu/a.tif', 0, 7).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(FeedRefusedError);
+		expect(err).not.toBeInstanceOf(FeedThrottledError);
+		// Still a FeedUnavailableError: nothing is written and the fetch stops reading.
+		expect(err).toBeInstanceOf(FeedUnavailableError);
+		expect(err).toMatchObject({ status: 403, message: 'HTTP 403' });
+		expect(feedErrorMessage(err)).toBe('the source refused this server’s requests (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again');
+		const left = throttle.get('data.chc.ucsb.edu')!.until - Date.now();
+		expect(left).toBeGreaterThan((REFUSED_PAUSE_SECONDS - 10) * 1000);
+		expect(left).toBeLessThanOrEqual(REFUSED_PAUSE_SECONDS * 1000);
+		// Longer than any 429 pause: a ban doesn't lift in a minute.
+		expect(REFUSED_PAUSE_SECONDS).toBeGreaterThan(THROTTLE_MAX_SECONDS);
+		// The next request to that host fails at once, refused again, without asking.
+		const ok = respond(206, 'ab');
+		await expect(liveHttp(ok, throttle).range('https://data.chc.ucsb.edu/b.tif', 0, 1)).rejects.toBeInstanceOf(FeedRefusedError);
+		await expect(liveHttp(ok, throttle).head!('https://data.chc.ucsb.edu/b.tif')).rejects.toBeInstanceOf(FeedRefusedError);
+		expect(ok).not.toHaveBeenCalled();
+		expect(await liveHttp(ok, throttle).text('https://www.dws.gov.za/p')).toBe('ab');
+		// Once the pause is over, it is asked again.
+		throttle.get('data.chc.ucsb.edu')!.until = Date.now() - 1;
+		expect(new TextDecoder().decode((await liveHttp(ok, throttle).range('https://data.chc.ucsb.edu/b.tif', 0, 1))!)).toBe('ab');
+		expect(throttle.has('data.chc.ucsb.edu')).toBe(false);
+	});
+
+	it('a 404 or 416 pauses nothing: "not published" is no refusal', async () => {
+		const throttle: ThrottleState = new Map();
+		expect(await liveHttp(respond(404), throttle).range('https://data.chc.ucsb.edu/a.tif', 0, 7)).toBeNull();
+		expect(await liveHttp(respond(416), throttle).range('https://data.chc.ucsb.edu/a.tif', 0, 7)).toBeNull();
+		expect(throttle.size).toBe(0);
 	});
 
 	it('a 503 without Retry-After pauses the default; a Retry-After past the cap pauses only the cap', async () => {

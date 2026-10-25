@@ -10,8 +10,10 @@
 // Both implement FeedHttp. Every response is bounded (time and size), and an
 // upstream body is never copied into an error: the messages are ours. An HTTP
 // 429 or 503 is a FeedThrottledError, and the live client then leaves that
-// host alone for its Retry-After (THROTTLE_*), across clients in one process.
-import { FeedThrottledError, FeedUnavailableError } from './errors.js';
+// host alone for its Retry-After (THROTTLE_*); an HTTP 403 is a
+// FeedRefusedError, and the host is left alone for REFUSED_PAUSE_SECONDS.
+// Both pauses hold across clients in one process.
+import { FeedRefusedError, FeedThrottledError, FeedUnavailableError } from './errors.js';
 import { CHC_BASE } from './sources/chirps.js';
 import { DWS_BASE } from './sources/dws.js';
 
@@ -97,6 +99,20 @@ export const THROTTLE_DEFAULT_SECONDS = 60;
 /** The longest such pause, whatever Retry-After asks: past it the scheduler's own backoff (15 min, doubling) takes over. */
 export const THROTTLE_MAX_SECONDS = 15 * 60;
 
+/**
+ * How long a host that answered HTTP 403 isn't asked again: an hour. A 403
+ * names no Retry-After, and from CHC it is a ban on this environment's
+ * outbound address for the volume it asked (2026-10-25: a fresh fetcher
+ * environment's first fetch or two worked, then every later one was
+ * refused), which doesn't lift in the minute a 429's default waits. An hour
+ * covers most of a warm Lambda environment's life, so the environment that
+ * was refused stops asking for good, while a new environment, with its own
+ * address, isn't held back by it. Past it the scheduler's refused backoff
+ * (2 h, doubling, 242_feed_refused_backoff.sql) has the feed waiting longer
+ * still. Kept apart from THROTTLE_*: a refusal is not a request to slow down.
+ */
+export const REFUSED_PAUSE_SECONDS = 60 * 60;
+
 /** A Retry-After header in seconds from `now`: delta-seconds or an HTTP date; null when absent or unreadable. */
 export function retryAfterSeconds(value: string | null, now = Date.now()): number | null {
 	const v = value?.trim();
@@ -107,12 +123,12 @@ export function retryAfterSeconds(value: string | null, now = Date.now()): numbe
 	return Number.isFinite(at) ? Math.max(0, Math.ceil((at - now) / 1000)) : null;
 }
 
-/** Per host, the pause a 429 or 503 started: until when (epoch ms) a live fetch doesn't ask it. */
-export type ThrottleState = Map<string, { until: number; status: 429 | 503 }>;
+/** Per host, the pause a 429, 503 or 403 started: until when (epoch ms) a live fetch doesn't ask it. */
+export type ThrottleState = Map<string, { until: number; status: 429 | 503 | 403 }>;
 /**
  * Shared by every client in one process, so a warm fetcher Lambda remembers a
- * throttled host across invocations: the fetches queued behind the one that
- * met the 429 fail at once instead of each asking again (docs/architecture.md
+ * throttled or refusing host across invocations: the fetches queued behind
+ * the one that met the 429 or 403 fail at once instead of each asking again (docs/architecture.md
  * § Data feeds → Throttling).
  */
 const THROTTLED: ThrottleState = new Map();
@@ -122,7 +138,7 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a), throttle: Throt
 		const p = throttle.get(host);
 		if (!p) return;
 		const left = p.until - Date.now();
-		if (left > 0) throw new FeedThrottledError(p.status, Math.ceil(left / 1000));
+		if (left > 0) throw p.status === 403 ? new FeedRefusedError() : new FeedThrottledError(p.status, Math.ceil(left / 1000));
 		throttle.delete(host);
 	};
 	const get = async (url: string, headers: Record<string, string>, method: 'GET' | 'HEAD' = 'GET'): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
@@ -157,6 +173,11 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a), throttle: Throt
 			const pause = Math.min(THROTTLE_MAX_SECONDS, after ?? THROTTLE_DEFAULT_SECONDS);
 			if (pause > 0) throttle.set(target.host, { until: Date.now() + pause * 1000, status: res.status });
 			throw new FeedThrottledError(res.status, after);
+		}
+		if (res.status === 403) {
+			await res.body?.cancel();
+			throttle.set(target.host, { until: Date.now() + REFUSED_PAUSE_SECONDS * 1000, status: 403 });
+			throw new FeedRefusedError();
 		}
 		if (res.status !== 200 && res.status !== 206) {
 			await res.body?.cancel();

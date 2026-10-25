@@ -231,6 +231,9 @@ describe('descriptions', () => {
 			expect(healthMessage(h({ code: 'failing', failures: 2, error: 'the source is unreachable: HTTP 503', newest: '2026-09-01' }))).toBe(
 				'The last 2 fetches failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.'
 			);
+			// A refusal (HTTP 403) says so, and that the feed waits hours (backend feeds/errors.ts FeedRefusedError).
+			const refused = 'the source refused this server’s requests (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again';
+			expect(healthMessage(h({ code: 'failing', failures: 3, error: refused, newest: '2026-10-20' }))).toBe(`The last 3 fetches failed: ${refused}. Newest data 20 Oct 2026.`);
 			expect(healthMessage(h({ code: 'failing', failures: 1, error: null, newest: null }))).toBe('The last fetch failed: unknown error. No data yet.');
 			// An error that reads like a date is the server's text, left as it is.
 			expect(healthMessage(h({ code: 'failing', failures: 1, error: 'no data at 2026-09-24', newest: null }))).toBe('The last fetch failed: no data at 2026-09-24. No data yet.');
