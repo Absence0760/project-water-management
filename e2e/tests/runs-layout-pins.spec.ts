@@ -239,22 +239,93 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		const panel = page.locator(`#${anchor}`);
 		const h = anchor === 'res-h' ? panel : panel.locator('h2, h3, h4').first();
 		await expect(h, anchor).toHaveText(heading);
-		if (anchor === 'res-forecast') {
-			// KNOWN BUG (reported with issue #586 round 0): the Forecast panel is a lazy chunk whose #res-forecast
-			// isn't on the page yet when RunsTab's fragment effect looks for it (RunsTab.svelte ~293), so the link
-			// neither scrolls there nor moves the focus. Only that it renders is pinned until that is fixed.
-			continue;
-		}
-		if (anchor === 'res-unit-rain' || anchor === 'res-wr2012') {
-			// KNOWN BUG (same report): lazy panels whose heading can arrive after their box, so the focus
-			// falls back to the panel itself (RunsTab.svelte ~297; RiverTab waits for the heading). The focus
-			// is inside the panel either way.
-			await expect.poll(() => panel.evaluate((el) => el.contains(document.activeElement)), { message: anchor }).toBe(true);
-		} else {
-			await expect(h, anchor).toBeFocused();
-		}
+		// Lazy panels (Forecast, Rain for each unit, WR2012) included: the page waits for the panel, then its heading (issue #586).
+		await expect(h, anchor).toBeFocused();
 		await expectTopInView(panel, anchor);
 	}
+});
+
+test('a link to a panel this run doesn’t have says what the panel needs, with the focus on it', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize(VIEW);
+	const project = await seedRunnableProject(page.request, 'Pins missing panels');
+	const runId = await createRun(page.request, project.id, 'Plain');
+	// A plain run has no WR2012 check, no checks-only gauge, no forecast and no rain for each unit (issue #586).
+	for (const [anchor, needs, href] of [
+		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=settings#set-wr2012'],
+		['res-gauges', 'It needs a flow record at a gauge that is not the calibration site', '?tab=series'],
+		['res-forecast', 'A forecast run needs forecast rain', '?tab=settings#set-feeds'],
+		['res-unit-rain', 'It needs Per unit flow generation', '?tab=settings#set-share']
+	] as const) {
+		await page.goto(`/projects/${project.id}?tab=overview`);
+		await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#${anchor}`);
+		const line = page.getByTestId('missing-panel');
+		await expect(line, anchor).toContainText(needs);
+		await expect(line, anchor).toHaveAttribute('data-for', anchor);
+		await expect(line.getByRole('link'), anchor).toHaveAttribute('href', href);
+		await expect(line, anchor).toBeFocused();
+		await expect(line, anchor).toBeInViewport();
+	}
+	// Another run picked: the line was about the linked run, and goes.
+	const other = await createRun(page.request, project.id, 'Another');
+	await page.goto(`/projects/${project.id}?tab=overview`);
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-wr2012`);
+	await expect(page.getByTestId('missing-panel')).toBeVisible();
+	await runsList(page).getByRole('button', { name: /^Another/ }).click();
+	await expect(page).toHaveURL(new RegExp(`run=${other}`));
+	await expect(page.getByTestId('missing-panel')).toHaveCount(0);
+});
+
+test('following a side-index link puts the focus on its panel’s heading, again when it is the fragment already', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize(VIEW);
+	const project = await seedRunnableProject(page.request, 'Pins index focus');
+	const runId = await createRun(page.request, project.id, 'Plain');
+	await openAll(page, project.id, runId);
+	const rail = page.getByRole('navigation', { name: 'Result sections' });
+	for (const [name, anchor] of [
+		['Calibration against observed flow', 'res-calibration'],
+		['Publication', 'res-publication'],
+		['Explore any output', 'res-explore']
+	] as const) {
+		await rail.getByRole('link', { name, exact: true }).click();
+		await expect(page).toHaveURL(new RegExp(`#${anchor}$`));
+		const h = page.locator(`#${anchor}`).locator('h2, h3, h4').first();
+		await expect(h, anchor).toBeFocused();
+		await expect(h, anchor).toBeInViewport();
+	}
+	// The same link again (no hashchange): the heading still takes the focus.
+	await rail.getByRole('link', { name: 'Explore any output', exact: true }).click();
+	await expect(page.locator('#res-explore').locator('h2, h3, h4').first()).toBeFocused();
+});
+
+test('the sidebar keeps a picked run: Runs → Settings → Runs and Runs → EWR stay on it, and the new page’s title has the focus', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize(VIEW);
+	const project = await seedRunnableProject(page.request, 'Pins sidebar run');
+	const older = await createRun(page.request, project.id, 'Older');
+	const newest = await createRun(page.request, project.id, 'Newest');
+	const sidebar = page.getByRole('navigation', { name: 'Project sections' });
+	const title = (name: string) => page.getByRole('heading', { level: 1, name, exact: true });
+
+	await openRuns(page, project.id, `&run=${older}`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Older', exact: true })).toBeVisible();
+	await sidebar.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(page).toHaveURL(/\?tab=settings$/);
+	await expect(title('Settings & calibration')).toBeFocused();
+	await sidebar.getByRole('link', { name: 'Runs & results', exact: true }).click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${older}$`));
+	await expect(page.getByRole('heading', { level: 2, name: 'Older', exact: true })).toBeVisible();
+	await expect(title('Runs & results')).toBeFocused();
+
+	await sidebar.getByRole('link', { name: 'EWR', exact: true }).press('Enter');
+	await expect(page).toHaveURL(new RegExp(`\\?tab=river&run=${older}$`));
+	await expect(title('EWR')).toBeFocused();
+
+	// Back on the newest (the default), the links carry no run: a run made since still opens first.
+	await page.goto(`/projects/${project.id}?tab=runs&run=${newest}`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Newest', exact: true })).toBeVisible();
+	await expect(sidebar.getByRole('link', { name: 'EWR', exact: true })).toHaveAttribute('href', '?tab=river');
 });
 
 test('the run picker: the newest by default, ?run= picks one, a pick is a step Back and Forward retrace', async ({ page, owner }) => {

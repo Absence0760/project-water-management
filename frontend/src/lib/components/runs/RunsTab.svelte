@@ -43,7 +43,8 @@
 	import { supplyHref } from '#lib/components/supply/links.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { historyDays, ranAgo } from '#lib/components/overview/latestRun.js';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, holdAnchor, landOnAnchor } from '#lib/help/anchor.js';
+	import { missingPanel, type MissingPanel } from './missingPanel';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
@@ -273,13 +274,17 @@
 
 	// A link to a results panel (#res-publication from the Summary's published
 	// baseline, #res-notes from a note): the panels render only once the run's details are in,
-	// after the browser's own jump, so scroll there then and hold it while the
-	// panels above load (holdAnchor), with focus on the panel's heading so Tab
-	// carries on from there. Once: later jumps (the section menu) find their
-	// panel on the page and are the browser's.
+	// after the browser's own jump, and some (Forecast, Unit rain, WR2012, everything after the
+	// flow-duration curve) are lazy chunks drawn later still. So wait for the panel and then its
+	// heading (landOnAnchor), scroll there and hold it while the panels above load, with focus
+	// on the heading so Tab carries on from there. A panel this run doesn't have (#res-wr2012 on
+	// a run without a WR2012 reference, issue #586) shows a line saying what it needs instead,
+	// focused. Once: later jumps (the section menu) find their panel on the page and are the browser's.
 	let fragmentShown = false;
 	/** The validation statement is open: the known-bug badge opens it (issue #103). */
 	let validationOpen = $state(false);
+	/** The line for a linked panel this run doesn't draw (missingPanel.ts), for the run it was linked on. */
+	let missingLink = $state<{ runId: string; hash: string; panel: MissingPanel } | null>(null);
 	let releaseFragment = () => {};
 	let destroyed = false;
 	$effect(() => {
@@ -289,13 +294,15 @@
 		if (!hash.startsWith('res-') || movedHref(hash, null)) return;
 		// The known-bug badge's link (issue #103): the statement opens on load too, not only on a click.
 		if (hash === 'res-validation') validationOpen = true;
+		const lacking = missingPanel(hash, detail.run.summary);
+		if (lacking) missingLink = { runId: detail.run.id, hash, panel: lacking };
 		tick().then(() => {
-			const el = destroyed ? null : document.getElementById(hash);
-			if (!el) return;
-			releaseFragment = holdAnchor(el);
-			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
-			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			focusAnchor(heading);
+			if (destroyed) return;
+			const line = lacking ? document.getElementById('res-missing') : null;
+			if (line) {
+				releaseFragment = holdAnchor(line);
+				focusAnchor(line);
+			} else releaseFragment = landOnAnchor(hash);
 		});
 	});
 	onDestroy(() => {
@@ -750,6 +757,12 @@
 					{/if}
 				</section>
 			</section>
+			{#if missingLink && missingLink.runId === detail.run.id}
+				<!-- A link to a panel this run doesn't have (missingPanel.ts): what it needs, focused on landing. -->
+				<p class="panel missing-panel" id="res-missing" tabindex="-1" data-testid="missing-panel" data-for={missingLink.hash}>
+					{missingLink.panel.text}{#if missingLink.panel.link}{' '}<a href={missingLink.panel.link.href}>{missingLink.panel.link.label}</a>{/if}
+				</p>
+			{/if}
 			{#if summary.forecast}
 				<Lazy load={loadForecastPanel}>
 					{#snippet children(ForecastPanel)}

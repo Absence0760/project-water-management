@@ -78,7 +78,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	curtailmentHref: { why: 'BUILDER: "<base>/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'lib/components/projects/ProjectTable.svelte'] },
 	historyHref: { why: 'BUILDER: compare/attribution.ts "/projects/" + encoded project id + "?tab=history"', in: ['lib/components/compare/CompareView.svelte'] },
 	// Local builders and constants in the component itself: a literal "?" or "#" head, or resolve() of a literal path.
-	tabHref: { why: 'routes/projects/[id]: "?tab=<TabId>" or the current pathname', in: ['routes/projects/[id]/+page.svelte'] },
+	tabHref: { why: 'routes/projects/[id]: "?tab=<TabId>" (&run=<encoded run id> on a run tab, workspace/tabLinks.ts) or the current pathname', in: ['routes/projects/[id]/+page.svelte'] },
 	addDataHref: { why: 'ProjectTable: `<base>/projects/${id}?add=data`', in: ['lib/components/projects/ProjectTable.svelte'] },
 	projectHref: { why: 'OverviewTab: project/links.ts "?tab=project" + an anchor', in: ['lib/components/overview/OverviewTab.svelte'] },
 	guide: { why: 'SectionHeader: its `guide` prop, which the workspace page and ApplicantView build as "<base>/help/guides/" + a TAB_GUIDE id (lib/workspace/tabs.ts, a constant; guides.test.ts checks each is a real guide)', in: ['lib/components/workspace/SectionHeader.svelte'] },
@@ -133,6 +133,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
 	recordLink: { why: 'GaugeCheckFlows: its recordHref prop, runs/checkGauges.ts recordHref: the literal "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/runs/GaugeCheckFlows.svelte'] },
 	dataHref: { why: 'CalibrationWindowFields prop: SettingsTab passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
+	'missingLink.panel.link.href': { why: 'RunsTab: the line for a linked panel the run doesn\'t have, a literal "?tab=…" constant (runs/missingPanel.ts NEEDS, issue #586)', in: ['lib/components/runs/RunsTab.svelte'] },
 	'moved.href': { why: 'SectionNav: a moved setting\'s link from the page\'s `elsewhere` list, a literal "?tab=…#…" constant (settings/sections.ts SETTINGS_ELSEWHERE, issue #521)', in: ['lib/components/common/SectionNav.svelte'] },
 	hrefOf: { why: 'SectionNav: a section\'s `href` (a literal "?tab=…" from the page that lists it) or "#" + its id', in: ['lib/components/common/SectionNav.svelte'] },
 	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=settings&rain=boundary#set-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },

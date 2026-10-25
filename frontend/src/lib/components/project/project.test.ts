@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PROJECT_ANCHORS, projectAnchor, projectHref } from './links';
 import { projectContext } from './project';
@@ -21,14 +22,35 @@ describe('projectContext', () => {
 });
 
 describe('Project page links', () => {
-	it('knows the panels that moved from the Summary, and nothing else', () => {
-		for (const id of ['details-h', 'members-h', 'farmers-h', 'share-h', 'team-h', 'recent-notes-h', 'import-record-h', 'model-h']) {
+	it('knows every panel, and nothing else', () => {
+		for (const id of ['details-h', 'members-h', 'farmers-h', 'share-h', 'team-h', 'recent-notes-h', 'import-record-h', 'model-h', 'licence-record']) {
 			expect(projectAnchor(id)).toBe(true);
 		}
-		expect(PROJECT_ANCHORS).toHaveLength(8);
 		expect(projectAnchor('res-ewr')).toBe(false);
 		expect(projectAnchor('setup-h')).toBe(false);
 		expect(projectAnchor('')).toBe(false);
+	});
+
+	it('lists every panel heading the page draws, in page order (a link to one lands on it, issue #586)', () => {
+		// The page's panels, in the order ProjectTab draws them, and each one's h2 id read from its source.
+		const src = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+		const tab = src('./ProjectTab.svelte');
+		const own = [...tab.matchAll(/<h2 id="([^"]+)"/g)].map((m) => [tab.indexOf(m[0]), m[1]!] as const);
+		const panels = [...tab.matchAll(/<(\w+Panel|RecentNotes) /g)].map((m) => {
+			const file = m[1] === 'RecentNotes' ? '../notes/RecentNotes.svelte' : `./${m[1]}.svelte`;
+			const id = /<h2 id="([^"]+)"/.exec(src(file))?.[1];
+			expect(id, file).toBeDefined();
+			return [m.index!, id!] as const;
+		});
+		const drawn = [...own, ...panels].sort((a, b) => a[0] - b[0]).map(([, id]) => id);
+		expect([...PROJECT_ANCHORS]).toEqual(drawn);
+	});
+
+	it('the licence record email links a panel the page lands on', () => {
+		const mail = readFileSync(new URL('../../../../../backend/src/mail/templates.ts', import.meta.url), 'utf8');
+		const ids = [...mail.matchAll(/tab=project#([\w-]+)/g)].map((m) => m[1]);
+		expect(ids).toContain('licence-record');
+		for (const id of ids) expect(projectAnchor(id!), id).toBe(true);
 	});
 
 	it('builds ?tab=project, with the panel when given', () => {

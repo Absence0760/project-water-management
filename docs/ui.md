@@ -886,7 +886,18 @@ its tab ids and arrow keys never exist twice. The Applicant view fills no
 slot.
 
 The arrow keys move through the tabs in the order shown, across sections,
-wrapping at the ends (Right/Down next, Left/Up previous).
+wrapping at the ends (Right/Down next, Left/Up previous), with the focus
+staying on the link. A link followed (a click or Enter) puts the focus on the
+new page's title, its `h1` (`focusPageStart`), so Tab carries on in the page
+rather than from the top of the sidebar (issue #586).
+
+The links to the tabs that show one run (Runs & results, EWR, Hydrological
+units, Allocations) keep the run picked on any of them (`&run=<id>`,
+`workspace/tabLinks.ts`): an older run picked on Runs & results is still the
+one shown after a visit to Settings, and EWR opens on it. Only a pick is
+carried: while the run shown is the default (the newest, or a viewer's
+published baseline), the links carry none, so a run made since still opens
+first; a run deleted since is dropped (issue #586).
 
 | Tab | `?tab=` | Aliases | Code |
 | --- | --- | --- | --- |
@@ -1561,7 +1572,8 @@ put the results first; its first screen follows board A1 of the redesign
    page (2026-09-27, issue #17). A link to one of their panels' old
    fragments on the Summary (`#details-h`, `#import-record-h`,
    `#recent-notes-h`, `#team-h`, `#members-h`, `#farmers-h`, `#share-h`,
-   and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`) is
+   and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`, which
+   lists every Project panel's heading) is
    sent there, replacing the history entry so Back skips it. So is a link to
    the reserve strip's old ids (`#strip-h`, `#reserve-strip`) or an EWR
    panel's `#res-…` id: to the EWR page's `#res-reserve-strip` or that panel
@@ -1943,10 +1955,12 @@ it scrolls, and isn't fitted to the window.
   issue #177): gauges and other water users apart, as the Network's header
   line splits them, and the Dams page's dams (`modelDams`: a farm with at
   least 1 m³).
-- **Fragments**: `?tab=project#members-h` (any id in `PROJECT_ANCHORS`)
-  waits for that panel's heading, scrolls it to the top and holds it while
-  the page settles (`holdAnchor`), with focus on the heading. History's
-  "farmers to link again" notes link to `#farmers-h`.
+- **Fragments**: `?tab=project#members-h` (any id in `PROJECT_ANCHORS`:
+  every panel's heading, `project.test.ts` checks the list against the
+  page's) waits for that panel's heading, scrolls it to the top and holds it
+  while the page settles (`holdAnchor`), with focus on the heading. History's
+  "farmers to link again" notes link to `#farmers-h`, and the licence record
+  review email to `#licence-record` (issue #586).
 - **Headline facts** each link to the tab where they are edited or looked at
   (farms, area, dams and the outflow gauge to Network, irrigated area to
   Crops, transfers to Transfers, time series to Data, runs to Runs). The
@@ -5211,6 +5225,10 @@ History is left to its own redesign.
   `scroll-padding-top` by its height, so a jumped-to section or a focused
   control clears it. It sits at the page's top level (Settings: above the
   form), so it stays stuck to the last panel.
+- **Focus.** A link followed jumps to its section and puts the focus on the
+  section's heading (`tabindex="-1"`, no scroll of its own), as a loaded
+  `#anchor` does, so Tab carries on from there; following the fragment
+  already in the URL does too (issue #586).
 - **Phones** (up to 640 px): one strip that scrolls sideways inside itself
   with every link (no More), the marked link kept in view, never the page.
 - **The side rail** (issue #468 on Settings & calibration; issue #462 on
@@ -5917,10 +5935,14 @@ section header, which it fills (`fillHeader`) like the other sections.
   charge follows.
 - **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
   Project page's recent notes, `notes.ts` `noteHref`; `?tab=calibration`
-  still works) land on that group once the tab's chunk has drawn it, held
-  while the page settles (`holdAnchor`), with focus on its heading. Before,
-  the browser's own jump ran before the lazy tab existed and the page opened
-  at the top.
+  still works, and with no fragment opens at **Flow calibration**) land on
+  that group once the tab's chunk has drawn it, held while the page settles
+  (`holdAnchor`), with focus on its heading. The panels that are lazy chunks
+  of their own (Evaporation from the map, Data feeds, API keys, Scheduled
+  reports) are waited for, then their heading (`landOnAnchor`, help/anchor.ts;
+  a card's h4, as Units without a station's in its legend, counts), until the
+  reader scrolls, types or clicks (issue #586). Before, the browser's own jump
+  ran before the lazy tab existed and the page opened at the top.
 - **On this page** (issue #468). A **Settings sections** menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu))
   wraps the whole tab. From a content width of 80rem (a 1440 px window) it is
@@ -8149,7 +8171,14 @@ read it before.
   Record, Dig deeper) renders once the hydrograph has drawn and been painted,
   so the first chart isn't held behind a second of rendering on a busy
   machine (`runs/RunCharts.svelte`); a link to a panel down there
-  (`#res-notes`, `#res-calibration`) renders them at once. The menu names the same groups. The river's panels (Reserve compliance,
+  (`#res-notes`, `#res-calibration`) renders them at once, and the page waits
+  for the panel and then its heading (lazy panels too: Forecast, Rain for each
+  unit, WR2012; `landOnAnchor`) before landing and focusing it. A link to a
+  panel the run doesn't have (`#res-wr2012` on a run without a WR2012
+  reference, `#res-gauges`, `#res-forecast`, `#res-runoff`, `#res-unit-rain`,
+  `#res-plausibility`) shows a focused line under the run header saying what
+  the panel needs, with a link to where it is set (`runs/missingPanel.ts`,
+  issue #586); picking another run removes it. The menu names the same groups. The river's panels (Reserve compliance,
   EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix,
   the seasonal outlook, the water account) are on EWR and the
   units' (curtailment, assurance of supply, unit detail, the per-unit table)
@@ -12395,7 +12424,9 @@ signed in or out, for someone outside the project, on a phone first.
 
 Viewers see a "View only" note in the section header's notice line, on every
 section, and their role badge in the sidebar. Inputs render as plain values
-instead of greyed-out fields. There are no move handles, drag targets, Add
+instead of greyed-out fields, except checkboxes and radios, which keep their
+mark so a viewer can see which option is chosen (the rule once matched radios
+too, which are always `:read-only`, and drew no circle; issue #586). There are no move handles, drag targets, Add
 data button or Run button.
 
 ## Accessibility
