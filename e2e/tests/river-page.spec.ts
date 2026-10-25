@@ -104,6 +104,15 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	await expect(stub).toContainText('Needs a Reserve rule table: set one in Settings → Reserve rule tables.');
 	await expect(stub.getByRole('link', { name: 'set one in Settings → Reserve rule tables' })).toHaveAttribute('href', '?tab=settings#set-reserve');
 	expect((await stub.boundingBox())!.height).toBeLessThan(80);
+	// The panels are the page's own sections, peers of the flow chart and the water-year bars (h2): as h3s they sat
+	// under "Days below the reserve, each water year" in a screen reader's outline. No level is skipped.
+	await expect(stub.getByRole('heading', { level: 2, name: 'Reserve rules met, by month' })).toBeVisible();
+	await expect(heat.getByRole('heading', { level: 2, name: /^Days below the EWR, by month/ })).toBeVisible();
+	await expect(page.locator('#res-ewr-grid').getByRole('heading', { level: 3, name: /^EWR required vs met, each water year/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Water account' }).getByRole('heading', { level: 2, name: /^Water account/ })).toBeVisible();
+	const levels = await page.getByTestId('river-body').locator('h2, h3, h4, h5, h6').evaluateAll((hs) => hs.filter((h) => h.checkVisibility()).map((h) => Number(h.tagName[1])));
+	expect(levels[0]).toBe(2);
+	for (let i = 1; i < levels.length; i++) expect(levels[i]! - levels[i - 1]!, `heading ${i}: ${levels.join(' ')}`).toBeLessThanOrEqual(1);
 	// Findings first: the two monthly panels, named apart, then the water account; the run-it-yourself tools after
 	// them, under their own heading, each one row (name, purpose, ⓘ, Run) until it has run.
 	expect(await page.locator('[id^="res-"]').evaluateAll((els) => els.map((e) => e.id))).toEqual([

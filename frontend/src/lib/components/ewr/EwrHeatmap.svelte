@@ -36,7 +36,8 @@
 		print = false,
 		headlineNote = '',
 		daily = 'the pragmatic EWR',
-		title = 'EWR compliance by month'
+		title = 'EWR compliance by month',
+		headingLevel = 3
 	}: {
 		compliance: EwrCompliance | undefined | null;
 		/** The site shown first: 'outlet' or a farm's node id. */
@@ -49,6 +50,8 @@
 		daily?: string;
 		/** The heading. EWR calls it "Days below the EWR, by month", apart from Reserve compliance (issue #465). */
 		title?: string;
+		/** Its heading's level: 3 under a page's h2 (Runs & results, the report); EWR's panels are h2, peers of its charts. */
+		headingLevel?: 2 | 3;
 	} = $props();
 
 	const uid = $props.id();
@@ -131,7 +134,7 @@
 
 <section class="ewr-heatmap" aria-labelledby="{uid}-h">
 	<div class="head">
-		<h3 id="{uid}-h">{title}{print && grid ? `: ${site === 'outlet' ? `outlet (${grid.name})` : `${grid.name} (EWR charge)`}` : ''} <HelpTip key="ewr-days-not-met" /></h3>
+		<svelte:element this={`h${headingLevel}`} id="{uid}-h">{title}{print && grid ? `: ${site === 'outlet' ? `outlet (${grid.name})` : `${grid.name} (EWR charge)`}` : ''} <HelpTip key="ewr-days-not-met" /></svelte:element>
 		{#if compliance && grids.length && !print}
 			<div class="controls">
 				<div class="field inline">

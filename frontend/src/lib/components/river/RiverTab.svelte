@@ -256,7 +256,7 @@
 	     its links; narrower a bar under the header, its links evenly spaced (issue #162, #462). The
 	     page's own widths are read from river-body, the column beside the index. -->
 	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="EWR sections" railFrom={RIVER_RAIL_FROM_REM}>
-	<div class="river-body">
+	<div class="river-body" data-testid="river-body">
 	{#if pick.gone}
 		<!-- `run=` names a run that's gone (deleted since the link was made): the newest is shown, and said (as Hydrological units). -->
 		<p class="alert alert-info" role="note">That run no longer exists, so this shows the newest run.</p>
@@ -338,35 +338,37 @@
 	{#if shown && summary}
 		{@const shownRun = shown.run}
 		{@const runSeries = shown.series}
-		<div class="panels">
+		<!-- The findings are the page's own sections, h2 as the flow chart and the water-year bars are: as h3s a screen
+		     reader's outline put them under the bars' heading. -->
+		<div class="panels findings">
 			{#if summary.ewrAssurance?.length}
 				<div class="panel" id="res-reserve">
 					<Lazy load={loadAssurancePanel}>
 						{#snippet children(EwrAssurancePanel)}
-							<EwrAssurancePanel sites={summary.ewrAssurance ?? []} title={RESERVE_MONTHS_HEADING} />
+							<EwrAssurancePanel sites={summary.ewrAssurance ?? []} title={RESERVE_MONTHS_HEADING} headingLevel={2} />
 						{/snippet}
 					</Lazy>
 				</div>
 			{:else}
 				<!-- Without a rule table this panel was simply absent and nothing said why (issue #465): one line saying what it needs. -->
 				<section class="panel stub" id="res-reserve" aria-labelledby="reserve-stub-h" data-testid="reserve-stub">
-					<h3 id="reserve-stub-h">{RESERVE_MONTHS_HEADING}</h3>
+					<h2 id="reserve-stub-h">{RESERVE_MONTHS_HEADING}</h2>
 					<p>{reserveStub.lead}{#if reserveStub.link}{' '}<a href="?tab=settings#set-reserve">{reserveStub.link}</a>.{/if}</p>
 				</section>
 			{/if}
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}
-					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} title={EWR_MONTHS_HEADING} />
+					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} title={EWR_MONTHS_HEADING} headingLevel={2} />
 				{:else}
-					<h3>{EWR_MONTHS_HEADING}</h3>
+					<h2>{EWR_MONTHS_HEADING}</h2>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 				{/if}
 				<!-- The volume side of compliance, per site and water year (the water account's tail until issue #175). -->
-				<EwrRequiredMet assurance={summary.supplyAssurance} />
+				<EwrRequiredMet assurance={summary.supplyAssurance} headingLevel={3} />
 			</div>
 			<!-- The last finding, straight after the EWR by month: it sat below the three tools until issue #465. -->
 			<div class="panel" id="res-water-account">
-				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" />
+				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" headingLevel={2} />
 			</div>
 		</div>
 		<!-- The run-it-yourself tools, under the menu's name for them (issue #465). Each is one row (name, purpose, ⓘ,
@@ -542,6 +544,10 @@
 	.panels > .panel {
 		min-width: 0;
 	}
+	/* The findings' headings are h2 (the page's sections), sized as the charts' above them. */
+	.findings :global(h2) {
+		font-size: 1.05rem;
+	}
 	/* Nor do the panels' tables scroll in a box of their own (the app's 70vh cap, the EWR grid's): they
 	   grow with the page and scroll only sideways when they are wide. Long ones fold instead
 	   (Reserve compliance's month by month shows its first rows, then Show all). */
@@ -555,7 +561,7 @@
 		align-items: baseline;
 		gap: 0.25rem 1rem;
 	}
-	.stub h3,
+	.stub h2,
 	.stub p {
 		margin: 0;
 	}

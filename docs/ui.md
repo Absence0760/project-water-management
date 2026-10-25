@@ -7649,7 +7649,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **Below it**, full width, the moved panels, with their ids, the findings
   first and the run-it-yourself tools after them (issue #465; until then the
   three tools sat between the findings and pushed the water account to the
-  page's foot):
+  page's foot). The findings' headings are `h2`, peers of the flow chart's
+  and the water-year bars' (their panels' `headingLevel={2}`, the EWR
+  required vs met table and the water account's bars an `h3` under them;
+  Runs & results' and the report's copies keep `h3`): until 2026-10-24 they
+  were `h3`, so a screen reader's outline put them under "Days below the
+  reserve, each water year":
   **Reserve rules met, by month** (`#res-reserve`, `EwrAssurancePanel` with
   a rule table; the panel's own name, *Reserve compliance by month*, stays
   on the printable report and Compare runs). Without a rule table in the
