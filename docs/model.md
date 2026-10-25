@@ -3218,8 +3218,10 @@ decision 2026-10-23):
   `waterYears` 0 for the whole run); each `FarmSummary.ewrShare` is the
   share applied, beside its `flowShare`. A split other than the default is a
   run warning (its note), the summary CSV's `EWR share (%)` column sits
-  beside `Flow share (%)` (an older run's is its flow share), the report's
-  Inputs table names it, a scenario can set it (`settings.set`
+  beside `Flow share (%)` (an older run's is its flow share) under an
+  `EWR split between units by` line naming the split applied and its period
+  or why it fell back, the report's Inputs table names the split the run
+  applied (`ewrSplit.applied`; a run before it, from its settings), a scenario can set it (`settings.set`
   `ewrSplit`, [scenarios.md](./scenarios.md)) and the run comparison lists
   a change ([run-comparison.md](./run-comparison.md)).
 - **Checks** (`checkEwrSplit`, in the invariant tests): every unit's `Y` is

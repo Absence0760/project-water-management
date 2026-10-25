@@ -809,7 +809,7 @@
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>
 				<dl class="kv">
-					{#each settingsRows(settings, { startDate: id.baseline.startDate, endDate: id.baseline.endDate }) as [k, v] (k)}<div><dt>{k}</dt><dd>{v}</dd></div>{/each}
+					{#each settingsRows(settings, { startDate: id.baseline.startDate, endDate: id.baseline.endDate, summary: sum }) as [k, v] (k)}<div><dt>{k}</dt><dd>{v}</dd></div>{/each}
 					<div><dt>Declared uncertainty rule</dt><dd>{declaredRuleText(report.uncertainty.declared)}</dd></div>
 					<div><dt>EWR rule tables</dt><dd>{report.river.length ? report.river.map((s) => `${s.name}: ${s.source}`).join('; ') : 'none'}</dd></div>
 				</dl>
