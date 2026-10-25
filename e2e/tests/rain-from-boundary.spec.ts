@@ -37,6 +37,7 @@ async function sandspruitId(request: APIRequestContext): Promise<string> {
 /** Remove any feed this spec left on the shared example (a failed earlier run included). */
 async function removeBoundaryFeeds(request: APIRequestContext, id: string) {
 	const { feeds } = (await (await request.get(`${API_URL}/projects/${id}/feeds`)).json()) as { feeds: { id: string; config: { boundary?: unknown } }[] };
+	console.log('PROBE', JSON.stringify(feeds));
 	for (const f of feeds.filter((x) => x.config.boundary)) expect((await request.delete(`${API_URL}/projects/${id}/feeds/${f.id}`, { headers: { Origin: WEB_URL } })).status()).toBe(204);
 }
 
