@@ -28,6 +28,7 @@ import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { parseFetchRequest } from '../jobs/transport.js';
+import { FeedRefusedError, FeedThrottledError, FeedUnavailableError, feedErrorMessage } from './errors.js';
 import { CHIRPS_REVISION_DAYS, FEED_META_MAX_BYTES, runFetch, utcToday } from './fetch.js';
 import { dwsFixtureLastDataDay, FIXTURE_CELL, fixtureHttp } from './fixtures.js';
 import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
@@ -425,6 +426,33 @@ describe('the scheduler', () => {
 		expect(await dueAfter(8, 24 * 60)).toBe(true);
 	});
 
+	it('a feed the source refused (HTTP 403) backs off 2 h × 2^(failures − 1), never beyond the day; other failures keep 15 min (positive control)', async () => {
+		const owner = await signUp('Refused');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		// The stored messages exactly as the fetch writes them (feeds/errors.ts), so the SQL's prefix can't drift from FEED_REFUSED_PREFIX.
+		const refused = feedErrorMessage(new FeedRefusedError());
+		const dueAfter = async (failures: number, minutesAgo: number, error: string) => {
+			await asOwner(`UPDATE data_feed SET consecutive_failures = $2, last_error = $4, last_scheduled_at = now() - make_interval(mins => $3) WHERE id = $1`, [id, failures, minutesAgo, error]);
+			return (await claimDue(50)).length === 1;
+		};
+		// One refusal: two hours, not 15 minutes (a minute's slack for the tick).
+		expect(await dueAfter(1, 16, refused)).toBe(false);
+		expect(await dueAfter(1, 118, refused)).toBe(false);
+		expect(await dueAfter(1, 119, refused)).toBe(true);
+		// Three: eight hours.
+		expect(await dueAfter(3, 7 * 60, refused)).toBe(false);
+		expect(await dueAfter(3, 8 * 60, refused)).toBe(true);
+		// Five would be 32 h: capped at the day, so a refused feed still tries once a day.
+		expect(await dueAfter(5, 23 * 60, refused)).toBe(false);
+		expect(await dueAfter(5, 24 * 60, refused)).toBe(true);
+		// Positive controls: an unavailable or throttled source keeps 15 minutes, doubling.
+		expect(await dueAfter(1, 16, feedErrorMessage(new FeedUnavailableError('HTTP 502')))).toBe(true);
+		expect(await dueAfter(1, 16, feedErrorMessage(new FeedThrottledError(429, 60)))).toBe(true);
+		// An older stored 403, from before FeedRefusedError, is no refusal to the backoff.
+		expect(await dueAfter(1, 16, 'the source is unreachable: HTTP 403')).toBe(true);
+	});
+
 	it('a daily CHIRPS-GEFS feed is due once the day’s 08:45 UTC has passed since it was last scheduled, in UTC whatever the session time zone (#33)', async () => {
 		// The pure timing function, at fixed instants, in a session far from UTC
 		// (UTC+14: its calendar day already differs from UTC's at 08:45 UTC).
@@ -433,7 +461,7 @@ describe('the scheduler', () => {
 		try {
 			await client.query(`SET TimeZone = 'Pacific/Kiritimati'`);
 			const due = async (source: string, schedule: string, failures: number, last: string | null, now: string) =>
-				(await client.query<{ due: boolean }>('SELECT app_feed_is_due($1, $2, $3, $4, $5) AS due', [source, schedule, failures, last, now])).rows[0]!.due;
+				(await client.query<{ due: boolean }>('SELECT app_feed_is_due($1, $2, $3, $4, $5, NULL) AS due', [source, schedule, failures, last, now])).rows[0]!.due;
 			// Fetched at 06:00 UTC (yesterday's issue): not due at 08:40, due at 08:45.
 			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:40:00Z')).toBe(false);
 			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:45:00Z')).toBe(true);

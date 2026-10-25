@@ -7220,7 +7220,10 @@ part of the Settings tab's chunk; WP-2.10,
   runs as, the health sentence ("The last fetch
   failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.",
   written by the panel from the server's reason code and days, `healthMessage`
-  in `feeds.ts`, its days like the rest of the app's calendar days), and
+  in `feeds.ts`, its days like the rest of the app's calendar days; a source
+  that answered HTTP 403 reads "the source refused this server’s requests
+  (HTTP 403): it may have blocked this server’s address, so the feed waits
+  hours before asking again", architecture.md § Data feeds → Throttling), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.

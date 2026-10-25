@@ -359,8 +359,8 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
 # fetcher_errors never sees it. lambda-fetcher.ts logs one line per failed
 # answer:
 #   {"event":"feed_fetch_failed","feedId":"…","fetchJobId":"…","source":"dws","reason":"unavailable","detail":"HTTP 403"}
-# the ids, its source, a reason code (timeout, throttled, invalid_request,
-# unavailable, format, internal, other) and the failure's safe detail (an HTTP
+# the ids, its source, a reason code (timeout, throttled, refused,
+# invalid_request, unavailable, format, internal, other) and the failure's safe detail (an HTTP
 # status or one of the live client's fixed texts), never the stored message,
 # which can name a grid cell or a station. One failure alarms: feeds fetch a few times a
 # day, and SNS only notifies on the change to ALARM, so a source that stays
@@ -390,7 +390,7 @@ resource "aws_cloudwatch_metric_alarm" "feed_fetch_failed" {
   period              = 3600
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter message.event = \"feed_fetch_failed\" | stats count() by message.source, message.reason, message.detail. unavailable/timeout = the source is down or slow (wait for the next fetch); throttled = HTTP 429/503, the source is limiting us (the fetcher pauses the host; lower fetcher_reserved_concurrency if it persists); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
+  alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter message.event = \"feed_fetch_failed\" | stats count() by message.source, message.reason, message.detail. unavailable/timeout = the source is down or slow (wait for the next fetch); throttled = HTTP 429/503, the source is limiting us (the fetcher pauses the host; lower fetcher_reserved_concurrency if it persists); refused = HTTP 403, the source banned this server's address (CHC bans an address for volume: the fetcher pauses the host an hour and the feed backs off hours; if it persists, lower fetcher_reserved_concurrency and contact chc-help@geog.ucsb.edu); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }

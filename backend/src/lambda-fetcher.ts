@@ -23,7 +23,7 @@
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
-import { FeedFormatError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
+import { FeedFormatError, FeedRefusedError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
 import { type FetchAnswer, type FetchRequest, runFetch } from './feeds/fetch.js';
 import { type FeedHttp, feedHttp } from './feeds/http.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
@@ -42,16 +42,19 @@ const TOO_SLOW = feedErrorMessage(new FeedUnavailableError('it did not answer in
 const INVALID_REQUEST = 'the fetch request was not valid, so nothing was fetched';
 
 const UNAVAILABLE = feedErrorMessage(new FeedUnavailableError(''));
+const REFUSED = feedErrorMessage(new FeedRefusedError());
 
 /**
  * A failed fetch's error, as a fixed code for the log (feed_fetch_failed): the
  * stored message can name the grid cell or station, so it never goes to a log
  * whole (failureDetail is the part that may). `throttled`: the source
- * answered HTTP 429 or 503 (feeds/errors.ts FeedThrottledError).
+ * answered HTTP 429 or 503 (feeds/errors.ts FeedThrottledError). `refused`:
+ * it answered HTTP 403, refusing this server's address (FeedRefusedError).
  */
-export function fetchFailureReason(error: string): 'timeout' | 'throttled' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
+export function fetchFailureReason(error: string): 'timeout' | 'throttled' | 'refused' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
 	if (error === TOO_SLOW) return 'timeout';
 	if (error === INVALID_REQUEST) return 'invalid_request';
+	if (error === REFUSED) return 'refused';
 	if (error.startsWith(UNAVAILABLE)) return /^HTTP (429|503)\b/.test(error.slice(UNAVAILABLE.length)) ? 'throttled' : 'unavailable';
 	if (error.startsWith(feedErrorMessage(new FeedFormatError('')))) return 'format';
 	if (error === feedErrorMessage(new Error())) return 'internal';
@@ -79,10 +82,11 @@ export const FAILURE_DETAIL_MAX = 80;
 
 /**
  * What of a failed fetch's message may go to the log beside its reason: the
- * HTTP status (`HTTP 429`) or one of SAFE_DETAILS, else null. Never a format
- * error's text, which names grid cells and stations.
+ * HTTP status (`HTTP 429`, `HTTP 403`) or one of SAFE_DETAILS, else null.
+ * Never a format error's text, which names grid cells and stations.
  */
 export function failureDetail(error: string): string | null {
+	if (error === REFUSED) return 'HTTP 403';
 	if (!error.startsWith(UNAVAILABLE)) return null;
 	const rest = error.slice(UNAVAILABLE.length);
 	const status = /^HTTP [1-5]\d\d\b/.exec(rest);

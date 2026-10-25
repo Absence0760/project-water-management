@@ -4041,7 +4041,12 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     (after CHC publishes the day's issue, #33); or, while failing, after
     15 min × 2^(failures − 1), capped at the day. UTC whatever the session
     time zone. 111 dropped the hourly interval; the `schedule` argument
-    stays so the callers are unchanged.
+    stays so the callers are unchanged. 242 adds the feed's `last_error`:
+    when it is a refusal (it starts `the source refused this server’s
+    requests`, `FEED_REFUSED_PREFIX` in `feeds/errors.ts`: the source
+    answered HTTP 403), the failing backoff is 2 h × 2^(failures − 1)
+    instead, still capped at the day ([architecture.md § Data feeds →
+    Throttling](./architecture.md#data-feeds)).
   - `app_record_feed_checked(feed)` (027): a fetch whose forecast issue was
     older than the one merged, dropped by the ingest: stamps
     `last_attempt_at` only, as an editor.

@@ -1325,7 +1325,7 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   DLQ (14 days). A source that is down or answers garbage is *not* a
   retry: the fetcher sends the failure back, the feed records it and shows as
   failing, and the schedule tries again (15 minutes after one failure,
-  doubling up to a day).
+  doubling up to a day; 2 hours, doubling, after an HTTP 403).
 - **Alarms** (to the alerts topic): `fetch-requests-dlq-arrivals` and
   `ingest-results-dlq-arrivals` (a new DLQ message, § Background jobs);
   `fetcher-errors` (a crash or timeout) and `fetcher-throttles` (it hit
@@ -1345,9 +1345,19 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   - *Runbook: `feed-fetch-failed`.* Logs Insights on the fetcher's log group:
     `filter message.event = "feed_fetch_failed" | stats count() by message.source, message.reason, message.detail`.
     `unavailable` or `timeout`: the source is down or slow; the feed retries
-    on its own schedule (nothing to do unless it persists; DWS from outside
-    South Africa answers 403, see Sources' terms below; a CHC `HTTP 403` that
-    a laptop doesn't get is the source refusing AWS's address). `throttled`
+    on its own schedule (nothing to do unless it persists). `refused`
+    (`HTTP 403`): the source refuses this server's address. From CHC it is a
+    per-IP ban for volume (each fetcher environment has its own address: a
+    new one gets a fetch or two through, then 403s); the fetcher stops
+    asking that host for an hour and the feed backs off 2 hours, doubling, up
+    to a day (architecture.md § Data feeds → Throttling). If it persists,
+    lower `fetcher_reserved_concurrency` to 1 and write to CHC
+    (chc-help@geog.ucsb.edu) with the user agent
+    (`water-management-feeds/1`) and what the fetcher asks (about 5 range
+    reads per daily file, 120 files a fetch), to ask what volume they allow.
+    A `refused` from DWS outside South Africa is expected (Sources' terms
+    below). Older lines, from before `refused` existed, log a 403 as
+    `unavailable` with `detail` `HTTP 403`. `throttled`
     (`HTTP 429` or `HTTP 503`): the source is limiting us; the fetcher pauses
     that host for its `Retry-After` and the feeds back off on their own
     (architecture.md § Data feeds → Throttling); if it persists through a

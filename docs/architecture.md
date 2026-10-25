@@ -1398,7 +1398,8 @@ merges into:
   together: a failure between them rolls the claim back and the next tick
   tries again, and one feed's failure doesn't hold up the rest (#32). A
   failing feed retries sooner: 15 minutes after one failure, doubling up to
-  the day. If the acting user is no longer an editor, the enqueue is
+  the day (2 hours, doubling, when the source refused it with HTTP 403;
+  Throttling below). If the acting user is no longer an editor, the enqueue is
   refused, the feed records it (`app_feed_schedule_failed`, keeping the
   claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
@@ -1468,7 +1469,22 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   Lambda's invocations, so the fetches queued behind it fail without asking.
   The feed records the failure and the scheduler's backoff takes it from
   there (15 minutes, doubling up to a day); a success restarts the backfill
-  chain. Concurrency stays where it is until the logs show `HTTP 429`: then
+  chain. An HTTP 403 is a `FeedRefusedError` (also a `FeedUnavailableError`,
+  `refused` in the fetcher's log), kept apart from throttling: CHC's nginx
+  answers 403 to an address it has banned for volume (2026-10-25: each new
+  fetcher environment, with its own outbound address, got through a fetch
+  or two and was refused from then on), and the DWS site to addresses
+  outside South Africa. A 403 carries no `Retry-After`, and a ban doesn't
+  lift in a minute, so the live client leaves the host alone for an hour
+  (`REFUSED_PAUSE_SECONDS`): the refused environment stops asking, and a new
+  one isn't held back. Since that pause is per process, the feed's stored
+  message says so ("the source refused this server’s requests (HTTP 403):
+  it may have blocked this server’s address, so the feed waits hours before
+  asking again"), and the scheduler reads it (`app_feed_is_due`,
+  242_feed_refused_backoff.sql) to back the feed off 2 hours after one
+  refusal, doubling, capped at the day like any failure, so a refused feed
+  still tries once a day. Other failures keep 15 minutes. A 404 or 416 is
+  still "not published", no failure and no pause. Concurrency stays where it is until the logs show `HTTP 429`: then
   lower the fetcher's concurrency to one, or the per-fetch six, before
   lengthening the backfill's pause.
 

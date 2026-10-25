@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FeedThrottledError } from './feeds/errors.js';
+import { FeedRefusedError, FeedThrottledError } from './feeds/errors.js';
 import type { FeedHttp } from './feeds/http.js';
 
 const sent: { url: string | undefined; message: unknown }[] = [];
@@ -174,8 +174,30 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		expect(sent[0]).toMatchObject({ message: { result: { ok: false, error: 'the source is unreachable: HTTP 429: the source asked us to slow down, so the feed tries again later' } } });
 	});
 
+	it('logs a refused live fetch (HTTP 403) as `refused`, not `unavailable` or `throttled`, and stores the refusal’s own sentence', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		httpOverride.next = {
+			range: async () => {
+				throw new FeedRefusedError();
+			},
+			text: async () => null
+		};
+		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps_gefs', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start: today, end: today, today } };
+		await handler({ Records: [record('m1', req)] } as never);
+		const failed = warn.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === 'feed_fetch_failed');
+		expect(failed).toEqual([{ event: 'feed_fetch_failed', feedId: ids.feedId, fetchJobId: ids.fetchJobId, source: 'chirps_gefs', reason: 'refused', detail: 'HTTP 403' }]);
+		expect(sent[0]).toMatchObject({
+			message: { result: { ok: false, error: 'the source refused this server’s requests (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again' } }
+		});
+	});
+
 	it('logs a failure’s detail only when it is the live client’s own text or an HTTP status, never a cell or a station', () => {
 		expect(failureDetail('the source is unreachable: HTTP 403')).toBe('HTTP 403');
+		expect(failureDetail('the source refused this server’s requests (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again')).toBe('HTTP 403');
+		// Only the refusal's exact sentence: anything after the prefix is not ours to trust.
+		expect(failureDetail('the source refused this server’s requests at -20.27')).toBeNull();
 		expect(failureDetail('the source is unreachable: HTTP 503: the source asked us to slow down, so the feed tries again later')).toBe('HTTP 503');
 		expect(failureDetail('the source is unreachable: the request timed out')).toBe('the request timed out');
 		expect(failureDetail('the source is unreachable: the response is larger than expected')).toBe('the response is larger than expected');
@@ -190,6 +212,8 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 	it('maps each failure message to a fixed reason code', () => {
 		expect(fetchFailureReason('the source is unreachable: it did not answer in time')).toBe('timeout');
 		expect(fetchFailureReason('the fetch request was not valid, so nothing was fetched')).toBe('invalid_request');
+		expect(fetchFailureReason('the source refused this server’s requests (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again')).toBe('refused');
+		// An older stored 403 (before FeedRefusedError) reads as it did.
 		expect(fetchFailureReason('the source is unreachable: HTTP 403')).toBe('unavailable');
 		expect(fetchFailureReason('the source is unreachable: HTTP 503')).toBe('throttled');
 		expect(fetchFailureReason('the source is unreachable: HTTP 429: the source asked us to slow down, so the feed tries again later')).toBe('throttled');
