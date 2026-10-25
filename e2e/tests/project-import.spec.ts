@@ -91,7 +91,7 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 	await expect(record.getByRole('region', { name: 'Importer notes' }).getByRole('paragraph')).toHaveText('None.');
 	await expect(record.getByRole('region', { name: /^Unmapped report/ })).toHaveCount(0);
 	await page.goto(`${page.url().split('?')[0]}?tab=runs`);
-	await expect(page.getByRole('region', { name: 'Run summary' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Summary', exact: true })).toBeVisible();
 });
 
 test('an imported project exports back to the same file', async ({ page, owner }) => {

@@ -54,7 +54,8 @@ test('GR4J is the only runoff model: no picker, its parameters save, and a run r
 	await expect(page.getByText('Workbook comparison', { exact: true })).toHaveCount(0);
 	await expect(sections(page).getByRole('link', { name: 'Runoff model' })).toBeVisible();
 	const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
-	await expect(runoff.getByText('X1 420 mm · X3 90 mm · X4 1.7 days')).toBeVisible();
+	// Each parameter by its name, as Where the parameters came from writes it (#586 D10).
+	await expect(runoff.getByText('Production store capacity X1 420 mm · Routing store capacity X3 90 mm · Unit hydrograph time base X4 1.7 days')).toBeVisible();
 	const balance = runoff.getByRole('table', { name: 'Where the rain went over the run' });
 	for (const row of ['Rain', 'Actual evaporation', 'Natural flow', 'Change in storage']) {
 		await expect(balance.getByRole('rowheader', { name: row, exact: true })).toBeVisible();
@@ -75,7 +76,10 @@ test('an old legacy run opens read-only with a clear badge, and can’t be nomin
 	// Badged in the list and the header.
 	const row = page.getByRole('region', { name: 'Runs', exact: true }).getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Old legacy/ }) });
 	await expect(row.getByText('Workbook comparison', { exact: true })).toBeVisible();
-	await expect(row.getByText('Workbook comparison', { exact: true })).toHaveAttribute('title', /removed in engine 1\.0\.0.*can’t be re-run/);
+	// What the tag means, in words under the list (#586 D18), not only a hover title.
+	const key = page.getByRole('region', { name: 'Runs', exact: true }).locator('details.tag-key');
+	await key.getByText('What the tags mean').click();
+	await expect(key.getByRole('definition').filter({ hasText: /removed in engine 1\.0\.0.*can’t be re-run/ })).toBeVisible();
 	await expect(page.locator('.badge').filter({ hasText: 'Workbook comparison' })).toBeVisible();
 	// No stores to show; the calibration still reads.
 	await expect(sections(page).getByRole('link', { name: 'Calibration' })).toBeVisible();
@@ -124,7 +128,7 @@ test('run comparison shows an old legacy run against a GR4J run', async ({ page,
 	await expect(page.getByRole('rowheader', { name: 'Runoff coefficient (flow ÷ rain)' })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Kling–Gupta (KGE)' })).toBeVisible();
 	// Neither run's parameters were fitted, so neither side is called in-sample (issue #45).
-	await expect(page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (parameters not fitted)' })).toBeVisible();
+	await expect(page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (parameters not from an automatic fit)' })).toBeVisible();
 
 	// The EWR test against the observed record, legacy and GR4J side by side (issue #4).
 	const ewr = page.getByRole('region', { name: 'EWR test against observed flow' });

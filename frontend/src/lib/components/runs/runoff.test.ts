@@ -34,8 +34,15 @@ describe('balanceRows', () => {
 });
 
 describe('describeParams', () => {
-	it('lists GR4J parameters with units, X2 only when set', () => {
-		expect(describeParams(balance())).toBe('X1 350 mm · X3 90 mm · X4 1.7 days');
-		expect(describeParams(balance({ params: { x1: 350, x2: -1.2, x3: 90, x4: 1.7 } }))).toBe('X1 350 mm · X2 -1.2 mm/day · X3 90 mm · X4 1.7 days');
+	it('lists GR4J parameters by name with units, X2 only when set', () => {
+		expect(describeParams(balance())).toBe('Production store capacity X1 350 mm · Routing store capacity X3 90 mm · Unit hydrograph time base X4 1.7 days');
+		expect(describeParams(balance({ params: { x1: 350, x2: -1.2, x3: 90, x4: 1.7 } }))).toBe(
+			'Production store capacity X1 350 mm · Groundwater exchange X2 −1.2 mm/day · Routing store capacity X3 90 mm · Unit hydrograph time base X4 1.7 days'
+		);
+	});
+	it('rounds a fitted parameter to at most 3 decimals, as Where the parameters came from does (#586 D10)', () => {
+		expect(describeParams(balance({ params: { x1: 426.0810500977728, x2: 0, x3: 47.3793803685375, x4: 2.5447538701361117 } }))).toBe(
+			'Production store capacity X1 426.081 mm · Routing store capacity X3 47.379 mm · Unit hydrograph time base X4 2.545 days'
+		);
 	});
 });

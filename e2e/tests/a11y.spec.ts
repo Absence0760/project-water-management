@@ -39,7 +39,7 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	{
 		id: 'runs',
 		ready: async (p) => {
-			await expect(p.getByRole('region', { name: 'Run summary' })).toBeVisible();
+			await expect(p.getByRole('region', { name: 'Summary', exact: true })).toBeVisible();
 			await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
 		}
 	},

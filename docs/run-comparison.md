@@ -303,7 +303,7 @@ bottom:
    the scores are in-sample (issue #45, `comparison.calibration.fitStatus`):
    **calibration period (in-sample)** when both runs' parameters were fitted
    on the days scored, the shared reason when neither was ("parameters not
-   fitted", "parameters edited since the fit", "not the period fitted"), and
+   from an automatic fit", "parameters edited since the fit", "fitted on other days"), and
    "run A …, run B …" when they differ. Under it, **Fit and validation** sets each run's fit record side
    by side: the fit (model, time, objective, seed; the time day first in UTC, "GR4J fit of 24 Sep 2026
    10:05 UTC", as the run's own provenance says it: the engine's `describeFitRecord` takes the stored

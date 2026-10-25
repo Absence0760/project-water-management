@@ -120,7 +120,7 @@ test('a plain run: its panels in page order under Model quality, Record and Dig 
 
 	expect(await panelOrder(page)).toEqual([
 		// The opening group has no heading: the run summary (its first heading is the Catchment card's).
-		'res-summary: Catchment',
+		'res-summary: Summary',
 		'## Model quality',
 		'res-hydrograph: Hydrograph',
 		'res-fdc: Flow-duration curve',
@@ -156,7 +156,7 @@ test('a run with every optional panel: Forecast beside the Summary, and checks-o
 	await openAll(page, id, runId);
 
 	expect(await panelOrder(page)).toEqual([
-		'res-summary: Catchment',
+		'res-summary: Summary',
 		'res-forecast: Forecast',
 		'## Model quality',
 		'res-hydrograph: Hydrograph',
@@ -207,7 +207,7 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 	// Each anchor and the heading it lands on (the panel's first h2–h4; #res-h is the run's own heading).
 	const anchors: [string, string][] = [
 		['res-h', 'Every panel'],
-		['res-summary', 'Catchment'],
+		['res-summary', 'Summary'],
 		['res-forecast', 'Forecast'],
 		['res-hydrograph', 'Hydrograph'],
 		['res-fdc', 'Flow-duration curve'],

@@ -198,10 +198,11 @@
 <section aria-labelledby="{uid}-h">
 	<!-- The panel's actions in its head (issue #521). A run that can't be published offers neither: its reason says why under the status. -->
 	<div class="panel-head">
-		<h3 id="{uid}-h">
-			Publication
-			{#if isCurrent}<span class="badge badge-owner">Published</span>{/if}
-		</h3>
+		<!-- The badge beside the heading, not in it: the heading reads "Publication", as the side index names it (#586 D4). -->
+		<div class="title">
+			<h3 id="{uid}-h">Publication</h3>
+			{#if isCurrent}<span class="badge badge-owner" data-testid="publication-published">Published</span>{/if}
+		</div>
 		{#if canEdit && !blocker && (!isCurrent || (current && !editing))}
 			<div class="acts head-acts">
 				{#if !isCurrent}
@@ -302,9 +303,14 @@
 	.head-acts {
 		margin: 0;
 	}
-	h3 .badge {
-		margin-left: 0.4rem;
-		vertical-align: 1px;
+	.title {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+	.title h3 {
+		margin: 0;
 	}
 	.notice {
 		display: grid;

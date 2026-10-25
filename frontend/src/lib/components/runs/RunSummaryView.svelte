@@ -10,13 +10,13 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import WithheldUnitsNote from './WithheldUnitsNote.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
-	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, outletEwrLine, SUPPLY_TARGET } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
 	import { otherUsesLink } from './humanImpacts';
 	import { calibrationSample } from '#lib/components/calibration/sample.js';
+	import { volumeBiasText, worseThanMean, WORSE_THAN_MEAN } from '#lib/components/calibration/metrics.js';
 
 	let {
 		summary,
@@ -58,6 +58,9 @@
 	const cal = $derived(summary.calibration);
 	// "in-sample" only when the parameters were fitted on the days scored (issue #45).
 	const sample = $derived(calibrationSample(cal));
+	// Toned and worded as the Calibration panel's tiles are (#586 D12): NSE no better than the mean flow is flagged,
+	// and the volume bias reads "12.3% too wet", the panel's words, not a signed PBIAS.
+	const nseFlag = $derived(worseThanMean('nse', cal?.nse));
 	// Reserve compliance by month (engine ≥ 0.21.0): the headline when the project judges by a rule table.
 	const reserve = $derived(headlineSite(summary, headline));
 	const c = $derived(summary.catchment);
@@ -140,16 +143,17 @@
 		<dd class="sub">over the whole record</dd>
 	</div>
 	{#if cal && cal.days > 0}
-		<div class="stat">
-			<dt><span title={NSE_HELP}>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
+		<div class="stat" class:flagged={nseFlag}>
+			<dt><span>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
 			<dd>{fmtNum(cal.nse, 2)}</dd>
+			{#if nseFlag}<dd class="sub flag">{WORSE_THAN_MEAN}</dd>{/if}
 			<dd class="sub">{fmtNum(cal.days)} days observed{#if cal.siteName} at {cal.siteName}{/if}</dd>
 			<dd class="sub">{sample.short}</dd>
 		</div>
 		<div class="stat">
-			<dt><span title={PBIAS_HELP}>Calibration PBIAS</span> <HelpTip key="stats.pbias" /></dt>
-			<dd>{cal.pbias == null ? '–' : `${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}`}<small>%</small></dd>
-			{#if cal.pbias != null}<dd class="sub">{describePbias(cal.pbias)}</dd>{/if}
+			<dt><span>Calibration volume bias</span> <HelpTip key="stats.pbias" /></dt>
+			<!-- PBIAS is 100 × Σ(obs − sim)/Σobs, the volume error's negative (calibration/metrics.ts volumeBiasText). -->
+			<dd>{volumeBiasText(cal.pbias == null ? null : -cal.pbias)}</dd>
 			<dd class="sub">{sample.short}</dd>
 		</div>
 	{:else}
@@ -272,6 +276,10 @@
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
+	}
+	.stat dd.sub.flag {
+		color: var(--warning);
+		font-weight: 600;
 	}
 	.stat dd.none {
 		color: var(--text-muted);

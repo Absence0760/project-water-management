@@ -132,7 +132,7 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	await expect(page.getByRole('heading', { level: 2, name: 'With rules' })).toBeVisible();
 
 	// The headline: months met at the outlet first, days below the pragmatic EWR second.
-	const summary = page.getByRole('region', { name: 'Run summary' });
+	const summary = page.getByRole('region', { name: 'Summary', exact: true });
 	await expect(summary.getByText('Reserve rules met')).toBeVisible();
 	await expect(summary.getByText('33 of 36 months at the outlet')).toBeVisible();
 	// The plain-words summary above the cards names the same measure, after the units' supply (issue #558).
@@ -383,7 +383,7 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 
 	// The same run, now headed by the pragmatic EWR: Runs & results and the EWR page.
 	await page.goto(`/projects/${id}?tab=runs`);
-	const summary = page.getByRole('region', { name: 'Run summary' });
+	const summary = page.getByRole('region', { name: 'Summary', exact: true });
 	await expect(summary.getByText(/\. Flow at the outflow gauge was below the EWR on [\d.]+% of days \([\d\s]+ days\)\.$/)).toBeVisible();
 	await expect(summary.getByText('Reserve rules met')).toHaveCount(0);
 	await page.goto(`/projects/${id}?tab=river`);

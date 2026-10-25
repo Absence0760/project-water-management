@@ -70,7 +70,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	// The run's own scores are in-sample: its parameters were fitted on these days (issue #45).
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByText('Calibration period (in-sample).', { exact: true })).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Run summary' }).getByText('calibration period (in-sample)', { exact: true })).toHaveCount(2);
+	await expect(page.getByRole('region', { name: 'Summary', exact: true }).getByText('calibration period (in-sample)', { exact: true })).toHaveCount(2);
 });
 
 test('editing a fitted parameter by hand marks the fit record as edited: in the form, once saved, on the run and in run comparison', async ({ page, owner }) => {
@@ -149,7 +149,7 @@ test('a calibration exclusion needs a reason, and shows in Inputs that differ an
 	await expect(page.getByRole('heading', { level: 2, name: 'After' })).toBeVisible();
 	// The whole 120-day record falls in the excluded water year.
 	await expect(page.getByRole('region', { name: 'Calibration against observed flow' })).toContainText(
-		'Every observed day inside the calibration window falls in a calibration exclusion (2021-10-01 – 2022-09-30: Rain gauge moved)'
+		'Every observed day inside the calibration window falls in a calibration exclusion (1 Oct 2021 – 30 Sep 2022: Rain gauge moved)'
 	);
 	await expect(page.getByRole('region', { name: /^Where the parameters came from/ })).toContainText(
 		'This run’s calibration statistics leave out WY 2021/22 (Rain gauge moved).'

@@ -166,7 +166,7 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	await expectImportRecord(page, owner.displayName);
 
 	await page.goto(`${page.url().split('?')[0]}?tab=runs`);
-	await expect(page.getByRole('region', { name: 'Run summary' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Summary', exact: true })).toBeVisible();
 
 	// What was sent is what the workbook holds: the same series as the Python importer's committed output.
 	const id = new URL(page.url()).pathname.split('/').pop()!;

@@ -11,8 +11,8 @@
 	import type { RunSummary } from '@water-management/engine';
 	import { api, type RunCatchmentDay, type RunDay } from '#lib/api/index.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { fmtDay, fmtNum, MINUS, parseDay } from '#lib/format/number.js';
-	import { balanceClosure, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, traceRows } from './checks';
+	import { fmtDay, parseDay } from '#lib/format/number.js';
+	import { balanceClosure, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, fmtBalance, traceRows } from './checks';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 
 	let {
@@ -112,8 +112,8 @@
 		}
 	}
 
-	/** Enough digits to see float noise without drowning the volumes. */
-	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2).replace(/^-/, MINUS) : fmtNum(x, 3, true));
+	/** Float noise as "< 0.001", not an exponent (checks.ts fmtBalance). */
+	const fmtValue = fmtBalance;
 </script>
 
 <section aria-labelledby="{uid}-h">

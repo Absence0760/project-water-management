@@ -9,7 +9,24 @@ export interface MetricRow {
 	unit?: string;
 	/** One-line plain-language explanation. */
 	help: string;
+	/**
+	 * The score is no better than always predicting the mean observed flow (NSE or log NSE ≤ 0, KGE ≤ −0.41): the one
+	 * benchmark the panel states, not a pass mark (calibration research CR-6). The Summary's tile is toned by the same.
+	 */
+	worseThanMean?: true;
 }
+
+/** The mean observed flow's own scores: NSE 0 and KGE 1 − √2 ≈ −0.41 (Knoben et al. 2019). */
+export const MEAN_FLOW_KGE = 1 - Math.SQRT2;
+
+/** True when a score is no better than the mean observed flow (MetricRow.worseThanMean); false when it is better or missing. */
+export function worseThanMean(key: 'nse' | 'logNse' | 'kge', value: number | null | undefined): boolean {
+	if (value == null || !Number.isFinite(value)) return false;
+	return value <= (key === 'kge' ? MEAN_FLOW_KGE : 0);
+}
+
+/** What the Summary tile and the panel's tile say under a score that is no better than the mean flow. */
+export const WORSE_THAN_MEAN = 'no better than the mean flow';
 
 /**
  * A volume bias in plain words, the calibration panel's one convention
@@ -27,18 +44,21 @@ export function volumeBiasText(simMinusObsPct: number | null | undefined): strin
 
 /** The metric tiles, in reading order. Fields missing on old runs show "–". */
 export function metricRows(c: CalibrationStats): MetricRow[] {
+	const mark = (key: 'nse' | 'logNse' | 'kge', v: number | null | undefined) => (worseThanMean(key, v) ? { worseThanMean: true as const } : {});
 	return [
 		{
 			key: 'nse',
 			label: 'Nash–Sutcliffe (NSE)',
 			value: fmtNum(c.nse, 2),
-			help: '1 is a perfect fit; 0 or below is no better than always predicting the observed mean.'
+			help: '1 is a perfect fit; 0 or below is no better than always predicting the observed mean.',
+			...mark('nse', c.nse)
 		},
 		{
 			key: 'kge',
 			label: 'Kling–Gupta (KGE)',
 			value: fmtNum(c.kge, 2),
-			help: 'Combines timing, variability and volume; 1 is perfect, above −0.41 beats the mean flow.'
+			help: 'Combines timing, variability and volume; 1 is perfect, above −0.41 beats the mean flow.',
+			...mark('kge', c.kge)
 		},
 		{
 			key: 'pbias',
@@ -51,7 +71,8 @@ export function metricRows(c: CalibrationStats): MetricRow[] {
 			key: 'logNse',
 			label: 'Log NSE (low flows)',
 			value: fmtNum(c.logNse, 2),
-			help: 'NSE on the logarithm of flow, so dry-season flows count as much as floods.'
+			help: 'NSE on the logarithm of flow, so dry-season flows count as much as floods.',
+			...mark('logNse', c.logNse)
 		},
 		{
 			key: 'r2',
@@ -116,10 +137,13 @@ export function windowError(start: string | null, end: string | null): string | 
 	return null;
 }
 
-/** "2005-10-01 – 2012-09-30", "from 2005-10-01", "whole record". */
-export function describeWindow(start: string | null | undefined, end: string | null | undefined): string {
-	if (start && end) return `${start} – ${end}`;
-	if (start) return `from ${start}`;
-	if (end) return `up to ${end}`;
+/**
+ * "2005-10-01 – 2012-09-30", "from 2005-10-01", "whole record": each day through `day`, the identity for the
+ * printable report's ISO dates, fmtDay ("1 Oct 2005") on screen (ui-playbook § 4, dates a person reads).
+ */
+export function describeWindow(start: string | null | undefined, end: string | null | undefined, day: (iso: string) => string = (d) => d): string {
+	if (start && end) return `${day(start)} – ${day(end)}`;
+	if (start) return `from ${day(start)}`;
+	if (end) return `up to ${day(end)}`;
 	return 'whole record';
 }

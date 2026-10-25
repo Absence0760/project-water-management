@@ -10,9 +10,9 @@ describe('calibrationSample (issue #45)', () => {
 			short: 'calibration period (in-sample)',
 			qualifier: 'in-sample'
 		});
-		expect(calibrationSample({ fitStatus: 'notFitted' })).toMatchObject({ label: 'Calibration period (parameters not fitted)', qualifier: 'parameters not fitted' });
+		expect(calibrationSample({ fitStatus: 'notFitted' })).toMatchObject({ label: 'Calibration period (parameters not from an automatic fit)', qualifier: 'parameters not from an automatic fit' });
 		expect(calibrationSample({ fitStatus: 'edited' }).label).toBe('Calibration period (parameters edited since the fit)');
-		expect(calibrationSample({ fitStatus: 'otherPeriod' }).label).toBe('Calibration period (not the period fitted)');
+		expect(calibrationSample({ fitStatus: 'otherPeriod' }).label).toBe('Calibration period (fitted on other days)');
 		for (const s of ['notFitted', 'edited', 'otherPeriod'] as const) expect(calibrationSample({ fitStatus: s }).short).not.toMatch(/in-sample/);
 	});
 

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CalibrationStats } from '@water-management/engine';
-import { describeWindow, isLegacyStats, isPartYear, kgeComponents, metricRows, volumeBiasText, waterYearLabel, windowError } from './metrics';
+import { describeWindow, isLegacyStats, isPartYear, kgeComponents, metricRows, volumeBiasText, waterYearLabel, windowError, worseThanMean } from './metrics';
 import { tipFor } from '#lib/help/tips.js';
+import { fmtDay } from '#lib/format/number.js';
 
 const base: CalibrationStats = {
 	days: 100,
@@ -40,6 +41,18 @@ describe('metricRows', () => {
 			expect(Object.keys(r)).not.toContain('rating');
 			expect(r.help).not.toMatch(/very good|satisfactory/i);
 		}
+	});
+
+	it('marks a score no better than the mean flow, the benchmark the panel states (#586 D12)', () => {
+		expect(metricRows(base).some((r) => r.worseThanMean)).toBe(false);
+		const bad = Object.fromEntries(metricRows({ ...base, nse: -2.26, kge: -0.5, logNse: 0 }).map((r) => [r.key, r]));
+		expect(bad.nse!.worseThanMean).toBe(true);
+		expect(bad.kge!.worseThanMean).toBe(true);
+		expect(bad.logNse!.worseThanMean).toBe(true);
+		// KGE between the mean flow's −0.41 and 0 still beats the mean.
+		expect(worseThanMean('kge', -0.3)).toBe(false);
+		expect(worseThanMean('nse', 0.01)).toBe(false);
+		expect(worseThanMean('nse', null)).toBe(false);
 	});
 
 	it('shows dashes for metrics an old run does not have', () => {
@@ -83,6 +96,9 @@ describe('formatting helpers', () => {
 		expect(describeWindow('2005-10-01', '2012-09-30')).toBe('2005-10-01 – 2012-09-30');
 		expect(describeWindow(null, null)).toBe('whole record');
 		expect(describeWindow('2005-10-01', null)).toBe('from 2005-10-01');
+		// On screen, day first (#586 D9); the printable report keeps ISO.
+		expect(describeWindow('2005-10-01', '2012-09-30', fmtDay)).toBe('1 Oct 2005 – 30 Sep 2012');
+		expect(describeWindow(null, '2012-09-30', fmtDay)).toBe('up to 30 Sep 2012');
 		expect(windowError(null, null)).toBeNull();
 		expect(windowError('2005-10-01', '2012-09-30')).toBeNull();
 		expect(windowError('2012-10-01', '2005-09-30')).toMatch(/before the end/);

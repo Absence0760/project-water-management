@@ -170,7 +170,7 @@ describe('headlines', () => {
 		expect(card(hs, 'nse')).toMatchObject({ term: 'Calibration NSE', value: '0.62', sub: ['90 days observed', 'calibration period (in-sample)'] });
 		// In-sample only when the parameters were fitted on these days (issue #45).
 		const handSet = headlines(summary({ calibration: { ...summary().calibration!, fitStatus: 'notFitted' } }), 120, null);
-		expect(card(handSet, 'nse').sub).toEqual(['90 days observed', 'calibration period (parameters not fitted)']);
+		expect(card(handSet, 'nse').sub).toEqual(['90 days observed', 'calibration period (parameters not from an automatic fit)']);
 		expect(card(hs, 'outflow')).toMatchObject({ value: '0.500', unit: 'm³/s', sub: ['50% of natural'] });
 		expect(hs.every((h) => h.delta === null)).toBe(true);
 	});

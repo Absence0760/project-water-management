@@ -7944,14 +7944,17 @@ read it before.
 
 - **The page** (issue #17): a reading page with the runs list beside the
   shown run. The section header's line counts the runs and says when the
-  newest ran ("20 runs · newest ran today", "No runs yet"), and for an
+  newest ran ("20 runs · newest ran today", "No runs yet", or "Couldn’t
+  load the runs" when the list fails to load), and for an
   editor the **run form** sits last in the header, after Add data, in place
   of the **Run model** button the other sections have ([§ Section
   header](#section-header)): a **Run label** field, **Run forecast** (with a forecast
   series) and **Run model**. Its status (what a run still needs, flow shares
   over 100 %, unsaved model changes (Run model asks to save them first),
   inputs changed since the latest run,
-  the progress while a run goes, else "Runs use the saved network…") is one
+  the progress while a run goes ("… for every hydrological unit"), else "Runs
+  use the saved network…", with a sentence on what Run forecast does when it
+  is offered, in words rather than the button's hover title, #586 D18) is one
   slim line under the header (`#run-note`, the buttons' accessible
   description), with the progress bar under it. A run the header started on
   another section and still going when the page opens shows here the same
@@ -7963,8 +7966,13 @@ read it before.
   starts (under the header at the top of the page, at its sticky offset
   once scrolled, less the save bar): a long list scrolls inside its panel
   (at least 7.5rem tall), so nothing in the rail is clipped. Narrower, the
-  rail stacks above the results and the list scrolls inside its panel past
-  20rem (about five rows), so the shown run starts near the top. Each row is
+  rail stacks above the results and a list of more than two runs folds to
+  the newest and the shown run, its filter folded with it, under **Show all
+  N runs** (`aria-expanded`; **Show fewer runs** folds it back, keeping the
+  shown run's row), so the shown run's heading is on the first screen of a
+  390×844 phone (#586 D8: three rows still ran it past the window, each row
+  96 px with its tap-size pin and ✕; the fold is CSS, `.runs.folded`, so the
+  wide rail lists every row). Each row is
   the label (two lines at most) over one line of when it ran and the water
   years it covers, each part unbroken (`runs-page.spec.ts` checks every row's
   line at 1440 and 1280). With no runs the list says "No runs yet. Run the
@@ -7975,11 +7983,18 @@ read it before.
   supply and dam storage). With no runs the Runs card is the page's one empty
   state, across the page's width with no results column beside or under it:
   a second "Results appear here" card had left a mostly empty box beside it
-  at 1440 and a screen of it on a phone (`runs-page.spec.ts`).
+  at 1440 and a screen of it on a phone (`runs-page.spec.ts`). When the
+  list fails to load, the rail says "Couldn’t load the runs: <reason>" with
+  **Try again**, the header says the same, and there is no results column:
+  the header used to say "No runs yet" and a second card "Pick a run" with
+  nothing to pick (#586 D3).
 - **Outcomes for this run.** The run header has one line, "For this run:
   EWR → · Hydrological units →" (a navigation landmark, *Outcomes
   for this run*; the links are named "EWR for this run" and
-  "Hydrological units for this run"), to the [EWR](#ewr)
+  "Hydrological units for this run", each followed by what its page holds,
+  "reserve compliance, EWR by month, outlook and water account" and "supply
+  against demand, curtailment and assurance of supply", in words rather than
+  a hover title, #586 D18), to the [EWR](#ewr)
   and [Hydrological units](#hydrological-units) pages for the shown run. It replaced
   the two link rows (`#res-river`, `#res-units`) and their groups, which a
   link still reaching Runs & results with those anchors is sent to (the page
@@ -8234,15 +8249,21 @@ read it before.
   pinned) overtakes is read again, so a deleted run never comes back
   (issue #77). Rows are compact so several fit
   the narrow rail: the label (two lines at most; the full label is the row's
-  tooltip and the results heading), when it ran and the years it covers
+  tooltip and the results heading; labels that would read the same cut at two
+  lines keep the ending that tells them apart, "Dam raise on the upper
+  tributary… 7", `runList.ts` `rowLabels` on the schematic's
+  `distinctShortNames`, with the full label still the row's accessible name,
+  #586 D7), when it ran and the years it covers
   ("today 15:06 · 1979–2024", or "23 Sep 2026 15:06 · …" before
   yesterday, `fmtWhen`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
   base, **Inputs not stored** for a run from before stored inputs, which
   can't be re-run from them, **May be affected** for a run whose engine (or
-  its fit's) had a known bug, its errata ids in the tooltip (mouse only, as
-  the other tags; the header badge says it in words), Workbook
-  comparison). Pin and
+  its fit's) had a known bug, its errata ids in the tooltip (the header
+  badge says it in words), Workbook comparison; `runs/runTags.ts`). Each
+  tag's meaning is in words under the list, **What the tags mean**, a
+  disclosure listing the tags the shown rows carry, since a hover title
+  reaches only a mouse (#586 D18). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header, day first as on the Summary
   ("1 Oct 2021 – 28 Jan 2022 (120 days) · ran today 01:13 by Ann · engine
@@ -8250,9 +8271,13 @@ read it before.
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
   whose label contains every word typed (any case), with "N of M runs". The
   words are in the URL (`q=`), so a reload and Back keep them; one search is
-  one step in history, as on the project list (issue #521). Its header links to **Compare
+  one step in history, as on the project list (issue #521). When the run on
+  screen isn't among the runs the filter keeps, a line under the box says so
+  ("Showing “Run 20”, which isn’t in the filter.", #586 D20). Its header links to **Compare
   runs** (the Compare runs tab, `?tab=compare`, [run-comparison.md](./run-comparison.md)).
-  Viewing an older run, the header offers "go to latest".
+  Viewing an older run, the header offers "go to latest"; it hides once the
+  latest shows, so the focus moves to the latest run's row in the list (the
+  results heading when a filter hides the row), not to the page (#586 E9).
   **Which run opens** when the URL names none (`defaultRunId` in
   `runs/runList.ts`): for an editor or owner the newest run, the one they are
   working on; for a viewer the published baseline when there is one (the run
@@ -8271,7 +8296,8 @@ read it before.
   option (read only), and "· published" to the published one.
 - **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
   in the Runs chunk, helpers in `runs/publication.ts`; `#res-publication`,
-  menu entry **Publication**). Says whether the shown run is the project's
+  menu entry **Publication**; its heading reads "Publication", with the
+  **Published** badge beside it rather than in it, #586 D4). Says whether the shown run is the project's
   published baseline ("This run is the published baseline … Published … by
   …"), another run is, or nothing is published yet, and shows the current
   notice: the level with its percentage ("Advisory · 10 %"), its text in
@@ -8310,7 +8336,8 @@ read it before.
   **Endorse as the responsible authority** with an optional note, once
   (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
-- **Summary** (the "Run summary" region): it opens with one or two plain
+- **Summary** (the "Summary" region, under a visible **Summary** heading that
+  matches the side index, #586 D4): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
   always agree with the cards): irrigation supply first, the units (how many
   got less than 95 % of their demand and the lowest one, or "Every
@@ -8328,15 +8355,20 @@ read it before.
   months", the longest run not met and a link to the panel; the days card is
   then labelled "Days below the pragmatic EWR", or "Days below the daily EWR"
   when it came from the DRM tables, the secondary measure), irrigation
-  supplied, and NSE and PBIAS (no rating words: model.md §2.10; PBIAS read
-  in plain words by `runs/rating.ts`), labelled by whether they are in-sample
+  supplied, and the calibration NSE and volume bias (no rating words:
+  model.md §2.10), toned and worded as the Calibration panel's own tiles
+  (#586 D12, `calibration/metrics.ts`): an NSE no better than the mean flow
+  (≤ 0, the one benchmark the panel states; KGE's is −0.41) gets the warning
+  edge and "no better than the mean flow" on both, and the volume bias reads
+  as the panel writes it, "84.1% too dry", never a signed PBIAS beside
+  "model over-estimates"; each is labelled by whether it is in-sample
   (issue #45, `calibration/sample.ts`, from the run's
   `summary.calibration.fitStatus`, engine ≥ 0.39.0): **calibration period
   (in-sample)** only when the run's parameters came from Fit automatically for
   its runoff model, unedited, on the same calibration window, exclusions and
-  flow record; otherwise **calibration period (parameters not fitted)** (set
+  flow record; otherwise **calibration period (parameters not from an automatic fit)** (set
   by hand, imported or defaults), **(parameters edited since the fit)** or
-  **(not the period fitted)**; a run from before engine 0.39.0 says only
+  **(fitted on other days)**; a run from before engine 0.39.0 says only
   "calibration period". The calibration panel's note, the checks line, the
   plain-words sentence, the Summary tab's card and the run comparison use the
   same words (compare: one label when both runs agree, else "run A …, run B
@@ -8440,6 +8472,12 @@ read it before.
   exactly the columns shown (`balanceEquation`), so the row adds up to its
   residual by eye, as in the summary CSV. A red residual
   if it isn't float noise; a GR4J run adds the runoff model's residual in mm.
+  Float noise below 0.001 reads "< 0.001", never an exponent ("-7.45e-9"
+  read as a figure to check; `checks.ts` `fmtBalance`, which the self-checks'
+  largest daily error and Trace a day use too; #586 D10). Every water year
+  shows: the table doesn't scroll inside the global 70vh cap, and a 15-year
+  run's table fits its column beside the side index at 1440 and 1280
+  (`runs-page.spec.ts`, #586 D1).
   The last row is the whole run. Third, **Trace a day**: pick a farm (or gauge)
   and a day (it opens on the farm-day with the largest residual) and it
   fetches `GET …/runs/:runId/day` and lists every column in FarmTemplate order,
@@ -8710,6 +8748,9 @@ read it before.
   the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",
   and the annual water balance's *Simulated vs observed* column says the same, never a signed PBIAS beside
   a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled;
+  a tile no better than the mean flow, NSE or log NSE ≤ 0 or KGE ≤ −0.41, gets a warning edge and "No better
+  than the mean flow." as the Summary's NSE card does, #586 D12; its window, observations and exclusions
+  are day first, "1 Oct 2021 – 28 Jan 2022", as is the EWR test's intro, #586 D9;
   from engine 1.19.0 the same **WR2012 statistics** table as the fit results, for the run's scored
   days, above the annual water balance, CR-28),
   then **Where the parameters came from**: the fit record the
@@ -8727,7 +8768,9 @@ read it before.
   panel shows as "Excluded" with the observed days removed (or explains that
   every observed day was excluded). The calibration window shown is the run's,
   not today's. The **runoff model** panel for GR4J runs (`RunoffPanel`:
-  the parameters, a table of where the rain went (rain, evaporation, flow,
+  the parameters by name and to at most three decimals, as Where the
+  parameters came from writes them, "Production store capacity X1 426.081
+  mm · …", #586 D10; a table of where the rain went (rain, evaporation, flow,
   exchange, change in storage, in mm and as a share of rain;
   `runs/runoff.ts`), and the production and routing stores through time,
   the chart beside the table only where the panel is 44rem wide or more (a
@@ -8897,7 +8940,9 @@ read it before.
   only a stored legacy run made after the nomination can raise it.
   Then the **Reproduction** panel (`runs/ReproducePanel.svelte`, in the
   Runs chunk, helpers in `runs/reproduce.ts`; WP-3.1; `#res-reproduce`, with
-  *Changes since this run* under it): for a run with stored
+  *Changes since this run* under it, a disclosure whose body holds
+  **Restore these inputs**, so it is offered under the changes it would
+  undo, not before they are seen, #586 D16): for a run with stored
   inputs, **Check reproduction** (viewers too; in the panel's head) re-runs it on the server from
   them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
   version), **Differs in N places** (each listed: a summary value, or a
@@ -10441,8 +10486,8 @@ the viewer's day, with a request's change set folded into one entry.
 
 - The **save bar** and the Settings save row have an optional "Reason for
   this change", kept with the revision.
-- **Runs**: a collapsible "Changes since this run" and **Restore these
-  inputs** (not for a scenario run).
+- **Runs**: a collapsible "Changes since this run" with **Restore these
+  inputs** inside it (not for a scenario run).
 - **Elsewhere** (issue #42): the compare page's *Inputs that differ* says who
   changed each model or settings line between two runs and when
   ([run-comparison.md](./run-comparison.md)). The Project page's **Recent
