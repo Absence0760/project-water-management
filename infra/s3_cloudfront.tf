@@ -257,27 +257,20 @@ resource "aws_cloudfront_function" "spa_rewrite" {
       };
     }
 
-    // Query values go back out as they arrive, taken to be as the viewer sent
-    // them (still encoded; AWS's own redirect samples do the same). The docs
-    // don't say, so postapply-check.sh --redirect-from checks it on the live
-    // distribution with an encoded '&' and space.
-    function query(qs) {
-      var parts = [];
-      for (var name in qs) {
-        var values = qs[name].multiValue ? qs[name].multiValue : [qs[name]];
-        for (var i = 0; i < values.length; i++) {
-          parts.push(values[i].value === '' ? name : name + '=' + values[i].value);
-        }
-      }
-      return parts.length ? '?' + parts.join('&') : '';
-    }
-
+    // The query goes back out byte for byte as the viewer sent it:
+    // rawQueryString() (runtime 2.0) is the unparsed string, without the '?',
+    // '' for a bare '?' and undefined for none. request.querystring would not
+    // do: observed live on 2026-10-25, CloudFront keeps each value encoded and
+    // a repeated name's values in order, but not the order of distinct names
+    // (?probe=x&n=1&n=2 came back as n=1&n=2&probe=x). postapply-check.sh
+    // --redirect-from checks the exact Location on the live distribution.
     function moved(request) {
+      var qs = request.rawQueryString();
       return {
         statusCode: 301,
         statusDescription: 'Moved Permanently',
         headers: {
-          location: { value: 'https://' + SITE_HOST + request.uri + query(request.querystring) },
+          location: { value: 'https://' + SITE_HOST + request.uri + (qs === undefined ? '' : '?' + qs) },
           'cache-control': { value: 'max-age=3600' }
         }
       };

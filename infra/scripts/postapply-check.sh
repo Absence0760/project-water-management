@@ -34,8 +34,10 @@
 #                    hostname in redirect_domains, issue #551): a page on
 #                    https://<host> answers 301 to the same path and query on
 #                    https://<domain> (the probe's query has an encoded '&'
-#                    and space and a repeated name, so a redirect that decoded
-#                    or dropped values would fail it), and https://<host>/api/health still
+#                    and space and a repeated name after another name, and the
+#                    Location must match byte for byte, so a redirect that
+#                    decoded, dropped or reordered values would fail it), and
+#                    https://<host>/api/health still
 #                    answers 200 (the API keeps serving a former hostname, for
 #                    one-click unsubscribes and logger pushes).
 #
