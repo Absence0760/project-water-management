@@ -89,11 +89,20 @@ test('picking a series charts it through the URL: Back returns to the one before
 	await expect(seriesRow(page, 'CHIRPS cell').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(page.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
 
-	// A shared link opens on its series; one to a series that no longer exists shows the default.
+	// A shared link opens on its series, with no note (positive control)…
 	await openData(page, project.id, `&series=${ids['Pan station']}`);
 	await expect(seriesRow(page, 'Pan station').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('gone-series')).toHaveCount(0);
+	await expect(page).toHaveURL(new RegExp(`[?&]series=${ids['Pan station']}`));
+	// …and one to a series that no longer exists shows the default, drops the dead id from the address (no history
+	// entry) and says so in one line (issue #586: it charted another series without a word, the URL unchanged).
 	await openData(page, project.id, '&series=00000000-0000-4000-8000-000000000000');
 	await expect(seriesRow(page, 'Gauge R1').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('gone-series')).toHaveText('The series that link named is no longer stored: showing Gauge R1 instead.');
+	await expect(page).not.toHaveURL(/[?&]series=/);
+	// Picking a series clears the note.
+	await seriesRow(page, 'Logger L1').getByRole('button', { name: 'View', exact: true }).click();
+	await expect(page.getByTestId('gone-series')).toHaveCount(0);
 });
 
 /**

@@ -84,9 +84,14 @@
 	let catchment = $state.raw<CatchmentFlows>({});
 	let catchError = $state<string | null>(null);
 	let catchLoading = $state(true);
+	// Try again on a failed load of the flows: bumping it re-runs the loads below (failures aren't cached, cache.ts).
+	let attempt = $state(0);
+	const retry = () => attempt++;
+	const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 	$effect(() => {
 		const id = runId;
+		void attempt;
 		catchLoading = true;
 		catchError = null;
 		Promise.all(CATCHMENT_FLOW_KEYS.filter(([, k]) => has(k)).map(async ([slot, k]) => [slot, await get(k)] as const))
@@ -95,7 +100,7 @@
 				catchment = Object.fromEntries(pairs) as CatchmentFlows;
 			})
 			.catch((e) => {
-				if (id === runId) catchError = e instanceof Error ? e.message : String(e);
+				if (id === runId) catchError = reason(e);
 			})
 			.finally(() => {
 				if (id === runId) catchLoading = false;
@@ -110,6 +115,7 @@
 	$effect(() => {
 		const id = runId;
 		const g = siteId;
+		void attempt;
 		site = {};
 		siteError = null;
 		if (!g) return;
@@ -118,7 +124,7 @@
 				if (id === runId) site = { observed, simulated, ...(observedOther ? { observedOther } : {}) };
 			})
 			.catch((e) => {
-				if (id === runId) siteError = e instanceof Error ? e.message : String(e);
+				if (id === runId) siteError = reason(e);
 			});
 	});
 
@@ -130,6 +136,7 @@
 	$effect(() => {
 		const id = runId;
 		const at = refs.find((r) => r.key === FLOW_QUALITY_COLUMN.key)?.nodeId;
+		void attempt;
 		quality = null;
 		qualityError = null;
 		if (at === undefined) return;
@@ -138,7 +145,7 @@
 				if (id === runId) quality = { nodeId: at, series };
 			})
 			.catch((e) => {
-				if (id === runId) qualityError = `The observed flow's quality flags could not be loaded: ${e instanceof Error ? e.message : String(e)}`;
+				if (id === runId) qualityError = `Couldn't load the observed flow's quality flags: ${reason(e)}`;
 			});
 	});
 	const lanesAt = (nodeId: string | null) => (quality && quality.nodeId === nodeId ? flowFlagLanes(quality.series.values as number[], quality.series.startDate, flagUse) : []);
@@ -227,24 +234,45 @@
 	});
 </script>
 
+<!-- One switch for every flow chart on the page (each chart's toolbar shows it), so its name says so (issue #586). -->
 {#snippet unitToggle()}
-	<span class="seg" role="group" aria-label="Flow units">
+	<span class="seg" role="group" aria-label="Flow units, for every flow chart on this page">
 		<button type="button" class="btn btn-sm" aria-pressed={flowUnit === 'm³/s'} onclick={() => (flowUnit = 'm³/s')}>m³/s</button>
 		<button type="button" class="btn btn-sm" aria-pressed={flowUnit === 'm³/day'} onclick={() => (flowUnit = 'm³/day')}>m³/day</button>
 	</span>
 {/snippet}
 
+<!-- The flow-duration curve's toolbar: which days the curves rank, beside the unit switch (issue #586). -->
+{#snippet fdcToolbar()}
+	{@render unitToggle()}
+	{#if fdc.partial}
+		<span class="seg" role="group" aria-label="Days the curves rank">
+			<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'observed'} onclick={() => (fdcDays = 'observed')}>Observed days</button>
+			<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'all'} onclick={() => (fdcDays = 'all')}>Whole run</button>
+		</span>
+	{/if}
+{/snippet}
+
+<!-- A failed load of the flows: what failed, why, and Try again (playbook § 4). -->
+{#snippet loadFailed(what: string, why: string)}
+	<div class="alert alert-error" role="alert">
+		Couldn't load {what}: {why}
+		<button type="button" class="btn btn-sm" onclick={retry}>Try again</button>
+	</div>
+{/snippet}
+
 <div class="charts">
 	<h2 class="group-h wide">Model quality</h2>
 	<section class="panel wide" id="res-hydrograph" aria-labelledby="hydro-h">
-		<h3 id="hydro-h" class="visually-hidden">Hydrograph</h3>
+		<div class="panel-head"><h3 id="hydro-h">Hydrograph</h3></div>
 		{#if catchError}
-			<div class="alert alert-error" role="alert">{catchError}</div>
+			{@render loadFailed('the flows', catchError)}
 		{:else if catchLoading && !hydroSeries.length}
 			<div class="chart-ph" style:height="390px" role="status">Loading flows…</div>
 		{:else}
 			<LineChart
 				title="Flow at the outflow gauge: natural, simulated and observed"
+				toolsLabel="Hydrograph controls"
 				unit={flowUnit}
 				series={hydroSeries}
 				logToggle
@@ -262,14 +290,20 @@
 				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
-		{#if qualityError}<div class="alert alert-error" role="alert">{qualityError}</div>{/if}
+		{#if qualityError}
+			<div class="alert alert-error" role="alert">
+				{qualityError}
+				<button type="button" class="btn btn-sm" onclick={retry}>Try again</button>
+			</div>
+		{/if}
 		{#if siteId}
 			<!-- The calibration site (engine ≥ 1.41.0): the pair the run's calibration statistics score. -->
 			{#if siteError}
-				<div class="alert alert-error" role="alert">{siteError}</div>
+				{@render loadFailed(`the flows at ${siteName}`, siteError)}
 			{:else if siteSeries.length}
 				<LineChart
 					title="Flow at {siteName}, the calibration site: simulated and observed"
+					toolsLabel="Calibration site hydrograph controls"
 					unit={flowUnit}
 					series={siteSeries}
 					logToggle
@@ -291,29 +325,27 @@
 	</section>
 
 	<section class="panel wide" id="res-fdc" aria-labelledby="fdc-h">
-		<h3 id="fdc-h" class="visually-hidden">Flow-duration curve</h3>
-		{#if catchLoading && !fdc.series.length}
+		<div class="panel-head"><h3 id="fdc-h">Flow-duration curve</h3></div>
+		{#if catchError}
+			<!-- The same failed load as the hydrograph's: not "no positive values", which isn't what happened. -->
+			{@render loadFailed('the flows', catchError)}
+		{:else if catchLoading && !fdc.series.length}
 			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
 		{:else}
 			<LineChart
-				title="Flow-duration curve"
+				title="Flow-duration curve at the outflow gauge: natural, simulated and observed"
+				toolsLabel="Flow-duration curve controls"
 				unit={flowUnit}
 				height={260}
 				series={fdc.series}
 				xy={fdc.xy}
 				xLabel="Time flow is equalled or exceeded (%)"
 				xFormat={(v) => `${fmtNum(v, v < 1 ? 2 : 0, true)}%`}
-				toolbar={unitToggle}
+				toolbar={fdcToolbar}
 				logToggle
 				bind:log={fdcLog}
 				caption={fdcCaption(fdc)}
 			/>
-			{#if fdc.partial}
-				<span class="seg days" role="group" aria-label="Days the curves rank">
-					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'observed'} onclick={() => (fdcDays = 'observed')}>Observed days</button>
-					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'all'} onclick={() => (fdcDays = 'all')}>Whole run</button>
-				</span>
-			{/if}
 			{#if fdc.q.length}
 				<table class="data compact q">
 					<thead>
@@ -401,9 +433,6 @@
 		color: var(--text-muted);
 		background: var(--surface-2);
 		border-radius: var(--radius-sm);
-	}
-	.days {
-		margin-top: 0.5rem;
 	}
 	.q {
 		margin-top: 0.5rem;

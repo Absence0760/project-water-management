@@ -126,35 +126,33 @@
 			the record implies. A year fails when that exceeds the simulated natural flow by more than {fmtPct(n.tolerance, 0)} of the observed volume (gauging
 			error). {n.failedYears.length ? `${n.failedYears.length} of ${n.judgedYears} water years fail.` : `No judged water year fails (${n.judgedYears} judged).`}
 		</p>
+		<!-- Fit by stacking, not by scrolling sideways (ui-playbook § 2): ten columns ran off the right edge at 1440,
+		     the verdict with them. Pairs share a column, one over the other (the year over its days, the natural flow over the
+		     natural flow the record implies, use over dams), and the result comes straight after the year, so it shows
+		     even where the table still scrolls (a phone). -->
 		<div class="table-wrap">
-			<table class="data compact" aria-labelledby="{uid}-nat">
+			<table class="data compact nat" aria-labelledby="{uid}-nat">
 				<thead>
 					<tr>
-						<th scope="col">Water year</th>
-						<th scope="col" class="num">Days</th>
-						<th scope="col" class="num">Natural <span class="u">Mm³</span></th>
-						<th scope="col" class="num">Observed <span class="u">Mm³</span></th>
-						<th scope="col" class="num">Use <span class="u">Mm³</span></th>
-						<th scope="col" class="num">Dams <span class="u">Mm³</span></th>
-						<th scope="col" class="num">Land cover <span class="u">Mm³</span></th>
-						<th scope="col" class="num">Observed + abstraction <span class="u">Mm³</span></th>
-						<th scope="col" class="num">Gap <span class="u">% of natural</span></th>
+						<th scope="col">Water year <span class="under">days</span></th>
 						<th scope="col">Result</th>
+						<th scope="col" class="num">Natural <span class="u">Mm³</span> <span class="under">observed + abstraction</span></th>
+						<th scope="col" class="num">Gap <span class="u">% of natural</span></th>
+						<th scope="col" class="num">Observed <span class="u">Mm³</span></th>
+						<th scope="col" class="num">Use <span class="u">Mm³</span> <span class="under">dams</span></th>
+						<th scope="col" class="num">Land cover <span class="u">Mm³</span></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each n.years as y (y.waterYear)}
 						<tr class:short-row={y.passed === false}>
-							<th scope="row">{wy(y.waterYear)}</th>
-							<td class="num">{fmtNum(y.days)}</td>
-							<td class="num">{mm3(y.naturalMm3)}</td>
-							<td class="num">{mm3(y.observedMm3)}</td>
-							<td class="num">{mm3(y.useMm3)}</td>
-							<td class="num">{mm3(y.damsMm3)}</td>
-							<td class="num">{mm3(y.landCoverMm3)}</td>
-							<td class="num">{mm3(y.naturalisedMm3)}</td>
+							<th scope="row">{wy(y.waterYear)} <span class="under">{fmtNum(y.days)} days</span></th>
+							<td class:fails={y.passed === false}>{y.passed === null ? 'not judged' : y.passed ? 'passes' : 'fails'}</td>
+							<td class="num">{mm3(y.naturalMm3)} <span class="under">{mm3(y.naturalisedMm3)}</span></td>
 							<td class="num">{y.gapPct === null ? '–' : fmtNum(y.gapPct, 1)}</td>
-							<td>{y.passed === null ? 'not judged' : y.passed ? 'passes' : 'fails'}</td>
+							<td class="num">{mm3(y.observedMm3)}</td>
+							<td class="num">{mm3(y.useMm3)} <span class="under">{mm3(y.damsMm3)}</span></td>
+							<td class="num">{mm3(y.landCoverMm3)}</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -429,10 +427,31 @@
 	details {
 		margin-top: 0.5rem;
 	}
+	/* A disclosure keeps its marker (▶), as every other on the page: display: flex dropped it (issue #586). */
 	summary {
 		cursor: pointer;
-		min-height: 36px;
-		display: flex;
-		align-items: center;
+		display: list-item;
+		padding-block: 0.45rem;
+	}
+	/* The naturalised-flow table's headings wrap at their spaces, bottom-aligned, as the water balance's do. */
+	.nat thead th {
+		white-space: normal;
+		vertical-align: bottom;
+	}
+	.nat tbody th {
+		white-space: nowrap;
+	}
+	.nat :is(th, td) {
+		padding-inline: 0.35rem;
+	}
+	/* The second of a stacked pair: its own line, lighter, so the pair reads as two figures. */
+	.under {
+		display: block;
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	/* A failing year is already tinted (short-row); its verdict is bold too, so it never rests on colour alone. */
+	td.fails {
+		font-weight: 600;
 	}
 </style>

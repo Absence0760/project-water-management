@@ -1606,6 +1606,12 @@ Interaction details that bit:
   and the project's members, the pending invitations and the farmers use it;
   Crops' `removed()` and the Network's `remove()` did the same by hand, and
   Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
+  A row that stays but loses its control does the same: revoking an API key
+  or withdrawing a share link keeps the row (marked revoked) but its button
+  goes, so the index counts only the rows that still have one, and the next
+  live key's Revoke or link's Withdraw takes the focus (else Make a key, the
+  share form's first field, or the heading); removing a scheduled report
+  focuses the next schedule's Remove, else Add a schedule (issue #586).
   A row with no control every row has (a note: only some have Delete) takes
   the focus itself: the notes list's items carry `tabindex="-1"` and the
   selector is the item (`notes/NotesList.svelte`, `history-steps.spec.ts`).
