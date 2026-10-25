@@ -91,7 +91,7 @@
 	import type { RunBlocker } from '#lib/calibration/autoFit.js';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
 	import { fitRecordLine } from '#lib/components/calibration/provenance.js';
-	import { api, type Project } from '#lib/api/index.js';
+	import { api, hasRole, type Project } from '#lib/api/index.js';
 	import CalibrationWindowFields from '#lib/components/calibration/CalibrationWindowFields.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
@@ -108,7 +108,7 @@
 	import { outcomesError } from '#lib/components/outcomes/outcomeSettings.js';
 	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
-	import { saveBlockers, SETTINGS_ELSEWHERE, settingsForward, settingsNavGroups } from './sections';
+	import { saveBlockers, settingsElsewhere, settingsForward, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import type { CatchmentStation } from './unitRain';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
@@ -520,7 +520,7 @@
 <!-- In-page menu (issue #468): from a content width where the monthly rows still fit beside it, a sticky
      index on the left, grouped by task, with a find box; narrower, the bar that sticks under the app header
      and a sideways strip on a phone. -->
-<SectionNav groups={navGroups} label="Settings sections" find="Find a setting" elsewhere={SETTINGS_ELSEWHERE} railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
+<SectionNav groups={navGroups} label="Settings sections" find="Find a setting" elsewhere={settingsElsewhere(hasRole(project.role, 'owner'))} railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
 <!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
 <div class="settings-form explain-scope" class:explained={explainSwitch.on}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findElsewhere } from '#lib/components/common/sectionNav.js';
-import { saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_MOVED, SETTINGS_SECTIONS, settingsForward, settingsNavGroups } from './sections';
+import { saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_MOVED, SETTINGS_SECTIONS, settingsElsewhere, settingsForward, settingsNavGroups } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
 	it('has unique ids, in page order, grouped by task', () => {
@@ -39,6 +39,14 @@ describe('SETTINGS_SECTIONS', () => {
 			// Its one panel's heading, word for word (issue #586, C9).
 			'Automatic runs'
 		]);
+	});
+});
+
+describe('settingsElsewhere (issue #586)', () => {
+	it('offers API keys to an owner only, since Project shows no such panel to anyone else', () => {
+		expect(settingsElsewhere(true).map((e) => e.text)).toContain('API keys');
+		expect(settingsElsewhere(false).map((e) => e.text)).not.toContain('API keys');
+		expect(settingsElsewhere(false).map((e) => e.text)).toEqual(['Comparison band', 'Data feeds', 'Scheduled reports']);
 	});
 });
 

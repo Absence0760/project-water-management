@@ -49,7 +49,8 @@ export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
  * comparison band went to Allocations in round 1, so a search for it, or its other names, offers
  * a link to that card (`#alloc-band`, which AllocationsTab lands on). Data feeds went to Data, and
  * API keys and Scheduled reports to Project (issue #586 round 1); a search finds them at their new
- * homes. API keys is listed for every role: Project says to a non-owner that only owners make keys.
+ * homes. API keys is an owner's panel, so `settingsElsewhere` leaves it out for anyone else: Project
+ * shows them no such panel, and a link to it would land nowhere.
  */
 export const SETTINGS_ELSEWHERE = [
 	{ text: 'Comparison band', words: 'registered volumes allocation tolerance licence WARMS modelled use', href: '?tab=allocations#alloc-band', page: 'Allocations' },
@@ -57,6 +58,11 @@ export const SETTINGS_ELSEWHERE = [
 	{ text: 'API keys', words: 'ingest logger token integration', href: '?tab=project#project-api-keys', page: 'Project' },
 	{ text: 'Scheduled reports', words: 'schedule email PDF monthly weekly', href: '?tab=project#project-report-schedules', page: 'Project' }
 ] as const;
+
+/** The moved settings this reader can follow: API keys only for an owner (issue #586 round 1). */
+export function settingsElsewhere(owner: boolean) {
+	return owner ? SETTINGS_ELSEWHERE : SETTINGS_ELSEWHERE.filter((e) => e.text !== 'API keys');
+}
 
 /**
  * Where each Settings anchor that moved away now lives (issue #586 round 1): `?tab=settings#set-feeds`
