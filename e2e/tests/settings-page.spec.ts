@@ -1,9 +1,8 @@
 // The Settings & calibration page (?tab=settings, issue #17 option A). A reading page: the long form scrolls,
 // under the section header, which says where the GR4J parameters came from (the fit's day and in-sample score,
 // or that there is no fit record) and carries "Fit the parameters", a jump to Fit automatically. The sticky menu
-// is grouped (model inputs · how results are read · runs, feeds and reports) and also links API keys (owners)
-// and Scheduled reports, which save on their own, as a line above them says. Synthetic data, plus the invented
-// example catchments for a real fit record.
+// is grouped by task, Automatic runs last (Data feeds, API keys and Scheduled reports moved to Data and Project,
+// issue #586 round 1). Synthetic data, plus the invented example catchments for a real fit record.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
@@ -23,11 +22,10 @@ const SETTINGS_INDEX: [string, string[]][] = [
 	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
-	['Automation & access', ['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']]
+	['Automatic runs', ['Automatic runs']]
 ];
-const AFTER_FORM = 'Data feeds, API keys and scheduled reports save as you change them, not with the save bar’s Save changes.';
 
-test('the header says there is no fit record and jumps to Fit the parameters; the side index is grouped by task and reaches the panels after the form', async ({ page, owner }) => {
+test('the header says there is no fit record and jumps to Fit the parameters; the side index is grouped by task and reaches its last panel', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Settings page');
@@ -62,8 +60,7 @@ test('the header says there is no fit record and jumps to Fit the parameters; th
 	await expect(menu.getByRole('link', { name: 'Fit the parameters' })).toHaveAttribute('aria-current', 'location');
 	await expect(menu).toBeInViewport();
 
-	// The panels after the form: the line says they save on their own; each has its own link.
-	await expect(page.getByText(AFTER_FORM, { exact: true })).toBeVisible();
+	// The last panel has its own link.
 	await menu.getByRole('link', { name: 'Automatic runs' }).click();
 	await expect(page).toHaveURL(/#set-auto$/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Automatic runs' })).toBeInViewport();
@@ -74,18 +71,10 @@ test('the header says there is no fit record and jumps to Fit the parameters; th
 	await expect(page).toHaveURL(/#set-fit$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
 
-	// Each panel keeps its own anchor, so a link to it still lands, with its link marked. Data feeds is a lazy
-	// chunk: its anchor is on a wrapper that is always there.
-	for (const [id, name] of [
-		['set-report-schedules', 'Scheduled reports'],
-		['set-api-keys', 'API keys'],
-		['set-feeds', 'Data feeds']
-	] as const) {
-		await page.goto(`/projects/${project.id}?tab=settings#${id}`);
-		// Not exact: a panel's heading may carry its ⓘ tip ("API keys About API keys"); the id scopes it.
-		await expect(page.locator(`#${id}`).getByRole('heading', { level: 2, name })).toBeInViewport();
-		await expect(menu.getByRole('link', { name, exact: true })).toHaveAttribute('aria-current', 'location');
-	}
+	// Each anchor's landing from a page load is pinned in settings-layout-pins.spec.ts. Scrolled to the foot of
+	// the page, the index still sticks beside the last panel and marks it.
+	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+	await expect(menu.getByRole('link', { name: 'Automatic runs', exact: true })).toHaveAttribute('aria-current', 'location');
 	// The index sticks beside the last panel too.
 	await expect(menu).toBeInViewport();
 });
@@ -200,7 +189,7 @@ test('a viewer reads where the parameters came from, with nothing to fit and no 
 	await expect(header(v).getByRole('link', { name: /^Fit (the parameters|record)$/ })).toHaveCount(0);
 	await expect(v.getByText(/save as you change them/)).toHaveCount(0);
 	// The same one group link (API keys, an owner's panel, isn't on the page for a viewer).
-	await expect(settingsMenu(v).getByRole('list', { name: 'Automation & access' }).getByRole('link')).toHaveText(['Automatic runs', 'Data feeds', 'Scheduled reports']);
+	await expect(settingsMenu(v).getByRole('list', { name: 'Automatic runs' }).getByRole('link')).toHaveText(['Automatic runs']);
 	await expect(v.locator('#set-api-keys')).toHaveCount(0);
 	await expect(anySaveBar(v)).toHaveCount(0);
 });

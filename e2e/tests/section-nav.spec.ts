@@ -30,8 +30,8 @@ const SETTINGS_LINKS = [
 	'Outcome matrix',
 	'Seasonal outlook',
 	'Evidence',
-	// On the bar, Automatic runs, Data feeds, API keys and Scheduled reports behind one link.
-	'Automation & access'
+	// Its own group's one link: the panels that shared it moved to Data and Project (issue #586 round 1).
+	'Automatic runs'
 ];
 /** The side index's groups at 1440 px (issue #468): every panel, under its task. */
 const SETTINGS_RAIL: [string, string[]][] = [
@@ -40,7 +40,7 @@ const SETTINGS_RAIL: [string, string[]][] = [
 	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
-	['Automation & access', ['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']]
+	['Automatic runs', ['Automatic runs']]
 ];
 const moreButton = (menu: Locator) => menu.getByRole('button', { name: /^More sections/ });
 
@@ -97,7 +97,8 @@ async function expectRail(menu: Locator, groups: [string | null, string[]][], pa
 	for (const [name, links] of groups) {
 		if (!name) continue;
 		await expectLinkNames(menu.getByRole('list', { name, exact: true }).getByRole('link'), links);
-		await expect(menu.getByText(name, { exact: true })).toBeVisible();
+		// The group's name over its links (the last group's is its one link's too).
+		await expect(menu.getByText(name, { exact: true }).first()).toBeVisible();
 	}
 	await expect(menu.locator('.groups')).toHaveCount(0);
 	const rail = (await menu.boundingBox())!;
@@ -128,7 +129,8 @@ test('Settings: at 1280 px every link is on the bar, in at most two rows; at 144
 	await expect(menu.getByRole('link')).toHaveText(SETTINGS_RAIL.flatMap(([, links]) => links));
 	for (const [name, links] of SETTINGS_RAIL) {
 		await expect(menu.getByRole('list', { name, exact: true }).getByRole('link')).toHaveText(links);
-		await expect(menu.getByText(name, { exact: true })).toBeVisible();
+		// The group's name over its links (the last group's is its one link's too).
+		await expect(menu.getByText(name, { exact: true }).first()).toBeVisible();
 	}
 	const rail = (await menu.boundingBox())!;
 	const panel = (await page.locator('#set-period').boundingBox())!;
@@ -219,7 +221,7 @@ test('a narrower window moves the last links into More, which works from the key
 	await page.keyboard.press('Enter');
 	await expect(more).toHaveAttribute('aria-expanded', 'true');
 	await expect(menu.getByRole('link')).toHaveText(SETTINGS_LINKS);
-	await expect(menu.getByRole('list', { name: 'Automation & access' }).last().getByRole('link').last()).toHaveText('Automation & access');
+	await expect(menu.getByRole('list', { name: 'Automatic runs' }).last().getByRole('link').last()).toHaveText('Automatic runs');
 	await page.keyboard.press('Tab');
 	await expect(menu.getByRole('link', { name: SETTINGS_LINKS[onBar.length], exact: true })).toBeFocused();
 	await page.keyboard.press('Escape');
@@ -229,20 +231,20 @@ test('a narrower window moves the last links into More, which works from the key
 
 	// Following a link in More jumps to its section below the menu, closes it, and More then says it holds the section read.
 	await more.click();
-	await menu.getByRole('link', { name: 'Automation & access' }).click();
+	await menu.getByRole('link', { name: 'Automatic runs', exact: true }).click();
 	await expect(page).toHaveURL(/#set-auto$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Automatic runs' })).toBeInViewport();
+	const auto = page.getByRole('heading', { level: 2, name: 'Automatic runs' });
+	await expect(auto).toBeInViewport();
 	await expect(more).toHaveAttribute('aria-expanded', 'false');
-	// Past the form too (the menu used to sit inside it and scrolled away at Data feeds): the group's panels below it
-	// still count as the group's link being read.
-	await page.getByRole('heading', { level: 2, name: 'Scheduled reports' }).scrollIntoViewIfNeeded();
+	// At the foot of the page, the menu still sticks, and More says it holds the section read.
+	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 	await expect(menu).toBeInViewport();
 	await expect(more).toHaveAccessibleName('More sections, including the one being read');
 
 	// A click outside closes it too.
 	await more.click();
 	await expect(more).toHaveAttribute('aria-expanded', 'true');
-	await page.getByRole('heading', { level: 2, name: 'Scheduled reports' }).click();
+	await auto.click();
 	await expect(more).toHaveAttribute('aria-expanded', 'false');
 });
 

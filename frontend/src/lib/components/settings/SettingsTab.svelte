@@ -16,12 +16,6 @@
 	const loadDroughtRestriction = () => import('./DroughtRestrictionFields.svelte');
 	// The daily EWR at the outlet (engine ≥ 1.77.0, issue #455): its own chunk, for the same reason.
 	const loadEwrDailySource = () => import('./EwrDailySourceFields.svelte');
-	// API keys render for owners only, so the rest of the team never downloads them.
-	const loadApiKeys = () => import('#lib/components/apiKeys/ApiKeysPanel.svelte');
-	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
-	const loadDataFeeds = () => import('#lib/components/feeds/DataFeedsPanel.svelte');
-	// Scheduled reports: out of the tab's chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
-	const loadReportSchedules = () => loadSections().then((m) => ({ default: m.ReportSchedulesPanel }));
 	// Evaporation from the map (issue #326 B-evap): out of the tab's chunk, for the same reason as the panels above; it loads its proposal on mount.
 	const loadEvaporationProposal = () => loadSections().then((m) => ({ default: m.EvaporationProposal }));
 	// The FAO-56 pan-coefficient helper: editors only, under pan coefficient × A-pan, so a viewer or a monthly-PE
@@ -43,7 +37,8 @@
 
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { withParam } from '#lib/workspace/overlays.js';
 	import { landOnAnchor } from '#lib/help/anchor.js';
@@ -113,7 +108,7 @@
 	import { outcomesError } from '#lib/components/outcomes/outcomeSettings.js';
 	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
-	import { saveBlockers, SETTINGS_ELSEWHERE, settingsNavGroups } from './sections';
+	import { saveBlockers, SETTINGS_ELSEWHERE, settingsForward, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import type { CatchmentStation } from './unitRain';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
@@ -464,11 +459,11 @@
 	 */
 	const RAIL_FROM_REM = 80;
 	let navLayout = $state<'bar' | 'rail'>('bar');
-	// A link that stands for several panels (the bar's "Automation & access") shows a problem on any of them.
+	// Each link is marked while its panel has something to fix before saving.
 	const navGroups = $derived(
-		settingsNavGroups(project.role === 'owner', navLayout === 'rail').map((g) => ({
+		settingsNavGroups().map((g) => ({
 			label: g.label,
-			sections: g.sections.map((sec) => ({ ...sec, problem: blockers.some((b) => b.id === sec.id || (sec.covers ?? []).includes(b.id)) }))
+			sections: g.sections.map((sec) => ({ ...sec, problem: blockers.some((b) => b.id === sec.id) }))
 		}))
 	);
 
@@ -493,13 +488,24 @@
 	);
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 
+	// A link to a panel that moved away (#set-feeds, #set-api-keys, #set-report-schedules: an old email, a
+	// bookmark, a note) goes on to its new page, every other parameter kept, replacing this entry so Back
+	// skips it; that page lands on the panel (issue #586 round 1). On load, and for such a link followed
+	// while the page is open (the query is unchanged, so only the #fragment moves).
+	// keepFocus: the new page's landing focuses the heading, which SvelteKit's reset would take back to the body.
+	$effect(() => {
+		const to = settingsForward(page.url);
+		if (to) untrack(() => void goto(to, { replace: true, reset: false, keepFocus: true }));
+	});
+
 	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
 	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
-	// panels settle (as EWR does), and focus its heading once that is drawn too: several panels
-	// (Evaporation from the map, Data feeds, API keys, Scheduled reports) are lazy chunks of their own,
-	// drawn after this mounts (landOnAnchor waits for them). `?tab=calibration`, which has no page of its
-	// own yet, opens at Flow calibration (issue #586).
+	// panels settle (as EWR does), and focus its heading once that is drawn too: some panels (Evaporation
+	// from the map) are lazy chunks of their own, drawn after this mounts (landOnAnchor waits for them).
+	// `?tab=calibration`, which has no page of its own yet, opens at Flow calibration (issue #586). A
+	// moved panel's link lands nowhere here: the effect above sends it on.
 	onMount(() => {
+		if (settingsForward(page.url)) return;
 		const hash = page.url.hash.slice(1);
 		const id = hash.startsWith('set-') ? hash : !hash && page.url.searchParams.get('tab') === 'calibration' ? 'set-flow' : null;
 		return id ? landOnAnchor(id) : undefined;
@@ -513,9 +519,7 @@
 
 <!-- In-page menu (issue #468): from a content width where the monthly rows still fit beside it, a sticky
      index on the left, grouped by task, with a find box; narrower, the bar that sticks under the app header
-     (one Automation & access link standing for the four panels that run or connect by themselves), and a
-     sideways strip on a phone. It wraps the whole tab, so it stays beside (or above) the panels after the
-     form too. -->
+     and a sideways strip on a phone. -->
 <SectionNav groups={navGroups} label="Settings sections" find="Find a setting" elsewhere={SETTINGS_ELSEWHERE} railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
 <!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
@@ -1575,40 +1579,9 @@
 
 </div>
 
-<!-- After the form: feeds, keys and schedules save themselves, never through the save bar. -->
-{#if !readonly}
-	<p class="muted small after-form">
-		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with the save bar’s Save changes.
-	</p>
-{/if}
-<!-- The panels after the form follow the explain switch too (their field help is .explain, issue #521). -->
-<div class="settings-after explain-scope" class:explained={explainSwitch.on}>
-<!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
-<div id="set-feeds">
-	<Lazy load={loadDataFeeds}>
-		{#snippet children(DataFeedsPanel)}<DataFeedsPanel projectId={project.id} />{/snippet}
-	</Lazy>
-</div>
-
-{#if project.role === 'owner'}
-	<Lazy load={loadApiKeys}>
-		{#snippet children(ApiKeysPanel)}<ApiKeysPanel projectId={project.id} />{/snippet}
-	</Lazy>
-{/if}
-
-<!-- As #set-feeds: the id outside the lazy panel. -->
-<div id="set-report-schedules">
-	<Lazy load={loadReportSchedules}>
-		{#snippet children(ReportSchedulesPanel)}<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />{/snippet}
-	</Lazy>
-</div>
-</div>
 </SectionNav>
 
 <style>
-	.after-form {
-		margin: 1.5rem 0 0.75rem;
-	}
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);

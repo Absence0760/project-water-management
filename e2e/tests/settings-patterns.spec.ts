@@ -16,12 +16,12 @@ async function checkPanels(page: Page, projectId: string) {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto(`/projects/${projectId}?tab=settings`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
-	// The panels after the form load on their own; wait for the last one.
-	await expect(page.locator('#set-report-schedules section.panel')).toBeVisible();
+	// Evaporation from the map, a card of Flow calibration, loads on its own; wait for it.
+	await expect(page.locator('#set-evaporation').locator('h2, h3').first()).toBeVisible();
 	await layoutSettled(page);
 
 	// Closed, every fold's line says its values.
-	const closed = await expectFoldsNamed(page.locator('.settings-form, .settings-after'));
+	const closed = await expectFoldsNamed(page.locator('.settings-form'));
 	expect(closed).toBeGreaterThan(3);
 
 	// Open every fold (each opened in turn, so a fold inside another is reached once its parent is open).
@@ -30,9 +30,9 @@ async function checkPanels(page: Page, projectId: string) {
 		if (!(await shut.count())) break;
 		await shut.first().click();
 	}
-	await expectFoldsNamed(page.locator('.settings-form, .settings-after'));
+	await expectFoldsNamed(page.locator('.settings-form'));
 
-	const panels = await page.locator('.settings-form section.panel, .settings-after section.panel').all();
+	const panels = await page.locator('.settings-form section.panel').all();
 	expect(panels.length).toBeGreaterThan(10);
 	for (const panel of panels) {
 		const id = (await panel.getAttribute('id')) ?? (await panel.getByRole('heading', { level: 2 }).first().innerText());

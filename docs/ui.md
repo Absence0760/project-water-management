@@ -5398,7 +5398,7 @@ History is left to its own redesign.
   window's height less the save bar (`--dock-h`), scrolling inside itself
   only in a window shorter than its tallest state. Narrower it is the bar,
   with the same sections; a page whose links differ between the two binds
-  `layout` (Settings' bar folds four panels into one Automation & access
+  `layout` (Runs & results' bar folds three panels into one Notes & evidence
   link, its rail lists them). Without `children` the wrapper draws no box
   (`display: contents`), so the bar still sticks down the whole page.
 - **Find** (`find`, the box's label): in the rail, a search box at its top;
@@ -6374,20 +6374,21 @@ section header, which it fills (`fillHeader`) like the other sections.
   check `#set-wr2012`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
   tables `#set-reserve`), **Reading results** (Outcome matrix
   `#set-outcomes`, Seasonal outlook `#set-outlook`, Evidence
-  `#set-evidence`: they change no result) and **Automation & access**
-  (Automatic runs `#set-auto`, last in the form; Data feeds moved to the
-  Data page, and API keys and Scheduled reports to the Project page,
-  `?tab=project#project-api-keys` and `#project-report-schedules`, issue
-  #586, [§ Project](#project)). Judge results by (`#set-judge`) heads the form
+  `#set-evidence`: they change no result) and **Automatic runs**
+  (`#set-auto`, the last panel, the group named as its heading). Data feeds,
+  API keys and Scheduled reports, which followed the form and saved on their
+  own, moved to the Data page (`?tab=series#data-feeds`) and the Project page
+  (`?tab=project#project-api-keys` and `#project-report-schedules`, [§
+  Project](#project)) in issue #586 round 1; nothing follows the form now.
+  Judge results by (`#set-judge`) heads the form
   above them all, as the client asked (issue #444), and isn't in the menu.
   The panels sit in that order on the page, so the marked link moves down the
   column as you read. Beside the index, every 12-month row still fits (the
   month cells' padding is slim: twelve months and a year total at 1440 px,
   `settings.spec.ts`; the WR2012 check's row and its Sum too, `wr2012.spec.ts`,
   issue #586). Narrower (1280 px and down) it is the bar under the
-  header, its links evenly spaced, with the four automation panels behind one
-  **Automation & access** link (`covers`), so sixteen links stay in two rows
-  at 1280 px in CI's fonts; on a phone the sideways strip. Both have
+  header, its links evenly spaced, the same seventeen links as the index, in
+  two rows at 1280 px in CI's fonts; on a phone the sideways strip. Both have
   **Find a setting**: type part of a setting's name (`pan coef`,
   `february`) and the index narrows to the panels and settings that match;
   picking a setting opens what folds it (Advanced: days in February) and
@@ -6396,8 +6397,23 @@ section header, which it fills (`fillHeader`) like the other sections.
   `settings/sections.ts`, SectionNav's `elsewhere`): "comparison band",
   "registered volumes" or "tolerance" lists **Comparison band, on
   Allocations**, which opens Allocations on that card (`#alloc-band`, its
-  heading focused once the volumes are in; issue #521). A panel with a Save blocker gets a red dot ("has a problem"),
-  and on the bar's Automation link a problem on any panel it stands for.
+  heading focused once the volumes are in; issue #521). The same for the
+  panels that moved in issue #586 round 1: **Data feeds, on Data**
+  (`?tab=series#data-feeds`; also "CHIRPS", "DWS", "gauging station"),
+  **API keys, on Project** (`?tab=project#project-api-keys`; also "ingest",
+  "logger") and **Scheduled reports, on Project**
+  (`?tab=project#project-report-schedules`; also "schedule", "email",
+  "PDF"). Their old anchors still work: `?tab=settings#set-feeds`,
+  `#set-api-keys` and `#set-report-schedules`, from an old email, a bookmark
+  or a note, go on to those addresses with every other parameter kept
+  (`?tab=settings&rain=boundary#set-feeds` opens
+  `?tab=series&rain=boundary#data-feeds`; a `?rain=boundary` or
+  `?rain=units` link with no `#` goes there too), replacing the entry so Back
+  skips it, on a page load or a link followed with Settings open; the page
+  there lands on the panel and focuses its heading (`settingsForward` in
+  `settings/sections.ts`; `e2e/tests/settings-layout-pins.spec.ts`). No
+  backend email or printed report links to them. A panel with a Save
+  blocker gets a red dot ("has a problem").
   The menu marks the panel being read with `aria-current="location"` and,
   as a bar, raises the page's `scroll-padding-top` by its height (the rail
   sits beside the panels, so it doesn't), and the workspace page sets
@@ -8230,8 +8246,7 @@ read it before.
   model, Unit rain, WR2012 check, EWR vs observed, Plausibility, Notes &
   evidence, Validation, Outputs) so it still fits two rows at 1280 px beside
   the runs rail (issue #137); its **Notes & evidence** is one link standing
-  for Run notes, Evidence and Reproduction (`covers`, as Settings'
-  Automation & access; issue #521). Runoff model only for a GR4J run, Rain for each
+  for Run notes, Evidence and Reproduction (`covers`; issue #521). Runoff model only for a GR4J run, Rain for each
   unit only for a run with rain for each unit (`summary.unitRain`), WR2012
   check only with a reference, and Plausibility checks only on a run made by
   engine 0.25.0 or later. The page's `scroll-padding-top` includes the bar's
