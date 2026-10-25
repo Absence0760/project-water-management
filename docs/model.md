@@ -2522,8 +2522,9 @@ placed, [followups.md](./followups.md)). The input's series
 `rain_chirps_cell_mm@<unitId>` (`referenceCellSeriesKey`) is CHIRPS at that
 **single** cell, not an area average. It isn't a stored series: the backend
 reads it from the CHIRPS cell cache when it builds a run's input (the
-centre of the unit's parcel, the product of the unit's own CHIRPS feed,
-`rnl` without one), and the run's input snapshot stores it like any other
+centre of the unit's parcel, in the CHIRPS v3 product of the unit's own
+CHIRPS series the run reads, `rnl` when it has none or one that isn't v3;
+never a feed's product on its own, issue #561), and the run's input snapshot stores it like any other
 series (`runs/referenceCell.ts`). The cache holds a cell once some feed has
 fetched it, which the reference unit's own feed does when the centre lies
 inside its parcel (the usual case).

@@ -15,13 +15,9 @@
 // Only when settings.rainStations assigns a station to the catchment or a
 // unit, so every other project's input is exactly as before.
 import {
-	CHIRPS_V3_RNL,
-	CHIRPS_V3_SAT,
 	type DailySeries,
 	type RainStationInputs,
 	type RainStationSettings,
-	sameProvenance,
-	type SeriesProvenance,
 	seriesOrigin,
 	stationChirpsSeriesKey,
 	stationSeriesKey,
@@ -29,10 +25,7 @@ import {
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import type { ChirpsDailyProduct } from '../feeds/config.js';
-import { referenceCellSeries } from './referenceCell.js';
-
-/** The product a unit feed reads unless told otherwise (as referenceCell.ts's DEFAULT_PRODUCT). */
-const DEFAULT_PRODUCT: ChirpsDailyProduct = 'rnl';
+import { DEFAULT_CELL_PRODUCT, referenceCellSeries, seriesChirpsProduct } from './referenceCell.js';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -68,13 +61,6 @@ interface StationRow {
 	station_lon: number | null;
 }
 
-/** The CHIRPS v3 daily product a series holds, by its provenance; null for any other (v2, unrecorded). */
-function v3Product(p: SeriesProvenance | null | undefined): ChirpsDailyProduct | null {
-	if (sameProvenance(p, CHIRPS_V3_RNL)) return 'rnl';
-	if (sameProvenance(p, CHIRPS_V3_SAT)) return 'sat';
-	return null;
-}
-
 /**
  * The CHIRPS product a station's cell is read in: the product of the CHIRPS
  * series the run reads that the station's pairing corrects (its factors then
@@ -89,14 +75,14 @@ export function productFor(stationId: string, rs: RainStationSettings, runSeries
 	const units = isObj(rs.units) ? Object.keys(rs.units).sort() : [];
 	for (const u of units) {
 		if (named(rs.units![u])?.correctAgainst !== stationId) continue;
-		const product = v3Product(runSeries[unitRainSeriesKey('rain_chirps_mm', u)]?.provenance);
+		const product = seriesChirpsProduct(runSeries[unitRainSeriesKey('rain_chirps_mm', u)]);
 		if (product) return product;
 	}
 	if (named(rs.catchment)?.correctAgainst === stationId) {
-		const product = v3Product(runSeries.rain_chirps_mm?.provenance);
+		const product = seriesChirpsProduct(runSeries.rain_chirps_mm);
 		if (product) return product;
 	}
-	return DEFAULT_PRODUCT;
+	return DEFAULT_CELL_PRODUCT;
 }
 
 /**

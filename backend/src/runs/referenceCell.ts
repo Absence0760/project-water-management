@@ -6,18 +6,44 @@
 // referenceCellSeriesKey); it is not a stored series, so the run's input
 // snapshot (run_input_series, series_id null) is what keeps it.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { type DailySeries, referenceCellSeriesKey, type UnitRainSettings } from '@water-management/engine';
+import {
+	CHIRPS_V3_RNL,
+	CHIRPS_V3_SAT,
+	type DailySeries,
+	referenceCellSeriesKey,
+	sameProvenance,
+	unitRainSeriesKey,
+	type UnitRainSettings
+} from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { centerOf } from '../geo/geojson.js';
 import { chcCell, seriesFromCache } from '../feeds/cellCache.js';
 import { cacheOrigin, readCellCache } from '../feeds/cellCacheStore.js';
-import { CHIRPS_PRODUCT_FIRST_DAY, chirpsProduct, type ChirpsDailyProduct, type FeedConfig } from '../feeds/config.js';
+import { CHIRPS_PRODUCT_FIRST_DAY, type ChirpsDailyProduct } from '../feeds/config.js';
 import type { Geometry } from '../geo/geojson.js';
 
-/** The product a unit feed reads unless told otherwise (feeds/fromUnits.ts DEFAULT_UNIT_PRODUCT, not imported: that module carries the routes). */
-const DEFAULT_PRODUCT: ChirpsDailyProduct = 'rnl';
+/**
+ * The product a cell is read in when the series it is compared with isn't
+ * CHIRPS v3: the unit feeds' default (feeds/fromUnits.ts
+ * DEFAULT_UNIT_PRODUCT, not imported: that module carries the routes).
+ */
+export const DEFAULT_CELL_PRODUCT: ChirpsDailyProduct = 'rnl';
 
-/** Where the reference cell is: the reference unit's centre (lon, lat) and the product its own feed reads. */
+/**
+ * The CHIRPS v3 daily product a series a run reads holds, by its provenance;
+ * null for any other (v2, unrecorded) or none. A cell compared with that
+ * series is read in this product, so its factors apply to the product they
+ * were fitted on (issue #561): never a feed's product on its own, since the
+ * series a run reads (the first by name per site, runs/execute.ts) need not
+ * be the one a feed writes.
+ */
+export function seriesChirpsProduct(series: DailySeries | undefined): ChirpsDailyProduct | null {
+	if (sameProvenance(series?.provenance, CHIRPS_V3_RNL)) return 'rnl';
+	if (sameProvenance(series?.provenance, CHIRPS_V3_SAT)) return 'sat';
+	return null;
+}
+
+/** Where the reference cell is: the reference unit's centre (lon, lat) and the product of the unit's CHIRPS the run reads. */
 export interface ReferenceCell {
 	unitId: string;
 	lat: number;
@@ -29,8 +55,16 @@ export interface ReferenceCell {
  * The reference cell of a project's settings.unitRain, or null: per-unit rain
  * off, no reference, or a reference unit with no single parcel on the map
  * (the engine then warns that it has no cell series and fits nothing).
+ * `runSeries`: the series the run reads (loadLiveInput's); the cell is read in
+ * the product of the reference unit's own CHIRPS among them
+ * (seriesChirpsProduct), else DEFAULT_CELL_PRODUCT.
  */
-export async function referenceCell(db: Db, projectId: string, unitRain: UnitRainSettings | null | undefined): Promise<ReferenceCell | null> {
+export async function referenceCell(
+	db: Db,
+	projectId: string,
+	unitRain: UnitRainSettings | null | undefined,
+	runSeries: Readonly<Record<string, DailySeries | undefined>>
+): Promise<ReferenceCell | null> {
 	const ref = unitRain?.mode === 'perUnit' ? unitRain.reference : null;
 	if (!ref || typeof ref.unitId !== 'string') return null;
 	// The unit's polygon as the unit feeds pick it (fromUnits.ts unitParcel): the parcel its area came from, else its only parcel.
@@ -43,12 +77,8 @@ export async function referenceCell(db: Db, projectId: string, unitRain: UnitRai
 	);
 	if (!rows[0]) return null;
 	const [lon, lat] = centerOf(rows[0].geometry);
-	// The product of the unit's own CHIRPS feed (the cells it caches), else the unit feeds' default.
-	const { rows: feeds } = await db.query<{ config: FeedConfig }>(
-		`SELECT config FROM data_feed WHERE project_id = $1 AND source = 'chirps' AND config->'unit'->>'nodeId' = $2 ORDER BY created_at, id LIMIT 1`,
-		[projectId, ref.unitId]
-	);
-	return { unitId: ref.unitId, lat: lat!, lon: lon!, product: feeds[0] ? chirpsProduct(feeds[0].config) : DEFAULT_PRODUCT };
+	const product = seriesChirpsProduct(runSeries[unitRainSeriesKey('rain_chirps_mm', ref.unitId)]) ?? DEFAULT_CELL_PRODUCT;
+	return { unitId: ref.unitId, lat: lat!, lon: lon!, product };
 }
 
 /**
@@ -80,8 +110,13 @@ export async function referenceCellSeries(db: Db, cell: Pick<ReferenceCell, 'lat
 }
 
 /** The input series key and values of a project's reference cell, or null. */
-export async function referenceCellInput(db: Db, projectId: string, unitRain: UnitRainSettings | null | undefined): Promise<{ key: string; series: DailySeries } | null> {
-	const cell = await referenceCell(db, projectId, unitRain);
+export async function referenceCellInput(
+	db: Db,
+	projectId: string,
+	unitRain: UnitRainSettings | null | undefined,
+	runSeries: Readonly<Record<string, DailySeries | undefined>>
+): Promise<{ key: string; series: DailySeries } | null> {
+	const cell = await referenceCell(db, projectId, unitRain, runSeries);
 	if (!cell) return null;
 	const series = await referenceCellSeries(db, cell);
 	return series ? { key: referenceCellSeriesKey(cell.unitId), series } : null;
