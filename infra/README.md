@@ -443,7 +443,9 @@ the us-east-1 one ([§ Budget alerts](#budget-alerts)).
 - **No www alias.** `www.icwbt.jaredhoward.com` isn't worth a SAN,
   records and a redirect.
 - **A former hostname is an alias of the same distribution**, not a second
-  distribution (`redirect_domains`): `spa_rewrite` 301s its pages, its
+  distribution (`redirect_domains`): `spa_rewrite` 301s its pages (the query
+  as sent, `rawQueryString()`, never rebuilt from the parsed
+  `querystring`, which reorders names), its
   `/api/*` keeps answering (one-click unsubscribes, logger pushes), and the
   certificate covers it as a SAN. A second distribution would have meant
   moving the alias between distributions, which CloudFront only allows once

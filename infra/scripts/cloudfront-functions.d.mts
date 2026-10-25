@@ -2,7 +2,15 @@
 
 /** A CloudFront Functions viewer-request event, as much of it as the functions here read. */
 export interface ViewerRequestEvent {
-	request: { method: string; uri: string; querystring: Record<string, unknown>; headers: Record<string, { value: string }>; cookies: Record<string, unknown> };
+	request: {
+		method: string;
+		uri: string;
+		querystring: Record<string, unknown>;
+		headers: Record<string, { value: string }>;
+		cookies: Record<string, unknown>;
+		/** The query as the viewer sent it, without the '?' (runtime 2.0); only spa_rewrite's redirect calls it. */
+		rawQueryString?: () => string | undefined;
+	};
 	viewer: { ip: string };
 }
 
@@ -19,3 +27,4 @@ export function loadFunction(
 	name: string,
 	vars?: string[]
 ): { handler: (event: ViewerRequestEvent) => ViewerRequestEvent['request'] | FunctionResponse; [name: string]: unknown };
+export function viewerRequest(target: string, headers?: Record<string, { value: string }>): ViewerRequestEvent['request'];
