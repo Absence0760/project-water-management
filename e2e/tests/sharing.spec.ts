@@ -89,17 +89,18 @@ test('an owner shares a project read-only with a viewer, who joins by accepting 
 	await v.getByRole('link', { name: 'Transfers' }).click();
 	await expect(v.getByLabel('From, transfer 1', { exact: true })).toBeDisabled();
 
-	await v.getByRole('link', { name: 'Settings' }).click();
+	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Settings' }).click();
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	// No save bar for a viewer, whatever they type into.
 	await expect(v.getByRole('region', { name: /^Unsaved / })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
 
-	await v.getByRole('link', { name: 'Data', exact: true }).click();
+	// The sidebar's link: Settings' panels link to Data too (issue #586).
+	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Data', exact: true }).click();
 	await expect(v.getByRole('heading', { name: 'Input time series' })).toBeVisible();
 	await expect(v.getByRole('button', { name: 'Add data' })).toHaveCount(0);
 
-	await v.getByRole('link', { name: 'Runs & results' }).click();
+	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Runs & results' }).click();
 	await expect(v.getByRole('heading', { name: 'Runs', exact: true })).toBeVisible();
 	await expect(v.getByRole('button', { name: 'Run model' })).toHaveCount(0);
 
