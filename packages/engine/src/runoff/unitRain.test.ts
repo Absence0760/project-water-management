@@ -577,7 +577,54 @@ describe('scenarios and sensitivity reach a unit’s own rain', () => {
 		const { options } = resolveEnsembleOptions(input, { members: 30, rainSources: ['recorded', 'chirps'] });
 		const ctx = ensembleContext(input, options);
 		expect(Object.keys(ctx.chirps!.series).filter((k) => k.includes('@'))).toEqual(['rain_chirps_mm@A', 'rain_chirps_mm@C']);
-		expect(unitOf(runModel(ctx.chirps!), 'A').rule).toBe('unitChirps');
+		// A keeps its rule, pinned (engine ≥ 1.95.0); with no gauge its days fall to its CHIRPS.
+		const a = unitOf(runModel(ctx.chirps!), 'A');
+		expect(a.rule).toBe('unitGauge');
+		expect(a.days.unitGauge).toBe(0);
+	});
+
+	it('the CHIRPS-only member keeps each unit’s gauge MAP ratio: a rule-2 unit and a short CHIRPS on the §2.4b factors read at the base level', () => {
+		// The catchment CHIRPS is the gauge × 0.5, so its §2.4b factors are 2 and the member's corrected CHIRPS is the gauge
+		// exactly: every unit without a gauge of its own must read the same rain in the member as in the base run.
+		// B: rule 2 (MAP 700 ÷ gauge MAP 500 = 1.4), no CHIRPS. C: MAP 750 (ratio 1.5) but CHIRPS over 200 days only, so the
+		// base levels it by the §2.4b factors × its ratio. D: rule 2 too (600 ÷ 500). Before engine 1.95.0 the member lost the
+		// ratio on all three, and C's §2.4b factors.
+		const input = everyRule();
+		set(input, 'rain_chirps_mm', rainOf(0.5));
+		set(input, 'rain_chirps_mm@C', rainOf(0.5).slice(60, 260), fromEpochDay(toEpochDay(START) + 60));
+		const base = runModel(input);
+		expect(unitOf(base, 'B')).toMatchObject({ rule: 'gaugeMap', gaugeMapFactor: 1.4 });
+		expect(unitOf(base, 'C')).toMatchObject({ rule: 'gaugeMap', gaugeMapFactor: 1.5, chirps: { source: 'bias' } });
+		const member = runModel(ensembleContext(input, resolveEnsembleOptions(input, { members: 30, rainSources: ['recorded', 'chirps'] }).options).chirps!);
+		for (const id of ['B', 'C', 'D']) {
+			expect(unitOf(member, id).rule, id).toBe(unitOf(base, id).rule);
+			const want = col(base, 'rain_unit', id)!;
+			const got = col(member, 'rain_unit', id)!;
+			for (let t = 0; t < want.length; t++) expect(got[t], `${id} day ${t}`).toBeCloseTo(want[t]!, 9);
+		}
+	});
+
+	it('the CHIRPS-only member keeps a unit’s CHIRPS on the catchment’s §2.4b factors: the base run’s level, not raw', () => {
+		// C: its own CHIRPS and no MAP, so the base run levels it by the catchment's §2.4b factors (gauge ÷ CHIRPS = 2). The
+		// member's catchment CHIRPS carries those factors, so C's must too, else the member reads it at half the base level.
+		const input = everyRule();
+		set(input, 'rain_chirps_mm', rainOf(0.5));
+		delete input.model.nodes[3]!.mapMm;
+		const base = runModel(input);
+		expect(unitOf(base, 'C')).toMatchObject({ rule: 'unitChirps', chirps: { source: 'bias' } });
+		const { options } = resolveEnsembleOptions(input, { members: 30, rainSources: ['recorded', 'chirps'] });
+		const member = runModel(ensembleContext(input, options).chirps!);
+		expect(unitOf(member, 'C').rule).toBe('unitChirps');
+		const want = col(base, 'rain_unit', 'C')!;
+		const got = col(member, 'rain_unit', 'C')!;
+		expect(got.length).toBe(want.length);
+		for (let t = 0; t < want.length; t++) expect(got[t], `day ${t}`).toBeCloseTo(want[t]!, 9);
+		// Positive control: C levelled by its own MAP (everyRule's 750 mm) keeps its CHIRPS as stored, and reads the same in both.
+		const mapped = everyRule();
+		set(mapped, 'rain_chirps_mm', rainOf(0.5));
+		const ctx = ensembleContext(mapped, resolveEnsembleOptions(mapped, { members: 30, rainSources: ['recorded', 'chirps'] }).options);
+		expect((ctx.chirps!.series as Record<string, unknown>)['rain_chirps_mm@C']).toBe((mapped.series as Record<string, unknown>)['rain_chirps_mm@C']);
+		expect(unitOf(runModel(ctx.chirps!), 'C').chirps).toEqual(unitOf(runModel(mapped), 'C').chirps);
 	});
 });
 

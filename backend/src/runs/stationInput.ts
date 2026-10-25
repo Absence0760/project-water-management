@@ -20,14 +20,12 @@ import {
 	type RainStationSettings,
 	seriesOrigin,
 	stationChirpsSeriesKey,
-	stationSeriesKey
+	stationSeriesKey,
+	unitRainSeriesKey
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
-import { chirpsProduct, type ChirpsDailyProduct, type FeedConfig } from '../feeds/config.js';
-import { referenceCellSeries } from './referenceCell.js';
-
-/** The product a unit feed reads unless told otherwise (as referenceCell.ts's DEFAULT_PRODUCT). */
-const DEFAULT_PRODUCT: ChirpsDailyProduct = 'rnl';
+import type { ChirpsDailyProduct } from '../feeds/config.js';
+import { DEFAULT_CELL_PRODUCT, referenceCellSeries, seriesChirpsProduct } from './referenceCell.js';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -64,20 +62,27 @@ interface StationRow {
 }
 
 /**
- * The CHIRPS product a station's cell is read in: the product of the feed
- * whose CHIRPS the station's pairing corrects (its factors then apply to the
- * same product they were fitted on): the first land unit it corrects, by node
- * id, that has its own feed, else the catchment's feed (one with no unit) when
- * the catchment is corrected against it, else the unit feeds' default.
+ * The CHIRPS product a station's cell is read in: the product of the CHIRPS
+ * series the run reads that the station's pairing corrects (its factors then
+ * apply to the same product they were fitted on), taken from `runSeries`,
+ * the series loadLiveInput already chose (the first by name per site, issue
+ * #561), never from whichever feed came first: the first land unit it
+ * corrects, by node id, whose own CHIRPS the run reads is CHIRPS v3, else
+ * the catchment's (`rain_chirps_mm`) when the catchment is corrected against
+ * it and that is CHIRPS v3, else the unit feeds' default.
  */
-function productFor(stationId: string, rs: RainStationSettings, unitProduct: Map<string, ChirpsDailyProduct>, catchmentProduct: ChirpsDailyProduct | null): ChirpsDailyProduct {
+export function productFor(stationId: string, rs: RainStationSettings, runSeries: Readonly<Record<string, DailySeries | undefined>>): ChirpsDailyProduct {
 	const units = isObj(rs.units) ? Object.keys(rs.units).sort() : [];
 	for (const u of units) {
-		const a = named(rs.units![u]);
-		if (a?.correctAgainst === stationId && unitProduct.has(u)) return unitProduct.get(u)!;
+		if (named(rs.units![u])?.correctAgainst !== stationId) continue;
+		const product = seriesChirpsProduct(runSeries[unitRainSeriesKey('rain_chirps_mm', u)]);
+		if (product) return product;
 	}
-	if (named(rs.catchment)?.correctAgainst === stationId && catchmentProduct) return catchmentProduct;
-	return DEFAULT_PRODUCT;
+	if (named(rs.catchment)?.correctAgainst === stationId) {
+		const product = seriesChirpsProduct(runSeries.rain_chirps_mm);
+		if (product) return product;
+	}
+	return DEFAULT_CELL_PRODUCT;
 }
 
 /**
@@ -96,6 +101,7 @@ export async function stationInputs(
 	projectId: string,
 	rainStations: unknown,
 	catchmentGaugeId: string | null,
+	runSeries: Readonly<Record<string, DailySeries | undefined>>,
 	today?: string
 ): Promise<{ series: Record<string, DailySeries>; stations: RainStationInputs } | null> {
 	if (!assignsStations(rainStations)) return null;
@@ -129,21 +135,9 @@ export async function stationInputs(
 		if (a) wanted.add(a.stationId).add(a.correctAgainst);
 	}
 	const placed = rows.filter((r) => wanted.has(r.id) && r.station_lat !== null && r.station_lon !== null);
-	if (placed.length) {
-		const { rows: feeds } = await db.query<{ config: FeedConfig; unit: string | null }>(
-			`SELECT config, config->'unit'->>'nodeId' AS unit FROM data_feed WHERE project_id = $1 AND source = 'chirps' ORDER BY created_at, id`,
-			[projectId]
-		);
-		const unitProduct = new Map<string, ChirpsDailyProduct>();
-		let catchmentProduct: ChirpsDailyProduct | null = null;
-		for (const f of feeds) {
-			if (f.unit === null) catchmentProduct ??= chirpsProduct(f.config);
-			else if (!unitProduct.has(f.unit)) unitProduct.set(f.unit, chirpsProduct(f.config));
-		}
-		for (const r of placed) {
-			const cell = await referenceCellSeries(db, { lat: r.station_lat!, lon: r.station_lon!, product: productFor(r.id, rs, unitProduct, catchmentProduct) }, today);
-			if (cell) series[stationChirpsSeriesKey(r.id)] = cell;
-		}
+	for (const r of placed) {
+		const cell = await referenceCellSeries(db, { lat: r.station_lat!, lon: r.station_lon!, product: productFor(r.id, rs, runSeries) }, today);
+		if (cell) series[stationChirpsSeriesKey(r.id)] = cell;
 	}
 	return { series, stations };
 }

@@ -1108,7 +1108,7 @@ export function* stationLines(st: RainStationSummary): Generator<string> {
 	for (const a of st.units) yield row(a);
 	if (!st.pairings.length) return;
 	yield csvRow(['Station CHIRPS pairings (monthly factors: the station ÷ the CHIRPS at it on their shared days)']);
-	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Common years', 'Shared days', 'Pinned', ...MONTHS]);
+	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Complete years (accumulations counted)', 'Shared days', 'Pinned', ...MONTHS]);
 	for (const p of st.pairings) {
 		const factors = p.refused === null ? MONTHS.map((_, i) => p.months.find((m) => m.month === i + 1)?.factor ?? null) : MONTHS.map(() => null);
 		yield csvRow([p.stationName, 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell", p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);
@@ -1140,10 +1140,12 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 			'EWR split between units by',
 			EWR_SPLIT_LABEL[split.applied],
 			split.period
-				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water years` : 'the whole run: no complete water year'})`
+				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water year${split.period.waterYears === 1 ? '' : 's'}` : 'the whole run: no complete water year'}${split.pinned ? '; the capture run’s shares' : ''})`
 				: split.why === 'catchmentRain'
 					? 'the flow share: GR4J ran once on the catchment rain'
-					: 'the flow share: no unit made natural runoff'
+					: split.why === 'resumed'
+						? 'the flow share: resumed from a snapshot of a run that split the EWR by the flow share'
+						: 'the flow share: no unit made natural runoff'
 		]);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
 	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);

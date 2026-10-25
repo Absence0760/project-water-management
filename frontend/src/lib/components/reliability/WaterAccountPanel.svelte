@@ -21,12 +21,15 @@
 	let {
 		assurance,
 		engineVersion = null,
-		balanceHref
+		balanceHref,
+		headingLevel = 3
 	}: {
 		assurance: SupplyAssurance | undefined | null;
 		engineVersion?: string | null;
 		/** Runs & results' Water balance for the same run. */
 		balanceHref?: string;
+		/** Its heading's level (the bars' one level under it): EWR's panels are h2, peers of its charts. */
+		headingLevel?: 2 | 3;
 	} = $props();
 
 	const uid = $props.id();
@@ -45,7 +48,7 @@
 </script>
 
 <section class="water-account" aria-labelledby="{uid}-h-t">
-	<h3 id="{uid}-h"><span id="{uid}-h-t">Water account</span> <HelpTip key="water-account" /></h3>
+	<svelte:element this={`h${headingLevel}`} id="{uid}-h"><span id="{uid}-h-t">Water account</span> <HelpTip key="water-account" /></svelte:element>
 	{#if !account}
 		<p class="muted" data-testid="account-not-computed">{notComputedText(engineVersion)}</p>
 	{:else}
@@ -63,7 +66,7 @@
 
 		{#if bars && shown}
 			<div class="head">
-				<h4 id="{uid}-bh">In and out: {label(shown)}</h4>
+				<svelte:element this={`h${headingLevel + 1}`} id="{uid}-bh">In and out: {label(shown)}</svelte:element>
 				<div class="field inline">
 					<label for="{uid}-p">Period</label>
 					<select id="{uid}-p" bind:value={period}>
@@ -136,7 +139,7 @@
 		gap: 0.5rem 1rem;
 		margin: 0.75rem 0 0.5rem;
 	}
-	.head h4 {
+	.head :is(h3, h4) {
 		margin: 0;
 	}
 	.field.inline {

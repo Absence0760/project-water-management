@@ -26,14 +26,14 @@ async function openBox(page: Page, projectId: string, nodeId: string, unit: stri
 	if (parcels) await expect(panel(page).getByTestId('cropland-parcels').locator('caption')).toHaveText(`Cultivated area in ${unit}’s parcels on the map`);
 }
 
-/** Two parcels of `nodeId` in the synthetic grid's half-cropland block. */
-async function drawParcels(page: Page, projectId: string, nodeId: string) {
+/** Two parcels of `nodeId` in the synthetic grid's half-cropland block (`suffix` after their names, for a second unit's). */
+async function drawParcels(page: Page, projectId: string, nodeId: string, suffix = '') {
 	for (const [name, ring] of [
 		['Lower lands', box(21.31, -33.69, 0.01)],
 		['Top camp', box(21.33, -33.67, 0.005)]
 	] as const) {
 		const made = await page.request.post(`${API_URL}/projects/${projectId}/map/features`, {
-			data: { kind: 'farm_parcel', name, nodeId, geometry: { type: 'Polygon', coordinates: [ring] } }
+			data: { kind: 'farm_parcel', name: `${name}${suffix}`, nodeId, geometry: { type: 'Polygon', coordinates: [ring] } }
 		});
 		expect(made.status(), await made.text()).toBe(201);
 	}
@@ -41,6 +41,107 @@ async function drawParcels(page: Page, projectId: string, nodeId: string) {
 
 test.beforeAll(async () => {
 	await loadSyntheticLandCover();
+});
+
+test('a Use that answers after Back moved the drawer to another unit leaves the box on that unit and the keyboard where it was', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Cropland proposals use race');
+	const idOf = (name: string) => String(project.model.nodes.find((n) => n.name === name)!.id);
+	await drawParcels(page, project.id, idOf('Upper farm'));
+	// Lower farm's drawer, then Upper farm's by a client-side step (a farm= link), so Back returns to Lower farm's
+	// with the drawer, and its proposals box, still mounted.
+	await openBox(page, project.id, idOf('Lower farm'), 'Lower farm', false);
+	await page.evaluate((href) => {
+		const a = document.createElement('a');
+		a.href = href;
+		document.querySelector('dialog[open]')!.append(a);
+		a.click();
+		a.remove();
+	}, `?tab=crops&farm=${idOf('Upper farm')}`);
+	await expect(page.getByRole('dialog', { name: 'Upper farm: planted areas' })).toBeVisible();
+	await expect(panel(page).getByTestId('cropland-parcels').locator('caption')).toHaveText('Cultivated area in Upper farm’s parcels on the map');
+
+	// Hold the save until Back has moved the drawer to Lower farm and its summary is in.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let posted!: () => void;
+	const arrived = new Promise<void>((r) => (posted = r));
+	await page.route(/\/crop-area-from-land-cover$/, async (route) => {
+		posted();
+		await held;
+		await route.continue();
+	});
+	await cropRow(page, 'Orchard').getByRole('button', { name: /^Use / }).click();
+	await answerConfirm(page, true, /Set Orchard’s planted area on Upper farm from land cover\?/);
+	await arrived;
+	await page.goBack();
+	await expect(page.getByRole('dialog', { name: 'Lower farm: planted areas' })).toBeVisible();
+	await expect(panel(page).getByTestId('cropland-body')).toHaveAttribute('data-ready', 'true');
+	await expect(panel(page).getByTestId('cropland-parcels')).toHaveCount(0);
+
+	const saved = page.waitForResponse(/\/crop-area-from-land-cover$/);
+	// The box's reload after the save: one GET of a summary, whichever unit it asks for.
+	const reloaded = page.waitForResponse((r) => r.request().method() === 'GET' && /\/cropland-proposals$/.test(new URL(r.url()).pathname));
+	await expect(panel(page)).toHaveAttribute('data-saving', 'true');
+	release();
+	expect((await saved).status()).toBe(200);
+	await reloaded;
+	// The Use has finished, its focus step included.
+	await expect(panel(page)).not.toHaveAttribute('data-saving');
+	// The notice still reports the save (it names its unit), but doesn't take the keyboard: it's about a unit the drawer
+	// has left.
+	await expect(panel(page).getByTestId('cropland-notice')).toContainText('Orchard’s planted area on Upper farm is now');
+	await expect(panel(page).getByTestId('cropland-notice')).not.toBeFocused();
+	// Still Lower farm's summary (no parcels), not the reload of Upper farm's the save asked for.
+	await expect(page.getByRole('dialog', { name: 'Lower farm: planted areas' })).toBeVisible();
+	await expect(panel(page).getByTestId('cropland-body')).toHaveAttribute('data-ready', 'true');
+	await expect(panel(page).getByTestId('cropland-parcels')).toHaveCount(0);
+});
+
+test('a Use that fails after Back moved the drawer on reports it in the notice, naming its unit, not on the other unit’s row', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Cropland proposals use fails');
+	const idOf = (name: string) => String(project.model.nodes.find((n) => n.name === name)!.id);
+	// Parcels on both units, so Lower farm's box has an Orchard row too: the crop's key is the same on every unit.
+	await drawParcels(page, project.id, idOf('Upper farm'));
+	await drawParcels(page, project.id, idOf('Lower farm'), ' (lower)');
+	await openBox(page, project.id, idOf('Lower farm'), 'Lower farm');
+	await page.evaluate((href) => {
+		const a = document.createElement('a');
+		a.href = href;
+		document.querySelector('dialog[open]')!.append(a);
+		a.click();
+		a.remove();
+	}, `?tab=crops&farm=${idOf('Upper farm')}`);
+	await expect(page.getByRole('dialog', { name: 'Upper farm: planted areas' })).toBeVisible();
+	await expect(panel(page).getByTestId('cropland-parcels').locator('caption')).toHaveText('Cultivated area in Upper farm’s parcels on the map');
+
+	// Hold the save until Back has moved the drawer to Lower farm, then fail it.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let posted!: () => void;
+	const arrived = new Promise<void>((r) => (posted = r));
+	await page.route(/\/crop-area-from-land-cover$/, async (route) => {
+		posted();
+		await held;
+		await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Something went wrong' }) });
+	});
+	await cropRow(page, 'Orchard').getByRole('button', { name: /^Use / }).click();
+	await answerConfirm(page, true, /Set Orchard’s planted area on Upper farm from land cover\?/);
+	await arrived;
+	await page.goBack();
+	await expect(page.getByRole('dialog', { name: 'Lower farm: planted areas' })).toBeVisible();
+	await expect(panel(page).getByTestId('cropland-parcels').locator('caption')).toHaveText('Cultivated area in Lower farm’s parcels on the map');
+	await expect(panel(page)).toHaveAttribute('data-saving', 'true');
+	release();
+	await expect(panel(page)).not.toHaveAttribute('data-saving');
+	// Lower farm's Orchard row (the same crop) carries no error; the notice names the unit the failure was for.
+	await expect(cropRow(page, 'Orchard').getByRole('alert')).toHaveCount(0);
+	await expect(panel(page).locator('.err')).toHaveCount(0);
+	const notice = panel(page).getByTestId('cropland-notice');
+	await expect(notice).toHaveText('Couldn’t save Orchard’s planted area on Upper farm: Something went wrong');
+	await expect(notice).toHaveClass(/alert-error/);
+	await expect(notice).not.toBeFocused();
 });
 
 test('an editor uses the parcels’ cultivated area as a crop’s planted area; History cites the dataset; a viewer can’t', async ({ page, owner, signIn }) => {

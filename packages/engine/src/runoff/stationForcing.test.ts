@@ -349,6 +349,42 @@ describe('carry-through', () => {
 		expect(out.summary.stations!.catchment!.days).toMatchObject({ station: 0, chirps: DAYS });
 	});
 
+	it('the CHIRPS-only member keeps a rule-2 unit’s MAP ratio under a catchment station: ÷ (station MAP × r), engine 1.95.0, ER-30', () => {
+		// C (MAP 750, no records of its own) runs rule 2 on the catchment rain × 750 ÷ (600 × r) (RS5): station × r on S's
+		// days, which is at the catchment MAP's level (600 × r), and the catchment CHIRPS × S's factors on the others, at that
+		// level already (no r). In the member S is blanked, so every day is a CHIRPS day, and C must keep the base run's
+		// ratio, pinned, not one re-derived without the station.
+		for (const scaleToMap of [true, false]) {
+			const x = catchment({ unitRain: { mode: 'perUnit', gaugeMapMm: 600, gaugeMapSource: 'the station' }, rainStations: { catchment: { stationId: 'S', scaleToMap }, sites: SITES } });
+			// Wet catchment CHIRPS on S's gaps (the fixture's are dry there), so the positive control below bites.
+			const wet = [...(x.series.rain_chirps_mm!.values as number[])];
+			for (const t of GAP) wet[t] = 5 + t;
+			x.series.rain_chirps_mm = { startDate: START, values: wet };
+			const base = runModel(x);
+			const r = base.summary.stations!.catchment!.ratio;
+			if (scaleToMap) expect(r).not.toBe(1);
+			const ratio = 750 / (600 * r);
+			const baseC = base.summary.unitRain!.units.find((u) => u.nodeId === 'C')!;
+			expect(baseC.rule, String(scaleToMap)).toBe('gaugeMap');
+			expect(baseC.gaugeMapFactor).toBeCloseTo(ratio, 12);
+			const fit = base.summary.stations!.pairings.find((p) => p.stationId === 'S')!;
+			const { options } = resolveEnsembleOptions(x, { members: 30, rainSources: ['recorded', 'chirps'] });
+			const out = runModel(ensembleContext(x, options).chirps!);
+			expect(out.summary.stations!.catchment).toMatchObject({ ratio: r, days: { station: 0, chirps: DAYS } });
+			const memberC = out.summary.unitRain!.units.find((u) => u.nodeId === 'C')!;
+			expect(memberC).toMatchObject({ rule: 'gaugeMap', factor: baseC.factor, gaugeMapFactor: baseC.gaugeMapFactor });
+			const chirps = x.series.rain_chirps_mm!.values as number[];
+			const c = col(out, 'rain_unit', 'C');
+			for (let t = 0; t < DAYS; t++) expect(c[t], `${scaleToMap} day ${t}`).toBeCloseTo(chirps[t]! * pairingFactorOn(fit, D0 + t)! * ratio, 9);
+			// Positive control: on S's gaps the base run reads the same CHIRPS day, so the member reads what the base did.
+			const cBase = col(base, 'rain_unit', 'C');
+			for (const t of GAP) {
+				expect(cBase[t], `${scaleToMap} gap ${t}`).toBeGreaterThan(0);
+				expect(c[t], `${scaleToMap} gap ${t}`).toBeCloseTo(cBase[t]!, 12);
+			}
+		}
+	});
+
 	it('an outlook member keeps the stations and pins the base input’s pairing factors', () => {
 		const x = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' } }, catchment: { stationId: 'S' }, sites: SITES } });
 		const base = runModel(x);

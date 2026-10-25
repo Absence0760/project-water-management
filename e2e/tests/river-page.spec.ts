@@ -104,6 +104,15 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	await expect(stub).toContainText('Needs a Reserve rule table: set one in Settings → Reserve rule tables.');
 	await expect(stub.getByRole('link', { name: 'set one in Settings → Reserve rule tables' })).toHaveAttribute('href', '?tab=settings#set-reserve');
 	expect((await stub.boundingBox())!.height).toBeLessThan(80);
+	// The panels are the page's own sections, peers of the flow chart and the water-year bars (h2): as h3s they sat
+	// under "Days below the reserve, each water year" in a screen reader's outline. No level is skipped.
+	await expect(stub.getByRole('heading', { level: 2, name: 'Reserve rules met, by month' })).toBeVisible();
+	await expect(heat.getByRole('heading', { level: 2, name: /^Days below the EWR, by month/ })).toBeVisible();
+	await expect(page.locator('#res-ewr-grid').getByRole('heading', { level: 3, name: /^EWR required vs met, each water year/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Water account' }).getByRole('heading', { level: 2, name: /^Water account/ })).toBeVisible();
+	const levels = await page.getByTestId('river-body').locator('h2, h3, h4, h5, h6').evaluateAll((hs) => hs.filter((h) => h.checkVisibility()).map((h) => Number(h.tagName[1])));
+	expect(levels[0]).toBe(2);
+	for (let i = 1; i < levels.length; i++) expect(levels[i]! - levels[i - 1]!, `heading ${i}: ${levels.join(' ')}`).toBeLessThanOrEqual(1);
 	// Findings first: the two monthly panels, named apart, then the water account; the run-it-yourself tools after
 	// them, under their own heading, each one row (name, purpose, ⓘ, Run) until it has run.
 	expect(await page.locator('[id^="res-"]').evaluateAll((els) => els.map((e) => e.id))).toEqual([
@@ -313,6 +322,85 @@ test('the run picker: another run is a URL, Back returns, a reload keeps it', as
 	await expect(page).toHaveURL(/[?&]tab=river$/);
 	await expect(context).toContainText('Second');
 	await expect(page.getByLabel('Run', { exact: true })).not.toHaveValue(baseline);
+	await expect(page.getByRole('note').filter({ hasText: 'no longer exists' })).toHaveCount(0);
+
+	// A link to a run that's gone (deleted since the link was made): the newest instead, said so, as Hydrological units does.
+	await page.goto(`/projects/${id}?tab=river&run=00000000-0000-4000-8000-000000000000`);
+	await expect(page.getByRole('note').filter({ hasText: 'That run no longer exists, so this shows the newest run.' })).toBeVisible();
+	await expect(context).toContainText('Second');
+	await expect(riverTiles(page)).toHaveCount(2);
+	// Picking a run names it in the URL, and the note goes.
+	await page.getByLabel('Run', { exact: true }).selectOption(baseline);
+	await expect(context).toContainText('Baseline');
+	await expect(page.getByRole('note').filter({ hasText: 'no longer exists' })).toHaveCount(0);
+});
+
+test('another run: the page stays, marked busy, while its record loads, then swaps; a record that fails leaves nothing stale', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River switch');
+	const first = await createRun(page.request, id, 'First');
+	const second = await createRun(page.request, id, 'Second');
+	await createRun(page.request, id, 'Third');
+	const newest = await createRun(page.request, id, 'Newest');
+	await openRiver(page, id);
+	const body = page.getByTestId('river-body');
+	await expect(body).toHaveAttribute('data-run', newest);
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+
+	// Scrolled down to the water account, the reader picks the first run, whose record is slow to come.
+	const account = page.getByRole('region', { name: 'Water account' });
+	await account.scrollIntoViewIfNeeded();
+	await expect(account).toBeInViewport();
+	const scrolled = await page.evaluate(() => scrollY);
+	expect(scrolled).toBeGreaterThan(0);
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let holding!: () => void;
+	const isHeld = new Promise<void>((r) => (holding = r));
+	await page.route(`**/projects/${id}/runs/${first}`, async (route) => {
+		holding();
+		await held;
+		await route.continue();
+	});
+	await page.getByLabel('Run', { exact: true }).selectOption(first);
+	await isHeld;
+	// Until it is in, the newest run's panels stay where they were, marked busy: the page doesn't empty or get shorter.
+	await expect(body).toHaveAttribute('aria-busy', 'true');
+	await expect(body).toHaveAttribute('data-run', newest);
+	await expect(account).toBeInViewport();
+	await expect(riverTiles(page)).toHaveCount(2);
+	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+	// The tools are the newest run's, not the first's the header now names: inert until the swap, so none of their
+	// Run buttons can start a job on the wrong run (a click can't reach one, nor can focus).
+	const tools = page.locator('section[aria-labelledby="river-tools-h"]');
+	const ensemble = page.getByTestId('uncertainty-panel').locator('button', { hasText: 'Run…' });
+	const takesFocus = () => ensemble.evaluate((b: HTMLElement) => (b.focus({ preventScroll: true }), document.activeElement === b));
+	await expect(tools).toHaveAttribute('inert', '');
+	expect(await takesFocus()).toBe(false);
+	release();
+	await expect(body).toHaveAttribute('data-run', first);
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+	await expect(page.getByTestId('river-context')).toContainText('First');
+	// The first run: nothing before it, so no change line (the newest run's would be stale).
+	await expect(riverTile(page, 'ewr')).not.toContainText('vs previous run');
+	await expect(page.getByRole('region', { name: 'Days below the reserve, each water year' }).getByRole('img', { name: /^Days below the reserve per water year\. First:/ })).toBeVisible();
+	await expect(page.locator('#res-ewr figure.chart')).toHaveAttribute('data-ready', 'true');
+	// Swapped and drawn: the panels' remount (keyed on the run) didn't move the page, and the tools are the first run's, usable.
+	await expect(account).toBeInViewport();
+	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+	await expect(tools).not.toHaveAttribute('inert');
+	expect(await takesFocus()).toBe(true);
+
+	// A record that fails: the error, and nothing of the run before it.
+	await page.route(`**/projects/${id}/runs/${second}`, (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Something went wrong' }) }));
+	await page.getByLabel('Run', { exact: true }).selectOption(second);
+	await expect(page.getByRole('alert')).toBeVisible();
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+	await expect(body).not.toHaveAttribute('data-run');
+	await expect(riverTiles(page)).toHaveCount(0);
+	await expect(page.locator('#res-water-account')).toHaveCount(0);
+	await expect(page.locator('#res-ewr')).toHaveCount(0);
 });
 
 test('Runs & results links here for its run, and an old link to a moved panel lands on it here', async ({ page, owner }) => {
@@ -515,6 +603,97 @@ test('with a Reserve rule table the panels that count the pragmatic EWR name it,
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
 	await expect(menu.getByRole('link', { name: 'Flow vs pragmatic EWR' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' }).getByRole('img')).toBeVisible();
+});
+
+/** Two runs whose flow charts are labelled apart: the first (`outlet`) draws the outlet's rule requirement ("Flow vs
+ *  reserve"), the newest only the pragmatic EWR ("Flow vs pragmatic EWR"). Opens EWR on the newest, drawn. */
+async function seedFlowSwap(page: Page, name: string) {
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, name);
+	const table = (siteNodeId: string | null) => ({
+		siteNodeId,
+		source: 'Synthetic rule table',
+		component: 'total',
+		unit: 'mcm',
+		points: POINTS,
+		ewr: MONTHS.map((m) => POINTS.map(() => (m === 'Jan' ? 1000 : 0))),
+		naturalSource: 'run',
+		natural: null,
+		scale: 1
+	});
+	// The first run draws the outlet's rule requirement ("Flow vs reserve"); the newest, with the table moved to a gauge
+	// upstream, only the pragmatic EWR ("Flow vs pragmatic EWR"): the two runs' charts are labelled apart.
+	await updateSettings(page.request, id, { ewrRules: [table(null)] });
+	const outlet = await createRun(page.request, id, 'At the outlet');
+	const model = sampleModel();
+	const gauge = { ...model.nodes[0]!, id: crypto.randomUUID(), name: 'Upper gauge', downstreamNodeId: model.nodes[0]!.id, sortOrder: 4 };
+	model.nodes[1]!.downstreamNodeId = gauge.id;
+	model.nodes.push(gauge);
+	await putModel(page.request, id, model);
+	await updateSettings(page.request, id, { ewrRules: [table(gauge.id)] });
+	await createRun(page.request, id, 'At the gauge');
+	// Not openRiver: it waits on the chart named Flow vs reserve.
+	await page.goto(`/projects/${id}?tab=river`);
+	await expect(page.getByTestId('river-context')).toContainText('At the gauge');
+	const flow = page.locator('#res-ewr section.flow');
+	const fig = flow.locator('figure.chart');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs pragmatic EWR');
+	await expect(fig).toHaveAttribute('data-ready', 'true');
+	await expect(fig).not.toContainText('Reserve rule requirement');
+	return { id, outlet, flow, fig };
+}
+
+test('another run: the flow chart keeps the run before’s heading and caption with its lines until the next run’s are in', async ({ page, owner }) => {
+	void owner;
+	const { id, outlet, flow, fig } = await seedFlowSwap(page, 'River flow swap');
+
+	// The first run's series are slow to come: its record is in (the newest run's previous), so the page swaps, but the
+	// chart keeps the newest run's lines, and with them their heading and caption, never the first run's words on them.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let holding!: () => void;
+	const isHeld = new Promise<void>((r) => (holding = r));
+	await page.route(`**/projects/${id}/runs/${outlet}/series**`, async (route) => {
+		holding();
+		await held;
+		await route.continue();
+	});
+	await page.getByLabel('Run', { exact: true }).selectOption(outlet);
+	await isHeld;
+	await expect(page.getByTestId('river-body')).toHaveAttribute('data-run', outlet);
+	await expect(flow).toHaveAttribute('aria-busy', 'true');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs pragmatic EWR');
+	await expect(fig).not.toContainText('Reserve rule requirement');
+	release();
+	await expect(flow).toHaveAttribute('aria-busy', 'false');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs reserve');
+	await expect(fig).toContainText('The Reserve rule requirement line');
+});
+
+test('another run whose series fail: the error sits under that run’s heading, not the run before’s', async ({ page, owner }) => {
+	void owner;
+	const { id, outlet, flow, fig } = await seedFlowSwap(page, 'River flow swap fails');
+	// The first run's series are held (the chart keeps the newest run's lines and heading), then fail.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let holding!: () => void;
+	const isHeld = new Promise<void>((r) => (holding = r));
+	await page.route(`**/projects/${id}/runs/${outlet}/series**`, async (route) => {
+		holding();
+		await held;
+		await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Something went wrong' }) });
+	});
+	await page.getByLabel('Run', { exact: true }).selectOption(outlet);
+	await isHeld;
+	await expect(page.getByTestId('river-body')).toHaveAttribute('data-run', outlet);
+	await expect(flow).toHaveAttribute('aria-busy', 'true');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs pragmatic EWR');
+	release();
+	await expect(flow).toHaveAttribute('aria-busy', 'false');
+	// The error is the first run's, so it sits under the first run's heading, and no line of the newest run's is left.
+	await expect(flow.getByRole('alert')).toContainText('Something went wrong');
+	await expect(flow.getByRole('heading', { level: 2 })).toHaveText('Flow vs reserve');
+	await expect(fig).toHaveCount(0);
 });
 
 test('with a Reserve rule table the headline tile is Reserve rules met, with the pragmatic EWR’s days under it, and the strip is named for the test it counts (issue #558)', async ({ page, owner }) => {

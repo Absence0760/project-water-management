@@ -18,11 +18,17 @@
 // the pairing is refused.
 //
 // A complete year in common: a calendar year (1 January … 31 December, 365
-// or 366 days) on every day of which both the checked station record and the
-// CHIRPS at it have a reading. A day the checks or an unreliable period set
-// aside breaks its year. With fewer than STATION_PAIRING_MIN_YEARS of them
-// (not necessarily consecutive) the pairing is refused. The factors are still
-// fitted on every shared day, inside complete years or not.
+// or 366 days) on every day of which both the checked station record **as
+// the forcing reads it** and the CHIRPS at it have a reading. A multi-day
+// accumulation's days count as read: its total is the station's, spread over
+// them by §2.4d (provisional, engine 1.96.0, model.md §2.4i: WMO-TD/No. 341
+// and Lynch 2004 count a reliable accumulated total as a usable month). A
+// day the checks or an unreliable period set aside breaks its year: a
+// reading after a blank outage set aside, a blank day an accumulation run
+// as recorded leaves blank. With fewer than STATION_PAIRING_MIN_YEARS of
+// them (not necessarily consecutive) the pairing is refused. The factors are
+// still fitted on every shared day of the fit's record (accumulation windows
+// left out), inside complete years or not.
 //
 // The station's record is checked as the forcing checks it: the catchment
 // gauge's full checks when stations[id].isCatchmentGauge, else a station's.
@@ -64,12 +70,28 @@ const factorWarning = (what: string, own: number, used: number, how: string): st
 const daysInYear = (y: number) => toEpochDay(`${y + 1}-01-01`) - toEpochDay(`${y}-01-01`);
 const validPinned = (p: unknown): p is number[] => Array.isArray(p) && p.length === 12 && p.every((k) => typeof k === 'number' && Number.isFinite(k) && k > 0);
 
-/** The shared days of `a` and `b` by calendar month (count, Σa, Σb), their first and last, and the complete calendar years in common. */
+/** The calendar years on every day of which both `a` and `b` have a reading. */
+function completeYears(a: DailySeries, b: DailySeries): number {
+	const perYear = new Map<number, number>();
+	const a0 = toEpochDay(a.startDate);
+	const b0 = toEpochDay(b.startDate);
+	for (let i = 0; i < b.values.length; i++) {
+		if (!reading(b.values[i])) continue;
+		const j = b0 + i - a0;
+		if (j < 0 || j >= a.values.length || !reading(a.values[j])) continue;
+		const y = Number(fromEpochDay(b0 + i).slice(0, 4));
+		perYear.set(y, (perYear.get(y) ?? 0) + 1);
+	}
+	let years = 0;
+	for (const [y, d] of perYear) if (d === daysInYear(y)) years++;
+	return years;
+}
+
+/** The shared days of `a` and `b` by calendar month (count, Σa, Σb) and their first and last. */
 function common(a: DailySeries, b: DailySeries) {
 	const n = new Array<number>(12).fill(0);
 	const sa = new Array<number>(12).fill(0);
 	const sb = new Array<number>(12).fill(0);
-	const perYear = new Map<number, number>();
 	const a0 = toEpochDay(a.startDate);
 	const b0 = toEpochDay(b.startDate);
 	let first: number | null = null;
@@ -89,12 +111,8 @@ function common(a: DailySeries, b: DailySeries) {
 		sb[m]! += bv;
 		first ??= day;
 		last = day;
-		const y = Number(fromEpochDay(day).slice(0, 4));
-		perYear.set(y, (perYear.get(y) ?? 0) + 1);
 	}
-	let years = 0;
-	for (const [y, d] of perYear) if (d === daysInYear(y)) years++;
-	return { n, sa, sb, first, last, years };
+	return { n, sa, sb, first, last };
 }
 
 /**
@@ -115,8 +133,10 @@ export function fitStationPairing(
 	const src = stationChirpsSource(settings, series, stationId);
 	const chirpsAt: StationPairingFit['chirpsAt'] = src.at === 'unit' ? { unitId: src.unitId, unitName: nodes.find((x) => x.id === src.unitId)?.name ?? src.unitId } : { cell: true };
 	const chirps = src.at === 'none' ? null : src.series;
-	const rec = checkedStationRecord(settings, series, stationId, { fitExcludeAccumulations: true, name: stationName, isCatchmentGauge: stations[stationId]?.isCatchmentGauge === true })?.record ?? null;
-	const c = rec && chirps ? common(rec, chirps) : null;
+	const checked = checkedStationRecord(settings, series, stationId, { fitExcludeAccumulations: true, name: stationName, isCatchmentGauge: stations[stationId]?.isCatchmentGauge === true });
+	const rec = checked?.record ?? null;
+	// The factors read the fit's record (accumulation windows left out); the complete years, the forcing's.
+	const c = rec && chirps ? { ...common(rec, chirps), years: completeYears(checked!.forcing ?? rec, chirps) } : null;
 
 	const pinnedRaw = settings.rainStations?.pinnedFactors?.[stationId];
 	const pinned = validPinned(pinnedRaw) ? pinnedRaw : null;

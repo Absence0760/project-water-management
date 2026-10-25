@@ -49,6 +49,8 @@
 	let busy = $state<string | null>(null);
 	let rowError = $state<{ key: string; text: string } | null>(null);
 	let notice = $state<string | null>(null);
+	/** The notice reports a failed Use for a unit the box has left (ProposalPanel's noticeFailed). */
+	let noticeFailed = $state(false);
 	let choiceKey = $state('');
 	let allCrops = $state(false);
 	let seq = 0;
@@ -79,6 +81,7 @@
 		shownId = id;
 		untrack(() => {
 			notice = null;
+			noticeFailed = false;
 			rowError = null;
 			choiceKey = '';
 			void load(id);
@@ -109,10 +112,21 @@
 				...(c.featureId ? { featureId: c.featureId } : {})
 			});
 			notice = `${r.name}’s planted area on ${d.nodeName} is now ${fmtHa(res.areaM2)}, from land cover.`;
-			await Promise.all([load(d.nodeId), onModelChanged()]);
-			await frame?.focusNotice();
+			noticeFailed = false;
+			// Reload the unit the drawer shows now, not d's: Back or a farm= link may have moved it on while the save was out,
+			// and loading d's would put its parcels under another unit's name.
+			await Promise.all([load(nodeId), onModelChanged()]);
+			// The keyboard goes to the notice only if the drawer still shows d's unit: if the user moved on, it stays where
+			// they put it, and the notice (a live region naming its unit) still reports the save.
+			if (d.nodeId === nodeId) await frame?.focusNotice();
 		} catch (e) {
-			rowError = { key: r.cropId, text: msg(e) };
+			// The failure goes on its row only while the box still shows d's unit: keys repeat across units, so on another
+			// unit it would mark that unit's row. Otherwise the notice reports it, naming the unit.
+			if (d.nodeId === nodeId) rowError = { key: r.cropId, text: msg(e) };
+			else {
+				notice = `Couldn’t save ${r.name}’s planted area on ${d.nodeName}: ${msg(e)}`;
+				noticeFailed = true;
+			}
 		} finally {
 			busy = null;
 		}
@@ -122,12 +136,14 @@
 <ProposalPanel
 	bind:this={frame}
 	testid="cropland-proposals"
+	saving={busy !== null}
 	prefix="cropland"
 	variant="drawer"
 	title="From land cover"
 	helpKey="cultivated-area"
 	what="land-cover summary"
 	{notice}
+	{noticeFailed}
 	{loading}
 	loaded={data !== null}
 	{error}

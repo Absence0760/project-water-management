@@ -139,13 +139,13 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	const allocations = await allocationsForRun(db, projectId);
 	// The reference gauge's CHIRPS cell (engine ≥ 1.80.0, issue #500, runs/referenceCell.ts): read from the cell cache, not a
 	// stored series, so it has no series id; only when settings.unitRain names a reference, so other inputs are as before.
-	const cell = await referenceCellInput(db, projectId, (settings as { unitRain?: UnitRainSettings | null }).unitRain);
+	const cell = await referenceCellInput(db, projectId, (settings as { unitRain?: UnitRainSettings | null }).unitRain, series);
 	if (cell) (series as Record<string, DailySeries>)[cell.key] = cell.series;
 	// The rainfall stations (engine ≥ 1.91.0, issue #553, runs/stationInput.ts): each station's record, the CHIRPS at its
 	// own cell where the cache holds it, and its details; only when settings.rainStations assigns one, so other inputs are
 	// as before. A station's record names its series (241_station_input_series), so a manual run counts as a person
 	// accepting it (series/hold.ts) and its download shows the run; the cell's CHIRPS is no series and names none.
-	const stationed = await stationInputs(db, projectId, settings.rainStations, read?.id ?? null);
+	const stationed = await stationInputs(db, projectId, settings.rainStations, read?.id ?? null, series);
 	if (stationed) {
 		Object.assign(series, stationed.series);
 		for (const id of Object.keys(stationed.stations)) (seriesIds as Record<string, string>)[stationSeriesKey(id)] = id;

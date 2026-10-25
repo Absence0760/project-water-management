@@ -62,6 +62,20 @@ export const IRRIGATION_LABEL = 'Irrigation supplied';
 /** The irrigation traffic light's rule (backend portfolio/status.ts IRRIGATION_THRESHOLDS; provisional, no team setting yet). */
 export const IRRIGATION_RULE = 'green from 95 % of demand supplied over the run, amber from 80 %, red below';
 
+/**
+ * Why a run's use share and dam levels aren't shown (PortfolioProject.figuresWithheld, #523 I): the run caps use at, or
+ * scales demand to, the registered water volumes, which the project shows to its editors and owners only. The one
+ * wording: `withheldText` says it, and `irrigationText`'s long form after "Withheld: ".
+ */
+const WITHHELD_WHY = 'Run uses registered water volumes; figures for editors and owners only';
+
+/**
+ * Why a row's figures are withheld, short enough for the line under its pill
+ * (the project list) or its Lowest dam (the team page), so each row says it
+ * once; null when nothing is withheld.
+ */
+export const withheldText = (p: Pick<PortfolioProject, 'figuresWithheld'>): string | null => (p.figuresWithheld ? WITHHELD_WHY : null);
+
 /** "3 of 5 units below 95%", or null when none is (or the figure is unknown). */
 export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): string | null {
 	const r = p.irrigation;
@@ -77,6 +91,7 @@ export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): st
 export function irrigationText(p: Pick<PortfolioProject, 'irrigation'>, short = false): string {
 	const r = p.irrigation;
 	if (r.status === 'unknown' || r.fractionSupplied == null) {
+		if (r.reason === 'withheld') return short ? 'Withheld' : `Withheld: ${WITHHELD_WHY.charAt(0).toLowerCase()}${WITHHELD_WHY.slice(1)}`;
 		const why = r.reason === 'no-units' ? 'no hydrological units in the run' : r.reason === 'no-demand' ? 'no irrigation demand in the run' : 'no run yet';
 		return `Unknown: ${why}`;
 	}
@@ -128,9 +143,10 @@ export function farmsUnknownText(p: Pick<PortfolioProject, 'source'>): string {
 	return p.source === 'published' ? 'Unknown: publish again to count them' : 'Unknown until a run is published';
 }
 
-/** "Kareebos 18 %", "No farm dams", or why it is unknown. */
-export function damText(p: Pick<PortfolioProject, 'lowestDamPct' | 'damsKnown'>): string {
+/** "Kareebos 18 %", "No dams", "Withheld" (`withheldText` says why), or why it is unknown. */
+export function damText(p: Pick<PortfolioProject, 'lowestDamPct' | 'damsKnown' | 'figuresWithheld'>): string {
 	if (!p.damsKnown) return 'Unknown until a run is published';
+	if (p.figuresWithheld) return 'Withheld';
 	if (!p.lowestDamPct) return 'No dams';
 	return `${p.lowestDamPct.nodeName} ${fmtNum(p.lowestDamPct.pct * 100)} %`;
 }

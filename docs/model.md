@@ -2522,8 +2522,9 @@ placed, [followups.md](./followups.md)). The input's series
 `rain_chirps_cell_mm@<unitId>` (`referenceCellSeriesKey`) is CHIRPS at that
 **single** cell, not an area average. It isn't a stored series: the backend
 reads it from the CHIRPS cell cache when it builds a run's input (the
-centre of the unit's parcel, the product of the unit's own CHIRPS feed,
-`rnl` without one), and the run's input snapshot stores it like any other
+centre of the unit's parcel, in the CHIRPS v3 product of the unit's own
+CHIRPS series the run reads, `rnl` when it has none or one that isn't v3;
+never a feed's product on its own, issue #561), and the run's input snapshot stores it like any other
 series (`runs/referenceCell.ts`). The cache holds a cell once some feed has
 fetched it, which the reference unit's own feed does when the centre lies
 inside its parcel (the usual case).
@@ -2761,7 +2762,17 @@ runs' rain factor (§2.10g) therefore scales every rain record and, under
 per-unit rain, every unit's MAP and the gauge MAP by the same factor, so
 every unit's rain moves by it and the MAP ratios stay put. The uncertainty
 ensemble's CHIRPS-only member (§2.10e) drops the unit gauges as it drops the
-catchment gauge. A seasonal outlook's member (§2.15) runs each land unit's
+catchment gauge. From engine 1.95.0 each unit keeps the base run's rule and
+factors, pinned (`unitRain.pinned`) as a seasonal outlook's member pins them:
+its gauge MAP ratio still takes the member's catchment CHIRPS (at the gauge's
+level, §2.4b) to the unit's MAP, and its own gauge's days fall to the next
+link of its rule. The member's catchment CHIRPS carries the base run's §2.4b
+factors with the correction then off, so a unit the base run levels by those
+factors (level `bias`) carries them the same way: the member's copy of the
+unit's CHIRPS is × the base run's factor of the day. Before 1.95.0 the
+member re-derived each unit's rule without the gauges, so a rule-2 unit lost
+its MAP ratio and a `bias` unit read its CHIRPS raw (engine-errata.md ER-30).
+A seasonal outlook's member (§2.15) runs each land unit's
 season on that unit's own forcing: the base run's `rain_unit` on the
 analogue's days goes in as the unit's own forecast,
 `rain_forecast_mm@<unit>` (`unitForecastSeriesKey`, engine-only: the API
@@ -2941,9 +2952,34 @@ factors are clamped to 0.25–4 and banded at 0.5–2. **Refused** (no factors,
 a reason in `refused`, a warning) when the station has no record, there is
 no CHIRPS at it, or the two have fewer than `STATION_PAIRING_MIN_YEARS` = 5
 complete calendar years in common (a year every day of which both have a
-reading; not necessarily consecutive). A refused pairing corrects nothing:
+reading in the checked record **as the forcing reads it**; not necessarily
+consecutive). A refused pairing corrects nothing:
 its areas' gap days take the next fallback. Each pairing is fitted once per
 run, however many areas use it, and its factors are what a snapshot pins.
+
+**Accumulations and complete years** (provisional, engine 1.96.0, pending
+the client's hydrologist; [engine-audit.md RS6](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
+A §2.4d multi-day accumulation's days count as read for the complete years:
+its total is a reading of the station's, which the forcing spreads over the
+window's days by CHIRPS, so the station supplies every one of them. Only the
+factors leave the window out, day by day, because how the total splits
+between its days is CHIRPS's, not the station's. Up to engine 1.95.0 the
+count ran on the fit's record, so a station with one accumulation in every
+year (a gauge not read at weekends, say) had no complete year and was
+refused. Practice counts a known accumulated total as data: WMO's normals
+guidance accepts accumulated amounts within a month in place of daily totals
+and treats a month as missing only when a day *and* its accumulated total
+are missing (WMO 1989, *Calculation of Monthly and Annual 30-Year Standard Normals*, WMO-TD/No. 341, *Precipitation Total*), and the South
+African daily rainfall database marks a month holding an accumulation whose
+total is reliable as usable ("$") while a missing day makes the month, and
+so the year, incomplete (Lynch 2004, *Development of a Raster Database of Annual, Monthly and Daily Rainfall for Southern Africa*, WRC Report 1156/1/04, §6.3 and Tables 22–23). Days with no
+known total still break a year: the blank outage before a reading §2.4d sets
+aside (and that reading), a listed window with no reading (only the catchment gauge has listed windows), and a window's
+blank days under "Run as recorded (one day)", which the station doesn't
+supply. WMO limits each accumulation to 3 days, where a §2.4d window holds
+up to 7 blank days and its reading; the database's flag sets no limit, and
+the 7-day cap (longer is an outage) bounds it here. The factors are
+unchanged by this, so only whether a pairing is refused moves.
 
 **Which station is missing.** An assignment naming a station with no
 record in the input warns, and the area runs as without it: the catchment
@@ -3218,8 +3254,10 @@ decision 2026-10-23):
   `waterYears` 0 for the whole run); each `FarmSummary.ewrShare` is the
   share applied, beside its `flowShare`. A split other than the default is a
   run warning (its note), the summary CSV's `EWR share (%)` column sits
-  beside `Flow share (%)` (an older run's is its flow share), the report's
-  Inputs table names it, a scenario can set it (`settings.set`
+  beside `Flow share (%)` (an older run's is its flow share) under an
+  `EWR split between units by` line naming the split applied and its period
+  or why it fell back, the report's Inputs table names the split the run
+  applied (`ewrSplit.applied`; a run before it, from its settings), a scenario can set it (`settings.set`
   `ewrSplit`, [scenarios.md](./scenarios.md)) and the run comparison lists
   a change ([run-comparison.md](./run-comparison.md)).
 - **Checks** (`checkEwrSplit`, in the invariant tests): every unit's `Y` is
@@ -8920,7 +8958,9 @@ it never changes a run's results.
     **CHIRPS alone**, every day bias-corrected by the run's own monthly
     factors, and with the CHIRPS quantile map on (engine ≥ 1.53.0, §2.4b)
     mapped as the run maps its gap days (the station series dropped,
-    correction and map then off, the run window pinned). The spread between them is the rain-data uncertainty
+    correction and map then off, the run window pinned; under per-unit rain
+    each land unit keeps the base run's rule, MAP ratio and CHIRPS level,
+    pinned, as §2.4h says, engine ≥ 1.95.0, ER-30). The spread between them is the rain-data uncertainty
     the record can't settle.
   - **Observed record**, when both a gauge and a logger record have at least
     30 scored days: half the members are judged against each. A record that

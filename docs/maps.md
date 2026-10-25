@@ -1053,8 +1053,10 @@ unit, averaged over the unit's own polygon, so that under
   centre of the reference unit's parcel (`centerOf`, the area centroid; the
   parcel chosen as above), as `rain_chirps_cell_mm@<unit>`. It needs no feed
   of its own: `runs/referenceCell.ts` reads it from the shared CHIRPS cell
-  cache, in the product the unit's own feed reads (`rnl` without one), as a
-  one-cell feed would write it. The unit's feed caches that cell whenever
+  cache, in the CHIRPS v3 product of the unit's own CHIRPS series the run
+  reads (the first by name at the unit; `rnl` when it has none, or one that
+  isn't v3), never a feed's product on its own (issue #561), as a one-cell
+  feed would write it. The unit's feed caches that cell whenever
   the centre lies inside the parcel; a cell nobody has fetched (a concave
   parcel whose centroid falls outside it) gives no series, and the run warns
   that every month's factor is 1. The operator's decision (issue #500 item

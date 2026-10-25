@@ -6,11 +6,12 @@
 // statuses were judged by and whose it is; sortable both ways; old
 // `/teams/:id/portfolio` links land on it; a farmer never gets in. Layout at
 // 1440 and 1280 with thirty catchments, axe in both themes at desktop and
-// phone width.
+// phone width. A viewer kept from the registered volumes reads a cap run's
+// row as withheld, and why, once.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { acceptInvites, createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
-import { plantFiringAlert } from '../support/db.ts';
+import { plantAllocationMode, plantFiringAlert } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { DEMO, DROEVLEI, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -23,6 +24,7 @@ interface Row {
 	name: string;
 	ewr: { status: 'green' | 'amber' | 'red' | 'unknown'; daysNotMet30: number | null; days30: number | null };
 	irrigation: IrrigationFigure;
+	sourceRunId: string | null;
 }
 
 /**
@@ -171,6 +173,60 @@ test('the team filter states the irrigation rule and which EWR thresholds apply;
 	await expect(note).toContainText(`green when it was not met on under ${String(t.green)} % of them, amber under ${String(t.amber)} %, red otherwise`);
 	await expect(note).toContainText('These are the team’s own thresholds.');
 	await expect(listed).toContainText(irrigationPill(pub.irrigation)!);
+});
+
+// #523 I: a published run that caps use at the registered volumes, read by a team viewer kept from them
+// (allocations_viewer_units off, the default). Its use share and lowest farm dam rest on those volumes:
+// the pill and the dam say Withheld, short and muted, and the line under the pill says why, once.
+test('a viewer kept from the registered volumes reads a cap run’s row as withheld, and why, once; it fits its columns and passes axe', async ({ page, owner, signIn }) => {
+	void owner;
+	const a = await arrange(page.request, 'W');
+	const runId = a.rows.find((r) => r.id === a.published.id)!.sourceRunId!;
+	await plantAllocationMode(runId, 'cap');
+	const viewer = await signIn('Withheld viewer');
+	expect((await page.request.post(`${API_URL}/teams/${a.team.id}/members`, { data: { email: viewer.user.email, role: 'viewer' } })).status()).toBe(201);
+	await acceptInvites(viewer.user.email, a.team.id);
+	const why = 'Run uses registered water volumes; figures for editors and owners only';
+
+	// Positive control: the owner reads the run's figures.
+	await page.goto(`/?owner=team:${a.team.id}`);
+	await outcomesReady(page);
+	await expect(row(page, 'Pf published W').locator('td.c-status .st')).toHaveText(/^(Green|Amber|Red): \d+\.\d% supplied$/);
+	await expect(row(page, 'Pf published W')).not.toContainText('Withheld');
+
+	const v = viewer.page;
+	await v.setViewportSize({ width: 1440, height: 900 });
+	await v.goto(`/?owner=team:${a.team.id}`);
+	await outcomesReady(v);
+	const wr = row(v, 'Pf published W');
+	await expect(wr.locator('td.c-status .st')).toHaveText('Withheld');
+	await expect(wr.locator('td.c-status .withheld')).toHaveText(why);
+	// The reason is said once per row, under the pill; the dam is the short word, muted.
+	await expect(wr.locator('td.c-dam')).not.toContainText(why);
+	await expect(wr.locator('td.c-dam .muted').first()).toHaveText('Withheld');
+	await expect(wr.locator('td.c-dam')).toContainText('Restriction: Advisory · 15 %');
+	// Both cells fit their columns.
+	for (const cell of [wr.locator('td.c-status'), wr.locator('td.c-dam')]) {
+		expect(await cell.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+	}
+	await expectNoViolations(v);
+
+	// On a phone the figures fold under the name: "Lowest dam: Withheld", the reason under the pill, no page scroll.
+	await v.setViewportSize(PHONE);
+	await expect(wr.locator('.meta-narrow').first()).toBeVisible();
+	await expect(wr.locator('.meta-narrow').first()).toContainText(why);
+	await expect(wr.locator('.meta-mid .line')).toHaveText('Lowest dam: Withheld · Restriction: Advisory · 15 %');
+	expect(await v.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+	await expectNoViolations(v);
+
+	// The team page: its EWR pill isn't withheld, so the reason sits under Lowest dam, muted.
+	await v.setViewportSize({ width: 1440, height: 900 });
+	await v.goto(`/teams/${a.team.id}`);
+	const item = v.getByRole('listitem').filter({ has: v.getByRole('link', { name: 'Pf published W', exact: true }) });
+	const dam = item.locator('dd').filter({ hasText: why });
+	await expect(dam).toHaveText(`Withheld ${why}`);
+	await expect(dam).toHaveClass(/muted/);
+	await expectNoViolations(v);
 });
 
 // The link lands on the table, not the top of Hydrological units (docs/followups.md;

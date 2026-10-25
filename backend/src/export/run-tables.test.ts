@@ -114,6 +114,14 @@ describe('summary sheet', () => {
 		expect(mar.lines).toContain('EWR split between units by,each unit’s natural MAR,2000-10-01 – 2005-09-30 (5 complete water years)');
 		const frag = rowOf({ ...summary, farms: [{ ...farm, flowShare: 0.25, ewrShare: 0.25 }], ewrSplit: { method: 'naturalMar', applied: 'flowShare', why: 'catchmentRain' } });
 		expect(frag.lines).toContain('EWR split between units by,the flow share,the flow share: GR4J ran once on the catchment rain');
+		const none = rowOf({ ...summary, ewrSplit: { method: 'naturalMar', applied: 'flowShare', why: 'noRunoff' } });
+		expect(none.lines).toContain('EWR split between units by,the flow share,the flow share: no unit made natural runoff');
+		// A resumed run whose capture run split by the flow share keeps it: not "no unit made natural runoff".
+		const resumed = rowOf({ ...summary, ewrSplit: { method: 'naturalMar', applied: 'flowShare', why: 'resumed' } });
+		expect(resumed.lines).toContain('EWR split between units by,the flow share,the flow share: resumed from a snapshot of a run that split the EWR by the flow share');
+		// A resumed run's natural MAR shares are the capture run's; one complete water year is singular.
+		const pinned = rowOf({ ...summary, ewrSplit: { method: 'naturalMar', applied: 'naturalMar', period: { start: '2000-10-01', end: '2001-09-30', waterYears: 1 }, pinned: true } });
+		expect(pinned.lines).toContain('EWR split between units by,each unit’s natural MAR,2000-10-01 – 2001-09-30 (1 complete water year; the capture run’s shares)');
 		// The default writes no line.
 		expect(rowOf({ ...summary, ewrSplit: { method: 'flowShare', applied: 'flowShare' } }).lines.some((l) => l.startsWith('EWR split'))).toBe(false);
 	});
@@ -161,7 +169,7 @@ describe('summary sheet', () => {
 			'Lower unit,Short station,860,invented isohyet,745,station record,yes,5,4,yes,none (the next fallback),2000,0,80,0,0,0'
 		]);
 		expect(lines[at + 6]).toMatch(/^Station CHIRPS pairings/);
-		expect(lines[at + 7]).toBe('Station,CHIRPS at,Refused,Fit from,Fit to,Common years,Shared days,Pinned,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec');
+		expect(lines[at + 7]).toBe('Station,CHIRPS at,Refused,Fit from,Fit to,Complete years (accumulations counted),Shared days,Pinned,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec');
 		expect(lines[at + 8]).toBe("Hill station,the station's own CHIRPS cell,,1995-01-01,2020-12-31,26,9400,no,1,1.01,1.02,1.03,1.04,1.05,1.06,1.07,1.08,1.09,1.1,1.11");
 		expect(lines[at + 9]).toBe('Short station,the CHIRPS of Lower unit,only 3 complete years in common (5 needed),,,3,1000,no,,,,,,,,,,,,');
 		expect(lines[at + 10]).toBe('');

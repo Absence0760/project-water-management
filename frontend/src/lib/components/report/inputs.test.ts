@@ -93,6 +93,20 @@ describe('settingsRows', () => {
 			'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review'
 		);
 		expect(at({ ewrSplit: 'naturalMar' })).toBe('the flow share: natural MAR was asked for, but GR4J ran once on the catchment rain, so each unit’s natural MAR share is its flow share');
+		// What the run applied (summary.ewrSplit) wins over what the settings suggest: per-unit rain can still fall back.
+		const ran = (ewrSplit: unknown) =>
+			Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', ewrSplit: 'naturalMar', unitRain: { mode: 'perUnit' } } as never), { ...run, summary: { ewrSplit } as never }))[key];
+		expect(ran({ method: 'naturalMar', applied: 'flowShare', why: 'noRunoff' })).toBe('the flow share: natural MAR was asked for, but no unit made natural runoff over the run');
+		expect(ran({ method: 'naturalMar', applied: 'flowShare', why: 'resumed' })).toBe(
+			'the flow share: natural MAR was asked for, but the run resumed from a snapshot of a run that split the EWR by the flow share'
+		);
+		expect(ran({ method: 'naturalMar', applied: 'naturalMar', period: { start: '2000-10-01', end: '2010-09-30', waterYears: 10 } })).toBe(
+			'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review'
+		);
+		// A run before engine 1.94.0 has no summary.ewrSplit: read from the settings as before.
+		expect(ran(undefined)).toBe(
+			'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review'
+		);
 	});
 
 	it('names the runoff model and lists GR4J parameters only for a GR4J run', () => {
@@ -303,7 +317,7 @@ describe('stationRows and stationPairingRows (issue #553)', () => {
 	it('lists each pairing’s CHIRPS, fit period, days and factors, or why it was refused', () => {
 		const rows = stationPairingRows({ stations });
 		expect(rows.every((r) => r.length === PAIRING_HEAD.length)).toBe(true);
-		expect(rows[0]!.slice(0, 4)).toEqual(['Hill station', 'its own CHIRPS cell', '1995-01-01 to 2020-12-31 (26 complete years)', fmtNum(9_400)]);
+		expect(rows[0]!.slice(0, 4)).toEqual(['Hill station', 'its own CHIRPS cell', '1995-01-01 to 2020-12-31; 26 complete years (accumulations counted)', fmtNum(9_400)]);
 		expect(rows[0]![4]).toMatch(/^Jan 1\.1, Feb 1\.1, .*Dec 1\.1$/);
 		expect(rows[1]).toEqual(['Short station', 'the CHIRPS of Lower farm', '–', fmtNum(1_000), 'refused: only 3 complete years in common (5 needed)']);
 	});

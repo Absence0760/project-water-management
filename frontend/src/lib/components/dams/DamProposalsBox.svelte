@@ -79,6 +79,8 @@
 	let busy = $state<string | null>(null);
 	let rowError = $state<{ key: string; text: string } | null>(null);
 	let notice = $state<string | null>(null);
+	/** The notice reports a failed Use for a unit the box has left (ProposalPanel's noticeFailed). */
+	let noticeFailed = $state(false);
 	let seq = 0;
 	let frame = $state<ProposalPanel | null>(null);
 
@@ -102,6 +104,7 @@
 		const id = unitId;
 		untrack(() => {
 			notice = null;
+			noticeFailed = false;
 			rowError = null;
 			if (id) void load(id);
 		});
@@ -128,10 +131,21 @@
 		try {
 			const res = await api.damProposals.areaFromMap(projectId, d.nodeId, r.featureId);
 			notice = `${d.nodeName}’s full-supply area is now ${fmtDamArea(res.damAreaFullM2)}, from the map.`;
-			await Promise.all([load(d.nodeId), onModelChanged()]);
-			await frame?.focusNotice();
+			noticeFailed = false;
+			// Reload the unit Dam of names now, not d's: Dam of (or the page's pick) may have moved on while the save was out,
+			// and loading d's would put its rows under another unit's name.
+			await Promise.all([load(unitId), onModelChanged()]);
+			// The keyboard goes to the notice only if Dam of still names d's unit: if the user moved on, it stays where
+			// they put it, and the notice (a live region naming its unit) still reports the save.
+			if (d.nodeId === unitId) await frame?.focusNotice();
 		} catch (e) {
-			rowError = { key: r.key, text: msg(e) };
+			// The failure goes on its row only while the box still shows d's unit: keys repeat across units, so on another
+			// unit it would mark that unit's row. Otherwise the notice reports it, naming the unit.
+			if (d.nodeId === unitId) rowError = { key: r.key, text: msg(e) };
+			else {
+				notice = `Couldn’t save ${d.nodeName}’s full-supply area: ${msg(e)}`;
+				noticeFailed = true;
+			}
 		} finally {
 			busy = null;
 		}
@@ -144,12 +158,14 @@
 	{id}
 	{fold}
 	testid="dam-proposals"
+	saving={busy !== null}
 	prefix="dam-proposals"
 	{variant}
 	title="Proposed from the register and the map"
 	helpKey="dam-proposals"
 	what="proposals"
 	{notice}
+	{noticeFailed}
 	{loading}
 	loaded={data !== null}
 	{error}

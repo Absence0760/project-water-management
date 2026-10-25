@@ -49,7 +49,8 @@
 		sortPortfolio,
 		sourceText,
 		statusSummary,
-		thresholdsRule
+		thresholdsRule,
+		withheldText
 	} from '#lib/components/portfolio/portfolio.js';
 	import TeamSettings from '#lib/components/teams/TeamSettings.svelte';
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
@@ -310,7 +311,10 @@
 			</div>
 			<div>
 				<dt>Lowest dam</dt>
-				<dd class:muted={!p.damsKnown || !p.lowestDamPct}>{damText(p)}</dd>
+				<!-- The EWR pill isn't withheld, so the reason goes here, under the one figure that is (#523 I). -->
+				<dd class:muted={!p.damsKnown || !p.lowestDamPct || p.figuresWithheld}>
+					{damText(p)}{#if withheldText(p)}{' '}<span class="sub">{withheldText(p)}</span>{/if}
+				</dd>
 			</div>
 			<div>
 				<dt>Alerts</dt>

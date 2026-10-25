@@ -1902,7 +1902,14 @@ for every workspace tab. Its own chunk.
   from the map. Run the model to see its effect.", its
   "Run the model" a link to Runs & results, where Run model is; the notice
   takes the keyboard, since the Use button is gone) and reloads the saved
-  model and the proposals. The frame is shared with land cover and
+  model and the proposals. If Dam of moved to another unit while the save
+  was out, the box reloads the unit Dam of now names, and the notice still
+  says what was saved (it names its unit, and a screen reader announces
+  it) but leaves the keyboard where the user put it. A save that fails
+  after Dam of moved on is reported there too, as an error naming its unit
+  ("Couldn’t save Upper farm’s full-supply area: …"), not on the row of the
+  unit now shown, whose map row has the same key; a save that fails on the
+  unit still shown says so under its Use. The frame is shared with land cover and
   evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
   has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
   editor can use a value."). Other states: no dam on the map linked to the
@@ -2218,10 +2225,14 @@ status pill in words and colour, "Amber: 88.0% supplied", `irrigationText`,
 then on a line under it the units below 95 % of their demand over the run
 ("3 of 14 units below 95% over the run", `irrigationUnitsText`: the whole
 run, not the week the next column counts), and *Published* or *Latest run* with the figures'
-age, "to 31 Dec 2024 (20 months ago)"), **Hydrological units short** ("2 of 8 units
+age, "to 31 Dec 2024 (20 months ago)"; a pill that is *Withheld* says why on
+the line under it, "Run uses registered water volumes; figures for editors
+and owners only", `withheldText`, below), **Hydrological units short** ("2 of 8 units
 short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
 *Not published* until a run is published; under it the count over 30 days,
-"1 in the last 30 days"), **Lowest dam** (with the published restriction
+"1 in the last 30 days"), **Lowest dam** ("Kareebos 18 %"; muted *No dams*, or
+muted *Withheld* when `figuresWithheld`, the reason said once under the
+pill (`portfolio.spec.ts` pins the withheld row); with the published restriction
 under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
 without a publication, where the dam already says *Not published*), **Data**
 (the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
@@ -2237,7 +2248,13 @@ supplied over the whole run the figures come from (the published run, else
 the newest), the workspace Summary's *Irrigation supplied* card, with the
 units below 95 % of theirs; green from 95 %, amber from 80 %, red below
 (backend `portfolio/status.ts` `IRRIGATION_THRESHOLDS`, provisional, no team
-setting yet), unknown without a run, without units or without demand. Until
+setting yet), unknown without a run, without units or without demand
+("Unknown: no run yet"…), and *Withheld* (not "Unknown") to a viewer kept
+from the registered volumes when the run the figures come from caps use at,
+or scales demand to, them (`figuresWithheld`, issue #523 I, [security.md §
+Allocations](./security.md#allocations-popia-minimisation-038_allocationssql); [api.md § Portfolio](./api.md#portfolio)): the
+use share and the lowest farm dam rest on those volumes, so neither is
+shown, and the pill's sub line says why. Until
 then the column was **EWR, last 30 days** (the outlet over the 30 days to the
 figures' last day); that EWR status lives on the teams list and the team
 page, the workspace's [EWR](#ewr) page lights each month with the same
@@ -2550,8 +2567,10 @@ created 26 Sep 2026") and the actions: **Project list**, **Team settings**,
 and admins; opens the New project dialog with the team preselected). The
 main column is **Projects**: two tiles (EWR bar, alerts firing), then each project worst first with its source
 ("Published run"…), EWR pill, figures age and *Stale* flag, farms short
-(linking to the run's curtailment, as on the project list), lowest dam and
-alerts; a footnote states the traffic-light rule with a link to the
+(linking to the run's curtailment, as on the project list), lowest dam (muted
+*Withheld* to a viewer kept from the registered volumes, with the reason
+under it, since the EWR pill isn't withheld; `figuresWithheld`, as on the
+project list) and alerts; a footnote states the traffic-light rule with a link to the
 settings. **Members** is the side column (below on a narrow page): each
 member is a row of two lines (issue #520), the name with the email under it
 beside the role, then the row's **Reset two-step** and **Remove** on a line of
@@ -4758,7 +4777,14 @@ saves the catchment's model, and override mode there edits the scenario's
   server, shows a notice ("Orchard’s planted area on Upper farm is now
   51.73 ha, from land cover. Run the model to see its effect.", which takes
   the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the
-  saved model and the summary. Use is disabled while the model has
+  saved model and the summary. If Back or a `farm=` link moved the drawer
+  to another unit while the save was out, the box reloads the unit it now
+  shows, and the notice still says what was saved (it names its unit, and
+  a screen reader announces it) but leaves the keyboard where the user put
+  it. A save that fails after the drawer moved on is reported there too, as
+  an error naming its unit ("Couldn’t save Orchard’s planted area on Upper
+  farm: …"), not on the shown unit's row of the same crop; one that fails on
+  the unit still shown says so under its Use. Use is disabled while the model has
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
@@ -5890,10 +5916,13 @@ section header, which it fills (`fillHeader`) like the other sections.
   EWR at the outflow gauge**, when some month of it is above 0; and **The
   Reserve rule table at …** for each site with a table (the outlet first, a
   table keyed by the outlet node counting as the outlet, then gauges in
-  network order). It decides which test the Summary's headline card, the run
-  sentence (Runs & results, the printable report), the EWR page's tiles
-  and line, and the "days below" wording report (`runs/ewrAssurance.ts`
-  `resolveHeadline`). It changes no result, so it needs no re-run and saving
+  network order). It decides which test the EWR page's headline tile and
+  judged-by line (the Summary's headline card until issue #558), the run
+  sentence (Runs & results, the printable report) and the "days below"
+  wording report (`runs/ewrAssurance.ts` `resolveHeadline`); the line under
+  the select says so ("Which EWR the headline on the EWR page, the run
+  sentence and the printable report are judged by"; it named the Summary's
+  headline until the ad hoc fixes of 2026-10-24). It changes no result, so it needs no re-run and saving
   it alone doesn't put the latest run out of date: every run, old ones
   included, is read by the project's current choice (runs don't record it).
   That is deliberate (decided for issue #444): the choice picks which of the
@@ -7488,15 +7517,42 @@ stay lazy. Rules in `river/river.ts`, links in `river/links.ts`). Every
 role that reads runs sees it (`TAB_GROUP.river = 'core'`: owners, editors,
 viewers); an applicant and a farmer get their own views, as for every tab.
 
-- **Which run.** `run=<id>` picks it; without one (or when it names a run
-  that is gone) the newest run by `createdAt`, as the Summary shows
-  (`pickRiverRun`). The run before it (by `createdAt`) is what the changes are
+- **Which run.** `run=<id>` picks it; without one the newest run by
+  `createdAt`, as the Summary shows (`pickRiverRun`). A `run=` naming a run
+  that is gone (deleted since the link was made) shows the newest with a
+  note at the top, "That run no longer exists, so this shows the newest
+  run." (`role="note"`, as Hydrological units; until 2026-10-24 it fell back
+  to the newest silently). The run before it (by `createdAt`) is what the changes are
   against. The **Run** menu in the header (named for screen readers only,
   `aria-label="Run"`, like Hydrological units's picker, so on a phone the select fills a row of its own with
   no "Run" line above it) lists every run, newest first
   (`runOptionLabel`, the compare picker's labels); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
+  While the picked run's record loads, the page keeps the run before it on
+  screen, its body `aria-busy="true"`, then swaps (a cached record at once):
+  until 2026-10-24 every panel unmounted for at least a render on each pick,
+  so the page got shorter and a reader scrolled down lost their place. The
+  body's `data-run` names the run whose record is on screen (the tests'
+  readiness signal, with `aria-busy="false"`). A record that fails to load
+  clears the page to its error and **Try again**, so nothing of the run
+  before stays. The findings panels are keyed on the run, so their own
+  state (the EWR grid's site, measure and focused month, Reserve
+  compliance's site and Show all, the water account's year) starts afresh
+  with each run, as the tools' always have. The flow chart and the
+  water-year bars keep the run before drawn (`aria-busy`) while the next
+  run's series load (`FlowVsReserve`, `ReserveYearsChart`, which Compare
+  runs shares), instead of falling back to a short Loading… line; the flow
+  chart keeps the window you were looking at when the next run covers it.
+  Each chart keeps the props that label it (the flow chart's heading,
+  forecast band, shading and caption; the bars' names) with the lines it
+  draws, so the run before's lines never carry the next run's words. If the
+  next run's series fail, the flow chart drops the run before's lines and
+  shows the error under the next run's heading. The
+  tools under *How sure, and what if* are the run on screen's, so while
+  busy their section is `inert` and dimmed (the body shows a progress
+  cursor): a Run there can't start a job on a run the header no longer
+  names (`river-page.spec.ts`).
 - **Header.** The shared section header (`workspace/SectionHeader`, title
   from `TAB_LABELS`); the tab fills its context line (`fillHeader`): the run's
   label (with the *Workbook comparison* and *Evidence* badges), its period,
@@ -7646,7 +7702,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **Below it**, full width, the moved panels, with their ids, the findings
   first and the run-it-yourself tools after them (issue #465; until then the
   three tools sat between the findings and pushed the water account to the
-  page's foot):
+  page's foot). The findings' headings are `h2`, peers of the flow chart's
+  and the water-year bars' (their panels' `headingLevel={2}`, the EWR
+  required vs met table and the water account's bars an `h3` under them;
+  Runs & results' and the report's copies keep `h3`): until 2026-10-24 they
+  were `h3`, so a screen reader's outline put them under "Days below the
+  reserve, each water year":
   **Reserve rules met, by month** (`#res-reserve`, `EwrAssurancePanel` with
   a rule table; the panel's own name, *Reserve compliance by month*, stays
   on the printable report and Compare runs). Without a rule table in the
@@ -7713,8 +7774,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   heading; **Days below, by year** on the bar), **Reserve rules met, by
   month** (always, as its stub says what it needs without a table; **Reserve
   rules met**), **Days below the EWR, by month** (**Days below, by month**),
-  **Water account**, **Uncertainty bands** (**Uncertainty**), **Outcome
-  matrix** and **Seasonal outlook**, in three groups: The reserve; Water
+  **Water account**, **Uncertainty bands** (**Uncertainty**), **Sensitivity
+  runs** (**Sensitivity**), **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
   balance; How sure, and what if. On the bar the groups are named for screen
   readers only, its links evenly spaced (issue #162: the wider gaps between
   unnamed groups read as spacing bugs, and the names on the bar take it to
@@ -8708,7 +8769,10 @@ read it before.
   the days set aside, by the checks and as unreliable), **Where each MAP
   comes from** (both sources per area), and a table of each station's CHIRPS
   pairing (where its CHIRPS came from: its own cell or the CHIRPS of the
-  unit it stands in; the fit period with its complete years in common; the
+  unit it stands in; the fit period, then its complete years in common,
+  "…; N complete years (accumulations counted)", since the years count a
+  §2.4d accumulation's days as read and the period leaves them out, model.md
+  §2.4i; the
   shared days; the 12 factors, Jan–Dec, or "refused: …" with the reason).
   The report's inputs carry the same as two tables, **Rainfall stations**
   and **Station CHIRPS pairings** (`report/inputs.ts` `stationRows`,
@@ -8719,7 +8783,8 @@ read it before.
   (`backend/src/export/run-tables.ts` `stationLines`: one row per area with
   both MAPs and their sources, own and applied ratio, the correcting
   station, the days by source and set aside; then each pairing with its fit
-  period, common years, shared days and the 12 factors, or the refusal),
+  from and to, "Complete years (accumulations counted)", shared days and the
+  12 factors, or the refusal),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping

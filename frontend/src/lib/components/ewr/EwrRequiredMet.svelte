@@ -15,7 +15,14 @@
 	import { ewrMetShare, pctText } from '#lib/components/reliability/reliability.js';
 	import { fmtVolume } from './heatmap';
 
-	let { assurance }: { assurance: SupplyAssurance | undefined | null } = $props();
+	let {
+		assurance,
+		headingLevel = 4
+	}: {
+		assurance: SupplyAssurance | undefined | null;
+		/** Its heading's level: one under the EWR by month panel's (h3, or h2 on EWR). */
+		headingLevel?: 3 | 4;
+	} = $props();
 
 	const uid = $props.id();
 	const account = $derived(assurance?.waterAccount ?? null);
@@ -25,7 +32,7 @@
 
 {#if account?.total.ewr.length}
 	<section class="required-met" aria-labelledby="{uid}-h">
-		<h4 id="{uid}-h">EWR required vs met, each water year <HelpTip key="ewr-shortfall" label="About the EWR volume met" /></h4>
+		<svelte:element this={`h${headingLevel}`} id="{uid}-h">EWR required vs met, each water year <HelpTip key="ewr-shortfall" label="About the EWR volume met" /></svelte:element>
 		<div class="table-wrap scroll">
 			<table class="data" data-testid="ewr-required-met">
 				<caption class="visually-hidden">EWR required and met at each site per water year, m³</caption>
@@ -58,7 +65,7 @@
 	.required-met {
 		margin-top: 1rem;
 	}
-	.required-met h4 {
+	.required-met > :is(h3, h4) {
 		margin: 0 0 0.4rem;
 	}
 	.scroll {

@@ -31,11 +31,13 @@
 		controls,
 		actions,
 		notice,
+		noticeFailed = false,
 		loading,
 		loaded,
 		error,
 		onretry,
 		bodyGrid = false,
+		saving = false,
 		fold,
 		open = $bindable(),
 		children
@@ -62,6 +64,9 @@
 		actions?: Snippet;
 		/** What the last Use did; null for none. */
 		notice: string | null;
+		/** The notice reports a Use that failed for a unit the panel has left (the row it came from isn't shown): an
+		 *  error, without the link to run the model. */
+		noticeFailed?: boolean;
 		loading: boolean;
 		/** The panel has its data (the body content draws). */
 		loaded: boolean;
@@ -69,6 +74,8 @@
 		onretry: () => void;
 		/** Lay the body out as a one-column grid with gaps (Settings' group), not as a block. */
 		bodyGrid?: boolean;
+		/** A Use is out (saving, then reloading): `data-saving` on the section until it has finished, focus included. */
+		saving?: boolean;
 		/** Fold everything under the heading into one line of values (the unit's name, what is proposed), with its action. */
 		fold?: { name?: string; line: string; change: string };
 		/** The fold's open state (with `fold`). */
@@ -79,7 +86,9 @@
 	const uid = $props.id();
 	let noticeEl = $state<HTMLParagraphElement | null>(null);
 
-	/** After a Use: the button is gone or disabled, so the keyboard goes to what happened, not the top of the page. */
+	/** After a Use: the button is gone or disabled, so the keyboard goes to what happened, not the top of the page.
+	 *  It doesn't check the unit: callers call it only while the panel still shows the Use's unit, so a panel moved on
+	 *  to another unit keeps the keyboard where the user put it, and the notice (a live region) still reports the save. */
 	export async function focusNotice(): Promise<void> {
 		await tick();
 		noticeEl?.focus();
@@ -92,7 +101,7 @@
 	{@render controls?.()}
 	<!-- Always in the page, so a screen reader announces the text when it arrives. -->
 	<!-- Every notice is a saved model or settings change: Run model lives on Runs & results, so the notice links there. -->
-	<p class={notice ? 'alert alert-info slim' : 'visually-hidden'} role="status" tabindex="-1" bind:this={noticeEl} data-testid="{prefix}-notice">{#if notice}{notice} <a href="?tab=runs">Run the model</a> to see its effect.{/if}</p>
+	<p class={notice ? `alert ${noticeFailed ? 'alert-error' : 'alert-info'} slim` : 'visually-hidden'} role="status" tabindex="-1" bind:this={noticeEl} data-testid="{prefix}-notice">{#if notice}{notice}{#if !noticeFailed}{' '}<a href="?tab=runs">Run the model</a> to see its effect.{/if}{/if}</p>
 	<div class="body" class:grid={bodyGrid} aria-busy={loading} data-ready={!loading && (loaded || error !== null) ? 'true' : undefined} data-testid="{prefix}-body">
 		{#if error}
 			<p class="err" role="alert">The {what} couldn’t be loaded ({error}). <button type="button" class="btn btn-sm" onclick={onretry}>Try again</button></p>
@@ -102,7 +111,7 @@
 	</div>
 {/snippet}
 
-<section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
+<section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-saving={saving ? 'true' : undefined} data-testid={testid}>
 	{#if variant === 'page'}
 		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h2>{@render actions?.()}</div>
 	{:else if actions}

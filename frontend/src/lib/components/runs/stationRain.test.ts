@@ -82,8 +82,12 @@ describe('station helpers', () => {
 	it('words a pairing: where its CHIRPS came from, the period, the factors or the refusal', () => {
 		expect(chirpsAtText(pairing())).toBe('its own CHIRPS cell');
 		expect(chirpsAtText(pairing({ chirpsAt: { unitId: 'u1', unitName: 'Upper unit' } }))).toBe('the CHIRPS of Upper unit');
-		expect(pairingPeriodText(pairing())).toBe('1995-01-01 to 2020-12-31 (26 complete years)');
+		expect(pairingPeriodText(pairing())).toBe('1995-01-01 to 2020-12-31; 26 complete years (accumulations counted)');
 		expect(pairingPeriodText(pairing({ fitFrom: null, fitTo: null }))).toBe('–');
+		// The years count accumulation days the fit's dates leave out (engine ≥ 1.96.0): 5 complete years inside a span
+		// shorter than 5 calendar years, so the text never writes them as one period.
+		expect(pairingPeriodText(pairing({ fitFrom: '2016-01-03', fitTo: '2020-12-30', commonYears: 5 }))).toBe('2016-01-03 to 2020-12-30; 5 complete years (accumulations counted)');
+		expect(pairingPeriodText(pairing({ commonYears: 1 }))).toBe('1995-01-01 to 2020-12-31; 1 complete year (accumulations counted)');
 		expect(pairingFactorsText(pairing())).toMatch(/^Jan 1\.25, Feb 1, Mar 1, .*, Dec 1$/);
 		expect(pairingFactorsText(pairing({ refused: 'only 3 complete years in common (5 needed)', months: [] }))).toBe('refused: only 3 complete years in common (5 needed)');
 	});
@@ -148,7 +152,7 @@ describe('UnitRainPanel with rainfall stations', () => {
 		expect(body).toContain('14 by the checks, 30 unreliable');
 		expect(body).toContain('<strong>Upper unit</strong>: a synthetic MAP grid; Hill station: station record');
 		expect((body.match(/data-testid="run-station-pairing"/g) ?? []).length).toBe(2);
-		expect(body).toContain('1995-01-01 to 2020-12-31 (26 complete years)');
+		expect(body).toContain('1995-01-01 to 2020-12-31; 26 complete years (accumulations counted)');
 		expect(body).toContain('Jan 1.25, Feb 1');
 		expect(body).toContain('the CHIRPS of Upper unit');
 		expect(body).toContain('refused: only 3 complete years in common (5 needed)');

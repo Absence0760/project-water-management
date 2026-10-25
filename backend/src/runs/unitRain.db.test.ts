@@ -12,12 +12,14 @@
 // back unchanged. Positive control: the same project with unitRain off runs
 // on the catchment's rain, with no unitRain and no rain_unit series.
 // Invented names, geometry and values.
-import { AREAL_RAIN_FACTOR_MAX, AREAL_RAIN_FACTOR_MIN, defaultCalibrationRules, runModel, unitRainSeriesKey, type CalibrationRules, type ModelInput, type UnitRainUnit } from '@water-management/engine';
+import { AREAL_RAIN_FACTOR_MAX, AREAL_RAIN_FACTOR_MIN, defaultCalibrationRules, runModel, unitRainSeriesKey, type CalibrationRules, type ModelInput, type UnitRainSettings, type UnitRainUnit } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
 import { utcToday } from '../feeds/fetch.js';
 import { runTick } from '../jobs/runner.js';
+import { referenceCell, referenceCellSeries } from './referenceCell.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -234,5 +236,31 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 		// The cell series is part of the run's stored input: the run reproduces from it alone.
 		expect((await call('GET', `/projects/${pid}/runs/${runId}/reproduce`)).status).toBe('identical');
 		await call('PATCH', `/projects/${pid}`, { settings: { unitRain } });
+	});
+
+	it('reads the reference cell in the product of the unit’s CHIRPS the run reads, not of the unit’s feed (issue #561)', async () => {
+		const [north] = units;
+		const key = `rain_chirps_cell_mm@${north!.id}`;
+		await call('PATCH', `/projects/${pid}`, { settings: { unitRain: { ...unitRain, reference: { gauge: 'rain_catchment_mm', unitId: north!.id } } } });
+		// A `sat` record sited at the unit: it sorts ahead of its `rnl` feed's "CHIRPS v3 (rnl) Unit North", so the run reads it.
+		const values = Array.from({ length: 120 }, (_, t) => t % 6);
+		const record = (await call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'CHIRPS (blended)', unit: 'mm', startDate: FEED_START, values, product: 'CHIRPS sat', productVersion: '3.0' })).id as string;
+		await call('PATCH', `/projects/${pid}/series/${record}`, { siteNodeId: north!.id });
+		// What the cache holds at the unit's centre in each product (`sat` may be nothing: no feed here fetched it).
+		const at = (await withUser(owner.id, (db) => referenceCell(db, pid, { ...unitRain, reference: { gauge: 'rain_catchment_mm', unitId: north!.id } } as UnitRainSettings, {})))!;
+		const read = (product: 'sat' | 'rnl') => withUser(owner.id, (db) => referenceCellSeries(db, { lat: at.lat, lon: at.lon, product }));
+		try {
+			const input = (await call('GET', `/projects/${pid}/model-input`)).input as ModelInput;
+			expect(input.series[unitRainSeriesKey('rain_chirps_mm', north!.id)]!.provenance).toEqual({ product: 'CHIRPS sat', version: '3.0' });
+			expect((input.series as Record<string, unknown>)[key]).toEqual((await read('sat')) ?? undefined);
+			// The positive control: the record relabelled `rnl`, the cell is the `rnl` one the unit's feed cached.
+			await asOwner(`UPDATE time_series SET product = 'CHIRPS rnl' WHERE id = $1`, [record]);
+			const rnl = await read('rnl');
+			expect(rnl).not.toBeNull();
+			expect((((await call('GET', `/projects/${pid}/model-input`)).input as ModelInput).series as Record<string, unknown>)[key]).toEqual(rnl);
+		} finally {
+			await call('DELETE', `/projects/${pid}/series/${record}`, undefined, 204);
+			await call('PATCH', `/projects/${pid}`, { settings: { unitRain } });
+		}
 	});
 });

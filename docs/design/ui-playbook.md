@@ -1225,7 +1225,7 @@ section it belongs to, with the example that taught it.
 | Dam levels | `overview/damLevels.ts` (level, bands, capacity-weighted total, which dams are in a run) |
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
-| A panel of values proposed from the map (the modeller decides) | `proposals/ProposalPanel.svelte` (heading, intro, controls, the live notice focused after a Use via `focusNotice()`, the busy/`data-ready` body, failure with Try again; `variant` page, drawer or inline) with `ProposalNoDataset`, `ProposalSynthetic` and `ProposalSource`; the panel keeps its own rows and Use (land cover, dams, evaporation) |
+| A panel of values proposed from the map (the modeller decides) | `proposals/ProposalPanel.svelte` (heading, intro, controls, the live notice focused after a Use via `focusNotice()`, which callers call only while the panel still shows the Use's unit (it doesn't check), `noticeFailed` for a Use that failed for a unit the panel has left (an error in the notice, naming the unit, not on a row), `saving` (`data-saving`) while a Use is out, the busy/`data-ready` body, failure with Try again; `variant` page, drawer or inline) with `ProposalNoDataset`, `ProposalSynthetic` and `ProposalSource`; the panel keeps its own rows and Use (land cover, dams, evaporation) |
 | "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `supplyNav`, `series/sections.ts`, `compare/sections.ts`), each link named as its panel's heading (`label`, a shorter `bar` name on the bar); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width (`railSide="right"` beside a page's own left column), `href` + `page` for a link to another page, `barHeight` for a sticky panel under the bar, and `find` for a find-a-setting box (Settings, issue #468; every long page from 1440 px, issue #462; ui.md § On this page menu) |
 | Section links in a box that scrolls on its own (a side sheet's long form) | The same `common/SectionNav.svelte` with `onjump` (each link scrolls the box to the section and focuses it, no fragment in the URL; the scroll spy follows the box) and `heading={null}`, in the dialog's fixed `subhead` (the Network's node sheet, `network/nodeSections.ts` `nodeNavGroups`; issue #462). Not a row of buttons of its own: that one drifted from the pages' (no mark for the section being read, no More, names unlike the legends) |
 
@@ -1754,6 +1754,21 @@ Interaction details that bit:
   Data kept its own copy of the series (`untrack(() => initial)`), so a file
   added through the header's Add data didn't show until a reload. Sync from
   the prop when it changes to an array that isn't the tab's own.
+- **Keep the previous record on screen while the next loads; snapshot what
+  labels it, and make its actions inert.** A page that unmounts its panels
+  while another record loads gets shorter, and a reader scrolled down loses
+  their place. The EWR page keeps the run before on screen, its body
+  `aria-busy="true"` (`data-run` names the run drawn), until the picked
+  run's record is in. Two traps came with it. Words drawn from the new
+  props next to data still the old run's: the flow chart headed and
+  captioned the old run's lines from the new run's props, so keep the props
+  that label a drawing (heading, shading, caption) in the same state as its
+  data, set together when the data arrive (`FlowVsReserve`'s `drawn`,
+  `ReserveYearsChart`'s `drawnRuns`/`drawnKey`). And actions keyed on the
+  record drawn: the tools' Run buttons would start a job on a run the
+  header no longer names, so their section is `inert` (and dimmed) while
+  busy, not removed, so the page keeps its height. A record that fails to
+  load clears the page to its error, so nothing stale stays.
 
 ## 5. Testing
 
