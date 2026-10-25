@@ -28,8 +28,7 @@ type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibili
  * `rail`: the side index, with a line for each panel. On the bar (which must
  * keep every link on two rows at 1280 px, section-nav.spec.ts) the Record
  * group's Run notes, Evidence and Reproduction are one link, "Notes &
- * evidence", landing on Run notes and standing for the three (`covers`), as
- * Settings' Automation & access does.
+ * evidence", landing on Run notes and standing for the three (`covers`).
  */
 /** The run checks a gauge inside the network that it doesn't score: GaugeCheckFlows draws it under the flow-duration curve (checkGauges.ts checksOnlyGauges, from the same summary fields). */
 const hasCheckGauges = (summary: SectionInput) => (summary.plausibility?.gauges ?? []).some((g) => g.nodeId !== (summary.calibration?.siteNodeId ?? null));

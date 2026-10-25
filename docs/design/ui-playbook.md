@@ -1472,7 +1472,7 @@ Interaction details that bit:
   `holdAnchor` (`help/anchor.ts`), focusing its heading, as River & reserve,
   Hydrological units, Runs, Data and Project do. A panel that is a lazy chunk
   of its own is drawn after the tab mounts, so one look at mount finds nothing
-  (Settings' API keys and Evaporation from the map, Runs' Forecast) or a box
+  (Project's API keys, Settings' Evaporation from the map, Runs' Forecast) or a box
   without its heading yet: wait with `landOnAnchor(id)`, which holds the
   panel once drawn and focuses its heading once that is (an h2–h4), giving up
   when the reader takes over or after `LAND_WAIT_MS` (a panel or heading that

@@ -213,7 +213,7 @@ aside by name, once its evidence nomination keeps it for good).
 | **Network / Hydrological units / Dams** | Three units with dams on one river, a mid-catchment gauge, an **other water user** (a town's water works with a pump capacity, returning 40 %), two **boreholes** (one supplemental to the crops, one filling a dam in a drought, with an annual cap), a **river abstraction** with a pool for Rivieroewer's crops, in a **crop supply table** (40 % from its own dam, 40 % from the river, 20 % piped from Kransdal's dam), two **EWR sites** (the gauges), and **land cover** (a pine plantation and invasive riparian trees). The Kransdal dam has a firm-**yield** result. |
 | **Crops & demand** | Five crops, each with a default irrigation system; the project's own **irrigation systems** table has micro-sprinkler's efficiency edited (0.78) and a row of its own (*Subsurface drip (farm trial)*), which Vleiplaas's lucerne uses as a per-unit override. Demand objects in **m³/day** (a packhouse that rests at weekends), in **l/s** (a school and clinic) and **per unit** (a village per person with a holiday peak, a dairy herd per head). |
 | **Transfers** | Kransdal → Vleiplaas in four months, and Kransdal → Rivieroewer with a **rate per month**. |
-| **Data / Settings** | Catchment rain with a blank spell CHIRPS fills, an observed weir and a logger that drifts in 2022/23, a reference gauge, a 10-day forecast; a calibration window with one excluded year, a stored GR4J **fit**, a reporting window, a WR2012-style check, a declared uncertainty rule (Settings › Evidence). **Data feeds**: a CHIRPS feed over the map's boundary and a DWS gauge feed, both switched off (their synthetic fixtures are recent days, which would leave a gap after this 2010–2024 record). A weekly **scheduled report**. |
+| **Data / Settings / Project** | Catchment rain with a blank spell CHIRPS fills, an observed weir and a logger that drifts in 2022/23, a reference gauge, a 10-day forecast; a calibration window with one excluded year, a stored GR4J **fit**, a reporting window, a WR2012-style check, a declared uncertainty rule (Settings › Evidence). **Data feeds** (on Data): a CHIRPS feed over the map's boundary and a DWS gauge feed, both switched off (their synthetic fixtures are recent days, which would leave a gap after this 2010–2024 record). A weekly **scheduled report** (on Project). |
 | **Map** | The boundary, a parcel and a dam for each unit, both gauges, the town's works, the river, the boreholes, the river pump and the plantation, on the synthetic reference data's footprint, so the quaternary lookup, cultivated area from land cover and evaporation from the map all answer. |
 | **Runs & results / Compare** | *Before calibration (GR4J defaults)*, *Calibrated baseline* (pinned, with notes, **published** with a 20 % restriction notice in English and Afrikaans, nominated as **evidence**, with an uncertainty **ensemble**) and *Forecast (next 10 days)*: compare the first two to see the fit's effect. A **sensitivity sweep** and a **seasonal outlook** (demand at 100, 90 and 80 %). |
 | **Scenarios** | Five on the calibrated baseline, each with its run: a bigger dam, a new feedlot (a new demand), WUA **drought restrictions**, a crop change, and a drier climate (−15 % rain); and a cumulative **assessment** of the dam raise and the feedlot together. |
@@ -368,7 +368,7 @@ runs it ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
 
 ## Data feeds
 
-Settings → **Data feeds** attaches CHIRPS rainfall, the CHIRPS-GEFS forecast
+Data → **Data feeds** attaches CHIRPS rainfall, the CHIRPS-GEFS forecast
 or a DWS gauge to a project ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 Locally they need **no network**: `FEED_SOURCE=fixtures` (the default)
 answers every source from the synthetic files in `backend/fixtures/feeds/`,
@@ -413,7 +413,7 @@ A logger gateway or a script pushes readings to `POST
 ([api.md § Ingest](./api.md#ingest)). Locally, the push script stands in for
 the gateway:
 
-1. Sign in as a project's owner, open Settings → **API keys**, make a key
+1. Sign in as a project's owner, open Project → **API keys**, make a key
    and copy it (it is shown once).
 2. Put it in a gitignored `.env.development.local` at the repo root:
    `WM_INGEST_KEY=wm_…` (or export it). `WM_API_URL` picks another API

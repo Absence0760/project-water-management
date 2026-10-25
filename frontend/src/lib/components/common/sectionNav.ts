@@ -25,8 +25,8 @@ export interface NavSection {
 	 */
 	page?: string;
 	/**
-	 * The ids of the panels after it that this one link stands for (Settings'
-	 * "Automation & access" on the bar): the link is marked while any of them is
+	 * The ids of the panels after it that this one link stands for (Runs &
+	 * results' "Notes & evidence"): the link is marked while any of them is
 	 * read, and the find box searches them as part of it.
 	 */
 	covers?: string[];
