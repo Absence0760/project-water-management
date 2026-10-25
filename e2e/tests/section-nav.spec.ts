@@ -400,6 +400,41 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
+test('on a 320 px phone the Data strip scrolls sideways inside itself, and every link Tab reaches shows whole (issue #586)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Menu data phone');
+	await page.setViewportSize({ width: 320, height: 844 });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const menu = page.getByRole('navigation', { name: 'Data sections' });
+	const links = menu.getByRole('link');
+	await expect(links).toHaveText(['Series', 'Chart', 'Data feeds', 'Data checks', 'What the model uses']);
+	// The strip is wider than the phone and scrolls inside the bar; the page doesn't scroll sideways.
+	const strip = menu.locator('.flow');
+	expect(await strip.evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).overflowX === 'auto')).toBe(true);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+
+	/** The focused link lies wholly inside the strip's box (the browser alone leaves one cut at the edge). */
+	const shownWhole = () =>
+		page.evaluate(() => {
+			const a = document.activeElement as HTMLElement;
+			const flow = a.closest('.flow')!.getBoundingClientRect();
+			const r = a.getBoundingClientRect();
+			return r.left >= flow.left - 0.5 && r.right <= flow.right + 0.5;
+		});
+	await links.first().focus();
+	for (const name of ['Chart', 'Data feeds', 'Data checks', 'What the model uses']) {
+		await page.keyboard.press('Tab');
+		await expect(links.filter({ hasText: new RegExp(`^${name}$`) })).toBeFocused();
+		await expect.poll(shownWhole).toBe(true);
+	}
+	// And back.
+	for (const name of ['Data checks', 'Data feeds', 'Chart', 'Series']) {
+		await page.keyboard.press('Shift+Tab');
+		await expect(links.filter({ hasText: new RegExp(`^${name}$`) })).toBeFocused();
+		await expect.poll(shownWhole).toBe(true);
+	}
+});
+
 test('Compare runs has the menu: every panel drawn, by its heading, a side index from 1440 px and a jump that lands', async ({ page, owner }) => {
 	void owner;
 	const p = await seedWhatIfs(page.request, 'Menu compare');

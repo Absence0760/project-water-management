@@ -226,3 +226,16 @@ export function findEntries(
 	}
 	return out.slice(0, limit);
 }
+
+/**
+ * On a phone the bar is one strip that scrolls sideways: where to scroll it so
+ * the link at `left` (from the strip's start) and `width` wide shows whole,
+ * with `margin` px beside it, or null when it already does. A link Tab reaches
+ * half off the strip's edge stays there otherwise: the browser scrolls a
+ * focused element only when none of it shows (issue #586, at 320 px).
+ */
+export function stripScrollTo(left: number, width: number, scrollLeft: number, clientWidth: number, margin = 16): number | null {
+	if (left < scrollLeft) return Math.max(0, left - margin);
+	if (left + width > scrollLeft + clientWidth) return left + width - clientWidth + margin;
+	return null;
+}
