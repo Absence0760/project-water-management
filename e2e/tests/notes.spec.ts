@@ -187,3 +187,13 @@ for (const size of [
 		await expect(page.getByRole('button', { name: 'Notes on the project (31)' })).toBeFocused();
 	});
 }
+
+test('the Project page’s empty Recent notes links to the Network, where a unit takes notes (issue #586)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'No notes farm');
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const recent = page.getByRole('region', { name: 'Recent notes' });
+	await expect(recent).toContainText('No notes yet.');
+	await recent.getByRole('link', { name: 'Network' }).click();
+	await expect(page).toHaveURL(`/projects/${project.id}?tab=network`);
+});
