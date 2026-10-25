@@ -7,6 +7,7 @@
 //   FeedUnavailableError — the source didn't answer usefully (network error,
 //                          timeout, HTTP 5xx, a response too large). Nothing is
 //                          written; the next scheduled fetch tries again.
+//                          FeedThrottledError is the HTTP 429 / 503 case.
 //
 // Either way the feed's health records the failure (feeds/store.ts), and a
 // feed that keeps failing shows as failing, then stale.
@@ -20,6 +21,24 @@ export class FeedNoDataError extends FeedFormatError {}
 
 export class FeedUnavailableError extends Error {
 	override readonly name = 'FeedUnavailableError';
+}
+
+/**
+ * The source answered HTTP 429 or 503: it is limiting how fast we ask, or is
+ * briefly overloaded. A FeedUnavailableError like any other (the feed shows
+ * failing and its next fetch waits out the scheduler's backoff), but the
+ * live client also stops asking that host for a while (http.ts), so a
+ * throttled source isn't hammered by the fetches still queued for it.
+ */
+export class FeedThrottledError extends FeedUnavailableError {
+	readonly status: 429 | 503;
+	/** The source's Retry-After, in seconds, when it gave a usable one. */
+	readonly retryAfterSeconds: number | null;
+	constructor(status: 429 | 503, retryAfterSeconds: number | null = null) {
+		super(`HTTP ${status}: the source asked us to slow down, so the feed tries again later`);
+		this.status = status;
+		this.retryAfterSeconds = retryAfterSeconds;
+	}
 }
 
 /** The longest stored feed error (018_feeds.sql CHECK). */

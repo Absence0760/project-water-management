@@ -1439,10 +1439,38 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   (`app_begin_feed_fetch`, `029_feed_fetch.sql`), and the `feed_ingest` job
   claims and clears that record (`app_take_feed_fetch`): only the newest
   fetch's answer applies, once, and an older fetch's late answer or a
-  redelivery is dropped with the series and health untouched (#31). Every
+  redelivery is dropped with the series and health untouched (#31). That
+  record is **committed on its own connection before the request is sent**
+  (as `report_render` commits its render token): `app_take_feed_fetch` sees
+  only committed rows, and a failed fetch answers in a third of a second, so
+  an answer could otherwise beat the `feed_fetch` job's commit, or meet a job
+  that rolled back after sending, and be dropped as if it were stale. The
+  feed then never showed the failure ("not checked yet"). A send that fails
+  withdraws the record (the job's retry makes it again), so the feed isn't
+  held as "a fetch is still out". Every dropped answer is logged as
+  `{"event":"feed_answer_dropped","feedId","fetchJobId","reason","ok"}`
+  (`feed_gone`, `feed_off`, `feed_changed`, or `not_awaited`: a newer fetch
+  went out, or it was applied already). Every
   answer (inline too) is checked against the window it asked for, which comes
   from our side, never from the answer: a day outside it (the forecast aside,
   keyed by its issue) refuses the answer whole as a failed fetch.
+- **Throttling.** A fetch reads up to six files at a time (`mapLimit`), and
+  the fetcher runs at most two fetches at once (`fetcher_reserved_concurrency`
+  and its trigger's `maximum_concurrency`, `infra/feeds.tf`), so CHC sees at
+  most twelve requests in flight however many feeds backfill. Each feed's
+  backfill goes a window (120 days) a minute (`BACKFILL_NEXT_SECONDS`), so a
+  dozen feeds starting from 1981 together keep both fetches busy for hours.
+  An HTTP 429 or 503 is a `FeedThrottledError` (a `FeedUnavailableError`,
+  `throttled` in the fetcher's log): the fetch fails at once and starts no
+  further reads (`mapLimit` stops on the first failure), and the live client
+  asks that host nothing more for its `Retry-After` (60 s without one, at most
+  15 minutes, `THROTTLE_*` in `feeds/http.ts`), remembered across a warm
+  Lambda's invocations, so the fetches queued behind it fail without asking.
+  The feed records the failure and the scheduler's backoff takes it from
+  there (15 minutes, doubling up to a day); a success restarts the backfill
+  chain. Concurrency stays where it is until the logs show `HTTP 429`: then
+  lower the fetcher's concurrency to one, or the per-fetch six, before
+  lengthening the backfill's pause.
 
 The Data tab marks a series a feed wrote ("Written by the CHIRPS daily
 rainfall feed", with a count when the feed wrote only some of its days):

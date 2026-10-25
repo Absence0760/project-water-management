@@ -1335,18 +1335,34 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   expire unseen after 4 days); and `feed-fetch-failed`, any fetch the fetcher
   answered as failed in an hour. That last one is invisible to
   `fetcher-errors`, because the Lambda succeeded: it counts the fetcher's
-  `{"event":"feed_fetch_failed","feedId","source","reason"}` log line
-  (ids, the source and a reason code, never the stored message, which can
-  name a grid cell or a station). A stale or failing feed also shows in the
+  `{"event":"feed_fetch_failed","feedId","fetchJobId","source","reason","detail"}`
+  log line (ids, the source, a reason code and the safe part of the failure:
+  `detail` is the HTTP status, `HTTP 429`, or one of the live client's own
+  texts, `the request timed out`, else null; never the stored message, which
+  can name a grid cell or a station). A stale or failing feed also shows in the
   app, and emails the owners and editors of a project with the `data_stale`
   or `feed_failing` alert on.
   - *Runbook: `feed-fetch-failed`.* Logs Insights on the fetcher's log group:
-    `filter message.event = "feed_fetch_failed" | stats count() by message.source, message.reason`.
+    `filter message.event = "feed_fetch_failed" | stats count() by message.source, message.reason, message.detail`.
     `unavailable` or `timeout`: the source is down or slow; the feed retries
     on its own schedule (nothing to do unless it persists; DWS from outside
-    South Africa answers 403, see Sources' terms below). `format`: the source
+    South Africa answers 403, see Sources' terms below; a CHC `HTTP 403` that
+    a laptop doesn't get is the source refusing AWS's address). `throttled`
+    (`HTTP 429` or `HTTP 503`): the source is limiting us; the fetcher pauses
+    that host for its `Retry-After` and the feeds back off on their own
+    (architecture.md § Data feeds → Throttling); if it persists through a
+    backfill, lower `fetcher_reserved_concurrency` to 1. `format`: the source
     changed what it serves, a code fix. `invalid_request` or `internal`: a
     bug; the feed's status panel has the stored message.
+  - *A feed that logs failures but shows none* ("not checked yet"): on the
+    worker's log group,
+    `filter message.event = "feed_answer_dropped" | stats count() by message.reason`.
+    `feed_changed`: the feed was saved while its fetch was out (expected
+    once). `not_awaited` for every answer: a newer fetch keeps superseding
+    it (Run now pressed repeatedly) or the answers are redeliveries; match
+    `fetchJobId` against the fetcher's `feed_fetch_failed` lines, and look for
+    `job_failed` / `job_lease_lost` on `feed_fetch` jobs, which re-send the
+    same job.
 - **Sources' terms.** CHIRPS is public domain (the Climate Hazards Center
   waived copyright; cite it). CHIRPS-GEFS comes from the same server without a
   separate licence notice: confirm before relying on it commercially (the

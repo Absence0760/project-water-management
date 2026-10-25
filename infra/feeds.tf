@@ -358,10 +358,11 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
 # A fetch the fetcher answered as failed: the Lambda succeeded, so
 # fetcher_errors never sees it. lambda-fetcher.ts logs one line per failed
 # answer:
-#   {"event":"feed_fetch_failed","feedId":"…","source":"dws","reason":"unavailable"}
-# the feed's id, its source and a reason code (timeout, invalid_request,
-# unavailable, format, internal, other), never the stored message, which can
-# name a grid cell or a station. One failure alarms: feeds fetch a few times a
+#   {"event":"feed_fetch_failed","feedId":"…","fetchJobId":"…","source":"dws","reason":"unavailable","detail":"HTTP 403"}
+# the ids, its source, a reason code (timeout, throttled, invalid_request,
+# unavailable, format, internal, other) and the failure's safe detail (an HTTP
+# status or one of the live client's fixed texts), never the stored message,
+# which can name a grid cell or a station. One failure alarms: feeds fetch a few times a
 # day, and SNS only notifies on the change to ALARM, so a source that stays
 # down alarms once, not on every fetch.
 resource "aws_cloudwatch_log_metric_filter" "feed_fetch_failed" {
@@ -389,7 +390,7 @@ resource "aws_cloudwatch_metric_alarm" "feed_fetch_failed" {
   period              = 3600
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter message.event = \"feed_fetch_failed\" | stats count() by message.source, message.reason. unavailable/timeout = the source is down or slow (wait for the next fetch); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
+  alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter message.event = \"feed_fetch_failed\" | stats count() by message.source, message.reason, message.detail. unavailable/timeout = the source is down or slow (wait for the next fetch); throttled = HTTP 429/503, the source is limiting us (the fetcher pauses the host; lower fetcher_reserved_concurrency if it persists); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }

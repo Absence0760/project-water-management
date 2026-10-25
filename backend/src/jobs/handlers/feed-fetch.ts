@@ -8,9 +8,10 @@
 //     request to the fetcher Lambda through the `fetch-requests` queue. Its
 //     answer comes back on `ingest-results` and becomes a `feed_ingest` job.
 //     First the job records itself and its window on the feed
-//     (app_begin_feed_fetch, 029), in this transaction, so the answer is
-//     checked against what was asked for and a late answer to an older fetch
-//     is dropped (feed-ingest.ts, issue #31).
+//     (app_begin_feed_fetch, 029), committed on its own connection before the
+//     request is sent, so the answer is checked against what was asked for, a
+//     late answer to an older fetch is dropped (feed-ingest.ts, issue #31), and
+//     an answer that comes back before this job commits still finds it.
 //
 // A CHIRPS fetch goes through the shared cell cache (208_chirps_cell_cache,
 // feeds/cellCache.ts): the request names only the cells and days the cache
@@ -30,6 +31,7 @@ import { cacheOrigin, claimRecheck, readCellCache } from '../../feeds/cellCacheS
 import { chirpsProduct, type GridConfig, gridCells } from '../../feeds/config.js';
 import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
+import { withUser } from '../../db/tx.js';
 import { feedHttp } from '../../feeds/http.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { beginFeedFetch, feedForJob, takeFeedFetch } from '../../feeds/store.js';
@@ -82,9 +84,24 @@ export const feedFetchHandler = defineHandler({
 			if (recheck) request.recheck = { cells: grid(cells), head: recheck.head, read: recheck.read };
 		}
 		if (feedFetcher() === 'sqs') {
-			await beginFeedFetch(db, feed.id, job.id, window);
+			// Committed now, on its own connection, before the request leaves (as
+			// report-render.ts commits its token): the answer is applied only if
+			// app_take_feed_fetch finds this record, and it can't see one this
+			// job's transaction hasn't committed. A failure can come back in a
+			// third of a second, and an answer that beat the commit, or met a
+			// job that rolled back after sending (a lost lease, a timeout), was
+			// dropped without a trace: the feed never showed the failure.
+			await withUser(job.actingUserId, (tx) => beginFeedFetch(tx, feed.id, job.id, window));
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };
-			await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message);
+			try {
+				await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message);
+			} catch (err) {
+				// Nothing went out: withdraw the record, so the feed isn't held as
+				// "a fetch is still out" (fromBoundary.ts, fromUnits.ts) by an
+				// answer that can't come. The job's retry records it again.
+				await withUser(job.actingUserId, (tx) => takeFeedFetch(tx, feed.id, job.id)).catch(() => {});
+				throw err;
+			}
 			return;
 		}
 		// Inline: the fetch holds this transaction open for its duration, which

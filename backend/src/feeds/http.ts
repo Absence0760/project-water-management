@@ -8,8 +8,10 @@
 //              backend/.env.development.local to try a source for real.
 //
 // Both implement FeedHttp. Every response is bounded (time and size), and an
-// upstream body is never copied into an error: the messages are ours.
-import { FeedUnavailableError } from './errors.js';
+// upstream body is never copied into an error: the messages are ours. An HTTP
+// 429 or 503 is a FeedThrottledError, and the live client then leaves that
+// host alone for its Retry-After (THROTTLE_*), across clients in one process.
+import { FeedThrottledError, FeedUnavailableError } from './errors.js';
 import { CHC_BASE } from './sources/chirps.js';
 import { DWS_BASE } from './sources/dws.js';
 
@@ -90,7 +92,39 @@ const transportError = (err: unknown) =>
 
 type Fetch = typeof fetch;
 
-export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
+/** How long a host that answered HTTP 429 or 503 isn't asked again, when it gave no usable Retry-After. */
+export const THROTTLE_DEFAULT_SECONDS = 60;
+/** The longest such pause, whatever Retry-After asks: past it the scheduler's own backoff (15 min, doubling) takes over. */
+export const THROTTLE_MAX_SECONDS = 15 * 60;
+
+/** A Retry-After header in seconds from `now`: delta-seconds or an HTTP date; null when absent or unreadable. */
+export function retryAfterSeconds(value: string | null, now = Date.now()): number | null {
+	const v = value?.trim();
+	if (!v) return null;
+	if (/^\d{1,9}$/.test(v)) return Number(v);
+	// An HTTP date names its day and month (Date.parse would read "-5" as a year).
+	const at = /^[A-Za-z]{3}, /.test(v) ? Date.parse(v) : NaN;
+	return Number.isFinite(at) ? Math.max(0, Math.ceil((at - now) / 1000)) : null;
+}
+
+/** Per host, the pause a 429 or 503 started: until when (epoch ms) a live fetch doesn't ask it. */
+export type ThrottleState = Map<string, { until: number; status: 429 | 503 }>;
+/**
+ * Shared by every client in one process, so a warm fetcher Lambda remembers a
+ * throttled host across invocations: the fetches queued behind the one that
+ * met the 429 fail at once instead of each asking again (docs/architecture.md
+ * § Data feeds → Throttling).
+ */
+const THROTTLED: ThrottleState = new Map();
+
+export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a), throttle: ThrottleState = THROTTLED): FeedHttp {
+	const paused = (host: string) => {
+		const p = throttle.get(host);
+		if (!p) return;
+		const left = p.until - Date.now();
+		if (left > 0) throw new FeedThrottledError(p.status, Math.ceil(left / 1000));
+		throttle.delete(host);
+	};
 	const get = async (url: string, headers: Record<string, string>, method: 'GET' | 'HEAD' = 'GET'): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
 		let target = new URL(url);
 		if (!allowed(target)) throw new FeedUnavailableError('the request was refused (not a known source host)');
@@ -98,6 +132,7 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 		const signal = AbortSignal.timeout(TIMEOUT_MS);
 		let res: Response;
 		for (let hop = 0; ; hop++) {
+			paused(target.host);
 			try {
 				// Redirects are followed here, not by fetch, so each target is checked.
 				res = await fetchFn(target.href, { method, headers: { 'user-agent': USER_AGENT, ...headers }, signal, redirect: 'manual' });
@@ -115,6 +150,13 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 		if (res.status === 404 || res.status === 416) {
 			await res.body?.cancel();
 			return null;
+		}
+		if (res.status === 429 || res.status === 503) {
+			await res.body?.cancel();
+			const after = retryAfterSeconds(res.headers.get('retry-after'));
+			const pause = Math.min(THROTTLE_MAX_SECONDS, after ?? THROTTLE_DEFAULT_SECONDS);
+			if (pause > 0) throttle.set(target.host, { until: Date.now() + pause * 1000, status: res.status });
+			throw new FeedThrottledError(res.status, after);
 		}
 		if (res.status !== 200 && res.status !== 206) {
 			await res.body?.cancel();

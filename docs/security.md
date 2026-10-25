@@ -700,8 +700,10 @@ token, a malformed or unknown one, a live invite for another address) is
   carry a token). A failed sign-in or bad account link logs `login_failed`
   with the route's pattern and a reason code only, never the address tried
   (§ Throttles that don't depend on the WAF). The fetcher and renderer
-  Lambdas log a failed answer as `feed_fetch_failed` (the feed's id, its
-  source and a reason code: never the stored message, which can name a grid
+  Lambdas log a failed answer as `feed_fetch_failed` (the feed's and fetch
+  job's ids, its source, a reason code and `detail`, which is only the HTTP
+  status or one of the live client's own fixed texts, checked against an
+  allowlist (`failureDetail`): never the stored message, which can name a grid
   cell or a station) and `report_render_failed` (the report and project ids,
   `render`/`store` and `retry`: never the error text or the render token), and
   a failed queue send or PDF store by `safeError` too, as does the worker for a

@@ -511,4 +511,22 @@ describe('mapLimit', () => {
 		expect(out).toEqual([50, 10, 40, 20, 30]);
 		expect(peak).toBe(2);
 	});
+
+	it('starts nothing after the first failure: a failed fetch asks the source no more (positive control: all run without one)', async () => {
+		const started: number[] = [];
+		const run = (failAt: number | null) =>
+			mapLimit([0, 1, 2, 3, 4, 5, 6, 7], 2, async (v) => {
+				started.push(v);
+				await new Promise((r) => setImmediate(r));
+				if (v === failAt) throw new Error('HTTP 429');
+				return v;
+			});
+		await expect(run(1)).rejects.toThrow('HTTP 429');
+		// Item 1 fails while 0's worker has moved on to 2: those two had started, nothing after.
+		await new Promise((r) => setTimeout(r, 10));
+		expect(started).toEqual([0, 1, 2]);
+		started.length = 0;
+		expect(await run(null)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+		expect(started).toHaveLength(8);
+	});
 });
