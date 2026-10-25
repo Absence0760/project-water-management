@@ -36,7 +36,7 @@
 <script lang="ts">
 	import { onDestroy, type Snippet } from 'svelte';
 	import { anchorHeading, focusHeading } from '#lib/help/anchor.js';
-	import { activeSectionId, findElsewhere, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
+	import { activeSectionId, findElsewhere, stripScrollTo, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
 
 	let {
 		groups,
@@ -355,6 +355,14 @@
 			flowEl.scrollLeft = left - 16;
 		}
 	});
+	// A link Tab reaches on the strip shows whole, not cut at its edge (the browser leaves a half-shown one).
+	function revealFocused(e: FocusEvent) {
+		const link = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('.groups a') : null;
+		if (!flowEl || !link || flowEl.scrollWidth <= flowEl.clientWidth) return;
+		const at = link.getBoundingClientRect().left - flowEl.getBoundingClientRect().left + flowEl.scrollLeft;
+		const to = stripScrollTo(at, link.offsetWidth, flowEl.scrollLeft, flowEl.clientWidth);
+		if (to !== null) flowEl.scrollLeft = to;
+	}
 	// The bar sits over the content's top, so jumps and focus keep clear of it; the rail sits beside it.
 	// Not in a box of its own, which the bar doesn't cover.
 	$effect(() => {
@@ -511,7 +519,7 @@
 		</nav>
 	{:else}
 		<nav class="sections" class:embedded aria-label={label} bind:clientHeight={height} style:--bar-h="{height}px">
-			<div class="flow" bind:this={flowEl}>
+			<div class="flow" bind:this={flowEl} onfocusin={revealFocused}>
 				{#if find}
 					<div class="item find-wrap" bind:this={findWrap} onkeydown={findPopKeydown} onfocusout={findFocusOut} role="presentation">
 						<button

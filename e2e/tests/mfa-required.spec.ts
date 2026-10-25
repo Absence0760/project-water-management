@@ -80,3 +80,16 @@ test('the Project page’s two-step panel is the owners’: an editor doesn’t 
 	await openProject(editor.page, project.id);
 	await expect(editor.page.locator('[data-require-two-step]')).toHaveCount(0);
 });
+
+test('the switch’s hint links “Account page” to its Two-step sign-in panel, which takes the focus (issue #586)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Hint farm');
+	await viaMfaApi(page);
+	await openProject(page, project.id);
+	// Signed in with a password alone: the hint says to sign in with a code first, and where to set one up.
+	const hint = page.getByTestId('two-step-hint');
+	await expect(hint).toContainText('sign in with a code first');
+	await hint.getByRole('link', { name: 'Account page' }).click();
+	await expect(page).toHaveURL('/account#two-step');
+	await expect(page.getByRole('heading', { level: 2, name: 'Two-step sign-in' })).toBeFocused();
+});

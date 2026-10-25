@@ -6,8 +6,9 @@
 	// answer decides: turning it on needs this session's own second factor,
 	// so a refusal (403 mfa_required / mfa_step_up) also brings up the
 	// workspace's two-step prompt (layout/MfaBanner), and the switch goes back.
+	import { resolve } from '$app/paths';
 	import { mfaPrompt } from '#lib/auth/mfaPrompt.svelte.js';
-	import { ALWAYS_TEXT, inheritedText, requirementText, turnOnHint, type TwoStepScope } from './requireTwoStep';
+	import { ACCOUNT_TWO_STEP, ALWAYS_TEXT, inheritedText, requirementText, turnOnHint, type TwoStepScope } from './requireTwoStep';
 
 	let {
 		scope,
@@ -72,7 +73,7 @@
 	<p class="small what" id="{id}-what">{requirementText(scope)}</p>
 	{#if inherited}<p class="small" data-testid="two-step-inherited">{inherited}</p>{/if}
 	<p class="muted small">{ALWAYS_TEXT}</p>
-	{#if hint}<p class="muted small" data-testid="two-step-hint">{hint}</p>{/if}
+	{#if hint}<p class="muted small" data-testid="two-step-hint">{hint.before}<a href={resolve(ACCOUNT_TWO_STEP)}>{hint.link}</a>{hint.after}</p>{/if}
 	{#if !canChange}<p class="muted small">Only {scope === 'team' ? 'admins' : 'owners'} can change it.</p>{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<p class="muted small saved" role="status">{saved ?? ''}</p>

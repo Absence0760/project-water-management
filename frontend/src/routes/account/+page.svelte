@@ -8,12 +8,14 @@
 	// GET /auth/me/export) and "delete my account" (issue #112, DELETE
 	// /auth/me, components/account/DeleteAccount.svelte). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { PUBLIC_API_URL } from '$app/env/public';
 	import { api, ApiError } from '#lib/api/index.js';
 	import { displayNameProblem, passwordProblem } from '#lib/api/emailAuth.js';
 	import { session } from '#lib/auth/session.svelte.js';
+	import { hashId, landOnAnchor } from '#lib/help/anchor.js';
 	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
 	import DeleteAccount from '#lib/components/account/DeleteAccount.svelte';
 	import EmailText from '#lib/components/common/EmailText.svelte';
@@ -26,6 +28,10 @@
 	import { errorText } from '#lib/i18n/apiError.js';
 
 	const msg = errorText;
+
+	// A link to the Two-step sign-in panel (the account menu, the two-step prompt, the Project page's and
+	// team settings' "Account page", issue #586): land on it and focus its heading, so Tab carries on there.
+	onMount(() => (hashId(page.url.hash) === 'two-step' ? landOnAnchor('two-step') : undefined));
 
 	// The header's avatar: the display name's initials, as the account menu shows them.
 	const initials = $derived(

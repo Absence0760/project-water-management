@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSectionId, findElsewhere, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText, pageLinkName } from './sectionNav';
+import { activeSectionId, findElsewhere, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText, pageLinkName, stripScrollTo } from './sectionNav';
 
 describe('navFitCount', () => {
 	const fit = { avail: 400, lead: 100, gap: 5, groupGap: 15, more: 60, rows: 2 };
@@ -146,5 +146,23 @@ describe('navText and navEmpty (issue #462)', () => {
 		expect(navEmpty([])).toBe(true);
 		expect(navEmpty([{ label: 'A', sections: [] }])).toBe(true);
 		expect(navEmpty([{ label: 'A', sections: [] }, { label: null, sections: [{ id: 'x', label: 'X' }] }])).toBe(false);
+	});
+});
+
+describe('stripScrollTo (the phone strip shows a focused link whole, issue #586)', () => {
+	// A 273 px strip scrolled to 0, as the Data page's at 320 px.
+	it('leaves a link that shows whole where it is', () => {
+		expect(stripScrollTo(100, 80, 0, 273)).toBeNull();
+		expect(stripScrollTo(0, 273, 0, 273)).toBeNull();
+	});
+
+	it('scrolls a link cut at the right edge in whole, with a margin beyond it', () => {
+		// "What the model uses": 144 px wide, starting 265 px in, 8 px of it showing.
+		expect(stripScrollTo(265, 144, 0, 273)).toBe(265 + 144 - 273 + 16);
+	});
+
+	it('scrolls back to a link cut at the left edge (Shift+Tab), never before the start', () => {
+		expect(stripScrollTo(200, 80, 240, 273)).toBe(184);
+		expect(stripScrollTo(4, 80, 30, 273)).toBe(0);
 	});
 });

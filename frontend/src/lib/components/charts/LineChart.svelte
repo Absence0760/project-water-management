@@ -11,6 +11,7 @@
 	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
+	import { zoomHint } from './zoomHint';
 
 	let {
 		series,
@@ -144,6 +145,8 @@
 	const a11yName = $derived(chartName(title, series, unit, isTime ? aligned.x : null, xLabel));
 	const dataLo = $derived(aligned.x[0] ?? 0);
 	const dataHi = $derived(aligned.x[aligned.x.length - 1] ?? 0);
+	/** The line under the chart, worded for a mouse and for touch (zoomHint.ts; the CSS shows the reader's). */
+	const hint = $derived(zoomHint(isTime && pannable));
 	const canPan = $derived(!print && isTime && pannable && !!view && view.max - view.min < dataHi - dataLo);
 	// Print mode lays the plot out k times larger and scales it back into its box.
 	const k = $derived(print ? printScale(devicePixelRatio) : 1);
@@ -609,7 +612,7 @@
 		{#if caption}<p class="hint">{caption}</p>{/if}
 	{:else}
 		<p class="hint">
-			{#if caption}{caption}{' '}{/if}{#if isTime && pannable}Drag across the chart to zoom, then Shift+drag (or Earlier / Later) to move through the record; double-click for the full period.{:else}Drag across the chart to zoom; double-click to reset.{/if}
+			{#if caption}{caption}{' '}{/if}<span class="fine" data-hint="fine">{hint.fine}</span><span class="touch" data-hint="touch">{hint.touch}</span>
 		</p>
 	{/if}
 </figure>
@@ -778,6 +781,17 @@
 		font-size: var(--font-xs);
 		color: var(--text-muted);
 		margin: 0.25rem 0 0;
+	}
+	/* The zoom hint for the reader's pointer (zoomHint.ts): a touch screen has no drag zoom and no Shift key. */
+	@media (pointer: fine) {
+		.hint .touch {
+			display: none;
+		}
+	}
+	@media not all and (pointer: fine) {
+		.hint .fine {
+			display: none;
+		}
 	}
 	.plot :global(.u-legend) {
 		font-size: var(--font-sm);

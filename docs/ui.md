@@ -2188,7 +2188,10 @@ it scrolls, and isn't fitted to the window.
   requires it whatever the switch says; that publishing to farmers,
   deciding applications, endorsing a baseline and evidence packs always
   need it; and, while it's off and this session signed in without a code,
-  that turning it on needs one first. Turning it on without a second
+  that turning it on needs one first, its "Account page" a link to the
+  Account page's Two-step sign-in panel (`/account#two-step`, which lands on
+  its heading and focuses it; plain words were a dead end, issue #586; the
+  team settings' switch says the same). Turning it on without a second
   factor is refused (`403 mfa_required` / `mfa_step_up`): the error shows
   under the switch, the switch goes back, and the workspace's banner
   offers to set one up (`e2e/tests/mfa-required.spec.ts`).
@@ -5381,6 +5384,12 @@ History is left to its own redesign.
   already in the URL does too (issue #586).
 - **Phones** (up to 640 px): one strip that scrolls sideways inside itself
   with every link (no More), the marked link kept in view, never the page.
+  A link Tab (or Shift+Tab) reaches is scrolled in whole, 16 px clear of the
+  edge (`sectionNav.ts` `stripScrollTo`): the browser scrolls a focused
+  element only when none of it shows, so one half off the edge stayed cut
+  (issue #586, at 320 px). With `groupNames` (Data, Hydrological units) the
+  strip carries the group names between the links, as the bar does; a link
+  cut at the strip's edge is its overflow, not a fault.
 - **The side rail** (issue #468 on Settings & calibration; issue #462 on
   Runs & results, EWR, Hydrological units and Data): a
   page that passes its content as SectionNav's `children` and a `railFrom`
@@ -8891,7 +8900,12 @@ read it before.
   drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it
-  by half a window (the non-drag route, and the only one on touch). Neither
+  by half a window (the non-drag route, and the only one on touch). The line
+  under every chart says this for a mouse (`(pointer: fine)`); on touch,
+  where a drag scrolls the page, uPlot's zoom box and double-click listen
+  to the mouse and there is no Shift key, it says "Tap the chart to read
+  its values; Earlier / Later move through the record." instead
+  (`charts/zoomHint.ts`, issue #586). Neither
   goes past the ends of the record, and the window survives the log scale
   and unit switches. The figure carries the visible range as
   `data-view-start` / `data-view-end`. The time axis puts the day before the
@@ -10761,7 +10775,8 @@ March") is kept against what it is about.
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
     each naming and linking to its target, and the project-level notes
     button. A failed load says "Couldn’t load the notes: …" with **Try
-    again**.
+    again**; with none yet it says where notes are added, **Network** a link
+    to that tab (issue #586).
   One `GET /notes/counts` per project feeds every badge
   (`counts.svelte.ts`), refreshed after any change. Only the open project's
   counts are kept: opening another project drops them (coming back loads

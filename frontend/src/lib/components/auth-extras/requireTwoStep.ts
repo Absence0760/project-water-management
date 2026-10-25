@@ -30,9 +30,24 @@ export function inheritedText(own: boolean, effective: boolean, teamName: string
  * Why turning it on would be refused, said before the switch is used: the
  * person turning it on must be signed in with a second factor, so it can't
  * lock everyone out. Null when it's on already, or when they are (or it
- * isn't known yet: the server still says so if it refuses).
+ * isn't known yet: the server still says so if it refuses). "Account page"
+ * is a link to its Two-step sign-in panel, so the hint isn't a dead end.
  */
-export function turnOnHint(on: boolean, sessionVerified: boolean | null): string | null {
+export function turnOnHint(on: boolean, sessionVerified: boolean | null): TurnOnHint | null {
 	if (on || sessionVerified !== false) return null;
-	return 'To turn it on, sign in with a code first (set up two-step sign-in on your Account page), so it can’t lock everyone out.';
+	return {
+		before: 'To turn it on, sign in with a code first (set up two-step sign-in on your ',
+		link: 'Account page',
+		after: '), so it can’t lock everyone out.'
+	};
 }
+
+/** The hint's words around its link to the Account page's two-step panel (ACCOUNT_TWO_STEP). */
+export interface TurnOnHint {
+	before: string;
+	link: string;
+	after: string;
+}
+
+/** Where the hint's link goes: the Account page's Two-step sign-in panel (account/TwoStepSignIn.svelte), resolved against the base path. */
+export const ACCOUNT_TWO_STEP = 'account#two-step';
