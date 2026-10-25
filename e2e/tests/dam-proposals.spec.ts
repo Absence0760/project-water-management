@@ -146,6 +146,46 @@ test('an editor uses the map’s area; the register’s capacity is a reference 
 	await expectNoViolations(v, { include: '[data-testid="dam-proposals"]' });
 });
 
+test('a Use that answers after Dam of moved on leaves the box on the unit now picked', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dam proposals use race');
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!;
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, {
+		data: { kind: 'dam', name: 'Upper dam', nodeId: upper.id, geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.004)] } }
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	// Hold the save until Dam of has moved to another unit and that unit's proposals are in.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let posted!: () => void;
+	const arrived = new Promise<void>((r) => (posted = r));
+	await page.route(/\/dam-area-from-map$/, async (route) => {
+		posted();
+		await held;
+		await route.continue();
+	});
+
+	await openProposals(page, project.id, 'Upper farm');
+	await rowOf(page, 'area').getByRole('button', { name: 'Use the map’s area' }).click();
+	await answerConfirm(page, true, /Set Upper farm’s full-supply area from the map\?/);
+	await arrived;
+	await panel(page).getByLabel('Dam of').selectOption({ label: 'Lower farm' });
+	await expect(panel(page).locator('caption')).toHaveCount(0);
+	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('No dam on the map is linked to Lower farm.');
+	const saved = page.waitForResponse(/\/dam-area-from-map$/);
+	// The box's reload after the save: one GET of proposals, whichever unit it asks for.
+	const reloaded = page.waitForResponse((r) => r.request().method() === 'GET' && /\/dam-proposals$/.test(new URL(r.url()).pathname));
+	release();
+	expect((await saved).status()).toBe(200);
+	await reloaded;
+	await expect(panel(page).getByTestId('dam-proposals-notice')).toContainText('Upper farm’s full-supply area is now');
+	// The box still shows Lower farm, the unit Dam of names, not the reload of Upper farm the save asked for.
+	await expect(panel(page).getByLabel('Dam of')).toHaveValue(project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string);
+	await expect(panel(page).getByTestId('dam-proposals-body')).toHaveAttribute('data-ready', 'true');
+	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('No dam on the map is linked to Lower farm.');
+	await expect(panel(page).locator('caption')).toHaveCount(0);
+});
+
 test('with a run the box is the picked dam’s, folded in its chart panel; Dam of moves the pick, keeps units with no dam, and a card’s Proposals opens it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Dam proposals follow');

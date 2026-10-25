@@ -128,7 +128,9 @@
 		try {
 			const res = await api.damProposals.areaFromMap(projectId, d.nodeId, r.featureId);
 			notice = `${d.nodeName}’s full-supply area is now ${fmtDamArea(res.damAreaFullM2)}, from the map.`;
-			await Promise.all([load(d.nodeId), onModelChanged()]);
+			// Reload the unit Dam of names now, not d's: Dam of (or the page's pick) may have moved on while the save was out,
+			// and loading d's would put its rows under another unit's name.
+			await Promise.all([load(unitId), onModelChanged()]);
 			await frame?.focusNotice();
 		} catch (e) {
 			rowError = { key: r.key, text: msg(e) };
