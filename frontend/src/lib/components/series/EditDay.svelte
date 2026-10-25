@@ -41,6 +41,7 @@
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 	let done = $state<string | null>(null);
+	let dayEl: HTMLInputElement | undefined = $state();
 
 	const stored = $derived(values && date ? valueOn(values, date) : undefined);
 	const inRange = $derived(!!date && date >= series.startDate && date <= end);
@@ -78,6 +79,10 @@
 			forgetValues(projectId, series.id);
 			done = typed.value === null ? `Cleared ${fmtDay(date)}.` : `Saved ${fmtDay(date)}: ${exact(typed.value)} ${series.unit}.`;
 			await onsaved?.(meta);
+			// The button that had the focus is disabled now (nothing left to save), which dropped the focus to the page:
+			// the Day field takes it, its text selected, ready for the next day to correct.
+			dayEl?.focus();
+			dayEl?.select();
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -97,6 +102,7 @@
 					<label for={id('date')}>Day</label>
 					<input
 						id={id('date')}
+						bind:this={dayEl}
 						type="text"
 						class="day"
 						value={dayText}
@@ -104,7 +110,7 @@
 						onblur={() => {
 							if (date) dayText = fmtDay(date);
 						}}
-						placeholder="15 Nov 2021"
+						placeholder="e.g. 15 Nov 2021"
 						autocomplete="off"
 						spellcheck="false"
 						aria-invalid={dayUnread || (!!date && !inRange) ? 'true' : undefined}
@@ -123,7 +129,7 @@
 						aria-describedby={id('stored')}
 					/>
 				</div>
-				<button type="submit" class="btn btn-sm btn-primary save" {disabled}>{saving ? 'Saving…' : typed.ok && typed.value === null ? 'Clear the day' : 'Save the day'}</button>
+				<button type="submit" class="btn btn-sm btn-primary save" {disabled}>{saving ? 'Saving…' : inRange && typed.ok && typed.value === null ? 'Clear the day' : 'Save the day'}</button>
 			</div>
 			<p class="hint muted" id={id('stored')} data-testid="edit-day-stored">
 				{#if dayUnread}
@@ -176,9 +182,10 @@
 	.value input {
 		width: 9rem;
 	}
-	/* Wide enough for "30 Sep 2021" and the placeholder, as the native date field was. */
+	/* Wide enough for "30 Sep 2021" and the placeholder ("e.g. 15 Nov 2021", which reads as an example, not a day
+	   already picked), as the native date field was. */
 	.day {
-		width: 9.5rem;
+		width: 11rem;
 	}
 	.save {
 		min-height: 32px;
@@ -194,7 +201,8 @@
 		color: var(--success);
 		margin: 0.4rem 0 0;
 	}
-	@media (max-width: 640px) {
+	/* The Data page's column, not the viewport (ui-playbook § 2: container queries). */
+	@container data-page (max-width: 640px) {
 		.field,
 		.value input,
 		.day,

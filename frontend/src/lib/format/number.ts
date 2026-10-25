@@ -81,6 +81,8 @@ export function fmtQty(n: number | null | undefined, digits = 0, trim = false, s
  */
 export function fmtReading(v: number | null | undefined): string {
 	if (v == null || !Number.isFinite(v)) return '–';
+	// A dry day is 0, not "0.0000": the Data page's preview showed every rainless day with four decimals (issue #586).
+	if (v === 0) return '0';
 	const a = Math.abs(v);
 	return fmtNum(v, a >= 100 ? 0 : a >= 1 ? 2 : a >= 0.01 ? 3 : 4);
 }

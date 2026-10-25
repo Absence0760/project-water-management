@@ -5520,7 +5520,9 @@ with the table the data needs).
   link lands on Settings → Calibration record (`#set-record`). *What the model uses* spans the page;
   its kinds (at least 22rem each, one column on a phone) are behind **Show
   what each kind of series is for** (a `<details>`, closed by default, issue
-  #174), and its closing note, at a reading measure, shows either way.
+  #174), and its closing note, at a reading measure, shows either way; its
+  *Simulation period* is a link to that setting (`?tab=settings#set-period`,
+  the heading focused; it read "unless Settings sets one", a dead end).
 - **On this page.** Once there is a series, a **Data sections** menu
   ([§ On this page menu](#on-this-page-menu)): from 80rem of page (a 1440 px
   window) a side index on the left of the panels, narrower a bar under the
@@ -5593,14 +5595,18 @@ editors only; recommended to the client, whose answer to the issue's
 question 1 is still open) follows: a *Day* text field read day first
 (`parseDay`: "2 Oct 2021", "2/10/2021" or "2021-10-02"; not a native date
 field, which shows the browser's own order; issue #521), shown back as
-"2 Oct 2021" and checked against the series' span, a *Value (unit)* box that takes the day's stored value when the
+"2 Oct 2021" and checked against the series' span (its placeholder reads
+*e.g. 15 Nov 2021*, an example rather than a day that looks picked), a *Value (unit)* box that takes the day's stored value when the
 day is picked (12.5 or 12,5; blank = no reading; never negative), and
 **Save the day** (**Clear the day** when the box is blank; disabled while
 nothing changes). The line under them says the stored value and whether the
 day is already edited by hand, and on a series a data feed fills that the
-feed won't write over the day. It saves through `PUT
+feed won't write over the day. Until a day is picked the button reads **Save the day**, disabled (it read
+*Clear the day*, the blank box read as a clearing). It saves through `PUT
 …/series/:id/days/:date`, then says *Saved 2 Oct 2021: 14.2 mm. Kept in
-History, where the value before can be restored.*; a day outside the series
+History, where the value before can be restored.*, and the focus goes to
+the Day field with its text selected, ready for the next day (the button
+that had it is disabled once saved, which dropped the focus to the page); a day outside the series
 is for Add data (a file or pasted rows), and while a feed is replacing the
 series the box says to wait. A day edited by hand is marked so an edited
 record never passes as the raw one ([data-model.md § Days edited by
@@ -5697,10 +5703,16 @@ readings* on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 The table's breakpoints are container queries on the page's column
 (`@container data-page`), not the viewport, since the sidebar takes 240 px.
-In a column up to 72rem (a 1024 px window beside the sidebar) the table fits
+In a column up to 76rem (a 1024 or 1280 px window beside the sidebar, at the
+root's 14 px) the table fits
 without a sideways scroll: *From* folds under *Data up to* (the From column
 is hidden from sight, kept for screen readers), the row header and coverage
-narrow, and the row's buttons wrap two to a line. In a column 640 px or
+narrow, and the row's buttons wrap two to a line. Until issue #586 the fold
+began at 72rem, so a 1280 px window (a 1018 px column) kept the From column
+and squeezed the series names to 190 px, wrapping every role badge onto two
+lines with its ⓘ on a third. A badge that still wraps (a 1024 px window) is
+one rounded box with its ⓘ beside it. The key under the table keeps each
+colour with its words (a phone wrapped *no data* away from its swatch). In a column 640 px or
 narrower each row becomes a card
 (series and role on top, then labelled Data up to / From / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
@@ -5737,15 +5749,19 @@ a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
 where they disagree, using the project's thresholds from Settings → *Data
 quality*. A **Data checks** panel lists negative values, outliers and flat
-stretches found in each loaded series (engine `checkSeries`), plus the
+stretches found in each loaded series (engine `checkSeries`), each naming
+its series as a link-styled button (*Chart Logger* to a screen reader,
+`aria-pressed` while charted) that charts it as its row's **View** does,
+a history entry (issue #586: the check named the series and went nowhere), plus the
 catchment-rain checks for missing data recorded as 0 (issue #2): a **Zero rain
 run** badge for long zero stretches in the wet season, and a **Low vs CHIRPS**
 badge for water years far below the usual catchment / CHIRPS share (engine
 `rainVsChirps`, on the first catchment and first CHIRPS series by name, as a
 run reads them). These are the same checks a run reports as warnings; rules in
 [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
-What the checks look for is the heading's ⓘ (`data-quality-limits`), not a
-line under it (issue #464).
+What the checks look for is the ⓘ beside the heading (`data-quality-limits`), not a
+line under it (issue #464), and not inside it, so the heading, and a
+`#data-checks` landing, is named *Data checks* alone.
 Charting that catchment rain series tints the days a run will treat as
 missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
@@ -5831,7 +5847,8 @@ unit once: the m³/day columns name it in their label, so no second `(m³/day)`
 follows. The derived columns are
 computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
 (the same functions a run uses), not recomputed separately, so they are blank
-for any day outside the model's own run window. Its days read day first
+for any day outside the model's own run window. A dry day reads *0*, not *0.0000* (`fmtReading`,
+issue #586; the Download preview and the charts' hover values too). Its days read day first
 (`1 Oct 2021`, `fmtDay`; issue #521), and the search box takes a date as
 they read or year first (`2015`, `Mar 2015`, `14 Mar 2015`, `2015-03-14`;
 `format/number.ts` `dayPrefix`) or a value comparison (`> 20`, `= 0`); *Missing

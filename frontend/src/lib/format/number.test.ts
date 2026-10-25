@@ -54,6 +54,9 @@ describe('fmtReading', () => {
 		expect([1234.4, 100, 12.345, 1, 0.0123, 0.01, 0.00012, -250.6].map(fmtReading)).toEqual(['1\u202f234', '100', '12.35', '1.00', '0.012', '0.010', '0.0001', '\u2212251']);
 		expect([null, undefined, NaN].map(fmtReading)).toEqual(['–', '–', '–']);
 	});
+	it('reads a zero as 0, not with four decimals (a dry day; -0 too)', () => {
+		expect([0, -0].map(fmtReading)).toEqual(['0', '0']);
+	});
 });
 
 describe('fmtPct', () => {
