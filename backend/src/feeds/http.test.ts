@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FeedUnavailableError } from './errors.js';
-import { feedHttp, feedSourceMode, fileTag, liveHttp } from './http.js';
+import { FeedThrottledError, FeedUnavailableError } from './errors.js';
+import { feedHttp, feedSourceMode, fileTag, liveHttp, retryAfterSeconds, THROTTLE_DEFAULT_SECONDS, THROTTLE_MAX_SECONDS, type ThrottleState } from './http.js';
 
 describe('feedSourceMode', () => {
 	it('defaults to fixtures (local-first: no network in dev or CI)', () => {
@@ -43,13 +43,53 @@ describe('liveHttp', () => {
 	});
 
 	it('turns other statuses, network errors and timeouts into FeedUnavailableError with our own message', async () => {
-		await expect(liveHttp(respond(503, '<h1>secret stack</h1>')).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(new FeedUnavailableError('HTTP 503'));
+		await expect(liveHttp(respond(502, '<h1>secret stack</h1>')).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(new FeedUnavailableError('HTTP 502'));
 		await expect(liveHttp(respond(403)).text('https://data.chc.ucsb.edu/p')).rejects.toThrow('HTTP 403');
 		await expect(liveHttp(vi.fn(async () => { throw new TypeError('fetch failed: getaddrinfo ENOTFOUND'); })).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(
 			new FeedUnavailableError('the request failed')
 		);
 		const timeout = Object.assign(new Error('t'), { name: 'TimeoutError' });
 		await expect(liveHttp(vi.fn(async () => { throw timeout; })).text('https://data.chc.ucsb.edu/p')).rejects.toThrow('the request timed out');
+	});
+
+	it('reads HTTP 429 and 503 as throttled, and stops asking that host for the pause its Retry-After asks (positive control: another host is asked)', async () => {
+		const throttle: ThrottleState = new Map();
+		const busy = vi.fn(async () => new Response('slow down', { status: 429, headers: { 'retry-after': '120' } }));
+		const err = await liveHttp(busy, throttle).range('https://data.chc.ucsb.edu/a.tif', 0, 7).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(FeedThrottledError);
+		expect(err).toBeInstanceOf(FeedUnavailableError);
+		expect(err).toMatchObject({ status: 429, retryAfterSeconds: 120, message: 'HTTP 429: the source asked us to slow down, so the feed tries again later' });
+		// The next request to that host, from any client sharing the state, fails at once without asking.
+		const ok = respond(206, 'ab');
+		await expect(liveHttp(ok, throttle).range('https://data.chc.ucsb.edu/b.tif', 0, 1)).rejects.toMatchObject({ status: 429, retryAfterSeconds: expect.any(Number) });
+		expect(ok).not.toHaveBeenCalled();
+		expect(await liveHttp(ok, throttle).text('https://www.dws.gov.za/p')).toBe('ab');
+		expect(throttle.get('data.chc.ucsb.edu')!.until - Date.now()).toBeGreaterThan(110_000);
+		// Once the pause is over, it is asked again.
+		throttle.get('data.chc.ucsb.edu')!.until = Date.now() - 1;
+		expect(new TextDecoder().decode((await liveHttp(ok, throttle).range('https://data.chc.ucsb.edu/b.tif', 0, 1))!)).toBe('ab');
+		expect(throttle.has('data.chc.ucsb.edu')).toBe(false);
+	});
+
+	it('a 503 without Retry-After pauses the default; a Retry-After past the cap pauses only the cap', async () => {
+		const throttle: ThrottleState = new Map();
+		await expect(liveHttp(respond(503), throttle).text('https://data.chc.ucsb.edu/p')).rejects.toMatchObject({ status: 503, retryAfterSeconds: null });
+		expect(throttle.get('data.chc.ucsb.edu')!.until - Date.now()).toBeLessThanOrEqual(THROTTLE_DEFAULT_SECONDS * 1000);
+		throttle.clear();
+		await expect(liveHttp(respond(429, '', { 'retry-after': '86400' }), throttle).text('https://data.chc.ucsb.edu/p')).rejects.toMatchObject({ retryAfterSeconds: 86400 });
+		expect(throttle.get('data.chc.ucsb.edu')!.until - Date.now()).toBeLessThanOrEqual(THROTTLE_MAX_SECONDS * 1000);
+		expect(throttle.get('data.chc.ucsb.edu')!.until - Date.now()).toBeGreaterThan((THROTTLE_MAX_SECONDS - 10) * 1000);
+	});
+
+	it('reads Retry-After as seconds or an HTTP date, and nothing else', () => {
+		const now = Date.parse('2026-10-25T00:00:00Z');
+		expect(retryAfterSeconds('120', now)).toBe(120);
+		expect(retryAfterSeconds(' 0 ', now)).toBe(0);
+		expect(retryAfterSeconds('Sun, 25 Oct 2026 00:02:00 GMT', now)).toBe(120);
+		expect(retryAfterSeconds('Sat, 24 Oct 2026 23:00:00 GMT', now)).toBe(0);
+		expect(retryAfterSeconds(null, now)).toBeNull();
+		expect(retryAfterSeconds('soon', now)).toBeNull();
+		expect(retryAfterSeconds('-5', now)).toBeNull();
 	});
 
 	it('gives a range read the file’s tag: its ETag, else lm: and its Last-Modified, else none', async () => {
@@ -76,7 +116,7 @@ describe('liveHttp', () => {
 		expect(init.method).toBe('HEAD');
 		expect(init.headers).not.toHaveProperty('range');
 		expect(await liveHttp(respond(404)).head!('https://data.chc.ucsb.edu/a.tif')).toBeNull();
-		await expect(liveHttp(respond(503)).head!('https://data.chc.ucsb.edu/a.tif')).rejects.toThrow(new FeedUnavailableError('HTTP 503'));
+		await expect(liveHttp(respond(502)).head!('https://data.chc.ucsb.edu/a.tif')).rejects.toThrow(new FeedUnavailableError('HTTP 502'));
 	});
 
 	it('HEAD keeps to the known hosts too (the re-check is no way around the SSRF rule)', async () => {

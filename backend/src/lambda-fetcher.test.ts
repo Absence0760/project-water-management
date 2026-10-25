@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FeedThrottledError } from './feeds/errors.js';
 import type { FeedHttp } from './feeds/http.js';
 
 const sent: { url: string | undefined; message: unknown }[] = [];
@@ -15,7 +16,7 @@ vi.mock('./feeds/http.js', async (orig) => {
 	return { ...real, feedHttp: async () => httpOverride.next ?? real.feedHttp() };
 });
 
-const { FETCH_SEND_MARGIN_MS, fetchFailureReason, handler, withDeadline } = await import('./lambda-fetcher.js');
+const { FETCH_SEND_MARGIN_MS, failureDetail, fetchFailureReason, handler, withDeadline } = await import('./lambda-fetcher.js');
 
 afterEach(() => {
 	sent.length = 0;
@@ -131,8 +132,16 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		const failed = warn.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === 'feed_fetch_failed');
 		// The successful fetch logs none; the answered failures one each.
 		expect(failed).toEqual([
-			{ event: 'feed_fetch_failed', feedId: ids.feedId, source: 'chirps_gefs', reason: fetchFailureReason((sent[1]!.message as { result: { error: string } }).result.error) },
-			{ event: 'feed_fetch_failed', feedId: ids.feedId, source: null, reason: 'invalid_request' }
+			{
+				event: 'feed_fetch_failed',
+				feedId: ids.feedId,
+				fetchJobId: ids.fetchJobId,
+				source: 'chirps_gefs',
+				reason: fetchFailureReason((sent[1]!.message as { result: { error: string } }).result.error),
+				// A format error's text names the cell: no detail.
+				detail: null
+			},
+			{ event: 'feed_fetch_failed', feedId: ids.feedId, fetchJobId: ids.fetchJobId, source: null, reason: 'invalid_request', detail: null }
 		]);
 		expect(failed[0]!.reason).not.toBe('other');
 		// The stored message names the grid cell; the log never does.
@@ -147,10 +156,43 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		expect(warn.mock.calls.filter((c) => String(c[0]).includes('feed_fetch_failed'))).toEqual([]);
 	});
 
+	it('logs what the source did with a failed live fetch (HTTP 429 here), and its job, so a dropped answer can be traced', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		httpOverride.next = {
+			range: async () => {
+				throw new FeedThrottledError(429, 120);
+			},
+			text: async () => null
+		};
+		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps_gefs', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start: today, end: today, today } };
+		await handler({ Records: [record('m1', req)] } as never);
+		const failed = warn.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === 'feed_fetch_failed');
+		expect(failed).toEqual([{ event: 'feed_fetch_failed', feedId: ids.feedId, fetchJobId: ids.fetchJobId, source: 'chirps_gefs', reason: 'throttled', detail: 'HTTP 429' }]);
+		// The feed's row gets the whole sentence.
+		expect(sent[0]).toMatchObject({ message: { result: { ok: false, error: 'the source is unreachable: HTTP 429: the source asked us to slow down, so the feed tries again later' } } });
+	});
+
+	it('logs a failure’s detail only when it is the live client’s own text or an HTTP status, never a cell or a station', () => {
+		expect(failureDetail('the source is unreachable: HTTP 403')).toBe('HTTP 403');
+		expect(failureDetail('the source is unreachable: HTTP 503: the source asked us to slow down, so the feed tries again later')).toBe('HTTP 503');
+		expect(failureDetail('the source is unreachable: the request timed out')).toBe('the request timed out');
+		expect(failureDetail('the source is unreachable: the response is larger than expected')).toBe('the response is larger than expected');
+		expect(failureDetail('the source is unreachable: it did not answer in time')).toBe('it did not answer in time');
+		// Not ours to trust: a forecast's issue date, a format error's cell, anything else.
+		expect(failureDetail('the source is unreachable: the newest forecast (issued 2026-03-10) is still being published: 4 of its 16 days are out')).toBeNull();
+		expect(failureDetail('the source’s data could not be read: the grid has no data at -20.27, 25.37')).toBeNull();
+		expect(failureDetail('the source is unreachable: HTTP 4290 at -20.27')).toBeNull();
+		expect(failureDetail('the fetch failed with an internal error')).toBeNull();
+	});
+
 	it('maps each failure message to a fixed reason code', () => {
 		expect(fetchFailureReason('the source is unreachable: it did not answer in time')).toBe('timeout');
 		expect(fetchFailureReason('the fetch request was not valid, so nothing was fetched')).toBe('invalid_request');
-		expect(fetchFailureReason('the source is unreachable: HTTP 503')).toBe('unavailable');
+		expect(fetchFailureReason('the source is unreachable: HTTP 403')).toBe('unavailable');
+		expect(fetchFailureReason('the source is unreachable: HTTP 503')).toBe('throttled');
+		expect(fetchFailureReason('the source is unreachable: HTTP 429: the source asked us to slow down, so the feed tries again later')).toBe('throttled');
 		expect(fetchFailureReason('the source’s data could not be read: no station X0H000')).toBe('format');
 		expect(fetchFailureReason('the fetch failed with an internal error')).toBe('internal');
 		expect(fetchFailureReason('something new')).toBe('other');

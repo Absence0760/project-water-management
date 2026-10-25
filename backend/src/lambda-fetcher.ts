@@ -41,17 +41,53 @@ const DEFAULT_BUDGET_MS = 100_000;
 const TOO_SLOW = feedErrorMessage(new FeedUnavailableError('it did not answer in time'));
 const INVALID_REQUEST = 'the fetch request was not valid, so nothing was fetched';
 
+const UNAVAILABLE = feedErrorMessage(new FeedUnavailableError(''));
+
 /**
  * A failed fetch's error, as a fixed code for the log (feed_fetch_failed): the
- * stored message can name the grid cell or station, so it never goes to a log.
+ * stored message can name the grid cell or station, so it never goes to a log
+ * whole (failureDetail is the part that may). `throttled`: the source
+ * answered HTTP 429 or 503 (feeds/errors.ts FeedThrottledError).
  */
-export function fetchFailureReason(error: string): 'timeout' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
+export function fetchFailureReason(error: string): 'timeout' | 'throttled' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
 	if (error === TOO_SLOW) return 'timeout';
 	if (error === INVALID_REQUEST) return 'invalid_request';
-	if (error.startsWith(feedErrorMessage(new FeedUnavailableError('')))) return 'unavailable';
+	if (error.startsWith(UNAVAILABLE)) return /^HTTP (429|503)\b/.test(error.slice(UNAVAILABLE.length)) ? 'throttled' : 'unavailable';
 	if (error.startsWith(feedErrorMessage(new FeedFormatError('')))) return 'format';
 	if (error === feedErrorMessage(new Error())) return 'internal';
 	return 'other';
+}
+
+/**
+ * The endings of an unavailable fetch's message that name no cell, station or
+ * URL: the live client's own (feeds/http.ts) and the fetcher's deadline.
+ * Anything else (a forecast's partial issue, a message added later) is left
+ * out of the log rather than trusted.
+ */
+const SAFE_DETAILS: readonly string[] = [
+	'the request timed out',
+	'the request failed',
+	'the response is larger than expected',
+	'the source redirected too many times',
+	'the source redirected somewhere it may not',
+	'the request was refused (not a known source host)',
+	'a file changed while it was being read',
+	'it did not answer in time'
+];
+/** The longest detail logged (each above is shorter; the cap guards one added later). */
+export const FAILURE_DETAIL_MAX = 80;
+
+/**
+ * What of a failed fetch's message may go to the log beside its reason: the
+ * HTTP status (`HTTP 429`) or one of SAFE_DETAILS, else null. Never a format
+ * error's text, which names grid cells and stations.
+ */
+export function failureDetail(error: string): string | null {
+	if (!error.startsWith(UNAVAILABLE)) return null;
+	const rest = error.slice(UNAVAILABLE.length);
+	const status = /^HTTP [1-5]\d\d\b/.exec(rest);
+	if (status) return status[0];
+	return SAFE_DETAILS.includes(rest) && rest.length <= FAILURE_DETAIL_MAX ? rest : null;
 }
 
 /** Enough of a fetch message to answer it: the ids the worker routes the answer by. */
@@ -126,13 +162,16 @@ export const handler = async (event: SQSEvent, context?: Pick<Context, 'getRemai
 		// The answer went back, but it says the fetch failed: the Lambda itself
 		// succeeded, so its Errors metric never sees this. One line per failed
 		// answer (a retried send logs nothing until it goes through), metric
-		// and alarm in infra/feeds.tf. Ids, the source and a reason code only.
+		// and alarm in infra/feeds.tf. Ids, the source, a reason code and the
+		// safe detail (failureDetail: `HTTP 429`, `the request timed out`), never a cell or a station.
 		if (!result.ok) {
 			logEvent('warn', {
 				event: 'feed_fetch_failed',
 				feedId: ids.feedId,
+				fetchJobId: ids.fetchJobId,
 				source: req ? req.request.source : null,
-				reason: fetchFailureReason(result.error)
+				reason: fetchFailureReason(result.error),
+				detail: failureDetail(result.error)
 			});
 		}
 		if (!req) continue;
