@@ -191,6 +191,19 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 	// the planner from folding m into the outer query, which would work each
 	// closeness out again for the filter and the sort.
 	const wordsIn = (expr: string) => words.map((_, i) => `(' ' || ${expr}) LIKE '% ' || $${i + 3}::text || '%'`).join(' AND ');
+	// Sequential scans are off for this one statement. Under RLS the planner
+	// may not read the table's statistics for LIKE (textlike isn't
+	// leakproof), so it prices every word test at a fixed 20 %, whatever the
+	// word and whatever the data. For one-letter words ("k d") the trigram
+	// index offers one weak trigram a word, and that blind estimate makes a
+	// parallel scan of every row cost within 1 % of the index: the plan
+	// flipped to the scan on a fixture change that touched no query (#570).
+	// Through the index "k d" took 9 ms on 150 000 places, the parallel scan
+	// 13 ms on three processes, a serial one 27 ms. The setting goes back
+	// before the next statement; a query shape the index can't serve still
+	// scans (the setting only prices a scan up), which the perf test's plan
+	// check catches.
+	const seqscan = (await db.query<{ was: string }>(`SELECT current_setting('enable_seqscan') AS was, set_config('enable_seqscan', 'off', true)`)).rows[0]!.was;
 	const places = await db.query<{ place_id: string; name: string; feature: string; admin1: string; country: string; lon: number; lat: number; dataset: string; source: string; alias: string | null }>(
 		`SELECT place_id, name, feature, admin1, country, lon, lat, dataset, source,
 			CASE WHEN alt_close < main_close THEN (
@@ -216,6 +229,7 @@ export async function searchMap(db: Db, q: string): Promise<SearchAnswer> {
 		 ORDER BY ${PLACE_ORDER}`,
 		[phrase, SEARCH_PLACE_LIMIT + 1, ...words]
 	);
+	await db.query(`SELECT set_config('enable_seqscan', $1, true)`, [seqscan]);
 
 	// Only asked when no place matched: with none loaded the answer says so.
 	const placesLoaded = places.rows.length > 0 || (await db.query<{ loaded: boolean }>(`SELECT EXISTS (SELECT 1 FROM gazetteer_reference) AS loaded`)).rows[0]!.loaded;

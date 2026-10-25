@@ -86,6 +86,30 @@ describe('what a search finds', () => {
 		expect(hitsOf((await search(viewer, 'Sandlaagte oos')).body)).toEqual(['place:Sandlaagte-Oos']);
 	});
 
+	it('turns sequential scans off for the gazetteer statement only: they are back on for the rest of the transaction, and a session that had them off keeps them off', async () => {
+		const seen: string[] = [];
+		await withUser(viewer.id, async (db) => {
+			// The gazetteer query runs with them off (positive control that the setting is made at all).
+			const spy = new Proxy(db, {
+				get(target, prop) {
+					if (prop === 'query')
+						return async (sql: string, params?: unknown[]) => {
+							if (sql.includes('FROM gazetteer_reference g')) seen.push((await target.query<{ s: string }>(`SELECT current_setting('enable_seqscan') AS s`)).rows[0]!.s);
+							return target.query(sql, params);
+						};
+					const v = Reflect.get(target, prop);
+					return typeof v === 'function' ? v.bind(target) : v;
+				}
+			}) as typeof db;
+			expect(hitsOf(await searchMap(spy, 'morester'))).toEqual(['place:Môrester']);
+			seen.push((await db.query<{ s: string }>(`SELECT current_setting('enable_seqscan') AS s`)).rows[0]!.s);
+			await db.query(`SET LOCAL enable_seqscan = off`);
+			await searchMap(db, 'morester');
+			seen.push((await db.query<{ s: string }>(`SELECT current_setting('enable_seqscan') AS s`)).rows[0]!.s);
+		});
+		expect(seen).toEqual(['off', 'on', 'off']);
+	});
+
 	it('folds a station’s or dam’s accents in SQL as the gazetteer’s are folded at load', async () => {
 		await asOwner(`INSERT INTO gauge_station_reference (code, name, river, lon, lat, dataset, source) VALUES ('Z9H901', 'Môrester @ Kloof', 'Kloof', 21.4, -33.7, 'search-test', 'Test')`);
 		try {

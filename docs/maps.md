@@ -1665,7 +1665,13 @@ The search's places come from `gazetteer_reference` (225), which the
   table (about 111 000 rows for South Africa and its neighbours;
   `geo/search.db.perf.test.ts` holds a budget of 40 ms on 150 000, two
   alternate names on every fifth: 6 to 17 ms a search, 2026-10-13; on the
-  real seven dumps 2 to 7 ms). A load
+  real seven dumps 2 to 7 ms). The search turns sequential scans off for
+  that one statement (`searchMap`, back on before the next): under RLS
+  Postgres may not read the table's statistics for `LIKE`, which isn't
+  leakproof, so it prices each word at a fixed 20 %, and for a search of
+  one-letter words ("k d", one weak trigram each) a parallel scan of every
+  row then priced within 1 % of the index and was picked (2026-10-25: 13 ms
+  on three processes, against 9 ms through the index). A load
   replaces every row of its dataset in one transaction; other datasets stay.
 - **Production loading** goes through the reference-dataset path
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),

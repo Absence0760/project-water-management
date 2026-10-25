@@ -8,6 +8,13 @@
 // use it under RLS) a search read every row: a median of about 150 ms here.
 // Through it, 5 to 11 ms.
 //
+// The plan is the one the search gets: explained in its own transaction,
+// with the sequential scans searchMap turns off for the statement. Under RLS
+// the planner prices LIKE blind (a fixed 20 % a word), and for "k d" a
+// parallel scan tied the index within 1 %; a fixture change that touched no
+// query (#570, one word of the invented names) flipped it to the scan.
+// With scans off a query shape the index can't serve still shows a Seq Scan.
+//
 // Alternate names (237) go through a second trigram index on ' ' ||
 // alt_search, the two arms a BitmapOr on the one table. GeoNames' 2026-10-13
 // dumps give 23 472 alternate names on 14 739 of 111 246 places (one in
@@ -56,15 +63,21 @@ function place(i: number): PlaceRecord {
 		lon: 18 + (i % 1000) / 100, lat: -34 + Math.floor(i / 1000) / 100, source: 'SYNTHETIC perf data' };
 }
 
-/** The SQL and parameters searchMap sends for the gazetteer, caught on the way through. */
-async function placesQuery(q: string): Promise<{ sql: string; params: unknown[] }> {
-	let caught: { sql: string; params: unknown[] } | null = null;
+/**
+ * The plan the gazetteer query gets, explained in the search's own
+ * transaction just before it runs, so with the settings searchMap gives it
+ * (sequential scans off for that statement; a query the index can't serve
+ * still shows a Seq Scan).
+ */
+async function placesPlan(q: string): Promise<Record<string, unknown>> {
+	let caught: Record<string, unknown> | null = null;
 	await withUser(userId, async (db) => {
 		const spy = new Proxy(db, {
 			get(target, prop) {
 				if (prop === 'query')
-					return (sql: string, params: unknown[]) => {
-						if (sql.includes('FROM gazetteer_reference')) caught = { sql, params };
+					return async (sql: string, params: unknown[]) => {
+						if (sql.includes('FROM gazetteer_reference g'))
+							caught = (await target.query<{ 'QUERY PLAN': [{ Plan: Record<string, unknown> }] }>(`EXPLAIN (FORMAT JSON) ${sql}`, params)).rows[0]!['QUERY PLAN'][0].Plan;
 						return target.query(sql, params);
 					};
 				const v = Reflect.get(target, prop);
@@ -107,9 +120,7 @@ afterAll(async () => {
 
 describe('map search over a country-sized gazetteer', () => {
 	it.each(QUERIES)('"%s" goes through the trigram index, never a scan of the table', async (q) => {
-		const { sql, params } = await placesQuery(q);
-		const plan = await withUser(userId, (db) => db.query<{ 'QUERY PLAN': [{ Plan: Record<string, unknown> }] }>(`EXPLAIN (FORMAT JSON) ${sql}`, params));
-		const nodes = planNodes(plan.rows[0]!['QUERY PLAN'][0].Plan);
+		const nodes = planNodes(await placesPlan(q));
 		expect(nodes.some((n) => n.index === 'gazetteer_reference_search_trgm_idx'), JSON.stringify(nodes)).toBe(true);
 		expect(nodes.some((n) => n.index === 'gazetteer_reference_alt_search_trgm_idx'), JSON.stringify(nodes)).toBe(true);
 		expect(nodes.some((n) => n.type === 'Seq Scan'), JSON.stringify(nodes)).toBe(false);
