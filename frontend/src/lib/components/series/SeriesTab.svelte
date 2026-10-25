@@ -1785,6 +1785,8 @@ series names to 190 px, wrapping each role badge. */
 		.series td[data-label]::before {
 			content: attr(data-label) / '';
 			display: block;
+			/* A number cell doesn't wrap; its label must, or "Missing (% of days)" runs into the next at 320 px (issue #586). */
+			white-space: normal;
 			font-size: var(--font-xs);
 			font-weight: 600;
 			color: var(--text-muted);

@@ -369,7 +369,7 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const menu = page.getByRole('navigation', { name: 'Data sections' });
 	// Rain and observed flow, no logger or CHIRPS: no agreement table and no double mass.
-	await expect(menu.getByRole('link')).toHaveText(['Series', 'Chart', 'Data feeds', 'Data checks', 'What the model uses']);
+	await expect(menu.getByRole('link')).toHaveText(['Input time series', 'Series chart', 'Data feeds', 'Data checks', 'What the model uses']);
 	await expectNamedGroups(menu, ['Series', 'Checks', 'Reference']);
 
 	await menu.getByRole('link', { name: 'What the model uses' }).click();
@@ -407,7 +407,7 @@ test('on a 320 px phone the Data strip scrolls sideways inside itself, and every
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const menu = page.getByRole('navigation', { name: 'Data sections' });
 	const links = menu.getByRole('link');
-	await expect(links).toHaveText(['Series', 'Chart', 'Data feeds', 'Data checks', 'What the model uses']);
+	await expect(links).toHaveText(['Input time series', 'Series chart', 'Data feeds', 'Data checks', 'What the model uses']);
 	// The strip is wider than the phone and scrolls inside the bar; the page doesn't scroll sideways.
 	const strip = menu.locator('.flow');
 	expect(await strip.evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).overflowX === 'auto')).toBe(true);
@@ -422,13 +422,13 @@ test('on a 320 px phone the Data strip scrolls sideways inside itself, and every
 			return r.left >= flow.left - 0.5 && r.right <= flow.right + 0.5;
 		});
 	await links.first().focus();
-	for (const name of ['Chart', 'Data feeds', 'Data checks', 'What the model uses']) {
+	for (const name of ['Series chart', 'Data feeds', 'Data checks', 'What the model uses']) {
 		await page.keyboard.press('Tab');
 		await expect(links.filter({ hasText: new RegExp(`^${name}$`) })).toBeFocused();
 		await expect.poll(shownWhole).toBe(true);
 	}
 	// And back.
-	for (const name of ['Data checks', 'Data feeds', 'Chart', 'Series']) {
+	for (const name of ['Data checks', 'Data feeds', 'Series chart', 'Input time series']) {
 		await page.keyboard.press('Shift+Tab');
 		await expect(links.filter({ hasText: new RegExp(`^${name}$`) })).toBeFocused();
 		await expect.poll(shownWhole).toBe(true);

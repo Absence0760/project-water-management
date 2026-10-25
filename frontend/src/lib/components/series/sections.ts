@@ -40,10 +40,10 @@ export function dataNavGroups(p: DataPanels): NavGroup[] {
 	const groups: NavGroup[] = [
 		{
 			label: 'Series',
-			// Each link says its panel's heading; the bar the long ones shorter (issue #462).
+			// Each link says its panel's heading, on the bar too: "Series" there read as the group's own name (issue #586).
 			sections: [
-				{ id: 'data-series', label: 'Input time series', bar: 'Series' },
-				...(p.chart ? [{ id: 'data-chart', label: 'Series chart', bar: 'Chart' }] : []),
+				{ id: 'data-series', label: 'Input time series' },
+				...(p.chart ? [{ id: 'data-chart', label: 'Series chart' }] : []),
 				// The feeds that fill the series daily (issue #586: from Settings); its heading word for word.
 				{ id: 'data-feeds', label: 'Data feeds' }
 			]

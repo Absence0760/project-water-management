@@ -22,8 +22,8 @@ describe('dataNavGroups', () => {
 	it('names each link as its panel’s heading, the long ones shorter on the bar (issue #462)', () => {
 		const names = dataNavGroups(ALL).flatMap((g) => g.sections.map((s) => [s.label, navText(s, 'bar')]));
 		expect(names).toEqual([
-			['Input time series', 'Series'],
-			['Series chart', 'Chart'],
+			['Input time series', 'Input time series'],
+			['Series chart', 'Series chart'],
 			['Data feeds', 'Data feeds'],
 			['Gauge vs logger agreement', 'Gauge vs logger'],
 			['Double mass: catchment rain vs CHIRPS', 'Double mass'],

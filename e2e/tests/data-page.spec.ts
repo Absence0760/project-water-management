@@ -472,6 +472,9 @@ test('the series table, the CSV period and Edit a day read day first, and fit a 
 		await page.setViewportSize({ width, height: 844 });
 		await layoutSettled(page);
 		await expectNoSidewaysScroll(page);
+		// Each card cell holds its label: "Missing (% of days)" wraps rather than running into Typical (issue #586).
+		const overflowing = await row.locator('td[data-label]').evaluateAll((cells) => cells.filter((c) => c.scrollWidth > c.clientWidth + 1).map((c) => c.getAttribute('data-label')));
+		expect(overflowing, `at ${width} px`).toEqual([]);
 	}
 	await expectNoViolations(page);
 });
