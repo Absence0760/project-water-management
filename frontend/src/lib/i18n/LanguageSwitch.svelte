@@ -15,7 +15,21 @@
 	however many languages there are: it works before any script runs, the
 	chosen one is marked `aria-current`, and a click keeps the choice like a
 	button does; the address sets the words.
+
+	Saves to the account go one at a time, across every switch on the page,
+	and only the latest choice's answer is kept: two quick choices (Afrikaans,
+	then English while the Afrikaans save is still on its way) would otherwise
+	reach the server in either order and leave the account on the earlier one,
+	and the earlier save's late answer would set session.user.locale back,
+	which the root layout applies, turning the page back with it.
 -->
+<script lang="ts" module>
+	/** The latest choice made on this page; a save for an earlier one is skipped or its answer dropped. */
+	let latestChoice = 0;
+	/** The account saves, chained: each is sent once the one before it has answered. */
+	let saving: Promise<void> = Promise.resolve();
+</script>
+
 <script lang="ts">
 	import { api } from '#lib/api/index.js';
 	import { session } from '#lib/auth/session.svelte.js';
@@ -33,15 +47,22 @@
 
 	/** Keep the choice on this device and, signed in, on the account. */
 	async function keep(locale: Locale) {
+		const mine = ++latestChoice;
 		failed = false;
 		storeLocale(locale);
-		if (session.user) {
+		if (!session.user) return;
+		const save = saving.then(async () => {
+			// A later choice came before this one's turn: that one is saved instead.
+			if (mine !== latestChoice || !session.user) return;
 			try {
-				session.user = await api.auth.updateMe({ locale });
+				const user = await api.auth.updateMe({ locale });
+				if (mine === latestChoice) session.user = user;
 			} catch {
-				failed = true;
+				if (mine === latestChoice) failed = true;
 			}
-		}
+		});
+		saving = save;
+		await save;
 	}
 
 	async function choose(locale: Locale) {

@@ -7,6 +7,9 @@
 //   change, says so, and leaves nothing to use; the unit's form holds the MAP
 //   and a source naming the grid and the method, and History has one entry.
 //   The panel passes axe; a cancelled Use writes nothing.
+// - What a form holds now shows as stored (855.5 mm, never rounded to the
+//   proposal's whole mm) with its source in its own column, not a title; a
+//   grid whose credit line is also its source is cited once.
 // - A unit the grid covers in part (at least 90 %) is proposed with its
 //   coverage beside the MAP (issue #500 answer 8); a whole one shows none.
 // - A unit outside the grid is listed with why, never filled; a unit holding
@@ -65,16 +68,20 @@ test('an editor uses each unit’s MAP from the grid, written to the units with 
 	const rows = panel.getByTestId('unit-map-rows').locator('tbody tr');
 	await expect(rows).toHaveCount(2);
 	await expect(rows.getByRole('rowheader')).toHaveText(['Upper farm', 'Lower farm']);
-	// Unit, proposed MAP (whole mm), cells, what the form holds now (nothing yet).
-	await expect(rows.first()).toHaveText(/^Upper farm\s*\d{3}\s*\d+\s*None$/);
+	// Unit, proposed MAP (whole mm), cells, what the form holds now (nothing yet) and where that came from.
+	await expect(rows.first()).toHaveText(/^Upper farm\s*\d{3}\s*\d+\s*None\s*–$/);
 	const upperMm = (await rows.first().locator('td').first().textContent())!.trim();
+	const now = (row: typeof rows) => row.locator('td').nth(2);
+	await expect(panel.getByRole('table', { name: 'Each unit’s MAP proposed from the grid, beside the MAP its form holds now and where that came from' })).toBeVisible();
+	// The tip beside the heading is named for it.
+	await expect(panel.getByRole('heading', { name: 'MAP from the grid' }).getByRole('button', { name: 'About MAP from the grid' })).toBeVisible();
 	await expect(panel.getByTestId('unit-map-source')).toContainText('Invented MAP grid for tests and demos');
 	await expectNoViolations(page, { include: '[data-testid="unit-map-proposal"]' });
 
 	// Cancelled: nothing written.
 	await panel.getByRole('button', { name: 'Use for 2 units' }).click();
 	await answerConfirm(page, false);
-	await expect(rows.first().locator('td').last()).toHaveText('None');
+	await expect(now(rows.first())).toHaveText('None');
 	await expect(panel.getByTestId('unit-map-notice')).toHaveText('');
 
 	await panel.getByRole('button', { name: 'Use for 2 units' }).click();
@@ -83,7 +90,8 @@ test('an editor uses each unit’s MAP from the grid, written to the units with 
 	await expect(panel.getByTestId('unit-map-notice')).toBeFocused();
 	await expect(panel.getByTestId('unit-map-same')).toHaveText('Every unit listed holds this MAP from this grid.');
 	await expect(panel.getByRole('button', { name: /^Use for/ })).toHaveCount(0);
-	await expect(rows.first().locator('td').last()).toHaveText(`${upperMm} mm, the same`);
+	await expect(now(rows.first())).toHaveText(`${upperMm} mm, the same`);
+	await expect(rows.first().locator('td').last()).toHaveText(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel, \d+ cells$/);
 	// The switch's own count follows the model.
 	await expect(page.getByTestId('unit-rain-coverage')).toContainText('2 of 2 units with land have a MAP.');
 
@@ -97,6 +105,35 @@ test('an editor uses each unit’s MAP from the grid, written to the units with 
 	// One History entry for both units.
 	const history = await page.request.get(`${API_URL}/projects/${id}/history`);
 	expect(JSON.stringify(await history.json()).match(/MAP of 2 units from the MAP grid synthetic synthetic 1/g)).toHaveLength(1);
+});
+
+test('a typed MAP shows as stored with its source in words, and a grid whose credit is its source is cited once', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticMapGrid();
+	const project = await seed(page.request, 'Unit MAP as stored');
+	// Upper farm holds a typed 855.5 mm: it read "856" beside a whole-mm proposal, a 0.5 mm difference shown as 1 mm.
+	const model = await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json();
+	for (const n of model.nodes) if (n.name === 'Upper farm') Object.assign(n, { mapMm: 855.5, mapSource: 'Catchment study, 2019' });
+	expect((await page.request.put(`${API_URL}/projects/${project.id}/model`, { data: model })).status()).toBe(200);
+	// The Southwestern Cape surface is loaded with its credit line as both its source and its attribution (docs/maps.md § Sources).
+	const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+	await page.route(/\/map\/unit-map(\?|$)/, async (route) => {
+		if (route.request().method() !== 'GET') return route.continue();
+		const res = await route.fetch();
+		const body = (await res.json()) as { dataset: Record<string, unknown> | null };
+		if (body.dataset) body.dataset = { ...body.dataset, source: waas, attribution: waas };
+		await route.fulfill({ response: res, json: body });
+	});
+	await openSettings(page, project.id);
+	const panel = page.getByTestId('unit-map-proposal');
+	await expect(panel.getByTestId('unit-map-body')).toHaveAttribute('data-ready', 'true');
+	const upper = panel.getByTestId('unit-map-rows').locator('tbody tr').first();
+	await expect(upper.locator('td').nth(2)).toHaveText('855.5 mm');
+	await expect(upper.locator('td').last()).toHaveText('Catchment study, 2019');
+	await expect(upper.locator('td').nth(2)).not.toHaveAttribute('title');
+	await panel.getByText('Source and method').click();
+	await expect(panel.getByTestId('unit-map-source')).toHaveText(`${waas} (synthetic 1; dataset “synthetic”, 0.01° cells).`);
+	await expectNoViolations(page, { include: '[data-testid="unit-map-proposal"]' });
 });
 
 test('a unit outside the grid is listed and left alone, and a unit holding another grid’s MAP holds Use', async ({ page, owner }) => {
