@@ -43,7 +43,7 @@ const MODEL_JSON = `json_build_object(
 	'crops', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r)) ORDER BY r."sortOrder", r.name) FROM (
 		SELECT id, name, sort_order AS "sortOrder", crop_factor AS "cropFactor", irrigation_system_id AS "irrigationSystemId"
 		FROM crop WHERE project_id = $1) r), '[]'),
-	'cropAreas', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r))) FROM (
+	'cropAreas', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r)) ORDER BY r."nodeId", r."cropId", r."areaM2") FROM (
 		SELECT node_id AS "nodeId", crop_id AS "cropId", area_m2 AS "areaM2", irrigation_system_id AS "irrigationSystemId"
 		FROM crop_area WHERE project_id = $1) r), '[]'),
 	'irrigationSystems', coalesce((SELECT json_agg(r ORDER BY r."sortOrder", r.name, r.id) FROM (
