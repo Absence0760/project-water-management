@@ -69,6 +69,20 @@ describe('the farm view of a published cap or full-allocation run (#523 I)', () 
 		}
 	});
 
+	it('the project list’s outcome columns give that viewer no use share or farm dam level of it; the editor reads both (positive control)', async () => {
+		const row = async (who: typeof ctx.viewer) => {
+			const r = await who.call('GET', '/projects/outcomes');
+			expect(r.status).toBe(200);
+			return (r.body.projects as { id: string; irrigation: Record<string, unknown>; lowestDamPct: unknown; figuresWithheld: boolean }[]).find((p) => p.id === ctx.projectId)!;
+		};
+		const viewer = await row(ctx.viewer);
+		expect(viewer.irrigation).toEqual({ status: 'unknown', fractionSupplied: null, units: null, unitsBelow: null, reason: 'withheld' });
+		expect([viewer.lowestDamPct, viewer.figuresWithheld]).toEqual([null, true]);
+		const editor = await row(ctx.editor);
+		expect(editor.irrigation.fractionSupplied).toEqual(expect.any(Number));
+		expect(editor.figuresWithheld).toBe(false);
+	});
+
 	it('once a compare-only run is published: the preview opens, without the cap publication in its history or the cap-based outlook', async () => {
 		expect((await ctx.owner.call('POST', `${at}/publication`, { runId: later })).status).toBe(201);
 		const view = await ctx.viewer.call('GET', `${at}/farm/${ctx.otherFarmId}`);
@@ -79,6 +93,7 @@ describe('the farm view of a published cap or full-allocation run (#523 I)', () 
 		expect([history.length, editors.length]).toEqual([1, 2]);
 		expect((await ctx.editor.call('GET', `${at}/farm/${ctx.otherFarmId}`)).body.outlook).not.toBeNull();
 	});
+
 });
 
 describe('an outlook on a cap or full-allocation base (#523 I)', () => {
@@ -194,5 +209,27 @@ describe('a yield on a scenario, by the allocation mode it ran with (#523 G1c)',
 				)
 			)
 		).rejects.toThrow(/check constraint/);
+	});
+});
+
+// Last in the file: it leaves the project with no current publication.
+describe('the project list’s outcome columns, by the source run (#523 I)', () => {
+	it('the outcome columns read the source run: the compare-only publication’s share is the viewer’s; the newest run’s, unpublished, by its own mode', async () => {
+		const row = async (who: typeof ctx.viewer) =>
+			((await who.call('GET', '/projects/outcomes')).body.projects as { id: string; source: string; irrigation: { reason?: string; fractionSupplied: number | null }; figuresWithheld: boolean }[]).find(
+				(p) => p.id === ctx.projectId
+			)!;
+		// Published and compare-only: served whole.
+		expect(await row(ctx.viewer)).toMatchObject({ source: 'published', figuresWithheld: false, irrigation: { fractionSupplied: expect.any(Number) } });
+		// No publication (a superseded one is history: this test runs last), the newest run (the source then) caps: withheld from the viewer, not from the editor.
+		const rows = (await asOwner(`SELECT summary->'allocations' AS allocations FROM model_run WHERE id = $1`, [later])) as { allocations: unknown }[];
+		await asOwner(`UPDATE run_publication SET superseded_at = now() WHERE project_id = $1 AND superseded_at IS NULL`, [ctx.projectId]);
+		await markMode(later, 'fullAllocation');
+		try {
+			expect(await row(ctx.viewer)).toMatchObject({ source: 'run', figuresWithheld: true, irrigation: { reason: 'withheld', fractionSupplied: null } });
+			expect(await row(ctx.editor)).toMatchObject({ source: 'run', figuresWithheld: false, irrigation: { fractionSupplied: expect.any(Number) } });
+		} finally {
+			await asOwner(`UPDATE model_run SET summary = jsonb_set(summary, '{allocations}', $2::jsonb) WHERE id = $1`, [later, JSON.stringify(rows[0]?.allocations ?? null)]);
+		}
 	});
 });

@@ -44,6 +44,7 @@ const outcome = (id: string, over: Partial<PortfolioProject> = {}): PortfolioPro
 	farmCount: 4,
 	lowestDamPct: null,
 	damsKnown: false,
+	figuresWithheld: false,
 	feeds: { total: 0, ok: 0, failing: 0 },
 	alertsFiring: 0,
 	restriction: null,

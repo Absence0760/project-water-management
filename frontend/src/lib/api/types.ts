@@ -547,8 +547,14 @@ export interface PortfolioProject {
 		/** Units below 95 % of their demand. */
 		unitsBelow: number | null;
 		/** Why it is unknown (status 'unknown' only). */
-		reason?: 'no-figures' | 'no-units' | 'no-demand';
+		reason?: 'no-figures' | 'no-units' | 'no-demand' | 'withheld';
 	};
+	/**
+	 * The source run caps use at, or scales demand to, the registered volumes and
+	 * this project keeps you from each one: no use share (irrigation unknown,
+	 * 'withheld') and no farm dam level (#523 I).
+	 */
+	figuresWithheld: boolean;
 	/** null = unknown (not published, or published before the counts were stored). */
 	farmsShort7: number | null;
 	farmsShort30: number | null;

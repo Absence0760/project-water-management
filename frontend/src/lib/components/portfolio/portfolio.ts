@@ -62,6 +62,9 @@ export const IRRIGATION_LABEL = 'Irrigation supplied';
 /** The irrigation traffic light's rule (backend portfolio/status.ts IRRIGATION_THRESHOLDS; provisional, no team setting yet). */
 export const IRRIGATION_RULE = 'green from 95 % of demand supplied over the run, amber from 80 %, red below';
 
+/** Why a run's use share and dam levels aren't shown (PortfolioProject.figuresWithheld, #523 I). */
+const WITHHELD_WHY = 'the run caps use at, or scales demand to, the registered water volumes, which this project shows to its editors and owners only';
+
 /** "3 of 5 units below 95%", or null when none is (or the figure is unknown). */
 export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): string | null {
 	const r = p.irrigation;
@@ -77,6 +80,7 @@ export function irrigationUnitsText(p: Pick<PortfolioProject, 'irrigation'>): st
 export function irrigationText(p: Pick<PortfolioProject, 'irrigation'>, short = false): string {
 	const r = p.irrigation;
 	if (r.status === 'unknown' || r.fractionSupplied == null) {
+		if (r.reason === 'withheld') return short ? 'Withheld' : `Withheld: ${WITHHELD_WHY}`;
 		const why = r.reason === 'no-units' ? 'no hydrological units in the run' : r.reason === 'no-demand' ? 'no irrigation demand in the run' : 'no run yet';
 		return `Unknown: ${why}`;
 	}
@@ -129,8 +133,9 @@ export function farmsUnknownText(p: Pick<PortfolioProject, 'source'>): string {
 }
 
 /** "Kareebos 18 %", "No farm dams", or why it is unknown. */
-export function damText(p: Pick<PortfolioProject, 'lowestDamPct' | 'damsKnown'>): string {
+export function damText(p: Pick<PortfolioProject, 'lowestDamPct' | 'damsKnown' | 'figuresWithheld'>): string {
 	if (!p.damsKnown) return 'Unknown until a run is published';
+	if (p.figuresWithheld) return `Withheld: ${WITHHELD_WHY}`;
 	if (!p.lowestDamPct) return 'No dams';
 	return `${p.lowestDamPct.nodeName} ${fmtNum(p.lowestDamPct.pct * 100)} %`;
 }
