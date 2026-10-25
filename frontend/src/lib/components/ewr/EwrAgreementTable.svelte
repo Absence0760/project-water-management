@@ -11,7 +11,7 @@
 <script lang="ts">
 	import type { EwrAgreementSite, RunSummary } from '@water-management/engine';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { AGREEMENT_HELP, agreementGap, biasVerdict, fmtRatio, monthRows, waterYearRows, type AgreementRow } from './agreement';
 
 	let {
@@ -80,7 +80,7 @@
 		<p class="muted">{gap}</p>
 	{:else}
 		<p class="muted small intro">
-			On each of the {fmtNum(a.days)} days with an observed flow ({a.firstObservedDate} – {a.lastObservedDate}), is the simulated outflow
+			On each of the {fmtNum(a.days)} days with an observed flow ({fmtDay(a.firstObservedDate ?? '–')} – {fmtDay(a.lastObservedDate ?? '–')}), is the simulated outflow
 			below the EWR when the observed flow was? {#if site}The gauge's own record measures the river where this EWR site's test runs, against
 				its own requirement, so it shows whether the model's EWR failures there are real.{:else}The observed record measures the same river the
 				outlet EWR test uses, so it shows whether the model's EWR failures are real.{/if} Every observed day counts, including those the parameters were fitted

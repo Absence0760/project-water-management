@@ -1,5 +1,6 @@
 // The runoff model's water balance (RunSummary.runoff) as display rows.
-import type { RunoffBalance } from '@water-management/engine';
+import { CALIBRATION_PARAMS, type RunoffBalance, type RunoffModelId } from '@water-management/engine';
+import { fmtNum } from '#lib/format/number.js';
 
 export interface BalanceRow {
 	key: 'rain' | 'aet' | 'flow' | 'exchange' | 'storage';
@@ -30,12 +31,18 @@ export function balanceRows(b: RunoffBalance): BalanceRow[] {
 	return rows;
 }
 
-/** "X1 350 mm · X3 90 mm · X4 1.7 days" (X2 only when it is not 0). */
+/**
+ * "Production store capacity X1 350 mm · Routing store capacity X3 90 mm · Unit hydrograph time base X4 1.7 days":
+ * each parameter by its name, as Where the parameters came from writes it, to at most 3 decimals (X2 only when it is
+ * not 0). A parameter the model's list doesn't know keeps its key.
+ */
 export function describeParams(b: RunoffBalance): string {
-	const p = b.params;
-	if (b.model !== 'gr4j') return Object.entries(p).map(([k, v]) => `${k} ${v}`).join(' · ');
-	const parts = [`X1 ${p.x1} mm`];
-	if (p.x2) parts.push(`X2 ${p.x2} mm/day`);
-	parts.push(`X3 ${p.x3} mm`, `X4 ${p.x4} days`);
-	return parts.join(' · ');
+	const specs = CALIBRATION_PARAMS[b.model as RunoffModelId] ?? [];
+	return Object.entries(b.params)
+		.filter(([k, v]) => !(b.model === 'gr4j' && k === 'x2' && !v))
+		.map(([k, v]) => {
+			const spec = specs.find((p) => p.key === k);
+			return `${spec?.label ?? k} ${fmtNum(v, 3, true)}${spec?.unit ? ` ${spec.unit}` : ''}`;
+		})
+		.join(' · ');
 }

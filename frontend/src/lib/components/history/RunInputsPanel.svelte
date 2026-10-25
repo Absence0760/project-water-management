@@ -114,27 +114,30 @@
 				<a class="small" href="?tab=history">Open the full history</a>
 			{/if}
 		{/if}
-	</details>
-	{#if canEdit}
-		<div class="restore-row">
-			{#if scenarioRun}
-				<p class="muted small">A scenario run’s inputs are its scenario’s changes on the base run, so they can’t be restored into the project.</p>
-			{:else}
-				<button type="button" class="btn btn-sm" onclick={askRestore} disabled={modelDirty} title={modelDirty ? 'Save or discard your unsaved model changes first' : undefined}>
-					Restore these inputs
-				</button>
-				<span class="muted small">Puts back the settings and model this run used, as a new change. Series values stay as they are.</span>
-			{/if}
-		</div>
-		{#if restored}
-			<div class="alert alert-success-ish" role="status">
-				This run’s inputs are restored. Run the model again to see them in the results.
-				{#if restored.length}
-					Farmers to link again (<a href="?tab=project#farmers-h">Project page</a>): {restored.map((r) => `${r.displayName} to ${r.nodeName}`).join(', ')}.
+		<!-- Inside the disclosure, under the changes it would undo, not offered before they are seen (#586 D16). -->
+		{#if canEdit}
+			<div class="restore-row">
+				{#if scenarioRun}
+					<p class="muted small">A scenario run’s inputs are its scenario’s changes on the base run, so they can’t be restored into the project.</p>
+				{:else}
+					<button type="button" class="btn btn-sm" onclick={askRestore} disabled={modelDirty} aria-describedby="{uid}-restore-note">
+						Restore these inputs
+					</button>
+					<span class="muted small" id="{uid}-restore-note"
+						>{modelDirty ? 'Save or discard your unsaved model changes first.' : 'Puts back the settings and model this run used, as a new change. Series values stay as they are.'}</span
+					>
 				{/if}
 			</div>
+			{#if restored}
+				<div class="alert alert-success-ish" role="status">
+					This run’s inputs are restored. Run the model again to see them in the results.
+					{#if restored.length}
+						Farmers to link again (<a href="?tab=project#farmers-h">Project page</a>): {restored.map((r) => `${r.displayName} to ${r.nodeName}`).join(', ')}.
+					{/if}
+				</div>
+			{/if}
 		{/if}
-	{/if}
+	</details>
 </section>
 
 <Dialog bind:open={confirmOpen} title="Restore this run’s inputs?" wide>

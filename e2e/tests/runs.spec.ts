@@ -27,7 +27,7 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(page.locator('#res-h').locator('..')).toContainText(/1 Oct 2021 – 28 Jan 2022 \(120 days\) · ran today \d\d:\d\d by /);
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
 
-	const summary = page.getByRole('region', { name: 'Run summary' });
+	const summary = page.getByRole('region', { name: 'Summary', exact: true });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
 	// The per-unit table moved to Hydrological units (issue #17, supply-page.spec.ts): the run header links there for this run.
 	await expect(summary.getByRole('heading', { name: 'Hydrological units', exact: true })).toHaveCount(0);
@@ -38,8 +38,8 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	// A gauge record is scored against the simulated outflow, not natural flow.
 	await expect(calibration.getByRole('definition').filter({ hasText: 'Simulated outflow at the outlet' })).toBeVisible();
 	// The headline fit scores say whether they are in-sample (issue #4): these parameters were set by hand, not fitted (issue #45).
-	await expect(calibration.getByText('Calibration period (parameters not fitted).', { exact: true })).toBeVisible();
-	await expect(summary.getByText('calibration period (parameters not fitted)')).toHaveCount(2);
+	await expect(calibration.getByText('Calibration period (parameters not from an automatic fit).', { exact: true })).toBeVisible();
+	await expect(summary.getByText('calibration period (parameters not from an automatic fit)')).toHaveCount(2);
 	await expect(summary.getByText(/in-sample/)).toHaveCount(0);
 	await expect(calibration.getByText(/in-sample/)).toHaveCount(0);
 

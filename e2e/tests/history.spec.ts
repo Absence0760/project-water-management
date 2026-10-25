@@ -97,7 +97,10 @@ test('a run shows the changes since it, and restores its inputs', async ({ page,
 
 	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
 	const since = page.getByRole('region', { name: 'Changes since this run' });
+	// Restore is offered under the changes it would undo, once they are open, not before (#586 D16).
+	await expect(page.getByRole('button', { name: 'Restore these inputs' })).toBeHidden();
 	await since.getByText('Changes since this run').click();
+	await expect(since.getByRole('button', { name: 'Restore these inputs' })).toBeVisible();
 	// The net difference, then the change recorded since the run.
 	await expect(since.getByRole('listitem').filter({ hasText: /^Changed Upper farm: dam capacity 150\u202f000 m³ → 175\u202f000 m³$/ })).toBeVisible();
 	await expect(since.getByRole('listitem').filter({ hasText: 'Model changed: Upper farm: dam capacity 150\u202f000 m³ → 175\u202f000 m³' })).toBeVisible();

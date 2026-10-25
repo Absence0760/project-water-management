@@ -14,7 +14,7 @@ export interface CalibrationSample {
 	short: string;
 	/** What the scores do and don't show. */
 	note: string;
-	/** The words in brackets ("in-sample", "parameters not fitted"); null when not recorded. */
+	/** The words in brackets ("in-sample", "parameters not from an automatic fit"); null when not recorded. */
 	qualifier: string | null;
 }
 
@@ -24,7 +24,7 @@ const LABELS: Record<CalibrationSample['status'], { qualifier: string | null; no
 		note: 'These scores are for the same days the parameters were fitted on, so they show how well the model fits, not how well it predicts. The fit’s validation scores (split-sample, wet/dry years, independent record) are under Where the parameters came from.'
 	},
 	notFitted: {
-		qualifier: 'parameters not fitted',
+		qualifier: 'parameters not from an automatic fit',
 		note: 'The parameters were set by hand, imported or left at their defaults: no automatic fit chose them. If they were tuned by hand against this record the scores flatter the model as much as a fit’s own scores do. Fit automatically with validation to see how they score on days they never saw.'
 	},
 	edited: {
@@ -32,7 +32,7 @@ const LABELS: Record<CalibrationSample['status'], { qualifier: string | null; no
 		note: 'Parameters were changed by hand after the automatic fit, so neither the fit’s scores nor its validation describe them. These scores are for the parameters as edited.'
 	},
 	otherPeriod: {
-		qualifier: 'not the period fitted',
+		qualifier: 'fitted on other days',
 		note: 'The parameters were fitted on another calibration window, other exclusions or the other flow record, so some or all of these days were not part of the fit. The fit’s own scores are under Where the parameters came from.'
 	},
 	unknown: {

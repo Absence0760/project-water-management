@@ -46,7 +46,8 @@
 	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
-	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
+	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, rowLabels, runErrorText, runYears } from './runList';
+	import { runTags, tagKey } from './runTags';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
@@ -119,6 +120,8 @@
 	let loadError = $state<string | null>(null);
 	/** The list has loaded and holds no run: the page shows one empty state (the Runs card) and no results column. */
 	const noRuns = $derived(!loading && !loadError && runs.length === 0);
+	/** The list failed to load and holds no run: the rail's alert is the page's one message, with no results column (#586 D3). */
+	const listFailed = $derived(!loading && !!loadError && runs.length === 0);
 	const RESULTS_SHOW =
 		"A run's results: flows at the outflow gauge, calibration against observed flow, EWR compliance and each hydrological unit's supply and dam storage.";
 	let actionError = $state<string | null>(null);
@@ -225,12 +228,26 @@
 	 * unit, dam or run pick does on every page (ui-playbook § 4, "A pick is a step in history"); the
 	 * default pick and the fallback after a delete replace the entry, so Back never stops on them.
 	 */
-	function select(id: string | null, how: 'pick' | 'default' = 'default') {
+	function select(id: string | null, how: 'pick' | 'default' = 'default'): Promise<void> {
 		const url = new URL(page.url.href);
 		if (id) url.searchParams.set('run', id);
 		else url.searchParams.delete('run');
-		if (url.search === page.url.search) return;
-		goto(url, { replace: how === 'default', reset: false });
+		if (url.search === page.url.search) return Promise.resolve();
+		return goto(url, { replace: how === 'default', reset: false });
+	}
+	/**
+	 * Go to latest: the button hides once the latest run shows, and it had the focus, so the focus goes to that run's
+	 * row in the list (the results heading when a filter hides the row), not to <body> (#586 E9).
+	 */
+	async function goLatest() {
+		if (!latest) return;
+		await select(latest.id, 'pick');
+		await tick();
+		const row = document.querySelector<HTMLElement>('ul.runs li.active button.pick');
+		const target = row ?? document.getElementById('res-h');
+		if (!target) return;
+		if (!row && !target.hasAttribute('tabindex')) target.tabIndex = -1;
+		target.focus();
 	}
 
 	let detailFor = untrack(() => detail?.run.id ?? '');
@@ -367,9 +384,6 @@
 		commit(runs.map((r) => ({ ...r, evidence: status(r.id) })));
 	}
 
-	/** The scenarios based on a run (024_scenarios): it is kept, and can't be deleted, while they exist. */
-	const citedByScenario = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'scenario');
-	const signedBy = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'signoff').map((c) => c.name);
 
 	/** Pin or unpin a run (015_run_pinned): the storage cap keeps a pinned run. */
 	async function togglePin(r: RunMeta) {
@@ -416,6 +430,22 @@
 	let runQuery = $state(untrack(() => page.url.searchParams.get('q') ?? ''));
 	// Only while the box shows: an old link's q= never hides runs behind a filter that isn't on screen.
 	const shownRuns = $derived(runs.length >= RUN_FILTER_FROM ? filterRuns(runs, runQuery) : runs);
+	/** Each row's label: null shows it whole (clamped to two lines), else the form that keeps it apart from a look-alike (#586 D7). */
+	const shortLabels = $derived(rowLabels(shownRuns.map((r) => r.label || 'Untitled run')));
+	const rowTags = $derived(shownRuns.map((r) => runTags(r, { latestId: latest?.id ?? null, publishedId: currentPublishedRunId, evidence: evidenceById.get(r.id) })));
+	const tagLines = $derived(tagKey(rowTags));
+	/**
+	 * Stacked (a phone), a long list folds to its newest run and the shown run's, with its filter, so the results start
+	 * on the first screen (#586 D8: three rows still ran the results' heading past a 390×844 screen, each row 96 px with
+	 * its tap-size pin and delete); the fold is CSS (.runs.folded), so the wide rail, which scrolls inside itself, shows
+	 * every row and the filter. Not while a filter narrows the list: the filter is the reader's own fold.
+	 */
+	const FOLD_ROWS = 1;
+	let runsAll = $state(false);
+	const foldable = $derived(!runQuery.trim() && shownRuns.length > FOLD_ROWS + 1);
+	const foldHidden = $derived(foldable ? shownRuns.filter((r, i) => i >= FOLD_ROWS && r.id !== selectedId).length : 0);
+	/** The run on screen isn't in the filtered list (a filter that matches nothing, or not it): say so (#586 D20). */
+	const shownOutsideFilter = $derived(!!runQuery.trim() && !!detail && !shownRuns.some((r) => r.id === detail!.run.id));
 	const queryStep = new SearchStep();
 	let queryTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
@@ -439,7 +469,7 @@
 		const reasons: string[] = [];
 		if (project.updatedAt > latest.createdAt) reasons.push('the model or settings were saved');
 		const newer = project.settings.simulationEnd ? [] : newDataSinceRun(series ?? [], latest);
-		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${newer.map(dataEnd).sort().pop()}`);
+		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${fmtDay(newer.map(dataEnd).sort().pop() ?? '')}`);
 		return reasons.length ? reasons : null;
 	});
 	// What a run still needs, and whether forecast rain allows a forecast run (runReady.ts, shared with
@@ -509,7 +539,7 @@
 <svelte:window bind:scrollY />
 
 {#snippet headerContext()}
-	{#if loading && !runs.length}Loading runs…{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
+	{#if loading && !runs.length}Loading runs…{:else if listFailed}Couldn’t load the runs{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
 {/snippet}
 <!-- The run form: in the section header, after Add data; its status line opens the page. -->
 {#snippet runForm()}
@@ -522,7 +552,6 @@
 				class="btn"
 				disabled={runBusy || missing.length > 0 || !!overAllocated}
 				aria-describedby="run-note"
-				title="The record as an ordinary run, then the days after the last recorded rain on forecast rain, shown apart. Keeps one forecast run."
 				onclick={() => start(true)}>Run forecast</button
 			>
 		{/if}
@@ -539,7 +568,7 @@
 	<div class="run-status">
 		<p class="note" id="run-note" role="status" aria-live="polite">
 			{#if runBusy}
-				Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
+				Simulating every day of the record for every hydrological unit{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
 			{:else if missing.length}
 				<span class="warn">
 					A run needs {missing.join(' and ')}. Set up the <a href="?tab=network">network</a> and upload
@@ -555,7 +584,8 @@
 			{:else if stale}
 				<span class="warn">Inputs changed since the latest run ({stale.join('; ')}). Run again to update the results.</span>
 			{:else}
-				Runs use the saved network, crops, transfers, settings and time series.
+				Runs use the saved network, crops, transfers, settings and time series.{#if hasForecast}
+					Run forecast runs the record as an ordinary run, then the days after the last recorded rain on forecast rain, shown apart; one forecast run is kept.{/if}
 			{/if}
 		</p>
 		{#if runBusy}<div class="progress" aria-hidden="true"><span></span></div>{/if}
@@ -572,7 +602,7 @@
 
 <!-- No runs: one empty state, the Runs card across the page, saying what a run will show (a second
      "Results appear here" card beside or under it was mostly empty space, a screen of it on a phone). -->
-<div class="layout" class:no-runs={noRuns} bind:this={layoutEl} style:--rail-top="{railTop}px">
+<div class="layout" class:no-runs={noRuns || listFailed} bind:this={layoutEl} style:--rail-top="{railTop}px">
 	<!-- The rail: the runs list, in view beside the long results page (sticky on wide screens). -->
 	<aside class="rail" bind:this={railEl}>
 		<section class="panel list" aria-labelledby="runs-h">
@@ -591,7 +621,7 @@
 				<p class="visually-hidden" role="status">Loading runs…</p>
 			{:else if loadError}
 				<div class="alert alert-error" role="alert">
-					{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
+					Couldn’t load the runs: {loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
 				</div>
 			{:else if runs.length === 0}
 				<!-- "Run the model" only while it can start: otherwise the status line under the header says what a run needs. -->
@@ -601,33 +631,29 @@
 				</div>
 			{:else}
 				{#if runs.length >= RUN_FILTER_FROM}
-					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} onfocus={queryStep.focus} oninput={writeQuery} />
+					<input class="filter" class:folded={foldable && !runsAll} type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} onfocus={queryStep.focus} oninput={writeQuery} />
 					{#if runQuery.trim()}<p class="muted small filter-count" role="status">{shownRuns.length ? `${shownRuns.length} of ${runs.length} runs` : 'No run label matches.'}</p>{/if}
+					{#if shownOutsideFilter && detail}<p class="muted small filter-count" data-testid="shown-outside-filter">Showing “{detail.run.label || 'Untitled run'}”, which isn’t in the filter.</p>{/if}
 				{/if}
 				<!-- Compact rows: the label (two lines at most, the full label on
 				     hover), when it ran and the years it covers, then small status
 				     tags. The full dates, author and engine are in the results header. -->
-				<ul class="runs">
-					{#each shownRuns as r (r.id)}
-						<li class:active={r.id === selectedId}>
+				<ul class="runs" class:folded={foldable && !runsAll} id="runs-list">
+					{#each shownRuns as r, i (r.id)}
+						{@const short = shortLabels[i]}
+						<li class:active={r.id === selectedId} class:beyond={i >= FOLD_ROWS && r.id !== selectedId}>
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id, 'pick')}>
-								<span class="lbl">{r.label || 'Untitled run'}</span>
+								{#if short}
+									<!-- Shortened to keep it apart from a look-alike: the full label is read out, and is the results heading once picked. -->
+									<span class="lbl" aria-hidden="true">{short}</span><span class="visually-hidden">{r.label}</span>
+								{:else}
+									<span class="lbl">{r.label || 'Untitled run'}</span>
+								{/if}
 								<!-- Each part on one line: "2021–2022" broke after its dash, a third line on every row. -->
 								<span class="meta"><span class="nw">{fmtWhen(r.createdAt)}</span> · <span class="nw">{runYears(r.startDate, r.endDate)}</span></span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto' || r.trigger === 'forecast' || r.errata?.length}
+								{#if rowTags[i]?.length}
 									<span class="tags">
-										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
-										{#if r.trigger === 'auto'}<span class="tag" title="Made automatically after new data arrived (Settings → Automatic runs). Only the newest automatic run is kept, unless it is pinned or published.">Auto</span>{/if}
-										{#if r.trigger === 'forecast'}<span class="tag tag-warn" title="A forecast run: the days from {r.forecastFrom} run on forecast rain and are shown apart; its other figures cover the record before them. Only the newest forecast run is kept, unless it is pinned or published.">Forecast</span>{/if}
-										{#if r.id === currentPublishedRunId}<span class="tag tag-owner" title="The published baseline: stakeholders and farmers see this run's figures. Kept while a publication holds it.">Published</span>{/if}
-										{#if evidenceById.get(r.id) === 'current'}<span class="tag tag-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="tag" title="Nominated as evidence before, since replaced or withdrawn. Kept for good: it can't be deleted.">Former evidence</span>{/if}
-										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
-										{#if r.scenarioName}<span class="tag" title="Made by the scenario “{r.scenarioName}”: its changes applied to its base run.">Scenario</span>{/if}
-										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
-										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
-										{#if signedBy(r).length}<span class="tag tag-owner" title="Signed off by {signedBy(r).join(', ')} (see its report). Kept for good: it can't be deleted.">Signed off</span>{/if}
-										{#if r.errata?.length}<span class="tag tag-warn" title="May be affected by {r.errata.length === 1 ? 'a known engine bug' : `${r.errata.length} known engine bugs`} ({r.errata.join(', ')}): each changes results only under its conditions. See the run's validation statement, and re-run on the current engine to compare.">May be affected</span>{/if}
-										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (the original workbook’s, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.">Workbook comparison</span>{/if}
+										{#each rowTags[i]! as t (t.id)}<span class="tag" class:tag-owner={t.tone === 'owner'} class:tag-warn={t.tone === 'warn'} title={t.detail ?? undefined}>{t.label}</span>{/each}
 									</span>
 								{/if}
 							</button>
@@ -650,11 +676,29 @@
 						</li>
 					{/each}
 				</ul>
+				<!-- Show all and the tags' key share a line under the list, so a folded phone list stays short. -->
+				<div class="list-foot">
+					{#if foldable}
+						<!-- Stacked only (CSS): the wide rail lists every row and scrolls inside itself. -->
+						<button type="button" class="btn btn-sm fold-btn" aria-expanded={runsAll} aria-controls="runs-list" onclick={() => (runsAll = !runsAll)}
+							>{runsAll ? 'Show fewer runs' : `Show all ${shownRuns.length} runs`}{#if !runsAll}<span class="visually-hidden">, {foldHidden} more</span>{/if}</button
+						>
+					{/if}
+					{#if tagLines.length}
+						<!-- The tags in words, for touch and keyboard: their hover titles reach only a mouse (#586 D18). -->
+						<details class="tag-key small">
+							<summary>What the tags mean</summary>
+							<dl>
+								{#each tagLines as t (t.label)}<div><dt>{t.label}</dt><dd>{t.meaning}</dd></div>{/each}
+							</dl>
+						</details>
+					{/if}
+				</div>
 			{/if}
 		</section>
 	</aside>
 
-	{#if !noRuns}
+	{#if !noRuns && !listFailed}
 	<div class="detail">
 		<!-- In-page menu, grouped by the question each panel answers: from 62rem of results a side index on the
 		     right (the runs list is the left column), with the main panels of EWR and Hydrological
@@ -708,20 +752,19 @@
 						{#if notesPreview(detail.run.notes)}<a class="muted small evidence-line" href="#res-notes" data-testid="notes-preview">Notes: {notesPreview(detail.run.notes)}</a>{/if}
 						<span class="muted small">
 							{fmtDay(detail.run.startDate)} – {fmtDay(detail.run.endDate)} ({fmtNum(runDays(detail.run))} days) · ran {fmtWhen(detail.run.createdAt)} by {detail.run.createdBy ?? FORMER_MEMBER} · engine {detail.run.engineVersion}
-							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id, 'pick')}>go to latest</button>{/if}
+							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={goLatest}>go to latest</button>{/if}
 						</span>
 						<!-- The river and unit panels have their own pages (issue #17): one link each, keeping the run. -->
 						<nav class="outcomes small" aria-label="Outcomes for this run">
 							<span class="muted">For this run:</span>
-							<a
-								href={riverHref(shownRunId)}
-								aria-label="EWR for this run"
-								title="EWR against outflow, reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account">EWR <span aria-hidden="true">→</span></a
+							<!-- What each page holds, in words beside its link rather than a hover title (#586 D18). -->
+							<span class="outcome"
+								><a href={riverHref(shownRunId)} aria-label="EWR for this run" aria-describedby="outcome-ewr">EWR <span aria-hidden="true">→</span></a>
+								<span class="muted" id="outcome-ewr">reserve compliance, EWR by month, outlook and water account</span></span
 							>
-							<a
-								href={supplyHref(shownRunId)}
-								aria-label="Hydrological units for this run"
-								title="Each hydrological unit's supply against its demand, the hydrological unit results table, the curtailment targets and assurance of supply">Hydrological units <span aria-hidden="true">→</span></a
+							<span class="outcome"
+								><a href={supplyHref(shownRunId)} aria-label="Hydrological units for this run" aria-describedby="outcome-units">Hydrological units <span aria-hidden="true">→</span></a>
+								<span class="muted" id="outcome-units">supply against demand, curtailment and assurance of supply</span></span
 							>
 						</nav>
 					</div>
@@ -739,7 +782,9 @@
 						<DownloadMenu items={downloadItems} />
 					</div>
 				</div>
-				<section id="res-summary" aria-label="Run summary">
+				<section id="res-summary" aria-labelledby="summary-h">
+					<!-- Named as the side index and the bar name it (#586 D4). -->
+					<h3 id="summary-h" class="summary-h">Summary</h3>
 					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
 					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
 						<Lazy load={loadRunScaledEwr}>
@@ -946,6 +991,13 @@
 		gap: 0 0.9rem;
 		margin-top: 0.2rem;
 	}
+	/* Each link with what its page holds beside it (#586 D18), wrapping as one piece on a phone. */
+	.outcome {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0 0.4rem;
+	}
 	/* A flex item drops the space before the arrow ("EWR→"), so the gap puts it back. */
 	.outcomes a {
 		display: inline-flex;
@@ -1129,7 +1181,10 @@
 		background: var(--accent-soft);
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
+	/* Positioned, so a row's visually hidden full label (a shortened row, #586 D7) sits in its row: placed against the
+	   sticky rail instead, the hidden labels of rows scrolled out of the list ran the rail 480 px past its box. */
 	.pick {
+		position: relative;
 		flex: 1;
 		display: flex;
 		flex-direction: column;
@@ -1208,6 +1263,65 @@
 	}
 	.filter-count {
 		margin: 0 0 0.4rem;
+	}
+	/* Stacked (a phone), a long list shows its first rows and the shown run's under "Show all N runs" (#586 D8),
+	   so the results start on the first screen; the wide rail (below) lists every row and scrolls inside itself. */
+	.runs.folded li.beyond,
+	.filter.folded {
+		display: none;
+	}
+	.list-foot {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
+		margin-top: 0.4rem;
+	}
+	.list-foot:empty {
+		display: none;
+	}
+	@container runs-page (min-width: 50rem) {
+		.runs.folded li.beyond {
+			display: flex;
+		}
+		.filter.folded {
+			display: block;
+		}
+		.fold-btn {
+			display: none;
+		}
+		/* The rail is clipped to the window: an opened key scrolls inside itself rather than run past it. */
+		.tag-key dl {
+			max-height: 40vh;
+			overflow-y: auto;
+		}
+	}
+	/* The tags in words (#586 D18): one line under the list that opens. */
+	.tag-key {
+		color: var(--text-2);
+	}
+	.tag-key[open] {
+		flex-basis: 100%;
+	}
+	.tag-key summary {
+		cursor: pointer;
+		min-height: 24px;
+		color: var(--text-muted);
+	}
+	.tag-key dl {
+		margin: 0.35rem 0 0;
+		display: grid;
+		gap: 0.35rem;
+	}
+	.tag-key dt {
+		font-weight: 600;
+	}
+	.tag-key dd {
+		margin: 0;
+	}
+	/* The Summary's heading: the first in its panel, under the run header (#586 D4). */
+	.summary-h {
+		margin: 1rem 0 0.5rem;
 	}
 	.pin svg {
 		fill: none;

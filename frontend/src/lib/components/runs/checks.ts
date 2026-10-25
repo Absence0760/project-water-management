@@ -89,6 +89,15 @@ export function residualIsNoise(r: WaterBalanceRow): boolean {
 	return Math.abs(r.residualM3) <= 1e-9 * scale;
 }
 
+/**
+ * A balance figure in m³ (a residual, a day trace's term): to 3 decimals, and float noise below 0.001 as "< 0.001"
+ * rather than an exponent ("-7.45e-9"), which reads as a figure to check (#586 D10). Exactly 0 stays "0".
+ */
+export function fmtBalance(x: number | null | undefined): string {
+	if (x == null || !Number.isFinite(x)) return '–';
+	return x !== 0 && Math.abs(x) < 1e-3 ? '< 0.001' : fmtNum(x, 3, true);
+}
+
 /** How many open water years the closure line names before "and N more" (a 30-year run could have them all). */
 const CLOSURE_NAMED = 5;
 

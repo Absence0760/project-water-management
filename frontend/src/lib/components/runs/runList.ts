@@ -3,6 +3,7 @@
 // only needs enough to tell runs apart.
 import { ApiError } from '#lib/api/client.js';
 import { hasRole, type Role } from '#lib/api/types.js';
+import { distinctShortNames } from '#lib/components/network/schematic.js';
 
 /** A run's period as years: "1979–2024", or "2021" when it starts and ends in one year. */
 export function runYears(startDate: string, endDate: string): string {
@@ -56,4 +57,19 @@ export const RUN_GONE = 'This run no longer exists: it was deleted, or the stora
 export function runErrorText(err: unknown): string {
 	if (isRunGone(err)) return RUN_GONE;
 	return err instanceof Error ? err.message : String(err);
+}
+
+/** About two lines of a row's label in the 250 px rail (it clamps at two lines; #586 D7). */
+export const ROW_LABEL_CHARS = 44;
+
+/**
+ * Each row's label as the rail shows it: null where the label shows whole (two lines at most, clamped), or a
+ * shortened form where clamping would make it read like another row's ("Dam raise on the upper tributary with the
+ * 20…" six times): those keep the ending that tells them apart ("Dam raise on the upper tributary… 7"), as the
+ * schematic's distinctShortNames does for unit names (ui-playbook § 3, distinct names). The same label twice stays
+ * the same.
+ */
+export function rowLabels(labels: readonly string[], max = ROW_LABEL_CHARS): (string | null)[] {
+	const plain = (s: string) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+	return distinctShortNames(labels, max).map((short, i) => (short === plain(labels[i]!) ? null : short));
 }

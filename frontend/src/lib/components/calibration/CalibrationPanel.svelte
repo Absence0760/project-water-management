@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import type { CalibrationStats } from '@water-management/engine';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import {
 		FLOW_KIND_LABEL,
 		SIMULATED_LABEL,
@@ -17,7 +17,8 @@
 		kgeComponents,
 		metricRows,
 		volumeBiasText,
-		waterYearLabel
+		waterYearLabel,
+		WORSE_THAN_MEAN
 	} from './metrics';
 	import { calibrationSample } from './sample';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
@@ -52,13 +53,13 @@
 	{#if calibration && calibration.days === 0 && calibration.excludedDays}
 		<p class="muted">
 			Every observed day inside the calibration window falls in a calibration exclusion
-			({calibration.exclusions?.map((x) => `${x.start} – ${x.end}: ${x.reason}`).join('; ')}), so there are no calibration statistics.
+			({calibration.exclusions?.map((x) => `${fmtDay(x.start)} – ${fmtDay(x.end)}: ${x.reason}`).join('; ')}), so there are no calibration statistics.
 			Change the exclusions in Settings.
 		</p>
 	{:else if !calibration || calibration.days === 0}
 		<p class="muted">
 			No observed flow falls inside the calibration window{requestedStart || requestedEnd
-				? ` (${describeWindow(requestedStart, requestedEnd)})`
+				? ` (${describeWindow(requestedStart, requestedEnd, fmtDay)})`
 				: ''}, so there are no calibration statistics. Upload an observed or logger flow series, or widen the window in
 			Settings.
 		</p>
@@ -70,14 +71,14 @@
 			<div>
 				<dt>Window <HelpTip key="calibration-window" /></dt>
 				<dd>
-					{describeWindow(calibration.windowStart ?? requestedStart, calibration.windowEnd ?? requestedEnd)}
+					{describeWindow(calibration.windowStart ?? requestedStart, calibration.windowEnd ?? requestedEnd, fmtDay)}
 					{#if !requestedStart && !requestedEnd && !legacy}<span class="muted">(no window set: whole overlap)</span>{/if}
 				</dd>
 			</div>
 			<div>
 				<dt>Observations</dt>
 				<dd>
-					{fmtNum(calibration.days)} days{#if calibration.firstObservedDate}, {calibration.firstObservedDate} – {calibration.lastObservedDate}{/if}
+					{fmtNum(calibration.days)} days{#if calibration.firstObservedDate}, {fmtDay(calibration.firstObservedDate)} – {fmtDay(calibration.lastObservedDate ?? '–')}{/if}
 				</dd>
 			</div>
 			{#if calibration.flowKind}
@@ -94,7 +95,7 @@
 					<dt>Excluded</dt>
 					<dd>
 						{fmtNum(calibration.excludedDays ?? 0)} observed days in
-						{calibration.exclusions.map((x) => `${x.start} – ${x.end} (${x.reason})`).join('; ')}
+						{calibration.exclusions.map((x) => `${fmtDay(x.start)} – ${fmtDay(x.end)} (${x.reason})`).join('; ')}
 					</dd>
 				</div>
 			{/if}
@@ -109,11 +110,12 @@
 
 		<ul class="metrics">
 			{#each rows as r (r.key)}
-				<li class="metric">
+				<li class="metric" class:flagged={r.worseThanMean}>
 					<div class="top">
 						<span class="label" id="{uid}-{r.key}">{r.label}</span> <HelpTip key={`stats.${r.key}`} label="About {r.label}" />
 					</div>
 					<div class="value">{r.value}{#if r.unit}<small>{r.unit}</small>{/if}</div>
+					{#if r.worseThanMean}<p class="flag">{WORSE_THAN_MEAN[0]!.toUpperCase()}{WORSE_THAN_MEAN.slice(1)}.</p>{/if}
 					<p class="help">{r.help}</p>
 					{#if r.key === 'kge' && kgeComponents(calibration)}
 						<p class="help">{kgeComponents(calibration)} (correlation, variability ratio, volume ratio; each 1 is ideal)</p>
@@ -226,6 +228,17 @@
 		font-weight: 400;
 		color: var(--text-muted);
 		margin-left: 0.2rem;
+	}
+	/* No better than the mean flow: the Summary's tile carries the same edge and words (#586 D12). */
+	.metric.flagged {
+		border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+		box-shadow: inset 3px 0 0 var(--warning);
+	}
+	.flag {
+		margin: 0.1rem 0 0;
+		font-size: var(--font-sm);
+		font-weight: 600;
+		color: var(--warning);
 	}
 	.help {
 		font-size: var(--font-sm);

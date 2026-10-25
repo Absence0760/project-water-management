@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '#lib/api/client.js';
-import { defaultRunId, filterRuns, isRunGone, RUN_GONE, runErrorText, runYears } from './runList';
+import { defaultRunId, filterRuns, isRunGone, rowLabels, RUN_GONE, runErrorText, runYears } from './runList';
 
 describe('runYears', () => {
 	it('shows the first and last year', () => {
@@ -62,5 +62,22 @@ describe('runErrorText (issue #77)', () => {
 		expect(isRunGone(kept)).toBe(false);
 		expect(runErrorText(kept)).toBe('this run is pinned; unpin it before deleting it');
 		expect(isRunGone(new Error('not found'))).toBe(false);
+	});
+});
+
+describe('rowLabels (#586 D7)', () => {
+	const LONG = 'Dam raise on the upper tributary with the 2026 licence volumes and the new EWR table';
+	it('keeps the ending that tells long labels with one start apart', () => {
+		const shown = rowLabels([`${LONG} 1`, `${LONG} 4`, 'Run 02', `${LONG} 7`]);
+		expect(shown[2]).toBeNull();
+		const cut = [shown[0], shown[1], shown[3]];
+		expect(cut.every((s) => s !== null && s.length <= 44)).toBe(true);
+		expect(new Set(cut).size).toBe(3);
+		expect(cut.map((s) => s!.slice(-2))).toEqual([' 1', ' 4', ' 7']);
+		expect(cut[0]).toMatch(/^Dam raise on the upper tributary.*… 1$/);
+	});
+	it('leaves a label whole when nothing else reads like it, and the same label twice the same', () => {
+		expect(rowLabels([LONG, 'Baseline'])).toEqual([null, null]);
+		expect(rowLabels([LONG, LONG])).toEqual([null, null]);
 	});
 });

@@ -204,8 +204,8 @@ export const FIT_ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.10; packages/engine/src/project.ts AnnualVolume'
 	},
 	'in-sample': {
-		long: 'Scores on the days a model was fitted on show how well it fits, not how well it predicts: judge fitted parameters by the fit’s validation scores. A run’s calibration scores are labelled in-sample only when its parameters came from Fit automatically for its runoff model, unchanged since, with the same calibration window, exclusions and flow record (engine 0.39.0).\n\nOtherwise the label says why not: “parameters not fitted” (set by hand, imported or left at their defaults), “parameters edited since the fit”, or “not the period fitted” (another window, other exclusions or the other record). Parameters tuned by hand against the record flatter the model as much as a fit does, so read hand-calibrated scores the same way. A run made before engine 0.39.0 says only “calibration period”.',
-		aliases: ['in sample', 'calibration period', 'parameters not fitted', 'out-of-sample'],
+		long: 'Scores on the days a model was fitted on show how well it fits, not how well it predicts: judge fitted parameters by the fit’s validation scores. A run’s calibration scores are labelled in-sample only when its parameters came from Fit automatically for its runoff model, unchanged since, with the same calibration window, exclusions and flow record (engine 0.39.0).\n\nOtherwise the label says why not: “parameters not from an automatic fit” (set by hand, imported or left at their defaults), “parameters edited since the fit”, or “fitted on other days” (another window, other exclusions or the other record). Parameters tuned by hand against the record flatter the model as much as a fit does, so read hand-calibrated scores the same way. A run made before engine 0.39.0 says only “calibration period”.',
+		aliases: ['in sample', 'calibration period', 'parameters not from an automatic fit', 'parameters not fitted', 'out-of-sample'],
 		related: ['calibration', 'nse', 'pbias'],
 		source: 'docs/model.md §2.10; docs/calibration-research.md'
 	}

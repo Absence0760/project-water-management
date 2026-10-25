@@ -30,7 +30,7 @@ const tab = (page: Page, name: string) => page.getByRole('navigation', { name: '
 const projectRow = (page: Page, name: string) =>
 	page.getByRole('row').filter({ has: page.getByRole('rowheader', { name, exact: true }) });
 const runsList = (page: Page) => page.getByRole('region', { name: 'Runs', exact: true });
-const runSummary = (page: Page) => page.getByRole('region', { name: 'Run summary' });
+const runSummary = (page: Page) => page.getByRole('region', { name: 'Summary', exact: true });
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'] as const;
 const CROP_FACTORS = ['0.55', '0.65', '0.75', '0.8', '0.8', '0.7', '0.6', '0.5', '0.45', '0.45', '0.5', '0.55'];
