@@ -29,17 +29,30 @@
 	const vm = $derived(supplyCard(farm, unit, staleEnd));
 	let failed = $state(false);
 
+	// Saves go to the server one after another, and only the latest choice's
+	// answer is kept: a quick m³ → ML → m³ sent side by side could reach the
+	// server in either order and leave the account on ML, and ML's late answer
+	// would set session.user back (ui-playbook § 5, the language switch's trap).
+	let latestChoice = 0;
+	let saving: Promise<void> = Promise.resolve();
 	async function choose(u: VolumeUnit) {
 		if (u === unit) return;
 		unit = u;
 		writeUnit(u);
 		failed = false;
 		if (!session.user) return;
-		try {
-			session.user = await api.auth.updateMe({ volumeUnit: u });
-		} catch {
-			failed = true; // the switch still applies on this phone
-		}
+		const mine = ++latestChoice;
+		saving = saving.then(async () => {
+			// A later choice came before this one's turn: that one is saved instead.
+			if (mine !== latestChoice || !session.user) return;
+			try {
+				const user = await api.auth.updateMe({ volumeUnit: u });
+				if (mine === latestChoice) session.user = user;
+			} catch {
+				if (mine === latestChoice) failed = true; // the switch still applies on this phone
+			}
+		});
+		await saving;
 	}
 </script>
 
