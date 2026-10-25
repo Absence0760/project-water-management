@@ -170,7 +170,10 @@
 		</p>
 	{/if}
 	{#if published === false}
-		<p class="muted small">Nothing is published yet: a link opens only once a run is published (Runs tab).</p>
+		<!-- Where to publish, as a link to it (issue #586: plain words naming a place were a dead end). -->
+		<p class="muted small" data-testid="share-unpublished">
+			Nothing is published yet: a link opens only once a run is published, from its <a href="?tab=runs#res-publication">Publication on Runs &amp; results</a>.
+		</p>
 	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 

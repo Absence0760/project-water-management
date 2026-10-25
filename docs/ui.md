@@ -1966,12 +1966,30 @@ it scrolls, and isn't fitted to the window.
   issue #177): gauges and other water users apart, as the Network's header
   line splits them, and the Dams page's dams (`modelDams`: a farm with at
   least 1 m³).
+- **On this page** (issue #586 R1-E): the shared menu
+  ([§ On this page menu](#on-this-page-menu)), labelled "Project page
+  sections" (the sidebar is "Project sections"). A side index from 80rem of
+  page (a 1440 px window), the two-row bar with More below that (1280 px),
+  one sideways strip on a phone. Its links are read from the page
+  (`project/sections.ts`): every id in `PROJECT_ANCHORS` whose panel is
+  drawn, in that order, named by its heading word for word (a trailing count
+  dropped, "Farmers (3)" is "Farmers", so the link doesn't change while the
+  count loads), grouped by its column's `data-nav-group` (**The project**,
+  **People and access**). So a viewer's menu has no Share links, Two-step
+  sign-in, Registration checks or Licence record; Import record shows only
+  on an imported project; and a panel added to `PROJECT_ANCHORS` (API keys
+  and Scheduled reports, #586 R1-B) gets its link with no other change. The
+  page re-reads it when its content changes (a late panel, a team's name on
+  Members). `project-page.spec.ts` pins the side index at 1440, the bar's two
+  rows at 1280, the strip on a phone and a viewer's list, each against the
+  headings drawn.
 - **Fragments**: `?tab=project#members-h` (any id in `PROJECT_ANCHORS`:
   every panel's heading, or a lazy panel's wrapper, `project.test.ts` checks
   the list against the page's) waits for that panel's heading
   (`landOnAnchor`, `lib/help/anchor.ts`: a lazy chunk's heading comes after
   the page mounts), scrolls it to the top and holds it while the page
-  settles, with focus on the heading. History's "farmers to link again" notes
+  settles, with focus on the heading (as Settings, Runs and Data; it stops
+  waiting after a few seconds, or once the reader scrolls or types). History's "farmers to link again" notes
   link to `#farmers-h`, and the licence record review email to
   `#licence-record` (issue #586). A link to a panel this reader isn't shown
   (`#project-api-keys` for an editor) leaves the page at its top.
@@ -2156,7 +2174,9 @@ it scrolls, and isn't fitted to the window.
   when it ends or who withdrew it, and when it was last opened (to the
   hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
-  a link opens only once a run is published.
+  a link opens only once a run is published, and links to where that is done
+  (*Publication on Runs & results*, `?tab=runs#res-publication`, landing on
+  its heading; it named "Runs tab" in plain words, a dead end, issue #586).
 - **Two-step sign-in** (204_mfa_opt_in, `project/TwoStepPanel.svelte`),
   owners only, under Share links: a **Require two-step sign-in** switch
   (`auth-extras/RequireTwoStep.svelte`, shared with the team settings; its
@@ -5302,11 +5322,11 @@ show the same cards, with **+ Add transfer** under them.
 
 The long workspace pages share one in-page menu, `common/SectionNav.svelte`
 (its rules in `common/sectionNav.ts`): **Settings & calibration**, **Runs &
-results**, **EWR**, **Hydrological units**, **Data** and
+results**, **EWR**, **Hydrological units**, **Data**, **Project** and
 **Compare runs**, and the Network's node sheet as a bar of its own (below).
 Each page gives it its sections in groups (a `nav` labelled "Settings
 sections", "Result sections", "EWR sections", "Hydrological units
-sections", "Data sections", "Comparison sections"; "Sections of the form" in
+sections", "Data sections", "Project page sections", "Comparison sections"; "Sections of the form" in
 the node sheet); each group is a list named for screen readers. Each link says
 its panel's heading (`label`), so the menu and the page read alike ("EWR by
 month" against *EWR compliance by month* was one of the navigation review's
@@ -5323,8 +5343,9 @@ names, Settings' links no longer fit two rows at 1280 px, Runs'
 last links went into More and River's bar took a second row at 1440 px (in
 CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Network, Crops,
 Scenarios), the Summary (short once its lists fold, 2026-09-29), Dams (one card list beside a sticky chart) and the pages with at most two panels past their
-first screen at 1440×960 (Transfers, one card; Allocations, Project,
-Applications) have none (surveyed 2026-09-27 with the example catchments;
+first screen at 1440×960 (Transfers, one card; Allocations,
+Applications) have none (Project had none until its panels reached about
+fourteen, issue #586 R1-E: it has the menu now, built from the page, [§ Project](#project)) (surveyed 2026-09-27 with the example catchments;
 Compare runs has since grown past ten panels and has the menu, issue #462);
 History is left to its own redesign.
 
