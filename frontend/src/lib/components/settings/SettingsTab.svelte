@@ -492,10 +492,10 @@
 	// bookmark, a note) goes on to its new page, every other parameter kept, replacing this entry so Back
 	// skips it; that page lands on the panel (issue #586 round 1). On load, and for such a link followed
 	// while the page is open (the query is unchanged, so only the #fragment moves).
-	// keepFocus: the new page's landing focuses the heading, which SvelteKit's reset would take back to the body.
+	// reset: false, so SvelteKit leaves the focus to the new page's landing, which focuses the heading.
 	$effect(() => {
 		const to = settingsForward(page.url);
-		if (to) untrack(() => void goto(to, { replace: true, reset: false, keepFocus: true }));
+		if (to) untrack(() => void goto(to, { replace: true, reset: false }));
 	});
 
 	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
