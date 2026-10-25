@@ -10,7 +10,7 @@ describe('defaultEvidenceRule', () => {
 		// No seed: the database draws it (declaredRuleError refuses an unknown field).
 		expect(Object.keys(r)).not.toContain('seed');
 		expect(declaredRuleText(r)).toBe(
-			'skill score KGE′, lowest skill kept 0.5, worst wr2012 flag kept query, largest low-flow bias kept ±50 %, members 300, bounds typical, pan coefficient shift ±0.1'
+			'KGE′ of at least 0.5, WR2012 flags up to “query”, low-flow bias within ±50 %, 300 members, typical bounds, pan coefficient varied by ±0.1'
 		);
 	});
 
