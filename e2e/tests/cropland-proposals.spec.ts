@@ -43,7 +43,7 @@ test.beforeAll(async () => {
 	await loadSyntheticLandCover();
 });
 
-test('a Use that answers after Back moved the drawer to another unit leaves the box on that unit', async ({ page, owner }) => {
+test('a Use that answers after Back moved the drawer to another unit leaves the box on that unit and the keyboard where it was', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Cropland proposals use race');
 	const idOf = (name: string) => String(project.model.nodes.find((n) => n.name === name)!.id);
@@ -82,9 +82,16 @@ test('a Use that answers after Back moved the drawer to another unit leaves the 
 	const saved = page.waitForResponse(/\/crop-area-from-land-cover$/);
 	// The box's reload after the save: one GET of a summary, whichever unit it asks for.
 	const reloaded = page.waitForResponse((r) => r.request().method() === 'GET' && /\/cropland-proposals$/.test(new URL(r.url()).pathname));
+	await expect(panel(page)).toHaveAttribute('data-saving', 'true');
 	release();
 	expect((await saved).status()).toBe(200);
 	await reloaded;
+	// The Use has finished, its focus step included.
+	await expect(panel(page)).not.toHaveAttribute('data-saving');
+	// The notice still reports the save (it names its unit), but doesn't take the keyboard: it's about a unit the drawer
+	// has left.
+	await expect(panel(page).getByTestId('cropland-notice')).toContainText('Orchard’s planted area on Upper farm is now');
+	await expect(panel(page).getByTestId('cropland-notice')).not.toBeFocused();
 	// Still Lower farm's summary (no parcels), not the reload of Upper farm's the save asked for.
 	await expect(page.getByRole('dialog', { name: 'Lower farm: planted areas' })).toBeVisible();
 	await expect(panel(page).getByTestId('cropland-body')).toHaveAttribute('data-ready', 'true');

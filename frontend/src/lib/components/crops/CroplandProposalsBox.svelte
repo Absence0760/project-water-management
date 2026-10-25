@@ -112,7 +112,9 @@
 			// Reload the unit the drawer shows now, not d's: Back or a farm= link may have moved it on while the save was out,
 			// and loading d's would put its parcels under another unit's name.
 			await Promise.all([load(nodeId), onModelChanged()]);
-			await frame?.focusNotice();
+			// The keyboard goes to the notice only if the drawer still shows d's unit: if the user moved on, it stays where
+			// they put it, and the notice (a live region naming its unit) still reports the save.
+			if (d.nodeId === nodeId) await frame?.focusNotice();
 		} catch (e) {
 			rowError = { key: r.cropId, text: msg(e) };
 		} finally {
@@ -124,6 +126,7 @@
 <ProposalPanel
 	bind:this={frame}
 	testid="cropland-proposals"
+	saving={busy !== null}
 	prefix="cropland"
 	variant="drawer"
 	title="From land cover"

@@ -1902,7 +1902,10 @@ for every workspace tab. Its own chunk.
   from the map. Run the model to see its effect.", its
   "Run the model" a link to Runs & results, where Run model is; the notice
   takes the keyboard, since the Use button is gone) and reloads the saved
-  model and the proposals. The frame is shared with land cover and
+  model and the proposals. If Dam of moved to another unit while the save
+  was out, the box reloads the unit Dam of now names, and the notice still
+  says what was saved (it names its unit, and a screen reader announces
+  it) but leaves the keyboard where the user put it. The frame is shared with land cover and
   evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
   has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
   editor can use a value."). Other states: no dam on the map linked to the
@@ -2218,10 +2221,14 @@ status pill in words and colour, "Amber: 88.0% supplied", `irrigationText`,
 then on a line under it the units below 95 % of their demand over the run
 ("3 of 14 units below 95% over the run", `irrigationUnitsText`: the whole
 run, not the week the next column counts), and *Published* or *Latest run* with the figures'
-age, "to 31 Dec 2024 (20 months ago)"), **Hydrological units short** ("2 of 8 units
+age, "to 31 Dec 2024 (20 months ago)"; a pill that is *Withheld* says why on
+the line under it, "Uses registered volumes, shown to editors and owners
+only", `withheldText`, below), **Hydrological units short** ("2 of 8 units
 short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
 *Not published* until a run is published; under it the count over 30 days,
-"1 in the last 30 days"), **Lowest dam** (with the published restriction
+"1 in the last 30 days"), **Lowest dam** ("Kareebos 18 %"; muted *No dams*, or
+muted *Withheld* when `figuresWithheld`, the reason said once under the
+pill (`portfolio.spec.ts` pins the withheld row); with the published restriction
 under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
 without a publication, where the dam already says *Not published*), **Data**
 (the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
@@ -2237,7 +2244,13 @@ supplied over the whole run the figures come from (the published run, else
 the newest), the workspace Summary's *Irrigation supplied* card, with the
 units below 95 % of theirs; green from 95 %, amber from 80 %, red below
 (backend `portfolio/status.ts` `IRRIGATION_THRESHOLDS`, provisional, no team
-setting yet), unknown without a run, without units or without demand. Until
+setting yet), unknown without a run, without units or without demand
+("Unknown: no run yet"…), and *Withheld* (not "Unknown") to a viewer kept
+from the registered volumes when the run the figures come from caps use at,
+or scales demand to, them (`figuresWithheld`, issue #523 I, [security.md §
+Allocations](./security.md#allocations-popia-minimisation-038_allocationssql); [api.md § Portfolio](./api.md#portfolio)): the
+use share and the lowest farm dam rest on those volumes, so neither is
+shown, and the pill's sub line says why. Until
 then the column was **EWR, last 30 days** (the outlet over the 30 days to the
 figures' last day); that EWR status lives on the teams list and the team
 page, the workspace's [EWR](#ewr) page lights each month with the same
@@ -2550,8 +2563,10 @@ created 26 Sep 2026") and the actions: **Project list**, **Team settings**,
 and admins; opens the New project dialog with the team preselected). The
 main column is **Projects**: two tiles (EWR bar, alerts firing), then each project worst first with its source
 ("Published run"…), EWR pill, figures age and *Stale* flag, farms short
-(linking to the run's curtailment, as on the project list), lowest dam and
-alerts; a footnote states the traffic-light rule with a link to the
+(linking to the run's curtailment, as on the project list), lowest dam (muted
+*Withheld* to a viewer kept from the registered volumes, with the reason
+under it, since the EWR pill isn't withheld; `figuresWithheld`, as on the
+project list) and alerts; a footnote states the traffic-light rule with a link to the
 settings. **Members** is the side column (below on a narrow page): each
 member is a row of two lines (issue #520), the name with the email under it
 beside the role, then the row's **Reset two-step** and **Remove** on a line of
@@ -4758,7 +4773,11 @@ saves the catchment's model, and override mode there edits the scenario's
   server, shows a notice ("Orchard’s planted area on Upper farm is now
   51.73 ha, from land cover. Run the model to see its effect.", which takes
   the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the
-  saved model and the summary. Use is disabled while the model has
+  saved model and the summary. If Back or a `farm=` link moved the drawer
+  to another unit while the save was out, the box reloads the unit it now
+  shows, and the notice still says what was saved (it names its unit, and
+  a screen reader announces it) but leaves the keyboard where the user put
+  it. Use is disabled while the model has
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,

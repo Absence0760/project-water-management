@@ -146,7 +146,7 @@ test('an editor uses the map’s area; the register’s capacity is a reference 
 	await expectNoViolations(v, { include: '[data-testid="dam-proposals"]' });
 });
 
-test('a Use that answers after Dam of moved on leaves the box on the unit now picked', async ({ page, owner }) => {
+test('a Use that answers after Dam of moved on leaves the box, and the keyboard, on the unit now picked', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Dam proposals use race');
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!;
@@ -175,10 +175,19 @@ test('a Use that answers after Dam of moved on leaves the box on the unit now pi
 	const saved = page.waitForResponse(/\/dam-area-from-map$/);
 	// The box's reload after the save: one GET of proposals, whichever unit it asks for.
 	const reloaded = page.waitForResponse((r) => r.request().method() === 'GET' && /\/dam-proposals$/.test(new URL(r.url()).pathname));
+	// The keyboard is on Dam of, where the user moved on.
+	await panel(page).getByLabel('Dam of').focus();
+	await expect(panel(page)).toHaveAttribute('data-saving', 'true');
 	release();
 	expect((await saved).status()).toBe(200);
 	await reloaded;
+	// The Use has finished, its focus step included.
+	await expect(panel(page)).not.toHaveAttribute('data-saving');
+	// The notice still reports the save (it names its unit), but doesn't take the keyboard from Dam of: it's about a unit
+	// the user has left.
 	await expect(panel(page).getByTestId('dam-proposals-notice')).toContainText('Upper farm’s full-supply area is now');
+	await expect(panel(page).getByTestId('dam-proposals-notice')).not.toBeFocused();
+	await expect(panel(page).getByLabel('Dam of')).toBeFocused();
 	// The box still shows Lower farm, the unit Dam of names, not the reload of Upper farm the save asked for.
 	await expect(panel(page).getByLabel('Dam of')).toHaveValue(project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string);
 	await expect(panel(page).getByTestId('dam-proposals-body')).toHaveAttribute('data-ready', 'true');

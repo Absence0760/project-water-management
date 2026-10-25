@@ -131,7 +131,9 @@
 			// Reload the unit Dam of names now, not d's: Dam of (or the page's pick) may have moved on while the save was out,
 			// and loading d's would put its rows under another unit's name.
 			await Promise.all([load(unitId), onModelChanged()]);
-			await frame?.focusNotice();
+			// The keyboard goes to the notice only if Dam of still names d's unit: if the user moved on, it stays where
+			// they put it, and the notice (a live region naming its unit) still reports the save.
+			if (d.nodeId === unitId) await frame?.focusNotice();
 		} catch (e) {
 			rowError = { key: r.key, text: msg(e) };
 		} finally {
@@ -146,6 +148,7 @@
 	{id}
 	{fold}
 	testid="dam-proposals"
+	saving={busy !== null}
 	prefix="dam-proposals"
 	{variant}
 	title="Proposed from the register and the map"

@@ -36,6 +36,7 @@
 		error,
 		onretry,
 		bodyGrid = false,
+		saving = false,
 		fold,
 		open = $bindable(),
 		children
@@ -69,6 +70,8 @@
 		onretry: () => void;
 		/** Lay the body out as a one-column grid with gaps (Settings' group), not as a block. */
 		bodyGrid?: boolean;
+		/** A Use is out (saving, then reloading): `data-saving` on the section until it has finished, focus included. */
+		saving?: boolean;
 		/** Fold everything under the heading into one line of values (the unit's name, what is proposed), with its action. */
 		fold?: { name?: string; line: string; change: string };
 		/** The fold's open state (with `fold`). */
@@ -79,7 +82,9 @@
 	const uid = $props.id();
 	let noticeEl = $state<HTMLParagraphElement | null>(null);
 
-	/** After a Use: the button is gone or disabled, so the keyboard goes to what happened, not the top of the page. */
+	/** After a Use: the button is gone or disabled, so the keyboard goes to what happened, not the top of the page.
+	 *  Only while the panel still shows the unit the Use was for: a panel moved on to another unit keeps the keyboard where
+	 *  the user put it, and the notice (a live region) still reports the save. */
 	export async function focusNotice(): Promise<void> {
 		await tick();
 		noticeEl?.focus();
@@ -102,7 +107,7 @@
 	</div>
 {/snippet}
 
-<section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
+<section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-saving={saving ? 'true' : undefined} data-testid={testid}>
 	{#if variant === 'page'}
 		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h2>{@render actions?.()}</div>
 	{:else if actions}
