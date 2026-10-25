@@ -1140,10 +1140,12 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 			'EWR split between units by',
 			EWR_SPLIT_LABEL[split.applied],
 			split.period
-				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water years` : 'the whole run: no complete water year'})`
+				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water year${split.period.waterYears === 1 ? '' : 's'}` : 'the whole run: no complete water year'}${split.pinned ? '; the capture run’s shares' : ''})`
 				: split.why === 'catchmentRain'
 					? 'the flow share: GR4J ran once on the catchment rain'
-					: 'the flow share: no unit made natural runoff'
+					: split.why === 'resumed'
+						? 'the flow share: resumed from a snapshot of a run that split the EWR by the flow share'
+						: 'the flow share: no unit made natural runoff'
 		]);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
 	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);
