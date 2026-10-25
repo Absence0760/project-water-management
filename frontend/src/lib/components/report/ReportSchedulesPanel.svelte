@@ -9,6 +9,7 @@
 <script lang="ts">
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick } from 'svelte';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { api, type Member } from '#lib/api/index.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { session } from '#lib/auth/session.svelte.js';
@@ -110,6 +111,8 @@
 			return;
 		busy = s.id;
 		message = error = null;
+		// Its place in the list: its row, and the Remove that had the focus, go with it (issue #586).
+		const at = schedules?.findIndex((x) => x.id === s.id) ?? -1;
 		try {
 			if (what === 'toggle') {
 				await reports.updateSchedule(s.id, { enabled: !s.enabled });
@@ -119,6 +122,8 @@
 				message = 'Schedule removed.';
 			}
 			await reload();
+			// The Remove of the schedule now in its place takes the focus, else Add a schedule, else the heading.
+			if (what === 'remove') await focusAfterRemove(at, `[aria-labelledby="${uid}-h"] .schedule button.btn-danger`, addButton ?? `${uid}-h`);
 		} catch (err) {
 			error = msg(err);
 		} finally {

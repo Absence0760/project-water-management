@@ -10,6 +10,7 @@
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount, tick } from 'svelte';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { PUBLIC_API_URL } from '$app/env/public';
 	import { api, API_KEY_NAME_MAX, type ApiKey, type ApiKeySeries } from '#lib/api/index.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
@@ -118,10 +119,14 @@
 		if (!(await confirmDialog({ title: 'Revoke this API key?', message: revokeKeyQuestion(keyName), confirmLabel: 'Revoke key', danger: true }))) return;
 		busy = id;
 		error = null;
+		// Its place among the keys that can still be revoked: the revoked key keeps its row, but its Revoke button,
+		// which had the focus, goes (issue #586). The next live key's Revoke takes it, else Make a key.
+		const at = rows.filter((r) => r.canRevoke).findIndex((r) => r.id === id);
 		try {
 			await api.apiKeys.revoke(projectId, id);
 			if (fresh?.id === id) fresh = null;
 			keys = await api.apiKeys.list(projectId);
+			await focusAfterRemove(at, '#set-api-keys td.act button.btn-danger', makeButton ?? 'api-keys-h');
 		} catch (err) {
 			error = msg(err);
 		} finally {

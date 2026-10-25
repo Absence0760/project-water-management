@@ -18,6 +18,7 @@
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { api, SHARE_LABEL_MAX, type PackStatus, type ScenarioStatus, type ShareLink } from '#lib/api/index.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { DEFAULT_EXPIRY_DAYS, EXPIRY_CHOICES, linkRow, revokeQuestion, sortLinks, STATE_WORD } from './shareLinks';
@@ -53,6 +54,8 @@
 	let published = $state<boolean | null>(null);
 	let copied = $state('');
 	let urlInput: HTMLInputElement | undefined = $state();
+	let panel: HTMLElement | undefined = $state();
+	const uid = $props.id();
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const rows = $derived(sortLinks(links).map((l) => linkRow(l)));
@@ -114,10 +117,15 @@
 		if (!(await confirmDialog({ title: 'Withdraw this link?', message: revokeQuestion(name, opens), confirmLabel: 'Withdraw link', danger: true }))) return;
 		busy = id;
 		error = null;
+		// Its place among the links that can still be withdrawn: a withdrawn link keeps its row, but its Withdraw,
+		// which had the focus, goes (issue #586). The next live link's Withdraw takes it, else the make form's
+		// first field, else the heading (or, with neither, the panel).
+		const at = rows.filter((r) => r.canRevoke).findIndex((r) => r.id === id);
 		try {
 			await api.shareLinks.revoke(projectId, id);
 			if (fresh?.id === id) fresh = null;
 			links = await listLinks();
+			await focusAfterRemove(at, `[data-share-links="${uid}"] td.act button.btn-danger`, shareable ? 'share-label' : targeted ? panel : 'share-h');
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -126,7 +134,7 @@
 	}
 </script>
 
-<section class:panel={!targeted} aria-labelledby={targeted ? undefined : 'share-h-t'} data-testid={pack ? 'pack-share' : scenario ? 'scenario-share' : undefined}>
+<section class:panel={!targeted} bind:this={panel} data-share-links={uid} aria-labelledby={targeted ? undefined : 'share-h-t'} data-testid={pack ? 'pack-share' : scenario ? 'scenario-share' : undefined}>
 	{#if pack}
 		<p class="muted small intro" id="share-what">
 			A read-only link to {pack.name} for someone outside the project (an NGO, a catchment forum), signed out. They see what the verify

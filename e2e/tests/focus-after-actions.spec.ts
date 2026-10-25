@@ -247,3 +247,51 @@ test('removing a project member, revoking an invitation and a farmer’s invitat
 	await answerConfirm(page, true, 'Revoke this invitation?');
 	await expect(page.getByRole('heading', { name: /^Farmers/ })).toBeFocused();
 });
+
+// Issue #586: a revoked key and a withdrawn link keep their rows but lose their buttons, and a removed schedule
+// goes with its row; each left the focus on <body>. The next one's button takes it, then the panel's add action.
+test('revoking an API key, removing a scheduled report and withdrawing a share link keep the focus in the panel', async ({ page, owner }) => {
+	const project = await seedRunnableProject(page.request, 'Focus keys links schedules');
+	const post = async (path: string, data: object) => expect((await page.request.post(`${API_URL}/projects/${project.id}/${path}`, { data })).status()).toBe(201);
+	for (const name of ['Gate A', 'Gate B']) await post('api-keys', { name, allowedSeries: null, expiresInDays: 30 });
+	for (const hour of [6, 7]) await post('report-schedules', { frequency: 'weekly', weekday: 1, hour, timezone: 'UTC', recipients: [owner.id] });
+	for (const label of ['Forum A', 'Forum B']) await post('share-links', { label, expiresInDays: 7 });
+
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const keys = page.getByRole('region', { name: 'API keys' });
+	const revokes = keys.getByRole('button', { name: /^Revoke Gate / });
+	await expect(revokes).toHaveCount(2);
+	await revokes.first().click();
+	await answerConfirm(page, true, 'Revoke this API key?');
+	await expect(revokes).toHaveCount(1);
+	await expect(revokes).toBeFocused();
+	await revokes.click();
+	await answerConfirm(page, true, 'Revoke this API key?');
+	await expect(revokes).toHaveCount(0);
+	await expect(keys.getByRole('button', { name: 'Make a key' })).toBeFocused();
+
+	const schedules = page.getByRole('region', { name: 'Scheduled reports' });
+	const removes = schedules.getByRole('button', { name: /^Remove schedule: / });
+	await expect(removes).toHaveCount(2);
+	await removes.first().click();
+	await answerConfirm(page, true, 'Remove this schedule?');
+	await expect(removes).toHaveCount(1);
+	await expect(removes).toBeFocused();
+	await removes.click();
+	await answerConfirm(page, true, 'Remove this schedule?');
+	await expect(removes).toHaveCount(0);
+	await expect(schedules.getByRole('button', { name: 'Add a schedule' })).toBeFocused();
+
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const links = page.getByRole('region', { name: 'Share links' });
+	const withdraws = links.getByRole('button', { name: /^Withdraw Forum / });
+	await expect(withdraws).toHaveCount(2);
+	await withdraws.first().click();
+	await answerConfirm(page, true, 'Withdraw this link?');
+	await expect(withdraws).toHaveCount(1);
+	await expect(withdraws).toBeFocused();
+	await withdraws.click();
+	await answerConfirm(page, true, 'Withdraw this link?');
+	await expect(withdraws).toHaveCount(0);
+	await expect(links.getByLabel('Who it’s for')).toBeFocused();
+});
