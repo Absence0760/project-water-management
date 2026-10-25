@@ -7488,9 +7488,12 @@ stay lazy. Rules in `river/river.ts`, links in `river/links.ts`). Every
 role that reads runs sees it (`TAB_GROUP.river = 'core'`: owners, editors,
 viewers); an applicant and a farmer get their own views, as for every tab.
 
-- **Which run.** `run=<id>` picks it; without one (or when it names a run
-  that is gone) the newest run by `createdAt`, as the Summary shows
-  (`pickRiverRun`). The run before it (by `createdAt`) is what the changes are
+- **Which run.** `run=<id>` picks it; without one the newest run by
+  `createdAt`, as the Summary shows (`pickRiverRun`). A `run=` naming a run
+  that is gone (deleted since the link was made) shows the newest with a
+  note at the top, "That run no longer exists, so this shows the newest
+  run." (`role="note"`, as Hydrological units; until 2026-10-24 it fell back
+  to the newest silently). The run before it (by `createdAt`) is what the changes are
   against. The **Run** menu in the header (named for screen readers only,
   `aria-label="Run"`, like Hydrological units's picker, so on a phone the select fills a row of its own with
   no "Run" line above it) lists every run, newest first

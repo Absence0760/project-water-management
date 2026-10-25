@@ -313,6 +313,17 @@ test('the run picker: another run is a URL, Back returns, a reload keeps it', as
 	await expect(page).toHaveURL(/[?&]tab=river$/);
 	await expect(context).toContainText('Second');
 	await expect(page.getByLabel('Run', { exact: true })).not.toHaveValue(baseline);
+	await expect(page.getByRole('note').filter({ hasText: 'no longer exists' })).toHaveCount(0);
+
+	// A link to a run that's gone (deleted since the link was made): the newest instead, said so, as Hydrological units does.
+	await page.goto(`/projects/${id}?tab=river&run=00000000-0000-4000-8000-000000000000`);
+	await expect(page.getByRole('note').filter({ hasText: 'That run no longer exists, so this shows the newest run.' })).toBeVisible();
+	await expect(context).toContainText('Second');
+	await expect(riverTiles(page)).toHaveCount(2);
+	// Picking a run names it in the URL, and the note goes.
+	await page.getByLabel('Run', { exact: true }).selectOption(baseline);
+	await expect(context).toContainText('Baseline');
+	await expect(page.getByRole('note').filter({ hasText: 'no longer exists' })).toHaveCount(0);
 });
 
 test('Runs & results links here for its run, and an old link to a moved panel lands on it here', async ({ page, owner }) => {

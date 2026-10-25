@@ -24,13 +24,17 @@ const created = (r: RunMeta) => {
  * The run the page shows and the one before it (by createdAt; ties keep the
  * list order, which is newest first). `wanted` is the URL's `run=`; without
  * it, or when it names no run in the list, the newest run, as the Summary
- * picks (overview/latestRun.ts pickRuns). null without runs.
+ * picks (overview/latestRun.ts pickRuns). `gone`: `wanted` names a run
+ * that isn't in the list (deleted since the link was made), so the page
+ * says it shows the newest instead, as Hydrological units does. null
+ * without runs.
  */
-export function pickRiverRun(runs: readonly RunMeta[] | null, wanted: string | null): { run: RunMeta; previous: RunMeta | null } | null {
+export function pickRiverRun(runs: readonly RunMeta[] | null, wanted: string | null): { run: RunMeta; previous: RunMeta | null; gone: boolean } | null {
 	if (!runs?.length) return null;
 	const sorted = runs.map((r, i) => ({ r, i })).sort((a, b) => created(b.r) - created(a.r) || a.i - b.i).map((x) => x.r);
-	const at = Math.max(0, wanted ? sorted.findIndex((r) => r.id === wanted) : 0);
-	return { run: sorted[at]!, previous: sorted[at + 1] ?? null };
+	const found = wanted ? sorted.findIndex((r) => r.id === wanted) : 0;
+	const at = Math.max(0, found);
+	return { run: sorted[at]!, previous: sorted[at + 1] ?? null, gone: found < 0 };
 }
 
 export type RiverKpiId = 'reserve' | 'ewr' | 'outflow';

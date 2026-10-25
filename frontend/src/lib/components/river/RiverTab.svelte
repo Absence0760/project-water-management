@@ -257,6 +257,10 @@
 	     page's own widths are read from river-body, the column beside the index. -->
 	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="EWR sections" railFrom={RIVER_RAIL_FROM_REM}>
 	<div class="river-body">
+	{#if pick.gone}
+		<!-- `run=` names a run that's gone (deleted since the link was made): the newest is shown, and said (as Hydrological units). -->
+		<p class="alert alert-info" role="note">That run no longer exists, so this shows the newest run.</p>
+	{/if}
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
 	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
