@@ -423,6 +423,29 @@ runs and accumulations are real) can't be decided without the client.
       1981) where that narrows it. Trigger:
       the client's first per-unit run, or the hydrologist's review of the
       unit MAPs.
+- [ ] **Accumulations in a station pairing's complete years (engine
+      1.96.0, engine-audit.md RS6, model.md §2.4i *Accumulations and
+      complete years*).** **Provisional decision 2026-10-24 (to be
+      confirmed by the client's hydrologist):** a §2.4d multi-day
+      accumulation's days count as read when the pairing counts its
+      complete years (the total is known and the forcing spreads it), and
+      the factors still leave the window out. Up to 1.95.0 a station with an
+      accumulation in every year was refused outright. Sources: WMO-TD/No.
+      341 (1989) accepts accumulated amounts within a month in lieu of daily
+      totals; Lynch (2004, WRC Report 1156/1/04) marks a month with a
+      reliable accumulated total usable. To confirm: is that right for the
+      client's stations, and should a window longer than WMO's 3 days break
+      its year? Durable fix: the hydrologist's answer, then a length limit in
+      `completeYears` if they want one. Trigger: the client's first station
+      pairing, or a station refused for too few complete years.
+      **Also open (found in review):** for the station that is the
+      catchment gauge, a §2.4e rain-source period's replacement days are
+      another series' rain, yet they count in its pairing's complete years
+      and factors, against the CHIRPS at the station. Whether they belong in
+      a pairing is the same question U1 asks of the reference fit (model.md
+      §2.4h *Still provisional*); ask it of both. Durable fix: leave
+      rain-source days out of the fit's record (and the count) if the
+      hydrologist says so. Trigger: the same answer as U1's.
 - [ ] **The EWR split's MAR period (engine 1.94.0, issue #553,
       engine-audit.md ES1, model.md §2.5b).** The operator chose the option
       (split the EWR by the flow share, or by each unit's natural MAR ÷ the

@@ -104,6 +104,9 @@ describe('checkedStationRecord', () => {
 		expect(fit.record.values[ACC_BLANK[0] - 1]).toBe(0);
 		expect(fit.record.values[ACC_READ + 1]).toBe(gauge[ACC_READ + 1]);
 		expect(fit.setAside.checks).toBe(1); // the 60 mm reading
+		// Beside it, the record as the forcing reads it (the pairing's complete years count on it); none without the option.
+		expect(fit.forcing).toEqual(run.record);
+		expect(run.forcing).toBeUndefined();
 		// Positive control: read against the catchment's CHIRPS (no cell), the reading is one day's rain, kept.
 		const noCell = checkedStationRecord(settingsWith(), seriesOf({ [stationSeriesKey('S1')]: ser(gauge), rain_chirps_mm: ser(catchmentChirps) }), 'S1')!;
 		expect(noCell.record.values[ACC_READ]).toBe(60);

@@ -3845,11 +3845,12 @@ export interface StationPairingFit {
 	chirpsAt: { cell: true } | { unitId: string; unitName: string };
 	/** Null = refused (too short, or no CHIRPS at the station); `refused` says why. */
 	refused: string | null;
-	/** The first and last shared day, and the count of complete calendar years in common. */
+	/** The first and last shared day of the fit's record (accumulation windows left out). */
 	fitFrom: string | null;
 	fitTo: string | null;
+	/** Complete calendar years in common, on the record as the forcing reads it (accumulation days count as read, engine ≥ 1.96.0, model.md §2.4i). */
 	commonYears: number;
-	/** Shared days with a reading in both. */
+	/** Shared days with a reading in both, on the fit's record. */
 	days: number;
 	pinned: boolean;
 	/** Same shape as the reference gauge's months (§2.4h). Empty when refused. */

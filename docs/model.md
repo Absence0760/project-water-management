@@ -2952,9 +2952,34 @@ factors are clamped to 0.25–4 and banded at 0.5–2. **Refused** (no factors,
 a reason in `refused`, a warning) when the station has no record, there is
 no CHIRPS at it, or the two have fewer than `STATION_PAIRING_MIN_YEARS` = 5
 complete calendar years in common (a year every day of which both have a
-reading; not necessarily consecutive). A refused pairing corrects nothing:
+reading in the checked record **as the forcing reads it**; not necessarily
+consecutive). A refused pairing corrects nothing:
 its areas' gap days take the next fallback. Each pairing is fitted once per
 run, however many areas use it, and its factors are what a snapshot pins.
+
+**Accumulations and complete years** (provisional, engine 1.96.0, pending
+the client's hydrologist; [engine-audit.md RS6](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
+A §2.4d multi-day accumulation's days count as read for the complete years:
+its total is a reading of the station's, which the forcing spreads over the
+window's days by CHIRPS, so the station supplies every one of them. Only the
+factors leave the window out, day by day, because how the total splits
+between its days is CHIRPS's, not the station's. Up to engine 1.95.0 the
+count ran on the fit's record, so a station with one accumulation in every
+year (a gauge not read at weekends, say) had no complete year and was
+refused. Practice counts a known accumulated total as data: WMO's normals
+guidance accepts accumulated amounts within a month in place of daily totals
+and treats a month as missing only when a day *and* its accumulated total
+are missing (WMO 1989, *Calculation of Monthly and Annual 30-Year Standard Normals*, WMO-TD/No. 341, *Precipitation Total*), and the South
+African daily rainfall database marks a month holding an accumulation whose
+total is reliable as usable ("$") while a missing day makes the month, and
+so the year, incomplete (Lynch 2004, *Development of a Raster Database of Annual, Monthly and Daily Rainfall for Southern Africa*, WRC Report 1156/1/04, §6.3 and Tables 22–23). Days with no
+known total still break a year: the blank outage before a reading §2.4d sets
+aside (and that reading), a listed window with no reading (only the catchment gauge has listed windows), and a window's
+blank days under "Run as recorded (one day)", which the station doesn't
+supply. WMO limits each accumulation to 3 days, where a §2.4d window holds
+up to 7 blank days and its reading; the database's flag sets no limit, and
+the 7-day cap (longer is an outage) bounds it here. The factors are
+unchanged by this, so only whether a pairing is refused moves.
 
 **Which station is missing.** An assignment naming a station with no
 record in the input warns, and the area runs as without it: the catchment

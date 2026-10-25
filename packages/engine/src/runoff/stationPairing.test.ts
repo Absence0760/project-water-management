@@ -37,7 +37,7 @@ const NODES = [node('U', 'Unit U'), node('V', 'Unit V')];
 const settingsWith = (rainStations: RainStationSettings | null = null): ProjectSettings => ({ ...mergeSettings({}, []), rainStations });
 const seriesOf = (m: Record<string, DailySeries>) => m as unknown as ModelInput['series'];
 
-function pairing(opts: { start?: string; end?: string; chirps?: (number | null)[]; station?: (number | null)[]; rainStations?: RainStationSettings | null; chirpsKey?: string; extra?: Record<string, DailySeries> } = {}) {
+function pairing(opts: { start?: string; end?: string; chirps?: (number | null)[]; station?: (number | null)[]; rainStations?: RainStationSettings | null; chirpsKey?: string; extra?: Record<string, DailySeries>; settings?: ProjectSettings } = {}) {
 	const start = opts.start ?? '2015-01-01';
 	const days = daysBetween(start, opts.end ?? '2021-01-01');
 	const chirps = opts.chirps ?? chirpsOver(start, days);
@@ -48,7 +48,7 @@ function pairing(opts: { start?: string; end?: string; chirps?: (number | null)[
 		...(opts.extra ?? {})
 	});
 	const warnings: string[] = [];
-	const fit = fitStationPairing({ settings: settingsWith(opts.rainStations ?? null), series, stations: STATIONS, nodes: NODES, stationId: 'S1' }, warnings);
+	const fit = fitStationPairing({ settings: opts.settings ?? settingsWith(opts.rainStations ?? null), series, stations: STATIONS, nodes: NODES, stationId: 'S1' }, warnings);
 	return { fit, warnings, chirps, station, start };
 }
 
@@ -216,6 +216,97 @@ describe('fitStationPairing: complete years in common', () => {
 		const { fit } = pairing({ start, chirps, station: scaled(start, chirpsOver(start, chirps.length), (m) => K[m - 1]!) });
 		expect(fit.commonYears).toBe(5);
 		expect(fit.refused).toBeNull();
+	});
+});
+
+describe('fitStationPairing: multi-day accumulations and complete years (provisional, model.md §2.4i)', () => {
+	// Each year: 0 mm on 9 May, blank 10–14 May, 60 mm on the 15th; the CHIRPS rains 15 mm on the 10th–13th and
+	// nothing on the 9th and the 14th–16th, so §2.4d reads the 60 mm as six days' rain (a spread window).
+	const start = '2016-01-01';
+	const end = '2021-01-01';
+	const at = (iso: string) => toEpochDay(iso) - toEpochDay(start);
+	function withYearlyAccumulations(opts: { outage?: boolean; settings?: ProjectSettings } = {}) {
+		const chirps: (number | null)[] = chirpsOver(start, daysBetween(start, end));
+		const station: (number | null)[] = scaled(start, chirps, (m) => K[m - 1]!);
+		for (let y = 2016; y <= 2020; y++) {
+			// An outage: 9 blank days (past the 7 a window may hold), so the reading after it is set aside.
+			const first = at(opts.outage ? `${y}-05-06` : `${y}-05-10`);
+			const read = at(`${y}-05-15`);
+			station[first - 1] = 0;
+			chirps[first - 1] = 0;
+			for (let i = first; i < read; i++) station[i] = null;
+			for (let i = first; i <= read + 1; i++) chirps[i] = i < read - 1 ? 15 : 0;
+			station[read] = 60;
+		}
+		return pairing({ start, end, chirps, station, settings: opts.settings });
+	}
+
+	it('an accumulation in every year leaves the years complete: its total is known and spread (§2.4d), so the pairing is fitted', () => {
+		const { fit, warnings } = withYearlyAccumulations();
+		expect(fit.commonYears).toBe(5);
+		expect(fit.refused).toBeNull();
+		expect(fit.months).toHaveLength(12);
+		expect(warnings.some((w) => w.includes('is refused'))).toBe(false);
+	});
+
+	it('the factors still leave the accumulation windows out, day by day', () => {
+		const { fit, chirps, station } = withYearlyAccumulations();
+		const d0 = toEpochDay(start);
+		const windowDay = (i: number) => {
+			const iso = fromEpochDay(d0 + i);
+			return iso.slice(5) >= '05-10' && iso.slice(5) <= '05-15';
+		};
+		let n = 0;
+		let g = 0;
+		let c = 0;
+		for (let i = 0; i < chirps.length; i++)
+			if (monthOfEpochDay(d0 + i) === 5 && !windowDay(i)) {
+				n++;
+				g += station[i]!;
+				c += chirps[i]!;
+			}
+		const may = fit.months[4]!;
+		expect(may.sharedDays).toBe(n);
+		expect(may.sharedDays).toBe(5 * 31 - 5 * 6);
+		expect(may.gaugeMm).toBeCloseTo(g, 9);
+		expect(may.chirpsMm).toBeCloseTo(c, 9);
+	});
+
+	it('a blank outage, and the reading after it set aside as missing (§2.4d), still breaks its year', () => {
+		const { fit } = withYearlyAccumulations({ outage: true });
+		expect(fit.commonYears).toBe(0);
+		expect(fit.refused).toMatch(/0 complete calendar years/);
+	});
+
+	it('the set-aside reading alone breaks its year: an outage over New Year leaves the next year incomplete', () => {
+		// Blank 23–31 Dec 2017 (9 days, an outage), 60 mm on 1 Jan 2018: 2017 is broken by its blanks, 2018 only by the reading.
+		const chirps: (number | null)[] = chirpsOver(start, daysBetween(start, end));
+		const station: (number | null)[] = scaled(start, chirps, (m) => K[m - 1]!);
+		const first = at('2017-12-23');
+		const read = at('2018-01-01');
+		station[first - 1] = 0;
+		chirps[first - 1] = 0;
+		for (let i = first; i < read; i++) station[i] = null;
+		for (let i = first; i <= read + 1; i++) chirps[i] = i < read - 1 ? 15 : 0;
+		station[read] = 60;
+		const { fit, warnings } = pairing({ start, end, chirps, station });
+		expect(warnings.some((w) => w.includes('is refused'))).toBe(true);
+		expect(fit.commonYears).toBe(3); // 2016, 2019, 2020; counting the reading as rain would make 2018 complete too
+		// Positive control: the same reading after 5 blank days is a spread window over New Year, and every year is complete.
+		for (let i = first; i < read - 5; i++) station[i] = chirps[i]! * K[11]!;
+		station[read - 6] = 0;
+		chirps[read - 6] = 0;
+		const spread = pairing({ start, end, chirps, station });
+		expect(spread.fit.commonYears).toBe(5);
+		expect(spread.fit.refused).toBeNull();
+	});
+
+	it('under "Run as recorded (one day)" an accumulation’s blank days stay blank, so they break the year', () => {
+		const base = mergeSettings({}, []);
+		const settings: ProjectSettings = { ...base, zeroRainRuns: { ...base.zeroRainRuns, accumulationMode: 'asRecorded' }, rainStations: null };
+		const { fit } = withYearlyAccumulations({ settings });
+		expect(fit.commonYears).toBe(0);
+		expect(fit.refused).toMatch(/0 complete calendar years/);
 	});
 });
 
