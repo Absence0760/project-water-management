@@ -401,6 +401,7 @@ MUTANTS = [
     ("a pairing takes 4 complete years in common (5)", "STATION_PAIRING_MIN_YEARS = 5", "STATION_PAIRING_MIN_YEARS = 4"),
     ("a pairing needs 6 complete years in common (5)", "STATION_PAIRING_MIN_YEARS = 5", "STATION_PAIRING_MIN_YEARS = 6"),
     ("a pairing keeps the station's accumulation windows", "sv, cv = rec.fit_value(o), h.get(o)", "sv, cv = rec.value(o), h.get(o)"),
+    ("a pairing's complete years leave a spread accumulation's days out (engine 1.95.0, before RS6)", "yv = rec.value(o)", "yv = rec.fit_value(o)"),
     ("a pairing month needs no 50 mm of CHIRPS", "        if n[m] >= FIT_MIN_DAYS and c[m] >= FIT_MIN_MM:\n            f = g[m] / c[m]", "        if n[m] >= FIT_MIN_DAYS:\n            f = g[m] / c[m]"),
     ("a pairing factor isn't clamped", "            cf = min(FACTOR_MAX, max(FACTOR_MIN, f))", "            cf = f"),
     ("a station without a cell or a site is paired with the catchment's CHIRPS", "if site else None\n", 'if site else series.get("rain_chirps_mm")\n'),
