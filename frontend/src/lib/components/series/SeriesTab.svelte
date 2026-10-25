@@ -1305,11 +1305,12 @@
 {/if}
 
 <style>
-	/* A 24 px target (WCAG 2.5.8). */
+	/* A 24 px target (WCAG 2.5.8) that wraps as text: inline-flex made the words and the arrow
+	   separate columns on a phone (issue #586 R1-D). */
 	.feeds-link {
-		display: inline-flex;
-		align-items: center;
+		display: inline-block;
 		min-height: 24px;
+		line-height: 24px;
 	}
 	.series th[scope='row'] {
 		min-width: 190px;
