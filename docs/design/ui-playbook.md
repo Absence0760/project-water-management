@@ -647,9 +647,9 @@ section it belongs to, with the example that taught it.
   in the field's `aria-describedby`, since a hidden child of a referenced
   element drops out of the description: "The gauge code, e.g. A2H012." stays,
   "Verified DWS data lags by months…" is `.explain`. The switch hides
-  `.explain` inside an `explain-scope` wrapper (`.settings-form` and
-  `.settings-after`, the panels after the form that save on their own, so a
-  panel outside both needs a wrapper);
+  `.explain` inside an `explain-scope` wrapper (`.settings-form`, so a
+  panel outside it needs a wrapper; Data and Project have no switch, so the
+  field help there is always shown);
   and measure the widest content beside a rail before choosing where it
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail

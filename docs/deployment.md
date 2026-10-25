@@ -2171,7 +2171,7 @@ Step 2 operations (roadmap [step-2 § 8](./roadmap/step-2-shared-catchment.md#8-
 Every step is an ordinary app action by an owner unless it says "operator".
 
 1. **Bad data pushed by a gateway (an API key).**
-   1. Revoke the key (Settings → API keys → Revoke). It stops working on the
+   1. Revoke the key (Project → API keys → Revoke). It stops working on the
       next request.
    2. In History, filter by `series` and find the key's `series.merged` /
       `series.created` events (the actor is `API key “<name>”`; each gives

@@ -235,7 +235,7 @@ rows exist for this.
 - ✅ **Scheduled fetchers** (issue #10, WP-2.10; [architecture.md § Data feeds](./architecture.md#data-feeds)):
   CHIRPS daily rainfall and the CHIRPS-GEFS forecast for grid cells over the
   catchment, and a DWS gauge's daily flow, on the job queue, with health and
-  stale-feed warnings in Settings → Data feeds. Synthetic fixtures locally;
+  stale-feed warnings in Data → Data feeds (Settings until issue #586). Synthetic fixtures locally;
   in production a fetcher Lambda outside the VPC (Terraform plan only). By
   cells, not a polygon yet; DWS unverified against the live site
   ([followups.md](./followups.md)).
