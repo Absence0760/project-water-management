@@ -75,6 +75,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		SES_CONFIGURATION_SET: 'water-management',
 		JOB_TRANSPORT: 'sqs',
 		JOBS_QUEUE_URL: SQS('jobs'),
+		FEED_SOURCE: 'live',
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
 		PACKS_BUCKET: 'water-management-packs-000000000000',
@@ -90,6 +91,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		NODE_EXTRA_CA_CERTS: CA,
 		FEED_FETCHER: 'sqs',
 		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests'),
+		FEED_SOURCE: 'live',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
 		STORAGE: 's3',
@@ -142,6 +144,8 @@ const requiredFor = (role: Role, name: string) => !!SETTINGS[name]?.checks?.[rol
 
 /** Env names read by the source modules each entry point reaches. */
 const reachable = {} as Record<Role, Map<string, Set<string>>>;
+/** The source modules (backend-relative paths, src/…) each entry point's bundle holds. */
+const modules = {} as Record<Role, Set<string>>;
 /** Each entry point's bundle (a file: URL), and a loader that imports one natively (see the header). */
 const bundle = {} as Record<Role, string>;
 let nativeImport: (url: string) => Promise<Record<string, unknown>>;
@@ -201,6 +205,7 @@ beforeAll(async () => {
 		}
 		expect(files.some((f) => f.endsWith(`src/${ENTRY[role]}`))).toBe(true);
 		reachable[role] = names;
+		modules[role] = new Set(files);
 	}
 }, 60_000);
 afterAll(() => {
@@ -272,8 +277,22 @@ describe('every setting a Lambda can read is classified', () => {
 	it('the inventory sees known reads (positive control for the scan)', () => {
 		expect(reachable.api.has('AUTH_JWT_SECRET')).toBe(true);
 		expect(reachable.fetcher.has('FEED_SOURCE')).toBe(true);
+		expect(reachable.api.has('FEED_SOURCE') && reachable.worker.has('FEED_SOURCE')).toBe(true);
 		expect(reachable.migrate.has('MASTER_SECRET_ARN')).toBe(true);
 		expect(reachable.renderer.has('RENDER_SITE_URL')).toBe(true);
+	});
+
+	// FEED_SOURCE is also which CHIRPS cell cache a process reads (feeds/cellCacheStore.ts cacheOrigin), and what the Data
+	// feeds panel says the feeds read (feeds/routes.ts). A Lambda that holds either with no live check could read the fixtures'
+	// rows, empty in production, while the worker merges `chc` ones: the API did, until 2026-10-25. (The renderer reaches
+	// feeds/http.ts through feeds/fetch.ts but neither of these: it has no database and runs no fetch.)
+	it('every Lambda that reads the cell cache or reports the feed mode refuses a FEED_SOURCE but live', () => {
+		const readers = ROLES.filter((role) => modules[role].has('src/feeds/cellCacheStore.ts') || modules[role].has('src/feeds/routes.ts'));
+		expect(readers).toEqual(expect.arrayContaining(['api', 'worker'])); // positive control: runs execute on both (runs/referenceCell.ts)
+		for (const role of readers) {
+			expect(productionEnvProblems(role, prod(role, { FEED_SOURCE: undefined })), role).toContain('FEED_SOURCE is not set (production needs live)');
+			expect(productionEnvProblems(role, prod(role, { FEED_SOURCE: 'fixtures' })), role).toContain('FEED_SOURCE must be live in production');
+		}
 	});
 
 	it('no stale entries: each setting is read by some Lambda (or the runtime), and each check is on a Lambda that reads it', () => {
@@ -388,6 +407,9 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['renderer', 'STORAGE', undefined],
 			['fetcher', 'FEED_SOURCE', 'fixtures'],
 			['fetcher', 'FEED_SOURCE', undefined],
+			['api', 'FEED_SOURCE', undefined],
+			['api', 'FEED_SOURCE', 'fixtures'],
+			['worker', 'FEED_SOURCE', undefined],
 			['worker', 'FEED_FETCHER', 'inline'],
 			['worker', 'REPORT_RENDERER', 'inline'],
 			['api', 'MAIL_TRANSPORT', 'smtp'],

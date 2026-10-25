@@ -1081,7 +1081,9 @@ three queues (the API to jobs, the worker to fetch-requests and
 render-requests), `SendMessage` only, one per statement, and the deploy role's right to update the worker); the data-feed
 stack (both queues' SSE, DLQs and visibility; the fetcher outside the VPC, its
 size and concurrency, an environment with no database URL, a role on the two
-feed queues only; the worker's `FEED_FETCHER=sqs` and its event source; the
+feed queues only; the worker's `FEED_FETCHER=sqs` and its event source;
+`FEED_SOURCE=live` on the API and the worker, so both read the `chc` CHIRPS
+cell cache the fetcher's answers fill; the
 API kept to the jobs queue through the endpoint; the deploy role's right to
 update the fetcher); every alarm
 wired to SNS, including the `self_check_failed` log metric filters (pattern
