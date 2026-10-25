@@ -734,8 +734,9 @@ project's declared uncertainty rule for evidence (issue #71,
 (evidence)**, the whole rule in words either side (`declaredRuleText`, "not
 declared" when absent). It changes no result, so the line only says the two
 runs were made under different declared rules. Its wording (`declaredRuleText`)
-changed in issue #586 Round 0, to plain words; `ENGINE_VERSION` is unchanged,
-because the line is display only and changes no result. Settings keys the engine doesn't know yet still appear as
+changed in issue #586 Round 0, to plain words, with engine 1.97.0: the line
+changes no result, but an evidence pack's reproduction recomputes it at the
+pack's engine version, so its text moves only with an `ENGINE_VERSION` bump. Settings keys the engine doesn't know yet still appear as
 *Setting "x" changed*.
 
 ## Where the code lives
