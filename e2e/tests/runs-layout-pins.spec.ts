@@ -239,6 +239,11 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		const panel = page.locator(`#${anchor}`);
 		const h = anchor === 'res-h' ? panel : panel.locator('h2, h3, h4').first();
 		await expect(h, anchor).toHaveText(heading);
+		if (anchor === 'res-hydrograph' || anchor === 'res-fdc') {
+			// Shown, word for word the side index's, so the focus ring the link puts on it can be seen (issue #586:
+			// both were visually hidden, which Playwright's toBeVisible still passes).
+			expect(await h.evaluate((e) => !e.closest('.visually-hidden') && e.getBoundingClientRect().width > 1), anchor).toBe(true);
+		}
 		if (anchor === 'res-forecast') {
 			// KNOWN BUG (reported with issue #586 round 0): the Forecast panel is a lazy chunk whose #res-forecast
 			// isn't on the page yet when RunsTab's fragment effect looks for it (RunsTab.svelte ~293), so the link

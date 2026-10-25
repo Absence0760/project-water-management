@@ -5430,9 +5430,13 @@ with the table the data needs).
   (`agoText` in `lib/format/age.ts`; those two days used to read "1 months" / "1 years").
 - **Picking a series**: clicking a row (or its **View** button) charts it
   through the URL (`series=<id>`, `withParam`), so the link can be shared
-  and Back returns to the series before. Without `series=` (or with one that
-  no longer exists) the observed flow a run reads is charted, else the main
-  rainfall, else the first. Deleting the charted series drops the parameter
+  and Back returns to the series before. Without `series=` the observed flow
+  a run reads is charted, else the main rainfall, else the first. A
+  `series=` naming a series no longer stored (a note's or a run's link to one
+  deleted since) is dropped from the address (`goto` with `replace`) and a
+  one-line note says "The series that link named is no longer stored:
+  showing <name> instead", rather than charting another series without a
+  word (issue #586). Deleting the charted series drops the parameter
   (`goto` with `replace`); an upload through **Add data** on this tab charts the
   uploaded series (`series=<id>`, with `replace`, the page's `onUploaded`).
   The chart sits under the table, so after a pick it scrolls just into view
@@ -8632,7 +8636,20 @@ read it before.
   swatch, a points-only series (recessions, double mass) a filled one, where
   uPlot's default left it empty. The m³/s ↔ m³/day switch sits on every flow chart
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
-  flow series is picked), and one click sets all of them (Explore's **Series**
+  flow series is picked), and one click sets all of them: its group is named
+  "Flow units, for every flow chart on this page", and on Runs & results each
+  chart's switches are a group named by its chart ("Hydrograph controls",
+  "Flow-duration curve controls", "Explore any output controls", "Model
+  stores controls"; `LineChart`'s `toolsLabel`), so the repeated Earlier /
+  Later, Log scale and time-window buttons say which chart they move (issue
+  #586). The Hydrograph and Flow-duration curve panels show their headings,
+  word for word the side index's, so the focus ring a `#res-hydrograph` link
+  puts on the heading can be seen. When a chart's series fail to load, the
+  hydrograph, the flow-duration curve, the calibration site's chart, the
+  model stores and Explore any output each say "Couldn't load the flows: <why>"
+  (the stores, "the model stores"; Explore, "the series") with **Try again**,
+  which loads them again (the flow-duration curve used to say "No positive
+  values to plot on a log scale", which wasn't what happened). (Explore's **Series**
   picker names each daily volume in the unit the switch shows, "Simulated
   outflow (m³/s)", `results.ts` `displayUnit`); the run comparison's
   overlay has its own while a flow series is picked. The calibration panel (it opens with the same
@@ -8841,7 +8858,7 @@ read it before.
   export carries exactly the chart's numbers, issue #45; when the observed
   record misses some of the run's days, every curve and the Q table rank only
   the days with a reading by default, `onDaysOf`, so they compare like with
-  like, and **Observed days / Whole run** switches; the caption says which
+  like, and **Observed days / Whole run** (in the chart's toolbar, beside the unit switch) switches; the caption says which
   days each curve ranks),
   EWR against outflow and **Reserve compliance by month** (both on
   [EWR](#ewr) since issue #17) when the run has a rule
@@ -8912,9 +8929,12 @@ read it before.
   only on runs that have them): the dry season in one sentence, a line per
   check (*no finding*, *see below* or *not checked*, with a coloured edge and
   the words), then (1) **Natural flow ≥ observed + net abstraction**: a row per
-  water year with natural, observed, the abstraction split into use, dams and
-  land cover, observed + abstraction, the gap as % of natural and passes /
-  fails / not judged (failing rows shaded); (2) **EWR days by rain source**:
+  water year (its days under it) with passes / fails / not judged straight
+  after the year (failing rows shaded, the verdict bold), natural with
+  observed + abstraction under it, the gap as % of natural, observed, use
+  with dams under it, and land cover: paired figures share a column so the
+  verdict shows at 1440 and 1280, and comes second where a phone still
+  scrolls the table (issue #586); (2) **EWR days by rain source**:
   the share of days not met in good-rain and fallback-rain years, the Reserve
   months met split the same way per rule-table site, and, collapsed, each
   water year's station days, rain, fallback shares and days not met; (3)

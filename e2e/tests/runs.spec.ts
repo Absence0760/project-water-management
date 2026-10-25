@@ -229,6 +229,19 @@ test('every daily results chart moves through the record like the hydrograph, an
 	// The flow-duration curve has no dates to move through.
 	await expect(fdc.getByRole('button', { name: /Earlier/ })).toHaveCount(0);
 
+	// Each chart's switches are one group named by its chart, so the repeated Earlier / Later, Log scale and
+	// window buttons say which chart they move; the unit switch's own name says it sets every flow chart (issue #586).
+	for (const [chart, name] of [
+		[hydro, 'Hydrograph controls'],
+		[fdc, 'Flow-duration curve controls'],
+		[explore, 'Explore any output controls']
+	] as const) {
+		const tools = chart.getByRole('group', { name, exact: true });
+		await expect(tools.getByRole('button', { name: 'Log scale' })).toBeVisible();
+		await expect(tools.getByRole('group', { name: 'Flow units, for every flow chart on this page', exact: true })).toBeVisible();
+	}
+	await expect(page.getByRole('group', { name: 'Hydrograph controls', exact: true }).getByRole('button', { name: /Earlier/ })).toBeVisible();
+
 	// The unit switch sits on each flow chart and drives them all.
 	for (const chart of [hydro, fdc, explore]) await expect(chart.getByRole('button', { name: 'm³/s' })).toHaveAttribute('aria-pressed', 'true');
 	await fdc.getByRole('button', { name: 'm³/day' }).click();
@@ -451,11 +464,48 @@ test('with a gauge covering part of the run, the flow-duration curves rank the o
 	await createRun(page.request, project.id, 'Half gauged');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const fdc = page.locator('#res-fdc');
-	const days = fdc.getByRole('group', { name: 'Days the curves rank' });
+	// In the chart's toolbar, beside the unit switch, not under the caption (issue #586).
+	const days = fdc.getByRole('group', { name: 'Flow-duration curve controls', exact: true }).getByRole('group', { name: 'Days the curves rank' });
 	await expect(days.getByRole('button', { name: 'Observed days' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(fdc).toContainText('Every curve ranks the 60 days with an observed reading, so they compare like with like.');
 	await days.getByRole('button', { name: 'Whole run' }).click();
 	await expect(fdc).toContainText('Natural and simulated flow rank all 120 days of the run; observed flow only its 60 days with a reading.');
+});
+
+test('when a run’s series fail to load, each chart says what failed with Try again, and Try again draws it (issue #586)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Series fail to load');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', gr4j: { x1: 350, x2: -0.5, x3: 90, x4: 1.7, warmupDays: 30 } });
+	await createRun(page.request, project.id, 'Failing series');
+	let fail = true;
+	await page.route(/\/runs\/[^/]+\/series\?/, (route) =>
+		fail ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Series store unavailable' }) }) : route.fallback()
+	);
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const hydro = page.locator('#res-hydrograph');
+	const fdc = page.locator('#res-fdc');
+	const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
+	const explore = page.locator('#res-explore');
+	const failed = (panel: typeof hydro, what: string) =>
+		expect(panel.getByRole('alert')).toHaveText(new RegExp(`^\\s*Couldn't load ${what}: .+\\s+Try again\\s*$`));
+	await failed(hydro, 'the flows');
+	// The flow-duration curve says the same, not "No positive values to plot on a log scale", which isn't what happened.
+	await failed(fdc, 'the flows');
+	await expect(fdc).not.toContainText('No positive values');
+	await failed(runoff, 'the model stores');
+	await failed(explore, 'the series');
+
+	// Try again loads them again.
+	fail = false;
+	await hydro.getByRole('button', { name: 'Try again' }).click();
+	await expect(hydro.getByRole('img', { name: /^Flow at the outflow gauge/ }).locator('canvas')).toBeVisible();
+	await expect(fdc.getByRole('img', { name: /^Flow-duration curve/ })).toBeVisible();
+	await runoff.getByRole('button', { name: 'Try again' }).click();
+	await expect(runoff.getByRole('img', { name: /^Model stores/ }).locator('canvas')).toBeVisible();
+	await explore.getByRole('button', { name: 'Try again' }).click();
+	await expect(explore.getByRole('img', { name: /^Catchment · / }).locator('canvas')).toBeVisible();
+	for (const panel of [hydro, fdc, runoff, explore]) await expect(panel.getByRole('alert')).toHaveCount(0);
 });
 
 test('with a gauge covering the whole run there is no choice of days to make (positive control)', async ({ page, owner }) => {

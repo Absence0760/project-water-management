@@ -26,6 +26,7 @@
 		recentLabel = 'Recent',
 		windows,
 		toolbar,
+		toolsLabel,
 		caption,
 		shade = [],
 		shadeKey,
@@ -61,6 +62,11 @@
 		 */
 		windows?: readonly { label: string; days: number | null }[];
 		toolbar?: Snippet;
+		/**
+		 * Names the chart's switches as one group, by its chart ("Hydrograph controls"), where several charts on a page
+		 * repeat Earlier / Later, Log scale and the time window (Runs & results, issue #586; WCAG 2.4.6).
+		 */
+		toolsLabel?: string;
 		caption?: string;
 		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption` or `shadeKey`). */
 		shade?: { start: string; end: string }[];
@@ -532,7 +538,7 @@
 				{#each series as s (s.label)}<span><i class:dash={s.style === 'dashed' || s.style === 'step'} style:border-color="var({s.color ?? '--series-1'})"></i>{s.label}</span>{/each}
 			</span>
 		{:else}
-		<span class="tools">
+		<span class="tools" role={toolsLabel ? 'group' : undefined} aria-label={toolsLabel}>
 			{#if toolbar}{@render toolbar()}{/if}
 			{#if isTime && pannable && hasData && (canWindow || canPan)}
 				<span class="seg" role="group" aria-label="Move through the record">

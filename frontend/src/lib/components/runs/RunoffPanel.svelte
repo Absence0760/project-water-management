@@ -38,8 +38,11 @@
 	];
 	let stores = $state.raw<ChartSeries[]>([]);
 	let error = $state<string | null>(null);
+	// Try again on a failed load: bumping it re-runs the load (failures aren't cached, cache.ts).
+	let attempt = $state(0);
 	$effect(() => {
 		const id = runId;
+		void attempt;
 		error = null;
 		const want = STORES.filter(([k]) => refs.some((r) => r.key === k && r.nodeId === null));
 		Promise.all(want.map(([k]) => cachedSeries(id, k, null, () => api.runs.series(projectId, id, k, null))))
@@ -87,9 +90,12 @@
 		</div>
 		<div>
 			{#if error}
-				<div class="alert alert-error" role="alert">{error}</div>
+				<div class="alert alert-error" role="alert">
+					Couldn't load the model stores: {error}
+					<button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
+				</div>
 			{:else if stores.length}
-				<LineChart title="Model stores" unit="mm" height={220} series={stores} recentDays={3 * 365} recentLabel="Last 3 years" {band} />
+				<LineChart title="Model stores" toolsLabel="Model stores controls" unit="mm" height={220} series={stores} recentDays={3 * 365} recentLabel="Last 3 years" {band} />
 			{:else}
 				<div class="chart-ph" role="status">Loading stores…</div>
 			{/if}

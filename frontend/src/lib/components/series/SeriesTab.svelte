@@ -173,6 +173,21 @@
 		seriesParam && list.some((s) => s.id === seriesParam) ? seriesParam : list.length ? pickDefault(list) : null
 	);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
+	// A `series=` link to a series no longer stored (deleted since a note or a run linked it) charted another one
+	// without a word, the URL still naming the dead id (issue #586). Once the list is in, drop the stale parameter
+	// (replace, no history entry) and say so in one line, as Runs & results does for a deleted run. A series deleted
+	// here drops its own parameter, with no note (remove).
+	let goneSeries = $state(false);
+	let removedHere = '';
+	$effect(() => {
+		const id = seriesParam;
+		if (!id || loading || loadError || list.some((s) => s.id === id)) return;
+		untrack(() => {
+			if (id === removedHere) return;
+			goneSeries = true;
+			void goto(withoutParam(page.url, 'series'), { reset: false, replace: true });
+		});
+	});
 	// How the Series details show its product (series/details.ts): a CHIRPS select, the words, or no field.
 	const viewingProduct = $derived(viewing ? productField(viewing) : null);
 
@@ -205,6 +220,7 @@
 	/** Chart a series: a URL change, so it can be shared and Back returns; the chart, under the table, comes into view. */
 	function choose(id: string, replaceState = false) {
 		if (id === selectedId && seriesParam === id) return;
+		goneSeries = false;
 		void goto(withParam(page.url, 'series', id), { reset: false, replace: replaceState }).then(() => {
 			if (!replaceState) showChart();
 		});
@@ -495,6 +511,7 @@
 			await api.series.remove(projectId, s.id);
 			// Its place among the rows as drawn (grouped, folded), so the View that takes the focus is the one now there.
 			const at = [...document.querySelectorAll('#series-rows tr[data-series]')].findIndex((tr) => (tr as HTMLElement).dataset.series === s.id);
+			removedHere = s.id;
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
 			// The deleted series was charted: back to the default, without a history entry for it.
@@ -911,9 +928,14 @@
 
 <!-- The notices: one slim line each under the section header, as the page's own. "New data since the latest run"
      is the page's notice (newDataSinceRun, with Re-run model or the queued automatic re-run), here as on every tab. -->
-{#if actionError || refreshError || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
+{#if actionError || refreshError || goneSeries || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
 	<div class="notes">
 		{#if actionError}<p class="note err" role="alert">{actionError}</p>{/if}
+		{#if goneSeries}
+			<p class="note note-info" role="status" data-testid="gone-series">
+				The series that link named is no longer stored{viewing ? `: showing ${viewing.name || kindLabel(viewing.kind)} instead` : ''}.
+			</p>
+		{/if}
 		{#if refreshError}
 			<p class="note err" role="alert" data-testid="refresh-error">
 				Couldn't refresh the series ({refreshError}); showing the list as last loaded.

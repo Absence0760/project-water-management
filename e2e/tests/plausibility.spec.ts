@@ -43,13 +43,33 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// 1. One row per water year of the gauge record, each judged.
 	const nat = panel.getByRole('table', { name: /^Natural flow ≥ observed \+ net abstraction/ });
 	await expect(nat.getByRole('row')).toHaveCount(4);
-	await expect(nat.getByRole('row', { name: /^2019\/20 366 / })).toBeVisible();
-	await expect(nat.getByRole('row', { name: /^2021\/22 365 .* (passes|fails)$/ })).toBeVisible();
+	// The year over its days, then the verdict (issue #586: it sat last, off the right edge at 1440).
+	await expect(nat.getByRole('row', { name: /^2019\/20 366 days (passes|fails|not judged) / })).toBeVisible();
+	await expect(nat.getByRole('row', { name: /^2021\/22 365 days (passes|fails) / })).toBeVisible();
+	await expect(nat.getByRole('columnheader')).toHaveText([/^Water year/, 'Result', /^Natural/, /^Gap/, /^Observed/, /^Use/, /^Land cover/]);
+	// Paired figures share a column: the whole table fits beside the side index at 1440 and 1280, and on a phone,
+	// where it may still scroll, the verdict column is in view.
+	const verdictInView = () =>
+		nat.evaluate((t) => {
+			const box = t.closest('.table-wrap')!.getBoundingClientRect();
+			const result = t.querySelector('thead th:nth-child(2)')!.getBoundingClientRect();
+			return { fits: t.scrollWidth <= t.closest('.table-wrap')!.clientWidth + 1, verdict: result.right <= box.right + 1 };
+		});
+	for (const width of [1440, 1280]) {
+		await page.setViewportSize({ width, height: 900 });
+		await expect.poll(verdictInView, { message: `${width}` }).toEqual({ fits: true, verdict: true });
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect.poll(async () => (await verdictInView()).verdict, { message: '390' }).toBe(true);
+	await page.setViewportSize({ width: 1280, height: 720 });
 
 	// 2. The blank third year ran on CHIRPS: one fallback-rain year, two good-rain years.
 	await expect(panel.getByText('of days EWR not met, 2 water years')).toBeVisible();
 	await expect(panel.getByText('of days EWR not met, 1 water year', { exact: true })).toBeVisible();
-	await panel.getByText(/^Rain source by water year/).click();
+	// A disclosure with its marker (▶), like every other on the page (issue #586: display: flex dropped it).
+	const rainYears = panel.locator('summary').filter({ hasText: /^Rain source by water year/ });
+	expect(await rainYears.evaluate((el) => getComputedStyle(el).display)).toBe('list-item');
+	await rainYears.click();
 	await expect(panel.getByRole('row', { name: /^2021\/22 0 of 365 .* fallback \d+$/ })).toBeVisible();
 	await expect(panel.getByRole('row', { name: /^2019\/20 366 of 366 .* good \d+$/ })).toBeVisible();
 

@@ -37,6 +37,8 @@
 	let node = $state(CATCHMENT);
 	let key = $state('');
 	let log = $state(false);
+	// Try again on a failed load: bumping it re-runs the load (failures aren't cached, cache.ts).
+	let attempt = $state(0);
 
 	const group = $derived(groups.find((g) => (g.nodeId ?? CATCHMENT) === node) ?? groups[0]);
 	const ref = $derived(group?.options.find((r) => r.key === key) ?? group?.options[0]);
@@ -69,6 +71,7 @@
 	$effect(() => {
 		const r = ref;
 		const fu = flowUnit;
+		void attempt;
 		if (!r) {
 			data = [];
 			return;
@@ -87,7 +90,7 @@
 				data = [{ label: r.label, startDate: d.startDate, values: conv.values }];
 			})
 			.catch((e) => {
-				if (my === requestNo) error = e instanceof Error ? e.message : String(e);
+				if (my === requestNo) error = `Couldn't load the series: ${e instanceof Error ? e.message : String(e)}`;
 			})
 			.finally(() => {
 				if (my === requestNo) loading = false;
@@ -118,9 +121,10 @@
 			</select>
 		</div>
 	</div>
-	<LoadState {loading} {error}>
+	<LoadState {loading} {error} retry={() => attempt++}>
 		<LineChart
 			{title}
+			toolsLabel="Explore any output controls"
 			{unit}
 			series={data}
 			logToggle={isFlow}
