@@ -148,7 +148,7 @@
 		{/if}
 	</div>
 	<!-- Each add, pause and remove saves at once, unlike the page's fields that wait for the save bar (issue #586, E13). -->
-	{#if canEdit}<p class="muted small saves-note" data-testid="schedules-saves">Saves as you change it, not with Save changes at the foot of the page.</p>{/if}
+	{#if canEdit}<p class="muted small saves-note" data-testid="schedules-saves">Schedules save as you change them: adding, pausing or removing one needs no Save changes.</p>{/if}
 
 	{#if loadError}
 		<div class="alert alert-error" role="alert">

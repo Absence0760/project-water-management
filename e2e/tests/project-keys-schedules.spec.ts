@@ -10,7 +10,6 @@ import { expect, test } from '../support/fixtures.ts';
 import { openProject } from '../support/project.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
-const SAVES = 'Saves as you change it, not with Save changes at the foot of the page.';
 const keysPanel = (page: Page) => page.getByRole('region', { name: 'API keys' });
 const schedulesPanel = (page: Page) => page.getByRole('region', { name: 'Scheduled reports' });
 const region = (page: Page, name: string) => page.getByRole('region', { name, exact: true });
@@ -24,8 +23,8 @@ test('an owner finds Scheduled reports under the model and API keys after Share 
 	const schedules = schedulesPanel(page);
 	await expect(keys.getByText('No API keys yet.')).toBeVisible();
 	await expect(schedules.getByText('No scheduled reports.')).toBeVisible();
-	await expect(keys.getByTestId('api-keys-saves')).toHaveText(SAVES);
-	await expect(schedules.getByTestId('schedules-saves')).toHaveText(SAVES);
+	await expect(keys.getByTestId('api-keys-saves')).toHaveText('Keys save as you make or revoke them: neither needs Save changes.');
+	await expect(schedules.getByTestId('schedules-saves')).toHaveText('Schedules save as you change them: adding, pausing or removing one needs no Save changes.');
 
 	// Scheduled reports at the foot of the left column, under The model; API keys in the right, between Share links and Two-step sign-in.
 	const box = async (name: string) => (await region(page, name).boundingBox())!;

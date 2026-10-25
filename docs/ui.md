@@ -1983,9 +1983,11 @@ it scrolls, and isn't fitted to the window.
   is its own lazy chunk, and its anchor is a wrapper outside the chunk, so a
   link finds it while the chunk loads (the old `#set-api-keys` id was inside
   the lazy panel). Both save as they change, unlike Project details (the
-  save bar), and say so under their heading: "Saves as you change it, not
-  with Save changes at the foot of the page." (finding E13; schedules show
-  it to editors and owners only). Settings forwards its old
+  save bar), and say so under their heading, as Data feeds does on the
+  Data page: "Keys save as you make or revoke them: neither needs Save
+  changes." and "Schedules save as you change them: adding, pausing or
+  removing one needs no Save changes." (finding E13; schedules say it to
+  editors and owners only). Settings forwards its old
   `#set-api-keys` and `#set-report-schedules` links here. Tested by
   `e2e/tests/project-keys-schedules.spec.ts` (placement, the saves line and
   a schedule saved while the details are unsaved, each anchor landing,
@@ -2222,8 +2224,8 @@ or a script uses to push daily readings into the project's series.
   pushes one day with a `$WM_INGEST_KEY` placeholder (never the key itself).
   The example wraps its long lines rather than scrolling sideways in the
   Project page's column (a scroll box with nothing focusable fails axe).
-- "Saves as you change it, not with Save changes at the foot of the page."
-  under the head: a key is made and revoked at once.
+- "Keys save as you make or revoke them: neither needs Save changes." under
+  the head: a key is made and revoked at once.
 - **The list** scrolls inside its card past 70 % of the window's height
   (`.table-wrap`), so thirty keys don't push the page's other panels away.
 - **Expected format of a request**, under the panel's head, before any key

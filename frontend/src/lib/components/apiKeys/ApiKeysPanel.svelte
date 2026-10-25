@@ -144,7 +144,7 @@
 		{#if !making}<button type="button" class="btn btn-sm btn-primary" bind:this={makeButton} onclick={startMaking}>Make a key</button>{/if}
 	</div>
 	<!-- Keys are made and revoked at once, unlike the page's fields that wait for the save bar (issue #586, E13). -->
-	<p class="muted small saves-note" data-testid="api-keys-saves">Saves as you change it, not with Save changes at the foot of the page.</p>
+	<p class="muted small saves-note" data-testid="api-keys-saves">Keys save as you make or revoke them: neither needs Save changes.</p>
 	<FormatHelp summary="Expected format of a request" format={INGEST_FORMAT} />
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 

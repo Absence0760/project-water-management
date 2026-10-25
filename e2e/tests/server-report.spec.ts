@@ -136,7 +136,7 @@ test('Project → Scheduled reports: an editor adds a weekly schedule; a viewer 
 	const panel = page.getByRole('region', { name: 'Scheduled reports' });
 	await expect(panel.getByText('No scheduled reports.')).toBeVisible();
 	// It saves as it changes, unlike the page's details, and says so (issue #586, E13).
-	await expect(panel.getByTestId('schedules-saves')).toHaveText('Saves as you change it, not with Save changes at the foot of the page.');
+	await expect(panel.getByTestId('schedules-saves')).toHaveText('Schedules save as you change them: adding, pausing or removing one needs no Save changes.');
 	await panel.getByRole('button', { name: 'Add a schedule' }).click();
 	await panel.getByLabel('Every', { exact: true }).selectOption('weekly');
 	await panel.getByLabel('On', { exact: true }).selectOption({ label: 'Monday' });
