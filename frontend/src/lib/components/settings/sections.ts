@@ -1,9 +1,13 @@
 // The Settings & calibration page's in-page menu, one link per panel in page
 // order, grouped by task (issue #468), and the list of what blocks Save, each
 // pointing at its panel. The ids are set on the panels in SettingsTab.svelte
-// (and around Wr2012Section and EwrRulesSection, on DataFeedsPanel's wrapper
-// (the panel is lazy), and on ApiKeysPanel and ReportSchedulesPanel, which
-// follow the form). Each label is its panel's heading, word for word.
+// (and around Wr2012Section and EwrRulesSection). Each label is its panel's
+// heading, word for word. Data feeds, API keys and Scheduled reports, which
+// followed the form and saved on their own, moved to Data and Project (issue
+// #586 round 1): SETTINGS_ELSEWHERE finds them there, and settingsForward
+// sends their old anchors on.
+
+import { hashId } from '#lib/help/anchor.js';
 
 export const SETTINGS_SECTIONS = [
 	// Data & rain: what the model runs on.
@@ -33,10 +37,9 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-outlook', label: 'Seasonal outlook', group: 'Reading results' },
 	// The uncertainty rule an evidence report's cited ensemble must follow (issue #71 ER3); changes no result.
 	{ id: 'set-evidence', label: 'Evidence', group: 'Reading results' },
-	// When the project re-runs itself after new data (WP-2.11); last in the form: it changes no result.
-	{ id: 'set-auto', label: 'Automatic runs', group: 'Automation & access' },
-	// After the settings form, saved on its own (feeds/DataFeedsPanel.svelte).
-	{ id: 'set-feeds', label: 'Data feeds', group: 'Automation & access' }
+	// When the project re-runs itself after new data (WP-2.11); last in the form: it changes no result. The group is
+	// its one panel, named as its heading (issue #586, C9): the panels that shared it moved to Data and Project.
+	{ id: 'set-auto', label: 'Automatic runs', group: 'Automatic runs' }
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
@@ -44,41 +47,52 @@ export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 /**
  * Settings that moved to another page, for Find a setting (issue #521): the registered-volumes
  * comparison band went to Allocations in round 1, so a search for it, or its other names, offers
- * a link to that card (`#alloc-band`, which AllocationsTab lands on).
+ * a link to that card (`#alloc-band`, which AllocationsTab lands on). Data feeds went to Data, and
+ * API keys and Scheduled reports to Project (issue #586 round 1); a search finds them at their new
+ * homes. API keys is listed for every role: Project says to a non-owner that only owners make keys.
  */
 export const SETTINGS_ELSEWHERE = [
-	{ text: 'Comparison band', words: 'registered volumes allocation tolerance licence WARMS modelled use', href: '?tab=allocations#alloc-band', page: 'Allocations' }
+	{ text: 'Comparison band', words: 'registered volumes allocation tolerance licence WARMS modelled use', href: '?tab=allocations#alloc-band', page: 'Allocations' },
+	{ text: 'Data feeds', words: 'CHIRPS forecast DWS gauging station fetch automatically', href: '?tab=series#data-feeds', page: 'Data' },
+	{ text: 'API keys', words: 'ingest logger token integration', href: '?tab=project#project-api-keys', page: 'Project' },
+	{ text: 'Scheduled reports', words: 'schedule email PDF monthly weekly', href: '?tab=project#project-report-schedules', page: 'Project' }
 ] as const;
 
-/** The menu's one link (on the bar) for the panels that run or connect by themselves. */
-export const AUTOMATION_LABEL = 'Automation & access';
-
-/** The panels after the form that save on their own, for the menu (API keys: owners only). */
-const AFTER_FORM = (isOwner: boolean) => [
-	{ id: 'set-feeds', label: 'Data feeds' },
-	...(isOwner ? [{ id: 'set-api-keys', label: 'API keys' }] : []),
-	{ id: 'set-report-schedules', label: 'Scheduled reports' }
-];
+/**
+ * Where each Settings anchor that moved away now lives (issue #586 round 1): `?tab=settings#set-feeds`
+ * in an old email, a bookmark or a note goes to Data feeds on Data, and the other two to Project.
+ */
+export const SETTINGS_MOVED: Readonly<Record<string, { tab: string; hash: string }>> = {
+	'set-feeds': { tab: 'series', hash: 'data-feeds' },
+	'set-api-keys': { tab: 'project', hash: 'project-api-keys' },
+	'set-report-schedules': { tab: 'project', hash: 'project-report-schedules' }
+};
 
 /**
- * The menu's groups, by task (issue #468), in page order. In the side rail
- * every panel has its link, Automation & access listing Automatic runs, Data
- * feeds, API keys (owners) and Scheduled reports. On the bar (narrower than
- * the rail needs) that group is one link, "Automation & access", landing on
- * Automatic runs and standing for the four (`covers`), or the bar's links no
- * longer fit two rows at 1280 px (section-nav.spec.ts).
+ * The link a Settings URL forwards to when its #anchor names a panel that moved, or null: the same URL
+ * on the panel's new page and anchor, every other query parameter kept (`rain=boundary`, `run=`), so
+ * the panel opens as the old link meant. The caller replaces the history entry, so Back skips it.
  */
-export function settingsNavGroups(isOwner: boolean, rail = false): { label: string; sections: { id: string; label: string; covers?: string[] }[] }[] {
-	const groups: { label: string; sections: { id: string; label: string; covers?: string[] }[] }[] = [];
+export function settingsForward(url: Pick<URL, 'pathname' | 'search' | 'hash'>): string | null {
+	const hash = hashId(url.hash);
+	const moved = Object.hasOwn(SETTINGS_MOVED, hash) ? SETTINGS_MOVED[hash]! : null;
+	if (!moved) return null;
+	const params = new URLSearchParams(url.search);
+	params.set('tab', moved.tab);
+	return `${url.pathname}?${params}#${moved.hash}`;
+}
+
+/**
+ * The menu's groups, by task (issue #468), in page order: every panel has its link, on the bar and
+ * in the side index alike, each one its panel's heading.
+ */
+export function settingsNavGroups(): { label: string; sections: { id: string; label: string }[] }[] {
+	const groups: { label: string; sections: { id: string; label: string }[] }[] = [];
 	for (const sec of SETTINGS_SECTIONS) {
-		if (sec.id === 'set-feeds') continue;
 		let g = groups.find((x) => x.label === sec.group);
 		if (!g) groups.push((g = { label: sec.group, sections: [] }));
 		g.sections.push({ id: sec.id, label: sec.label });
 	}
-	const auto = groups.at(-1)!;
-	if (rail) auto.sections.push(...AFTER_FORM(isOwner));
-	else auto.sections = [{ id: 'set-auto', label: AUTOMATION_LABEL, covers: AFTER_FORM(isOwner).map((s) => s.id) }];
 	return groups;
 }
 

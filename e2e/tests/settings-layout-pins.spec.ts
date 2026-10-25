@@ -1,9 +1,9 @@
 // Layout pins for Settings & calibration (?tab=settings), issue #586 round 0: the page is about to be split into
-// Model settings and a new Calibration page, with Data feeds, API keys and Scheduled reports moving to Data and
-// Project. These pins hold today's page, so a later round that moves a panel has to move its pin with it and can't
-// lose one silently: the panels and their #set-* anchors in page order, the side index in the same order and
-// pointing at them, every anchor landing on its heading with the focus there, ?tab=calibration opening the page,
-// and the one save bar saving edits from both halves together. The detailed checks live elsewhere and aren't
+// Model settings and a new Calibration page. These pins hold today's page, so a later round that moves a panel has
+// to move its pin with it and can't lose one silently: the panels and their #set-* anchors in page order, the side
+// index in the same order and pointing at them, every anchor landing on its heading with the focus there,
+// ?tab=calibration opening the page, and the one save bar saving edits from both halves together. Round 1 moved
+// Data feeds to Data and API keys and Scheduled reports to Project: their old anchors forward there. The detailed checks live elsewhere and aren't
 // repeated: the index's keys and find box (settings-index.spec.ts), the bar's rows at 1280 and More at 1024
 // (section-nav.spec.ts), the header's fit line and jump (settings-page.spec.ts), Discard's Cancel and a Save
 // blocker's link (settings.spec.ts), leaving with unsaved settings (leave-guard.spec.ts). Synthetic data only.
@@ -16,8 +16,8 @@ import { anySaveBar, isProjectPatch, openSettings, saveSettings, settingsBar, se
 
 /**
  * Every panel on the page, top to bottom, by its anchor and its heading (word for word, without its ⓘ tip): Judge
- * results by heads the page, the form's panels follow, then the three after the form that save on their own (API
- * keys for an owner only). settings/sections.ts lists the form's; SettingsTab.svelte sets the ids.
+ * results by heads the page, the form's panels follow, Automatic runs last. settings/sections.ts lists the form's;
+ * SettingsTab.svelte sets the ids.
  */
 const PANELS: [id: string, heading: string][] = [
 	['set-judge', 'Judge results by'],
@@ -37,10 +37,17 @@ const PANELS: [id: string, heading: string][] = [
 	['set-outcomes', 'Outcome matrix'],
 	['set-outlook', 'Seasonal outlook'],
 	['set-evidence', 'Evidence'],
-	['set-auto', 'Automatic runs'],
-	['set-feeds', 'Data feeds'],
-	['set-api-keys', 'API keys'],
-	['set-report-schedules', 'Scheduled reports']
+	['set-auto', 'Automatic runs']
+];
+
+/**
+ * The panels that moved away in round 1 (issue #586): each old anchor, where it forwards to (any other parameter
+ * kept), and the heading it lands on there. Data and Project set the new ids.
+ */
+const MOVED: [old: string, tab: string, id: string, heading: string][] = [
+	['set-feeds', 'series', 'data-feeds', 'Data feeds'],
+	['set-api-keys', 'project', 'project-api-keys', 'API keys'],
+	['set-report-schedules', 'project', 'project-report-schedules', 'Scheduled reports']
 ];
 
 /** The anchors inside a panel: Evaporation from the map, a card of Flow calibration that saves on its own. */
@@ -89,15 +96,8 @@ const INDEX: [group: string, links: [label: string, id: string][]][] = [
 			['Evidence', 'set-evidence']
 		]
 	],
-	[
-		'Automation & access',
-		[
-			['Automatic runs', 'set-auto'],
-			['Data feeds', 'set-feeds'],
-			['API keys', 'set-api-keys'],
-			['Scheduled reports', 'set-report-schedules']
-		]
-	]
+	// Its one panel, named as its heading (C9): the three that shared the group moved away.
+	['Automatic runs', [['Automatic runs', 'set-auto']]]
 ];
 
 /** A panel's own heading: the first h2 (h3 for a card) under its anchor, read as shown (its ⓘ tip adds no text). */
@@ -105,10 +105,13 @@ const panelHeading = (page: Page, id: string) => page.locator(`#${id}`).locator(
 const sections = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const pageTitle = (page: Page) => page.getByRole('heading', { level: 1, name: 'Settings & calibration', exact: true });
 
-/** Opens Settings and waits for the lazy panels (Evaporation from the map, and the three after the form) to draw. */
+/** A panel's heading, whether the anchor is on the heading itself or on the panel around it. */
+const anchoredHeading = (page: Page, id: string) => page.locator(`:is(h2, h3)#${id}, #${id} :is(h2, h3)`).first();
+
+/** Opens Settings and waits for the lazy panel (Evaporation from the map) to draw. */
 async function openAllPanels(page: Page, projectId: string) {
 	await openSettings(page, projectId);
-	for (const [id, heading] of [...INNER, ...PANELS.slice(-3)]) {
+	for (const [id, heading] of INNER) {
 		await expect(panelHeading(page, id)).toHaveText(heading, { useInnerText: true });
 	}
 }
@@ -136,10 +139,9 @@ test('the panels, their anchors and the side index, in page order', async ({ pag
 	for (const [id, heading, panel] of INNER) {
 		await expect(page.locator(`#${panel} #${id}`).locator('h2, h3').first()).toHaveText(heading, { useInnerText: true });
 	}
-	// The line that says the panels after the form save on their own sits between the form and them.
-	const line = (await page.getByText(/^Data feeds, API keys and scheduled reports save as you change them/).boundingBox())!;
-	expect(line.y).toBeGreaterThan((await panelHeading(page, 'set-auto').boundingBox())!.y);
-	expect(line.y).toBeLessThan((await panelHeading(page, 'set-feeds').boundingBox())!.y);
+	// Nothing follows the form now: no panels that save on their own, and no line saying they do.
+	await expect(page.getByText(/save as you change them/)).toHaveCount(0);
+	for (const [old] of MOVED) await expect(page.locator(`#${old}`)).toHaveCount(0);
 
 	// The side index: its groups in order, each a named list of its panels' headings, each linking to its anchor,
 	// and nothing else in it. Judge results by heads the page above the index's first panel and has no link.
@@ -173,8 +175,7 @@ test('in Per unit flow generation, the units’ rain and MAP from the grid are c
 for (const [id, heading] of [...PANELS, ...INNER.map(([i, h]): [string, string] => [i, h])]) {
 	test(`a load of #${id} lands on ${heading}: in view below the bar, and focused`, async ({ page, owner }) => {
 		void owner;
-		// The lazy panels too (Evaporation from the map, Data feeds, API keys, Scheduled reports): the page waits for the
-		// panel, then for its heading (issue #586).
+		// The lazy panel too (Evaporation from the map): the page waits for the panel, then for its heading (issue #586).
 		// 1280 px: the index is the bar that sticks over the content, so the heading must clear it too.
 		await page.setViewportSize({ width: 1280, height: 800 });
 		const project = await createProject(page.request, `Settings pins ${id}`);
@@ -188,6 +189,40 @@ for (const [id, heading] of [...PANELS, ...INNER.map(([i, h]): [string, string] 
 		expect((await h.boundingBox())!.y).toBeGreaterThanOrEqual(bar.y + bar.height);
 	});
 }
+
+for (const [old, tab, id, heading] of MOVED) {
+	test(`an old link to #${old} forwards to ?tab=${tab}#${id}, keeping its other parameters, and lands on ${heading} there`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 1280, height: 800 });
+		const project = await createProject(page.request, `Settings pins moved ${old}`);
+		// From the Summary, as an old email's or bookmark's link is opened: a page load, with the parameters it carried.
+		await page.goto(`/projects/${project.id}`);
+		await expect(page.getByRole('heading', { level: 1, name: 'Summary', exact: true })).toBeVisible();
+		await page.goto(`/projects/${project.id}?tab=settings&rain=boundary#${old}`);
+		await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=${tab}&rain=boundary#${id}$`));
+		const h = anchoredHeading(page, id);
+		await expect(h).toHaveText(heading, { useInnerText: true });
+		await expect(h).toBeInViewport();
+		await expect(h).toBeFocused();
+		// The forward replaced the old entry: Back returns to the Summary, not to Settings and on again.
+		await page.goBack();
+		await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+		await expect(page.getByRole('heading', { level: 1, name: 'Summary', exact: true })).toBeVisible();
+	});
+}
+
+test('an old #set- link to a moved panel followed while Settings is open forwards too', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await createProject(page.request, 'Settings pins moved in page');
+	await openSettings(page, project.id);
+	// A note's or a pasted link's fragment, with the page already open: only the #fragment changes.
+	await page.evaluate(() => (location.hash = '#set-report-schedules'));
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=project#project-report-schedules$`));
+	const h = anchoredHeading(page, 'project-report-schedules');
+	await expect(h).toHaveText('Scheduled reports', { useInnerText: true });
+	await expect(h).toBeFocused();
+});
 
 test('a load of #set-unit-rain lands on its card’s heading, an h4 in its legend', async ({ page, owner }) => {
 	void owner;

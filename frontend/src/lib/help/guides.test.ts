@@ -235,13 +235,9 @@ function panelHeadings(id: string): string[] {
 	return heads;
 }
 
-// Every panel the page has, by its heading: the menu's, plus the ones above and after it.
-const PANELS = new Map<string, string>([
-	...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]),
-	['Judge results by', 'set-judge'],
-	['API keys', 'set-api-keys'],
-	['Scheduled reports', 'set-report-schedules']
-]);
+// Every panel the page has, by its heading: the menu's, plus the one above it. Data feeds, API keys and
+// Scheduled reports moved to Data and Project (issue #586 round 1), so "Settings → Data feeds" is a broken path.
+const PANELS = new Map<string, string>([...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]), ['Judge results by', 'set-judge']]);
 const panelCache = new Map<string, string[]>();
 const headingsOf = (id: string) => panelCache.get(id) ?? (panelCache.set(id, panelHeadings(id)), panelCache.get(id)!);
 
