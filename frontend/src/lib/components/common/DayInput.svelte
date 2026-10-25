@@ -20,7 +20,7 @@
 		min,
 		max,
 		readonly = false,
-		placeholder = '15 Nov 2021',
+		placeholder = 'e.g. 15 Nov 2021',
 		invalidMessage,
 		commit = 'input',
 		onchange,
@@ -36,6 +36,11 @@
 		/** The last day the field takes, YYYY-MM-DD. */
 		max?: string | null;
 		readonly?: boolean;
+		/**
+		 * The blank field's hint. The default is an example ("e.g. …"), never a bare day: a bare "15 Nov 2021"
+		 * read as a stored setting (the Simulation period's blank start and end both seemed to say it). A field
+		 * whose blank means something says that instead (Settings' "First day with rain").
+		 */
 		placeholder?: string;
 		/** What the field says while its text can't be taken; default from min/max. */
 		invalidMessage?: string;
@@ -123,9 +128,9 @@
 {#if field.invalid}<span class="num-err" id={errId}>{message}</span>{/if}
 
 <style>
-	/* Wide enough for "30 Sep 2021" and the placeholder, as the native date field was. */
+	/* Wide enough for "30 Sep 2021" and the default placeholder ("e.g. 15 Nov 2021"), as the native date field was. */
 	.day-input {
-		min-width: min(9.5rem, 100%);
+		min-width: min(10.5rem, 100%);
 	}
 	input.invalid {
 		border-color: var(--danger);
