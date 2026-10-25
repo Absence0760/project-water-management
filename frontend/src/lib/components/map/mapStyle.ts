@@ -577,8 +577,41 @@ export const MAP_RAMP: readonly (readonly [number, string])[] = [
 	[2000, '#08306b']
 ];
 
-/** The MAP grid layer: a dot per point, coloured by MAP, and its value beside it (labels thin themselves where they would overlap). */
-export function mapGridLayers(dark: boolean, labels: boolean): { over: Layer[]; labels: Layer[] } {
+/** The MAP grid's label layer (its zoom range follows the grid drawn, CatchmentMap's setLayerZoomRange). */
+export const MAP_GRID_LABEL_LAYER = 'mapgrid-label';
+
+/**
+ * How far a label reaches below its point's centre, px, to the far side of
+ * the next row's dot: the 0.9 em offset and the 11 px text's line (about
+ * 23 px), its 2 px padding, and the next dot's largest radius with its ring
+ * (6 px). Points closer than this, a label sits on the dots of the row below.
+ */
+export const MAP_GRID_LABEL_CLEARANCE_PX = 31;
+
+/**
+ * The zoom from which the MAP grid's values are labelled: where one cell of
+ * the grid is MAP_GRID_LABEL_CLEARANCE_PX tall on screen, so each label sits
+ * in the gap under its own point instead of over its neighbours' dots
+ * (MapLibre thins labels against each other, never against the dots). Taken
+ * at the equator, where a degree of latitude is shortest on a Mercator map, so
+ * the gap is at least as wide anywhere else. 512 px tiles: a degree is
+ * 512 × 2^z ÷ 360 px at zoom z. About 11.1 for a 0.01° grid, 10.4 for a 1′
+ * grid and 14.6 for a 100 m (0.0009°) one; closer out, the dots alone, their
+ * colour read on the key. 0 (always) with no grid known.
+ */
+export function mapGridLabelMinZoom(cellDeg: number | null | undefined): number {
+	if (!(typeof cellDeg === 'number' && cellDeg > 0 && Number.isFinite(cellDeg))) return 0;
+	const z = Math.log2((MAP_GRID_LABEL_CLEARANCE_PX * 360) / (512 * cellDeg));
+	return Math.min(24, Math.max(0, Math.round(z * 10) / 10));
+}
+
+/**
+ * The MAP grid layer: a dot per point, coloured by MAP, and its value under
+ * it from `labelMinZoom` (mapGridLabelMinZoom) in, where the points are far
+ * enough apart for a label to clear the next row's dots; labels thin
+ * themselves where they would overlap each other.
+ */
+export function mapGridLayers(dark: boolean, labels: boolean, labelMinZoom = 0): { over: Layer[]; labels: Layer[] } {
 	const t = labelColours(dark);
 	const src = { source: 'mapgrid' };
 	return {
@@ -598,9 +631,10 @@ export function mapGridLayers(dark: boolean, labels: boolean): { over: Layer[]; 
 		labels: labels
 			? [
 					{
-						id: 'mapgrid-label',
+						id: MAP_GRID_LABEL_LAYER,
 						type: 'symbol',
 						...src,
+						...(labelMinZoom > 0 ? { minzoom: labelMinZoom } : {}),
 						layout: { 'text-field': ['get', 'label'], 'text-font': [LABEL_FONTS.regular], 'text-size': 11, 'text-offset': [0, 0.9], 'text-anchor': 'top', 'text-padding': 2 },
 						paint: { 'text-color': t.text, 'text-halo-color': t.halo, 'text-halo-width': 1.5 }
 					}
@@ -740,6 +774,8 @@ export interface StyleOptions {
 	units?: ReturnType<typeof unitsData>;
 	/** The MAP grid's points (mapGridData()); none when omitted. */
 	mapGrid?: ReturnType<typeof mapGridData>;
+	/** The cell size of the MAP grid drawn, degrees: its labels show from mapGridLabelMinZoom of it; null or omitted, at every zoom. */
+	mapGridCellDeg?: number | null;
 	/** The CHIRPS grid's cells and points (chirpsData()); none when omitted. */
 	chirps?: ReturnType<typeof chirpsData>;
 	/** The DEM grid's sampled cells (demGridData()); none when omitted. */
@@ -761,7 +797,7 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 	const glyphs = opts.glyphs || null;
 	const qt = quaternaryLayers(dark, !!glyphs);
 	const un = unitsLayers(dark, !!glyphs);
-	const mg = mapGridLayers(dark, !!glyphs);
+	const mg = mapGridLayers(dark, !!glyphs, mapGridLabelMinZoom(opts.mapGridCellDeg));
 	const dg = demGridLayers(dark, !!glyphs);
 	const style: Style = {
 		...base,

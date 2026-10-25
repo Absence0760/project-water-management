@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { functionCode, loadFunction } from './cloudfront-functions.mjs';
+import { functionCode, loadFunction, viewerRequest as cfRequest } from './cloudfront-functions.mjs';
 
 const root = new URL('../..', import.meta.url).pathname;
 const SITE = 'icwbt.jaredhoward.com';
@@ -119,8 +119,8 @@ test('no stale entries: each listed location is something the build writes', () 
 
 // --- A former hostname redirects (issue #551) --------------------------------
 
-/** A viewer request with a Host header and a query string as CloudFront gives it. */
-const hostRequest = (host, uri, querystring = {}) => ({ request: { method: 'GET', uri, querystring, headers: { host: { value: host } }, cookies: {} }, viewer: { ip: '198.51.100.7' } });
+/** A viewer request with a Host header for a path and query, as CloudFront gives it (cloudfront-functions.mjs). */
+const hostRequest = (host, target) => ({ request: cfRequest(target, { host: { value: host } }), viewer: { ip: '198.51.100.7' } });
 
 test('the site host is filled from var.domain_name, the one interpolation in the code', () => {
 	assert.equal(spa.SITE_HOST, SITE);
@@ -138,7 +138,7 @@ test("the site's own host is served as before, whatever its case", () => {
 
 test('any other host gets a 301 to the same path and query on the site host', () => {
 	for (const host of ['water-management.jaredhoward.com', 'd111111abcdef8.cloudfront.net', 'evil.example', `${SITE}.`]) {
-		const r = spa.handler(hostRequest(host, '/reset-password', { token: { value: 'abc-DEF_123' } }));
+		const r = spa.handler(hostRequest(host, '/reset-password?token=abc-DEF_123'));
 		assert.equal(r.statusCode, 301, host);
 		assert.equal(r.statusDescription, 'Moved Permanently');
 		// Never the request's own host: no open redirect.
@@ -147,13 +147,29 @@ test('any other host gets a 301 to the same path and query on the site host', ()
 		assert.equal(r.body, undefined);
 	}
 	const old = 'water-management.jaredhoward.com';
-	const location = (uri, qs) => spa.handler(hostRequest(old, uri, qs)).headers.location.value;
+	const location = (target) => spa.handler(hostRequest(old, target)).headers.location.value;
 	assert.equal(location('/'), `https://${SITE}/`);
 	assert.equal(location('/projects/abc/runs'), `https://${SITE}/projects/abc/runs`);
 	// Every path redirects, even one the site would 404: the new host answers it.
 	assert.equal(location('/wp-login.php'), `https://${SITE}/wp-login.php`);
-	// Query strings as CloudFront passes them (values as sent, still encoded): repeats and bare names kept.
-	assert.equal(location('/share', { a: { value: '1', multiValue: [{ value: '1' }, { value: '2' }] }, flag: { value: '' }, q: { value: 'a%20b' } }), `https://${SITE}/share?a=1&a=2&flag&q=a%20b`);
+	// The query byte for byte as sent: encoding, repeats, bare names, and the
+	// order across names, which request.querystring loses (the model sorts the
+	// names, as CloudFront reordered the live probe on 2026-10-25).
+	for (const query of ['?a=1&a=2&flag&q=a%20b', '?probe=a%26b%20c&n=1&n=2', '?z=1&a=2&z=3', '?flag=&x=%E2%9C%93', '?']) {
+		assert.equal(location(`/share${query}`), `https://${SITE}/share${query}`, query);
+	}
+	assert.equal(location('/share'), `https://${SITE}/share`);
+});
+
+test('the test model of a CloudFront request matches what the live probe showed', () => {
+	const r = cfRequest('/page?probe=a%26b%20c&n=1&n=2');
+	assert.equal(r.uri, '/page');
+	assert.equal(r.rawQueryString(), 'probe=a%26b%20c&n=1&n=2');
+	assert.deepEqual(Object.keys(r.querystring), ['n', 'probe']);
+	assert.deepEqual(r.querystring.n.multiValue, [{ value: '1' }, { value: '2' }]);
+	assert.deepEqual(r.querystring.probe, { value: 'a%26b%20c' });
+	assert.equal(cfRequest('/page?').rawQueryString(), '');
+	assert.equal(cfRequest('/page').rawQueryString(), undefined);
 });
 
 test('a request without a Host header (the e2e site server) is served, not redirected', () => {

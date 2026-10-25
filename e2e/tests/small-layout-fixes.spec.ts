@@ -9,7 +9,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { openMap } from '../support/map.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
-test('at 390 px the map tools stay inside the map card while the map loads', async ({ page, owner }) => {
+test('at 390 px the map tools stay inside the map card while the map loads', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	await page.setViewportSize({ width: 390, height: 844 });
 	const project = await seedRunnableProject(page.request, 'Map tools loading');
@@ -17,7 +17,10 @@ test('at 390 px the map tools stay inside the map card while the map loads', asy
 	let release!: () => void;
 	const held = new Promise<void>((done) => (release = done));
 	let seen = false;
-	await page.route('**/_app/immutable/**/*.js', async (route) => {
+	// fetchRoute, not page.route: every chunk passes through this handler, and one the page asks for as the
+	// test ends (the map's own imports, once it mounts) would otherwise still be reading its body when the
+	// context closes, and fail a test whose every step passed with "Response has been disposed".
+	await fetchRoute(page, '**/_app/immutable/**/*.js', async (route) => {
 		const res = await route.fetch();
 		const body = await res.text();
 		if (/data-testid=["']?catchment-map/.test(body)) {
@@ -26,19 +29,23 @@ test('at 390 px the map tools stay inside the map card while the map loads', asy
 		}
 		await route.fulfill({ response: res, body });
 	});
-	await openMap(page, project.id);
-	const tools = page.locator('.tools-at');
-	await expect(tools.getByRole('button', { name: /Measure/ })).toBeVisible();
-	await expect(page.getByTestId('catchment-map')).toHaveCount(0);
-	expect(seen).toBe(true);
-	const box = await page.evaluate(() => {
-		const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
-		return { tools: r('.tools-at').bottom, card: r('.map-card').bottom, body: r('.map-body').bottom };
-	});
-	expect(box.tools).toBeLessThanOrEqual(box.body);
-	expect(box.body).toBeLessThanOrEqual(box.card);
-	await expectNoSidewaysScroll(page);
-	release();
+	// Released in finally, so a failed check doesn't leave the held chunk for fetchRoute's teardown to wait on.
+	try {
+		await openMap(page, project.id);
+		const tools = page.locator('.tools-at');
+		await expect(tools.getByRole('button', { name: /Measure/ })).toBeVisible();
+		await expect(page.getByTestId('catchment-map')).toHaveCount(0);
+		expect(seen).toBe(true);
+		const box = await page.evaluate(() => {
+			const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+			return { tools: r('.tools-at').bottom, card: r('.map-card').bottom, body: r('.map-body').bottom };
+		});
+		expect(box.tools).toBeLessThanOrEqual(box.body);
+		expect(box.body).toBeLessThanOrEqual(box.card);
+		await expectNoSidewaysScroll(page);
+	} finally {
+		release();
+	}
 	await expect(page.getByTestId('catchment-map')).toBeVisible();
 });
 

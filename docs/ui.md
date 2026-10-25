@@ -11589,7 +11589,8 @@ published.
   code), so a switch needs no request and the saved copy holds them all
   (the engine's `pickNotice`, through `farm/notice.ts`, shared with
   `/share` and the alert emails); water received this season with the ML/m³
-  switch (saved to the account, `app_user.volume_unit`, and kept on the
+  switch (saved to the account, `app_user.volume_unit`, one save at a time
+  with only the latest choice's answer kept, and kept on the
   phone for the saved copy) and "What do %, m³ and ML mean?" under it, a
   link to the `farm-pct-volume` entry; the dam
   (hidden without one) with the days-left line, or the no-stop-level
@@ -11828,7 +11829,11 @@ saved unit with the error above them). There it is `segmented`:
   engine's `matchLocale`, run by the root layout whenever the session
   changes).
   Choosing applies at once, is kept on the device and, signed in, saved with
-  `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
+  `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). The saves go
+  one at a time across every switch on the page, and only the latest
+  choice's answer sets the session (`LanguageSwitch.svelte`): two quick
+  choices could otherwise reach the server in either order and leave the
+  account on the earlier one. Signing up
   sends the page's language as the account's; an account created from an
   invite takes the invite's (`invite.locale`, 050).
 - **Messages are their English** (gettext style, issue #9). The English is

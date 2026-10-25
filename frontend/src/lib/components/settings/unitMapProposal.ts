@@ -56,10 +56,33 @@ export function coveredText(u: Pick<UnitMapProposal['units'][number], 'coveredSh
 	return `${pctText(u.coveredShare)} covered`;
 }
 
-/** What the unit's form holds now, in a cell. */
+/**
+ * What the unit's form holds now, in a cell: as stored, not rounded to whole
+ * mm like the proposal, so a typed 855.5 never reads "856" beside a proposed
+ * 855 (a 0.5 mm difference shown as 1 mm). Up to 6 decimals, trailing zeros
+ * dropped: any value a person types or a grid writes shows whole.
+ */
 export function currentText(u: UnitMapProposal['units'][number]): string {
 	if (u.current.mapMm === null) return 'None';
-	return `${fmtNum(u.current.mapMm)} mm`;
+	return `${fmtNum(u.current.mapMm, 6, true)} mm`;
+}
+
+/** Where the MAP the unit's form holds came from, in a cell; "–" with none. */
+export const currentSourceText = (u: UnitMapProposal['units'][number]): string => (u.current.mapMm === null ? '–' : u.current.mapSource || '–');
+
+/**
+ * The grid's citation under Source and method: its source, version, label
+ * and cell size, then its attribution only when it says something the source
+ * doesn't. `pnpm import:map-grid` stores the source as the attribution when
+ * none is given, and the Southwestern Cape surface is loaded with its credit
+ * line as both, so citing both printed the same sentence twice (the Map's
+ * Layers box drops it the same way, MapLayers.svelte `mgCredit`).
+ */
+export function gridCitation(d: Pick<NonNullable<UnitMapProposal['dataset']>, 'source' | 'version' | 'label' | 'cellDeg' | 'attribution'>): string {
+	const head = `${d.source} (${d.version}; dataset “${d.label}”, ${cellText(d.cellDeg)}).`;
+	const bare = (a: string) => a.trim().replace(/[.!?]+$/, '');
+	const credit = d.attribution.trim();
+	return credit && bare(credit) !== bare(d.source) ? `${head} ${credit}` : head;
 }
 
 /** The confirmation before Use. */

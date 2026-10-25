@@ -184,6 +184,9 @@ resource "aws_lambda_function" "worker" {
       # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
       FEED_FETCHER             = "sqs"
       FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url
+      # Never a fetch here (FEED_FETCHER=sqs); it is the cell cache the
+      # worker's runs read, the same `chc` the API's read (lambda.tf).
+      FEED_SOURCE = "live"
       # Server-side reports (reports.tf): no Chromium here, so renders go to
       # the renderer; the worker records them and emails the link (SES).
       REPORT_RENDERER           = "sqs"

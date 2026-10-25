@@ -700,8 +700,10 @@ token, a malformed or unknown one, a live invite for another address) is
   carry a token). A failed sign-in or bad account link logs `login_failed`
   with the route's pattern and a reason code only, never the address tried
   (§ Throttles that don't depend on the WAF). The fetcher and renderer
-  Lambdas log a failed answer as `feed_fetch_failed` (the feed's id, its
-  source and a reason code: never the stored message, which can name a grid
+  Lambdas log a failed answer as `feed_fetch_failed` (the feed's and fetch
+  job's ids, its source, a reason code and `detail`, which is only the HTTP
+  status or one of the live client's own fixed texts, checked against an
+  allowlist (`failureDetail`): never the stored message, which can name a grid
   cell or a station) and `report_render_failed` (the report and project ids,
   `render`/`store` and `retry`: never the error text or the render token), and
   a failed queue send or PDF store by `safeError` too, as does the worker for a
@@ -3992,7 +3994,10 @@ key there would let any read-only principal forge any user's session.
   start on a missing or local-default setting, a `dev-only-`/`test-only-`
   placeholder anywhere (the committed dev JWT secret), a non-https or localhost
   URL, a `DATABASE_URL` without `sslmode=verify-full` or with a short (dev)
-  password, `VITEST`, no explicit `ALERTS_ENABLED` on the worker, or a
+  password, `VITEST`, a `FEED_SOURCE` other than `live` on the API, worker or
+  fetcher (on the API and worker it picks the CHIRPS cell cache a run reads,
+  so the fixtures' default would read rows production never fills), no
+  explicit `ALERTS_ENABLED` on the worker, or a
   `DB_POOL_MAX` on the API or the worker that is missing or not a whole
   number of at least 1 (the database's connections are sized on it,
   infra/README.md § Connections). The error

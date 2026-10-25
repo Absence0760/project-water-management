@@ -265,8 +265,8 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	FETCH_REQUESTS_QUEUE_URL: { why: 'Where the worker sends fetch requests.', checks: { worker: publicHttps } },
 	FEED_SOURCE: {
-		why: 'fixtures (the default) is synthetic data. Only the fetcher fetches in production; the API and worker never call feedHttp there.',
-		checks: { fetcher: oneOf('live') }
+		why: 'fixtures (the default) is synthetic data. Only the fetcher fetches in production, but it is also which CHIRPS cell cache a process reads (feeds/cellCacheStore.ts cacheOrigin: live reads the chc rows the worker merges, fixtures a set production never fills), so a run started on the API with it unset reads no CHIRPS cell for its reference cell or rainfall stations, and the Data feeds panel calls live feeds sample data. Every Lambda that reaches it must say live.',
+		checks: { api: oneOf('live'), worker: oneOf('live'), fetcher: oneOf('live') }
 	},
 	INGEST_RESULTS_QUEUE_URL: { why: 'Where the fetcher answers.', checks: { fetcher: publicHttps } },
 	FEED_FIXTURE_REWRITE: {

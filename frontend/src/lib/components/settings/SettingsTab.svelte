@@ -541,6 +541,8 @@
 	<ExplainSwitch />
 
 	<!-- Period ------------------------------------------------------------------------>
+	<!-- Blank (the default) runs over the whole rain record, so the blank fields say that rather than DayInput's
+	     example day, which read as a stored start and end of 15 Nov 2021. -->
 	<section class="panel" id="set-period" aria-labelledby="per-h">
 		<div class="panel-head">
 			<h2 id="per-h">Simulation period <HelpTip key="settings.simulationStart" /></h2>
@@ -554,6 +556,7 @@
 					id="st-start"
 					readonly={readonly}
 					value={s.simulationStart ?? ''}
+					placeholder="First day with rain"
 					onchange={(v) => (s.simulationStart = v || null)}
 					aria-invalid={dateError ? 'true' : undefined}
 					aria-describedby={dateError ? 'st-period-err' : undefined}
@@ -565,6 +568,7 @@
 					id="st-end"
 					readonly={readonly}
 					value={s.simulationEnd ?? ''}
+					placeholder="Last day with rain"
 					onchange={(v) => (s.simulationEnd = v || null)}
 					aria-invalid={dateError ? 'true' : undefined}
 					aria-describedby={dateError ? 'st-period-err' : undefined}

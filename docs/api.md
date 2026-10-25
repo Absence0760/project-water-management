@@ -1606,7 +1606,7 @@ Ids are client-generated UUIDs; rows missing from a `PUT` are deleted.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/model` | – | `ProjectModel` | viewer |
+| GET | `/projects/:id/model` | – | `ProjectModel`, every list in a fixed order: nodes by sort order then name, crops and irrigation systems likewise, crop areas by unit id then crop id (the engine's summing order), transfers by priority, land cover, boreholes and demand objects by unit; so the same model always reads back the same | viewer |
 | PUT | `/projects/:id/model` | `ProjectModel` | `ProjectModel` | editor |
 
 Names are one line (issue #385, migration 189): a node or crop name (1–100

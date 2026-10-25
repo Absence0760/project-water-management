@@ -1358,7 +1358,12 @@ Interaction details that bit:
   `min`/`max` (YYYY-MM-DD), and it keeps text it can't read with its message
   at the field, joins the owner's `invalidFields` (the save bar's list and
   the leave guard, as `NumberInput` does), and sets the input's custom
-  validity, so a form without `novalidate` refuses to submit it. A form
+  validity, so a form without `novalidate` refuses to submit it. Its
+  blank hint is an example, "e.g. 15 Nov 2021", never a bare day: a bare
+  "15 Nov 2021" in Settings' blank Simulation start and end read as a stored
+  period. Where blank means something, say that instead (Simulation start's
+  "First day with rain", end's "Last day with rain"; `DayInput.test.ts`,
+  `day-input.spec.ts`). A form
   with `novalidate` that checks its own dates looks for
   `validity.customError` on the field before it submits
   (`feeds/DataFeedsPanel.svelte`, `feeds/UnitRain.svelte`), and leaves the
@@ -1794,6 +1799,19 @@ Interaction details that bit:
   in between, skipped its click, and lost to the pick under CI load
   (`map-draw.spec.ts`, phone). After a save from a sheet, wait for the sheet
   to be hidden before choosing a side tab.
+- **A control that applies at once and saves behind it must order its
+  saves.** The language switch changes the page on the click and sends the
+  account save after it, so a spec (or a person) can choose again before the
+  first save has answered. Sent side by side, the two saves reached the
+  server in either order, and the account came back Afrikaans after a
+  switch back to English and a reload (`alerts.spec.ts`'s farm frame test,
+  #577's CI); the first save's late answer would also have set
+  `session.user` back, turning the page with it. Chain such saves and keep
+  only the latest choice's answer (`LanguageSwitch.svelte`, the farm view's
+  unit switch in `SupplyCard.svelte`, as the account page's unit radios and
+  `SectionsMenu.svelte` already did); pin it by holding the first save at
+  the network with `page.route` until the second choice is made, and
+  checking the order the saves were sent in (`language.spec.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card; a new tab or page joins the

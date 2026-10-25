@@ -14,10 +14,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // FEED_FETCHER=sqs tests capture the fetch requests instead of sending them;
 // every other test fetches inline and sends nothing.
-const { sent } = vi.hoisted(() => ({ sent: [] as unknown[] }));
+// `onSend.fn`, when set, runs as the message is sent, inside the fetch job's
+// transaction: what the fetcher's answer meets if it comes back before that commits.
+const { sent, onSend } = vi.hoisted(() => ({ sent: [] as unknown[], onSend: {} as { fn?: (message: unknown) => Promise<void> } }));
 vi.mock('../jobs/transport.js', async (orig) => ({
 	...(await orig<typeof import('../jobs/transport.js')>()),
-	sendToQueue: async (_url: string | undefined, _name: string, message: unknown) => void sent.push(message)
+	sendToQueue: async (_url: string | undefined, _name: string, message: unknown) => {
+		sent.push(message);
+		await onSend.fn?.(message);
+	}
 }));
 import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
@@ -34,6 +39,7 @@ type User = Awaited<ReturnType<typeof signUp>>;
 
 afterEach(async () => {
 	sent.length = 0;
+	delete onSend.fn;
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 	await asOwner('DELETE FROM data_feed');
@@ -625,6 +631,73 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		await tick();
 		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([1.5, null, 2.5]);
 		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: plus(o.window.start, 2), last_value: 2.5, consecutive_failures: 0, last_meta: { through: o.window.end } });
+	});
+
+	it('a failed answer that comes back before the fetch job commits is recorded: the feed shows the failure (the fetch is committed before the request leaves)', async () => {
+		const owner = await signUp('Racer');
+		const pid = await project(owner);
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] } })).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		const seen: Record<string, unknown>[] = [];
+		// The fetcher fails in a third of a second, and its answer is ingested while the fetch job's transaction is still open.
+		onSend.fn = async (m) => {
+			const f = m as FetchMsg;
+			seen.push((await asOwner('SELECT fetch_job_id FROM data_feed WHERE id = $1', [feedId]))[0]);
+			vi.stubEnv('FEED_FETCHER', 'sqs');
+			const answer = msg({ feedId: f.feedId, jobId: f.fetchJobId, version: f.feedVersion }, { ok: false, error: 'the source is unreachable: HTTP 429: the source asked us to slow down, so the feed tries again later' });
+			expect(await acceptIngestResult(answer)).toBe('queued');
+			expect((await tick()).done).toBe(1);
+		};
+		const m = await runFetchJob();
+		// Another connection saw the fetch recorded as the request left.
+		expect(seen).toEqual([{ fetch_job_id: m.fetchJobId }]);
+		expect(await feedRow(feedId)).toMatchObject({
+			consecutive_failures: 1,
+			last_attempt_at: expect.any(Date),
+			last_error: 'the source is unreachable: HTTP 429: the source asked us to slow down, so the feed tries again later'
+		});
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health).toMatchObject({ state: 'failing', reason: { code: 'failing', failures: 1 } });
+		// Applied once: the feed waits on no fetch now.
+		expect((await asOwner('SELECT fetch_job_id FROM data_feed WHERE id = $1', [feedId]))[0]).toEqual({ fetch_job_id: null });
+	});
+
+	it('a request that could not be sent leaves the feed waiting on nothing, and the job retries', async () => {
+		const owner = await signUp('Unsent');
+		const pid = await project(owner);
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] } })).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		onSend.fn = async () => {
+			throw new Error('SQS is down');
+		};
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.stubEnv('FEED_FETCHER', 'sqs');
+		vi.stubEnv('FETCH_REQUESTS_QUEUE_URL', 'https://sqs.test/fetch-requests');
+		expect((await tick()).failed).toBe(1);
+		expect((await asOwner('SELECT fetch_job_id FROM data_feed WHERE id = $1', [feedId]))[0]).toEqual({ fetch_job_id: null });
+		expect((await asOwner(`SELECT status FROM job WHERE kind = 'feed_fetch' AND project_id = $1`, [pid]))[0]).toEqual({ status: 'failed' });
+		// Positive control: a send that goes through leaves the fetch recorded.
+		delete onSend.fn;
+		await asOwner(`UPDATE job SET run_after = now() WHERE kind = 'feed_fetch' AND project_id = $1`, [pid]);
+		expect((await tick()).done).toBe(1);
+		expect((await asOwner('SELECT fetch_job_id IS NOT NULL AS waiting FROM data_feed WHERE id = $1', [feedId]))[0]).toEqual({ waiting: true });
+	});
+
+	it('logs an answer it drops, with the reason, and never its values', async () => {
+		const o = await fetchJob();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		await acceptIngestResult(msg(o, result(o)));
+		await tick();
+		// Applied: a redelivery is dropped as no longer awaited.
+		await acceptIngestResult(msg(o, result(o, [8.25])));
+		await tick();
+		await acceptIngestResult(msg({ ...o, version: 'older' }, { ok: false, error: 'the source is unreachable: HTTP 429' }));
+		await tick();
+		const lines = warn.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === 'feed_answer_dropped');
+		expect(lines).toEqual([
+			{ event: 'feed_answer_dropped', feedId: o.feedId, fetchJobId: o.jobId, reason: 'not_awaited', ok: true },
+			{ event: 'feed_answer_dropped', feedId: o.feedId, fetchJobId: o.jobId, reason: 'feed_changed', ok: false }
+		]);
+		expect(JSON.stringify(warn.mock.calls)).not.toContain('8.25');
 	});
 
 	it('refuses a message that names another feed’s job, or no job', async () => {

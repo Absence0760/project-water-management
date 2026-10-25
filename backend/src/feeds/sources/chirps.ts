@@ -109,14 +109,25 @@ export function meanOf(values: readonly (number | null)[], cells: readonly Cell[
 	return Math.round((sum / weights) * 100) / 100;
 }
 
-/** Runs `fn` over `items` with at most `limit` in flight, keeping order. */
+/**
+ * Runs `fn` over `items` with at most `limit` in flight, keeping order. The
+ * first failure rejects, and no item is started after it: the other workers
+ * finish the one they hold and stop, so a fetch that has already failed (a
+ * throttled source above all) asks the source nothing more.
+ */
 export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
 	const out = new Array<R>(items.length);
 	let next = 0;
+	let failed = false;
 	const worker = async () => {
-		while (next < items.length) {
+		while (!failed && next < items.length) {
 			const i = next++;
-			out[i] = await fn(items[i]!, i);
+			try {
+				out[i] = await fn(items[i]!, i);
+			} catch (err) {
+				failed = true;
+				throw err;
+			}
 		}
 	};
 	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));

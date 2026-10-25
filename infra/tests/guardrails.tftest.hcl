@@ -834,9 +834,10 @@ run "production_guardrails" {
       "var SITE_HOST = 'icwbt.jaredhoward.com';",
       "if (host && host !== SITE_HOST) return moved(request);",
       "statusCode: 301",
-      "location: { value: 'https://' + SITE_HOST + request.uri + query(request.querystring) }",
+      "var qs = request.rawQueryString();",
+      "location: { value: 'https://' + SITE_HOST + request.uri + (qs === undefined ? '' : '?' + qs) }",
     ] : strcontains(aws_cloudfront_function.spa_rewrite.code, s)])
-    error_message = "spa_rewrite must 301 any other host to the same path on the site's hostname (infra/scripts/cloudfront-functions.test.mjs runs it)."
+    error_message = "spa_rewrite must 301 any other host to the same path and the query as sent (rawQueryString) on the site's hostname (infra/scripts/cloudfront-functions.test.mjs runs it)."
   }
   assert {
     condition     = alltrue([for f in [aws_cloudfront_function.api_strip_prefix, aws_cloudfront_function.tiles_range] : !strcontains(f.code, "SITE_HOST")])
@@ -2321,10 +2322,19 @@ run "data_feeds" {
   assert {
     condition = (
       aws_lambda_function.worker.environment[0].variables["FEED_FETCHER"] == "sqs" &&
-      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests.url &&
-      !contains(keys(aws_lambda_function.worker.environment[0].variables), "FEED_SOURCE")
+      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests.url
     )
     error_message = "The worker hands fetches to the fetcher (it has no internet) and never fetches itself."
+  }
+  # FEED_SOURCE is also which CHIRPS cell cache a process reads (cellCacheStore.ts
+  # cacheOrigin): the API and the worker run models from it, so both read the live
+  # `chc` rows, never the fixtures' (unset on the API served runs no CHIRPS cells).
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["FEED_SOURCE"] == "live" &&
+      aws_lambda_function.worker.environment[0].variables["FEED_SOURCE"] == "live"
+    )
+    error_message = "The API and the worker read the live CHIRPS cell cache (FEED_SOURCE = live), as the fetcher fills it."
   }
   assert {
     condition = (

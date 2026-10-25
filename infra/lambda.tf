@@ -187,6 +187,14 @@ resource "aws_lambda_function" "backend" {
       JOB_TRANSPORT  = "sqs"
       JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
 
+      # Data feeds (feeds.tf): the API never fetches, but this picks which
+      # CHIRPS cell cache it reads (backend/src/feeds/cellCacheStore.ts
+      # cacheOrigin): a run started here must read the `chc` rows the worker
+      # merges from the live fetcher, and the Data feeds panel must not call
+      # them sample data. Unset is the local fixtures, which the backend's
+      # production check refuses (config/production.ts).
+      FEED_SOURCE = "live"
+
       # Server-side reports (reports.tf): the API signs PDF downloads as
       # CloudFront signed URLs on the site's /reports/* path. The private key
       # is in the runtime secret; these name its public half: the key id
