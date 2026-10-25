@@ -7,7 +7,7 @@
 	// Summary's first screen until 2026-09-27 and moved unchanged; the Summary
 	// links here, and its old `#…-h` links are sent here (links.ts). A
 	// reading page: it scrolls, it isn't fitted to the window.
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { page } from '$app/state';
 	import type { Project, RunMeta } from '#lib/api/index.js';
@@ -16,7 +16,9 @@
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { downloads } from '#lib/export/index.js';
 	import { fmtNum } from '#lib/format/number.js';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import SectionNav from '#lib/components/common/SectionNav.svelte';
+	import type { NavGroup } from '#lib/components/common/sectionNav.js';
+	import { anchorHeading, landOnAnchor } from '#lib/help/anchor.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import type { ProjectDetailsDraft } from './detailsDraft.svelte';
 	import AuthorityPanel from './AuthorityPanel.svelte';
@@ -29,6 +31,7 @@
 	import MembersPanel from './MembersPanel.svelte';
 	import RegistrationChecksPanel from './RegistrationChecksPanel.svelte';
 	import { DEFAULT_TIME_ZONE, projectContext } from './project';
+	import { panelLabel, projectNavGroups, sameNav } from './sections';
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
 	import TwoStepPanel from './TwoStepPanel.svelte';
@@ -95,40 +98,54 @@
 
 	// A link to one of the panels (`#members-h`, or an old Summary link sent here): the panels
 	// fill in as their data arrives, after the browser's own jump, so wait for the heading, then
-	// scroll there and hold it while the page settles (as EWR does), focusing it.
+	// scroll there and hold it while the page settles, focusing it (landOnAnchor, as Settings,
+	// Runs and Data do).
 	let body: HTMLDivElement | undefined = $state();
 	// Bumped by Acts for the authority after each change, so the members list's authority lines follow it (229).
 	let authorityVersion = $state(0);
-	let releaseAnchor = () => {};
-	let stopWaiting = () => {};
+	let stopLanding = () => {};
 	onMount(() => {
 		const hash = page.url.hash.slice(1);
-		if (!projectAnchor(hash) || !body) return;
-		const land = () => {
-			const heading = document.getElementById(hash);
-			if (!heading) return false;
-			releaseAnchor = holdAnchor(heading);
-			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			focusAnchor(heading);
-			return true;
-		};
-		if (land()) return;
-		const mo = new MutationObserver(() => land() && mo.disconnect());
-		mo.observe(body, { childList: true, subtree: true });
-		stopWaiting = () => mo.disconnect();
+		if (projectAnchor(hash) && body) stopLanding = landOnAnchor(hash, body);
 	});
-	onDestroy(() => {
-		stopWaiting();
-		releaseAnchor();
+	onDestroy(() => stopLanding());
+
+	// The in-page menu (common/SectionNav, issue #586 R1-E): every panel in PROJECT_ANCHORS that this
+	// reader is shown, named by its heading as drawn and grouped by its column (sections.ts), read again
+	// whenever the page's content changes (a panel drawn late, a heading that names a team). A side
+	// index from 80rem of page (a 1440 px window), as Settings and Data; the bar below that.
+	const RAIL_FROM_REM = 80;
+	let navGroups = $state<NavGroup[]>([]);
+	function readPanel(id: string) {
+		const el = body?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+		const heading = el && anchorHeading(el);
+		if (!el || !heading) return null;
+		const copy = heading.cloneNode(true) as HTMLElement;
+		copy.querySelectorAll('button, .helptip, .visually-hidden, [aria-hidden="true"]').forEach((n) => n.remove());
+		return { label: panelLabel(copy.textContent ?? ''), group: el.closest<HTMLElement>('[data-nav-group]')?.dataset.navGroup ?? null };
+	}
+	$effect(() => {
+		const root = body;
+		if (!root) return;
+		const read = () => {
+			const next = projectNavGroups(readPanel);
+			if (!sameNav(next, untrack(() => navGroups))) navGroups = next;
+		};
+		read();
+		const mo = new MutationObserver(read);
+		mo.observe(root, { childList: true, subtree: true, characterData: true });
+		return () => mo.disconnect();
 	});
 </script>
 
 {#snippet headerContext()}<span data-testid="project-context">{context}</span>{/snippet}
 {#snippet headerActions()}<DownloadMenu items={projectDownloads} />{/snippet}
 
+<!-- In-page menu: around the whole page, so it sticks down it (as a bar) or stands beside it (the side index). -->
+<SectionNav groups={navGroups} label="Project page sections" railFrom={RAIL_FROM_REM}>
 <div class="project-page" bind:this={body}>
 	<div class="grid">
-		<div class="col">
+		<div class="col" data-nav-group="The project">
 			<section class="panel" aria-labelledby="details-h">
 				<div class="panel-head">
 					<h2 id="details-h">Project details</h2>
@@ -187,7 +204,7 @@
 		</div>
 
 		<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->
-		<div class="col access">
+		<div class="col access" data-nav-group="People and access">
 			<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
 			<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} {authorityVersion} />
 			<!-- The host's checks of signers' registrations (167_signers): editors read them, owners record them. -->
@@ -205,6 +222,7 @@
 		</div>
 	</div>
 </div>
+</SectionNav>
 
 <style>
 	.save-hint {
