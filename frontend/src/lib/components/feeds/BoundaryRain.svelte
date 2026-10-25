@@ -1,5 +1,5 @@
 <!--
-	Settings → Data feeds → Attach a feed → Area: "The catchment boundary" (issue
+	Data → Data feeds → Attach a feed → Area: "The catchment boundary" (issue
 	#326 B-rain, issue #521; docs/ui.md § Data feeds, docs/maps.md § Rain from
 	the boundary): the CHIRPS cells the map's catchment boundary covers, each
 	weighted by the share of it inside, shown as a proposal with its source, and

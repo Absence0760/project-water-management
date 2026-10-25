@@ -34,8 +34,8 @@ test('the series are grouped, the series behind come first in their group and ar
 	// Run model is the header's primary action on every section; Add data sits beside it.
 	await expect(header.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
 	await expect(header.getByTestId('header-run')).toHaveClass(/btn-primary/);
-	// The feeds that fill series daily are one link away (Settings → Data feeds).
-	await expect(page.getByTestId('data-feeds-link')).toHaveAttribute('href', '?tab=settings#set-feeds');
+	// The feeds that fill series daily are Data feeds, further down this page (issue #586: it was on Settings).
+	await expect(page.getByTestId('data-feeds-link')).toHaveAttribute('href', '#data-feeds');
 
 	// Grouped by what each series is (issue #553): the station, the catchment's other rain, the flow records, the
 	// rest. Within a group the series behind come first (CHIRPS, 20 days, before the forecast that runs ahead), each
@@ -107,11 +107,11 @@ test('picking a series charts it through the URL: Back returns to the one before
 
 /**
  * Elements on the Data tab that scroll vertically inside themselves (the page is the one scroll; issue #17,
- * 2026-09-29): the series and chart, and the panels below them (gauge vs logger, double mass, checks, reference).
+ * 2026-09-29): the series and chart, and the panels below them (data feeds, gauge vs logger, double mass, checks, reference).
  */
 const innerScrollers = (page: import('@playwright/test').Page) =>
 	page.evaluate(() =>
-		[...document.querySelectorAll('.data-page, #data-agreement, #data-double-mass, #data-checks, #data-uses')]
+		[...document.querySelectorAll('.data-page, #data-feeds, #data-agreement, #data-double-mass, #data-checks, #data-uses')]
 			.flatMap((root) => [root, ...root.querySelectorAll('*')])
 			.filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1)
 			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
@@ -458,4 +458,75 @@ test('the series table, the CSV period and Edit a day read day first, and fit a 
 		await expectNoSidewaysScroll(page);
 	}
 	await expectNoViolations(page);
+});
+
+test('Data feeds is a section of its own: named as its heading in the menu, the series’ link and a link from another page land on its heading past 30 series, and only an owner is told it saves as it changes', async ({ page, owner, signIn }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Data feeds section');
+	await Promise.all(
+		Array.from({ length: 30 }, (_, i) =>
+			putEnding(page.request, project.id, { kind: i % 2 ? 'rain_chirps_mm' : 'flow_observed_m3s', name: `Station ${String(i + 1).padStart(2, '0')}`, endAgo: 2, length: 120 })
+		)
+	);
+	await openData(page, project.id);
+	await expect(seriesRows(page).first()).toBeVisible();
+	const menu = page.getByRole('navigation', { name: 'Data sections' });
+	const feeds = page.getByRole('region', { name: 'Data feeds' });
+	const heading = feeds.getByRole('heading', { level: 2, name: 'Data feeds' });
+	// The side index names it as its heading, word for word, in the Series group after the chart (issue #586: from Settings).
+	await expect(menu.getByRole('link', { name: 'Data feeds', exact: true })).toHaveAttribute('href', '#data-feeds');
+	await expect(feeds.getByText('No feeds yet.')).toBeVisible();
+	await expect(feeds.getByTestId('feeds-saves')).toHaveText('Feeds save as you change them: attaching, switching off or removing one needs no Save changes.');
+
+	// The series panel's link goes down the page to it, its heading focused.
+	await page.getByTestId('data-feeds-link').click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=series#data-feeds$`));
+	await expect(heading).toBeInViewport();
+	await expect(heading).toBeFocused();
+
+	// A link from another page (Runs & results' forecast stub, the Map's Observed flow): a fresh load lands on it too.
+	await page.goto(`/projects/${project.id}?tab=overview`);
+	await page.goto(`/projects/${project.id}?tab=series#data-feeds`);
+	await expect(heading).toBeFocused();
+	await expect(heading).toBeInViewport();
+	await expectNoViolations(page, { include: '#data-feeds' });
+
+	// A viewer reads it: no add action, no saves line; a ?rain= link lands on the panel's heading and opens nothing.
+	const viewer = await signIn('Data feeds viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await v.setViewportSize({ width: 390, height: 844 });
+	await v.goto(`/projects/${project.id}?tab=series&rain=units#data-feeds`);
+	const seen = v.getByRole('region', { name: 'Data feeds' });
+	await expect(seen.getByRole('heading', { level: 2, name: 'Data feeds' })).toBeFocused();
+	await expect(seen.getByRole('button', { name: 'Refresh status' })).toBeVisible();
+	await expect(seen.getByRole('button', { name: /^(?:Attach a feed|Rain from the map)$/ })).toHaveCount(0);
+	await expect(seen.getByTestId('feeds-saves')).toHaveCount(0);
+	await expect(seen.getByTestId('unit-rain')).toHaveCount(0);
+	await expect(seen.getByText('No feeds yet. An owner can attach one.')).toBeVisible();
+	await expectNoSidewaysScroll(v);
+	await expectNoViolations(v, { include: '#data-feeds' });
+});
+
+test('?rain=units#data-feeds opens Rain for each unit on its heading once per arrival: Close gives the focus back and it stays shut, a reload opens it again', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Data feeds rain arrival');
+	await page.goto(`/projects/${project.id}?tab=series&rain=units#data-feeds`);
+	const feeds = page.getByRole('region', { name: 'Data feeds' });
+	const unitRain = feeds.getByTestId('unit-rain');
+	await expect(unitRain.getByRole('heading', { name: 'Rain for each unit' })).toBeFocused();
+	await expect(feeds.getByLabel('Area', { exact: true })).toHaveValue('units');
+	await expect(feeds.getByRole('heading', { level: 2, name: 'Data feeds' })).toBeInViewport();
+
+	await unitRain.getByRole('button', { name: 'Close' }).click();
+	await expect(unitRain).toHaveCount(0);
+	await expect(feeds.getByRole('button', { name: 'Attach a feed' })).toBeFocused();
+	// The URL still asks, but this arrival was answered: a refreshed list doesn't open it again.
+	await feeds.getByRole('button', { name: 'Refresh status' }).click();
+	await expect(feeds.getByRole('status').filter({ hasText: 'Status refreshed.' })).toBeVisible();
+	await expect(unitRain).toHaveCount(0);
+
+	await page.reload();
+	await expect(unitRain.getByRole('heading', { name: 'Rain for each unit' })).toBeFocused();
 });

@@ -1,4 +1,4 @@
-// Words for the nearest-gauging-stations proposal in Settings → Data feeds
+// Words for the nearest-gauging-stations proposal in Data → Data feeds
 // (issue #326 Part B "B-gauge"; docs/ui.md § Data feeds, docs/maps.md §
 // Gauging stations). Pure, so the rule each sentence states is unit-tested.
 import type { GaugeStationLookup, GaugeStationProposal } from '#lib/api/types.js';

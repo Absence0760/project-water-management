@@ -1,4 +1,4 @@
-// Settings → Data feeds → Rain for each unit (issue #482, docs/ui.md § Data
+// Data → Data feeds → Rain for each unit (issue #482, docs/ui.md § Data
 // feeds, docs/maps.md § Rain for each unit): the per-unit CHIRPS proposal
 // (GET …/feeds/chirps/from-units) in words, and the checks on the panel's
 // product and start date. Pure, so they test without a page.

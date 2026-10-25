@@ -479,7 +479,7 @@ export const GUIDES: Guide[] = [
 		title: 'Load rainfall and flow automatically with data feeds',
 		summary: 'Attach a CHIRPS, CHIRPS-GEFS or DWS feed, set one up from the catchment boundary, and read whether each is keeping up.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'series',
 		sections: [
 			{
 				heading: 'What a feed does',
@@ -497,7 +497,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Put the catchment boundary on the **Map** (delineate, draw or upload it).',
-							'Open **Settings & calibration → Data feeds**, press **Attach a feed** (an editor: **Rain from the map**) and choose the **Area** *The catchment boundary, from the map* (the Map’s own link opens it too).',
+							'Open **Data → Data feeds**, press **Attach a feed** (an editor: **Rain from the map**) and choose the **Area** *The catchment boundary, from the map* (the Map’s own link opens it too).',
 							'Read the proposal: the CHIRPS cells the boundary covers, the share of each inside it and its weight. A boundary over about 2 500 km² needs feeds for its parts.',
 							'An owner presses **Apply**. Where runs already read a CHIRPS record (**Runs read**), the owner chooses: **Keep** it, the default, and the feed goes into a new series named to sort after it, so runs keep reading the record, read from its first day (rnl when that is before 1998); or **Replace** it, and the feed reads the whole record again from its first day and takes its place once complete (the old values stay in the History). The daily product and start date can be changed before Apply.'
 						]
@@ -516,7 +516,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Give each hydrological unit its parcel on the **Map** (delineate, draw or upload it, and link it to the unit).',
-							'Open **Settings & calibration → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
+							'Open **Data → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
 							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create the feed** (**Create 4 feeds** for four units; **Update** where a unit has one already). Units without a parcel are listed, with a link to the map.',
 							'Give each unit its MAP and source on its form, then choose **Per unit** under **Settings & calibration → Flow generation**, give each unit its rainfall station, and refit.'
 						]

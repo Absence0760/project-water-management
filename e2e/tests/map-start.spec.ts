@@ -154,7 +154,9 @@ test('an editor starts an empty model from the map: delineate, the units’ boun
 
 	// 4. Data and the first run.
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'data');
-	await expect(startSheet(page).getByRole('link', { name: 'Rain from the boundary' })).toBeVisible();
+	// The rain and the gauges are Data feeds, on the Data page (issue #586: it was on Settings); rain opens the boundary's proposal.
+	await expect(startSheet(page).getByRole('link', { name: 'Rain from the boundary' })).toHaveAttribute('href', '?tab=series&rain=boundary#data-feeds');
+	await expect(startSheet(page).getByRole('link', { name: 'Observed flow' })).toHaveAttribute('href', '?tab=series#data-feeds');
 	// Evaporation is a step of its own: with no A-pan the dams would lose nothing (round 4, persona-hydrologist).
 	await expect(startSheet(page).getByRole('link', { name: 'Evaporation' })).toHaveAttribute('href', '?tab=settings#set-demand');
 	await expect(startSheet(page).getByTestId('start-run')).toBeVisible();
