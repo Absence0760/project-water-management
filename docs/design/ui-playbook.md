@@ -1269,6 +1269,15 @@ Interaction details that bit:
   *I understand*, *Accept the new terms*, the banner's *Dismiss*) calls
   `focusPageStart()` (`lib/a11y/focusPage.ts`): the new page's `h1`, or
   `#main` while it loads.
+- **A link that moves to another part of the page or app puts the focus there,
+  never on `<body>`.** One pattern each (issue #586): a workspace sidebar
+  link focuses the new page's `h1` (`focusPageStart()` after the navigation;
+  the arrow keys between the links keep it on the link); an in-page menu
+  link (`SectionNav`) and a loaded `#anchor` focus the section's heading
+  (`tabindex="-1"`, no scroll; `anchorHeading`/`focusHeading`,
+  `help/anchor.ts`). Not `data-sveltekit-keepfocus` on a link that changes
+  the page: Tab would start again from the sidebar. Test it with
+  `toBeFocused()`.
 - **Motion that runs longer than 5 s needs a way to stop it** (WCAG 2.2.2);
   reduced motion doesn't count. The landing hero has a pause toggle; the
   sign-in panel's decoration simply stops after 4.8 s. Never animate text a
@@ -1450,7 +1459,14 @@ Interaction details that bit:
   (`?tab=settings#set-…`) had silently done that until its page spec
   followed one; the tab now finds the element on mount and holds it with
   `holdAnchor` (`help/anchor.ts`), focusing its heading, as River & reserve,
-  Hydrological units, Runs, Data and Project do. Test a fragment link by *loading* it,
+  Hydrological units, Runs, Data and Project do. A panel that is a lazy chunk
+  of its own is drawn after the tab mounts, so one look at mount finds nothing
+  (Settings' API keys and Evaporation from the map, Runs' Forecast) or a box
+  without its heading yet: wait with `landOnAnchor(id)`, which holds the
+  panel once drawn and focuses its heading once that is (an h2–h4), giving up
+  when the reader takes over. A link to a panel the page doesn't draw for this
+  item says so in a focused line, not silently at the top (Runs'
+  `missingPanel.ts`). Test a fragment link by *loading* it,
   not only by clicking the in-page menu. And a `page.goto` that changes only
   the fragment is a same-page jump, not a load: the River menu's first
   "loaded link" test passed on such a jump without loading anything, and the

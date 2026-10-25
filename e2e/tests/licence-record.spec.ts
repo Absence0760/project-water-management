@@ -5,7 +5,7 @@
 // the names it keeps) is kept: the decision + 3 years for a refusal. An
 // editor reads it without the form; a viewer doesn't see it. Synthetic data.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
+import { addMember, createProject, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
@@ -56,4 +56,16 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	await viewer.page.goto(`/projects/${project.id}?tab=project`);
 	await expect(viewer.page.getByTestId('project-role')).toBeVisible();
 	await expect(viewer.page.getByTestId('licence-record')).toHaveCount(0);
+});
+
+test('the licence record email’s link (`?tab=project#licence-record`) lands on the panel, focused (issue #586)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await createProject(page.request, 'Licence record link');
+	await page.goto('/');
+	await page.goto(`/projects/${project.id}?tab=project#licence-record`);
+	const heading = page.locator('#licence-record');
+	await expect(heading).toContainText('Licence record');
+	await expect(heading).toBeFocused();
+	await expect(heading).toBeInViewport();
 });

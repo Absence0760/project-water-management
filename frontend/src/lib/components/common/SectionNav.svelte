@@ -34,7 +34,8 @@
 	`heading` names the bar's start ("On this page"; null for none).
 -->
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { onDestroy, type Snippet } from 'svelte';
+	import { anchorHeading, focusHeading } from '#lib/help/anchor.js';
 	import { activeSectionId, findElsewhere, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
 
 	let {
@@ -125,13 +126,38 @@
 	}
 	const hrefOf = (sec: NavSection) => sec.href ?? `#${sec.id}`;
 	const embedded = $derived(!!onjump);
-	/** A link followed: in a box of its own (`onjump`), the page goes to the section instead of the fragment. */
+	/**
+	 * A link followed: in a box of its own (`onjump`), the page goes to the section instead of the
+	 * fragment. On the page, the browser jumps to the fragment, then the section's heading takes
+	 * the focus (as a link into the page does, lib/help/anchor.ts), so Tab carries on from the
+	 * section, not from the top of the page (issue #586). The fragment already in the URL makes
+	 * no hashchange: SvelteKit scrolls to it itself, and the heading is focused at once.
+	 */
+	let stopFocusOnJump = () => {};
 	function follow(e: MouseEvent, sec: NavSection) {
 		moreOpen = false;
-		if (!onjump || sec.href || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-		e.preventDefault();
-		onjump(sec.id);
+		if (sec.href || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		if (onjump) {
+			e.preventDefault();
+			onjump(sec.id);
+			return;
+		}
+		stopFocusOnJump();
+		const el = document.getElementById(sec.id);
+		const heading = el && anchorHeading(el);
+		if (!heading) return;
+		if (location.hash === `#${sec.id}`) {
+			focusHeading(heading);
+			return;
+		}
+		const land = () => {
+			stopFocusOnJump();
+			if (location.hash === `#${sec.id}`) focusHeading(heading);
+		};
+		window.addEventListener('hashchange', land);
+		stopFocusOnJump = () => window.removeEventListener('hashchange', land);
 	}
+	onDestroy(() => stopFocusOnJump());
 
 	/** Each group's links on the bar and in More, in page order. */
 	const split = $derived.by(() => {

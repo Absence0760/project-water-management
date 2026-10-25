@@ -8,7 +8,7 @@
 // (section-nav.spec.ts), the header's fit line and jump (settings-page.spec.ts), Discard's Cancel and a Save
 // blocker's link (settings.spec.ts), leaving with unsaved settings (leave-guard.spec.ts). Synthetic data only.
 import type { Page } from '@playwright/test';
-import { createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
+import { addMember, createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
 import { answerConfirm, confirmBox } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -170,24 +170,11 @@ test('in Per unit flow generation, the units’ rain and MAP from the grid are c
 	await expect(page.locator('#set-unit-map').locator('h2, h3, h4').first()).toHaveText('MAP from the grid', { useInnerText: true });
 });
 
-/**
- * Anchors that don't land today, from a load of the page (a link from another page or a bookmark): each panel is a
- * lazy chunk that isn't drawn when SettingsTab's onMount looks for the anchor's heading, so the heading is never
- * focused, and for the two whose id is inside the chunk (API keys, Evaporation from the map) nothing scrolls at all.
- * Expected to fail until issue #586 lands them (its round 1 moves the three after the form); remove the entry with
- * the fix, and this pin then holds it.
- */
-const NOT_LANDING: Record<string, string> = {
-	'set-evaporation': 'the id is inside the lazy card: the page stays at the top',
-	'set-feeds': 'the heading is drawn after onMount: in view, not focused',
-	'set-api-keys': 'the id is inside the lazy panel: the page stays at the top',
-	'set-report-schedules': 'the heading is drawn after onMount: in view, not focused'
-};
-
 for (const [id, heading] of [...PANELS, ...INNER.map(([i, h]): [string, string] => [i, h])]) {
 	test(`a load of #${id} lands on ${heading}: in view below the bar, and focused`, async ({ page, owner }) => {
 		void owner;
-		test.fail(id in NOT_LANDING, `issue #586: #${id} ${NOT_LANDING[id]}`);
+		// The lazy panels too (Evaporation from the map, Data feeds, API keys, Scheduled reports): the page waits for the
+		// panel, then for its heading (issue #586).
 		// 1280 px: the index is the bar that sticks over the content, so the heading must clear it too.
 		await page.setViewportSize({ width: 1280, height: 800 });
 		const project = await createProject(page.request, `Settings pins ${id}`);
@@ -202,13 +189,52 @@ for (const [id, heading] of [...PANELS, ...INNER.map(([i, h]): [string, string] 
 	});
 }
 
-test('?tab=calibration opens Settings & calibration under its own sidebar row, and lands its anchors', async ({ page, owner }) => {
+test('a load of #set-unit-rain lands on its card’s heading, an h4 in its legend', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await createProject(page.request, 'Settings pins unit rain link');
+	await putModel(page.request, project.id, sampleModel());
+	await updateSettings(page.request, project.id, { unitRain: { mode: 'perUnit' } });
+	await page.goto(`/projects/${project.id}?tab=settings#set-unit-rain`);
+	const h = page.locator('#set-unit-rain > legend h4');
+	await expect(h).toHaveText('Units without a station', { useInnerText: true });
+	await expect(h).toBeInViewport();
+	await expect(h).toBeFocused();
+});
+
+test('a viewer sees which radio option is chosen: the read-only form keeps a radio’s mark (issue #586)', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings pins viewer radio');
+	const viewer = await signIn('Settings radio viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await openSettings(v, project.id);
+	const method = v.getByTestId('flowgen-method');
+	const chosen = method.getByRole('radio', { name: 'Fragmentation', exact: true });
+	await expect(chosen).toBeChecked();
+	await expect(chosen).toBeDisabled();
+	// Drawn as a radio (the read-only rule for text fields once took its circle away: appearance none, no border).
+	for (const radio of await method.getByRole('radio').all()) {
+		await expect(radio).toBeVisible();
+		expect(await radio.evaluate((el) => getComputedStyle(el).appearance)).not.toBe('none');
+		const box = (await radio.boundingBox())!;
+		expect(box.width).toBeGreaterThan(0);
+		expect(box.height).toBeGreaterThan(0);
+	}
+});
+
+test('?tab=calibration opens Settings & calibration under its own sidebar row at Flow calibration, and lands its anchors', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Settings pins alias');
 	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(pageTitle(page)).toBeVisible();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=calibration$`));
+	// It opens at Flow calibration, its heading focused, not at the top of Settings (issue #586).
+	const flow = panelHeading(page, 'set-flow');
+	await expect(flow).toHaveText('Flow calibration', { useInnerText: true });
+	await expect(flow).toBeInViewport();
+	await expect(flow).toBeFocused();
 	// The sidebar marks Settings & calibration: there is no Calibration row (yet).
 	await expect(sections(page).getByRole('link', { name: 'Settings & calibration', exact: true })).toHaveAttribute('aria-current', 'page');
 	await expect(sections(page).getByRole('link', { name: /^Calibration/ })).toHaveCount(0);

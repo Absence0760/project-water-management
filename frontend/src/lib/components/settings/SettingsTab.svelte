@@ -46,7 +46,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { withParam } from '#lib/workspace/overlays.js';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { landOnAnchor } from '#lib/help/anchor.js';
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '#lib/components/notes/notes.js';
 	import {
@@ -494,18 +494,14 @@
 
 	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
 	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
-	// panels settle (as EWR does), and focus its heading.
+	// panels settle (as EWR does), and focus its heading once that is drawn too: several panels
+	// (Evaporation from the map, Data feeds, API keys, Scheduled reports) are lazy chunks of their own,
+	// drawn after this mounts (landOnAnchor waits for them). `?tab=calibration`, which has no page of its
+	// own yet, opens at Flow calibration (issue #586).
 	onMount(() => {
 		const hash = page.url.hash.slice(1);
-		const el = hash.startsWith('set-') ? document.getElementById(hash) : null;
-		if (!el) return;
-		const release = holdAnchor(el);
-		const heading = el.querySelector<HTMLElement>('h2, h3');
-		if (heading) {
-			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			focusAnchor(heading);
-		}
-		return release;
+		const id = hash.startsWith('set-') ? hash : !hash && page.url.searchParams.get('tab') === 'calibration' ? 'set-flow' : null;
+		return id ? landOnAnchor(id) : undefined;
 	});
 </script>
 

@@ -35,7 +35,7 @@
 
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
@@ -68,6 +68,8 @@
 	import { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { fetchProjectPage, takeProjectPage } from '#lib/workspace/firstLoad.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
+	import { carriedRun, isRunTab, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
+	import { focusPageStart } from '#lib/a11y/focusPage.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
 	import { FieldHistoryStore, setFieldHistory } from '#lib/components/history/fieldHistory.svelte.js';
@@ -658,10 +660,31 @@
 		if (moved) void goto(moved, { replace: true, reset: false });
 	});
 
-	// Selecting a tab keeps focus/scroll and adds a history entry so Back works.
+	// Selecting a tab keeps the scroll and adds a history entry so Back works. The tabs that show
+	// a run keep the one the reader picked on any of them (issue #586, workspace/tabLinks.ts).
+	let pickedRun = $state<{ projectId: string; id: string } | null>(null);
+	$effect(() => {
+		const id = isRunTab(tab) ? page.url.searchParams.get('run') : null;
+		if (id) untrack(() => (pickedRun = { projectId, id }));
+	});
+	const carried = $derived(carriedRun(pickedRun?.projectId === projectId ? pickedRun.id : null, runs, project?.role));
 	function tabHref(id: TabId) {
-		return id === 'overview' ? page.url.pathname : `?tab=${id}`;
+		return tabLinkHref(id, page.url.pathname, carried);
 	}
+
+	// Following a sidebar link puts the focus on the new page's title (its h1, focusPageStart), so Tab
+	// carries on in the page, not from the top of the sidebar (issue #586; ui-playbook.md § 4). The arrow
+	// keys between the links keep it on the link instead (tabKeydown).
+	let focusTitle = false;
+	function followTab(e: MouseEvent) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		focusTitle = true;
+	}
+	afterNavigate(() => {
+		if (!focusTitle) return;
+		focusTitle = false;
+		void focusPageStart();
+	});
 
 	function onProjectChange(p: Project) {
 		project = p;
@@ -743,6 +766,7 @@
 						data-sveltekit-noscroll
 						aria-current={tab === id ? 'page' : undefined}
 						onkeydown={(e) => tabKeydown(e, id)}
+						onclick={followTab}
 						onpointerenter={() => warmTab(id)}
 						onfocus={() => warmTab(id)}
 					>
@@ -772,7 +796,7 @@
 {#snippet projectSidebar()}
 	<div class="project-side">
 		<div class="side-head"><span class="side-kicker">Catchment</span>{@render roleBadge()}<SectionsMenu roleTabs={roleIds} /></div>
-		<a class="side-project" href={tabHref('overview')} title={project?.name} data-testid="project-name">{project?.name}</a>
+		<a class="side-project" href={tabHref('overview')} onclick={followTab} title={project?.name} data-testid="project-name">{project?.name}</a>
 		{@render sectionsNav()}
 	</div>
 {/snippet}
@@ -1566,7 +1590,8 @@
 		text-align: center;
 	}
 	/* Read-only inputs read as plain values, not as a broken, greyed-out form. */
-	.readonly :global(input:not([type='checkbox']):read-only),
+	/* Not a radio: it is always :read-only, and without its circle a viewer couldn't tell which option is chosen (issue #586). */
+	.readonly :global(input:not([type='checkbox']):not([type='radio']):read-only),
 	.readonly :global(select:disabled),
 	.readonly :global(textarea:read-only) {
 		background: transparent;
