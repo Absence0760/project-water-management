@@ -74,10 +74,11 @@ export const SETTINGS_MOVED: Readonly<Record<string, { tab: string; hash: string
  * the panel opens as the old link meant. The caller replaces the history entry, so Back skips it.
  */
 export function settingsForward(url: Pick<URL, 'pathname' | 'search' | 'hash'>): string | null {
-	const hash = hashId(url.hash);
+	const params = new URLSearchParams(url.search);
+	// `?rain=boundary` or `?rain=units` asks Data feeds for a map proposal, so such a link goes there even without its #.
+	const hash = hashId(url.hash) || (/^(boundary|units)$/.test(params.get('rain') ?? '') ? 'set-feeds' : '');
 	const moved = Object.hasOwn(SETTINGS_MOVED, hash) ? SETTINGS_MOVED[hash]! : null;
 	if (!moved) return null;
-	const params = new URLSearchParams(url.search);
 	params.set('tab', moved.tab);
 	return `${url.pathname}?${params}#${moved.hash}`;
 }

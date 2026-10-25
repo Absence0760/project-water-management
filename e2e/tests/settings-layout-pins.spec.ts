@@ -195,11 +195,12 @@ for (const [old, tab, id, heading] of MOVED) {
 		void owner;
 		await page.setViewportSize({ width: 1280, height: 800 });
 		const project = await createProject(page.request, `Settings pins moved ${old}`);
-		// From the Summary, as an old email's or bookmark's link is opened: a page load, with the parameters it carried.
+		// From the Summary, as an old email's or bookmark's link is opened: a page load, with the parameters it carried
+		// (any other parameter; settings-after-form-layout.spec.ts follows ?rain=boundary, which opens a card of its own).
 		await page.goto(`/projects/${project.id}`);
 		await expect(page.getByRole('heading', { level: 1, name: 'Summary', exact: true })).toBeVisible();
-		await page.goto(`/projects/${project.id}?tab=settings&rain=boundary#${old}`);
-		await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=${tab}&rain=boundary#${id}$`));
+		await page.goto(`/projects/${project.id}?tab=settings&ref=bookmark#${old}`);
+		await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=${tab}&ref=bookmark#${id}$`));
 		const h = anchoredHeading(page, id);
 		await expect(h).toHaveText(heading, { useInnerText: true });
 		await expect(h).toBeInViewport();
@@ -215,13 +216,15 @@ test('an old #set- link to a moved panel followed while Settings is open forward
 	void owner;
 	await page.setViewportSize({ width: 1280, height: 800 });
 	const project = await createProject(page.request, 'Settings pins moved in page');
-	await openSettings(page, project.id);
 	// A note's or a pasted link's fragment, with the page already open: only the #fragment changes.
-	await page.evaluate(() => (location.hash = '#set-report-schedules'));
-	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=project#project-report-schedules$`));
-	const h = anchoredHeading(page, 'project-report-schedules');
-	await expect(h).toHaveText('Scheduled reports', { useInnerText: true });
-	await expect(h).toBeFocused();
+	for (const [old, tab, id, heading] of MOVED) {
+		await openSettings(page, project.id);
+		await page.evaluate((hash) => (location.hash = hash), `#${old}`);
+		await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=${tab}#${id}$`));
+		const h = anchoredHeading(page, id);
+		await expect(h).toHaveText(heading, { useInnerText: true });
+		await expect(h).toBeFocused();
+	}
 });
 
 test('a load of #set-unit-rain lands on its card’s heading, an h4 in its legend', async ({ page, owner }) => {

@@ -97,6 +97,14 @@ describe('settingsForward (issue #586 round 1)', () => {
 		expect(settingsForward(at('/app/projects/p1?tab=settings#set-api-keys'))).toBe('/app/projects/p1?tab=project#project-api-keys');
 	});
 
+	it('sends a map proposal’s link (?rain=boundary, ?rain=units) to Data feeds without its #', () => {
+		expect(settingsForward(at('/projects/p1?tab=settings&rain=boundary'))).toBe('/projects/p1?tab=series&rain=boundary#data-feeds');
+		expect(settingsForward(at('/projects/p1?tab=settings&rain=units'))).toBe('/projects/p1?tab=series&rain=units#data-feeds');
+		expect(settingsForward(at('/projects/p1?tab=settings&rain=other'))).toBeNull();
+		// Another panel's anchor wins: the rain= is for Data feeds only.
+		expect(settingsForward(at('/projects/p1?tab=settings&rain=boundary#set-ewr'))).toBeNull();
+	});
+
 	it('leaves every other anchor here', () => {
 		for (const hash of ['', '#set-auto', '#set-ewr', '#set-feeds-x', '#data-feeds', '#%E0', '#constructor', '#toString']) {
 			expect(settingsForward(at(`/projects/p1?tab=settings${hash}`)), hash).toBeNull();

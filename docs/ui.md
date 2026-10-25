@@ -6269,7 +6269,8 @@ section header, which it fills (`fillHeader`) like the other sections.
   `#set-api-keys` and `#set-report-schedules`, from an old email, a bookmark
   or a note, go on to those addresses with every other parameter kept
   (`?tab=settings&rain=boundary#set-feeds` opens
-  `?tab=series&rain=boundary#data-feeds`), replacing the entry so Back
+  `?tab=series&rain=boundary#data-feeds`; a `?rain=boundary` or
+  `?rain=units` link with no `#` goes there too), replacing the entry so Back
   skips it, on a page load or a link followed with Settings open; the page
   there lands on the panel and focuses its heading (`settingsForward` in
   `settings/sections.ts`; `e2e/tests/settings-layout-pins.spec.ts`). No
