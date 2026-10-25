@@ -1057,9 +1057,13 @@
 				{/each}
 			</table>
 		</div>
-		<p class="muted small key">
-			<span class="sw full"></span> complete year <span class="sw part"></span> some days missing <span class="sw none"></span> no data.
-			Rainfall "typical" = mean annual total; flow = mean daily flow. <span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.
+		<!-- Each swatch or pill stays on one line with its words: a phone wrapped "no data" away from its colour. -->
+		<p class="muted small key" data-testid="series-key">
+			<span class="key-item"><span class="sw full"></span> complete year</span>
+			<span class="key-item"><span class="sw part"></span> some days missing</span>
+			<span class="key-item"><span class="sw none"></span> no data.</span>
+			<span>Rainfall’s typical value is its mean annual total; flow’s, its mean daily flow.</span>
+			<span><span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.</span>
 		</p>
 	</LoadState>
 </section>
@@ -1244,15 +1248,19 @@
 {#if hasChecks}
 	<section class="panel" id="data-checks" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
-			<!-- What the checks look for is the ⓘ's (issue #464), not a line under the heading. -->
-			<h2 id="chk-h">Data checks <HelpTip key="data-quality-limits" label="About the data checks" /></h2>
+			<!-- What the checks look for is the ⓘ's (issue #464), not a line under the heading; beside the heading, not in
+			     it, so the heading (and a #data-checks landing) is named "Data checks" alone. -->
+			<div class="chk-h"><h2 id="chk-h">Data checks</h2><HelpTip key="data-quality-limits" label="About the data checks" /></div>
 		</div>
 		{#if checks.length}
 			<ul class="checks">
 				{#each checks as c (c.id)}
 					<li>
 						<span class="badge badge-warn">{CHECK_LABEL[c.check.check]}</span>
-						<strong>{c.series.name || kindLabel(c.series.kind)}</strong>
+						<!-- The series named charts it, as its row's View does (the check was a dead end: issue #586). -->
+						<button type="button" class="chk-series" data-testid="check-series" aria-pressed={c.series.id === selectedId} onclick={() => choose(c.series.id)}
+							><span class="visually-hidden">Chart </span>{c.series.name || kindLabel(c.series.kind)}</button
+						>
 						<span class="muted">({kindLabel(c.series.kind)})</span>:
 						{c.check.text.slice(c.check.text.indexOf(':') + 1).trim()}
 					</li>
@@ -1281,7 +1289,8 @@
 		</dl>
 	</details>
 	<p class="muted small">
-		A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
+		A run needs at least one rainfall series; its period is the span of those series unless the
+		<a href="?tab=settings#set-period" data-testid="uses-period-link">Simulation period</a> setting sets one.
 		With several series of one kind, the first by name is used, in character order: digits and capitals before lower case.
 	</p>
 </section>
@@ -1385,10 +1394,11 @@
 		width: 100%;
 		max-width: 28rem;
 	}
+	/* The ⓘ stays beside its badge: in a narrow column (a 1024 px window) a long badge wraps inside itself, and the
+	   tip used to drop to a line of its own under it. */
 	.role-line {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
+		align-items: flex-start;
 		gap: 0.15rem;
 		margin-top: 0.15rem;
 	}
@@ -1397,9 +1407,11 @@
 		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.4rem;
-		border-radius: 999px;
+		/* Not a full pill: a badge that wraps reads as one rounded box, not a lozenge pinched at each line. */
+		border-radius: 0.6rem;
 		background: var(--accent-soft);
 		color: var(--accent);
+		min-width: 0;
 	}
 	.why {
 		font-weight: 400;
@@ -1462,12 +1474,15 @@
 	}
 	/* A mid-width column (beside the sidebar, e.g. a 1024 px window): the table fits without a sideways scroll by
 	   folding From under Data up to, letting the row header and coverage narrow, and wrapping the actions two to a
-	   line. Container, not viewport, widths: the sidebar takes 240 px, so the viewport lies about the room. */
-	@container data-page (max-width: 72rem) {
+	   line. Container, not viewport, widths: the sidebar takes 240 px, so the viewport lies about the room. Up to 76rem (at the
+root's 14 px, a 1280 px window under the bar): at 72rem a 1280 px window kept the From column and squeezed the
+series names to 190 px, wrapping each role badge. */
+	@container data-page (max-width: 76rem) {
 		.series th[scope='row'] {
 			min-width: 9rem;
 		}
-		.cov {
+		/* .series: the plain `.cov` rule below comes later in the file and would win a tie. */
+		.series .cov {
 			min-width: 7.5rem;
 		}
 		.series .from-col {
@@ -1613,6 +1628,32 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.3rem;
+	}
+	.key-item {
+		white-space: nowrap;
+	}
+	.chk-h {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.chk-h h2 {
+		margin: 0;
+	}
+	/* A series named in a check, as a link: it charts that series. */
+	.chk-series {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-weight: 600;
+		color: var(--accent);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.chk-series[aria-pressed='true'] {
+		color: var(--text);
+		text-decoration: none;
 	}
 	.sw {
 		display: inline-block;
