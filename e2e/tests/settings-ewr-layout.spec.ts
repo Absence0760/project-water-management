@@ -99,7 +99,8 @@ test.describe('at 1440×900', () => {
 
 		// The band moved to Allocations: a pointer line; the reporting window and threshold are their own panel now.
 		const ewr = page.locator('#set-ewr');
-		await expect(ewr.getByTestId('ewr-band-moved').getByRole('link', { name: 'Allocations' })).toHaveAttribute('href', '?tab=allocations');
+		// It lands on the band's card, as Find a setting's link does (issue #586, C7; settings-after-form-layout.spec.ts).
+		await expect(ewr.getByTestId('ewr-band-moved').getByRole('link', { name: 'Allocations' })).toHaveAttribute('href', '?tab=allocations#alloc-band');
 		await expect(ewr.getByLabel(/^Comparison band/)).toHaveCount(0);
 		await expect(ewr.getByLabel(/^Annual assurance threshold/)).toHaveCount(0);
 		await expect(page.getByTestId('summary-ewr')).toHaveText('Daily EWR from the DRM TAB file');

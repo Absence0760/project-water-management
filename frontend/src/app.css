@@ -538,6 +538,14 @@ textarea {
 .fold-name {
 	font-weight: 500;
 }
+/* The values shrink and wrap inside their own box, so a long line stays beside its name with the action on the
+   same row, rather than dropping whole under the name and pushing the action onto a row of its own (issue #586,
+   C14: Data quality's limits and the Calibration record's quality flags at 1440 beside the index). On a phone,
+   where even 14rem won't fit beside the name, the line takes the next row whole. */
+.fold-line {
+	flex: 1 1 14rem;
+	min-width: 0;
+}
 .fold-problem {
 	display: none;
 	color: var(--danger);
@@ -548,6 +556,7 @@ textarea {
 }
 .fold-change {
 	margin-left: auto;
+	white-space: nowrap;
 	color: var(--accent);
 	font-weight: 500;
 	text-decoration: underline;

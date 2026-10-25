@@ -190,7 +190,7 @@
 					{searchedFrom(data.dam)} · <a href={mapNodeHref(data.nodeId)}>Show on map</a>
 				</p>
 				{#if !data.datasets.length}
-					<ProposalNoDataset testid="dam-proposals-no-register" what="register of dams" consequence="no capacity is proposed" command="pnpm import:dam-register" />
+					<ProposalNoDataset testid="dam-proposals-no-register" what="register of dams" consequence="no capacity can be proposed" instead="Enter the dam’s capacity by hand." />
 				{:else if capacityRows.length === 0}
 					<p class="muted small" data-testid="dam-proposals-none">No registered dam within {fmtNum(data.radiusM / 1000)} km of the dam on the map.</p>
 				{/if}

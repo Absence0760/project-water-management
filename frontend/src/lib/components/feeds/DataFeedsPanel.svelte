@@ -11,6 +11,7 @@
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -544,9 +545,8 @@
 			</div>
 		{/if}
 
-		{#if data.feeds.length === 0}
-			<p class="muted">No feeds yet{data.canEdit ? '.' : '. An owner can attach one.'}</p>
-		{:else}
+		<!-- The app's one empty state (LoadState's dashed box), as API keys and Scheduled reports show theirs (issue #586, C17). -->
+		<LoadState loading={false} empty={data.feeds.length === 0} emptyText="No feeds yet{data.canEdit ? '.' : '. An owner can attach one.'}">
 			<ul class="feeds" aria-label="Data feeds">
 				{#each data.feeds as f (f.id)}
 					<li class="feed" data-state={f.health.state}>
@@ -583,7 +583,7 @@
 					</li>
 				{/each}
 			</ul>
-		{/if}
+		</LoadState>
 	{/if}
 </section>
 

@@ -40,7 +40,7 @@
 
 	<!-- At the defaults (most projects) the limits are one line of their values; Change the limits opens the three
 	     groups (ui-playbook.md § 2, "Settings at their defaults are one line"). -->
-	<Fold testid="quality-limits" name={atDefaults ? 'Default limits:' : 'Limits:'} line={dataQualityLine(value)} {atDefaults} change="Change the limits" body="stack" spaced>
+	<Fold testid="quality-limits" name={atDefaults ? 'Default limits:' : 'Limits:'} line={dataQualityLine(value)} {atDefaults} change="Change the limits" {readonly} body="stack" spaced>
 	<h3 class="sub first">Gauge vs logger</h3>
 	<div class="fields">
 		<div class="field">

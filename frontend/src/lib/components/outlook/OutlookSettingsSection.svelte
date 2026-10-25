@@ -6,12 +6,27 @@
 	// form (the save bar saves it), in the Settings tab's chunk. No model input. The defaults are the engine's, confirmed by
 	// the client (plan.md O3, O6, issue #90).
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '#lib/components/notes/notes.js';
 	import { DEFAULT_OUTLOOK_SEASON, DEFAULT_PLANNING_SHARE, defaultReviewDate } from '@water-management/engine';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import { monthName } from '#lib/format/months.js';
 	import type { OutlookSettings } from '#lib/api/types.js';
 
-	let { value = $bindable(), readonly, error, summary = null }: { value: OutlookSettings; readonly: boolean; error: string | null; summary?: string | null } = $props();
+	let {
+		value = $bindable(),
+		readonly,
+		error,
+		summary = null,
+		projectId
+	}: {
+		value: OutlookSettings;
+		readonly: boolean;
+		error: string | null;
+		summary?: string | null;
+		/** The project, for the panel's Notes (issue #586, C12). */
+		projectId?: string;
+	} = $props();
 
 	const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 	const d = DEFAULT_OUTLOOK_SEASON;
@@ -45,6 +60,7 @@
 <section class="panel" aria-labelledby="outlook-set-h-t" data-testid="outlook-settings">
 	<div class="panel-head">
 		<h2 id="outlook-set-h"><span id="outlook-set-h-t">Seasonal outlook</span> <HelpTip key="seasonal-outlook" /></h2>
+		{#if projectId}<NotesDrawer {projectId} target={settingTarget('outlook')} />{/if}
 	</div>
 	{#if summary}<p class="summary" data-testid="summary-outlook">{summary}</p>{/if}
 	<p class="hint muted explain">The season the Runs tab’s outlook runs, its planning share and its review date.</p>

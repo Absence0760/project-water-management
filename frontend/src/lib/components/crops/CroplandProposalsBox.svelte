@@ -141,7 +141,7 @@
 
 	{#if data}
 		{#if !data.dataset}
-			<ProposalNoDataset testid="cropland-no-dataset" what="land-cover dataset" consequence="no cultivated area is proposed" command="pnpm import:land-cover" />
+			<ProposalNoDataset testid="cropland-no-dataset" what="land-cover map" consequence="no cultivated area can be proposed" instead="Enter the planted areas by hand." />
 		{:else}
 			{#if data.dataset.synthetic}
 				<ProposalSynthetic testid="cropland-synthetic" subject="The land cover" notWhat="ESA WorldCover" forWhat="catchment" />

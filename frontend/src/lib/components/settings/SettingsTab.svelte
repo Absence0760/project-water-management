@@ -93,6 +93,7 @@
 	import MarPenaltyFields from './MarPenaltyFields.svelte';
 	import FitPanel from '#lib/components/calibration/FitPanel.svelte';
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
+	import type { RunBlocker } from '#lib/calibration/autoFit.js';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
 	import { fitRecordLine } from '#lib/components/calibration/provenance.js';
 	import { api, type Project } from '#lib/api/index.js';
@@ -200,7 +201,7 @@
 	const GR4J_WARMUP_DEFAULT = 365;
 	// The pan row's fill tools are a Fold, closed at first; the warm-up and the quality flags close while at their defaults.
 	// Automated calibration's panel: the rules card's head runs it (its start() and canRun()).
-	let autoFit = $state<{ start: () => void; canRun: () => boolean } | undefined>(undefined);
+	let autoFit = $state<{ start: () => void; canRun: () => boolean; runBlocker: () => RunBlocker | null } | undefined>(undefined);
 	// The lake-factor preset picker (engine ≥ 1.49.0) fills lakeEvapFactorMonthly and its source note.
 	let lakePreset = $state('');
 	let lakePresetError = $state<string | null>(null);
@@ -592,7 +593,7 @@
 		     defaults (most projects) both are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
 		     are one line"). Always mounted (once its chunk loads, loadRainGaps), like the other sections that feed the Save blocker: a list left invalid
 		     after turning bias correction off must stay in the page, where the fold's line says it needs fixing. -->
-		<Fold testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} body="stack" spaced>
+		<Fold {readonly} testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} body="stack" spaced>
 			<Lazy load={loadRainGaps}>
 				{#snippet children(R)}
 			<R.ChirpsFitPeriodSection
@@ -701,7 +702,7 @@
 			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment. When an A-pan grid is
 			loaded, <a href="#set-evaporation">Evaporation from the map</a> (under Flow calibration) proposes it from the catchment boundary.
 		</p>
-		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text}</p>{/if}
+		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text} <a href="?tab=series">{apanSource.link}</a>.</p>{/if}
 		<p class="visually-hidden" aria-live="polite">{monthlyAnnounce}</p>
 		{#if !readonly}
 			<GridPasteDialog
@@ -765,16 +766,19 @@
 				<NumberInput id="st-lef" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactor} aria-describedby="st-lef-h" />
 				<span class="hint explain" id="st-lef-h">Open-water evaporation from the hydrological units’ dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
 				<FieldHistoryLine field="settings:lakeEvapFactor" />
-				<label class="check">
-					<input
-						type="checkbox"
-						disabled={readonly}
-						checked={!!s.lakeEvapFactorMonthly}
-						onchange={(e) => setLakeMonthlyOn(e.currentTarget.checked)}
-					/>
-					Vary it by month
-				</label>
-				<HelpTip key="settings.lakeEvapFactorMonthly" label="About varying the dam evaporation factor by month" />
+				<!-- The box, its words and its ⓘ on one row, as a .lbl keeps a label and its tip (issue #586, C13). -->
+				<span class="check-row" data-testid="lake-monthly-row">
+					<label class="check">
+						<input
+							type="checkbox"
+							disabled={readonly}
+							checked={!!s.lakeEvapFactorMonthly}
+							onchange={(e) => setLakeMonthlyOn(e.currentTarget.checked)}
+						/>
+						Vary it by month
+					</label>
+					<HelpTip key="settings.lakeEvapFactorMonthly" label="About varying the dam evaporation factor by month" />
+				</span>
 			</div>
 		</div>
 		<div class="field lake-preset">
@@ -813,6 +817,7 @@
 		{/if}
 		<!-- Rarely changed: folded into its value (common/Fold, issue #521 round 5; it was its own <details>). -->
 		<Fold
+			{readonly}
 			name="Advanced, days in February:"
 			line="{fmtNum(s.februaryDays, 2, true)}{febChanged ? ` (not the default ${fmtNum(FEB_DEFAULT, 2)})` : ''}"
 			spaced
@@ -1043,7 +1048,8 @@
 		<div class="sub-card" data-testid="flow-gr4j-card">
 			<div class="card-head">
 				<h3 class="sub first">GR4J parameters</h3>
-				<a class="btn btn-sm" href="#set-fit" data-testid="flow-fit-link">Fit the parameters</a>
+				<!-- A viewer can't fit (the header gives them only "Fit record"), so no jump to a fit they can't make (issue #586, C11). -->
+				{#if !readonly}<a class="btn btn-sm" href="#set-fit" data-testid="flow-fit-link">Fit the parameters</a>{/if}
 			</div>
 			<div class="fields gr4j-fields">
 				{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
@@ -1094,7 +1100,7 @@
 				<span class="hint explain" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
 				<FieldHistoryLine field="settings:gr4j.x2" />
 			</fieldset>
-			<Fold name="More:" line="warm-up {fmtNum(s.gr4j.warmupDays)} days" atDefaults={s.gr4j.warmupDays === GR4J_WARMUP_DEFAULT} spaced testid="flow-more" lineTestid="flow-more-summary">
+			<Fold {readonly} name="More:" line="warm-up {fmtNum(s.gr4j.warmupDays)} days" atDefaults={s.gr4j.warmupDays === GR4J_WARMUP_DEFAULT} spaced testid="flow-more" lineTestid="flow-more-summary">
 				<div class="field">
 					<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label><HelpTip key="settings.gr4j" label="About the warm-up" /></span>
 					<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
@@ -1231,7 +1237,7 @@
 						{panOutOfRange.map((i) => WATER_YEAR_MONTHS[i]).join(', ')}: confirm against local humidity and wind.
 					</p>
 				{/if}
-				<Fold name="Fill or edit the row:" line="preset, FAO-56 helper, paste · source: {s.panCoefficientSource?.trim() || 'not given'}" body="none" testid="pan-tools" lineTestid="pan-tools-summary" lineClass="pan-tools-line">
+				<Fold {readonly} name="Fill or edit the row:" line="preset, FAO-56 helper, paste · source: {s.panCoefficientSource?.trim() || 'not given'}" body="none" testid="pan-tools" lineTestid="pan-tools-summary" lineClass="pan-tools-line">
 					<div class="fold-body stack">
 						<div class="field pan-preset">
 							<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label><HelpTip key="settings.panCoefficient" label="About the pan-coefficient presets" /></span>
@@ -1317,6 +1323,7 @@
 		<!-- Rarely changed: the gauged ranges, the day rules, the river-stop months and gap filling, folded into one line of
 		     their values (ui-playbook.md § 2, "Rarely changed settings fold into their values"). -->
 		<Fold
+			{readonly}
 			name="Quality flags:"
 			line={qualityFlagsSummary(s.qualityFlags, s.flowGapFill, seriesKinds)}
 			atDefaults={qualityFlagsAtDefaults(s.qualityFlags, s.flowGapFill)}
@@ -1341,6 +1348,7 @@
 	<section class="panel" id="set-fit" aria-labelledby="fit-h">
 		<div class="panel-head">
 			<h2 id="fit-h">Fit the parameters</h2>
+			<NotesDrawer projectId={project.id} target={settingTarget('fit')} />
 		</div>
 		<p class="summary" data-testid="summary-fit">{summaries['set-fit']}</p>
 		<p class="hint explain">Fit automatically, the fit record of the parameters above, and automated calibration under declared rules.</p>
@@ -1388,7 +1396,22 @@
 					<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={draft.errors.rules} bind:lastShare={draft.kept.flaggedShare} {readonly}>
 						<!-- The card's main action in its head, beside the sign-off (issue #521); AutoFitPanel below runs it and shows the result. -->
 						{#snippet headAction()}
-							<button type="button" class="btn btn-primary" onclick={() => autoFit?.start()} disabled={!autoFit?.canRun()}>Run the calibration rules</button>
+							<button
+								type="button"
+								class="btn btn-primary"
+								onclick={() => autoFit?.start()}
+								disabled={!autoFit?.canRun()}
+								aria-describedby={autoFit?.runBlocker() ? 'rules-run-why' : undefined}>Run the calibration rules</button
+							>
+						{/snippet}
+						<!-- Why it can't run, under it rather than ~700 px down at the card's foot (issue #586, C3). -->
+						{#snippet headNote()}
+							{@const why = autoFit?.runBlocker()}
+							{#if why}
+								<p class="hint run-why" id="rules-run-why" data-testid="rules-run-why" data-kind={why.kind}>
+									{why.text}{#if why.kind === 'record'}{' '}<a href="?tab=series">Add one on Data</a>.{/if}
+								</p>
+							{/if}
 						{/snippet}
 					</CalibrationRulesFields>
 				{/snippet}
@@ -1473,7 +1496,7 @@
 			</p>
 		</div>
 		<!-- The registered-volumes band moved to Allocations, beside what it changes (issue #521). -->
-		<p class="hint muted" data-testid="ewr-band-moved">The registered-volumes comparison band is on <a href="?tab=allocations">Allocations</a>.</p>
+		<p class="hint muted" data-testid="ewr-band-moved">The registered-volumes comparison band is on <a href="?tab=allocations#alloc-band">Allocations</a>.</p>
 	</section>
 
 	<!-- Reserve rule tables (engine ≥ 0.21.0) -------------------------------------->
@@ -1492,10 +1515,10 @@
 
 	<!-- Outcome matrix (issue #53 R4): how results are read, never a model input -------------------->
 	<div id="set-outcomes">
-		<OutcomeSettingsSection summary={summaries['set-outcomes']} bind:value={s.outcomes} {readonly} error={outError} daily={s.ewrDailySource} />
+		<OutcomeSettingsSection projectId={project.id} summary={summaries['set-outcomes']} bind:value={s.outcomes} {readonly} error={outError} daily={s.ewrDailySource} />
 	</div>
 	<div id="set-outlook">
-		<OutlookSettingsSection summary={summaries['set-outlook']} bind:value={s.outlook} {readonly} error={outlookErr} />
+		<OutlookSettingsSection projectId={project.id} summary={summaries['set-outlook']} bind:value={s.outlook} {readonly} error={outlookErr} />
 	</div>
 
 	<!-- Evidence (issue #71, evidence-report.md ER3): the uncertainty rule an evidence report's bands must follow; changes no result. -->
@@ -1517,6 +1540,7 @@
 	<section class="panel" id="set-auto" aria-labelledby="auto-h">
 		<div class="panel-head">
 			<h2 id="auto-h">Automatic runs</h2>
+			<NotesDrawer projectId={project.id} target={settingTarget('auto')} />
 		</div>
 		<p class="summary" data-testid="summary-auto">{summaries['set-auto']}</p>
 		<p class="hint explain">Run the model by itself when new data arrives.</p>
@@ -1660,6 +1684,11 @@
 		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 		gap: 0 1.25rem;
 		margin-top: 0.5rem;
+	}
+	.check-row {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 	/* Not a checkbox: stretched, "Vary it by month" sat half a field away from its box. */
 	.field :global(input:not([type='checkbox'])),

@@ -1387,7 +1387,7 @@ describe('diffInputs', () => {
 
 	it('notes a declared uncertainty rule set, changed or withdrawn, and nothing between absent and null (issue #71)', () => {
 		const rule = { members: 300, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: 0.5, wr2012MaxLevel: 'query', maxLowFlowBiasPct: 50 } };
-		const text = 'skill score KGE′, lowest skill kept 0.5, worst wr2012 flag kept query, largest low-flow bias kept ±50 %, members 300, bounds typical, pan coefficient shift ±0.1';
+		const text = 'KGE′ of at least 0.5, WR2012 flags up to “query”, low-flow bias within ±50 %, 300 members, typical bounds, pan coefficient varied by ±0.1';
 		const withRule = (r: unknown) => snapshot({ settings: { ...snapshot().settings, evidenceUncertaintyRule: r } as never });
 		const absent = snapshot();
 		expect('evidenceUncertaintyRule' in absent.settings).toBe(false);
@@ -1396,7 +1396,7 @@ describe('diffInputs', () => {
 		expect(texts(withRule(null), withRule(rule))).toEqual([`Declared uncertainty rule (evidence): not declared → ${text}`]);
 		expect(texts(withRule(rule), withRule(null))).toEqual([`Declared uncertainty rule (evidence): ${text} → not declared`]);
 		expect(texts(withRule(rule), withRule({ ...rule, members: 500 }))).toEqual([
-			`Declared uncertainty rule (evidence): ${text} → ${text.replace('members 300', 'members 500')}`
+			`Declared uncertainty rule (evidence): ${text} → ${text.replace('300 members', '500 members')}`
 		]);
 		expect(texts(absent, withRule(null))).toEqual([]);
 		expect(texts(withRule(null), absent)).toEqual([]);

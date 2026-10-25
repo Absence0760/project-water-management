@@ -117,6 +117,11 @@ test('a fit keeps running, and its result waits, while another tab is open', asy
 	await expect(fit.getByLabel('Starts')).toHaveValue('2');
 	const params = fit.getByRole('table', { name: 'Parameters', exact: true });
 	await expect(params).toBeVisible();
+	// One status line says the fit finished; the result itself isn't a live region, read out whole (issue #586, C18).
+	await expect(fit.getByTestId('fit-status')).toHaveText(/^Fit finished: .+, \d[\d\u202f ]* runs\. The result is below\.$/);
+	await expect(fit.locator('.result[aria-live]')).toHaveCount(0);
+	// Apply and Discard are the result's action row.
+	await expect(fit.getByTestId('fit-result-actions')).toHaveClass(/\baction-row\b/);
 
 	// Leaving the project with the result unapplied asks first.
 	const projectsLink = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' });
@@ -131,6 +136,9 @@ test('a fit keeps running, and its result waits, while another tab is open', asy
 	await answerConfirm(page, false, 'You have unsaved changes (settings). Leave and go to All projects? They will be lost.');
 	await fit.getByRole('button', { name: 'Discard result' }).click();
 	await expect(params).toHaveCount(0);
+	// The button went with the result: the focus is on the card's heading, not lost to the page.
+	await expect(fit.getByRole('heading', { name: /^Fit automatically/, level: 3 })).toBeFocused();
+	await expect(fit.getByTestId('fit-status')).toHaveText('');
 	await expect(fit.getByRole('button', { name: 'Fit automatically', exact: true })).toBeEnabled();
 });
 

@@ -9,7 +9,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { saveSettings } from '../support/settings.ts';
 
 const DEFAULT_RULE_TEXT =
-	'skill score KGE′, lowest skill kept 0.5, worst wr2012 flag kept query, largest low-flow bias kept ±50 %, members 300, bounds typical, pan coefficient shift ±0.1';
+	'KGE′ of at least 0.5, WR2012 flags up to “query”, low-flow bias within ±50 %, 300 members, typical bounds, pan coefficient varied by ±0.1';
 
 async function savedRule(page: import('@playwright/test').Page, projectId: string): Promise<unknown> {
 	const res = await page.request.get(`${API_URL}/projects/${projectId}`);
@@ -56,7 +56,7 @@ test('an editor declares the rule from the defaults, saves it whole, and a viewe
 	const expected = { members: 200, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: 0.6, wr2012MaxLevel: 'unusable', maxLowFlowBiasPct: null } };
 	expect(await savedRule(page, project.id)).toEqual(expected);
 	const text =
-		'The rule: skill score KGE′, lowest skill kept 0.6, worst wr2012 flag kept no check, largest low-flow bias kept no check, members 200, bounds typical, pan coefficient shift ±0.1';
+		'The rule: KGE′ of at least 0.6, no WR2012 check, no low-flow bias check, 200 members, typical bounds, pan coefficient varied by ±0.1';
 
 	await page.reload();
 	await expect(declare).toBeChecked();

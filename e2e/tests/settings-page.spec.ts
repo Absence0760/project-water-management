@@ -129,6 +129,10 @@ test('Vary it by month sits beside its box, and the page reflows at 1280 and on 
 	// The box was stretched across its field, leaving the words half a field away.
 	expect(box.width).toBeLessThan(30);
 	expect(text.x - (box.x + box.width)).toBeLessThan(16);
+	// Its ⓘ on the same row, after the words, not alone on a line under them (issue #586, C13).
+	const tip = (await page.getByTestId('lake-monthly-row').getByRole('button', { name: 'About varying the dam evaporation factor by month' }).boundingBox())!;
+	expect(tip.x).toBeGreaterThan(text.x + text.width);
+	expect(Math.abs(tip.y + tip.height / 2 - (box.y + box.height / 2))).toBeLessThan(8);
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
 

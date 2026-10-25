@@ -67,6 +67,22 @@ export function autoState(a: Pick<AutoCalibration, 'status' | 'cases' | 'plan' |
 	return { kind: 'running', text: `Fitting ${Math.min(a.cases.length + 1, n)} of ${n} on the server…`, progress: n ? Math.round((100 * a.cases.length) / n) : null };
 }
 
+/** Why "Run the calibration rules" can't run now, or null. `record` is the one a link to Data settles. */
+export type RunBlocker = { kind: 'record' | 'viewer' | 'unsaved' | 'running' | 'busy'; text: string };
+
+/**
+ * The reason beside a disabled "Run the calibration rules", in the card's head (issue #586, C3; ui-playbook.md
+ * § 2: an action's reason is shown, not just a dead button). The first that holds, in the order a user settles them.
+ */
+export function runBlocker(o: { hasObserved: boolean; readonly: boolean; rulesUnsaved: boolean; running: boolean; busy: boolean }): RunBlocker | null {
+	if (o.readonly) return { kind: 'viewer', text: 'Only an editor can run the calibration rules.' };
+	if (!o.hasObserved) return { kind: 'record', text: 'There’s no observed or logger flow record to calibrate against yet.' };
+	if (o.rulesUnsaved) return { kind: 'unsaved', text: 'Save the calibration rules first: the server only runs saved rules.' };
+	if (o.running) return { kind: 'running', text: 'The rules are running: their progress is under the rules.' };
+	if (o.busy) return { kind: 'busy', text: 'Wait a moment: the last request is still going.' };
+	return null;
+}
+
 /** Why the kept fit can't be applied now, or null: nothing kept, applied already, unsaved rules or form edits, or a viewer. */
 export function applyBlocker(a: Pick<AutoCalibration, 'status' | 'chosen' | 'appliedAt'>, o: { rulesUnsaved: boolean; formDirty: boolean; readonly: boolean }): string | null {
 	if (o.readonly) return 'Only an editor can apply a fit.';

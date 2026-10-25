@@ -210,11 +210,24 @@ const ruleRows: [string, (r: DeclaredUncertaintyRule) => string][] = [
 	['Pan coefficient shift', (r) => (r.panOffset > 0 ? `±${r.panOffset}` : 'not varied')]
 ];
 
-/** A declared rule in one line, for the settings diff and the report. */
+/**
+ * A declared rule in one line of plain words, for Settings, the settings diff and the report: "KGE′ of at least 0.5,
+ * WR2012 flags up to “query”, low-flow bias within ±50 %, 300 members, typical bounds, pan coefficient varied by ±0.1".
+ * Its own phrases, not the rows' labels lowercased, which read "worst wr2012 flag kept no check" (issue #586, C15).
+ */
 export function declaredRuleText(v: unknown): string {
 	if (v === null || v === undefined) return 'not declared';
 	if (declaredRuleError(v)) return 'not a valid rule';
-	return ruleRows.map(([label, f]) => `${label.toLowerCase()} ${f(v as DeclaredUncertaintyRule)}`).join(', ');
+	const r = v as DeclaredUncertaintyRule;
+	const t = r.thresholds;
+	return [
+		`${objectiveShortLabel(t.objective)} of at least ${t.minSkill}`,
+		t.wr2012MaxLevel === 'unusable' ? 'no WR2012 check' : t.wr2012MaxLevel === 'ok' ? 'WR2012 flags OK only' : `WR2012 flags up to “${t.wr2012MaxLevel}”`,
+		t.maxLowFlowBiasPct === null ? 'no low-flow bias check' : `low-flow bias within ±${t.maxLowFlowBiasPct} %`,
+		`${r.members} members`,
+		`${r.bounds} bounds`,
+		r.panOffset > 0 ? `pan coefficient varied by ±${r.panOffset}` : 'pan coefficient not varied'
+	].join(', ');
 }
 
 /**

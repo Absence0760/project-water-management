@@ -111,6 +111,21 @@ export async function expectFoldsNamed(scope: Page | Locator): Promise<number> {
 	return folds.length;
 }
 
+/**
+ * A closed fold's name, values and action share one row: the values may wrap inside their own box, but they start
+ * on the name's row and the action sits beside them, not orphaned on a row of its own (issue #586, C14).
+ */
+export async function expectFoldOnOneRow(fold: Locator) {
+	const summary = fold.locator(':scope > summary');
+	const [name, line, action] = await Promise.all(
+		['.fold-name', '.fold-line', '.fold-change'].map(async (sel) => (await summary.locator(`:scope > ${sel}`).boundingBox())!)
+	);
+	const overlaps = (a: { y: number; height: number }, b: { y: number; height: number }) => a.y < b.y + b.height && b.y < a.y + a.height;
+	expect(overlaps(name!, line!), 'the values start on the name’s row').toBe(true);
+	expect(overlaps(action!, line!), 'the action is beside the values').toBe(true);
+	expect(action!.x, 'the action after the values').toBeGreaterThanOrEqual(line!.x + line!.width - 1);
+}
+
 /** The accessible names that two or more visible buttons in `scope` share (none, by the playbook's head-row rule). */
 export async function sharedButtonNames(scope: Locator): Promise<string[]> {
 	const names = await scope.getByRole('button').evaluateAll((els) =>

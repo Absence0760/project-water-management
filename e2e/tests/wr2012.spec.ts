@@ -209,3 +209,21 @@ test('Propose from the map can be closed again', async ({ page, owner }) => {
 	await expect(section.getByRole('button', { name: 'Close the proposal' })).toHaveCount(0);
 	await expect(section.getByRole('button', { name: 'Propose from the map' })).toBeFocused();
 });
+
+test('at 1440 beside the side index, the monthly row and its Sum fit without scrolling in their box (issue #586, C8)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'WR2012 fits');
+	// Monthly volumes with three decimals, as a WR2012 table gives a small quaternary's (the report saw "Su" cut off).
+	const monthlyMm3 = new Array(12).fill(1.234);
+	await updateSettings(page.request, project.id, {
+		wr2012: { reference: { quaternary: 'Z99A', areaKm2: 60, marMm3: 14.8, monthlyMm3, periodStart: 1990, periodEnd: 2025, mapMm: null, source: 'Synthetic' } }
+	});
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const section = page.getByRole('region', { name: /^WR2012 check/ });
+	await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
+	const wrap = section.locator('.table-wrap').filter({ has: page.getByRole('columnheader', { name: 'Sum' }) });
+	await expect(wrap.getByRole('cell', { name: '14.808' })).toBeVisible();
+	const size = await wrap.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+	expect(size.scroll, JSON.stringify(size)).toBeLessThanOrEqual(size.client);
+});

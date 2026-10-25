@@ -4777,7 +4777,8 @@ saves the catchment's model, and override mode there edits the scenario's
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
   attribution and counting method. Other states: no parcel linked (with
-  **Open the Map**), no dataset loaded (the loader's command), no cropland
+  **Open the Map**), no dataset loaded (in plain words, with what to enter by hand; the
+  loader's command is only in maps.md), no cropland
   in the parcels, no crop yet, and a "Synthetic test data" warning for the
   committed grid. On a narrow sheet the Use buttons are 44 px targets; the
   tables scroll in their own box. e2e: `cropland-proposals.spec.ts`.
@@ -5930,8 +5931,10 @@ section header, which it fills (`fillHeader`) like the other sections.
   results are judged automatically until you choose again; it never blocks
   Save (the note is a warning box, tied to the select by
   `aria-describedby`). With no rule table and no stored choice there is
-  nothing to choose, so the panel says results are judged by the pragmatic
-  EWR and links to Reserve rules instead of showing a select. It never sets
+  nothing to choose, so the panel's one line (at the summary line's size, as
+  the other panels') says results are judged by the pragmatic EWR and links
+  to **Reserve rule tables**, named as that heading (issue #586), instead of
+  showing a select. It never sets
   **EWR charge follows** (Reserve rules), the model input behind the daily
   charge, curtailment and water account: when the test the choice judges by
   (`headlineTest`: Automatic counts as a rule table whenever there is one)
@@ -5970,7 +5973,8 @@ section header, which it fills (`fillHeader`) like the other sections.
   The panels sit in that order on the page, so the marked link moves down the
   column as you read. Beside the index, every 12-month row still fits (the
   month cells' padding is slim: twelve months and a year total at 1440 px,
-  `settings.spec.ts`). Narrower (1280 px and down) it is the bar under the
+  `settings.spec.ts`; the WR2012 check's row and its Sum too, `wr2012.spec.ts`,
+  issue #586). Narrower (1280 px and down) it is the bar under the
   header, its links evenly spaced, with the four automation panels behind one
   **Automation & access** link (`covers`), so sixteen links stay in two rows
   at 1280 px in CI's fonts; on a phone the sideways strip. Both have
@@ -6094,7 +6098,8 @@ two.
   A-pan comes from (`apanSourceNote`, `settings/peInput.ts`, engine ≥ 0.38.0,
   issue #45): the project's **daily A-pan series** on the days it has a
   value, these monthly means filling the rest, or these monthly means on
-  every day (with a pointer to the Data tab); nothing while the series list
+  every day, each with a link to Data (`?tab=series`: **See the series on
+  Data** / **Add a daily A-pan record on Data**, issue #586); nothing while the series list
   loads. Effective rainfall %, the **soil-water store**
   (mm, `settings.effectiveRainStoreMm`, default 25; 0 carries no rain over, as
   the workbook does; [model.md §2.3](./model.md#23-irrigation-demand) step 4),
@@ -6107,7 +6112,8 @@ two.
   below it the **Dam evaporation preset** picker (engine ≥ 1.49.0, "Fill
   from a preset…": flat 0.75, or the WR90 monthly lake factors converted to
   A-pan at this project's monthly A-pan by WR90's or Taljaard's 2023 pan
-  equation; model.md §2.7a item 4). Picking one ticks **Vary it by month**,
+  equation; model.md §2.7a item 4). Picking one ticks **Vary it by month**
+  (its box, words and ⓘ on one row, issue #586),
   fills the monthly row and the **Dam evaporation factor source** note
   (`settings.lakeEvapFactorSource`, up to 600 characters, with a
   field-history line), then goes back to "Fill from a preset…"; all stay
@@ -6130,7 +6136,8 @@ two.
   WR2012 check, in that order, after Rain gaps (under Data & rain).
 - **Flow calibration** (rain → natural flow, `#set-flow`). **Layout (issue
   #521):** four bordered cards. **GR4J parameters**, with **Fit the
-  parameters** (a link to `#set-fit`) in its head: X1, X3 and X4, the
+  parameters** (a link to `#set-fit`; editors only, as in the header, issue
+  #586) in its head: X1, X3 and X4, the
   catchment area and the runoff model, X2's switch, and **More: warm-up 365
   days**, a `common/Fold.svelte` with `atDefaults` line that opens to the warm-up
   (closed while it is 365). Each field's "Changed 1× · last by …" history
@@ -6568,7 +6575,11 @@ two.
     applied, asks first in the leave guard's dialog ("an automatic fit still
     running" / "an automatic fit not yet applied to the form"); leaving
     anyway, or opening another project, cancels it and resets the choices.
-    **Discard result** drops a result without applying it.
+    **Discard result** drops a result without applying it, and puts the
+    focus on the card's heading (the button goes with the result). Apply and
+    Discard are the result's `.action-row`. When a result arrives, one
+    visually hidden status line says so ("Fit finished: …"), rather than the
+    whole result being a live region read out at once (issue #586).
   - The result shows the engine's plain-language notes (for example "wet-year
     behaviour is weakly constrained"), current against fitted parameters, and
     a scores table. Its columns are current parameters, fitted, then each
@@ -6755,7 +6766,11 @@ two.
     `lib/calibration/autoFit.ts`) lists the **saved** rules, warns while they
     are drafts and says how many model runs their search makes. **Run the
     calibration rules** (in the rules' head, above) asks the server (disabled while the rules have unsaved
-    edits, and for viewers); the latest run, whoever or whatever started it
+    edits, and for viewers). While it is disabled its reason is the line
+    straight under it, and its description (`runBlocker`: no flow record, with
+    **Add one on Data**, `?tab=series`; the rules unsaved; a run going; issue
+    #586: it was ~700 px down at the card's foot). With no record the panel
+    and Fit automatically say so too, each linking **Data**; the latest run, whoever or whatever started it
     ("Started by …" / "Queued by new data"), shows "Fitting *i* of *n* on the
     server…" while its jobs run (followed every 1.5 s by
     `lib/calibration/autoFollow.svelte.ts`, one project at a time: opening
@@ -6810,7 +6825,8 @@ two.
   in the data*). A used value goes into the form only; Save keeps it. A
   proposal from the committed synthetic dataset carries a warning that its
   values are invented; with no dataset loaded, or no quaternary at the point,
-  it says so. **Close the proposal** puts the button back (and the focus on
+  it says so (with no dataset, in plain words: enter the values from the
+  study by hand; every map proposal's notice reads that way, issue #586). **Close the proposal** puts the button back (and the focus on
   it). Unticking **Compare runs with WR2012 naturalised flow**, or the MAR
   band, and ticking it again brings back what was typed until the settings
   are saved or discarded.
@@ -6891,7 +6907,9 @@ two.
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
   issue #174), and a line saying the registered-volumes comparison band is
-  on [Allocations](#allocations-taballocations) (`ewr-band-moved`). The
+  on [Allocations](#allocations-taballocations) (`ewr-band-moved`; its link,
+  `?tab=allocations#alloc-band`, lands on the band's card with its heading
+  focused, as Find a setting's does, issue #586). The
   reporting window and the annual assurance threshold moved to **Reporting**,
   and the band with the allocation mode to Allocations (issue #521, with the
   operator's OK, 2026-10-11): they read supply and use, not the river.
@@ -7212,8 +7230,12 @@ two.
   it is declared first: an evidence report's bands come only from an
   ensemble run to this rule (the first complete one whose options match it
   exactly), and a later change is recorded in the History tab and needs a
-  new ensemble run to it. The rule shows in one line under the form
-  (`declaredRuleText`), with its field-history line. An invalid rule blocks
+  new ensemble run to it. The rule shows in one line of plain words under
+  the form (`declaredRuleText`: "KGE′ of at least 0.5, WR2012 flags up to
+  “query”, low-flow bias within ±50 %, 300 members, typical bounds, pan
+  coefficient varied by ±0.1", or "no WR2012 check"; it read "worst wr2012
+  flag kept no check" before issue #586), with its field-history line; History
+  and Compare runs use the same words. An invalid rule blocks
   Save (the engine's `declaredRuleError`, as the API checks it). Viewers see
   it read-only.
 
@@ -7476,7 +7498,9 @@ run's report to chosen members every week or month.
   (Africa/Johannesburg)" or "On the 1st of every month at 06:00 (UTC)", who it
   goes to and who it sends as, and "Next: …" with, when the last due time sent
   nothing, why ("the project had no runs to report on"); a paused one says
-  **Paused.**
+  **Paused.** With none, "No scheduled reports." in `LoadState`'s dashed
+  empty box, as Data feeds' "No feeds yet." and API keys' "No API keys yet."
+  (one empty-state style for the three, issue #586).
 - **The head**: the heading with its ⓘ (report PDFs and schedules: the link
   needs a sign-in, the PDF is kept 7 days, a schedule sends as the editor who
   last saved it; the paragraph that was under the heading, issue #521) and,
@@ -10499,9 +10523,13 @@ March") is kept against what it is about.
     (the run notes stay the modeller's one explanation; these are comments
     from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
-    gaps, Calibration record, WR2012 check, Flow generation (keyed `share`, its Flow share name before issue #553), EWR, Reserve rule
+    gaps, Calibration record, Fit the parameters, WR2012 check, Flow generation (keyed `share`, its Flow share name before issue #553), EWR, Reserve rule
     tables, Drought restrictions, Reporting, Simulation period, Data quality,
-    Evidence), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
+    Outcome matrix, Seasonal outlook, Evidence, Automatic runs), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`),
+    always last in the head, after the panel's own action (**Propose from the
+    map**, **Add a rule table**; issue #586). Judge results by has none: it is
+    one pick of how results are read, not in the index, and a note on it
+    belongs with the EWR or Reserve rule table it names;
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
     each naming and linking to its target, and the project-level notes
     button. A failed load says "Couldn’t load the notes: …" with **Try

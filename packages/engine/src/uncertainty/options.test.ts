@@ -63,10 +63,11 @@ describe('declaredRuleError', () => {
 describe('declaredRuleText', () => {
 	it('reads a rule in one line, and says when there is none or it is invalid', () => {
 		expect(declaredRuleText(RULE)).toBe(
-			'skill score KGE′, lowest skill kept 0.5, worst wr2012 flag kept query, largest low-flow bias kept ±50 %, members 300, bounds typical, pan coefficient shift ±0.1'
+			'KGE′ of at least 0.5, WR2012 flags up to “query”, low-flow bias within ±50 %, 300 members, typical bounds, pan coefficient varied by ±0.1'
 		);
-		expect(declaredRuleText(withThresholds({ wr2012MaxLevel: 'unusable', maxLowFlowBiasPct: null }))).toContain('worst wr2012 flag kept no check, largest low-flow bias kept no check');
-		expect(declaredRuleText(withRule({ panOffset: 0 }))).toContain('pan coefficient shift not varied');
+		expect(declaredRuleText(withThresholds({ wr2012MaxLevel: 'unusable', maxLowFlowBiasPct: null }))).toContain('no WR2012 check, no low-flow bias check');
+		expect(declaredRuleText(withThresholds({ wr2012MaxLevel: 'ok' }))).toContain('WR2012 flags OK only');
+		expect(declaredRuleText(withRule({ panOffset: 0 }))).toContain('pan coefficient not varied');
 		expect(declaredRuleText(null)).toBe('not declared');
 		expect(declaredRuleText(undefined)).toBe('not declared');
 		expect(declaredRuleText(withRule({ members: 1 }))).toBe('not a valid rule');

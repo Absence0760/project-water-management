@@ -71,14 +71,16 @@ export function peText(pe: PeInput | EditablePe | null | undefined): string {
  * days it has a value with these monthly means on the rest, or the monthly
  * means every day. null while the series list is still loading.
  */
-export function apanSourceNote(seriesKinds: readonly string[] | null): { daily: boolean; text: string } | null {
+export function apanSourceNote(seriesKinds: readonly string[] | null): { daily: boolean; text: string; link: string } | null {
 	if (seriesKinds === null) return null;
+	// `link` names the Data page the note sends the reader to (`?tab=series`, issue #586 C4): a page named and not linked was a dead end.
 	return seriesKinds.includes('evap_apan_mm')
 		? {
 				daily: true,
-				text: 'A-pan comes from the daily A-pan series (Data tab) on the days it has a value; these monthly means fill the other days, and each run says how many.'
+				text: 'A-pan comes from the daily A-pan series on the days it has a value; these monthly means fill the other days, and each run says how many.',
+				link: 'See the series on Data'
 			}
-		: { daily: false, text: 'A-pan comes from these monthly means on every day. A daily A-pan record can be added on the Data tab.' };
+		: { daily: false, text: 'A-pan comes from these monthly means on every day.', link: 'Add a daily A-pan record on Data' };
 }
 
 /**
