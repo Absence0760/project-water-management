@@ -50,7 +50,7 @@
 	import { compareEvidenceNote } from '#lib/components/runs/evidence.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { runYears } from '#lib/components/runs/runList.js';
-	import { fmtDate } from '#lib/format/number.js';
+	import { fmtDate, fmtWhen } from '#lib/format/number.js';
 	import { runForcingOfSummary } from '@water-management/engine';
 
 	// Every comparison renders the paired uncertainty band (issue #4 phase 9), the daily series
@@ -339,7 +339,7 @@
 	const baseLine = $derived.by(() => {
 		const m = runMeta('a');
 		if (!m) return '';
-		const tags = [runYears(m.startDate, m.endDate), `ran ${fmtDate(m.createdAt, true)}`];
+		const tags = [runYears(m.startDate, m.endDate), `ran ${fmtWhen(m.createdAt)}`];
 		if (m.published) tags.push('published');
 		if (m.evidence === 'current') tags.push('evidence');
 		if (refA && projectA && refA.projectId !== (refB?.projectId ?? refA.projectId)) tags.push(projects.find((p) => p.id === refA.projectId)?.name ?? '');

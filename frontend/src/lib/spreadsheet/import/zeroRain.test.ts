@@ -74,7 +74,7 @@ describe('zero-rain runs (the Python importer cases)', () => {
 		const v = seasonal(WINTER);
 		gap(v, '2012-06-01', '2012-08-15');
 		const note = zeroRainNote([{ kind: 'rain_catchment_mm', startDate: START, values: v }])!;
-		expect(note).toContain('2012-06-01 to 2012-08-15 (76 days)');
+		expect(note).toContain('1 Jun 2012 to 15 Aug 2012 (76 days)');
 		expect(note).toContain('months 4,5,6,7,8,9');
 		// Engine ≥ 0.15.0 treats a flagged run as missing by default (CR-20); no re-export advice.
 		expect(note).toContain('Runs treat them as missing');
@@ -95,7 +95,7 @@ describe('zero-rain runs (the Python importer cases)', () => {
 			gap(v, '2012-06-01', '2012-08-15');
 			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
 				process.env.TZ = zone;
-				expect(zeroRainNote([{ kind: 'rain_catchment_mm', startDate: START, values: v }]), zone).toContain('2012-06-01 to 2012-08-15 (76 days)');
+				expect(zeroRainNote([{ kind: 'rain_catchment_mm', startDate: START, values: v }]), zone).toContain('1 Jun 2012 to 15 Aug 2012 (76 days)');
 			}
 		});
 	});

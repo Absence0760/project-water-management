@@ -138,7 +138,7 @@ test('a calibration exclusion needs a reason, and shows in Inputs that differ an
 	await expect(saveChanges(page)).toBeDisabled();
 	await excl.getByLabel(/^Water year/).fill('2021');
 	await excl.getByLabel(/^Water year/).press('Tab');
-	await expect(excl.getByText('WY 2021/22: 2021-10-01 – 2022-09-30')).toBeVisible();
+	await expect(excl.getByText('WY 2021/22: 1 Oct 2021 – 30 Sep 2022')).toBeVisible();
 	await excl.getByLabel('Reason').fill('Rain gauge moved');
 	await expect(excl.getByRole('alert')).toHaveCount(0);
 	await saveSettings(page);

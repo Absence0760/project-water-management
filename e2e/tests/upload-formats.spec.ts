@@ -143,7 +143,8 @@ test('Project import and API keys: the expected format of a project file, a work
 	}
 
 	const project = await createProject(page.request, 'Formats ingest');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	// API keys moved from Model settings to Project (issue #586 round 1).
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const panel = page.getByRole('region', { name: 'API keys' });
 	const help = panel.getByTestId('format-help');
 	await help.getByText('Expected format of a request').click();

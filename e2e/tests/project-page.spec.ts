@@ -246,7 +246,6 @@ test.describe('the big case: 30 members and 30 pending farmer invites', () => {
 		['phone', { width: 390, height: 844 }]
 	] as const) {
 		test(label, async ({ page, owner, playwright }) => {
-			void owner;
 			test.setTimeout(120_000);
 			await page.setViewportSize(viewport);
 			const project = await seedRunnableProject(page.request, `Project big case ${label} with a long catchment name to wrap`);
@@ -264,11 +263,42 @@ test.describe('the big case: 30 members and 30 pending farmer invites', () => {
 				expect(res.status()).toBe(201);
 			}
 			await openProject(page, project.id);
-			await expect(region(page, 'Members').getByRole('rowheader')).toHaveCount(31);
-			await expect(page.getByRole('region', { name: /^Farmers/ })).toContainText('Pending farmer invitations (30)');
+			const members = region(page, 'Members');
+			const farmers = page.getByRole('region', { name: /^Farmers/ });
+			const invites = farmers.getByRole('region', { name: /^Pending farmer invitations/ });
+			await expect(invites).toContainText('Pending farmer invitations (30)');
+			await expect(region(page, 'Recent notes')).toHaveAttribute('data-notes-ready', 'true');
+
+			// Each long list shows its first eight and opens the rest in place, never scrolling inside its card (issue
+			// #586 R4-F): unfolded, Recent notes sat 5,063 px down at 1440 and 13,960 px down on a phone.
+			await expect(members.getByRole('rowheader')).toHaveCount(8);
+			await expect(members.getByRole('rowheader').first()).toContainText(`${owner.displayName} (you)`);
+			// By name as a reader counts (the server sorts as text: 1, 10, 11 … 19, 2).
+			await expect(members.getByRole('rowheader').nth(2)).toContainText('Hydrologist 2 with');
+			await expect(invites.getByRole('listitem')).toHaveCount(8);
+			const showMembers = members.getByRole('button', { name: 'Show all 31 members' });
+			const showInvites = invites.getByRole('button', { name: 'Show all 30 invitations' });
+			for (const b of [showMembers, showInvites]) await expect(b).toHaveAttribute('aria-expanded', 'false');
+			const notesTop = (await region(page, 'Recent notes').boundingBox())!.y;
+			// Measured 3,663 px at 1440 and 6,961 px on a phone, the rest being the panels between (who decides, share
+			// links, two-step sign-in …), which the side index reaches in one click.
+			expect(notesTop).toBeLessThan(label === 'desktop' ? 4_000 : 7_600);
 			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
 			if (label === 'desktop') await expect(region(page, 'Project details')).toBeInViewport({ ratio: 1 });
 			await expectNoViolations(page);
+
+			// Opened: every row, the list growing with the page rather than scrolling inside its card.
+			await showMembers.click();
+			await expect(members.getByRole('rowheader')).toHaveCount(31);
+			const less = members.getByRole('button', { name: 'Show the first 8 members' });
+			await expect(less).toHaveAttribute('aria-expanded', 'true');
+			await expect(less).toBeFocused();
+			expect(await members.locator('.table-wrap').evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+			await showInvites.click();
+			await expect(invites.getByRole('listitem')).toHaveCount(30);
+			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+			await less.click();
+			await expect(members.getByRole('rowheader')).toHaveCount(8);
 		});
 	}
 });

@@ -382,6 +382,14 @@ section it belongs to, with the example that taught it.
   (`dam-proposals.spec.ts`). Land cover's tables fit as columns; the
   evaporation table's twelve months keep their sideways scroll with the
   sticky row label (a variant that can never fit).
+  A new read-only table takes app.css's `.table-stack` rather than another
+  copy: wrap its `.table-wrap` in `<div class="table-stack">` and give each
+  `td` a `data-label`; below 50rem of wrapper the rows are blocks, the cells
+  as many to a line as fit at 6rem (three at 390 px: two to a line made
+  Calibration's twelve-month EWR breakdown ~1,700 px tall). Calibration's
+  EWR test (nine columns, 299 px past its 323 px box) and plausibility
+  tables use it (#586 R4-K, `calibration-tables-phone.spec.ts`, which reads
+  every table box's `scrollWidth`, not just the page's).
 - **In a narrow column, a row's actions get their own line.** The team
   page's Members panel (a 20–24rem side column) had Name · Role · actions,
   and the third column clipped "Reset two-step" to "Reset two-" and
@@ -919,8 +927,9 @@ section it belongs to, with the example that taught it.
   duration", "Notes & evidence" standing for three panels) makes the bar and
   the page read differently, so when a bar can't fit two rows, the page has
   too many panels for one menu, and the fix is moving panels (as #586 moved
-  Model quality to Calibration), not shortening names. EWR and Compare runs
-  still carry `bar` names from before the rule. Two traps on the way: River's
+  Model quality to Calibration), not shortening names. EWR, Hydrological
+  units and Compare runs dropped theirs too (R4-F); their full headings still
+  fit two rows at 1280 px. Two traps on the way: River's
   chart-beside-bars switch was a window media query (1100 px), which beside
   a 13rem rail sees a column 13rem wider than it is, so it became a
   container query on the page's own column; and a page that only had a

@@ -13,7 +13,8 @@
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import EmailText from '#lib/components/common/EmailText.svelte';
 	import { expiryText } from '#lib/components/auth-extras/invites.js';
-	import { fmtDate } from '#lib/format/number.js';
+	import { fmtDate, fmtNum } from '#lib/format/number.js';
+	import { byName, foldRows, PEOPLE_SHOWN } from './project';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { farmNames, toggleFarm, type FarmOption } from './farmers';
 
@@ -34,8 +35,17 @@
 	} = $props();
 
 	let entries = $state<FarmerEntry[]>([]);
-	const farmers = $derived(entries.filter((f): f is Farmer => f.status === 'active'));
-	const invites = $derived(entries.filter((f): f is InvitedFarmer => f.status !== 'active'));
+	// Farmers by name as a reader counts; the invitations that need an owner (expired, or sent by someone who
+	// can no longer invite) first. Each list shows its first few until "Show all N" (issue #586 R4-F).
+	const farmers = $derived(byName(entries.filter((f): f is Farmer => f.status === 'active')));
+	const needsOwner = (inv: InvitedFarmer) => inv.status === 'expired' || !!inv.senderLapsed;
+	const invites = $derived(
+		entries.filter((f): f is InvitedFarmer => f.status !== 'active').sort((a, b) => Number(needsOwner(b)) - Number(needsOwner(a)))
+	);
+	let allFarmers = $state(false);
+	let allInvites = $state(false);
+	const farmerFold = $derived(foldRows(farmers, allFarmers, PEOPLE_SHOWN, (f) => f.userId === editing));
+	const inviteFold = $derived(foldRows(invites, allInvites, PEOPLE_SHOWN));
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 	let error = $state<string | null>(null);
@@ -108,7 +118,7 @@
 		error = null;
 		try {
 			await api.members.remove(projectId, f.userId);
-			const at = farmers.findIndex((x) => x.userId === f.userId);
+			const at = farmerFold.shown.findIndex((x) => x.userId === f.userId);
 			entries = entries.filter((x) => keyOf(x) !== f.userId);
 			// Its row, and the Remove that had the focus, have gone: the farmer now in its place takes it.
 			await focusAfterRemove(at, 'button[data-farmer-change]', 'farmers-h');
@@ -142,7 +152,7 @@
 		error = message = null;
 		try {
 			await emailAuthApi(api).projectInvites.revoke(projectId, inv.inviteId);
-			const at = invites.findIndex((x) => x.inviteId === inv.inviteId);
+			const at = inviteFold.shown.findIndex((x) => x.inviteId === inv.inviteId);
 			entries = entries.filter((x) => keyOf(x) !== inv.inviteId);
 			message = `Invitation to ${inv.email} revoked.`;
 			// The invitation's row, and its Revoke that had the focus, have gone: the next invitation's takes it.
@@ -174,8 +184,8 @@
 		emptyText={isOwner ? 'No farmers yet: invite them to see their own hydrological unit.' : 'No farmers yet.'}
 	>
 		{#if farmers.length}
-			<div class="table-wrap">
-				<table class="data">
+			<div class="table-wrap farmers-wrap">
+				<table class="data" id="farmers-table">
 					<thead>
 						<tr>
 							<th scope="col">Name</th>
@@ -184,7 +194,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each farmers as f (f.userId)}
+						{#each farmerFold.shown as f (f.userId)}
 							<tr>
 								<th scope="row">
 									{f.displayName}
@@ -229,13 +239,18 @@
 					</tbody>
 				</table>
 			</div>
+			{#if allFarmers || farmerFold.hidden}
+				<button type="button" class="btn btn-sm more" aria-expanded={allFarmers} aria-controls="farmers-table" onclick={() => (allFarmers = !allFarmers)}>
+					{allFarmers ? `Show the first ${PEOPLE_SHOWN} farmers` : `Show all ${fmtNum(farmers.length)} farmers`}
+				</button>
+			{/if}
 		{/if}
 
 		{#if invites.length}
 			<section class="invites" aria-labelledby="farmer-inv-h">
 				<h3 id="farmer-inv-h">Pending farmer invitations <span class="count">({invites.length})</span> <HelpTip key="invitation" label="About invitations" /></h3>
-				<ul>
-					{#each invites as inv (inv.inviteId)}
+				<ul id="farmer-invites">
+					{#each inviteFold.shown as inv (inv.inviteId)}
 						<li class:expired={inv.status === 'expired'}>
 							<div class="who">
 								<span class="email"><EmailText email={inv.email} /></span>
@@ -273,6 +288,11 @@
 						</li>
 					{/each}
 				</ul>
+				{#if allInvites || inviteFold.hidden}
+					<button type="button" class="btn btn-sm more" aria-expanded={allInvites} aria-controls="farmer-invites" onclick={() => (allInvites = !allInvites)}>
+						{allInvites ? `Show the first ${PEOPLE_SHOWN} invitations` : `Show all ${fmtNum(invites.length)} invitations`}
+					</button>
+				{/if}
 			</section>
 		{/if}
 	</LoadState>
@@ -292,6 +312,13 @@
 {/if}
 
 <style>
+	/* The page is the one scroll: the table grows with its rows (the first few until Show all, issue #586 R4-F). */
+	.farmers-wrap {
+		max-height: none;
+	}
+	.more {
+		margin-top: 0.5rem;
+	}
 	.intro {
 		margin: -0.25rem 0 0.75rem;
 	}

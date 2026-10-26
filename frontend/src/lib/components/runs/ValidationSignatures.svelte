@@ -29,7 +29,8 @@
 	<p class="flag {ok === null ? 'none' : ok ? 'good' : 'bad'}" role="status">
 		{ok === null ? 'Not judged: too few scored days or recession segments.' : ok ? 'Every signature is within its limit.' : 'A signature is outside its limit: see the run’s warnings.'}
 	</p>
-	<div class="table-wrap">
+	<!-- table-stack (app.css): on a phone each signature is a block, its figures under their data-labels. -->
+	<div class="table-stack"><div class="table-wrap">
 		<table class="data compact" aria-labelledby="{uid}-h" data-testid="validation-signatures">
 			<thead>
 				<tr>
@@ -45,16 +46,16 @@
 				{#each rows as r (r.label)}
 					<tr class:short-row={r.ok === false}>
 						<th scope="row">{r.label}</th>
-						<td class="num">{r.observed}</td>
-						<td class="num">{r.simulated}</td>
-						<td class="num">{r.difference}</td>
-						<td class="num">{r.limit}</td>
-						<td>{r.ok === null ? 'not judged' : r.ok ? 'within' : 'outside'}</td>
+						<td class="num" data-label="Observed">{r.observed}</td>
+						<td class="num" data-label="Simulated">{r.simulated}</td>
+						<td class="num" data-label="Difference or bias">{r.difference}</td>
+						<td class="num" data-label="Provisional limit">{r.limit}</td>
+						<td data-label="Result">{r.ok === null ? 'not judged' : r.ok ? 'within' : 'outside'}</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
-	</div>
+	</div></div>
 	<p class="muted small">{holdoutText(signatures)}</p>
 {:else}
 	<p class="muted small">Not computed: needs an observed flow record.</p>

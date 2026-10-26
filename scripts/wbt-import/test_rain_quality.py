@@ -75,7 +75,7 @@ class ZeroRainRuns(unittest.TestCase):
         gap(v, "2012-06-01", "2012-08-15")
         series = [{"kind": "rain_catchment_mm", "startDate": START, "values": v}]
         note = zero_rain_note(series)
-        self.assertIn("2012-06-01 to 2012-08-15 (76 days)", note)
+        self.assertIn("1 Jun 2012 to 15 Aug 2012 (76 days)", note)
         self.assertIn("months 4,5,6,7,8,9", note)
         # Engine >= 0.15.0 treats a flagged run as missing by default (CR-20);
         # the note must not tell the user to re-export it as blank any more.

@@ -75,10 +75,11 @@ describe('riverNavGroups', () => {
 	});
 	it('puts the findings first, the water account straight after them, and the run-it-yourself tools last (issue #465)', () => {
 		expect(riverNavGroups(false, false).map((g) => g.label)).toEqual(['The reserve', 'Water balance', 'How sure, and what if']);
-		const bar = riverNavGroups(false, false).flatMap((g) => g.sections.map((s) => navText(s, 'bar')));
-		expect(bar).toEqual(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
+		// The bar says each panel's heading word for word, as the side index does (issue #586 R4-F).
+		const sections = riverNavGroups(false, false).flatMap((g) => g.sections);
+		expect(sections.map((s) => navText(s, 'bar'))).toEqual(sections.map((s) => s.label));
 	});
-	it('names each link as its panel’s heading, shorter on the bar only (issue #462)', () => {
+	it('names each link as its panel’s heading (issue #462)', () => {
 		const labels = (ruleTable: boolean) => riverNavGroups(false, ruleTable).flatMap((g) => g.sections.map((s) => s.label));
 		expect(labels(false)).toEqual([
 			'Flow vs reserve',

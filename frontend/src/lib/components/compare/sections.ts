@@ -1,8 +1,8 @@
 // Compare runs' section menu (common/SectionNav, issue #462): the summary on
 // top (what the change does, the days below the reserve each year), then the
 // full comparison's panels in page order under its heading. Each id is set on
-// its panel in CompareView.svelte, each link says the panel's heading, and on
-// the bar a shorter name where the heading is long. Panels drawn only for
+// its panel in CompareView.svelte, and each link says the panel's heading word
+// for word, on the bar too (issue #586 R4-F). Panels drawn only for
 // some pairs (a scenario's overrides, reserve compliance, plausibility,
 // assurance of supply) are listed only when drawn.
 import type { NavGroup, NavSection } from '#lib/components/common/sectionNav.js';
@@ -34,7 +34,7 @@ export function compareNavGroups({ summary, full }: CompareNavInput): NavGroup[]
 	const top: NavSection[] = summary
 		? [
 				{ id: 'cmp-outcomes', label: H.outcomes },
-				{ id: 'cmp-years', label: summary.yearsHeading, bar: 'Days below, by year' }
+				{ id: 'cmp-years', label: summary.yearsHeading }
 			]
 		: [];
 	const rest: NavSection[] = full
@@ -43,9 +43,9 @@ export function compareNavGroups({ summary, full }: CompareNavInput): NavGroup[]
 				{ id: 'cmp-changes', label: H.changes },
 				{ id: 'cmp-headline', label: H.headline },
 				{ id: 'cmp-uncertainty', label: H.uncertainty },
-				...(full.reserve ? [{ id: 'cmp-reserve', label: H.reserve, bar: 'Reserve by month' }] : []),
-				{ id: 'cmp-ewr-agreement', label: H.ewrAgreement, bar: 'EWR vs observed' },
-				...(full.plausibility ? [{ id: 'cmp-plausibility', label: H.plausibility, bar: 'Plausibility' }] : []),
+				...(full.reserve ? [{ id: 'cmp-reserve', label: H.reserve }] : []),
+				{ id: 'cmp-ewr-agreement', label: H.ewrAgreement },
+				...(full.plausibility ? [{ id: 'cmp-plausibility', label: H.plausibility }] : []),
 				{ id: 'cmp-units', label: H.units },
 				...(full.assurance ? [{ id: 'cmp-assurance', label: H.assurance }] : []),
 				{ id: 'cmp-series', label: H.series }
