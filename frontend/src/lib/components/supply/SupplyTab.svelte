@@ -403,7 +403,7 @@
 												<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
 												{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="unit-map-link">Show on map</a>{/if}
 												<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>
-												{#if registered.has(c.nodeId)}<a href={allocationsHref(run.id, { unit: c.nodeId })} aria-label="{c.name}: registered vs modelled use">Registered use</a>{/if}
+												{#if registered.has(c.nodeId)}<a href={allocationsHref(run.id, { unit: c.nodeId })} aria-label="{c.name}: registered use vs modelled use">Registered use</a>{/if}
 											</p>
 										{/if}
 									</li>

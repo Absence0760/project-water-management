@@ -181,7 +181,8 @@ export function divertMonthsPreview(n: Pick<NetworkNode, 'divertMonthlyM3Day'>):
  * 1.32.0): the run ignores the one value there, so the table shows the
  * months' range, read-only, instead of an input, and points to the one-node
  * form where the months are edited. `text` is the cell ("by month: 0–800",
- * "by month: 500"), `aria` its accessible name. Null when it isn't set by
+ * "by month: 500"), `aria` its accessible name, which holds `text` word for
+ * word (label in name). Null when it isn't set by
  * month: the table edits the one value. The caller adds where to edit it.
  */
 export function divertMonthsCell(n: Pick<NetworkNode, 'divertMonthlyM3Day'>, name: string): { text: string; aria: string } | null {
@@ -194,8 +195,10 @@ export function divertMonthsCell(n: Pick<NetworkNode, 'divertMonthlyM3Day'>, nam
 	const { scale, unit } = riverUnit();
 	const [a, b] = [asEntered(lo, scale), asEntered(hi, scale)];
 	const range = lo === hi ? a : `${a}–${b}`;
-	const words = lo === hi ? `${a} ${unit} every month` : `between ${a} and ${b} ${unit}`;
-	return { text: `by month: ${range}`, aria: `River to dam at ${name} is set by month, ${words}` };
+	// The name carries the cell's words as they read ("by month: 0–800"), so a
+	// voice command that says them reaches the link (WCAG 2.5.3 label in name).
+	const text = `by month: ${range}`;
+	return { text, aria: `River to dam at ${name} is set ${text} ${unit}${lo === hi ? ' every month' : ''}` };
 }
 
 /** The hands-off flow's row when its box is ticked (0 in every month, to fill in) or null when unticked. */

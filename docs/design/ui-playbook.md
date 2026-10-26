@@ -928,8 +928,14 @@ section it belongs to, with the example that taught it.
   the page read differently, so when a bar can't fit two rows, the page has
   too many panels for one menu, and the fix is moving panels (as #586 moved
   Model quality to Calibration), not shortening names. EWR, Hydrological
-  units and Compare runs dropped theirs too (R4-F); their full headings still
-  fit two rows at 1280 px. Two traps on the way: River's
+  units and Compare runs dropped theirs too (R4-F), Data (R4-M: "Gauge vs
+  logger agreement", "Double mass: catchment rain vs CHIRPS") and the
+  Network's node sheet (R4-N: all thirteen legends of a unit with a dam,
+  "Combined boreholes (one capacity)" and "Bed losses in the reach below"
+  among them, fit two rows of the 920 px sheet at 1280 px); their full
+  headings still fit two rows at 1280 px. With no page left using one, the
+  `bar` field itself went (R4-N): `NavSection` has only `label`, so the bar
+  can't say anything else. Two traps on the way: River's
   chart-beside-bars switch was a window media query (1100 px), which beside
   a 13rem rail sees a column 13rem wider than it is, so it became a
   container query on the page's own column; and a page that only had a

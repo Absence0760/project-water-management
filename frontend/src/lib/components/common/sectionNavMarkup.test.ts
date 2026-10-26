@@ -34,21 +34,19 @@ describe('SectionNav', () => {
 		expect(html.indexOf('id="body"')).toBeGreaterThan(html.indexOf('aria-label="Test sections"'));
 	});
 
-	it('says a section’s shorter bar name on the bar, and the page another page’s link goes to (issue #462)', () => {
+	it('says each section’s heading word for word on the bar, and the page another page’s link goes to (issues #462, #586 D4)', () => {
 		const html = bare(
 			render(SectionNav, {
 				props: {
 					groups: [
-						{ label: 'Model', sections: [{ id: 'cal', label: 'Calibration against observed flow', bar: 'Calibration' }] },
+						{ label: 'Model', sections: [{ id: 'cal', label: 'Calibration against observed flow' }] },
 						{ label: 'On EWR', sections: [{ id: 'river-w', label: 'Water account', href: '?tab=river#res-water-account', page: 'EWR' }] }
 					],
 					label: 'Test sections'
 				}
 			}).body
 		);
-		expect(html).toMatch(/<a class="pill[^"]*" href="#cal"[^>]*>Calibration</);
-		// The bar's hidden measuring copy says the bar's name too, never the heading.
-		expect(html).not.toContain('Calibration against observed flow');
+		expect(html).toMatch(/<a class="pill[^"]*" href="#cal"[^>]*>Calibration against observed flow</);
 		// The page it goes to is in the link's name, not a hidden span Chromium would space off ("Water account , on …").
 		expect(html).toMatch(/href="\?tab=river#res-water-account"[^>]*aria-label="Water account, on EWR"[^>]*>Water account</);
 		expect(html).not.toContain(', on EWR</span>');

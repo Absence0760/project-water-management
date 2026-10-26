@@ -130,7 +130,7 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 
 	// Remove Vines (planted on a farm, so it asks first); the sheet closes with it.
 	const vines = await openCropSheet(page, 'Vines');
-	await vines.getByRole('button', { name: 'Remove Vines' }).click();
+	await vines.getByRole('button', { name: 'Remove crop Vines' }).click();
 	await answerConfirm(page, true, 'Remove crop “Vines”?');
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).not.toHaveURL(/crop=/);
@@ -140,10 +140,10 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 	await expect(page.getByRole('img', { name: 'Lower farm: 12 ha, Orchard 12 ha' })).toBeVisible();
 
 	// Lucerne (planted nowhere: no question) was last: the focus goes to the crop now last. With the list empty, to Add crop.
-	await (await openCropSheet(page, 'Lucerne')).getByRole('button', { name: 'Remove Lucerne' }).click();
+	await (await openCropSheet(page, 'Lucerne')).getByRole('button', { name: 'Remove crop Lucerne' }).click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Edit Orchard' })).toBeFocused();
-	await (await openCropSheet(page, 'Orchard')).getByRole('button', { name: 'Remove Orchard' }).click();
+	await (await openCropSheet(page, 'Orchard')).getByRole('button', { name: 'Remove crop Orchard' }).click();
 	await answerConfirm(page, true, 'Remove crop “Orchard”?');
 	await expect(page.getByTestId('crop-row')).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Add crop', exact: true })).toBeFocused();

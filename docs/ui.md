@@ -3018,8 +3018,10 @@ itself.
     three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
     viewer), the node picker (‹ select ›, labelled "Hydrological unit to edit") and under it
     the form's section menu (the pages' `common/SectionNav` as a bar,
-    "Sections of the form": Catchment area, Flow share, Dam, …, Bed losses,
-    short names on the bar and each legend in More; one press opens that
+    "Sections of the form": Catchment area, Flow share, Dam, …, Bed losses in
+    the reach below, each by its legend word for word, on the bar and in More
+    alike (a unit with a dam's thirteen fit the bar's two rows at 1280 px;
+    issue #586 R4-N; on a phone the strip scrolls sideways); one press opens that
     section's card and folds the other sections, scrolls the form to it and
     focuses its heading, with no fragment in the URL, and the section being
     read is marked; issue #462, [§ On this page
@@ -4380,7 +4382,7 @@ map" card) stays the schematic; this is the geography.
   a pick from the list shows its Details (stacked on a phone, brought into
   view). The head's **Download GeoJSON** and **Every feature** (the grid).
 - **Checks** (A4, the side column's Checks tab, viewers too; the tab counts
-  the warnings, "Checks (1 warning)"): the count ("1 warning from the map’s
+  the warnings, named "Checks 1 warning" so the name holds the tab's words): the count ("1 warning from the map’s
   checks", or "The map’s checks found no problems.") and the warnings, each
   with buttons that pick its features and show their Details ([maps.md §
   Checks](./maps.md#checks)). Until 2026-10-02 a line in the column with
@@ -5399,9 +5401,10 @@ its panel's heading (`label`), so the menu and the page read alike ("EWR by
 month" against *EWR compliance by month* was one of the navigation review's
 findings, issue #462), on the bar too: every page names every heading word
 for word (issue #586, D4; EWR, Hydrological units and Compare runs dropped
-their shorter bar names in R4-F, and still fit two rows at 1280 px, one on
-Hydrological units). A section's `bar` name, the heading's first words, is
-legacy and no page uses it. With
+their shorter bar names in R4-F, Data in R4-M and the node sheet in R4-N, and
+still fit two rows at 1280 px, one on Hydrological units). There is no
+shorter bar name: a section has only its `label`, the `bar` field went in
+R4-N. With
 `groupNames` the bar shows the names too: a small muted label before each
 group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
@@ -5722,15 +5725,16 @@ with the table the data needs).
   ([§ On this page menu](#on-this-page-menu)): from 80rem of page (a 1440 px
   window) a side index on the left of the panels, narrower a bar under the
   header, above the table, that sticks down the whole page as it scrolls:
-  **Input time series** (`#data-series`; **Series** on the bar), **Series
-  chart** (`#data-chart`, with a series picked; **Chart**), **Data feeds**
-  (`#data-feeds`, always), **Gauge vs logger
-  agreement** (`#data-agreement`; **Gauge vs logger**), **Double mass:
-  catchment rain vs CHIRPS** (`#data-double-mass`; **Double mass**), **Data
-  checks** (`#data-checks`) and **What the model uses** (`#data-uses`), each
-  only when the page draws it (`series/sections.ts`, `dataNavGroups`; the
-  panels' headings, issue #462), in three groups (Series, Checks,
-  Reference), named on the bar too. The table's widths (`data-page`) are
+  **Input time series** (`#data-series`), **Series chart** (`#data-chart`,
+  with a series picked), **Data feeds** (`#data-feeds`, always), **Gauge vs
+  logger agreement** (`#data-agreement`), **Double mass: catchment rain vs
+  CHIRPS** (`#data-double-mass`), **Data checks** (`#data-checks`) and
+  **What the model uses** (`#data-uses`), each only when the page draws it
+  (`series/sections.ts`, `dataNavGroups`), in three groups (Series, Checks,
+  Reference), named on the bar too. Each link says its panel's heading word
+  for word, on the bar as in the side index (issue #462; #586 R4-M dropped
+  the bar's last short names); with all seven drawn the bar takes two rows at
+  1280 px. The table's widths (`data-page`) are
   the column beside the index. A loaded
   `?tab=series#data-…` link lands on its panel once it is drawn, held there
   with focus on its heading (`landOnAnchor`, `help/anchor.ts`, which also
@@ -11993,7 +11997,8 @@ overview and search the last one opened stays open). With all four open the
 list was ~1180 px tall, so the sticky column scrolled inside itself at
 1440×960 and 1280×800; with one open it is ~715 px at most (Reference) and fits both, with 24 px to
 spare at 1280×800, since a label that just fits on macOS wraps a line taller on Linux; the links are 24 px rows
-for that, not 28 (`help.spec.ts` checks each group, opened from the keyboard, the room left, and that together
+for that, not 28, and *Pages, one by one* lists each page's guide by the page's name alone (`guideNavLabel`; with
+the Calibration and Model settings guides, issue #586, the full titles overflowed 1280×800) (`help.spec.ts` checks each group, opened from the keyboard, the room left, and that together
 they reach every link). The contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
 against the app sidebar, beside the text, sticky while you read, scrolling on their own only in a
 window shorter than the overview plus the longest group (~715 px), where the alternative is
@@ -13187,6 +13192,15 @@ data button or Run button.
   width. No rule is disabled: a violation is fixed in the app. Each test
   scans one page state, through the shared `e2e/support/a11y.ts` scan (see
   e2e/README.md for why it runs axe in legacy mode).
+- **Label in name** (WCAG 2.5.3; axe-core 4.14 moved `label-content-name-mismatch`
+  out of its experimental rules and into the WCAG 2.1 A tag): a control with
+  an `aria-label` carries its visible words in that name, in order, so a voice
+  command that says what the control reads reaches it. "Remove crop" is named
+  "Remove crop Maize", a dam card's **Proposals** "Upper farm: proposals from
+  the register and the map", the account trigger "Account menu for {name}
+  {email}" (its avatar's initials and two-step badge are drawn by CSS, a
+  picture, not words), and the map's side tabs take their name from their
+  words ("Features 3", "Checks 1 warning", the last word visually hidden).
 - Every workspace tab (desktop and phone) and a GR4J run are also held to two
   of axe's best-practice rules the WCAG tags leave out: `empty-table-header`
   (a corner header above a column of row headers carries a visually hidden

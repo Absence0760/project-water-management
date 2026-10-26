@@ -17,8 +17,8 @@
 	(`railSide="right"`: on the right, beside a page's own left column, Runs &
 	results' runs list) instead, every group's name shown as a heading over its
 	links, and the arrow keys move between its links; narrower it is the bar
-	above. Each link says its panel's heading (`label`), on the bar too (issue
-	#586 D4); a section's shorter `bar` name is legacy, used by no page now. A group
+	above. Each link says its panel's heading (`label`) word for word, on the bar
+	too (issue #586 D4): there is no shorter bar name. A group
 	with no sections draws nothing, and with none at all the menu draws nothing
 	but the content (a page before its results load). `find`
 	adds a box that narrows the menu to the sections and the settings inside
@@ -36,7 +36,7 @@
 <script lang="ts">
 	import { onDestroy, type Snippet } from 'svelte';
 	import { anchorHeading, focusHeading } from '#lib/help/anchor.js';
-	import { activeSectionId, findElsewhere, stripScrollTo, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
+	import { activeSectionId, findElsewhere, stripScrollTo, findEntries, navEmpty, navFitCount, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
 
 	let {
 		groups,
@@ -438,8 +438,8 @@
 	More<span class="visually-hidden"> sections{current ? ', including the one being read' : ''}</span>
 	<span aria-hidden="true">▾</span>
 {/snippet}
-{#snippet linkText(sec: NavSection, where: 'bar' | 'rail' = 'rail')}
-	{navText(sec, where)}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
+{#snippet linkText(sec: NavSection)}
+	{sec.label}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
 {/snippet}
 {#snippet findText()}
 	<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
@@ -480,7 +480,7 @@
 			{#each away as moved (moved.href)}
 				<li>
 					<a data-item href={moved.href} onclick={() => (findOpen = false)} aria-label="{moved.text}, on {moved.page}" data-testid="find-elsewhere"
-						><span>{moved.text}</span><span class="in">on {moved.page} <span aria-hidden="true">↗</span></span></a
+						><span>{moved.text}</span> <span class="in">on {moved.page} <span aria-hidden="true">↗</span></span></a
 					>
 				</li>
 			{/each}
@@ -507,7 +507,7 @@
 										data-item
 										href={hrefOf(sec)}
 										onclick={(e) => follow(e, sec)}
-										aria-label={pageLinkName(sec, 'rail') ?? undefined}
+										aria-label={pageLinkName(sec) ?? undefined}
 										aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
 									>{@render linkText(sec)}{#if sec.href}<span class="ext" aria-hidden="true">↗</span>{/if}</a>
 								</li>
@@ -550,9 +550,9 @@
 											<a
 												class="pill"
 												href={hrefOf(sec)}
-												aria-label={pageLinkName(sec, 'bar') ?? undefined}
+												aria-label={pageLinkName(sec) ?? undefined}
 												aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
-												onclick={(e) => follow(e, sec)}>{@render linkText(sec, 'bar')}</a
+												onclick={(e) => follow(e, sec)}>{@render linkText(sec)}</a
 											>
 										</li>
 									{/each}
@@ -584,7 +584,7 @@
 												<li>
 													<a
 														href={hrefOf(sec)}
-														aria-label={pageLinkName(sec, 'rail') ?? undefined}
+														aria-label={pageLinkName(sec) ?? undefined}
 														aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
 														onclick={(e) => follow(e, sec)}>{@render linkText(sec)}</a
 													>
@@ -609,11 +609,11 @@
 				{#if find}<button type="button" class="pill find-btn" tabindex="-1" data-find>{@render findText()}</button>{/if}
 				{#each flat as sec (sec.id)}
 					{#if sec.groupName}
-						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec, 'bar')}</span></span>
-						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec, 'bar')}</span></span>
+						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec)}</span></span>
+						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec)}</span></span>
 					{:else}
-						<span class="pill marked" data-m>{@render linkText(sec, 'bar')}</span>
-						<span class="pill" data-p>{@render linkText(sec, 'bar')}</span>
+						<span class="pill marked" data-m>{@render linkText(sec)}</span>
+						<span class="pill" data-p>{@render linkText(sec)}</span>
 					{/if}
 				{/each}
 				<button type="button" class="pill more-btn current" tabindex="-1" data-more>{@render moreText(true)}</button>

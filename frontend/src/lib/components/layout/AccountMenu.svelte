@@ -97,16 +97,18 @@
 			type="button"
 			class="account-trigger"
 			bind:this={trigger}
-			aria-label="Account menu for {session.user.displayName}{mfaNeeded ? ', two-step sign-in needed' : ''}"
+			aria-label="Account menu for {session.user.displayName} {session.user.email}{mfaNeeded ? ', two-step sign-in needed' : ''}"
 			data-mfa-badge={mfaNeeded ?? undefined}
 			aria-expanded={menuOpen}
 			aria-controls={menuId}
 			disabled={signingOut}
 			onclick={() => (menuOpen = !menuOpen)}
 		>
-			<span class="avatar" aria-hidden="true">
-				{initials}
-				{#if mfaNeeded}<span class="mfa-badge">i</span>{/if}
+			<!-- The avatar is a picture of the person: its initials and the badge's "i" are
+			     drawn by CSS (::before), not text, so the button's visible words are the name
+			     and email, both in its accessible name (WCAG 2.5.3 label in name). -->
+			<span class="avatar" aria-hidden="true" data-initials={initials}>
+				{#if mfaNeeded}<span class="mfa-badge"></span>{/if}
 			</span>
 			<span class="who">
 				<span class="name">{session.user.displayName}</span>
@@ -206,6 +208,9 @@
 		font-size: var(--font-xs);
 		font-weight: 700;
 	}
+	.avatar::before {
+		content: attr(data-initials);
+	}
 	/* Two-step sign-in still needed: a small "i" on the avatar's corner, in the banner's warning colour. */
 	.mfa-badge {
 		position: absolute;
@@ -223,6 +228,9 @@
 		font-weight: 700;
 		font-style: italic;
 		line-height: 1;
+	}
+	.mfa-badge::before {
+		content: 'i';
 	}
 	.item-warning .label {
 		color: var(--warning);

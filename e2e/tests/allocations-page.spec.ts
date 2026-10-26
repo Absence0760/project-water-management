@@ -444,10 +444,10 @@ test('in the sidebar by default, it also opens from the Summary and from Hydrolo
 	await page.goto(`/projects/${p.id}?tab=supply`);
 	const results = page.getByRole('region', { name: 'Hydrological unit results' });
 	await expect(results.getByRole('link', { name: /^Registered vs modelled use, for each unit\s+Allocations$/ })).toHaveAttribute('href', `?tab=allocations&run=${runId}`);
-	const card = page.getByRole('link', { name: /: registered vs modelled use$/ }).first();
+	const card = page.getByRole('link', { name: /: registered use vs modelled use$/ }).first();
 	await expect(card).toHaveText('Registered use');
 	const label = (await card.getAttribute('aria-label'))!;
-	const unit = p.units.find((u) => label === `${u.name}: registered vs modelled use`)!;
+	const unit = p.units.find((u) => label === `${u.name}: registered use vs modelled use`)!;
 	await expect(card).toHaveAttribute('href', `?tab=allocations&run=${runId}&unit=${unit.id}`);
 	await card.click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Allocations' })).toBeVisible();

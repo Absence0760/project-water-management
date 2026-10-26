@@ -136,6 +136,10 @@ test('Runs tab: the flow-unit switch and a small link; Hydrological units: units
 	const compare = page.locator('a.small').filter({ hasText: 'Compare runs' });
 	await expect(compare).toBeVisible();
 	// RunInputsPanel had `class="muted small"` but no rule for .small until it became global: it now renders small like every other hint.
+	// The restore row is inside Changes since this run, under the changes it would undo (issue #586 D16).
+	const since = page.getByRole('region', { name: 'Changes since this run' }).locator(':scope > details');
+	await since.locator(':scope > summary').click();
+	await expect(since).toHaveAttribute('open');
 	const restoreHint = page.getByText(/^Puts back the settings and model this run used/);
 	await expect(restoreHint).toBeVisible();
 

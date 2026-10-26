@@ -1,6 +1,5 @@
 import type { RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { navText } from '#lib/components/common/sectionNav.js';
 import { isModelQualityAnchor } from '#lib/components/calibration/links.js';
 import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '#lib/components/river/links.js';
 import { supplyAnchor } from '#lib/components/supply/links.js';
@@ -49,7 +48,7 @@ describe('resultGroups', () => {
 
 	it('names each link as its panel’s heading word for word, on the bar too: no shorter names (issue #586, D4)', () => {
 		const bar = resultSections({ forecast });
-		expect(bar.map((s) => navText(s, 'bar'))).toEqual([
+		expect(bar.map((s) => s.label)).toEqual([
 			'Summary',
 			'Forecast',
 			'Water balance by water year',
@@ -62,7 +61,6 @@ describe('resultGroups', () => {
 			'Chart any daily series'
 		]);
 		for (const s of resultSections({ forecast }, true)) {
-			expect(s.bar, s.id).toBeUndefined();
 			expect(s.covers, s.id).toBeUndefined();
 		}
 	});

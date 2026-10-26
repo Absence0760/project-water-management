@@ -1,7 +1,6 @@
 import type { CurtailmentFarm, FarmSummary, RunSummary, SupplyReliability } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '#lib/api/types.js';
-import { navText } from '#lib/components/common/sectionNav.js';
 import { supplyBars } from '#lib/components/overview/supplyBars.js';
 import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
 import { fmtPct } from '#lib/format/number.js';
@@ -46,14 +45,14 @@ describe('links', () => {
 	});
 
 	it('names each link as its panel’s heading, word for word on the bar too (issue #586 R4-F)', () => {
-		const names = supplyNav(true, true).flatMap((g) => g.sections.map((s) => [s.label, navText(s, 'bar')]));
+		const names = supplyNav(true, true).flatMap((g) => g.sections.map((s) => s.label));
 		expect(names).toEqual([
-			['Hydrological unit detail', 'Hydrological unit detail'],
-			['Hydrological unit results', 'Hydrological unit results'],
-			['Curtailment targets', 'Curtailment targets'],
-			['Assurance of supply', 'Assurance of supply'],
-			['Drought restrictions', 'Drought restrictions'],
-			['Other uses of water', 'Other uses of water']
+			'Hydrological unit detail',
+			'Hydrological unit results',
+			'Curtailment targets',
+			'Assurance of supply',
+			'Drought restrictions',
+			'Other uses of water'
 		]);
 	});
 

@@ -6,7 +6,7 @@
 // Runs & results, EWR, Hydrological units, Data, Compare runs and Project. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
 import { seedWhatIfs } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { layoutSettled } from '../support/reflow.ts';
@@ -417,6 +417,55 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 		page.locator('#data-series')
 	);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+/** Every Data panel, each by its heading (series/sections.ts dataNavGroups): on the bar and in the side index alike. */
+const DATA_ALL: [string, string[]][] = [
+	['Series', ['Input time series', 'Series chart', 'Data feeds']],
+	['Checks', ['Gauge vs logger agreement', 'Double mass: catchment rain vs CHIRPS', 'Data checks']],
+	['Reference', ['What the model uses']]
+];
+
+test('Data with every panel drawn: the bar names each by its heading and fits two rows at 1280, the index at 1440, the strip on a phone', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Menu data all');
+	// Sixteen synthetic water years (a double mass needs ten): catchment rain twice CHIRPS (a double mass), and a gauge that reads 80 % of a logger
+	// (an agreement table).
+	const start = Date.UTC(2000, 9, 1);
+	const days = (Date.UTC(2016, 9, 1) - start) / 86_400_000;
+	const chirps = Array.from({ length: days }, (_, i) => (i % 3 === 0 ? 4 : 0));
+	const logger = Array.from({ length: days }, (_, i) => 1 + (i % 7) / 10);
+	await Promise.all([
+		putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Catchment rain', unit: 'mm', startDate: '2000-10-01', values: chirps.map((v) => v * 2) }),
+		putSeries(page.request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS', unit: 'mm', startDate: '2000-10-01', values: chirps }),
+		putSeries(page.request, project.id, { kind: 'flow_logger_m3s', name: 'Logger', unit: 'm3/s', startDate: '2000-10-01', values: logger }),
+		putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge', unit: 'm3/s', startDate: '2000-10-01', values: logger.map((v) => Math.round(v * 0.8 * 1000) / 1000) })
+	]);
+	await page.setViewportSize({ width: 1280, height: 960 });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const menu = page.getByRole('navigation', { name: 'Data sections' });
+	const all = DATA_ALL.flatMap(([, links]) => links);
+	// Word for word as the side index (issue #586 R4-M), with every group named, in two rows and no More.
+	await expect(menu.getByRole('link')).toHaveText(all);
+	await expectNamedGroups(menu, ['Series', 'Checks', 'Reference']);
+	expect(await barRows(menu)).toBeLessThanOrEqual(2);
+	await expect(moreButton(menu)).toHaveCount(0);
+	await menu.getByRole('link', { name: 'Double mass: catchment rain vs CHIRPS' }).click();
+	await expect(page).toHaveURL(/#data-double-mass$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Double mass: catchment rain vs CHIRPS' })).toBeInViewport();
+	await expectNoViolations(page);
+
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await expectRail(menu, DATA_ALL, page.locator('#data-series'));
+
+	// A phone: the same words on a strip that scrolls inside itself, the page never sideways.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(menu.getByRole('link')).toHaveText(all);
+	await menu.getByRole('link', { name: 'Gauge vs logger agreement' }).click();
+	await expect(page.locator('#data-agreement')).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Gauge vs logger agreement' })).toBeInViewport();
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	await expectNoViolations(page);
 });
 
 test('on a 320 px phone the Data strip scrolls sideways inside itself, and every link Tab reaches shows whole (issue #586)', async ({ page, owner }) => {

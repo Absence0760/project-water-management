@@ -121,6 +121,18 @@ describe('unitUse and wholeWaterYears', () => {
 		);
 	});
 
+	it('the sentence (the label’s accessible name) holds the label’s words, for every band (WCAG 2.5.3 label in name)', () => {
+		const words = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+		const cases = [
+			null,
+			{ modelledM3: 1320, registeredM3: 1000, ratio: 1.32, band: 'over' as const },
+			{ modelledM3: 500, registeredM3: 0, ratio: null, band: 'unregistered' as const },
+			{ modelledM3: 0, registeredM3: 0, ratio: null, band: 'none' as const }
+		];
+		for (const u of cases) expect(words(useSentence('Farm A', u, 'the mean water year'))).toContain(words(useLabel(u)));
+		expect(useSentence('Farm A', cases[2], 'the mean water year')).toBe(`Farm A: none registered, ${fmtNum(500)} m³ modelled (the mean water year).`);
+	});
+
 	it('a dam beside the river: its surface use is the take at the intake, and the sentence says so (engine 1.82.0)', () => {
 		const c = compareAllocations({
 			startDate: '2001-10-01',

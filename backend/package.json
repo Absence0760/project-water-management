@@ -42,31 +42,31 @@
 		"import:gazetteer": "tsx scripts/import-gazetteer.ts"
 	},
 	"dependencies": {
-		"@aws-sdk/client-s3": "3.1149.0",
-		"@aws-sdk/client-sesv2": "3.1149.0",
-		"@aws-sdk/client-sqs": "3.1149.0",
-		"@aws-sdk/s3-request-presigner": "3.1149.0",
+		"@aws-sdk/client-s3": "3.1152.0",
+		"@aws-sdk/client-sesv2": "3.1152.0",
+		"@aws-sdk/client-sqs": "3.1152.0",
+		"@aws-sdk/s3-request-presigner": "3.1152.0",
 		"@water-management/engine": "workspace:*",
 		"bcryptjs": "3.0.3",
 		"dotenv": "^18.0.7",
 		"hono": "4.13.13",
 		"jose": "6.2.12",
-		"nodemailer": "10.1.4",
+		"nodemailer": "10.1.7",
 		"pg": "8.23.1",
 		"playwright-core": "1.64.1",
-		"zod": "4.6.6"
+		"zod": "4.6.7"
 	},
 	"devDependencies": {
-		"@hono/node-server": "2.1.4",
+		"@hono/node-server": "2.1.5",
 		"@types/aws-lambda": "8.10.164",
 		"@types/node": "24.19.2",
 		"@types/nodemailer": "8.0.2",
 		"@types/pg": "8.23.1",
-		"@vitest/coverage-v8": "^5.0.3",
+		"@vitest/coverage-v8": "^5.0.5",
 		"esbuild": "0.28.2",
 		"h5wasm": "0.10.3",
 		"tsx": "4.23.15",
 		"typescript": "7.0.2",
-		"vitest": "^5.0.3"
+		"vitest": "^5.0.5"
 	}
 }

@@ -1763,6 +1763,18 @@ export function guideFor(id: string): Guide | undefined {
 	return byId.get(id);
 }
 
+/**
+ * A guide's line in the help contents. A page guide's title is "<page>: <what it is for>", and the contents list it
+ * by the page's name alone: the "Pages, one by one" group already says what the list is, and twelve full titles, two
+ * or three lines each in the 13rem column, made the open group taller than a 1280×800 window (help.spec.ts). The
+ * guide's own heading keeps the full title.
+ */
+export function guideNavLabel(g: Pick<Guide, 'kind' | 'title'>): string {
+	if (g.kind !== 'page') return g.title;
+	const colon = g.title.indexOf(':');
+	return colon > 0 ? g.title.slice(0, colon) : g.title;
+}
+
 /** In-page anchor for a guide section, from its heading. */
 export function sectionId(heading: string): string {
 	return norm(heading)
