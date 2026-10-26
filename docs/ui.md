@@ -3682,7 +3682,7 @@ workspace in #326 (E3–E6, D3) (`lib/components/map/`, a lazy tab;
 lookup). It has its own sidebar row under **Build the model**, after the
 Network (`lib/workspace/tabs.ts`; it was `LINKED_ONLY` until #326 D3, and the
 sidebar's rows went to 32 px to keep a row to spare at 1440×960), and the
-Network header's **Map** link and Settings → WR2012 check still open it. A
+Network header's **Map** link and Calibration → WR2012 check still open it. A
 core tab: owners, editors and viewers see it (it becomes a results view with
 A1); viewers get no edit tools. The Network's own picture (its "Catchment
 map" card) stays the schematic; this is the geography.
@@ -4345,7 +4345,7 @@ map" card) stays the schematic; this is the geography.
   (the same controls as the card); "Areas are computed on the server from
   each polygon (geodesic, WGS84)."; **Where each hydrological unit’s area
   came from** (every unit, including those with no parcel, with the count
-  "n of N from the map", and the link to Settings → WR2012 check); and
+  "n of N from the map", and the link to Calibration → WR2012 check); and
   **Imported files**. In a narrow modal each row becomes a labelled card.
   `?tab=network&grid=map-features` (any other tab) lands on the Map with
   it open.
@@ -5662,7 +5662,7 @@ with the table the data needs).
   flagged water years and the latest five, the rest behind **Show all N water
   years** (`series/agreementFold.ts`; on Runs & results it keeps its 320 px
   box, a focusable named region); its *Calibration record → Compare with*
-  link lands on Settings → Calibration record (`#set-record`). *What the model uses* spans the page;
+  link lands on Calibration → Calibration record (`?tab=calibration#set-record`). *What the model uses* spans the page;
   its kinds (at least 22rem each, one column on a phone) are behind **Show
   what each kind of series is for** (a `<details>`, closed by default, issue
   #174), and its closing note, at a reading measure, shows either way; its
@@ -5790,7 +5790,7 @@ gauge is badged *Gauge record (checks only)*: the run checks it against the
 simulated flow there (Runs & results → Plausibility checks), and it is never
 the outlet's record, whatever its name (the outlet's EWR test, the *What the
 model uses* badges and the setup checklist read only the outlet's; a gauge EWR
-site's own EWR test reads its record, engine ≥ 1.41.0). When Settings → Calibration record → *Scored at* picks its
+site's own EWR test reads its record, engine ≥ 1.41.0). When Calibration → Calibration record → *Scored at* picks its
 gauge (engine ≥ 1.41.0), it is badged *Gauge record (calibration site)*
 instead: Fit automatically and a run's calibration statistics score it ([model.md
 §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)). A record whose gauge has left the model says
@@ -5812,7 +5812,7 @@ has written over every day the feed wrote, or the feed is removed or
 re-targeted (`frontend/src/lib/series/provenance.ts` `feedMark`). The **Add data** form has an optional **Source** field (up to 200
 characters; the existing series' own source when appending or replacing,
 until typed over); the unit chosen is recorded with it. **Flow gaps**: when
-Settings → Calibration record → *Flow gaps* fills the charted gauge or logger
+Calibration → Calibration record → *Flow gaps* fills the charted gauge or logger
 record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were

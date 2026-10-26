@@ -723,7 +723,7 @@ export const GUIDES: Guide[] = [
 		title: 'Calibrate by hand',
 		summary: 'Change a runoff parameter, run, and read the hydrograph and statistics until the fit is right.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'Before you start',
@@ -842,7 +842,7 @@ export const GUIDES: Guide[] = [
 		summary:
 			'Enter the quaternary’s published naturalised flow, and every run compares its natural flow with it.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'Steps',
@@ -1481,7 +1481,7 @@ export const GUIDES: Guide[] = [
 		title: 'How GR4J turns rain into flow',
 		summary: 'Two stores and two unit hydrographs, four parameters, and a water balance that always closes.',
 		kind: 'concept',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'Under the ground',
@@ -1547,7 +1547,7 @@ export const GUIDES: Guide[] = [
 		summary:
 			'What is scored, how the optimiser searches, and why validation on unseen days matters more than the fit.',
 		kind: 'concept',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'What is scored',
