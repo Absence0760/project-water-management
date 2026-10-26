@@ -23,6 +23,12 @@ import type { ExampleMapFeature } from './map.js';
 import { buildShowcase, SHOWCASE_NAME, SHOWCASE_UNCERTAINTY_RULE, showcaseNodeId, UNITS } from './showcase.js';
 import { SHOWCASE_MAP_FILE, showcaseMap } from './showcaseMap.js';
 
+/**
+ * The DWS gauge feed's series. It must sort after the observed record runs read ("Outlet weir (synthetic)"),
+ * or the server refuses it (409 series_takes_over, feeds/routes.ts takesOver) and the seed stops there.
+ */
+export const SHOWCASE_DWS_FEED_TARGET = 'Outlet weir (synthetic, DWS feed)';
+
 /** The name the project has until its seeding finishes. */
 export const SHOWCASE_WORKING_NAME = `${SHOWCASE_NAME} (seeding…)`;
 
@@ -196,7 +202,7 @@ export async function seedShowcase(d: ShowcaseDeps): Promise<string | null> {
 	// across a two-year gap. Switching one on (Settings › Data feeds) fetches them.
 	const chirps = (await api('POST', `${at}/feeds/chirps/from-boundary`, { featureId: boundary.id, updatedAt: boundary.updatedAt })).feed;
 	await api('PATCH', `${at}/feeds/${chirps.id}`, { enabled: false });
-	await api('POST', `${at}/feeds`, { source: 'dws', config: { station: 'Z1H001' }, targetName: 'Outlet weir (DWS feed)', enabled: false });
+	await api('POST', `${at}/feeds`, { source: 'dws', config: { station: 'Z1H001' }, targetName: SHOWCASE_DWS_FEED_TARGET, enabled: false });
 
 	// Runs: before the fit, the calibrated baseline, and a forecast run.
 	await api('POST', `${at}/runs`, { label: 'Before calibration (GR4J defaults)' });
