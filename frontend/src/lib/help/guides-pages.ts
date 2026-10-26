@@ -480,6 +480,27 @@ export const PAGE_GUIDES: Guide[] = [
 						text: '**Flow calibration** here is not **Flow generation** on **Model settings**: Flow calibration holds the runoff model’s parameters (how rain becomes flow), Flow generation how the rain reaches each hydrological unit.'
 					}
 				]
+			},
+			{
+				heading: 'The loop: fit, save, run, read',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'**Choose what the fit is scored against.** In **Calibration → Calibration record**, pick the observed flow series (a gauge or a logger), the [[calibration-window]] and any [[calibration-exclusions]], each with its reason. Do this before you look at a score.',
+							'**Fit.** In **Calibration → Fit the parameters → Fit automatically**, choose the objective by what the results will feed, keep **Validate** ticked, and press **Fit automatically**. You can open other pages while it runs; the result waits here. Read the shaded validation columns, then press **Apply to form**. To set a parameter by hand instead, change it under **Flow calibration** ([[guide:calibrate-by-hand|Calibrate by hand]]).',
+							'**Save.** The fitted parameters are an unsaved edit until you press **Save changes** on the save bar. The bar is the same on Model settings, so an edit there and one here save together; a problem on either page is listed on the bar with a link to its panel. **Preview** on the bar shows what your unsaved change does to the last run first, worked out in your browser.',
+							'**Run.** Press **Run model** in the header. A run started here opens back on this page.',
+							'**Read.** Under **How the shown run fits**, the new run is shown: the **Hydrograph**, the **Flow-duration curve** and **Calibration against observed flow** (its scores, the calibration check of flow against use, and where the parameters came from), then the WR2012 check and the plausibility checks when the run has them. Pick an earlier run under the heading to compare by eye, or use **Compare runs** for the full comparison.',
+							'**Repeat** until the validation scores are as good as the record allows. The header always says where the shown parameters came from and whether anything has changed since the fit.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'Links to these panels from before they moved here (an old **Model settings** or **Runs & results** bookmark, a note, an email) still land on the panel here, for the same run.'
+					}
+				]
 			}
 		],
 		terms: ['calibration', 'gr4j'],
