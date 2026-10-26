@@ -122,7 +122,7 @@ test.describe('in a zone on another day than UTC', () => {
 		await panel.getByLabel('Name on the register').fill('Zone Specialist');
 		await panel.getByLabel('Checked by (organisation)').fill('Rooikloof WUA');
 		await panel.getByRole('button', { name: 'Record the check' }).click();
-		await expect(panel.getByRole('row', { name: /Zone specialist/ })).toContainText(`${days.local} by Rooikloof WUA`);
+		await expect(panel.getByRole('row', { name: /Zone specialist/ })).toContainText(`${days.label} by Rooikloof WUA`);
 		await expect(panel.getByRole('alert')).toHaveCount(0);
 	});
 });

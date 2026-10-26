@@ -68,7 +68,7 @@ test('the owner sees every public link with its target, and withdraws an applica
 	await app.getByRole('button', { name: 'Withdraw River Trust' }).click();
 	await answerConfirm(page, true);
 	await expect(app).toContainText('Withdrawn');
-	await expect(app).toContainText(/Withdrawn \d{4}-\d{2}-\d{2} by Owner/);
+	await expect(app).toContainText(/Withdrawn \d{1,2} [A-Z][a-z]{2} \d{4} by Owner/);
 	await expect(app.getByRole('button', { name: /^Withdraw/ })).toHaveCount(0);
 	// The baseline link is untouched.
 	await expect(baseline.getByRole('button', { name: 'Withdraw Catchment forum' })).toBeVisible();

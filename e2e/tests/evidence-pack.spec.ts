@@ -23,6 +23,7 @@ import { confirmAuthorityDelegate } from '../support/db.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { dayFirst } from '../support/format.ts';
 import { box } from '../support/map.ts';
 
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
@@ -177,7 +178,8 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	const issued = await getPack(page.request, project.id, packId);
 	expect(issued.status).toBe('issued');
 	const code = issued.shortCode;
-	const stamp = `Issued · version 1 · ${issued.issuedAt!.slice(0, 10)}`;
+	// The day the pack was issued, day first in the page's zone (the e2e browser runs in UTC).
+	const stamp = `Issued · version 1 · ${dayFirst(issued.issuedAt!.slice(0, 10))}`;
 	for (const s of await stamps.all()) await expect(s).toHaveText(stamp);
 	const origin = new URL(page.url()).origin;
 	const line = `Manifest SHA-256 ${issued.manifestSha256} · verify code ${code} at ${origin}/verify/${code}`;
@@ -327,7 +329,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await withdraw.getByLabel('Reason').fill('The rule table was replaced by the 2026 determination.');
 	await withdraw.getByRole('button', { name: 'Withdraw pack' }).click();
 	await expect(page.getByTestId('pack-banner')).toContainText('Withdrawn. Reason (shown publicly on the verify page): The rule table was replaced by the 2026 determination.');
-	for (const s of await stamps.all()) await expect(s).toHaveText(/^Withdrawn · version 1 · issued \d{4}-\d{2}-\d{2}$/);
+	for (const s of await stamps.all()) await expect(s).toHaveText(/^Withdrawn · version 1 · issued \d{1,2} [A-Z][a-z]{2} \d{4}$/);
 	await pub.goto(`/verify/${code}`);
 	await expect(result).toHaveAttribute('data-status', 'withdrawn');
 	await expect(pub.getByTestId('verify-verdict')).toContainText('Withdrawn.');
