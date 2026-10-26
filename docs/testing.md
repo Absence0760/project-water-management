@@ -279,7 +279,9 @@ guard, so the pin proves "unchanged", not "the same as now".
   invariant holding. The shards are their own vitest project, `fuzz`
   (`packages/engine/vitest.config.ts`), which `pnpm test`, `test:coverage`,
   `test:changed` and the release's soak run with `unit`: `sequence.groupOrder`
-  starts them only once the `unit` group has finished, one worker a shard.
+  starts them only once the `unit` group has finished, one worker a shard and
+  at most one fewer than the machine's cores (4 shards on a 4-core CI runner,
+  under coverage, each ran past the guard; `taskset -c 0-1` reproduces it).
   Inside `unit` they had run beside the engine's other heavy files, one worker
   per thread (`pnpm test` runs the engine before the frontend and backend,
   which import it, so its own files are the competition): 54–57 s a shard on the

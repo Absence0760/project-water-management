@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os';
 import { defineConfig } from 'vitest/config';
 
 // Three projects:
@@ -52,7 +53,11 @@ export default defineConfig({
 					// helpers' own tests (shard.test.ts) stay in unit.
 					include: ['src/fuzz/gr4j.*.test.ts'],
 					sequence: { groupOrder: 1 },
-					maxWorkers: 4,
+					// One shard a core, leaving one for vitest itself: four workers on a
+					// 4-core CI runner, under coverage's instrumentation, shared the CPU and
+					// each ran past its hang guard (the Coverage workflow on #587;
+					// reproduced with `taskset -c 0-1`, 180–195 s a shard against ~12 s alone).
+					maxWorkers: Math.max(1, Math.min(4, availableParallelism() - 1)),
 					// Each shard sets its own timeout (shardTimeoutMs); this is the rest's.
 					testTimeout: 120_000
 				}
