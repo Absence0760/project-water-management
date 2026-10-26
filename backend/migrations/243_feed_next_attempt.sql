@@ -16,17 +16,21 @@
 --   * failing: likewise p_last + backoff − 1 min <= p_now, the backoff
 --     15 min × 2^(failures − 1), or 2 h × 2^(failures − 1) after a refusal,
 --     capped at the day.
--- feeds.db.test.ts checks them against each other on a grid of instants.
+-- feeds.db.test.ts checks the new app_feed_is_due against a frozen copy of
+-- 242's body on a grid of feeds and instants.
 --
--- Same signature for app_feed_is_due, so CREATE OR REPLACE keeps its grants
--- (none: 242 revoked it from PUBLIC; only the SECURITY DEFINER schedulers
--- call it). The new function is pure (no table, no session state), and the
--- feed list reads it as water_app (feeds/store.ts COLS), so water_app may
--- execute it. No table, policy or RLS changes.
+-- Both are STABLE, not IMMUTABLE as 242 declared: adding a day to a
+-- timestamptz depends on the session's TimeZone, so neither may be folded
+-- or used in an index. Same signature for app_feed_is_due, so CREATE OR
+-- REPLACE keeps its grants (242 revoked PUBLIC's; the database's default
+-- privileges still give water_app EXECUTE, harmless for a function that reads
+-- no table). The new function reads no table either, and the feed list calls
+-- it as water_app (feeds/store.ts COLS), so water_app is granted EXECUTE
+-- explicitly. No table, policy or RLS changes.
 
 CREATE FUNCTION app_feed_next_attempt(p_source text, p_schedule text, p_failures integer, p_last timestamptz, p_last_error text)
 	RETURNS timestamptz
-	LANGUAGE sql IMMUTABLE SET search_path = public
+	LANGUAGE sql STABLE SET search_path = public
 	AS $$
 		SELECT CASE WHEN p_last IS NULL THEN NULL ELSE LEAST(
 			CASE WHEN p_source = 'chirps_gefs' THEN (
@@ -46,7 +50,7 @@ CREATE FUNCTION app_feed_next_attempt(p_source text, p_schedule text, p_failures
 -- LEAST ignores NULL, so a feed with no failures takes its schedule's instant.
 CREATE OR REPLACE FUNCTION app_feed_is_due(p_source text, p_schedule text, p_failures integer, p_last timestamptz, p_now timestamptz, p_last_error text)
 	RETURNS boolean
-	LANGUAGE sql IMMUTABLE SET search_path = public
+	LANGUAGE sql STABLE SET search_path = public
 	AS $$
 		SELECT p_last IS NULL OR app_feed_next_attempt(p_source, p_schedule, p_failures, p_last, p_last_error) <= p_now
 	$$;

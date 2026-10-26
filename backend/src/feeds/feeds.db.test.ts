@@ -489,7 +489,26 @@ describe('the scheduler', () => {
 			// A failing GEFS feed whose slot comes before its backoff ends: the slot.
 			expect(await next('chirps_gefs', 1, '2026-03-01T08:40:00Z', outage)).toBe('2026-03-01T08:45:00.000Z');
 
-			// And app_feed_is_due agrees on either side of every instant, on a grid of feeds.
+			// 242's app_feed_is_due, frozen: the rewrite must agree with it everywhere, not only with itself.
+			await client.query(`CREATE FUNCTION pg_temp.feed_is_due_242(p_source text, p_schedule text, p_failures integer, p_last timestamptz, p_now timestamptz, p_last_error text)
+				RETURNS boolean LANGUAGE sql AS $$
+					SELECT p_last IS NULL
+						OR CASE WHEN p_source = 'chirps_gefs' THEN
+							p_last < (
+								SELECT CASE WHEN s <= p_now THEN s ELSE s - interval '1 day' END
+								FROM (SELECT (date_trunc('day', p_now AT TIME ZONE 'UTC') + interval '8 hours 45 minutes') AT TIME ZONE 'UTC' AS s) slot
+							)
+						ELSE
+							p_last <= p_now + interval '1 minute' - interval '1 day'
+						END
+						OR (p_failures > 0 AND p_last <= p_now + interval '1 minute' - LEAST(
+							interval '1 day',
+							make_interval(mins => CASE WHEN starts_with(coalesce(p_last_error, ''), 'the source refused this server’s requests') THEN 120 ELSE 15 END
+								* power(2, LEAST(p_failures, 10) - 1)::integer)
+						))
+				$$`);
+
+			// app_feed_is_due turns true exactly at each instant, and agrees with 242's on either side of it, on a grid of feeds.
 			const lasts = ['2026-03-01T06:00:00Z', '2026-03-01T08:44:59Z', '2026-03-01T08:45:00Z', '2026-03-01T23:30:00Z'];
 			for (const source of ['chirps', 'chirps_gefs', 'dws'])
 				for (const failures of [0, 1, 2, 4, 7, 12])
@@ -501,6 +520,14 @@ describe('the scheduler', () => {
 							const t = Date.parse(at!);
 							expect(await due(t - 1000), `${source} ${failures} ${error} ${last}: before ${at}`).toBe(false);
 							expect(await due(t), `${source} ${failures} ${error} ${last}: at ${at}`).toBe(true);
+							for (const now of [t - 3_600_000, t - 60_000, t - 1000, t, t + 1000, t + 60_000]) {
+								const args = [source, 'daily', failures, last, new Date(now).toISOString(), error];
+								const { rows } = await client.query<{ now243: boolean; was242: boolean }>(
+									'SELECT app_feed_is_due($1, $2, $3, $4, $5, $6) AS now243, pg_temp.feed_is_due_242($1, $2, $3, $4, $5, $6) AS was242',
+									args
+								);
+								expect(rows[0]!.now243, `${source} ${failures} ${error} ${last} at ${new Date(now).toISOString()}: 243 against 242`).toBe(rows[0]!.was242);
+							}
 						}
 		} finally {
 			await client.end();
