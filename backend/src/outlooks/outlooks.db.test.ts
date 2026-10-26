@@ -260,7 +260,7 @@ describe('POST /projects/:id/outlooks', () => {
 		// After the day after the run's last: the state on the day before isn't known.
 		const late = await post(outlookOf(a.runId, { decisionDate: '2013-10-02', seasonEnd: '2014-04-30' }));
 		expect(late.status).toBe(422);
-		expect(late.body.error).toMatch(/^the decision date must fall after the base run's first day \(2000-10-01\)/);
+		expect(late.body.error).toMatch(/^the decision date must fall after the base run's first day \(1 Oct 2000\)/);
 		expect((await post(outlookOf(a.runId, { decisionDate: '2000-10-01', seasonEnd: '2001-04-30' }))).status).toBe(422);
 		// No database text in any of them.
 		for (const r of [late, other]) expect(JSON.stringify(r.body)).not.toMatch(/violat|constraint|relation|syntax/i);

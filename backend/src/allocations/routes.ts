@@ -13,7 +13,7 @@
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
-import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationMode, type RunAllocations, isIsoDate } from '@water-management/engine';
+import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationMode, type RunAllocations, dayText, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -286,7 +286,7 @@ async function prepareImport(db: Db, projectId: string, body: Omit<z.infer<typeo
 		[projectId, sha256]
 	);
 	if (dup[0])
-		throw new ApiError(409, `this file was already imported (as “${dup[0].fileName}” on ${localDate(new Date(dup[0].importedAt), dup[0].timeZone ?? DEFAULT_TIME_ZONE)}); delete that import first to re-import it`);
+		throw new ApiError(409, `this file was already imported (as “${dup[0].fileName}” on ${dayText(localDate(new Date(dup[0].importedAt), dup[0].timeZone ?? DEFAULT_TIME_ZONE))}); delete that import first to re-import it`);
 	const nodes = await matchNodes(db, projectId);
 	const { rows: known } = await db.query<KnownMatch>(
 		'SELECT registration_no AS "registrationNo", property_ref AS "propertyRef", node_id AS "nodeId" FROM allocation WHERE project_id = $1 AND node_id IS NOT NULL',

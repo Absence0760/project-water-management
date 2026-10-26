@@ -3,6 +3,7 @@
 // content. Every interpolated value is HTML-escaped — project and team names
 // and display names are user-controlled and these emails go to addresses the
 // user merely typed in.
+import { dayText } from '@water-management/engine';
 import { language } from '@water-management/engine/languages';
 import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
 import { LOCALES, mailT, mailLocale, type Locale, type MailTranslator } from './i18n/index.js';
@@ -506,12 +507,12 @@ export function licenceRecordMail(to: string, f: LicenceRecordFacts): Mail {
 	const subject = review ? `Record the licence outcome for ${f.projectName} — ${PRODUCT}` : `The licence record of ${f.projectName} can now be deleted — ${PRODUCT}`;
 	const paragraphs = review
 		? [
-				`${f.projectName} holds a licence record: an issued evidence pack or a nominated evidence run, with the names of the people who made and signed it. Its review was due on ${f.dueOn}, and no licence outcome is recorded.`,
+				`${f.projectName} holds a licence record: an issued evidence pack or a nominated evidence run, with the names of the people who made and signed it. Its review was due on ${dayText(f.dueOn)}, and no licence outcome is recorded.`,
 				'Record the licence outcome (licence issued, with its expiry date; licence refused; application rejected; not considered; or application withdrawn), or confirm that the record is still needed. The record is then kept until three years after the licence expires, or three years after any other outcome; a confirmation sets the next review five years on.',
 				'Nothing is deleted until the organisation asks for it.'
 			]
 		: [
-				`The licence record of ${f.projectName} reached its closing date on ${f.dueOn}: three years after the licence expired, or after the application was refused, rejected, not considered or withdrawn.`,
+				`The licence record of ${f.projectName} reached its closing date on ${dayText(f.dueOn)}: three years after the licence expired, or after the application was refused, rejected, not considered or withdrawn.`,
 				'It can now be deleted, with its evidence packs and the names they keep. Nothing is deleted automatically: ask the operator to delete the project, in writing, or record a later outcome if the licence was renewed.'
 			];
 	return render('licence_record', to, subject, {
