@@ -21,6 +21,7 @@
 	import type { CheckNode } from '#lib/components/calibration/calibrationCheck.js';
 	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
+	import { CAL_SUBSECTIONS } from '#lib/components/calibration/page.js';
 	import EwrAgreementTable from '#lib/components/ewr/EwrAgreementTable.svelte';
 	import AgreementTable from '#lib/components/series/AgreementTable.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
@@ -332,7 +333,7 @@
 					lanes={siteLanes}
 					lanesLabel={LANES_LABEL}
 					lanesNote={lanesLooksNote(siteLanes)}
-					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Settings → Calibration record → Scored at)."
+					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Calibration record → Scored at, above)."
 				/>
 			{:else}
 				<div class="chart-ph" style:height="390px" role="status">Loading flows at the calibration site…</div>
@@ -412,7 +413,7 @@
 				/>
 				{#if run.settings}
 					<div class="provenance">
-						<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, run.settings.fitRecord)} />
+						<FitProvenance headingId={CAL_SUBSECTIONS.provenance.id} record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, run.settings.fitRecord)} />
 					</div>
 				{/if}
 				{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}

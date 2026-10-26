@@ -276,15 +276,18 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	const runId = await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
-	// Model quality moved to Calibration (issue #586 Round 3); the water balance stays, with the summary.
+	// Model quality moved to Calibration (issue #586 Round 3); the water balance stays, with the summary. Each link
+	// is its panel's heading word for word (D4).
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
-		'Water balance',
-		'Notes & evidence',
-		'Validation',
+		'Water balance by water year',
+		'Run notes',
+		'Evidence',
+		'Reproduction',
+		'Validation statement',
 		'Publication',
 		'Self-checks',
-		'Outputs'
+		'Explore any output'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
 	const groups = ['Record', 'Dig deeper'];

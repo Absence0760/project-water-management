@@ -1590,8 +1590,12 @@ put the results first; its first screen follows board A1 of the redesign
    lists every Project panel's heading) is
    sent there, replacing the history entry so Back skips it. So is a link to
    the reserve strip's old ids (`#strip-h`, `#reserve-strip`) or an EWR
-   panel's `#res-…` id: to the EWR page's `#res-reserve-strip` or that panel
-   (`river/links.ts` `summaryToRiverAnchor`, issue #558).
+   panel's `#res-…` id: to the EWR page's `#res-reserve-strip` or that panel,
+   for the run the Summary shows (issue #558). Both are `from: 'overview'`
+   rows of the shared forwarding table (`nav/anchorMoves.ts`, issue #586
+   round 3), followed on load and on a hash change typed while the Summary
+   is open (`nav/anchorLanding.ts` `followAnchors`, whose `fill` passes the
+   run shown).
 4. **Setup.** While a step still needs work (or the lists are loading and
    nothing known is missing: a one-line "Checking data and runs…" bar) the
    checklist is on the page: first before a run, under the columns after
@@ -5343,9 +5347,11 @@ sections", "Data sections", "Project page sections", "Comparison sections"; "Sec
 the node sheet); each group is a list named for screen readers. Each link says
 its panel's heading (`label`), so the menu and the page read alike ("EWR by
 month" against *EWR compliance by month* was one of the navigation review's
-findings, issue #462); on the bar a section may say a shorter `bar` name,
-the heading's first words, to keep the bar to two rows, while the side
-index, the More menu and the find box say the heading. With
+findings, issue #462), on the bar too: Settings, Runs & results and
+Calibration name every heading word for word (issue #586, D4). A section's
+`bar` name, the heading's first words, is legacy: EWR and Compare runs still
+use it to keep their bars to two rows, while their side index, More menu and
+find box say the heading. With
 `groupNames` the bar shows the names too: a small muted label before each
 group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
@@ -5417,8 +5423,8 @@ History is left to its own redesign.
   window's height less the save bar (`--dock-h`), scrolling inside itself
   only in a window shorter than its tallest state. Narrower it is the bar,
   with the same sections; a page whose links differ between the two binds
-  `layout` (Runs & results' bar folds three panels into one Notes & evidence
-  link, its rail lists them). Without `children` the wrapper draws no box
+  `layout` (Runs & results' rail adds a line for two sub-headings the bar
+  leaves out, Changes since this run and Trace a day, issue #586 D4). Without `children` the wrapper draws no box
   (`display: contents`), so the bar still sticks down the whole page.
 - **Find** (`find`, the box's label): in the rail, a search box at its top;
   on the bar, a **Find** button at its start (in the fit's lead) opening the
@@ -6401,10 +6407,12 @@ section header, which it fills (`fillHeader`) like the other sections.
   gaps `#set-rain`, Data quality `#set-quality`: its zero-rain and
   low-vs-CHIRPS limits change results, issue #173), **Demand & supply**
   (Demand `#set-demand`, Drought restrictions
-  `#set-restrict`, Reporting `#set-reporting`), **Runoff & calibration** (Flow generation
-  `#set-share`, the id it had as the Flow share panel, kept so its links and notes still land, issue #553; Flow calibration `#set-flow`,
-  Calibration record `#set-record`, Fit the parameters `#set-fit`, WR2012
-  check `#set-wr2012`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
+  `#set-restrict`, Reporting `#set-reporting`), **Runoff** (Flow generation
+  `#set-share`, the id it had as the Flow share panel, kept so its links and notes still land, issue #553;
+  Flow calibration, Calibration record, Fit the parameters and WR2012 check
+  moved to [Calibration](#calibration) in issue #586 round 3, sharing this
+  page's draft and save bar: `CALIBRATION_SETTINGS_SECTIONS`, whose Save
+  blockers `saveBlockers` lists after this page's), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
   tables `#set-reserve`), **Reading results** (Outcome matrix
   `#set-outcomes`, Seasonal outlook `#set-outlook`, Evidence
   `#set-evidence`: they change no result) and **Automatic runs**
@@ -6436,7 +6444,11 @@ section header, which it fills (`fillHeader`) like the other sections.
   **API keys, on Project** (`?tab=project#project-api-keys`; also "ingest",
   "logger") and **Scheduled reports, on Project**
   (`?tab=project#project-report-schedules`; also "schedule", "email",
-  "PDF"). Their old anchors still work: `?tab=settings#set-feeds`,
+  "PDF"), and the fit's panels that moved in round 3, each **…, on
+  Calibration** (`?tab=calibration#set-flow`, `#set-record`, `#set-fit`,
+  `#set-wr2012` and the Evaporation from the map card's `#set-evaporation`;
+  also by the settings they hold: "X3", "pan coefficient", "exclusions",
+  "fit automatically", "quaternary", "dPET"). Their old anchors still work: `?tab=settings#set-feeds`,
   `#set-api-keys` and `#set-report-schedules`, from an old email, a bookmark
   or a note, go on to those addresses with every other parameter kept
   (`?tab=settings&rain=boundary#set-feeds` opens
@@ -6445,8 +6457,13 @@ section header, which it fills (`fillHeader`) like the other sections.
   skips it, on a page load or a `#…` followed or typed with Settings open;
   the page there lands on the panel and focuses its heading (one row each
   in `ANCHOR_MOVES`, `lib/nav/anchorMoves.ts`;
-  `e2e/tests/settings-layout-pins.spec.ts`). No
-  backend email or printed report links to them. A panel with a Save
+  `e2e/tests/settings-layout-pins.spec.ts`). So do the fit's old anchors
+  (round 3): `?tab=settings#set-fit` (`#set-flow`, `#set-record`,
+  `#set-wr2012`, `#set-evaporation`) goes on to `?tab=calibration#set-fit`,
+  every parameter kept (`e2e/tests/calibration-forwards.spec.ts`). No
+  backend email or printed report links to them; a note on one of those four
+  panels links to Calibration (`notes.ts` `noteHref`, "Calibration: Fit the
+  parameters"; a note on the rest says "Model settings: …"). A panel with a Save
   blocker gets a red dot ("has a problem").
   The menu marks the panel being read with `aria-current="location"` and,
   as a bar, raises the page's `scroll-padding-top` by its height (the rail
@@ -7768,20 +7785,37 @@ here (How the shown run fits); the settings panels follow. The page has:
   `MODEL_QUALITY_ANCHORS`, `modelQualitySections`); Model quality draws its
   panels after the flow-duration curve at once only for a link to one of
   them (`isLowerAnchor`, issue #586 R3-B).
-- **Side index** (`SectionNav`, "Calibration sections"): the two parts, by
-  their headings; a rail from 80rem of page (1440 px), the bar narrower. A
-  loaded `#cal-setup` / `#cal-fit` lands on its heading, focused.
+- **Side index** (`SectionNav`, "Calibration sections"; `calibration/page.ts`
+  `calibrationNavGroups`, issue #586 round 3): a group for each part, named
+  by its heading, listing its panels by theirs, word for word on the bar too
+  (D4): *Set up the fit* (Flow calibration, Calibration record, Fit the
+  parameters, WR2012 check: `CALIBRATION_SETTINGS_SECTIONS`) and *How the
+  shown run fits* (the shown run's Model quality panels, `modelQualitySections`,
+  none before a run is shown), with a line under Calibration against observed
+  flow for each sub-heading the page draws: **Calibration check: flow against
+  use, per gauge** (`#res-calibration-check`) and **Where the parameters came
+  from** (`#res-fit-provenance`; `CAL_SUBSECTIONS`; the page says which it
+  shows). A rail from 80rem of page (1440 px), the bar narrower. A loaded
+  `#cal-setup` / `#cal-fit` lands on its heading, focused.
 
 Set up the fit is a panel at the top; How the shown run fits takes the
 page's width under it. The
 Calibration row's link carries a run picked on Runs & results
-(`workspace/tabLinks.ts` `RUN_TABS`). An old `?tab=calibration#set-…` link (a
-bookmark, a note's link, from when the tab opened Settings) goes on to that
-panel on Settings, every other parameter kept, replacing the history entry
-(a row of `nav/anchorMoves.ts`); Settings sends a moved one (`#set-feeds`) on again.
+(`workspace/tabLinks.ts` `RUN_TABS`). Old links to the moved panels come
+here (rows of `nav/anchorMoves.ts`, issue #586 round 3), replacing the
+history entry so Back skips it: `?tab=settings#set-fit` (and `#set-flow`,
+`#set-record`, `#set-wr2012`, `#set-evaporation`), every parameter kept, and
+`?tab=runs&run=<id>#res-calibration` (and every other Model quality anchor),
+for the same run, the runs filter (`q=`) dropped. An old
+`?tab=calibration#set-…` link to a panel that stayed on Model settings (a
+bookmark, a note's link, from when the tab opened Settings) goes on there,
+every other parameter kept; Settings sends a moved one (`#set-feeds`) on
+again. The fit's anchors stay. The report's model checks, a note on one of
+the fit's panels and the WR2012 missing-panel line link here directly.
 Specs: `calibration-page.spec.ts`, `calibration-results.spec.ts` (Model
 quality's panels, anchors, missing-panel lines, the picker, the Summary's
-link), and `settings-layout-pins.spec.ts` for the old links.
+link), `calibration-forwards.spec.ts` for the old links, and
+`settings-layout-pins.spec.ts` for those that stayed on Model settings.
 
 ## EWR
 
@@ -8347,8 +8381,12 @@ read it before.
   results (`railSide="right"`: the runs list is the page's left column),
   every group named over its links, each link named as its panel's heading
   (**Water balance by water year**, **Run notes**, **Evidence**, **Reproduction**, **Validation
-  statement**, **Explore any output**), and two last groups for the panels that moved to their own pages
-  (issue #17), linked with the run shown: *On EWR* (**Reserve
+  statement**, **Explore any output**), with a line for two sub-headings a reader looks for, each
+  under its panel and on its heading's id (**Changes since this run**, `#res-changes`, under
+  Reproduction; **Trace a day**, `#res-trace`, under Self-checks; `RUN_SUBSECTIONS`, issue #586 D4),
+  and three last groups for the panels that moved to their own pages
+  (issue #17, issue #586 round 3), linked with the run shown: *On Calibration* (**Hydrograph**,
+  **Calibration against observed flow**), *On EWR* (**Reserve
   rules met, by month**, **Days below the EWR, by month**, **Water
   account**) and *On Hydrological units* (**Curtailment targets**,
   **Assurance of supply**; `otherPageGroups`, issue #462). The results keep
@@ -8357,11 +8395,12 @@ read it before.
   page, marks the section being read, takes at most two rows on a laptop
   (three at 1280 px until its groups could break across rows; [§ On this page
   menu](#on-this-page-menu)), and on phones is one sideways strip, without the
-  other pages' groups (the run header links to both pages). The bar keeps
-  shorter names (`bar`: Water balance, Notes &
-  evidence, Validation, Outputs) so it still fits two rows at 1280 px beside
-  the runs rail (issue #137); its **Notes & evidence** is one link standing
-  for Run notes, Evidence and Reproduction (`covers`; issue #521). The page's `scroll-padding-top` includes the bar's
+  other pages' groups (the run header links to those pages) and the two
+  sub-heading lines. Its links name the headings word for word, as the side
+  index does (issue #586, D4): with Model quality's links gone to Calibration
+  they fit two rows at 1280 px beside the runs rail without the shorter names
+  (Water balance, Notes & evidence, Validation, Outputs) and the one link that
+  stood for Run notes, Evidence and Reproduction (issue #521) they needed. The page's `scroll-padding-top` includes the bar's
   height, so a jumped-to section, or a focused control, clears both the phone
   bar and the menu.
 - **Page order.** The results are grouped by the question they answer
@@ -8387,7 +8426,13 @@ read it before.
      #586 round 2), then, collapsed,
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
-     stretches). Then one line of **model checks** (`credibility`): the
+     stretches). Each place a warning names ("Model settings → Rain gaps →
+     Flagged rain", "Calibration → Plausibility checks": the engine writes
+     them as page → panel heading, `packages/engine/src/places.ts`, engine
+     ≥ 1.98.0, issue #586 D19) is a link to that panel, on Calibration for the
+     run shown (`runs/warningText.ts`, `WarningText.svelte`); an older run's
+     "Settings → Calibration record" or "The Plausibility checks panel" links
+     to the panel's place now. The printable report keeps the plain words. Then one line of **model checks** (`credibility`): the
      self-checks, the calibration, the plausibility findings and the WR2012
      flag, each in words with a coloured edge and a link to its panel: the
      self-checks below, the rest on Calibration for the run shown
@@ -9414,8 +9459,9 @@ read it before.
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
   those runs; an older run shows neither. From engine 1.55.0, after it,
-  **Validation signatures** (`runs/ValidationSignatures.svelte`, helpers in
-  `runs/signatures.ts`; [model.md §2.10d](./model.md), *Validation
+  **Hydrological signatures** (named Validation signatures up to engine
+  1.97.0, issue #586 D17; `runs/ValidationSignatures.svelte`, helpers in
+  `runs/signatures.ts`; [model.md §2.10d](./model.md), *Hydrological
   signatures*, CR-16): which record is scored (the outlet's gauge or logger
   record, or the calibration site's, named) and on how many days; a verdict
   line; a table with a row each for the base-flow index by the Hughes et al.
@@ -9431,12 +9477,12 @@ read it before.
   skill of at least 0 with 8 or more segments), which the display reads
   through one named constant, `PROVISIONAL_SIGNATURE_LIMITS` in
   `runs/signatures.ts` ([followups.md § Hydrologist](./followups.md#hydrologist)).
-  The check list gains a *Validation signatures* line (so does the run's
+  The check list gains a *Hydrological signatures* line (so does the run's
   credibility strip, which counts the check list's findings) and the
   panel's intro counts six checks on those runs; a run with no observed
   record shows the heading and "Not computed: needs an observed flow
   record."; a run made before 1.55.0 shows neither. The help article
-  *Validation signatures* (`plausibility-signatures`) explains BFI, the two
+  *Hydrological signatures* (`plausibility-signatures`) explains BFI, the two
   filters, the low-flow slope and %BiasFLV and the held-out recession skill
   in plain words. The Compare page sets all six checks and the
   gauges side by side (`compare/PlausibilityCompare.svelte`, rows from

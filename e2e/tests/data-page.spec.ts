@@ -341,8 +341,9 @@ test('gauge vs logger flows with the page: the flagged and latest water years, t
 	await expect(panel.getByRole('button', { name: 'Show only the flagged and latest years' })).toHaveAttribute('aria-expanded', 'true');
 	expect(await innerScrollers(page)).toEqual([]);
 
-	await panel.getByRole('link', { name: 'Calibration record → Compare with' }).click();
-	await expect(page).toHaveURL(/[?&]tab=settings#set-record$/);
+	// The record is chosen on Calibration since issue #586 round 3.
+	await panel.getByRole('link', { name: 'Calibration → Calibration record → Compare with' }).click();
+	await expect(page).toHaveURL(/[?&]tab=calibration#set-record$/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Calibration record' })).toBeFocused();
 });
 

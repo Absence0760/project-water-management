@@ -20,11 +20,8 @@ const SETTINGS_LINKS = [
 	'Demand',
 	'Drought restrictions',
 	'Reporting',
+	// The fit's four panels moved to Calibration (issue #586 round 3).
 	'Flow generation',
-	'Flow calibration',
-	'Calibration record',
-	'Fit the parameters',
-	'WR2012 check',
 	'EWR',
 	'Reserve rule tables',
 	'Outcome matrix',
@@ -37,7 +34,7 @@ const SETTINGS_LINKS = [
 const SETTINGS_RAIL: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
-	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['Runoff', ['Flow generation']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automatic runs', ['Automatic runs']]
@@ -139,13 +136,15 @@ test('Settings: at 1280 px every link is on the bar, in at most two rows; at 144
 	expect(await menu.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
 });
 
-/** Runs & results' bar names (the shorter ones), and the headings the side index says (issue #462). */
+/** Runs & results' bar, each link its panel's heading word for word (issue #586, D4), and the side index's lines (issue #462). */
 // Model quality moved to Calibration (issue #586 Round 3); the water balance stays, after the summary.
-const RUNS_BAR = ['Summary', 'Water balance', 'Notes & evidence', 'Validation', 'Publication', 'Self-checks', 'Outputs'];
+const RUNS_BAR = ['Summary', 'Water balance by water year', 'Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication', 'Self-checks', 'Explore any output'];
 const RUNS_RAIL: [string | null, string[]][] = [
 	[null, ['Summary', 'Water balance by water year']],
-	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication']],
-	['Dig deeper', ['Self-checks', 'Explore any output']],
+	// The side index also has a line for each sub-heading a reader looks for (D4).
+	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Changes since this run', 'Validation statement', 'Publication']],
+	['Dig deeper', ['Self-checks', 'Trace a day', 'Explore any output']],
+	['On Calibration', ['Hydrograph, on Calibration', 'Calibration against observed flow, on Calibration']],
 	['On EWR', ['Reserve rules met, by month, on EWR', 'Days below the EWR, by month, on EWR', 'Water account, on EWR']],
 	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]
 ];

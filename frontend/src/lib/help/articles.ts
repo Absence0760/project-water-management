@@ -487,7 +487,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 
 	// ---- Crops and irrigation demand -----------------------------------------
 	'apan': {
-		long: 'Enter the 12 monthly values for the catchment, Oct … Sep, from an A-pan station, or from the WR90 or WR2012 quaternary data converted to A-pan: those studies publish Symons-pan (S-pan) evaporation, which reads lower than an A-pan beside it (Bosman 1990 gives the conversion). Entering S-pan unchanged understates crop demand and dam evaporation. When an A-pan grid is loaded, **Evaporation from the map** (Settings → Flow calibration) proposes the row from the catchment boundary, citing the grid; a reference-ET (ET₀) grid never fills this row, because ET₀ isn’t pan evaporation.',
+		long: 'Enter the 12 monthly values for the catchment, Oct … Sep, from an A-pan station, or from the WR90 or WR2012 quaternary data converted to A-pan: those studies publish Symons-pan (S-pan) evaporation, which reads lower than an A-pan beside it (Bosman 1990 gives the conversion). Entering S-pan unchanged understates crop demand and dam evaporation. When an A-pan grid is loaded, **Evaporation from the map** (Calibration → Flow calibration) proposes the row from the catchment boundary, citing the grid; a reference-ET (ET₀) grid never fills this row, because ET₀ isn’t pan evaporation.',
 		aliases: ['A pan', 'Apan', 'evaporation', 'WR90'],
 		related: ['crop-factor', 'irrigation-demand', 'wr90'],
 		source: 'b023 Crop demand; docs/model.md §7'

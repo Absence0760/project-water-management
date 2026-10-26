@@ -295,14 +295,12 @@ test('?tab=calibration opens the Calibration page under its own sidebar row, and
 	await expect(sections(page).getByRole('link', { name: 'Settings & calibration', exact: true })).not.toHaveAttribute('aria-current', 'page');
 	await expect(pageTitle(page)).toHaveCount(0);
 
-	// An old link into a Settings panel through it (a bookmark, a note) goes on to the panel there, replacing the entry,
-	// so Back skips it; the calibration panels and the rest alike.
+	// An old link into a panel that stayed on Model settings, through it (a bookmark, a note), goes on to the panel
+	// there, replacing the entry, so Back skips it. The fit's panels are on Calibration since round 3, so their links
+	// stay (calibration-forwards.spec.ts).
 	for (const [id, heading] of [
-		['set-fit', 'Fit the parameters'],
-		['set-flow', 'Flow calibration'],
-		['set-record', 'Calibration record'],
-		['set-wr2012', 'WR2012 check'],
-		['set-ewr', 'EWR']
+		['set-ewr', 'EWR'],
+		['set-period', 'Simulation period']
 	] as const) {
 		await page.goto('about:blank');
 		await page.goto(`/projects/${project.id}?tab=calibration#${id}`);

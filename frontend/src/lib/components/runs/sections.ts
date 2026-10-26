@@ -26,7 +26,8 @@ export interface ResultGroup extends NavGroup {
 	sections: ResultSection[];
 }
 
-type SectionInput = Pick<RunSummary, 'forecast'>;
+/** A run's summary, or the parts of one a test gives: only `forecast` changes the list. */
+type SectionInput = Partial<RunSummary>;
 
 /**
  * The sub-headings with a line of their own in the side index (`rail`), each its heading's id (the heading sets

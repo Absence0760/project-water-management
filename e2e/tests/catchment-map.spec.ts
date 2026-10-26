@@ -5,7 +5,7 @@
 // accepts a parcel's area from the picked feature's card and sees it in the
 // run comparison's input diff; places a gauge through the Place sheet
 // (`place=1`); reads Every feature (`grid=map-features`). The pick is in the
-// URL (`feature=`, `node=`) and Back undoes it. Settings → WR2012 check looks
+// URL (`feature=`, `node=`) and Back undoes it. Calibration → WR2012 check looks
 // up the quaternary under the boundary. A viewer gets no edit tools. The big
 // case (30 units) fits the window with the list scrolling in its card. No
 // assertion reads the map's pixels. Axe-scanned, light and dark, wide and phone.
@@ -119,7 +119,7 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 		await expect(r.getByRole('button', { name: /^Use / })).toHaveCount(0);
 	}
 	await expect(grid.getByTestId('map-area-sources').getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText('From the map “Upper farm”');
-	await expect(grid.getByRole('link', { name: 'Settings → WR2012 check' })).toBeVisible();
+	await expect(grid.getByRole('link', { name: 'Calibration → WR2012 check' })).toHaveAttribute('href', '?tab=calibration#set-wr2012');
 	await expect(grid.getByTestId('map-sources').getByRole('listitem')).toHaveCount(3);
 	// A row's name picks it and closes the grid.
 	await table.getByRole('button', { name: 'Lower farm', exact: true }).click();

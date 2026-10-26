@@ -71,6 +71,6 @@ export function flowFillShading(
 		filled: { startDate: record.startDate, values: f.values.map((v, i) => (f.code[i] !== FLOW_FILL_CODE.none && v !== null ? v : NaN)) },
 		summary: s,
 		code: f.code,
-		caption: `${parts.length ? `Shaded: ${parts.join('; ')}, in a run only (Settings → Calibration record → Flow gaps); the stored record is unchanged.` : 'No gap is filled (Settings → Calibration record → Flow gaps).'}${refused}${open}`
+		caption: `${parts.length ? `Shaded: ${parts.join('; ')}, in a run only (Calibration → Calibration record → Flow gaps); the stored record is unchanged.` : 'No gap is filled (Calibration → Calibration record → Flow gaps).'}${refused}${open}`
 	};
 }
