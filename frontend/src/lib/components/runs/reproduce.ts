@@ -1,10 +1,10 @@
 // "Check reproduction" (roadmap WP-3.1, GET …/runs/:runId/reproduce): what the
 // answer says, in words. Pure, so it is unit-tested without the component.
 import type { Reproduction, ReproductionDifference } from '#lib/api/index.js';
-import { fmtReading } from '#lib/format/number.js';
+import { fmtDay, fmtReading } from '#lib/format/number.js';
 
-/** A difference too small for fmtReading's four decimals still shows as a number. */
-const size = (v: number) => (v !== 0 && Math.abs(v) < 1e-4 ? v.toExponential(2) : fmtReading(v));
+/** How much a series differs: "by up to 12.50", and float noise below fmtReading's four decimals "by less than 0.0001", not an exponent ("2.00e-9" reads as a figure to check; #586 D10). */
+const bySize = (v: number) => (v !== 0 && Math.abs(v) < 1e-4 ? 'by less than 0.0001' : `by up to ${fmtReading(v)}`);
 
 /** One difference as a line: which value, and how it differs. `nodeName` names a node by id. */
 export function differenceText(d: ReproductionDifference, nodeName: (id: string) => string | undefined): string {
@@ -13,7 +13,7 @@ export function differenceText(d: ReproductionDifference, nodeName: (id: string)
 	if (d.kind !== 'series')
 		return d.kind === 'series_missing' ? `${where}${d.label} is stored with the run but not produced now` : `${where}${d.label} is produced now but wasn't stored with the run`;
 	const days = `${d.days} day${d.days === 1 ? '' : 's'}`;
-	return `${where}${d.label} differs on ${days} from ${d.firstDate}${d.maxAbsDiff === null ? '' : `, by up to ${size(d.maxAbsDiff)}`}`;
+	return `${where}${d.label} differs on ${days} from ${fmtDay(d.firstDate)}${d.maxAbsDiff === null ? '' : `, ${bySize(d.maxAbsDiff)}`}`;
 }
 
 /** The headline of an answer, and whether it is good news, bad news or neither. */

@@ -24,10 +24,18 @@ const DATA_NOTES: RegExp[] = [
 	/flat stretch(es)? of \d+ or more days/
 ];
 
+/**
+ * A warning as a list item: its first letter a capital. Some engine warnings start lower case
+ * ("bed losses are on: …") because the engine also joins them into sentences; changing the
+ * engine's own text would need an ENGINE_VERSION bump (#586 D19, Round 3).
+ */
+export const warningItem = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+
 export function warningGroups(warnings: readonly string[] | undefined): { check: string[]; data: string[] } {
 	const check: string[] = [];
 	const data: string[] = [];
-	for (const w of warnings ?? []) (DATA_NOTES.some((re) => re.test(w)) ? data : check).push(w);
+	// Grouped on the engine's own text (DATA_NOTES match it), then shown as items.
+	for (const w of warnings ?? []) (DATA_NOTES.some((re) => re.test(w)) ? data : check).push(warningItem(w));
 	return { check, data };
 }
 

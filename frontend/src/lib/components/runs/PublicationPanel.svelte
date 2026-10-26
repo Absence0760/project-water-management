@@ -15,6 +15,7 @@
 	import { tick } from 'svelte';
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '#lib/api/index.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { focusHeading } from '#lib/help/anchor.js';
 	import { fmtDay, fmtStamp } from '#lib/format/number.js';
 	import { damsWithoutStopLevel, draftFrom, emptyDraft, LEVEL_LABEL, noticeLanguages, noticeTextFields, parseDraft, publishBlocker, restrictionSummary, type NoticeDraft } from './publication';
 
@@ -48,12 +49,24 @@
 	const ownPublication = $derived(history.find((h) => h.runId === run.id) ?? null);
 	const endorsement = $derived(history.find((h) => h.runId === run.id && h.endorsement)?.endorsement ?? null);
 
+	/**
+	 * Where the focus goes once an action's control has gone (ui-playbook § 4): back to Edit notice when the
+	 * notice form closes, else the panel's heading (Publish this run and the endorse form go once they've acted).
+	 */
+	async function focusAfter(to: 'edit' | 'title') {
+		await tick();
+		const el = document.getElementById(to === 'edit' ? `${uid}-edit-open` : `${uid}-h`);
+		if (!el) return;
+		if (to === 'title') focusHeading(el);
+		else el.focus();
+	}
+
 	let endorseNote = $state('');
 	let endorsing = $state(false);
 	let endorseError = $state<string | null>(null);
 	async function endorse(e: SubmitEvent) {
 		e.preventDefault();
-		if (!ownPublication || !current) return;
+		if (endorsing || !ownPublication || !current) return;
 		endorsing = true;
 		endorseError = null;
 		try {
@@ -63,6 +76,7 @@
 				history: history.map((h) => (h.id === meta.id ? { ...h, endorsement: meta.endorsement } : h))
 			});
 			endorseNote = '';
+			await focusAfter('title');
 		} catch (err) {
 			endorseError = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -104,6 +118,12 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+	function cancelEdit() {
+		editing = false;
+		error = null;
+		focusAfter('edit');
+	}
+
 	async function publish() {
 		if (saving) return;
 		const parsed = parseDraft(pubDraft);
@@ -137,6 +157,8 @@
 				done = `${published} The publication history couldn’t be refreshed: reload the page to see it.`;
 			}
 			onChange?.({ current: publication, history: h });
+			// Publish this run has gone with the dialog (the run is published now).
+			await focusAfter('title');
 		} catch (e) {
 			pubError = msg(e);
 		} finally {
@@ -146,7 +168,7 @@
 
 	async function saveNotice(e: SubmitEvent) {
 		e.preventDefault();
-		if (!current) return;
+		if (saving || !current) return;
 		const parsed = parseDraft(draft);
 		if (!parsed.ok) {
 			error = parsed.error;
@@ -160,6 +182,7 @@
 			done = 'Notice saved.';
 			// The history entry of the current publication carries its level too.
 			onChange?.({ current: publication, history: history.map((h) => (h.id === publication.id ? { ...h, restriction: { level: publication.restriction.level } } : h)) });
+			await focusAfter('edit');
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -209,7 +232,7 @@
 					<button type="button" class="btn btn-primary btn-sm" onclick={openPublish}>Publish this run</button>
 				{/if}
 				{#if current && !editing}
-					<button type="button" class="btn btn-sm" onclick={openEdit}>Edit notice</button>
+					<button type="button" class="btn btn-sm" id="{uid}-edit-open" onclick={openEdit}>Edit notice</button>
 				{/if}
 			</div>
 		{/if}
@@ -237,8 +260,9 @@
 			<form class="edit" onsubmit={endorse} aria-label="Endorse this baseline">
 				<label for="{uid}-endorse">Endorsement note <span class="muted">(optional)</span></label>
 				<textarea id="{uid}-endorse" rows="2" maxlength={PUBLICATION_TEXT_MAX} bind:value={endorseNote}></textarea>
-				<div class="acts">
-					<button type="submit" class="btn btn-sm" disabled={endorsing}>{endorsing ? 'Endorsing…' : 'Endorse as the responsible authority'}</button>
+				<!-- The page's action row (ui-playbook § 2); aria-disabled while it saves, so the focus stays (§ 4). -->
+				<div class="action-row">
+					<button type="submit" class="btn btn-sm" aria-disabled={endorsing}>{endorsing ? 'Endorsing…' : 'Endorse as the responsible authority'}</button>
 				</div>
 				<p class="muted small">An endorsement is recorded once, with your name, and can’t be changed or withdrawn.</p>
 			</form>
@@ -264,9 +288,9 @@
 		{#if editing && current && !blocker}
 			<form class="edit" onsubmit={saveNotice} aria-label="Edit the notice">
 				{@render noticeFields(`${uid}-edit`, draft)}
-				<div class="acts">
-					<button type="submit" class="btn btn-primary btn-sm" disabled={saving}>{saving ? 'Saving…' : 'Save notice'}</button>
-					<button type="button" class="btn btn-sm" onclick={() => (editing = false)} disabled={saving}>Cancel</button>
+				<div class="action-row">
+					<button type="submit" class="btn btn-primary btn-sm" aria-disabled={saving}>{saving ? 'Saving…' : 'Save notice'}</button>
+					<button type="button" class="btn btn-sm" onclick={cancelEdit} disabled={saving}>Cancel</button>
 				</div>
 			</form>
 		{/if}
@@ -278,7 +302,7 @@
 <Dialog bind:open={dialogOpen} title="Publish this run?" wide>
 	<p>Publishing makes “{run.label || 'Untitled run'}” the run stakeholders see:</p>
 	<ul>
-		<li>each farmer sees this run’s figures for their own hydrological unit, from 1 October to {run.endDate}, and the notice below;</li>
+		<li>each farmer sees this run’s figures for their own hydrological unit, from 1 October to {fmtDay(run.endDate)}, and the notice below;</li>
 		<li>{current ? 'it replaces the current published baseline, which stays in the history' : 'it becomes the first published baseline'}, and the run is kept while the history holds it.</li>
 	</ul>
 	{#if noStop}
@@ -292,7 +316,7 @@
 	{#if pubError}<div class="alert alert-error" role="alert">{pubError}</div>{/if}
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (dialogOpen = false)} disabled={saving}>Cancel</button>
-		<button type="button" class="btn btn-primary" onclick={publish} disabled={saving}>{saving ? 'Publishing…' : 'Publish'}</button>
+		<button type="button" class="btn btn-primary" onclick={publish} aria-disabled={saving}>{saving ? 'Publishing…' : 'Publish'}</button>
 	{/snippet}
 </Dialog>
 

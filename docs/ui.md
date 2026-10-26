@@ -8277,7 +8277,9 @@ read it before.
      lands here, so a new engine warning is never hidden; past three, the
      first three and **Show all N things to check**, which folds back with
      **Show only the first 3 things to check**, so the results reach the
-     first screen, issue #521; the report lists them all), then, collapsed,
+     first screen, issue #521; the report lists them all; each item starts with
+     a capital, `warningItem`, though some engine warnings start lower case,
+     #586 round 2), then, collapsed,
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). Then one line of **model checks** (`credibility`): the
@@ -8493,7 +8495,7 @@ read it before.
   date and who last changed it. Editors get, in the panel's head (issue
   #521), **Publish this run** on any other run: a confirm dialog says what changes
   for stakeholders (each farmer sees this run's figures for their own farm
-  from 1 October, and the notice; it replaces the current baseline, which
+  from 1 October to the run's last day, day first, and the notice; it replaces the current baseline, which
   stays in the history), warns when farm dams have no stop level ("N farm
   dams have no stop level (0 %)…", from the run's model snapshot, design
   §3 Q3), and holds the notice fields (level, cut %, next update date,
@@ -8507,7 +8509,13 @@ read it before.
   keep separate notices and errors, so opening one never overwrites the
   other's typing. A publish that succeeds but whose history refresh
   fails still closes as published, with "The publication history couldn't
-  be refreshed: reload the page to see it." rather than an error. A legacy-model run (a stored run from
+  be refreshed: reload the page to see it." rather than an error. The focus
+  goes where the page is after each act (#586 round 2,
+  `runs-record-actions.spec.ts`): to the panel's heading once a publish or an
+  endorsement has taken its button away, and back to **Edit notice** when
+  the notice form saves or is cancelled. The forms end in the page's
+  `.action-row` (Save notice, then Cancel), and Save notice, Publish and the
+  endorse button stay focusable while they work (`aria-disabled`). A legacy-model run (a stored run from
   before engine 1.0.0) says why it can't be published: that model was
   removed and the run is a workbook comparison only. A scenario run (also once
   its scenario is deleted) says so too: farmers are shown the catchment as it
@@ -8636,6 +8644,11 @@ read it before.
   [model.md § Verification](./model.md#verification)). It has three
   parts. First, one line saying all checks passed, or how many failed (a failure
   is a model bug, so it asks to be reported). Then each check with ✓/✗ in text,
+  a wrapped line starting under the text, not the mark; when every check passed the
+  list (13 long lines, more than a phone's screen) waits behind **Show the N checks**
+  (`aria-expanded`, folding back with **Hide the checks**), as the things to check
+  fold; a failed check shows them all, and the printable report always lists them
+  (`runs-record-actions.spec.ts`, #586 round 2). The checks are
   in the workspace's words (the engine's "farm" reads "hydrological unit", `checkLabel`),
   the first problem (the node's name and date) under a failed one, which engine
   made the run and ran its checks, and the largest daily balance error of any
@@ -8678,7 +8691,10 @@ read it before.
   the form; a day it can't read, or one outside the run, replaces that line with what's wrong (an alert,
   the field `aria-invalid` and focused) and traces nothing. It was a native date field, which shows the
   browser's own order (12/30/2021 in a US browser; issue #521). The table's caption and the largest
-  residual's day are day first too. Parameters and names come from
+  residual's day are day first too. **Trace** stays focusable while it fetches (`aria-disabled`, not
+  `disabled`, which threw the keyboard's focus to the page), and one short status line announces
+  "Traced Upper farm on 2 Jul 2019: 23 columns." rather than a live region reading the whole table
+  (#586 round 2). Parameters and names come from
   the run's input snapshot, not today's model. The picker's first option,
   **Catchment (rain to natural flow)**, traces the runoff model's day instead
   (`GET …/runs/:runId/day` without a `nodeId`): for GR4J, rain used P, PET E,
@@ -9095,7 +9111,13 @@ read it before.
   and a line under the heading says which is which ("The run’s own
   explanation, kept with it …; the team’s discussion of the run is under
   Notes"); **Save notes**, like the Evidence form's **Nominate as evidence**,
-  is a default-size button in an action row under its field. Run notes,
+  is a default-size button in an action row under its field. Neither is ever
+  `disabled` under the focus: with nothing to save, or while saving or
+  nominating, it is `aria-disabled` (still focusable; its handler ignores the
+  press; `.btn[aria-disabled='true']` in `app.css` dims it as `:disabled`
+  does), so **Save notes** keeps the focus after a save, beside "Saved." (#586
+  round 2; ui-playbook § 4, don't disable a control while its own change
+  saves). Run notes,
   Evidence and Reproduction are three panels (issue #521; they were one card
   with four actions), each in the side index, and one **Notes & evidence**
   link on the bar.
@@ -9109,7 +9131,12 @@ read it before.
   instead** when another run is current; `POST …/evidence`). A legacy-model
   run (a stored run from before engine 1.0.0, which removed the model), a
   scenario run (also once its scenario is deleted), a forecast run and the
-  current evidence run say why they can't be nominated instead. The first
+  current evidence run say why they can't be nominated instead (the current
+  one only through the status line, "Nominated as evidence on …", not a
+  second "This run is the nominated evidence run." under it). Once a
+  nomination or a withdrawal is made, its form (and the head's button) give
+  way to the status line, and the focus goes to the panel's heading
+  (`runs-record-actions.spec.ts`, #586 round 2). The first
   three kinds can never be evidence (`evidenceKindBlocker`), so for them the
   panel shows only that reason, to everyone, with **Open the evidence run**
   (a link to its `#res-evidence`) "for its nomination history": no withdraw
@@ -9143,9 +9170,15 @@ read it before.
   inputs, **Check reproduction** (viewers too; in the panel's head) re-runs it on the server from
   them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
   version), **Differs in N places** (each listed: a summary value, or a
-  node's series with its differing days, first date and largest difference;
+  node's series with its differing days, first date (day first) and largest
+  difference, "by less than 0.0001" for float noise rather than an exponent;
   an error when the engine is the same version, a warning when it changed),
-  **Not reproducible**, or why a stored input can't be used. A run from
+  **Not reproducible**, or why a stored input can't be used. The button keeps
+  the focus while it checks (`aria-disabled`), and a failed check replaces an
+  earlier answer rather than sitting under it. *Changes since this run* dates
+  its recorded changes and the restore dialog's run day first ("26 Oct 2026
+  14:05", `fmtStamp`), and its heading, like *Validation statement*'s, is the
+  page's h3 size (#586 round 2). A run from
   before stored inputs says so instead of offering the check. The
   flow-duration curve with Q10–Q95 (engine `views/fdc.ts`: the Q table is
   `fdcPercentileTable`, the same function the run summary CSV, the .xlsx
@@ -9296,7 +9329,10 @@ read it before.
   observed record) or on two runs that scored different records
   ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
-  stored series, grouped by node. The catchment's series include the final
+  stored series (`runs/RunChart.svelte`, *Explore any output*), its first picker
+  **Catchment, hydrological unit or gauge** (the catchment first, then each in
+  network order; it read "Hydrological unit" over a list that opens on the
+  catchment, #586 round 2). The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
   (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)
   and the day's CHIRPS factor (`chirps_factor`), and with the CHIRPS

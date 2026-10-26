@@ -33,7 +33,9 @@ test('an editor nominates a run as evidence, replaces it, and the history keeps 
 	await expect(rowA.getByRole('button', { name: /^Delete run/ })).toHaveCount(0);
 	await expect(page.getByRole('link', { name: /^Nominated as evidence on \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d by Owner \d+\.$/ })).toBeVisible();
 	await expect(evidence.getByRole('button', { name: /^Nominate/ })).toHaveCount(0);
-	await expect(evidence.getByText('This run is the nominated evidence run.')).toBeVisible();
+	// The panel's status line says it once (#586 round 2: no second "This run is the nominated evidence run.").
+	await expect(evidence.getByText(/^Nominated as evidence on /)).toBeVisible();
+	await expect(evidence.getByText('This run is the nominated evidence run.')).toHaveCount(0);
 
 	// Replace it with B: a new entry, and A's stays in the history.
 	await list.getByRole('button', { name: /^GR4J B/ }).click();

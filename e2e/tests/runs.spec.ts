@@ -59,7 +59,7 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(chart.locator('canvas')).toBeVisible();
 
 	// A farm's own series can be charted too.
-	await page.getByLabel('Hydrological unit', { exact: true }).selectOption({ label: 'Upper farm' });
+	await page.getByLabel('Catchment, hydrological unit or gauge', { exact: true }).selectOption({ label: 'Upper farm' });
 	await expect(page.getByRole('img', { name: /^Upper farm · .*: line chart/ }).locator('canvas')).toBeVisible();
 
 	// The run is stored: a reload shows it again, newest first.
