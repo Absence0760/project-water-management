@@ -377,7 +377,9 @@ test('/welcome blocks its first paint on no stylesheet: its CSS is in the HTML',
 	const html = await (await request.get('/welcome')).text();
 	const links = html.match(/<link\b[^>]*rel="stylesheet"[^>]*>/g) ?? [];
 	expect(links.filter((l) => !/\sdisabled\b/.test(l))).toEqual([]);
-	expect(html).toMatch(/<style>[^<]*\.landing\b/);
+	// Read each <style> to its close: CSS may hold a "<" itself (a range query, "(width<=50rem)").
+	const styles = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]!);
+	expect(styles.some((css) => /\.landing\b/.test(css))).toBe(true);
 });
 
 test('on a desktop the story’s pinned scene fits the window, and the step in the middle lights its part', async ({ page }) => {
