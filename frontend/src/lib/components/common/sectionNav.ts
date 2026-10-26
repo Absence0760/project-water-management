@@ -1,5 +1,5 @@
 // The "On this page" menu shared by the long workspace pages (SectionNav.svelte):
-// Settings & calibration, Runs & results, EWR, Hydrological units, Data
+// Model settings, Runs & results, EWR, Hydrological units, Data
 // and Compare runs, and the Network node sheet's form (in a box of its own, `onjump`).
 
 export interface NavSection {

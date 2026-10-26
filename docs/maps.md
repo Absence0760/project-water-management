@@ -2238,9 +2238,9 @@ reads them.
 
 ## Evaporation from the map
 
-**Evaporation from the map**, in Settings → Flow calibration under GR4J's
+**Evaporation from the map**, in Calibration → Flow calibration under GR4J's
 potential evaporation (issue #326 Part B, "B-evap";
-[ui.md § Settings & calibration](./ui.md#settings--calibration)), averages an evaporation
+[ui.md § Calibration](./ui.md#set-up-the-fit)), averages an evaporation
 grid's 12 monthly means over the **catchment boundary** and proposes them,
 beside what the saved settings hold, as one of two inputs. Which one is the
 grid's kind, and **nothing is converted between them**:

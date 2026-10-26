@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findElsewhere } from '#lib/components/common/sectionNav.js';
 import { ANCHOR_MOVES, anchorMoved } from '#lib/nav/anchorMoves.js';
-import { saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsElsewhere, settingsNavGroups } from './sections';
+import { CALIBRATION_SETTINGS_SECTIONS, isCalibrationSetting, saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsElsewhere, settingsNavGroups, settingsPageOf } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
 	it('has unique ids, in page order, grouped by task', () => {
@@ -14,12 +14,8 @@ describe('SETTINGS_SECTIONS', () => {
 			'set-demand',
 			'set-restrict',
 			'set-reporting',
-			// Flow generation (issue #553 round 3) keeps the Flow share panel's id and leads Runoff & calibration.
+			// Flow generation (issue #553 round 3) keeps the Flow share panel's id; the four that set up a fit moved to Calibration (issue #586 round 3).
 			'set-share',
-			'set-flow',
-			'set-record',
-			'set-fit',
-			'set-wr2012',
 			'set-ewr',
 			'set-reserve',
 			// The outcome matrix's reading of a sweep, the seasonal outlook's season and the declared uncertainty rule: they change no result.
@@ -43,11 +39,28 @@ describe('SETTINGS_SECTIONS', () => {
 	});
 });
 
+describe('CALIBRATION_SETTINGS_SECTIONS (issue #586 round 3)', () => {
+	it('lists the four panels on the Calibration page, in its order, and none of them is on Model settings', () => {
+		expect(CALIBRATION_SETTINGS_SECTIONS.map((s) => [s.id, s.label])).toEqual([
+			['set-flow', 'Flow calibration'],
+			['set-record', 'Calibration record'],
+			['set-fit', 'Fit the parameters'],
+			['set-wr2012', 'WR2012 check']
+		]);
+		for (const s of CALIBRATION_SETTINGS_SECTIONS) {
+			expect(SETTINGS_SECTIONS.some((x) => (x.id as string) === s.id), s.id).toBe(false);
+			expect(isCalibrationSetting(s.id)).toBe(true);
+			expect(settingsPageOf(s.id)).toBe('calibration');
+		}
+		for (const s of SETTINGS_SECTIONS) expect(settingsPageOf(s.id), s.id).toBe('settings');
+	});
+});
+
 describe('settingsElsewhere (issue #586)', () => {
 	it('offers API keys to an owner only, since Project shows no such panel to anyone else', () => {
 		expect(settingsElsewhere(true).map((e) => e.text)).toContain('API keys');
 		expect(settingsElsewhere(false).map((e) => e.text)).not.toContain('API keys');
-		expect(settingsElsewhere(false).map((e) => e.text)).toEqual(['Comparison band', 'Data feeds', 'Scheduled reports']);
+		expect(settingsElsewhere(false).map((e) => e.text)).toEqual(['Comparison band', 'Data feeds', 'Scheduled reports', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']);
 	});
 });
 
@@ -55,6 +68,18 @@ describe('SETTINGS_ELSEWHERE (issue #521)', () => {
 	it('offers the comparison band on Allocations for each way a reader may ask for it', () => {
 		for (const q of ['comparison band', 'registered volumes', 'tolerance']) {
 			expect(findElsewhere(SETTINGS_ELSEWHERE, q).map((e) => e.href), q).toEqual(['?tab=allocations#alloc-band']);
+		}
+	});
+
+	it('finds the panels that moved to Calibration there, by their fields’ words too (issue #586 round 3)', () => {
+		for (const [q, href] of [
+			['warm-up', '?tab=calibration#set-flow'],
+			['pan coefficient', '?tab=calibration#set-flow'],
+			['exclusions', '?tab=calibration#set-record'],
+			['fit automatically', '?tab=calibration#set-fit'],
+			['quaternary', '?tab=calibration#set-wr2012']
+		] as const) {
+			expect(findElsewhere(SETTINGS_ELSEWHERE, q).map((e) => [e.href, e.page]), q).toEqual([[href, 'Calibration']]);
 		}
 	});
 

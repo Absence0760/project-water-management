@@ -20,15 +20,14 @@
 </script>
 
 <script lang="ts">
-	// Flow calibration, Calibration record, Fit the parameters and the WR2012 check (issue #586 round 2): the panels that
-	// set up a fit, out of SettingsTab.svelte so the Calibration page can mount them as they are. They edit the
-	// workspace page's draft (settingsDraft.svelte.ts) in place, so the one save bar saves them with the rest of the
-	// settings wherever they show, and Fit automatically's session (calibration/fitSession.svelte.ts) is the page's
-	// too, so a fit outlives a tab change. The ids (#set-flow, #set-record, #set-fit, #set-wr2012, #set-evaporation)
-	// are on the panels here; the Save blockers that link to them are listed by the page that shows them (SettingsTab
-	// today), and the side index by settings/sections.ts. No wrapper element: the panels are siblings of the page's
-	// other panels. They expect a `settings-form explain-scope` ancestor, as SettingsTab's: the panel lines' and cards'
-	// styles, and the explanations switch (app.css).
+	// Flow calibration, Calibration record, Fit the parameters and the WR2012 check (issue #586): the panels that set up
+	// a fit, on the Calibration page's "Set up the fit" (calibration/CalibrationTab.svelte, round 3; they were on
+	// Settings until then). They edit the workspace page's draft (settingsDraft.svelte.ts) in place, so the one save bar
+	// saves them with Model settings' edits, and Fit automatically's session (calibration/fitSession.svelte.ts) is the
+	// page's too, so a fit outlives a tab change. The ids (#set-flow, #set-record, #set-fit, #set-wr2012,
+	// #set-evaporation) are on the panels here (settings/sections.ts CALIBRATION_SETTINGS_SECTIONS); the draft works out
+	// their Save blockers (blockers.ts). No wrapper element: the page gives them a `settings-form explain-scope`
+	// ancestor, whose panel lines', cards' and explanations' rules are app.css's.
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '#lib/components/notes/notes.js';
 	import {
@@ -234,15 +233,15 @@
 		<NotesDrawer projectId={project.id} target={settingTarget('flow')} />
 	</div>
 	<p class="summary" data-testid="summary-flow">{summaries['set-flow']}</p>
-	<p class="hint explain">Rain → natural flow. Tune against observed flow; check NSE and PBIAS on Runs & results.</p>
+	<p class="hint explain">Rain → natural flow. Tune against observed flow, run the model, then check NSE and PBIAS under <a href="#cal-fit">How the shown run fits</a>.</p>
 	{#if petMissing}
 		<p class="alert alert-warning" role="status">
 			{#if pe.kind === 'monthly'}
 				GR4J needs potential evaporation, and the monthly PE row (below) is 0 in every month. Without it the catchment would never dry out,
 				so runs and fits are refused.
 			{:else}
-				GR4J needs A-pan evaporation (Demand, above) and a pan coefficient above 0 (below). Without them the catchment would never dry
-				out, so runs and fits are refused.
+				GR4J needs A-pan evaporation (<a href="?tab=settings#set-demand">Demand</a>, on Model settings) and a pan coefficient above 0 (below).
+				Without them the catchment would never dry out, so runs and fits are refused.
 			{/if}
 		</p>
 	{/if}
@@ -330,7 +329,7 @@
 			</span>
 			{#if s.unitRain?.mode === 'perUnit'}
 				<!-- A state line, not an explanation: it stays when the explanations are off. -->
-				<span class="hint" role="note" data-testid="areal-rain-unit-note">With flow generation Per unit (<a href="#set-share">Flow generation</a>), it applies only to the units that fall back to the catchment rain.</span>
+				<span class="hint" role="note" data-testid="areal-rain-unit-note">With flow generation Per unit (<a href="?tab=settings#set-share">Flow generation</a>, on Model settings), it applies only to the units that fall back to the catchment rain.</span>
 			{/if}
 			{#if areal}
 				<!-- Its own chunk (issue #521): most projects leave the correction off. -->
@@ -357,11 +356,11 @@
 			</p>
 			<span class="hint explain" id="st-pe-h">
 				{#if pe.kind === 'monthly'}
-					GR4J runs on the monthly PE row below. Irrigation demand and dam evaporation still use the A-pan row (Demand, above), and GR4J
-					doesn’t use the pan coefficient.
+					GR4J runs on the monthly PE row below. Irrigation demand and dam evaporation still use the A-pan row (<a href="?tab=settings#set-demand">Demand</a>,
+					on Model settings), and GR4J doesn’t use the pan coefficient.
 				{:else}
-					GR4J runs on pan coefficient × A-pan. The A-pan row (Demand, above) also drives irrigation demand and dam evaporation, so changing
-					it moves all three; to change GR4J’s PE alone, enter a monthly PE.
+					GR4J runs on pan coefficient × A-pan. The A-pan row (<a href="?tab=settings#set-demand">Demand</a>, on Model settings) also drives
+					irrigation demand and dam evaporation, so changing it moves all three; to change GR4J’s PE alone, enter a monthly PE.
 				{/if}
 			</span>
 		</fieldset>
@@ -486,8 +485,8 @@
 					</div>
 				</div>
 			</Fold>
-			<!-- The pan coefficient row's paste (issue #477): this panel's own, so it goes with the panel (issue #586). -->
-			<MonthlyPasteDialog bind:this={monthlyPaste} {draft} pan {readonly} />
+			<!-- The pan coefficient row's paste (issue #477): this row only, as Demand's A-pan row is on Model settings (issue #586). -->
+			<MonthlyPasteDialog bind:this={monthlyPaste} {draft} rows="pan" {readonly} />
 		{/if}
 	</div>
 	<div class="sub-card" data-testid="flow-evaporation-card">
@@ -656,9 +655,8 @@
 
 <style>
 	/* SettingsTab.svelte's styles for these panels, moved with them (issue #586): the same rules, so the panels look the
-	   same in place and on a page of their own. SettingsTab keeps its copy of the shared ones for its own panels. The
-	   panel line (.summary) and the cards (.sub-card) come from the page's `.settings-form` wrapper (SettingsTab), so a
-	   page that mounts these panels gives them that wrapper, as it gives them `explain-scope`. */
+	   same as Model settings' own. SettingsTab keeps its copy of the shared ones for its own panels. The panel line
+	   (.summary) and the cards (.sub-card) are app.css's `.settings-form` rules, the wrapper the page gives them. */
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);

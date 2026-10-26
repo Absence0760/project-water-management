@@ -1,5 +1,5 @@
 // Per-day quality flags (calibration research CR-18/19/22, issue #66): a
-// record's gauged range in Settings → Calibration record, the fit censoring
+// record's gauged range in Calibration → Calibration record, the fit censoring
 // days above the highest gauging, the data-quality panel beside the fit, and
 // the fit record saying when the flag settings changed since.
 import { seedRunnableProject, updateSettings } from '../support/api.ts';
@@ -9,7 +9,7 @@ import { saveChanges, saveSettings, openFold } from '../support/settings.ts';
 test('a gauged range needs its source, and saves with it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Quality flags form');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	// Folded into one line of their values (issue #521) until opened.
 	await expect(page.getByTestId('record-flags-summary')).toHaveText(
 		'gauged range not known · above-range days censored · below-range, suspect and infilled days left out · no river-stop months · flow gaps not filled'
@@ -54,7 +54,7 @@ test('the fit censors days above the highest gauging, shows its data quality, an
 		runoffModel: 'gr4j',
 		qualityFlags: { ratings: { flow_observed_m3s: { gaugedMaxM3s: 0.3, gaugedMinM3s: null, source: 'Synthetic rating table' } } }
 	});
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');

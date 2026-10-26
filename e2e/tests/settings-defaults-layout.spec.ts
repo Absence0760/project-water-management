@@ -1,7 +1,8 @@
 // Settings → Rain gaps, Data quality and the WR2012 check (issue #521 sections 4, 8 and 9): a group that is at its
 // defaults is one line of its values that opens to edit them (common/Fold.svelte with `atDefaults`, ui-playbook.md § 2);
 // Rain gaps is two cards with each list's add actions in its own head row, under their own names; the CHIRPS check
-// heads its own group; WR2012's "Propose from the map" is in the panel's head and its judging folds. Synthetic data.
+// heads its own group; WR2012's "Propose from the map" is in the panel's head and its judging folds (the WR2012 check is
+// on the Calibration page since issue #586 round 3). Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject } from '../support/api.ts';
@@ -11,8 +12,10 @@ import { openFold, showExplanations } from '../support/settings.ts';
 
 const box = async (l: Locator) => (await l.boundingBox())!;
 
+/** Opens a settings panel on its page: the WR2012 check is on Calibration, the rest on Model settings. */
 async function openAt(page: Page, projectId: string, id: string) {
-	await page.goto(`/projects/${projectId}?tab=settings#${id}`);
+	const tab = id === 'set-wr2012' ? 'calibration' : 'settings';
+	await page.goto(`/projects/${projectId}?tab=${tab}#${id}`);
 	await expect(page.locator(`#${id}`).getByRole('heading', { level: 2 }).first()).toBeInViewport();
 	await layoutSettled(page);
 }

@@ -29,7 +29,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Fit provenance');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await expect(fit.getByLabel('Seed')).toHaveValue('1');
 
@@ -81,7 +81,7 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Fit edited');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await fitAndApply(page, { seed: '3', validate: false });
 
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
@@ -128,7 +128,7 @@ test('a calibration exclusion needs a reason, and shows in Inputs that differ an
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Exclusions');
 	const before = await createRun(page.request, project.id, 'Before');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const excl = page.getByRole('group', { name: /^Calibration exclusions/ });
 	await expect(excl.getByText('None: every observed day in the calibration window is scored.')).toBeVisible();

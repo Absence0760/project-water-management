@@ -222,9 +222,9 @@ test('the sidebar keeps a picked run: Runs → Settings → Runs and Runs → EW
 
 	await openRuns(page, project.id, `&run=${older}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Older', exact: true })).toBeVisible();
-	await sidebar.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await sidebar.getByRole('link', { name: 'Model settings', exact: true }).click();
 	await expect(page).toHaveURL(/\?tab=settings$/);
-	await expect(title('Settings & calibration')).toBeFocused();
+	await expect(title('Model settings')).toBeFocused();
 	await sidebar.getByRole('link', { name: 'Runs & results', exact: true }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${older}$`));
 	await expect(page.getByRole('heading', { level: 2, name: 'Older', exact: true })).toBeVisible();

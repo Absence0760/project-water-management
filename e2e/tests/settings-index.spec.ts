@@ -1,14 +1,15 @@
-// Settings & calibration's side index, find box and explanations (issue #468): from 1440 px the in-page
+// Model settings' side index, find box and explanations (issue #468): from 1440 px the in-page
 // menu is a sticky column grouped by task (common/SectionNav's rail), with a find box that narrows it to
 // the panels and the settings inside them and jumps to the setting itself; narrower, the bar's Find button
 // opens the same box. Each panel says its current values under its heading, and the explanations under
-// the fields wait behind a switch. Synthetic data only.
+// the fields wait behind a switch. The Scored at choice is the Calibration record's, on Calibration (issue #586
+// round 3). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { openSettings, settingsBar, settingsMenu, showExplanations } from '../support/settings.ts';
+import { openCalibration, openSettings, settingsBar, settingsMenu, showExplanations } from '../support/settings.ts';
 
 const findBox = (page: import('@playwright/test').Page) => page.getByRole('searchbox', { name: 'Find a setting' });
 
@@ -38,9 +39,10 @@ test('the find box narrows the index to the settings that match, and a match jum
 	await expect(page.getByTestId('feb-advanced')).toHaveAttribute('open', '');
 
 	// From the keyboard: Enter takes the first match; Down walks the list.
-	await box.fill('pan coef');
-	// In page order: the PE choice's radio comes before the preset under it.
-	await expect(matches.getByRole('button').first()).toHaveAccessibleName(/^Pan coefficient × A-pan ?, in Flow calibration$/);
+	await box.fill('dam evaporation');
+	// In page order: Demand's factor comes before its preset and its source (the pan coefficient this once found is
+	// on Calibration now, issue #586 round 3).
+	await expect(matches.getByRole('button').first()).toHaveAccessibleName(/^Dam evaporation factor \(× A-pan\) ?, in Demand$/);
 	await box.press('ArrowDown');
 	await expect(matches.getByRole('button').first()).toBeFocused();
 	await page.keyboard.press('ArrowDown');
@@ -49,7 +51,7 @@ test('the find box narrows the index to the settings that match, and a match jum
 	await page.keyboard.press('ArrowUp');
 	await expect(box).toBeFocused();
 	await box.press('Enter');
-	await expect(page.getByRole('radio', { name: 'Pan coefficient × A-pan' })).toBeFocused();
+	await expect(page.locator('#st-lef')).toBeFocused();
 
 	// A section's own name links to it.
 	await box.fill('reserve rule');
@@ -151,7 +153,7 @@ test('the Scored at choice says where a gauge’s record is placed, with a link 
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2020-01-01', values: [1.2, 1.1, 1.0] });
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()) as { series: { id: string; kind: string }[] };
 	const series = list.series.find((x) => x.kind === 'flow_observed_m3s')!;
-	await openSettings(page, project.id);
+	await openCalibration(page, project.id);
 	// An explanation (issue #521): shown under the field with the page's explain switch on.
 	await showExplanations(page);
 	const how = page.getByTestId('calibration-site-how');
@@ -179,8 +181,8 @@ test('below the rail’s width the bar’s Find opens the same box; on a phone i
 		await find.click();
 		await expect(find).toHaveAttribute('aria-expanded', 'true');
 		await expect(findBox(page)).toBeFocused();
-		await findBox(page).fill('warm-up');
-		const match = menu.getByRole('list', { name: 'Matches' }).getByRole('button', { name: /^Warm-up/ });
+		await findBox(page).fill('february');
+		const match = menu.getByRole('list', { name: 'Matches' }).getByRole('button', { name: /^Days in February/ });
 		const pop = (await menu.getByRole('list', { name: 'Matches' }).boundingBox())!;
 		expect(pop.y).toBeGreaterThan(0);
 		expect(pop.x + pop.width).toBeLessThanOrEqual(width);
@@ -189,7 +191,7 @@ test('below the rail’s width the bar’s Find opens the same box; on a phone i
 			await expectNoViolations(page);
 		}
 		await match.click();
-		await expect(page.getByLabel(/^Warm-up/)).toBeFocused();
+		await expect(page.getByLabel('Days in February', { exact: true })).toBeFocused();
 		await expect(find).toHaveAttribute('aria-expanded', 'false');
 		// Escape closes it with the focus back on Find.
 		await find.click();

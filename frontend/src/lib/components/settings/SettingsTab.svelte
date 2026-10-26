@@ -1,6 +1,7 @@
 <script module lang="ts">
 	// Every lazy section below that draws on each visit shares one chunk, lazySections.ts (issue #521), with
-	// CalibrationSettings.svelte's: they all load as the tab opens, so one request and one gzip stream instead of seven.
+	// CalibrationSettings.svelte's (on the Calibration page): they load as the tab opens, so one request and one gzip
+	// stream instead of seven.
 	const loadSections = () => import('./lazySections');
 	// Settings → Evidence, the declared uncertainty rule (issue #71): out of the tab's chunk, loaded when the section
 	// draws, so the Settings tab chunk stays under its size ceiling.
@@ -33,8 +34,7 @@
 	import { settingTarget } from '#lib/components/notes/notes.js';
 	import {
 		fitFlowMethod,
-		fitRecordCaveats,
-		fitRecordStatus,
+		flowMethodOf as fitMethodOf,
 		LAKE_FACTOR_PRESETS,
 		lakeFactorPresetFill,
 		lakeFactorPresetNamed,
@@ -44,19 +44,13 @@
 		QM_WET_DAY_MM_MAX,
 		QM_WET_DAY_MM_MIN,
 		type FlowShareMethod,
-		type ProjectSettings,
 		type UnitRainSettings,
-		type SeriesOrigin,
-		type SeriesProvenance,
-		type ApanDailyFingerprint,
 		type SeriesMeta,
 		type ModelInput,
 		defaultProjectSettings,
 		resolveCatchmentAreaKm2
 	} from '@water-management/engine';
-	import { apanDailyOfValues } from '#lib/series/provenance.js';
-	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
-	import { api, hasRole, type Project } from '#lib/api/index.js';
+	import { hasRole, type Project } from '#lib/api/index.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
@@ -64,7 +58,6 @@
 	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
-	import { fitSummary } from './calibration';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { dataQualityError } from './dataQuality';
 	import DataQualitySection from './DataQualitySection.svelte';
@@ -72,13 +65,13 @@
 	import { outcomesError } from '#lib/components/outcomes/outcomeSettings.js';
 	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
-	import { saveBlockers, settingsElsewhere, settingsNavGroups } from './sections';
+	import { settingsElsewhere, settingsNavGroups } from './sections';
+	import { periodError, reportingError } from './blockers';
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import type { CatchmentStation } from './unitRain';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import MonthlyPasteDialog from './MonthlyPasteDialog.svelte';
-	import CalibrationSettings from './CalibrationSettings.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import EwrHeadlineField from './EwrHeadlineField.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
@@ -86,9 +79,8 @@
 	import { explainSwitch } from '#lib/components/common/explain.svelte.js';
 	import Fold from '#lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
-	import { annualGr4jPeMm, apanSourceNote, peFormError, peOf, withLakeMonthly } from './peInput';
-	import { arealRainFormError, type EditableArealRain } from './arealRain';
-	import { unitRainFormError, withUnitRain } from './unitRain';
+	import { apanSourceNote, withLakeMonthly } from './peInput';
+	import { withUnitRain } from './unitRain';
 	import { FLOW_METHODS, flowMethodOf, methodLabel, stationOptions, type FlowGenerationMethod } from './flowGeneration';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
@@ -104,46 +96,27 @@
 		project,
 		editor,
 		draft,
-		fit,
 		seriesKinds = null,
-		gaugeRecords = null,
-		chirpsSource,
-		observedOrigins,
-		apanSeries,
-		flowRecordId = null,
 		catchmentRain,
 		rainSeries,
 		readonly,
-		onProjectChange,
 		onModelChanged = () => {}
 	}: {
 		project: Project;
 		editor?: ModelEditor;
 		/**
 		 * The unsaved settings, held by the workspace page (settingsDraft.svelte.ts): its save bar saves,
-		 * discards and previews them with the model's edits, so this form has no save bar of its own.
+		 * discards and previews them with the model's edits and the Calibration page's, so this form has no save
+		 * bar of its own.
 		 */
 		draft: SettingsDraft;
-		/** Fit automatically's choices, progress and result, held by the workspace page so a tab change keeps them (calibration/fitSession.svelte.ts). */
-		fit: FitSession;
-		/** Kinds of the project's input series, to limit the calibration flow choices. */
+		/** Kinds of the project's input series: where Demand's A-pan comes from. */
 		seriesKinds?: string[] | null;
-		/** The flow records attached to gauges inside the network (084_gauge_records), for the calibration site's choices; null = not known. */
-		gaugeRecords?: { kind: string; siteNodeId: string }[] | null;
-		/** The CHIRPS series' product and version a run would use (issue #40c); undefined when not known. */
-		chirpsSource?: SeriesProvenance | null;
-		/** Each observed record's source and given unit a run would read (107_series_source.sql), by model-input key; undefined when not known. */
-		observedOrigins?: Partial<Record<string, SeriesOrigin | null>>;
-		/** The daily A-pan series a run would read (issue #45): null for none, undefined while the list loads. */
-		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
-		/** A flow record the calibration can score against, for the link to where its site is set (the Data tab). */
-		flowRecordId?: string | null;
 		/** The catchment rain series a run reads, whose station MAP Rain for each unit reads (issue #553): null = none, undefined = not loaded. */
 		catchmentRain?: CatchmentStation | null;
 		/** The project's catchment rain series, the rainfall stations Flow generation → Per unit assigns (issue #553); undefined = not loaded. */
 		rainSeries?: (Pick<SeriesMeta, 'id' | 'name' | 'kind' | 'station'> & { siteNodeId?: string | null })[];
 		readonly: boolean;
-		onProjectChange: (p: Project) => void;
 		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
 		onModelChanged?: () => Promise<void> | void;
 	} = $props();
@@ -157,19 +130,7 @@
 
 	const cal = $derived(s.calibration);
 	const hiLoSum = $derived((s.hiLoSplit.hi || 0) + (s.hiLoSplit.lo || 0));
-	const dateError = $derived(
-		s.simulationStart && s.simulationEnd && s.simulationStart > s.simulationEnd
-			? 'Simulation start must be before the end.'
-			: null
-	);
-	// GR4J's PE input (issue #39) and the areal rainfall correction (engine ≥ 1.13.0, §2.4g), both edited in Flow
-	// calibration (CalibrationSettings), checked here too, as Save blockers this page lists, and for Demand and the lines.
-	const pe = $derived(peOf(s));
-	const peError = $derived(peFormError(pe));
-	const peAnnual = $derived(annualGr4jPeMm(s));
-	const arealError = $derived(arealRainFormError((s.arealRain ?? null) as unknown as EditableArealRain | null));
-	// Rain for each unit (settings.unitRain, issue #482): checked here, so Save is blocked before its chunk has loaded.
-	const unitRainError = $derived(unitRainFormError(s.unitRain));
+	const dateError = $derived(periodError(s));
 	// Flow generation (issue #553 round 3): the radio is settings.unitRain on or off, as the checkbox it replaced was, so
 	// no stored project changes. The one switched off is kept until saved, so switching back brings it back as it was.
 	const flowMethod = $derived(flowMethodOf(s.unitRain));
@@ -198,49 +159,14 @@
 		if (!on && s.lakeEvapFactorMonthly) draft.lastLakeMonthly = [...s.lakeEvapFactorMonthly];
 		s.lakeEvapFactorMonthly = withLakeMonthly(on, s.lakeEvapFactor, draft.lastLakeMonthly);
 	}
-	const reportError = $derived(
-		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
-	);
+	const reportError = $derived(reportingError(s));
 	const dqError = $derived(dataQualityError(s.dataQuality));
 	const autoError = $derived(autoRunError(s.autoRun));
 	const outError = $derived(outcomesError(s.outcomes));
 	const outlookErr = $derived(outlookError(s.outlook));
-	// The child sections report their problems into the draft (bind:error), so they outlive the tab.
-	const errs = $derived(draft.errors);
-	// What blocks Save, by group, so the save bar can link to each one. Reported to the page's draft,
-	// whose save bar lists them; they keep while another tab is shown (the settings can't change there).
-	const blockers = $derived(
-		saveBlockers([
-			{ id: 'set-record', message: errs.calWindow },
-			{ id: 'set-record', message: errs.exclusions },
-			{ id: 'set-record', message: errs.lowFlow },
-			{ id: 'set-record', message: errs.qualityFlags },
-			{ id: 'set-fit', message: errs.rules },
-			{ id: 'set-rain', message: errs.fitPeriod },
-			{ id: 'set-rain', message: errs.zeroRain },
-			{ id: 'set-rain', message: errs.rainSource },
-			{ id: 'set-flow', message: peError },
-			{ id: 'set-flow', message: arealError },
-			{ id: 'set-share', message: unitRainError },
-			{ id: 'set-wr2012', message: errs.wr2012 },
-			{ id: 'set-ewr', message: errs.ewrSource },
-			{ id: 'set-reserve', message: errs.reserve },
-			{ id: 'set-restrict', message: errs.restrict },
-			{ id: 'set-reporting', message: reportError },
-			{ id: 'set-period', message: dateError },
-			{ id: 'set-quality', message: dqError },
-			{ id: 'set-outcomes', message: outError },
-			{ id: 'set-outlook', message: outlookErr },
-			{ id: 'set-evidence', message: errs.evidence },
-			{ id: 'set-auto', message: autoError }
-		])
-	);
-	$effect(() => {
-		draft.blockers = blockers;
-	});
-	const farmAreaKm2 = $derived(
-		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
-	);
+	// What blocks Save is the draft's to work out (blockers.ts), for this page's panels and Calibration's alike, so the
+	// save bar lists every problem whichever page is shown; the menu marks this page's.
+	const blockers = $derived(draft.blockers);
 	// The daily EWR's area ratio numerator: the area the run's natural flow is made on (the engine's own choice: the
 	// land units' under per-unit rain, else the calibration override, else the units' areas summed).
 	const ewrModelAreaKm2 = $derived(resolveCatchmentAreaKm2(s.calibration, { model: { nodes: editor?.model.nodes ?? [] }, settings: s } as unknown as ModelInput));
@@ -296,32 +222,6 @@
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	// Where Demand's A-pan comes from: a daily A-pan series (issue #45) is A-pan too, on the days it covers.
 	const apanSource = $derived(apanSourceNote(seriesKinds));
-	const nodeName = (id: string) => editor?.model.nodes.find((n) => n.id === id)?.name;
-	// The daily A-pan series now, as the fit record fingerprints it (issue #45): fetched and hashed only
-	// when the record tracked one, so "forcing changed since fit" can say whether it was replaced. Fetched
-	// here, once, for the header and for CalibrationSettings' fit record.
-	let apanNow = $state<ApanDailyFingerprint | null | undefined>(undefined);
-	const apanTracked = $derived(s.fitRecord?.forcing?.apanDaily !== undefined);
-	$effect(() => {
-		const meta = apanSeries;
-		const tracked = apanTracked;
-		apanNow = meta === null ? null : undefined;
-		if (!meta || !tracked) return;
-		let live = true;
-		api.series
-			.get(project.id, meta.id)
-			.then(apanDailyOfValues)
-			.then((f) => {
-				if (live) apanNow = f;
-			})
-			.catch(() => {
-				// Unknown, not "changed": the caveat then waits for a value it can compare.
-				if (live) apanNow = undefined;
-			});
-		return () => {
-			live = false;
-		};
-	});
 
 	/**
 	 * From this content width (rem, 14 px) the menu is a side index (issue #468): at 1440 px the content is
@@ -338,26 +238,26 @@
 		}))
 	);
 
-	// The section header (issue #17): where the parameters came from, and the way to the fit.
-	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
-	/** The fit's method when the parameters were fitted under the other one: "parameters not fitted for this method" (the fit status's methodChanged). */
-	const fitMismatch = $derived(fitStatus?.methodChanged && s.fitRecord ? fitFlowMethod(s.fitRecord) : null);
-	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
+	/**
+	 * The fit's method when the parameters were fitted under the other one: "parameters not fitted for this method"
+	 * (the engine's fitRecordStatus methodChanged, which reads only these two).
+	 */
+	const fitMismatch = $derived.by(() => {
+		const m = s.fitRecord ? fitFlowMethod(s.fitRecord) : null;
+		return m !== null && m !== fitMethodOf(s.unitRain) ? m : null;
+	});
 	// Rain gaps at its defaults: one line that opens its two cards (rain.ts).
 	const rainAtDefaults = $derived(rainGapsAtDefaults(s));
 	// Each panel's line of what it is set to now (summaries.ts).
 	const summaries = $derived(
 		settingsSummaries({
 			s: s as unknown as SummaryInput['s'],
-			unitAreaKm2: farmAreaKm2,
-			peAnnualMm: peAnnual,
 			ewrAnnualMm3: ewrAnnual,
-			ewrSource: dailyEwrHead,
-			fit: summary,
-			siteName: s.calibrationSiteNodeId ? (nodeName(s.calibrationSiteNodeId) ?? null) : null
+			ewrSource: dailyEwrHead
 		})
 	);
-	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
+	// The header names where the fit went (issue #586 round 3): its line and "Fit the parameters" are Calibration's now.
+	$effect(() => fillHeader({ context: headerContext }));
 
 	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link), on load or followed while
 	// the page is open (a #fragment typed or followed here, finding R2-D): the tab is a lazy chunk, so the
@@ -368,7 +268,8 @@
 	// to its new page instead, every other parameter kept, replacing this entry so Back skips it; that page
 	// lands on the panel (nav/anchorMoves.ts, issue #586 round 1). reset: false, so SvelteKit leaves the
 	// focus to the new page's landing. (`?tab=calibration` opened this page at Flow calibration until
-	// Calibration got a page of its own, issue #586; its #set- links come here.)
+	// Calibration got a page of its own, issue #586; its #set- links come here, but for the four panels that
+	// moved there in round 3.)
 	onMount(() => {
 		const stopAnchors = followAnchors({
 			page: 'settings',
@@ -379,10 +280,7 @@
 	});
 </script>
 
-{#snippet headerContext()}<span data-testid="fit-summary">{summary}</span>{/snippet}
-{#snippet headerActions()}
-	{#if !readonly}<a class="btn" href="#set-fit">Fit the parameters</a>{:else if s.fitRecord}<a class="btn" href="#set-fit">Fit record</a>{/if}
-{/snippet}
+{#snippet headerContext()}<span class="settings-context" data-testid="settings-context">What the model runs on, and how its results are read. The runoff parameters’ fit is on <a href="?tab=calibration">Calibration</a>.</span>{/snippet}
 
 <!-- In-page menu (issue #468): from a content width where the monthly rows still fit beside it, a sticky
      index on the left, grouped by task, with a find box; narrower, the bar that sticks under the app header
@@ -571,11 +469,11 @@
 		</div>
 		<p class="hint muted explain">
 			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment. When an A-pan grid is
-			loaded, <a href="#set-evaporation">Evaporation from the map</a> (under Flow calibration) proposes it from the catchment boundary.
+			loaded, <a href="?tab=calibration#set-evaporation">Evaporation from the map</a> (on Calibration, under Flow calibration) proposes it from the catchment boundary.
 		</p>
 		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text} <a href="?tab=series">{apanSource.link}</a>.</p>{/if}
-		<!-- Demand's own paste (issue #477): Flow calibration's pan coefficient row has its own (CalibrationSettings). -->
-		<MonthlyPasteDialog bind:this={monthlyPaste} {draft} pan={pe.kind !== 'monthly'} {readonly} />
+		<!-- Demand's own paste (issue #477), the A-pan row only: Flow calibration's pan coefficient row, on Calibration, has its own. -->
+		<MonthlyPasteDialog bind:this={monthlyPaste} {draft} rows="apan" {readonly} />
 		{#if s.lakeEvapFactorMonthly}
 			<div class="table-wrap">
 				<table class="data compact monthly" data-testid="lake-factor-row">
@@ -791,8 +689,8 @@
 		{#if fitMismatch}
 			<!-- A state line, not an explanation (it stays when the explanations are off): the fit is the other method's. -->
 			<p class="alert alert-warning" role="status" data-testid="flowgen-refit">
-				Parameters not fitted for this method: the GR4J parameters were fitted under {methodLabel(fitMismatch)}. <a href="#set-fit">Fit the parameters</a> again
-				before relying on the results.
+				Parameters not fitted for this method: the GR4J parameters were fitted under {methodLabel(fitMismatch)}. <a href="?tab=calibration#set-fit">Fit the parameters</a>
+				again on Calibration before relying on the results.
 			</p>
 		{/if}
 		{#if flowMethod === 'perUnit'}
@@ -879,22 +777,8 @@
 		</div>
 	</section>
 
-	<!-- Flow calibration, Calibration record, Fit the parameters and the WR2012 check (issue #586): their own component,
-	     so the Calibration page can mount them as they are, with this draft and fit session. -->
-	<CalibrationSettings
-		{project}
-		{editor}
-		{draft}
-		{fit}
-		{seriesKinds}
-		{gaugeRecords}
-		{chirpsSource}
-		{observedOrigins}
-		apanDaily={apanNow}
-		{flowRecordId}
-		{readonly}
-		{onProjectChange}
-	/>
+	<!-- Flow calibration, Calibration record, Fit the parameters and the WR2012 check moved to the Calibration page
+	     (issue #586 round 3, CalibrationSettings.svelte): the same draft, saved by the same save bar. -->
 
 	<!-- EWR -------------------------------------------------------------------------->
 	<section class="panel" id="set-ewr" aria-labelledby="ewr-h">
@@ -1036,24 +920,13 @@
 		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
-	.settings-form > :global(.explain-switch) {
-		margin: 0 0 0.75rem;
+	/* The header's line (it renders in SectionHeader's muted context): its link to Calibration is underlined, as a link
+	   in a line of text must be (WCAG 1.4.1, axe link-in-text-block). */
+	.settings-context a {
+		text-decoration: underline;
 	}
-	/* Each panel's current values, the line under its heading (the panels in their own components too). */
-	.settings-form :global(.summary) {
-		margin: -0.35rem 0 0.6rem;
-		font-size: 0.85rem;
-		color: var(--text-2);
-		font-variant-numeric: tabular-nums;
-	}
-	/* Fit the parameters' two cards: Fit automatically, and the calibration rules with their run (ui-playbook.md § 2,
-	   "Two forms in one panel are two cards"). */
-	.settings-form :global(.sub-card) {
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 0.75rem 0.9rem;
-		margin: 0.75rem 0;
-	}
+	/* The explanations switch, the panel lines (.summary) and the cards (.sub-card) are app.css's `.settings-form`
+	   rules, shared with the Calibration page's settings panels. */
 	/* Rain gaps' Flagged rain card (ChirpsFitPeriodSection's card titles itself the same way). */
 	.card-title {
 		font-size: 1rem;

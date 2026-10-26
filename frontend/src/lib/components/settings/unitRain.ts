@@ -1,5 +1,5 @@
 // Settings → Flow generation → Per unit → Units without a station (settings.unitRain, issue
-// #482, docs/model.md §2.4h, docs/ui.md § Settings & calibration): the switch,
+// #482, docs/model.md §2.4h, docs/ui.md § Model settings): the switch,
 // the catchment gauge's MAP as a read-out (the station's since issue #553), the MAP period in whole years, the
 // reference gauge and unit (issue #500), and the check that blocks Save. The engine's unitRainError is the API's rule;
 // this says the same problems in the form's words.

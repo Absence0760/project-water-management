@@ -85,7 +85,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	loginHref: { why: 'register page: `<base>/login?next=` + encoded next', in: ['routes/register/+page.svelte'] },
 	termsHref: { why: 'TermsSummary: its `termsHref` prop, "/terms" by default; the register page passes `<base>/terms`', in: ['lib/components/legal/TermsSummary.svelte'] },
 	forgotHref: { why: 'login page: `<base>/forgot-password…`', in: ['routes/login/+page.svelte'] },
-	settingsHref: { why: 'team page: withParam(page.url, …); Calibration page: BUILDER "?tab=settings#" + a SETTINGS_SECTIONS id (calibration/page.ts)', in: ['lib/components/calibration/CalibrationTab.svelte', 'routes/teams/[id]/+page.svelte'] },
+	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
 	back: {
 		why: 'EvidencePage, the pack pages: `<base>/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id',
 		in: [

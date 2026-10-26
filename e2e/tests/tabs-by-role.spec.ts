@@ -18,7 +18,7 @@ const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
 // Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
 // In sidebar order: Review, Build the model, Outcomes (lib/workspace/tabs.ts NAV_SECTIONS).
-const EVERY_TAB = ['Project', 'Applications', 'History', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
+const EVERY_TAB = ['Project', 'Applications', 'History', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Model settings', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
 // The Map is a core tab since #326 D3: a viewer sees it without the inputs.
 // Calibration is core too (issue #586): a viewer reads the fit's results.
@@ -115,10 +115,10 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body (Allocations shows by default, issue #444).
-	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Map', 'Data', 'Settings & calibration', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
-	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
+	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Map', 'Data', 'Model settings', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
+	const current = strip(v).getByRole('link', { name: 'Model settings' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
-	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();
+	await expect(v.getByRole('region', { name: 'Model settings', exact: true })).toBeVisible();
 
 	// An alias works the same way.
 	await v.goto(`/projects/${project.id}?tab=demand`);

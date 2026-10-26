@@ -2,7 +2,7 @@
 // wider its links flow across at most two rows (groups may break across them; as whole blocks, Runs &
 // results took three rows at 1280 px), and what doesn't fit goes into a More menu at the end of the bar.
 // From a 1440 px window it is a side index instead, every group named and every link named as its panel's
-// heading (issue #462; the bar keeps shorter names). It is on Settings & calibration, Runs & results,
+// heading (issue #462; the bar keeps shorter names). It is on Model settings, Runs & results,
 // EWR, Hydrological units and Data. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -20,11 +20,8 @@ const SETTINGS_LINKS = [
 	'Demand',
 	'Drought restrictions',
 	'Reporting',
+	// The four panels that set up a fit moved to Calibration (issue #586 round 3).
 	'Flow generation',
-	'Flow calibration',
-	'Calibration record',
-	'Fit the parameters',
-	'WR2012 check',
 	'EWR',
 	'Reserve rule tables',
 	'Outcome matrix',
@@ -37,7 +34,7 @@ const SETTINGS_LINKS = [
 const SETTINGS_RAIL: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
-	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['Runoff & calibration', ['Flow generation']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automatic runs', ['Automatic runs']]
@@ -190,10 +187,13 @@ test('Runs & results: at 1280 px every link is on the bar, in at most two rows; 
 	await expect(page.locator('#res-reserve')).toBeInViewport();
 });
 
-/** Settings & calibration at 1024 px, where its sixteen links don't fit in two rows. */
+/**
+ * Model settings at 720 px, where its thirteen links don't fit in two rows (seventeen did at 1024 px, until the
+ * four calibration panels moved to Calibration, issue #586 round 3; 660–768 px all need More here).
+ */
 async function narrowSettings(page: Page, name: string) {
 	const project = await createProject(page.request, name);
-	await page.setViewportSize({ width: 1024, height: 768 });
+	await page.setViewportSize({ width: 720, height: 768 });
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const menu = page.getByRole('navigation', { name: 'Settings sections' });
 	await expect(moreButton(menu)).toBeVisible();

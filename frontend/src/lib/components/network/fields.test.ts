@@ -229,7 +229,7 @@ describe('splitFields', () => {
 	});
 
 	it('names each reason once, with what would make the fields count', () => {
-		expect(unusedLine('notHiLo', 'area')).toEqual({ why: 'Not used with the area flow share', fix: 'Pick the high/low MAP split in Settings & calibration to use these.' });
+		expect(unusedLine('notHiLo', 'area')).toEqual({ why: 'Not used with the area flow share', fix: 'Pick the high/low MAP split in Model settings to use these.' });
 		expect(unusedLine('notManual', 'hiLo').why).toBe('Not used with the high/low MAP flow share');
 		expect(unusedLine('outlet').fix).toBe('');
 		// The reasons are fieldUnused's.

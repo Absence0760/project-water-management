@@ -40,7 +40,7 @@ export const FORMAT_GROUPS: readonly FormatGroup[] = [
 		formats: [PLANTINGS_FORMAT, gridFileFormat(PLANTED_AREAS_FORMAT), gridFileFormat(CROP_FACTORS_FORMAT), B023_FACTORS_FORMAT, NODE_FACTORS_FORMAT, gridFileFormat(SYSTEMS_FORMAT)]
 	},
 	{ id: 'transfers', title: 'Transfers', formats: [gridFileFormat(TRANSFERS_FORMAT)] },
-	{ id: 'settings', title: 'Settings & calibration', formats: [gridFileFormat(MONTHLY_SETTINGS_FORMAT), drmFormat('dailyEwr'), drmFormat('ruleTable')] },
+	{ id: 'settings', title: 'Model settings and Calibration', formats: [gridFileFormat(MONTHLY_SETTINGS_FORMAT), drmFormat('dailyEwr'), drmFormat('ruleTable')] },
 	{ id: 'map', title: 'Map', formats: [GEOJSON_FORMAT] },
 	{ id: 'allocations', title: 'Allocations', formats: [ALLOCATIONS_FORMAT] },
 	// The page's invite example names no project's units.

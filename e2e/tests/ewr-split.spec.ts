@@ -1,5 +1,5 @@
 // Settings → Flow generation → Split the EWR between units by (settings.ewrSplit, issue #553 round 4;
-// docs/ui.md § Settings & calibration, docs/model.md §2.5b). On the sample model (synthetic):
+// docs/ui.md § Model settings, docs/model.md §2.5b). On the sample model (synthetic):
 // the flow share by default; the state line says the choice only matters under Per unit, and
 // follows the method; choosing each unit's natural MAR saves, joins the panel's summary
 // and changes the Flow share line, and a reload keeps it.

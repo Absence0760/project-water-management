@@ -1,6 +1,6 @@
 <!--
 	Settings → Flow calibration → Rain into GR4J → Areal rainfall correction, while it is on
-	(settings.arealRain, engine ≥ 1.13.0, docs/model.md §2.4g, docs/ui.md § Settings & calibration): the factor in
+	(settings.arealRain, engine ≥ 1.13.0, docs/model.md §2.4g, docs/ui.md § Model settings): the factor in
 	every month, what it was derived from, the 12 monthly factors and the required source. Its own chunk (issue
 	#521): most projects leave the correction off, and the Settings tab chunk sits at its size ceiling. Bind the
 	setting; the page works out `arealError` (arealRainFormError), which blocks Save and shows under the source.

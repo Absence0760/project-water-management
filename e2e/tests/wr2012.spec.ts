@@ -1,5 +1,5 @@
 // The optional WR2012 check (issue #4 phase 8): enter a quaternary's
-// naturalised flow in Settings (with its plausibility checks), run the model,
+// naturalised flow on Calibration (with its plausibility checks; it was on Settings until issue #586 round 3), run the model,
 // read the report on Runs & results, and see it in run comparison.
 // The reference is synthetic: an invented quaternary and round numbers.
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
@@ -14,7 +14,7 @@ const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', '
 test('entering WR2012 data is checked for plausibility, saved, and every run reports against it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'WR2012 check');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
 	const save = saveChanges(page);
@@ -144,7 +144,7 @@ test('run comparison lists the WR2012 inputs that changed and compares the ratio
 test('unticking the check and ticking it again keeps what was typed, until saved or discarded', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'WR2012 keep');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
 	const on = section.getByLabel('Compare runs with WR2012 naturalised flow');
 	await on.check();
@@ -162,7 +162,7 @@ test('unticking the check and ticking it again keeps what was typed, until saved
 	// Another tab and back keeps the unsaved form too (the page holds it).
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network', exact: true }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Calibration', exact: true }).click();
 	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('Z99A');
 
 	// Discard forgets what was kept: ticked again, the reference starts blank.
@@ -183,7 +183,7 @@ test('unticking the MAR band or the check and ticking it again keeps the band an
 			calibrationPenalty: { enabled: true, weight: 0.5, marLowMm3: null, marHighMm3: null }
 		}
 	});
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
 	const band = section.getByLabel('Use a MAR band instead of one target');
 	await band.check();
@@ -207,7 +207,7 @@ test('unticking the MAR band or the check and ticking it again keeps the band an
 test('Propose from the map can be closed again', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'WR2012 propose close');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
 	await section.getByLabel('Compare runs with WR2012 naturalised flow').check();
 	await section.getByRole('button', { name: 'Propose from the map' }).click();
@@ -225,9 +225,9 @@ test('at 1440 beside the side index, the monthly row and its Sum fit without scr
 	await updateSettings(page.request, project.id, {
 		wr2012: { reference: { quaternary: 'Z99A', areaKm2: 60, marMm3: 14.8, monthlyMm3, periodStart: 1990, periodEnd: 2025, mapMm: null, source: 'Synthetic' } }
 	});
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
-	await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
+	await expect(page.locator('nav.rail-nav[aria-label="Calibration sections"]')).toBeVisible();
 	const wrap = section.locator('.table-wrap').filter({ has: page.getByRole('columnheader', { name: 'Sum' }) });
 	await expect(wrap.getByRole('cell', { name: '14.808' })).toBeVisible();
 	const size = await wrap.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));

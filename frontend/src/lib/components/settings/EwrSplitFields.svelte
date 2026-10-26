@@ -1,6 +1,6 @@
 <!--
 	Settings → Flow share → Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553,
-	docs/model.md §2.5b, docs/ui.md § Settings & calibration): the flow share (the default, what every earlier run
+	docs/model.md §2.5b, docs/ui.md § Model settings): the flow share (the default, what every earlier run
 	did) or each unit's natural MAR. Self-contained, props in and a change out, so it can sit in whichever Settings
 	section holds the flow generation choices: `value` is the stored setting (undefined = the flow share), `perUnit`
 	whether flow generation is Per unit (the only case the two differ, which the hint says), `onchange` gets the new

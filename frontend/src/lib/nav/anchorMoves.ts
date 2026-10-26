@@ -9,6 +9,7 @@
 import { RIVER_ANCHORS, RIVER_STRIP_ANCHOR } from '#lib/components/river/links.js';
 import { SUPPLY_ANCHORS, SUPPLY_TAB } from '#lib/components/supply/links.js';
 import { hashId } from '#lib/help/anchor.js';
+import { isCalibrationAnchor } from '#lib/components/settings/sections.js';
 import type { TabId } from '#lib/workspace/tabs.js';
 
 /** One moved anchor (or several that moved together, to the same page). */
@@ -46,10 +47,11 @@ export const ANCHOR_MOVES: readonly AnchorMove[] = [
 	{ from: 'runs', hash: [...RIVER_ANCHORS, RIVER_STRIP_ANCHOR], tab: 'river', keep: RUN },
 	{ from: 'runs', hash: 'res-units', tab: SUPPLY_TAB, to: null, keep: RUN_WINDOW },
 	{ from: 'runs', hash: SUPPLY_ANCHORS, tab: SUPPLY_TAB, keep: RUN_WINDOW },
-	// `?tab=calibration` opened Settings & calibration until Calibration had a page of its own (issue #586 round 2),
-	// so an old `?tab=calibration#set-ewr` (a bookmark, a note's link) goes to that panel there; Settings sends a
-	// moved one (`#set-feeds`) on again. Round 3 moves the calibration panels here, and turns their rows round.
-	{ from: 'calibration', hash: (id) => id.startsWith('set-'), tab: 'settings', keep: 'all' }
+	// `?tab=calibration` opened Settings & calibration (now Model settings) until Calibration had a page of its own
+	// (issue #586 round 2), so an old `?tab=calibration#set-ewr` (a bookmark, a note's link) goes to that panel there;
+	// Settings sends a moved one (`#set-feeds`) on again. The four panels that set up a fit are on Calibration now
+	// (round 3), so their anchors stay here.
+	{ from: 'calibration', hash: (id) => id.startsWith('set-') && !isCalibrationAnchor(id), tab: 'settings', keep: 'all' }
 ];
 
 const names = (m: AnchorMove, hash: string): boolean =>

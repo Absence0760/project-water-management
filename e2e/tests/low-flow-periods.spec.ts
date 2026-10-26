@@ -16,7 +16,7 @@ test('a low-flow period needs a reason and a source, leaves its high readings ou
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Low flows only');
 	const before = await createRun(page.request, project.id, 'Before');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const group = page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByText('None: every reading in the calibration window is scored at any flow.')).toBeVisible();
@@ -67,7 +67,7 @@ test('a viewer reads the low-flow periods but can’t add, change or remove one'
 	await updateSettings(page.request, project.id, { qualityFlags: { lowFlowPeriods: [PERIOD] } });
 	const viewer = await signIn('Low flows viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const group = viewer.page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByTestId('low-flow-period')).toHaveCount(1);
@@ -86,7 +86,7 @@ test('a viewer reads the low-flow periods but can’t add, change or remove one'
 	await expectNoViolations(viewer.page, { include: '[data-testid="low-flow-periods"]' });
 });
 
-test('scored at a gauge inside the network, Settings says the low-flow periods are not used there', async ({ page, owner }) => {
+test('scored at a gauge inside the network, Calibration says the low-flow periods are not used there', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Low flows at a weir');
 	const outlet = node('Outflow gauge', 'gauge', null, 1, { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
@@ -101,7 +101,7 @@ test('scored at a gauge inside the network, Settings says the low-flow periods a
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
 	await updateSettings(page.request, project.id, { calibrationSiteNodeId: weir.id, qualityFlags: { lowFlowPeriods: [PERIOD] } });
 
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByLabel('Scored at')).toHaveValue(weir.id);
 	const group = page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByTestId('low-flow-period')).toHaveCount(1);

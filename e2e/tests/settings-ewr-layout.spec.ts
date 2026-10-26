@@ -253,7 +253,7 @@ test('the comparison band saves from its card on Allocations with the settings P
 	// Stored as the project's setting; Settings saves on top of it without putting the old value back.
 	const read = async () => ((await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()) as { project: { settings: { allocationTolerance: number } } }).project.settings.allocationTolerance;
 	expect(await read()).toBe(0.15);
-	await page.getByRole('link', { name: 'Settings & calibration' }).first().click();
+	await page.getByRole('link', { name: 'Model settings' }).first().click();
 	const pragmatic = page.getByLabel('Pragmatic EWR, Oct, m³/day');
 	await pragmatic.fill('2100');
 	await pragmatic.blur();

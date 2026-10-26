@@ -37,7 +37,7 @@ test('a flow record uploaded in l/s says so, and an editor records where it came
 	await expect(page.getByRole('group', { name: 'Series details' }).getByRole('textbox', { name: 'Source' })).toHaveValue('DWS X1H001 (daily means)');
 });
 
-test('the Data tab shades the gap days a run fills, and Settings turns the filling on', async ({ page, owner }) => {
+test('the Data tab shades the gap days a run fills, and Calibration turns the filling on', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Flow gaps');
 	// A recession with a 3-day gap and a 20-day gap.
@@ -56,8 +56,8 @@ test('the Data tab shades the gap days a run fills, and Settings turns the filli
 		page.getByText('Shaded: 3 days interpolated across gaps of up to 5 days, in a run only (Settings → Calibration record → Flow gaps); the stored record is unchanged. 1 gap (20 days) stay open.')
 	).toBeVisible();
 
-	// Settings: the record's spec as saved, and switching it off clears the shading.
-	await page.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	// Calibration (the Calibration record's page since issue #586 round 3): the record's spec as saved, and switching it off clears the shading.
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Calibration', exact: true }).click();
 	// Gap filling is folded with the quality flags (issue #521); the line says the gauge's gaps are filled.
 	await expect(page.getByTestId('record-flags-summary')).toContainText('gaps filled in the observed gauge flow');
 	await openFold(page, 'record-flags');

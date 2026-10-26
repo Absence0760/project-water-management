@@ -154,7 +154,7 @@ The settings: `settings.outcomes`, the year-class method and the risk
 cut-offs per measure, editable in Settings → Outcome matrix, with the
 cut-offs' defaults marked *pending the hydrologist* until the hydrologist
 confirms them (O1: the client agreed, issue #90; the class method's
-default, O2, is confirmed) ([ui.md § Settings](../ui.md#settings--calibration), [api.md
+default, O2, is confirmed) ([ui.md § Settings](../ui.md#model-settings), [api.md
 § Projects](../api.md#projects)). The screen: the Runs tab's **Outcome
 matrix** panel ([ui.md § Outcome matrix](../ui.md#outcome-matrix)), the
 first screen that reads a sweep: an editor starts a demand sweep of the

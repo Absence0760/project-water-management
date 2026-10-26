@@ -1,5 +1,5 @@
 // Rain for each hydrological unit (issue #482; docs/ui.md § Data feeds, §
-// Settings & calibration, § Network; docs/maps.md § Rain for each unit). On
+// Model settings, § Network; docs/maps.md § Rain for each unit). On
 // the sample model with an invented parcel linked to one unit:
 // - Data → Data feeds → Attach a feed, Area "Each unit's parcel" (Rain for
 //   each unit, issue #521: an option of the attach card) proposes that unit's CHIRPS

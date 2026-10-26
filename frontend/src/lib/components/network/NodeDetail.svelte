@@ -92,7 +92,7 @@
 		previewHref?: string | null;
 		/** This node on the Map tab (issue #326 A2); null when no map feature is linked to it. */
 		mapHref?: string | null;
-		/** The project's flow-share method (Settings & calibration): fields only another method reads show read-only. */
+		/** The project's flow-share method (Model settings): fields only another method reads show read-only. */
 		method?: FlowShareMethod;
 		/** A unit's planted areas (Crops), for the Irrigation section's pointer to them; null for other nodes. */
 		planting?: FarmPlanting | null;
@@ -466,7 +466,7 @@
 							<div class="field">
 								<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
 								<span class="computed">{fmtPct(share, 2)}</span>
-								<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Settings &amp; calibration</a>). Saved settings only.</span>
+								<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Model settings</a>). Saved settings only.</span>
 							</div>
 						{/if}
 					</div>

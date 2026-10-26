@@ -8,13 +8,18 @@ const plan = (r: ReturnType<typeof planSettingsPaste>) => {
 };
 
 describe('monthly evaporation paste (issue #477)', () => {
-	it('has the pan coefficient row only while GR4J runs on pan × A-pan', () => {
-		expect(monthlySettingRows(settings(), true).map((r) => r.id)).toEqual(['apanMm', 'panCoefficient']);
-		expect(monthlySettingRows(settings(), false).map((r) => r.id)).toEqual(['apanMm']);
+	it('fills Demand’s A-pan row, Flow calibration’s pan coefficient row, or both (issue #586 round 3)', () => {
+		expect(monthlySettingRows(settings(), 'both').map((r) => r.id)).toEqual(['apanMm', 'panCoefficient']);
+		expect(monthlySettingRows(settings(), 'apan').map((r) => r.id)).toEqual(['apanMm']);
+		expect(monthlySettingRows(settings(), 'pan').map((r) => r.id)).toEqual(['panCoefficient']);
+		// The pan row's paste leaves an A-pan row out: that row is Demand's, on Model settings.
+		expect(plan(planSettingsPaste('Parameter\tOct\nA-pan\t1\nPan coefficient\t0.6', monthlySettingRows(settings(), 'pan'))).notes).toContain(
+			"Left out a row the table doesn't have: A-pan."
+		);
 	});
 
 	it('reads both rows by name or a short name, and either alone', () => {
-		const rows = monthlySettingRows(settings(), true);
+		const rows = monthlySettingRows(settings(), 'both');
 		const p = plan(planSettingsPaste('Parameter\tOct\tNov\nA-pan (mm)\t155\t160\nKp\t0.72\t0.7', rows));
 		expect(p.changes.map((c) => [c.rowId, c.column, c.to])).toEqual([
 			['apanMm', 'Oct', 155],
@@ -22,19 +27,19 @@ describe('monthly evaporation paste (issue #477)', () => {
 		]);
 		expect(plan(planSettingsPaste('Month\tDec\nPan coefficient\t0.65', rows)).changes).toHaveLength(1);
 		// A pan coefficient while GR4J reads a monthly PE row: no such row here.
-		expect(plan(planSettingsPaste('Parameter\tOct\nA-pan\t1\nPan coefficient\t0.6', monthlySettingRows(settings(), false))).notes).toContain(
+		expect(plan(planSettingsPaste('Parameter\tOct\nA-pan\t1\nPan coefficient\t0.6', monthlySettingRows(settings(), 'apan'))).notes).toContain(
 			"Left out a row the table doesn't have: Pan coefficient."
 		);
 	});
 
 	it('stops on a pan coefficient above 2 and a negative A-pan', () => {
-		const rows = monthlySettingRows(settings(), true);
+		const rows = monthlySettingRows(settings(), 'both');
 		expect(planSettingsPaste('Pan coefficient\t2.1', rows)).toEqual({ error: 'Pan coefficient, Oct: 2.1 is above 2.' });
 		expect(planSettingsPaste('A-pan evaporation\t-5', rows)).toEqual({ error: 'A-pan evaporation, Oct: −5 mm is below 0 mm.' });
 	});
 
 	it('a bare row pasted into a month fills from there', () => {
-		const rows = monthlySettingRows(settings(), true);
+		const rows = monthlySettingRows(settings(), 'both');
 		const p = plan(planSettingsPaste('0.8\t0.8\t0.8', rows, { row: 1, col: 9 }));
 		expect(p.changes.map((c) => [c.rowId, c.column])).toEqual([
 			['panCoefficient', 'Jul'],
@@ -44,7 +49,7 @@ describe('monthly evaporation paste (issue #477)', () => {
 	});
 
 	it('its CSV pastes back as no change', () => {
-		const rows = monthlySettingRows(settings(), true);
+		const rows = monthlySettingRows(settings(), 'both');
 		const csv = monthlySettingsCsv(rows);
 		expect(csv.split('\r\n').slice(0, 3)).toEqual([
 			'Parameter,Unit,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep',
@@ -57,7 +62,7 @@ describe('monthly evaporation paste (issue #477)', () => {
 	});
 
 	it('its Expected format example reads, both rows matched', () => {
-		const p = plan(planSettingsPaste(MONTHLY_SETTINGS_FORMAT.example, monthlySettingRows(settings(), true)));
+		const p = plan(planSettingsPaste(MONTHLY_SETTINGS_FORMAT.example, monthlySettingRows(settings(), 'both')));
 		expect(p.notes).toEqual(['Matched 2 rows by name.']);
 		expect(p.changes.length + p.unchanged).toBe(24);
 	});

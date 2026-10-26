@@ -7,7 +7,7 @@
 import type { Page } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openSettings } from '../support/settings.ts';
+import { openCalibration, openSettings } from '../support/settings.ts';
 
 /** The heading a panel's anchor names: the element itself, or the first h2–h4 inside it. */
 const anchoredHeading = (page: Page, id: string) => page.locator(`:is(h2, h3, h4)#${id}, #${id} :is(h2, h3, h4)`).first();
@@ -26,19 +26,26 @@ async function expectLanded(page: Page, id: string, heading: string | RegExp) {
 	await expect(h, id).toBeFocused();
 }
 
-test('a #fragment typed while Settings, Runs & results, Data or Project is open lands on its panel, focused', async ({ page, owner }) => {
+test('a #fragment typed while Model settings, Calibration, Runs & results, Data or Project is open lands on its panel, focused', async ({ page, owner }) => {
 	void owner;
-	test.setTimeout(90_000); // four pages, two fragments each
+	test.setTimeout(110_000); // five pages, two fragments each
 	await page.setViewportSize({ width: 1280, height: 800 });
 	const project = await seedRunnableProject(page.request, 'Hash change landing');
 	const runId = await createRun(page.request, project.id, 'Landing');
 
-	// Settings: the last panel, then a lazy card of Flow calibration (waited for, as on load).
+	// Model settings: the last panel, then the first.
 	await openSettings(page, project.id);
 	await typeHash(page, '#set-auto');
 	await expectLanded(page, 'set-auto', 'Automatic runs');
+	await typeHash(page, '#set-period');
+	await expectLanded(page, 'set-period', 'Simulation period');
+
+	// Calibration: a lazy card of Flow calibration (waited for, as on load), then a settings panel (issue #586 round 3).
+	await openCalibration(page, project.id);
 	await typeHash(page, '#set-evaporation');
 	await expectLanded(page, 'set-evaporation', 'Evaporation from the map');
+	await typeHash(page, '#set-wr2012');
+	await expectLanded(page, 'set-wr2012', 'WR2012 check');
 
 	// Runs & results, with its run drawn: a panel near the end, then one that moved to Hydrological units, which
 	// goes on there for the same run.

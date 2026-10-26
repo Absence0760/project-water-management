@@ -1,4 +1,4 @@
-// Settings → Fit the parameters (2026-10-10): two cards, each with its main action where it is seen.
+// Calibration → Fit the parameters (2026-10-10; on Settings until issue #586 round 3): two cards, each with its main action where it is seen.
 // Fit automatically: the choices that decide the fit (objective, parameters, validation), the search folded
 // into one line of its values, and the button straight under them, on the first screen once the section is
 // open, and the fit record at the card's foot. Calibration rules: the revision, sign-off state, fit count, the
@@ -18,7 +18,7 @@ const fitButton = (page: Page) => fitCard(page).getByRole('button', { name: 'Fit
 async function openFitSection(page: Page, name: string) {
 	const project = await seedRunnableProject(page.request, name);
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(rulesCard(page).getByTestId('rules-status')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Run the calibration rules' })).toBeVisible();
 	return project;
@@ -114,17 +114,21 @@ test('the search folds into its values: the line follows the fields, opens in pl
 	await expect(settingsBar(page)).toBeVisible();
 });
 
+// Find a setting is Model settings' (the Calibration page has no find box since the fit's panels moved there, issue
+// #586 round 3), so its reach into a folded field is checked on a fold that stayed: Demand's days in February.
 test('Find a setting reaches a folded field: it opens the fold and focuses the field', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await openFitSection(page, 'Fit find');
-	const rules = rulesCard(page);
-	await expect(rules.getByTestId('rules-search')).not.toHaveAttribute('open');
+	const project = await openFitSection(page, 'Fit find');
+	await expect(page.getByRole('searchbox', { name: 'Find a setting' })).toHaveCount(0);
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const feb = page.getByTestId('feb-advanced');
+	await expect(feb).not.toHaveAttribute('open');
 	const find = page.getByRole('searchbox', { name: 'Find a setting' });
-	await find.fill('Starts per fit');
+	await find.fill('Days in February');
 	await find.press('Enter');
-	await expect(rules.getByTestId('rules-search')).toHaveAttribute('open', '');
-	await expect(rules.getByLabel('Starts per fit')).toBeFocused();
+	await expect(feb).toHaveAttribute('open', '');
+	await expect(page.getByRole('spinbutton', { name: 'Days in February' })).toBeFocused();
 });
 
 test('a viewer sees the rules’ state in the head with no sign-off, and can open the folds to read the search', async ({ page, owner, signIn }) => {
@@ -133,7 +137,7 @@ test('a viewer sees the rules’ state in the head with no sign-off, and can ope
 	const viewer = await signIn('Fit layout viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await viewer.page.setViewportSize({ width: 1440, height: 900 });
-	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
 	const rules = rulesCard(viewer.page);
 	await expect(rules.getByTestId('rules-status')).toContainText('Revision 1 · draft');
 	await expect(rules.getByTestId('rules-sign-off')).toHaveCount(0);

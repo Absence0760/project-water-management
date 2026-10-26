@@ -197,7 +197,7 @@ test('unsaved model edits hold Use, saying why, and once saved it works again', 
 	await form.getByLabel('Return flow (% of supply)').fill('5');
 	await form.getByLabel('Return flow (% of supply)').press('Tab');
 	await closeModal(page);
-	await page.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await page.getByRole('link', { name: 'Model settings', exact: true }).click();
 	await expect(panel.getByTestId('unit-map-body')).toHaveAttribute('data-ready', 'true');
 
 	// Use waits: it saves straight to the model, which would drop the unsaved edit.

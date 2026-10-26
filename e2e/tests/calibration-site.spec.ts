@@ -1,6 +1,6 @@
 // Calibrating at a gauge inside the network (engine 1.41.0; docs/ui.md §
-// Settings, docs/model.md §2.10k). The outlet has no record; a record is
-// attached to an inner gauge. Settings → Calibration record offers that gauge
+// Calibration, docs/model.md §2.10k). The outlet has no record; a record is
+// attached to an inner gauge. Calibration → Calibration record offers that gauge
 // under "Scored at" (and no gauge without a record); a fit there scores the
 // gauge's record, its fit record names the gauge, and the Data page says the
 // record is the calibration site. Names and numbers are invented.
@@ -32,7 +32,7 @@ test('a fit is scored at a gauge inside the network, and its record says where',
 	const rec = list.find((s) => s.name === 'Weir record')!;
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
 
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const scoredAt = page.getByLabel('Scored at');
 	await expect(scoredAt).toHaveValue('');
 	// The outlet and the gauge with a record; never the bare gauge.
@@ -96,7 +96,7 @@ test('a saved site whose record has gone warns on the run and in Settings', asyn
 	// The record is moved back to the outlet afterwards: the stored site no longer has one.
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: null } })).status()).toBe(200);
 
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('calibration-site-gone')).toContainText('no flow record is attached to it any more');
 	await expect(page.getByLabel('Scored at')).toHaveValue(weir.id);
 

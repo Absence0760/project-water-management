@@ -1,7 +1,7 @@
 // Pasting a block from a spreadsheet into the node table and the
 // planted-areas and crop-factor grids (issue #285), and the transfers' rates,
-// the irrigation systems, new crop types and Settings' monthly A-pan and pan
-// coefficients (issue #477, each with its Expected format note): a block
+// the irrigation systems, new crop types, Model settings' monthly A-pan and
+// Calibration's pan coefficients (issue #477, each with its Expected format note): a block
 // pasted into a cell opens the preview with every value it would change,
 // Apply writes them into the grid (unsaved, as if typed), and Save keeps them.
 // The mapping itself is unit tested (frontend/src/lib/spreadsheet/paste,
@@ -14,7 +14,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectAbove } from '../support/reflow.ts';
 import { saveModelChanges } from '../support/network.ts';
-import { openSettings, saveSettings } from '../support/settings.ts';
+import { openFold, openSettings, saveSettings } from '../support/settings.ts';
 
 /** Paste `text` into a cell's input as Excel's clipboard would hand it over. */
 async function pasteInto(input: Locator, text: string) {
@@ -320,37 +320,66 @@ test('crop types: a name the project lacks adds that crop with its factors, and 
 	await expect(page.getByRole('dialog', { name: 'Crop factors' }).getByLabel('Maize crop factor, Oct')).toHaveValue('0.3');
 });
 
-test('settings: the monthly A-pan and pan coefficients take a paste, from the button or into a month, and save (issue #477)', async ({ page, owner }) => {
+test('settings: Demand’s A-pan and Flow calibration’s pan coefficients each take a paste into their own row, from the button or into a month, and save together (issues #477, #586)', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Grid paste settings');
 	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(100), panCoefficient: new Array(12).fill(0.7) });
+	const HEAD = '\ufeffParameter,Unit,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep\r\n';
+	const BOTH = 'Parameter\tOct\tNov\nA-pan\t150\t160\nKp\t0.75\t0.7\n';
+
+	// Model settings → Demand: the A-pan row only. A block with both rows fills the A-pan and leaves the pan
+	// coefficients out, since they are Flow calibration's, on Calibration (issue #586 round 3).
 	await openSettings(page, project.id);
 	await page.locator('#set-demand').getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
-	const dlg = page.getByRole('dialog', { name: 'Paste monthly evaporation' });
-	expect(await templateCsv(dlg)).toBe(
-		'\ufeffParameter,Unit,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep\r\nA-pan evaporation,mm,100,100,100,100,100,100,100,100,100,100,100,100\r\nPan coefficient,× A-pan,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7\r\n'
-	);
-	expect((await exampleFile(dlg)).name).toBe('monthly-evaporation-example.csv');
-	const box = dlg.getByLabel('Cells copied from a spreadsheet');
-	await box.fill('Parameter\tOct\nPan coefficient\t2.5\n');
-	await expect(dlg.getByText('Pan coefficient, Oct: 2.5 is above 2.')).toBeVisible();
-	await box.fill('Parameter\tOct\tNov\nA-pan\t150\t160\nKp\t0.75\t0.7\n');
-	await expect(dlg.getByTestId('paste-summary')).toHaveText('3 values change; 1 already has the pasted value.');
+	const apanDlg = page.getByRole('dialog', { name: 'Paste monthly A-pan evaporation' });
+	expect(await templateCsv(apanDlg)).toBe(`${HEAD}A-pan evaporation,mm,100,100,100,100,100,100,100,100,100,100,100,100\r\n`);
+	expect((await exampleFile(apanDlg)).name).toBe('monthly-evaporation-example.csv');
+	const apanBox = apanDlg.getByLabel('Cells copied from a spreadsheet');
+	await apanBox.fill('Parameter\tOct\nA-pan evaporation\t-5\n');
+	await expect(apanDlg.getByText('A-pan evaporation, Oct: −5 mm is below 0 mm.')).toBeVisible();
+	await apanBox.fill(BOTH);
+	await expect(apanDlg.getByTestId('paste-summary')).toHaveText('2 values change.');
+	await expect(apanDlg.getByText("Left out a row the table doesn't have: Kp.")).toBeVisible();
 	await expectNoViolations(page);
-	await dlg.getByRole('button', { name: 'Apply 3 changes' }).click();
-	await expect(dlg).toBeHidden();
+	await apanDlg.getByRole('button', { name: 'Apply 2 changes' }).click();
+	await expect(apanDlg).toBeHidden();
 	await expect(page.getByLabel('A-pan evaporation, Nov, mm')).toHaveValue('160');
-	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.75');
+	// A bare row pasted into a month of the A-pan row fills from there.
+	await pasteInto(page.getByLabel('A-pan evaporation, Aug, mm'), '120\t130\n');
+	await expect(apanDlg.getByTestId('paste-where')).toContainText('A-pan evaporation, Aug');
+	await apanDlg.getByRole('button', { name: 'Apply 2 changes' }).click();
+	await expect(page.getByLabel('A-pan evaporation, Sep, mm')).toHaveValue('130');
 
+	// Calibration → Flow calibration (the sidebar keeps the unsaved A-pan): the pan coefficient row only.
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Calibration', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
+	await openFold(page, 'pan-tools');
+	await page.locator('#set-flow').getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
+	const panDlg = page.getByRole('dialog', { name: 'Paste monthly pan coefficients' });
+	expect(await templateCsv(panDlg)).toBe(`${HEAD}Pan coefficient,× A-pan,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7\r\n`);
+	const panBox = panDlg.getByLabel('Cells copied from a spreadsheet');
+	await panBox.fill('Parameter\tOct\nPan coefficient\t2.5\n');
+	await expect(panDlg.getByText('Pan coefficient, Oct: 2.5 is above 2.')).toBeVisible();
+	await panBox.fill(BOTH);
+	await expect(panDlg.getByTestId('paste-summary')).toHaveText('1 value changes; 1 already has the pasted value.');
+	await expect(panDlg.getByText("Left out a row the table doesn't have: A-pan.")).toBeVisible();
+	await expectNoViolations(page);
+	await panDlg.getByRole('button', { name: 'Apply 1 change' }).click();
+	await expect(panDlg).toBeHidden();
+	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.75');
 	// A bare row pasted into a month of the pan coefficient row fills from there.
 	await pasteInto(page.getByLabel('Pan coefficient, Aug'), '0.8\t0.8\n');
-	await expect(dlg.getByTestId('paste-where')).toContainText('Pan coefficient, Aug');
-	await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
+	await expect(panDlg.getByTestId('paste-where')).toContainText('Pan coefficient, Aug');
+	await panDlg.getByRole('button', { name: 'Apply 2 changes' }).click();
 	await expect(page.getByLabel('Pan coefficient, Sep')).toHaveValue('0.8');
 
+	// One save keeps both pages' pastes.
 	await saveSettings(page);
 	await page.reload();
-	await expect(page.getByLabel('A-pan evaporation, Oct, mm')).toHaveValue('150');
 	await expect(page.getByLabel('Pan coefficient, Sep')).toHaveValue('0.8');
+	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.75');
+	await openSettings(page, project.id);
+	await expect(page.getByLabel('A-pan evaporation, Oct, mm')).toHaveValue('150');
+	await expect(page.getByLabel('A-pan evaporation, Sep, mm')).toHaveValue('130');
 });
