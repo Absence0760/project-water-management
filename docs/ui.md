@@ -2106,6 +2106,17 @@ width.
   **Leave** or **Remove** on a line of its own; the role picker and the
   buttons are 44 px. The rows are grids there, so the table keeps its roles
   explicitly.
+- **Members at scale** (issue #586 R4-F): the list is by role, owners first
+  (the server's grouping), then by name as a reader counts ("Hydrologist 2"
+  before "Hydrologist 10"; `project/project.ts` `byName`), and shows its first
+  eight (`PEOPLE_SHOWN`), the reader's own row always among them, under a
+  **Show all N members** button (`aria-expanded`) that opens the rest in place
+  and folds them back. The table grows with the page rather than scrolling
+  inside its card (it scrolled at 70vh). On a wide screen the Email column
+  wraps at the "@" first. With 30 members and 30 farmer invitations, Recent
+  notes had been 5,063 px down at 1440 and 13,960 px on a phone; now 3,663 and
+  6,961, the rest being the panels between, which the side index reaches in
+  one click (`project-page.spec.ts`, the big case).
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
@@ -2187,7 +2198,10 @@ width.
   empty. Everyone is invited, account or not (issue
   #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
-  Revoke. Empty state: "No farmers yet: invite them to see their own farm."
+  Revoke. The farmers are by name as a reader counts, the invitations an owner
+  must act on (expired, or **Sender can no longer invite**) first, and each
+  list shows its first eight under **Show all N farmers** / **Show all N
+  invitations**, as Members does (issue #586 R4-F). Empty state: "No farmers yet: invite them to see their own farm."
   Farmer invites stay out of the Members panel's pending list. In both
   pending lists, an invite whose sender is no longer an owner (team admin)
   carries a **Sender can no longer invite** badge: nobody can accept it
@@ -5377,11 +5391,11 @@ sections", "Data sections", "Project page sections", "Comparison sections"; "Sec
 the node sheet); each group is a list named for screen readers. Each link says
 its panel's heading (`label`), so the menu and the page read alike ("EWR by
 month" against *EWR compliance by month* was one of the navigation review's
-findings, issue #462), on the bar too: Settings, Runs & results and
-Calibration name every heading word for word (issue #586, D4). A section's
-`bar` name, the heading's first words, is legacy: EWR and Compare runs still
-use it to keep their bars to two rows, while their side index, More menu and
-find box say the heading. With
+findings, issue #462), on the bar too: every page names every heading word
+for word (issue #586, D4; EWR, Hydrological units and Compare runs dropped
+their shorter bar names in R4-F, and still fit two rows at 1280 px, one on
+Hydrological units). A section's `bar` name, the heading's first words, is
+legacy and no page uses it. With
 `groupNames` the bar shows the names too: a small muted label before each
 group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
@@ -8225,15 +8239,14 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   named over its links; narrower a bar under the header, above the tiles (two
   rows at 1280 px), that sticks down the panels. Its links, by the ids above
   in page order (`river/river.ts`, `riverNavGroups`; `links.ts`
-  `RIVER_ANCHORS`), say the panels' headings (issue #462), the bar a shorter
-  name: **Flow vs reserve** (**Flow vs pragmatic EWR**, or **Flow vs daily
-  EWR** from the DRM tables, when its heading is), **Days below the reserve,
-  each water year** (the test the results are judged by, as the chart's
-  heading; **Days below, by year** on the bar), **Reserve rules met, by
-  month** (always, as its stub says what it needs without a table; **Reserve
-  rules met**), **Days below the EWR, by month** (**Days below, by month**),
-  **Water account**, **Uncertainty bands** (**Uncertainty**), **Sensitivity
-  runs** (**Sensitivity**), **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
+  `RIVER_ANCHORS`), say the panels' headings word for word, on the bar too
+  (issue #462; the bar's shorter names went in issue #586 R4-F): **Flow vs
+  reserve** (**Flow vs pragmatic EWR**, or **Flow vs daily EWR** from the DRM
+  tables, when its heading is), **Days below the reserve, each water year**
+  (the test the results are judged by, as the chart's heading), **Reserve
+  rules met, by month** (always, as its stub says what it needs without a
+  table), **Days below the EWR, by month**, **Water account**, **Uncertainty
+  bands**, **Sensitivity runs**, **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
   balance; How sure, and what if. On the bar the groups are named for screen
   readers only, its links evenly spaced (issue #162: the wider gaps between
   unnamed groups read as spacing bugs, and the names on the bar take it to
@@ -8386,12 +8399,12 @@ read it before.
   index on the left of the page, narrower a bar under the header, above the
   tiles (one row), that sticks down the page: **Hydrological unit detail**
   (`#res-farm`, a link with no group name; it read "Each hydrological unit →
-  Hydrological unit detail" until issue #467; **Unit detail** on the bar),
+  Hydrological unit detail" until issue #467),
   then under *Tables for this run* **Hydrological unit results**,
-  **Curtailment targets** (**Curtailment** on the bar), **Assurance of
-  supply**, **Drought restrictions** for a run with the rule and **Other uses
-  of water** (**Other uses**) when there are any (`supply/supply.ts`,
-  `supplyNav`; the panels' headings, issue #462). The unit detail and the
+  **Curtailment targets**, **Assurance of supply**, **Drought restrictions**
+  for a run with the rule and **Other uses of water** when there are any
+  (`supply/supply.ts`, `supplyNav`; the panels' headings word for word, on
+  the bar too, issue #462 and #586 R4-F). The unit detail and the
   results table's header row stick under the bar (its height,
   SectionNav's `barHeight`, as `--nav-h`), or under the header beside the
   index; the page's widths (`supply-page`) are the column beside it. Until
@@ -10105,7 +10118,10 @@ gives it an `h1` and **Back to runs**). The full reference is
   comparison (a 1440 px window) a side index on the left of the panels,
   narrower a bar under the header. The summary's two panels, then every
   panel of the full comparison drawn for the pair, under *Full comparison*,
-  each link its panel's heading (`compare/sections.ts`).
+  each link its panel's heading word for word, on the bar too (issue #586
+  R4-F: it said "Days below, by year", "Reserve by month", "EWR vs observed"
+  and "Plausibility"; at 1280 px the full names still take two rows,
+  `compare/sections.ts`).
 - **What the change does** (left, ~55 %; "What changes" until issue #466): the outcomes table (*EWR not met*, the
   share of days, worded as the Summary's card and the EWR page's tile
   from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
