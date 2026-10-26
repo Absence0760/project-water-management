@@ -201,7 +201,7 @@ describe('toMarkdown / toJson', () => {
 		const md = toMarkdown([result(), result({ wr2012MarRatio: null, independentValidation: null, cell: { ...result().cell, wr2012Band: false } })], meta);
 		expect(md).toContain(`Engine ${ENGINE_VERSION}; seed 7, 2 starts, 40 runs per fit.`);
 		expect(md).toContain('Fitted to `flow_logger_m3s`; independent record: `flow_observed_m3s`.');
-		expect(md).toContain('- **drop**: 2018-01-01 – 2018-02-01 (silted)');
+		expect(md).toContain('- **drop**: 1 Jan 2018 – 1 Feb 2018 (silted)');
 		expect(md).toContain('| 1 | generic | typical | nseLog | drop | on | 350.3 | 0.00 | 90.5 | 1.75 | 0.800 | 0.750 | 0.600 | 0.550 | – | 0.400 | 1.23 | 1.10 | 12 | 1.2 % |');
 		expect(md).toContain('| 2 | generic | typical | nseLog | drop | off | 350.3 | 0.00 | 90.5 | 1.75 | 0.800 | 0.750 | 0.600 | 0.550 | – | – | 1.23 | – | 12 | 1.2 % |');
 		expect(md).toContain('- #1: an invented note');

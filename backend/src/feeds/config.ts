@@ -2,8 +2,9 @@
 // that source to read (grid cells, a box of them, or a gauge station), and which of the
 // project's series the values merge into. Pure: the routes, the handlers and
 // the fetcher Lambda all validate with these schemas.
-import { dayText, type SeriesKind } from '@water-management/engine';
-// The subpath, not the package root: the fetcher Lambda reaches this module (lambda-fetcher.test.ts).
+import type { SeriesKind } from '@water-management/engine';
+// Subpaths, not the package root: the fetcher Lambda reaches this module (lambda-fetcher.test.ts).
+import { dayText } from '@water-management/engine/calendar';
 import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, type SeriesProvenance } from '@water-management/engine/provenance';
 import { z } from 'zod';
 import { SeriesStartDate } from '../series/limits.js';
