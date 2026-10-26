@@ -896,8 +896,9 @@ section it belongs to, with the example that taught it.
   duration", "Notes & evidence" standing for three panels) makes the bar and
   the page read differently, so when a bar can't fit two rows, the page has
   too many panels for one menu, and the fix is moving panels (as #586 moved
-  Model quality to Calibration), not shortening names. EWR and Compare runs
-  still carry `bar` names from before the rule. Two traps on the way: River's
+  Model quality to Calibration), not shortening names. EWR, Hydrological
+  units and Compare runs dropped theirs too (R4-F); their full headings still
+  fit two rows at 1280 px. Two traps on the way: River's
   chart-beside-bars switch was a window media query (1100 px), which beside
   a 13rem rail sees a column 13rem wider than it is, so it became a
   container query on the page's own column; and a page that only had a
