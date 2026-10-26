@@ -34,11 +34,12 @@ test('at 1440×900 Add change is on the first screen, and Application details is
 	await expect(page.getByRole('button', { name: 'Add change', exact: true })).toBeInViewport({ ratio: 1 });
 	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeInViewport({ ratio: 1 });
 
-	// Closed, each line says its value.
+	// Closed, each line says its value, then its action, a word apart: the action ends the summary's accessible name
+	// (Fold.svelte, issue #586 R4-I).
 	await expect(details(page).getByRole('heading', { name: 'Application details' })).toBeVisible();
-	await expect(page.getByTestId('proposer-fold').locator(':scope > summary')).toHaveText(/^Proposer: none tickedChange$/);
-	await expect(page.getByTestId('scenario-statement').locator(':scope > summary')).toHaveText(/^Statement: 0 of 3 answeredChange$/);
-	await expect(page.getByTestId('rebase-fold').locator(':scope > summary')).toHaveText(/^Based on Calibrated baseline: rebase onto another runRebase…$/);
+	await expect(page.getByTestId('proposer-fold').locator(':scope > summary')).toHaveText(/^Proposer: none ticked Change$/);
+	await expect(page.getByTestId('scenario-statement').locator(':scope > summary')).toHaveText(/^Statement: 0 of 3 answered Change$/);
+	await expect(page.getByTestId('rebase-fold').locator(':scope > summary')).toHaveText(/^Based on Calibrated baseline: rebase onto another run Rebase…$/);
 	for (const id of ['proposer-fold', 'scenario-statement', 'rebase-fold']) {
 		const fold = page.getByTestId(id);
 		await expect(fold).not.toHaveAttribute('open');
@@ -74,7 +75,7 @@ test('a viewer reads the summaries and opens them read only; no rebase is offere
 	await viewer.page.goto(`/projects/${p.id}?tab=scenarios&scenario=${p.sid}`);
 	await expect(details(viewer.page)).toBeVisible();
 	await expect(viewer.page.getByTestId('rebase-fold')).toHaveCount(0);
-	await expect(viewer.page.getByTestId('scenario-statement').locator(':scope > summary')).toHaveText(/^Statement: 0 of 3 answeredShow$/);
+	await expect(viewer.page.getByTestId('scenario-statement').locator(':scope > summary')).toHaveText(/^Statement: 0 of 3 answered Show$/);
 	await openDetails(viewer.page, 'scenario-statement');
 	await expect(viewer.page.getByTestId('scenario-statement').getByRole('button')).toHaveCount(0);
 });

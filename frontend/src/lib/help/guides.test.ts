@@ -13,6 +13,7 @@ import {
 	GUIDES,
 	TAB_TITLES,
 	guideFor,
+	guideNavLabel,
 	inline,
 	inSentence,
 	plainText,
@@ -80,6 +81,20 @@ describe('guides', () => {
 		// Every page guide is some page's header link, so none is orphaned.
 		const linked = new Set(Object.values(TAB_GUIDE));
 		for (const g of GUIDES.filter((x) => x.kind === 'page')) expect(linked.has(g.id), g.id).toBe(true);
+	});
+
+	it('title every page guide "<page>: <what it is for>", and list it in the contents by the page’s name', () => {
+		const pages = GUIDES.filter((g) => g.kind === 'page');
+		expect(pages.length).toBeGreaterThan(0);
+		for (const g of pages) {
+			expect(g.title, g.id).toMatch(/^[^:]+: \S/);
+			const label = guideNavLabel(g);
+			expect(g.title.startsWith(`${label}: `), g.id).toBe(true);
+			// Its tab's name, "The" aside (The Map).
+			expect(label.replace(/^The /, ''), g.id).toBe(TAB_TITLES[g.tab!]);
+		}
+		// Every other guide keeps its full title.
+		for (const g of GUIDES.filter((x) => x.kind !== 'page')) expect(guideNavLabel(g)).toBe(g.title);
 	});
 
 	it('start with exactly one “start here” guide', () => {
