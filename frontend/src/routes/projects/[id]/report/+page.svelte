@@ -67,6 +67,7 @@
 	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartCaption, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '#lib/components/runs/flowSeries.js';
 	import { toDisplayUnit } from '#lib/components/runs/results.js';
 	import RunSummaryView from '#lib/components/runs/RunSummaryView.svelte';
+	import { calibrationHref } from '#lib/components/calibration/links.js';
 	import UnitResultsTable from '#lib/components/supply/UnitResultsTable.svelte';
 	import { hasHumanImpacts, loadHumanImpacts } from '#lib/components/runs/humanImpacts.js';
 	import { loadRestrictionTables } from '#lib/components/runs/restrictions.js';
@@ -502,7 +503,9 @@
 					{:else if s.id === 'assurance'}
 						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={run.engineVersion} print />
 					{:else if s.id === 'farms'}
-						<RunSummaryView {summary} {days} headline={project!.settings.ewrHeadline ?? null}>
+						<!-- The model checks' calibration items link to that run on Calibration (issue #586 round 3): a report link
+						     is absolute, since the report is its own route; the warnings keep their places as plain words. -->
+						<RunSummaryView {summary} {days} headline={project!.settings.ewrHeadline ?? null} calibrationHref={(hash) => resolve(`projects/${projectId}${calibrationHref(run?.id ?? null, hash)}`)}>
 							{#snippet units()}
 								<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />
 								<!-- The land-cover, groundwater, demand-object and other-user tables: on Hydrological units in the workspace (issue #137), here in their old place. -->
@@ -519,7 +522,8 @@
 								{/if}
 							{/snippet}
 						</RunSummaryView>
-						<div class="sub">
+						<!-- The model checks' Self-checks item links here (#res-checks). -->
+						<div class="sub" id="res-checks">
 							<SelfChecksPanel {summary} {projectId} runId={run.id} startDate={run.startDate} endDate={run.endDate} engineVersion={run.engineVersion} nodes={[]} trace={false} />
 						</div>
 					{:else if s.id === 'notes'}
