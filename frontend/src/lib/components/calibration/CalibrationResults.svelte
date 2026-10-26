@@ -36,6 +36,7 @@
 	import type { RunSummary } from '@water-management/engine';
 	import { calShown, isCalSubsection, shownRun, type CalShown } from './page';
 	import type { CalState } from './status';
+	import { RetryFocus } from './retryFocus';
 
 	type Land = (id: string) => (() => void) | void;
 
@@ -159,6 +160,26 @@
 		});
 	});
 	const retry = () => run && loadDetail(run.id);
+
+	// Each Try again takes its alert out of the page: the focus follows the retry (retryFocus.ts, WCAG 2.4.3), onto the
+	// loading line, then the new Try again or the part's heading. The list's is aria-disabled while it loads, never
+	// disabled, which would drop the focus too (ui-playbook § Focus).
+	const listRetry = new RetryFocus();
+	const runRetry = new RetryFocus();
+	let listStatus = $state<HTMLElement>();
+	let listButton = $state<HTMLElement>();
+	let runStatus = $state<HTMLElement>();
+	let runButton = $state<HTMLElement>();
+	$effect(() => {
+		const state = list !== null ? 'loaded' : listError ? 'failed' : 'loading';
+		const [st, bt] = [listStatus, listButton];
+		untrack(() => listRetry.follow(state, st, bt));
+	});
+	$effect(() => {
+		const state = detail ? 'loaded' : detailError ? 'failed' : 'loading';
+		const [st, bt] = [runStatus, runButton];
+		untrack(() => runRetry.follow(state, st, bt));
+	});
 	/** The run picked isn't the one on screen yet: its details are loading. */
 	const busy = $derived(!!detail && !!run && detail.run.id !== run.id);
 	const shownIsPicked = $derived(!!detail && !!run && detail.run.id === run.id);
@@ -259,10 +280,20 @@
 	{#if listError}
 		<div class="alert alert-error" role="alert">
 			Couldn’t load the runs: {listError}
-			<button type="button" class="btn btn-sm" onclick={loadList} disabled={listLoading}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				bind:this={listButton}
+				aria-disabled={listLoading || undefined}
+				onclick={(e) => {
+					if (listLoading) return;
+					listRetry.press(e.currentTarget);
+					void loadList();
+				}}>Try again</button
+			>
 		</div>
 	{:else}
-		<p class="muted" role="status" data-testid="calibration-runs-loading">Loading the runs…</p>
+		<p class="muted retry-line" role="status" tabindex="-1" bind:this={listStatus} data-testid="calibration-runs-loading">Loading the runs…</p>
 	{/if}
 {:else if !run}
 	<!-- The part's one empty state (ui-playbook.md § 2): what to do first. With no record to compare with, a run
@@ -315,7 +346,15 @@
 		<div class="alert alert-error" role="alert">
 			{detailError}
 			{#if !detailGone}
-				<button type="button" class="btn btn-sm" onclick={retry}>Try again</button>
+				<button
+					type="button"
+					class="btn btn-sm"
+					bind:this={runButton}
+					onclick={(e) => {
+						runRetry.press(e.currentTarget);
+						void retry();
+					}}>Try again</button
+				>
 			{:else if list[0] && list[0].id !== run.id}
 				<button type="button" class="btn btn-sm" onclick={() => choose(list[0]!.id)}>Show the newest run</button>
 			{/if}
@@ -332,7 +371,7 @@
 			<ModelQuality {projectId} run={detail.run} refs={detail.series} {nodeNames} {nodeOrder} runs={list} {series} {projectSettings} bind:flowUnit />
 		</div>
 	{:else}
-		<div class="chart-ph" role="status" data-testid="calibration-run-loading">Loading the run…</div>
+		<div class="chart-ph retry-line" role="status" tabindex="-1" bind:this={runStatus} data-testid="calibration-run-loading">Loading the run…</div>
 	{/if}
 {/if}
 
@@ -400,6 +439,10 @@
 		color: var(--text-muted);
 		background: var(--surface-2);
 		border-radius: var(--radius-sm);
+	}
+	/* Focused only by a retry (retryFocus.ts), never by Tab: no ring round the whole line, as LoadState's. */
+	.retry-line:focus {
+		outline: none;
 	}
 	.results[aria-busy='true'] {
 		opacity: 0.7;

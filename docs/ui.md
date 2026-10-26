@@ -7282,7 +7282,13 @@ The page has:
   an editor, whose Run model is the header's, or "An editor can run the
   model." for a viewer; then a line on what a run shows), loading the run,
   and a failed run with **Try again** (or **Show the newest run** for a run
-  that's gone). Calibration against observed flow's no-statistics line links
+  that's gone). Each **Try again** here (the runs list's, the run's, and the
+  calibration check's series) keeps the focus as LoadState's does
+  (`calibration/retryFocus.ts` on `common/loadState.ts` `retryLanding`, WCAG
+  2.4.3, issue #586 R4-A): on the loading line while it loads, on the new Try
+  again if it fails again, on the part's (or the check's) heading once
+  loaded; the runs list's is `aria-disabled` while it loads, never disabled
+  (`calibration-retry-focus.spec.ts`). Calibration against observed flow's no-statistics line links
   its fixes here (Data, and Calibration record on the page; `linked`, words
   in a printed report). A link to a Model quality panel
   (`#res-plausibility`, the Summary's model checks, an old
