@@ -207,15 +207,20 @@ describe('divertMonthsCell', () => {
 		expect(divertMonthsCell({}, 'Hilltop')).toBeNull();
 	});
 
-	it('shows the months’ range, and names it in full for a screen reader', () => {
+	it('shows the months’ range, and names it in full for a screen reader, the cell’s words included', () => {
 		expect(divertMonthsCell({ divertMonthlyM3Day: WINTER }, 'Hilltop')).toEqual({
 			text: 'by month: 0–0.01',
-			aria: 'River to dam at Hilltop is set by month, between 0 and 0.01 m³/s'
+			aria: 'River to dam at Hilltop is set by month: 0–0.01 m³/s'
 		});
 		expect(divertMonthsCell({ divertMonthlyM3Day: new Array(12).fill(17_280) }, 'Hilltop')).toEqual({
 			text: 'by month: 0.2',
-			aria: 'River to dam at Hilltop is set by month, 0.2 m³/s every month'
+			aria: 'River to dam at Hilltop is set by month: 0.2 m³/s every month'
 		});
+		// Label in name (WCAG 2.5.3): the link's name holds the words it shows.
+		for (const row of [WINTER, new Array(12).fill(17_280), []]) {
+			const c = divertMonthsCell({ divertMonthlyM3Day: row }, 'Hilltop')!;
+			expect(c.aria).toContain(c.text);
+		}
 		expect(divertMonthsCell({ divertMonthlyM3Day: [86.4, 1_296_000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, 'Hilltop')!.text).toBe('by month: 0–15');
 	});
 

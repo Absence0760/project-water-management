@@ -56,7 +56,7 @@ test('an owner without an authenticator is not prompted for the role alone; a re
 	const banner = page.getByRole('region', { name: 'Two-step sign-in' });
 	await expect(banner).toHaveAttribute('data-mfa-prompt', 'setup');
 	await expect(banner).toContainText('That needs two-step sign-in, and you haven’t set it up yet.');
-	const menu = page.getByRole('button', { name: `Account menu for ${owner.displayName}, two-step sign-in needed` });
+	const menu = page.getByRole('button', { name: `Account menu for ${owner.displayName} ${owner.email}, two-step sign-in needed` });
 	await expect(menu).toHaveAttribute('data-mfa-badge', 'setup');
 	await expectNoViolations(page);
 

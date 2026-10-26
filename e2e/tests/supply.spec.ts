@@ -235,7 +235,7 @@ test('the node table shows River to dam set by month read-only, and links to the
 		// The run ignores the one value, so the table has no input for it, only the months' range.
 		await expect(grid.getByLabel('River to dam at Upper farm, m³/s', { exact: true })).toHaveCount(0);
 		const cell = grid.getByTestId(`divert-by-month-${upper.id}`);
-		const link = cell.getByRole('link', { name: 'River to dam at Upper farm is set by month, between 0 and 0.01 m³/s: edit it in the hydrological unit’s form', exact: true });
+		const link = cell.getByRole('link', { name: 'River to dam at Upper farm is set by month: 0–0.01 m³/s: edit it in the hydrological unit’s form', exact: true });
 		await expect(link).toHaveText('by month: 0–0.01');
 		// A farm with the one value keeps editing it in the table.
 		await expect(grid.getByLabel('River to dam at Lower farm, m³/s', { exact: true })).toBeEditable();

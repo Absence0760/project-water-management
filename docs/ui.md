@@ -4360,7 +4360,7 @@ map" card) stays the schematic; this is the geography.
   a pick from the list shows its Details (stacked on a phone, brought into
   view). The head's **Download GeoJSON** and **Every feature** (the grid).
 - **Checks** (A4, the side column's Checks tab, viewers too; the tab counts
-  the warnings, "Checks (1 warning)"): the count ("1 warning from the map’s
+  the warnings, named "Checks 1 warning" so the name holds the tab's words): the count ("1 warning from the map’s
   checks", or "The map’s checks found no problems.") and the warnings, each
   with buttons that pick its features and show their Details ([maps.md §
   Checks](./maps.md#checks)). Until 2026-10-02 a line in the column with
@@ -13090,6 +13090,15 @@ data button or Run button.
   width. No rule is disabled: a violation is fixed in the app. Each test
   scans one page state, through the shared `e2e/support/a11y.ts` scan (see
   e2e/README.md for why it runs axe in legacy mode).
+- **Label in name** (WCAG 2.5.3; axe-core 4.14 moved `label-content-name-mismatch`
+  out of its experimental rules and into the WCAG 2.1 A tag): a control with
+  an `aria-label` carries its visible words in that name, in order, so a voice
+  command that says what the control reads reaches it. "Remove crop" is named
+  "Remove crop Maize", a dam card's **Proposals** "Upper farm: proposals from
+  the register and the map", the account trigger "Account menu for {name}
+  {email}" (its avatar's initials and two-step badge are drawn by CSS, a
+  picture, not words), and the map's side tabs take their name from their
+  words ("Features 3", "Checks 1 warning", the last word visually hidden).
 - Every workspace tab (desktop and phone) and a GR4J run are also held to two
   of axe's best-practice rules the WCAG tags leave out: `empty-table-header`
   (a corner header above a column of row headers carries a visually hidden

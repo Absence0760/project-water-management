@@ -1549,10 +1549,13 @@
 										bind:this={tabEls[t.id]}
 										onclick={() => (sideTab = t.id)}
 										onkeydown={tabKey}
-										aria-label={t.id === 'features' ? `Features (${features.length})` : t.id === 'checks' && checks.length ? `Checks (${checks.length} ${checks.length === 1 ? 'warning' : 'warnings'})` : undefined}
 										data-testid="map-tab-{t.id}"
 									>
-										{t.label}{#if t.id === 'features'}<span class="tab-count">{features.length}</span>{:else if t.id === 'checks' && checks.length}<span class="tab-count warn">{checks.length}</span>{/if}
+										<!-- The name is the words on the tab, count included ("Checks 2 warnings"), so
+										     a voice command says what it reads (WCAG 2.5.3, axe's label-content-name-mismatch);
+										     the space keeps the count a word of its own and collapses in the flex row. -->
+										{t.label}
+										{#if t.id === 'features'}<span class="tab-count">{features.length}</span>{:else if t.id === 'checks' && checks.length}<span class="tab-count warn">{checks.length}</span><span class="visually-hidden">&nbsp;{checks.length === 1 ? 'warning' : 'warnings'}</span>{/if}
 									</button>
 								{/each}
 							</div>
