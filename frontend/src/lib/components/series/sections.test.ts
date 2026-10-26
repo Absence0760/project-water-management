@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { navText } from '#lib/components/common/sectionNav.js';
 import { DATA_ANCHORS, dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 
 const ids = (p: Parameters<typeof dataNavGroups>[0]) => dataNavGroups(p).flatMap((g) => g.sections.map((s) => s.id));
@@ -20,15 +19,15 @@ describe('dataNavGroups', () => {
 	});
 
 	it('names each link as its panel’s heading, on the bar too (issue #462, #586 R4-M)', () => {
-		const names = dataNavGroups(ALL).flatMap((g) => g.sections.map((s) => [s.label, navText(s, 'bar')]));
+		const names = dataNavGroups(ALL).flatMap((g) => g.sections.map((s) => s.label));
 		expect(names).toEqual([
-			['Input time series', 'Input time series'],
-			['Series chart', 'Series chart'],
-			['Data feeds', 'Data feeds'],
-			['Gauge vs logger agreement', 'Gauge vs logger agreement'],
-			['Double mass: catchment rain vs CHIRPS', 'Double mass: catchment rain vs CHIRPS'],
-			['Data checks', 'Data checks'],
-			['What the model uses', 'What the model uses']
+			'Input time series',
+			'Series chart',
+			'Data feeds',
+			'Gauge vs logger agreement',
+			'Double mass: catchment rain vs CHIRPS',
+			'Data checks',
+			'What the model uses'
 		]);
 	});
 

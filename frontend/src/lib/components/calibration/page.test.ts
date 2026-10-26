@@ -44,7 +44,6 @@ describe('the side index (issue #586 round 3)', () => {
 		expect(results.map((s) => s.id)).toEqual(modelQualitySections(full).map((s) => s.id));
 		expect(results.map((s) => s.label)).toContain('WR2012 check: Z99A');
 		for (const s of calibrationNavGroups(full).flatMap((g) => g.sections)) {
-			expect(s.bar, s.id).toBeUndefined();
 			// Only a part's own heading, under its first line (below).
 			expect(s.covers ?? [], s.id).toEqual(s.covers ? [expect.stringMatching(/^cal-(setup|fit)-h$/)] : []);
 		}

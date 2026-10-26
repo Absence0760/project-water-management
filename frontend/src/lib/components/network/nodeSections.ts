@@ -27,15 +27,6 @@ export const SECTION_TITLE: Record<NodeSection, string> = {
 	cover: 'Land cover'
 };
 
-/** Each section's name on the section menu's bar, where room is short (its More menu says the legend). */
-export const SECTION_SHORT: Record<NodeSection, string> = {
-	...SECTION_TITLE,
-	groundwater: 'Combined boreholes',
-	damSurvey: 'Dam survey',
-	baseflow: 'Base flow',
-	reach: 'Bed losses'
-};
-
 /** Whether one of NODE_FIELDS shows on this kind of node (a gauge passes flow through; a user has only groundwater). */
 export function fieldShows(f: NodeField, kind: NetworkNode['kind']): boolean {
 	if (f.farmOnly && kind !== 'farm') return false;
@@ -70,18 +61,14 @@ export const sectionId = (nodeId: string, s: NodeSection) => `nd-sec-${s}-${node
 
 /**
  * The node sheet's section menu (common/SectionNav, issue #462): one group,
- * each link named by its fieldset's legend, with the short name on the bar
- * where the legend is longer.
+ * each link named by its fieldset's legend word for word, on the bar too
+ * (issue #586 R4-N); what doesn't fit the bar's two rows goes into its More menu.
  */
 export function nodeNavGroups(nodeId: string, sections: readonly NodeSection[]): NavGroup[] {
 	return [
 		{
 			label: null,
-			sections: sections.map((s) => ({
-				id: sectionId(nodeId, s),
-				label: SECTION_TITLE[s],
-				...(SECTION_SHORT[s] !== SECTION_TITLE[s] ? { bar: SECTION_SHORT[s] } : {})
-			}))
+			sections: sections.map((s) => ({ id: sectionId(nodeId, s), label: SECTION_TITLE[s] }))
 		}
 	];
 }
