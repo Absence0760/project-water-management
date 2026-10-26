@@ -31,6 +31,13 @@ describe('the side index (issue #586 round 3)', () => {
 		expect(isCalPart('set-fit')).toBe(false);
 	});
 
+	it('marks a part’s first line while its own heading is read, not the last line of the part above (a jump to #cal-fit)', () => {
+		const [setup, fit] = calibrationNavGroups(bare);
+		expect(setup!.sections[0]!.covers).toEqual(['cal-setup-h']);
+		expect(fit!.sections[0]).toMatchObject({ id: 'res-hydrograph', covers: ['cal-fit-h'] });
+		expect(fit!.sections.slice(1).every((s) => !s.covers)).toBe(true);
+	});
+
 	it('lists the shown run’s Model quality panels under the second, by their headings, with no shorter names', () => {
 		expect(lines(calibrationNavGroups(bare))[1]).toEqual(['How the shown run fits', ['Hydrograph', 'Flow-duration curve', 'Calibration against observed flow', 'EWR test: model against observed flow']]);
 		const results = calibrationNavGroups(full)[1]!.sections;
@@ -38,7 +45,8 @@ describe('the side index (issue #586 round 3)', () => {
 		expect(results.map((s) => s.label)).toContain('WR2012 check: Z99A');
 		for (const s of calibrationNavGroups(full).flatMap((g) => g.sections)) {
 			expect(s.bar, s.id).toBeUndefined();
-			expect(s.covers, s.id).toBeUndefined();
+			// Only a part's own heading, under its first line (below).
+			expect(s.covers ?? [], s.id).toEqual(s.covers ? [expect.stringMatching(/^cal-(setup|fit)-h$/)] : []);
 		}
 	});
 

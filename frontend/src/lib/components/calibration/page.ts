@@ -61,10 +61,15 @@ export function calibrationNavGroups(
 ): NavGroup[] {
 	const subs: NavSection[] = [...(shown.check ? [CAL_SUBSECTIONS.check] : []), ...(shown.provenance ? [CAL_SUBSECTIONS.provenance] : [])].map((s) => ({ id: s.id, label: s.label, sub: true }));
 	const results = summary ? modelQualitySections(summary).flatMap((s) => (s.id === 'res-calibration' ? [s, ...subs] : [s])) : [];
+	// Each part's first line stands for the part's own heading too (`covers`, the heading only, so the find box reads
+	// no more than its words): just past "How the shown run fits" (a jump to #cal-fit), the reader is in that part,
+	// not still on the last settings panel above it.
+	const covering = (sections: NavSection[], part: string): NavSection[] =>
+		sections.map((s, i) => (i === 0 ? { ...s, covers: [...(s.covers ?? []), part] } : s));
 	return [
-		{ label: CAL_PARTS[0].label, sections: CALIBRATION_SETTINGS_SECTIONS.map((s) => ({ id: s.id, label: s.label })) },
+		{ label: CAL_PARTS[0].label, sections: covering(CALIBRATION_SETTINGS_SECTIONS.map((s) => ({ id: s.id, label: s.label })), `${CAL_PARTS[0].id}-h`) },
 		// No run shown yet (none, or still loading): the part itself, so the index still reaches its empty state.
-		summary ? { label: CAL_PARTS[1].label, sections: results } : { label: null, sections: [{ id: CAL_PARTS[1].id, label: CAL_PARTS[1].label }] }
+		summary ? { label: CAL_PARTS[1].label, sections: covering(results, `${CAL_PARTS[1].id}-h`) } : { label: null, sections: [{ id: CAL_PARTS[1].id, label: CAL_PARTS[1].label }] }
 	];
 }
 
