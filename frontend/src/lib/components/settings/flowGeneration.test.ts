@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest';
 import type { RainStationSettings } from '@water-management/engine';
 import {
 	assignmentLine,
+	FLOW_METHODS,
 	flowMethodOf,
+	methodLabel,
 	landUnits,
 	namesLine,
 	stationOptions,
@@ -42,6 +44,23 @@ describe('the method', () => {
 			'perUnit',
 			'perUnit'
 		]);
+	});
+});
+
+describe('the methods’ words (issue #586 E14)', () => {
+	it('keep the names the engine’s messages use, each with plain words of what it does, no model jargon', () => {
+		// The fit record and the engine's "fitted under …" message name the methods by these.
+		expect(FLOW_METHODS.map((m) => m.label)).toEqual(['Fragmentation', 'Per unit']);
+		expect(methodLabel('perUnit')).toBe('Per unit');
+		for (const m of FLOW_METHODS) {
+			expect(m.short.length, m.value).toBeGreaterThan(0);
+			// Short enough to sit on the name's line at 1440, and lower case after it.
+			expect(m.short.length, m.value).toBeLessThanOrEqual(70);
+			expect(m.short, m.value).toMatch(/^[a-z]/);
+			// Plain words: no model or method name in them (GR4J, the other method's name).
+			expect(m.short, m.value).not.toMatch(/GR4J|Fragmentation|Per unit/);
+		}
+		expect(new Set(FLOW_METHODS.map((m) => m.short)).size).toBe(FLOW_METHODS.length);
 	});
 });
 

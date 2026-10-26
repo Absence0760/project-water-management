@@ -85,7 +85,7 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Notes on EWR (1)' })).toBeVisible();
 	// The groups whose sources and determinations most need a "why" take notes too (WR2012, Reserve rules, restrictions, Evidence).
-	// Every panel but Judge results by takes notes (issue #586, C12), and Notes is the last thing in each panel's head,
+	// Every panel but EWR the results are judged by takes notes (issue #586, C12), and Notes is the last thing in each panel's head,
 	// after the panel's own action.
 	for (const group of ['Reserve rule tables', 'Drought restrictions', 'Reporting', 'Evidence', 'Outcome matrix', 'Seasonal outlook', 'Automatic runs']) {
 		await expect(page.getByRole('button', { name: `Notes on ${group}`, exact: true })).toBeVisible();

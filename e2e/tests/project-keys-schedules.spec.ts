@@ -26,7 +26,7 @@ test('an owner finds Scheduled reports under the model and API keys after Share 
 	await expect(keys.getByTestId('api-keys-saves')).toHaveText('Keys save as you make or revoke them: neither needs Save changes.');
 	await expect(schedules.getByTestId('schedules-saves')).toHaveText('Schedules save as you change them: adding, pausing or removing one needs no Save changes.');
 
-	// Scheduled reports at the foot of the left column, under The model; API keys in the right, between Share links and Two-step sign-in.
+	// Scheduled reports last, under The model; API keys between Share links and Two-step sign-in (one column, issue #586 R4-B).
 	const box = async (name: string) => (await region(page, name).boundingBox())!;
 	const model = await box('The model');
 	const sched = (await schedules.boundingBox())!;

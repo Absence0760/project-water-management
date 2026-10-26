@@ -94,8 +94,11 @@ test('the index moves with the arrow keys, and a panel with a Save blocker is ma
 	const project = await createProject(page.request, 'Settings index keys');
 	await openSettings(page, project.id);
 	const menu = settingsMenu(page);
-	const first = menu.getByRole('link', { name: 'Simulation period', exact: true });
+	// The first link is the panel that heads the page (issue #586 R4-B).
+	const first = menu.getByRole('link', { name: 'EWR the results are judged by', exact: true });
 	await first.focus();
+	await page.keyboard.press('ArrowDown');
+	await expect(menu.getByRole('link', { name: 'Simulation period', exact: true })).toBeFocused();
 	await page.keyboard.press('ArrowDown');
 	await expect(menu.getByRole('link', { name: 'Rain gaps', exact: true })).toBeFocused();
 	await page.keyboard.press('End');

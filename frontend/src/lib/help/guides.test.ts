@@ -241,7 +241,7 @@ function panelHeadings(id: string): string[] {
 // Scheduled reports moved to Data and Project (issue #586 round 1), so "Settings → Data feeds" is a broken path,
 // and the fit's four to Calibration (round 3), so is "Settings → Fit the parameters": it is "Calibration → Fit the
 // parameters", as is the Plausibility checks panel the engine's warnings name (packages/engine/src/places.ts).
-const SETTINGS_PANELS = new Map<string, string>([...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]), ['Judge results by', 'set-judge']]);
+const SETTINGS_PANELS = new Map<string, string>(SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]));
 const CALIBRATION_PANELS = new Map<string, string>([...CALIBRATION_SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]), ['Plausibility checks', 'res-plausibility']]);
 const PANELS = new Map<string, string>([...SETTINGS_PANELS, ...CALIBRATION_PANELS]);
 type PathPage = 'settings' | 'calibration' | 'any';

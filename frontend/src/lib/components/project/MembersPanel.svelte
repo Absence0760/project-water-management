@@ -305,8 +305,10 @@
 </section>
 
 <style>
+	/* An email, a role and Add: a form's width, not the one wide column's (issue #586 R4-B). */
 	.add {
 		margin-top: 1rem;
+		max-width: 48rem;
 	}
 	.grow {
 		flex: 1;

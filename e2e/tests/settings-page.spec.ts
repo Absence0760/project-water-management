@@ -19,10 +19,12 @@ import { headerControl } from '../support/sectionHeader.ts';
 
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
-const SETTINGS_INDEX: [string, string[]][] = [
+const SETTINGS_INDEX: [string | null, string[]][] = [
+	// The panel that heads the page, in a group with no name (issue #586 R4-B).
+	[null, ['EWR the results are judged by']],
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
-	['Runoff & calibration', ['Flow generation']],
+	['Runoff', ['Flow generation']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automatic runs', ['Automatic runs']]
@@ -46,9 +48,10 @@ test('Model settings’ header points at Calibration for the fit, and its side i
 
 	// The index's groups, each a named list, in page order; each link is its panel's heading, word for word.
 	const menu = settingsMenu(page);
-	for (const [name, links] of SETTINGS_INDEX) {
-		await expect(menu.getByRole('list', { name, exact: true }).getByRole('link')).toHaveText(links);
+	for (const [gi, [, links]] of SETTINGS_INDEX.entries()) {
+		await expect(menu.getByRole('list').nth(gi).getByRole('link')).toHaveText(links);
 	}
+	for (const [name] of SETTINGS_INDEX) if (name) await expect(menu.getByRole('list', { name, exact: true })).toBeVisible();
 	for (const [, links] of SETTINGS_INDEX) {
 		for (const name of links) {
 			const id = (await menu.getByRole('link', { name, exact: true }).getAttribute('href'))!.slice(1);

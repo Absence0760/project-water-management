@@ -108,8 +108,11 @@
 	.owner-line {
 		margin-bottom: 0.4rem;
 	}
+	/* A team's name, not a paragraph: the picker and Move stay a field's width once the Project page is one
+	   wide column (issue #586 R4-B), rather than stretching the select across ~870 px at 1440. */
 	.move {
 		margin-top: 0.75rem;
+		max-width: 36rem;
 	}
 	.move .field {
 		margin-bottom: 0;

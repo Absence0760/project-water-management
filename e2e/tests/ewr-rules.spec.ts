@@ -368,7 +368,7 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 
 	// The picker is the page's first panel, and lists only what exists.
 	await expect(page.locator('.settings-form > .panel').first()).toHaveAttribute('id', 'set-judge');
-	const pick = page.getByRole('combobox', { name: 'Judge results by' });
+	const pick = page.getByRole('combobox', { name: 'EWR the results are judged by' });
 	await expect(pick.locator('option')).toHaveText([
 		'Automatic: now the Reserve rule table at the outlet, Outflow gauge',
 		'The pragmatic EWR at the outflow gauge',

@@ -16,12 +16,12 @@ import { expect, test } from '../support/fixtures.ts';
 import { anySaveBar, isProjectPatch, openCalibration, openSettings, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 
 /**
- * Every panel on the page, top to bottom, by its anchor and its heading (word for word, without its ⓘ tip): Judge
- * results by heads the page, the form's panels follow, Automatic runs last. settings/sections.ts lists the form's;
- * SettingsTab.svelte sets the ids.
+ * Every panel on the page, top to bottom, by its anchor and its heading (word for word, without its ⓘ tip): EWR the
+ * results are judged by ("Judge results by" until issue #586 E14) heads the page, the form's panels follow,
+ * Automatic runs last. settings/sections.ts lists them; SettingsTab.svelte sets the ids.
  */
 const PANELS: [id: string, heading: string][] = [
-	['set-judge', 'Judge results by'],
+	['set-judge', 'EWR the results are judged by'],
 	['set-period', 'Simulation period'],
 	['set-rain', 'Rain gaps'],
 	['set-quality', 'Data quality'],
@@ -61,8 +61,12 @@ const CAL_PANELS: [id: string, heading: string][] = [
 /** The anchors inside a Calibration panel: Evaporation from the map, a card of Flow calibration that saves on its own. */
 const INNER: [id: string, heading: string, panel: string][] = [['set-evaporation', 'Evaporation from the map', 'set-flow']];
 
-/** The side index at 1440 px: its groups by task, in page order, each link to its panel's anchor. */
-const INDEX: [group: string, links: [label: string, id: string][]][] = [
+/**
+ * The side index at 1440 px: its groups by task, in page order, each link to its panel's anchor. The panel that heads
+ * the page has a group of its own with no name (issue #586 R4-B: with no link, Find a setting couldn't find it).
+ */
+const INDEX: [group: string | null, links: [label: string, id: string][]][] = [
+	[null, [['EWR the results are judged by', 'set-judge']]],
 	[
 		'Data & rain',
 		[
@@ -80,7 +84,7 @@ const INDEX: [group: string, links: [label: string, id: string][]][] = [
 		]
 	],
 	[
-		'Runoff & calibration',
+		'Runoff',
 		// The four that set up a fit moved to Calibration (round 3).
 		[['Flow generation', 'set-share']]
 	],
@@ -135,18 +139,20 @@ test('the panels, their anchors and the side index, in page order', async ({ pag
 	await expect(page.getByText(/save as you change them/)).toHaveCount(0);
 	for (const [old] of MOVED) await expect(page.locator(`#${old}`)).toHaveCount(0);
 
-	// The side index: its groups in order, each a named list of its panels' headings, each linking to its anchor,
-	// and nothing else in it. Judge results by heads the page above the index's first panel and has no link.
+	// The side index: its groups in order, each a list of its panels' headings named by its group (the first has no
+	// name), each linking to its anchor, and nothing else in it.
 	const menu = settingsMenu(page);
 	await expect(menu.getByRole('list')).toHaveCount(INDEX.length);
-	for (const [group, links] of INDEX) {
-		const list = menu.getByRole('list', { name: group, exact: true });
+	for (const [gi, [group, links]] of INDEX.entries()) {
+		const list = menu.getByRole('list').nth(gi);
+		if (group) await expect(list).toHaveAccessibleName(group);
+		else await expect(list).toHaveAccessibleName('');
 		await expect(list.getByRole('link')).toHaveText(links.map(([label]) => label));
 		for (const [i, [, id]] of links.entries()) await expect(list.getByRole('link').nth(i)).toHaveAttribute('href', `#${id}`);
 	}
 	await expect(menu.getByRole('link')).toHaveCount(INDEX.flatMap(([, l]) => l).length);
-	// The index is in page order: its anchors are the panels' minus the head.
-	expect(INDEX.flatMap(([, l]) => l.map(([, id]) => id))).toEqual(PANELS.map(([id]) => id).filter((id) => id !== 'set-judge'));
+	// The index is in page order, every panel with its link.
+	expect(INDEX.flatMap(([, l]) => l.map(([, id]) => id))).toEqual(PANELS.map(([id]) => id));
 	// Each link's label is its panel's heading.
 	for (const [label, id] of INDEX.flatMap(([, l]) => l)) expect(PANELS.find(([p]) => p === id)?.[1], id).toBe(label);
 });

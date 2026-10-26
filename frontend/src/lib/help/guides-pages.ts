@@ -375,14 +375,15 @@ export const PAGE_GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**The model**: headline facts (units, gauges, catchment area, dams, irrigated area, transfers, series, runs), each linking to where it is edited.',
+							'One column, read top to bottom in the order the page’s **On this page** list gives: the project’s details, then who can open it, then its notes, facts and reports.',
 							'**Download** in the header: the whole project as one JSON file (model, settings and input series), for every member.',
-							'**Scheduled reports**, under the model: the latest run’s report PDF emailed to chosen members every week or month. Editors and owners add, pause and remove schedules; viewers read them.',
 							'**Members**: who can open the project and with which [[roles|role]]. Owners add people and change roles.',
 							'**Farmers**: which hydrological units each farmer is linked to; a farmer reads only their own.',
 							'**Share links** (owners only): read-only links for people outside the project, to the published baseline; the list also holds every link to an application, so an owner can withdraw any of them from one place.',
 							'**API keys** (owners only): keys a logger gateway or a script sends daily readings with ([[guide:push-logger-data|Push logger data with an API key]]).',
 							'**Two-step sign-in** (owners only): **Require two-step sign-in** for the project’s owners and signers ([[guide:two-step-sign-in|Sign in with two steps]]).',
+							'**The model**, after who can open it: headline facts (units, gauges, catchment area, dams, irrigated area, transfers, series, runs), each linking to where it is edited.',
+							'**Scheduled reports**, last, under the model: the latest run’s report PDF emailed to chosen members every week or month. Editors and owners add, pause and remove schedules; viewers read them.',
 							'Scheduled reports and API keys save as you change them; the project’s details wait for **Save changes** at the foot of the page.'
 						]
 					}
@@ -436,7 +437,7 @@ export const PAGE_GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'One long form, under **Build the model**, before **Calibration**. **Judge results by** comes first; then the panels by task: **Data & rain** (Simulation period, Rain gaps, Data quality), **Demand & supply** (Demand, Drought restrictions, Reporting), **Flow generation**, **EWR & Reserve** (EWR, Reserve rule tables), **Reading results** (Outcome matrix, Seasonal outlook, Evidence) and **Automatic runs**. Each panel says what it is set to under its heading.'
+						text: 'One long form, under **Build the model**, before **Calibration**. **EWR the results are judged by** comes first, the side index’s first link; then the panels by task: **Data & rain** (Simulation period, Rain gaps, Data quality), **Demand & supply** (Demand, Drought restrictions, Reporting), **Runoff** (Flow generation: how rain becomes each unit’s natural flow, not the runoff model’s parameters, which are fitted under **Calibration → Flow calibration**), **EWR & Reserve** (EWR, Reserve rule tables), **Reading results** (Outcome matrix, Seasonal outlook, Evidence) and **Automatic runs**. Each panel says what it is set to under its heading.'
 					},
 					{
 						type: 'p',
