@@ -27,7 +27,7 @@
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import Delta from '#lib/components/compare/Delta.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { landOnAnchor } from '#lib/help/anchor.js';
 	import { runHref } from '#lib/components/overview/attention.js';
 	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '#lib/components/overview/latestRun.js';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
@@ -36,7 +36,7 @@
 	import { runDamCapacity } from '#lib/components/runs/results.js';
 	import { runYears } from '#lib/components/runs/runList.js';
 	import { dataEndOf } from '#lib/format/age.js';
-	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '#lib/format/number.js';
+	import { fmtNum, fmtPct, fmtQty, fmtWhen, localIsoDate } from '#lib/format/number.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { withParam } from '#lib/workspace/overlays.js';
 	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
@@ -278,13 +278,11 @@
 		fragmentShown = true;
 		const hash = untrack(() => page.url.hash.slice(1));
 		if (!supplyAnchor(hash)) return;
+		// The shared landing (help/anchor.ts landOnAnchor, as Runs & results): it waits for a lazy panel and its
+		// heading. Looked up once here, `#res-assurance` (drawn later) left the focus on the body on a fresh load
+		// (issue #586 R4-F).
 		tick().then(() => {
-			const el = destroyed ? null : document.getElementById(hash);
-			if (!el) return;
-			releaseFragment = holdAnchor(el);
-			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
-			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			focusAnchor(heading);
+			if (!destroyed) releaseFragment = landOnAnchor(hash);
 		});
 	});
 	onDestroy(() => {
@@ -302,7 +300,7 @@
 		<label class="run-pick">
 			<span class="visually-hidden">Run shown</span>
 			<select value={meta.id} onchange={(e) => pickRun(e.currentTarget.value)}>
-				{#each runs as r (r.id)}<option value={r.id}>{runName(r)} · {fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</option>{/each}
+				{#each runs as r (r.id)}<option value={r.id}>{runName(r)} · {fmtWhen(r.createdAt)} · {runYears(r.startDate, r.endDate)}</option>{/each}
 			</select>
 		</label>
 	{/if}

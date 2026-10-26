@@ -16,7 +16,8 @@
 	});
 </script>
 
-<p class="visually-hidden" role="status">{stateText('loading')}</p>
+<!-- data-loading: a Try again hands the focus here while it loads (common/loadState.ts followRetry). -->
+<p class="visually-hidden" role="status" data-loading>{stateText('loading')}</p>
 {#each heights as h, i (i)}
 	<div class="skeleton" style:height="{h}px" aria-hidden="true">
 		<span style:width="55%"></span>

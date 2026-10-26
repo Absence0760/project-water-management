@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { onDestroy } from 'svelte';
 	import { diffEnsembleOptions, type EnsembleSummary, type PairedResult, type PairedSummary } from '@water-management/engine';
 	import { api, type Ensemble, type EnsembleDetail } from '#lib/api/index.js';
@@ -106,9 +107,22 @@
 	{#if !sameProject}
 		<p class="muted">Paired bands need two different runs of one project: the parameter sets describe one catchment.</p>
 	{:else if loading}
-		<p class="muted" role="status">Loading…</p>
+		<p class="muted" role="status" data-loading>Loading…</p>
 	{:else if error}
-		<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" onclick={load}>Try again</button></div>
+		<div class="alert alert-error" role="alert">
+			{error}
+			<!-- The loading line takes its place: the focus follows (followRetry). -->
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					followRetry(e.currentTarget);
+					loading = true;
+					load();
+				}}>Try again</button
+			>
+		</div>
 	{:else}
 		{#if withheld}<p class="alert alert-info" role="note" data-testid="paired-uncertainty-withheld">{withheld}</p>{/if}
 		{#if sumA || sumB}

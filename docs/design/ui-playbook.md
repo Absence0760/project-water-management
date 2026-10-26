@@ -722,9 +722,13 @@ section it belongs to, with the example that taught it.
   (`app.css`): the summary is one line naming the group and its current
   values ("Search: Wide bounds · 1 500 runs × 5 starts · seed 1", from a pure
   helper such as `calibration/fit.ts` `searchSummary`, unit-tested), with
-  **Change** at its end (`aria-hidden`, since the summary already announces
-  expanded/collapsed; **Hide** while open; **Show** for a viewer, who can
+  **Change** at its end (**Hide** while open; **Show** for a viewer, who can
   change nothing inside: pass `readonly`), and the fields open in place. The
+  visible word ends the summary's accessible name ("Default limits: … Change
+  the limits"), so a voice-control user who says "click Change" reaches it;
+  it was `aria-hidden` until issue #586 R4-I (WCAG 2.5.3 Label in Name;
+  `586-a11y-fold-name.spec.ts`). Never hide a visible action word from the
+  name of the control it sits in. The
   values shrink and wrap in their own box (`.fold-line`), so a long line
   keeps its name and action on its row instead of dropping under the name
   and orphaning the action (issue #586; `expectFoldOnOneRow`). The
@@ -923,8 +927,9 @@ section it belongs to, with the example that taught it.
   duration", "Notes & evidence" standing for three panels) makes the bar and
   the page read differently, so when a bar can't fit two rows, the page has
   too many panels for one menu, and the fix is moving panels (as #586 moved
-  Model quality to Calibration), not shortening names. EWR and Compare runs
-  still carry `bar` names from before the rule. Two traps on the way: River's
+  Model quality to Calibration), not shortening names. EWR, Hydrological
+  units and Compare runs dropped theirs too (R4-F); their full headings still
+  fit two rows at 1280 px. Two traps on the way: River's
   chart-beside-bars switch was a window media query (1100 px), which beside
   a 13rem rail sees a column 13rem wider than it is, so it became a
   container query on the page's own column; and a page that only had a
@@ -1765,7 +1770,13 @@ Interaction details that bit:
   the loading line while the retry loads, on the new Try again if it failed
   again, and on the panel's heading once it has loaded
   (`common/loadState.ts` `retryTarget`; `586-a11y-load-state.spec.ts`).
-  A panel with its own Try again should hand the focus on the same way.
+  A panel with its own Try again hands the focus on the same way: its click
+  calls `followRetry` (`common/loadState.ts`) before the retry starts, the
+  button carries `data-retry` and the loading line `data-loading`, and the
+  scope it watches (the alert's parent unless given) stays on the page
+  through the retry (issue #586 R4-I; `586-a11y-retry-focus.spec.ts`). A Try
+  again that can't act while a load is out is `aria-disabled`, never
+  `disabled`.
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling

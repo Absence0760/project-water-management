@@ -36,8 +36,8 @@
 	import { resolveHeadline } from '#lib/components/runs/ewrAssurance.js';
 	import { heatmapHeadlineNote, judgedByText } from '#lib/components/ewr/headline.js';
 	import { detailCache } from '#lib/components/runs/cache.js';
-	import { fmtDate, fmtDay } from '#lib/format/number.js';
-	import { holdAnchor } from '#lib/help/anchor.js';
+	import { fmtDay, fmtWhen } from '#lib/format/number.js';
+	import { landOnAnchor } from '#lib/help/anchor.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import UncertaintyPanel from '#lib/components/uncertainty/UncertaintyPanel.svelte';
 	import SensitivityPanel from '#lib/components/uncertainty/SensitivityPanel.svelte';
@@ -185,8 +185,11 @@
 	);
 
 	// --- a link to one of the panels (`#res-reserve`, or an old Runs & results link sent here):
-	// the panels render once the record is in, after the browser's own jump, so scroll there then
-	// and hold it while the page settles (as RunsTab does), with focus on the panel's heading.
+	// the panels render once the record is in, after the browser's own jump, and most are lazy
+	// chunks drawn later still, so land then with the shared landing (help/anchor.ts landOnAnchor,
+	// as Runs & results does): it waits for the panel and its heading, holds the panel in view while
+	// the page settles and focuses the heading. Its own code here followed a panel's first box, so on a
+	// fresh load `#res-ewr-grid` and `#res-water-account` left the focus on the body (issue #586 R4-F).
 	let fragmentShown = false;
 	let releaseFragment = () => {};
 	let destroyed = false;
@@ -196,28 +199,12 @@
 		const hash = untrack(() => page.url.hash.slice(1));
 		if (!riverAnchor(hash)) return;
 		tick().then(() => {
-			const el = destroyed ? null : document.getElementById(hash);
-			if (!el) return;
-			releaseFragment = holdAnchor(el);
-			// Most panels are lazy chunks: their heading may arrive after the panel's box, so wait for it.
-			const focusHeading = () => {
-				const heading = el.querySelector<HTMLElement>('h2, h3, h4');
-				if (!heading) return false;
-				if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-				heading.focus({ preventScroll: true });
-				return true;
-			};
-			if (focusHeading()) return;
-			const mo = new MutationObserver(() => focusHeading() && mo.disconnect());
-			mo.observe(el, { childList: true, subtree: true });
-			stopWaiting = () => mo.disconnect();
+			if (!destroyed) releaseFragment = landOnAnchor(hash);
 		});
 	});
-	let stopWaiting = () => {};
 	onDestroy(() => {
 		destroyed = true;
 		releaseFragment();
-		stopWaiting();
 	});
 
 	// --- the chart's fixed height: generous where the page is wide (it is the page's main content), less on a phone.
@@ -254,7 +241,7 @@
 			<span class="visually-hidden">Run</span>
 			<!-- Named "Run" itself too: a label round a select would add its chosen option to the name. -->
 			<select aria-label="Run" value={pick.run.id} onchange={(e) => choose(e.currentTarget.value)}>
-				{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
+				{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtWhen(iso), i === 0)}</option>{/each}
 			</select>
 		</label>
 		<a class="btn" href={runHref(pick.run.id)}>Open in Runs &amp; results</a>

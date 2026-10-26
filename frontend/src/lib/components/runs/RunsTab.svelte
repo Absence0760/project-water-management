@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { SearchStep } from '#lib/nav/searchStep.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
@@ -663,10 +664,20 @@
 				<ul class="runs skeleton" aria-hidden="true">
 					{#each [0, 1] as i (i)}<li><span class="sk sk-line"></span><span class="sk sk-short"></span></li>{/each}
 				</ul>
-				<p class="visually-hidden" role="status">Loading runs…</p>
+				<p class="visually-hidden" role="status" data-loading>Loading runs…</p>
 			{:else if loadError}
 				<div class="alert alert-error" role="alert">
-					Couldn’t load the runs: {loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
+					Couldn’t load the runs: {loadError}
+					<!-- Each Try again here takes itself out for a loading line: the focus follows (followRetry). -->
+					<button
+						type="button"
+						class="btn btn-sm"
+						data-retry
+						onclick={(e) => {
+							followRetry(e.currentTarget);
+							load();
+						}}>Try again</button
+					>
 				</div>
 			{:else if runs.length === 0}
 				<!-- "Run the model" only while it can start: otherwise the status line under the header says what a run needs. -->
@@ -753,7 +764,17 @@
 			<div class="alert alert-error" role="alert">
 				{detailError}
 				{#if !detailGone}
-					<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+					<button
+						type="button"
+						class="btn btn-sm"
+						data-retry
+						onclick={(e) => {
+							if (!selectedId) return;
+							// Lands on the run's heading once its results are drawn.
+							followRetry(e.currentTarget, { landing: () => document.getElementById('res-h')?.closest<HTMLElement>('h1, h2, h3, h4') });
+							loadDetail(selectedId);
+						}}>Try again</button
+					>
 				{:else if latest && latest.id !== selectedId}
 					<button type="button" class="btn btn-sm" onclick={() => select(latest.id, 'pick')}>Show the newest run</button>
 				{/if}
@@ -900,14 +921,22 @@
 						{#if publicationError}
 							<div class="alert alert-error" role="alert">
 								Couldn’t load the publication: {publicationError}
-								<button type="button" class="btn btn-sm" onclick={loadPublication}>Try again</button>
+								<button
+									type="button"
+									class="btn btn-sm"
+									data-retry
+									onclick={(e) => {
+										followRetry(e.currentTarget);
+										loadPublication();
+									}}>Try again</button
+								>
 							</div>
 						{:else if publication}
 							{#key shownRunId}
 								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} actsForAuthority={project.actsForAuthority ?? false} onChange={published} />
 							{/key}
 						{:else}
-							<p class="muted" role="status">Loading the publication…</p>
+							<p class="muted" role="status" data-loading>Loading the publication…</p>
 						{/if}
 					</section>
 				{/snippet}
@@ -933,7 +962,7 @@
 				<span class="sk sk-table"></span>
 			</div>
 			<div class="panel" aria-hidden="true"><span class="sk sk-chart"></span></div>
-			<p class="visually-hidden" role="status">Loading run results…</p>
+			<p class="visually-hidden" role="status" data-loading>Loading run results…</p>
 		{:else}
 			<div class="panel placeholder muted">Pick a run to see its results. {RESULTS_SHOW}</div>
 		{/if}

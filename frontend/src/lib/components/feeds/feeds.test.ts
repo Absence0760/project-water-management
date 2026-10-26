@@ -28,6 +28,7 @@ import {
 	healthMessage,
 	keptNote,
 	needsAttention,
+	nextTryNote,
 	parseBbox,
 	parseCells,
 	separateName,
@@ -416,5 +417,43 @@ describe('targetHint (issue #51)', () => {
 		expect(targetHint('chirps', 'rain_chirps_mm')).toBeNull();
 		expect(targetHint('chirps_gefs', 'rain_forecast_mm')).toBeNull();
 		expect(targetHint('dws', 'flow_observed_m3s')).toBeNull();
+	});
+});
+
+describe('nextTryNote: when a failing feed tries again (issue #586 Round 4)', () => {
+	// Rule 7: the time is the reader's clock, so "today" is the reader's day.
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	const now = new Date('2026-10-26T08:00:00Z');
+	const failing = { enabled: true, consecutiveFailures: 1, actingUser: 'Ann' };
+
+	it('says the time on the reader’s day, and the day and time on another (UTC)', () => {
+		process.env.TZ = 'UTC';
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T08:14:00Z' }, now)).toBe('It tries again after 08:14.');
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-27T07:59:00Z' }, now)).toBe('It tries again after 27 Oct 2026 07:59.');
+	});
+
+	it('dates it in the reader’s zone, where the day turns over sooner (Pacific/Kiritimati, UTC+14)', () => {
+		process.env.TZ = 'Pacific/Kiritimati';
+		// 08:00 UTC is 22:00 there: 09:13 UTC is 23:13 the same day, 10:13 UTC already tomorrow.
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T09:13:00Z' }, now)).toBe('It tries again after 23:13.');
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T10:13:00Z' }, now)).toBe('It tries again after 27 Oct 2026 00:13.');
+	});
+
+	it('says the next pass takes it once the time has come, or when it was never scheduled', () => {
+		process.env.TZ = 'UTC';
+		const due = 'It is due to try again: the scheduler takes it on its next pass.';
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T07:59:00Z' }, now)).toBe(due);
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T08:00:00Z' }, now)).toBe(due);
+		expect(nextTryNote({ ...failing, nextAttemptAt: null }, now)).toBe(due);
+	});
+
+	it('says nothing for a feed that isn’t failing, is switched off, or has no acting owner', () => {
+		const at = '2026-10-26T09:00:00Z';
+		expect(nextTryNote({ ...failing, consecutiveFailures: 0, nextAttemptAt: at }, now)).toBeNull();
+		expect(nextTryNote({ ...failing, enabled: false, nextAttemptAt: null }, now)).toBeNull();
+		expect(nextTryNote({ ...failing, actingUser: null, nextAttemptAt: null }, now)).toBeNull();
 	});
 });

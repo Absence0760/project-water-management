@@ -6,6 +6,7 @@
 	// those lines. The lines are ./derivedRain.ts's, computed by the parent from the model input when opened.
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import type { AreaRainLines } from './derivedRain';
 	import { sourceLanes, sourceSummary } from './rainSources';
@@ -74,9 +75,18 @@
 
 <div class="area-rain" {id} data-testid="area-rain">
 	{#if error}
-		<p class="err" role="alert">Couldn’t compute the rain of {name}: {error} {#if onretry}<button type="button" class="btn btn-sm" onclick={onretry}>Try again</button>{/if}</p>
+		<p class="err" role="alert">Couldn’t compute the rain of {name}: {error} {#if onretry}<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// The computing line takes its place: the focus follows (followRetry).
+					followRetry(e.currentTarget);
+					onretry();
+				}}>Try again</button
+			>{/if}</p>
 	{:else if loading || !lines}
-		<p class="muted" role="status">{loading ? 'Computing the rain from the stored inputs…' : 'A run reads no station for this area with the settings as saved.'}</p>
+		<p class="muted" role="status" data-loading={loading || undefined}>{loading ? 'Computing the rain from the stored inputs…' : 'A run reads no station for this area with the settings as saved.'}</p>
 	{:else}
 		<div class="area-head">
 		<p class="facts" data-testid="area-rain-days">

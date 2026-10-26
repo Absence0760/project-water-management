@@ -28,3 +28,84 @@ export function retryLanding(from: Element): { focus: () => void } | null {
 	if (!target) return null;
 	return { focus: () => (/^H[1-4]$/.test(target.tagName) ? focusHeading(target) : target.focus()) };
 }
+
+/**
+ * What followRetry sees in its scope after a change: whether the reader has
+ * taken the focus elsewhere, a new Try again (`[data-retry]`, none drawn
+ * when it was pressed) is drawn, the pressed one is still on the page, and a loading
+ * line (`[data-loading]`) is drawn.
+ */
+export interface RetryView {
+	moved: boolean;
+	again: boolean;
+	pressedOn: boolean;
+	loading: boolean;
+}
+/** stop: leave the focus; again / landing: focus the new Try again / the heading and stop; loading: focus the loading line and watch on; wait: watch on. */
+export type RetryStep = 'stop' | 'again' | 'wait' | 'loading' | 'landing';
+
+/** The step for a view (pure; followRetry's decision, unit-tested). */
+export function retryStep(v: RetryView): RetryStep {
+	if (v.moved) return 'stop';
+	if (v.again) return 'again';
+	if (v.pressedOn) return 'wait';
+	if (v.loading) return 'loading';
+	return 'landing';
+}
+
+/**
+ * A hand-built Try again's focus, the way LoadState places it (WCAG 2.4.3,
+ * issue #586 R4-I): call it from the button's click, before the retry
+ * starts. Try again swaps its alert for a loading line, and the focus fell
+ * to <body>. This watches `scope` (by default the parent of the alert round
+ * the button, which must stay on the page through the retry) and puts the
+ * focus on the loading line (`[data-loading]`) while the retry loads, on the
+ * new Try again (`[data-retry]`) when it failed again, and on the panel's
+ * heading (retryLanding) once it has loaded. It lets go as soon as the reader
+ * moves the focus themselves. `landing` names the element to land from when
+ * it isn't the scope (retryLanding: the heading of the region round it), for
+ * a Try again outside the panel it refreshes; or, as a function, finds what
+ * to focus once loaded (a page's <h1>, drawn only then), the scope's landing
+ * when it finds nothing.
+ */
+export function followRetry(
+	pressed: HTMLElement,
+	{ scope, landing }: { scope?: Element | null; landing?: Element | null | (() => HTMLElement | null | undefined) } = {}
+): void {
+	const root = scope ?? pressed.closest('[role="alert"], .alert')?.parentElement ?? pressed.parentElement;
+	if (!root) return;
+	const doc = root.ownerDocument;
+	let placed: HTMLElement | null = null;
+	// Another panel's Try again already drawn in the scope isn't this retry's.
+	const before = new Set(root.querySelectorAll('[data-retry]'));
+	const observer = new MutationObserver(step);
+	const stop = () => observer.disconnect();
+	function step() {
+		if (!root!.isConnected) return stop();
+		const active = doc.activeElement;
+		const moved = !!active && active !== doc.body && active !== pressed && active !== placed && !active.contains(root!);
+		const again = [...root!.querySelectorAll<HTMLElement>('[data-retry]')].find((b) => !before.has(b)) ?? null;
+		const loading = root!.querySelector<HTMLElement>('[data-loading]');
+		const next = retryStep({ moved, again: !!again, pressedOn: pressed.isConnected, loading: !!loading });
+		if (next === 'stop') return stop();
+		if (next === 'again') {
+			stop();
+			return again!.focus();
+		}
+		if (next === 'loading') {
+			if (loading !== placed) {
+				if (!loading!.hasAttribute('tabindex')) loading!.tabIndex = -1;
+				placed = loading;
+				loading!.focus();
+			}
+			return;
+		}
+		if (next === 'landing') {
+			stop();
+			const found = typeof landing === 'function' ? landing() : null;
+			if (found) return /^H[1-4]$/.test(found.tagName) ? focusHeading(found) : found.focus();
+			retryLanding((typeof landing === 'function' ? null : landing) ?? root!)?.focus();
+		}
+	}
+	observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['data-loading', 'data-retry'] });
+}

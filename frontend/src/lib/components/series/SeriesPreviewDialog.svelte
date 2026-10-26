@@ -23,6 +23,7 @@
 	// computed by SeriesTab in its own lazily loaded chunk, never stored.
 	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
 	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
@@ -183,6 +184,19 @@
 		if (!active || active === document.body || active === dialog || (dialog?.contains(active) && active.tagName === 'BUTTON')) input.focus();
 	}
 
+	// Each Try again takes itself out of the dialog (the loading line, or the list once loaded): the focus
+	// follows within its own block (followRetry), so the values' and the areas' retries don't find each other's.
+	function retryValues(e: MouseEvent) {
+		const button = e.currentTarget as HTMLElement;
+		followRetry(button, { scope: button.closest('[data-retry-scope]') });
+		onRetry?.();
+	}
+	function retryAreas(e: MouseEvent) {
+		const button = e.currentTarget as HTMLElement;
+		followRetry(button, { scope: button.closest('[data-retry-scope]') });
+		void fetchAreas();
+	}
+
 	function onScroll(e: Event) {
 		scrollTop = (e.currentTarget as HTMLDivElement).scrollTop;
 	}
@@ -194,31 +208,35 @@
 	</p>
 
 	{#if loading}
-		<div class="state" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading…</div>
+		<div class="state" role="status" aria-live="polite" data-loading><span class="spinner" aria-hidden="true"></span> Loading…</div>
 	{:else if noValues}
 		<div class="alert alert-error" role="alert">
 			Couldn't load the values of {failedNames} ({failedReason}).{pendingIds.length ? ` Still loading: ${pendingNames}.` : ''}
-			{#if onRetry}<button type="button" class="btn btn-sm" onclick={onRetry}>Try again</button>{/if}
+			{#if onRetry}<button type="button" class="btn btn-sm" data-retry onclick={retryValues}>Try again</button>{/if}
 		</div>
 	{:else if rows.length === 0}
 		<p class="muted">No series data loaded yet.</p>
 	{:else}
-		{#if missingIds.length > 0}
-			<div class="alert alert-warning" role="status">
-				{#if failedIds.length}{failedIds.length} series couldn't be loaded and show{failedIds.length === 1 ? 's' : ''} blank: {failedNames} ({failedReason}).{/if}
-				{#if pendingIds.length}{pendingIds.length} series {pendingIds.length === 1 ? "isn't" : "aren't"} loaded yet and show{pendingIds.length === 1 ? 's' : ''} blank: {pendingNames}.{/if}
-				{#if onRetry}<button type="button" class="btn btn-sm" onclick={onRetry}>Try again</button>{/if}
-			</div>
-		{/if}
+		<div data-retry-scope>
+			{#if missingIds.length > 0}
+				<div class="alert alert-warning" role="status">
+					{#if failedIds.length}{failedIds.length} series couldn't be loaded and show{failedIds.length === 1 ? 's' : ''} blank: {failedNames} ({failedReason}).{/if}
+					{#if pendingIds.length}{pendingIds.length} series {pendingIds.length === 1 ? "isn't" : "aren't"} loaded yet and show{pendingIds.length === 1 ? 's' : ''} blank: {pendingNames}.{/if}
+					{#if onRetry}<button type="button" class="btn btn-sm" data-retry onclick={retryValues}>Try again</button>{/if}
+				</div>
+			{/if}
+		</div>
 
-		{#if areasLoading}
-			<p class="muted areas-note" role="status" data-testid="preview-areas"><span class="spinner" aria-hidden="true"></span> Computing each area’s rain under its station…</p>
-		{:else if areasError || areasFailed.length}
-			<div class="alert alert-warning" role="status" data-testid="preview-areas">
-				{#if areasError}Couldn’t compute each area’s rain ({areasError}).{:else}Couldn’t compute the rain of {areasFailed.map((a) => `${areaTitle(a)} (${a.error})`).join(', ')}.{/if}
-				<button type="button" class="btn btn-sm" onclick={fetchAreas}>Try again</button>
-			</div>
-		{/if}
+		<div data-retry-scope>
+			{#if areasLoading}
+				<p class="muted areas-note" role="status" data-testid="preview-areas" data-loading><span class="spinner" aria-hidden="true"></span> Computing each area’s rain under its station…</p>
+			{:else if areasError || areasFailed.length}
+				<div class="alert alert-warning" role="status" data-testid="preview-areas">
+					{#if areasError}Couldn’t compute each area’s rain ({areasError}).{:else}Couldn’t compute the rain of {areasFailed.map((a) => `${areaTitle(a)} (${a.error})`).join(', ')}.{/if}
+					<button type="button" class="btn btn-sm" data-retry onclick={retryAreas}>Try again</button>
+				</div>
+			{/if}
+		</div>
 
 		<div class="controls">
 			<div class="search-row">

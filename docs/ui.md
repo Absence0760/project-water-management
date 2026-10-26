@@ -2106,6 +2106,17 @@ width.
   **Leave** or **Remove** on a line of its own; the role picker and the
   buttons are 44 px. The rows are grids there, so the table keeps its roles
   explicitly.
+- **Members at scale** (issue #586 R4-F): the list is by role, owners first
+  (the server's grouping), then by name as a reader counts ("Hydrologist 2"
+  before "Hydrologist 10"; `project/project.ts` `byName`), and shows its first
+  eight (`PEOPLE_SHOWN`), the reader's own row always among them, under a
+  **Show all N members** button (`aria-expanded`) that opens the rest in place
+  and folds them back. The table grows with the page rather than scrolling
+  inside its card (it scrolled at 70vh). On a wide screen the Email column
+  wraps at the "@" first. With 30 members and 30 farmer invitations, Recent
+  notes had been 5,063 px down at 1440 and 13,960 px on a phone; now 3,663 and
+  6,961, the rest being the panels between, which the side index reaches in
+  one click (`project-page.spec.ts`, the big case).
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
@@ -2187,7 +2198,10 @@ width.
   empty. Everyone is invited, account or not (issue
   #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
-  Revoke. Empty state: "No farmers yet: invite them to see their own farm."
+  Revoke. The farmers are by name as a reader counts, the invitations an owner
+  must act on (expired, or **Sender can no longer invite**) first, and each
+  list shows its first eight under **Show all N farmers** / **Show all N
+  invitations**, as Members does (issue #586 R4-F). Empty state: "No farmers yet: invite them to see their own farm."
   Farmer invites stay out of the Members panel's pending list. In both
   pending lists, an invite whose sender is no longer an owner (team admin)
   carries a **Sender can no longer invite** badge: nobody can accept it
@@ -5377,11 +5391,11 @@ sections", "Data sections", "Project page sections", "Comparison sections"; "Sec
 the node sheet); each group is a list named for screen readers. Each link says
 its panel's heading (`label`), so the menu and the page read alike ("EWR by
 month" against *EWR compliance by month* was one of the navigation review's
-findings, issue #462), on the bar too: Settings, Runs & results and
-Calibration name every heading word for word (issue #586, D4). A section's
-`bar` name, the heading's first words, is legacy: EWR and Compare runs still
-use it to keep their bars to two rows, while their side index, More menu and
-find box say the heading. With
+findings, issue #462), on the bar too: every page names every heading word
+for word (issue #586, D4; EWR, Hydrological units and Compare runs dropped
+their shorter bar names in R4-F, and still fit two rows at 1280 px, one on
+Hydrological units). A section's `bar` name, the heading's first words, is
+legacy and no page uses it. With
 `groupNames` the bar shows the names too: a small muted label before each
 group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
@@ -6166,7 +6180,13 @@ editors run one now and read the map's proposals, viewers read.
   in `feeds.ts`, its days like the rest of the app's calendar days; a source
   that answered HTTP 403 reads "the source refused this server’s requests
   (HTTP 403): it may have blocked this server’s address, so the feed waits
-  hours before asking again", architecture.md § Data feeds → Throttling), and
+  hours before asking again", architecture.md § Data feeds → Throttling),
+  followed on a failing feed by when it tries again ("It tries again after
+  10:13." today, "It tries again after 27 Oct 2026 08:45." on another day, in
+  the reader's clock; "It is due to try again: the scheduler takes it on its
+  next pass." once that time has come or it was never scheduled; nothing for
+  a feed switched off or with no acting owner): the server's `nextAttemptAt`,
+  from the scheduler's own rule (`nextTryNote` in `feeds.ts`), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.
@@ -6184,8 +6204,19 @@ editors run one now and read the map's proposals, viewers read.
   tabs note that runs use the current series until it completes.
 - **A warning** above the list counts the feeds that are stale or failing
   ("1 feed needs attention: …", `role="alert"`).
-- **Run now** (editors) queues a fetch at once and says so; the status
-  updates once the background worker has run it (**Refresh status**).
+- **Run now** (editors) queues a fetch at once and says so ("Fetch queued.
+  …"), then follows it (issue #586 Round 4, `feeds/follow.ts`): the panel
+  re-reads the list every 2 s for the first 10 s, then every 5 s, then every
+  10 s, about two minutes in all, until the feed's `lastAttemptAt` moves (a
+  result was recorded; in production when the fetcher's answer comes back).
+  Then the card updates and the live region says how it went, focus staying
+  on the button: "Fetch done: Rainfall — forecast. OK; newest data …" or
+  "Fetch failed: Rainfall — CHIRPS: <why>. It tries again after 10:13."
+  Polling stops when the panel unmounts and pauses while the page is hidden
+  (one poll at once when it shows again); a failed poll just waits for the
+  next, and never overwrites a newer list. If the two minutes run out it
+  says "The fetch is still waiting to run. Refresh status will show it once
+  it has." **Refresh status** still re-reads at any time.
   Pressed too often (6 fetches, then one every 10 minutes per feed), the
   section's error line shows the server's words, with the wait in whole
   minutes and a reminder that the feed also runs daily.
@@ -8012,7 +8043,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   against. The **Run** menu in the header (named for screen readers only,
   `aria-label="Run"`, like Hydrological units's picker, so on a phone the select fills a row of its own with
   no "Run" line above it) lists every run, newest first
-  (`runOptionLabel`, the compare picker's labels); picking one is a new
+  (`runOptionLabel`, the compare picker's labels, when each ran day first:
+  "today 13:40", `fmtWhen`, issue #586 R4-F); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
   While the picked run's record loads, the page keeps the run before it on
@@ -8253,15 +8285,14 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   named over its links; narrower a bar under the header, above the tiles (two
   rows at 1280 px), that sticks down the panels. Its links, by the ids above
   in page order (`river/river.ts`, `riverNavGroups`; `links.ts`
-  `RIVER_ANCHORS`), say the panels' headings (issue #462), the bar a shorter
-  name: **Flow vs reserve** (**Flow vs pragmatic EWR**, or **Flow vs daily
-  EWR** from the DRM tables, when its heading is), **Days below the reserve,
-  each water year** (the test the results are judged by, as the chart's
-  heading; **Days below, by year** on the bar), **Reserve rules met, by
-  month** (always, as its stub says what it needs without a table; **Reserve
-  rules met**), **Days below the EWR, by month** (**Days below, by month**),
-  **Water account**, **Uncertainty bands** (**Uncertainty**), **Sensitivity
-  runs** (**Sensitivity**), **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
+  `RIVER_ANCHORS`), say the panels' headings word for word, on the bar too
+  (issue #462; the bar's shorter names went in issue #586 R4-F): **Flow vs
+  reserve** (**Flow vs pragmatic EWR**, or **Flow vs daily EWR** from the DRM
+  tables, when its heading is), **Days below the reserve, each water year**
+  (the test the results are judged by, as the chart's heading), **Reserve
+  rules met, by month** (always, as its stub says what it needs without a
+  table), **Days below the EWR, by month**, **Water account**, **Uncertainty
+  bands**, **Sensitivity runs**, **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
   balance; How sure, and what if. On the bar the groups are named for screen
   readers only, its links evenly spaced (issue #162: the wider gaps between
   unnamed groups read as spacing bugs, and the names on the bar take it to
@@ -8269,8 +8300,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   (`river-body`): the flow chart and the years bars sit side by side from
   56rem of it.
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
-  and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
-  for a lazy panel's heading to arrive. An old link to one of these panels on
+  and holds it there, with focus on the panel's heading, waiting for a lazy
+  panel and its heading to arrive: the shared landing (`help/anchor.ts`
+  `landOnAnchor`, as Runs & results), since issue #586 R4-F replaced the
+  page's own copy of it (a fresh load of `#res-ewr-grid` or
+  `#res-water-account` was reported leaving the focus on the page;
+  `river-page.spec.ts` pins the focus on a fresh load). An old link to one of these panels on
   Runs & results (`?tab=runs&run=<id>#res-reserve` …, `RIVER_ANCHORS`) is
   replaced by the same link here. The Summary's **Reserve and EWR results**
   link and the run headline's "by month of the year" link here too, and an
@@ -8301,7 +8336,8 @@ read it before.
   `createdAt`, as the Summary shows (`pickRuns`). A `run=` naming a run that
   is gone shows the newest with a note. The run before it (by `createdAt`,
   `previousRunOf`) is what the change is against. The header's **Run shown**
-  menu lists every run; picking one is a history entry. **Open in Runs &
+  menu lists every run, each with when it ran day first ("today 13:40",
+  "23 Sep 2026 15:06", `fmtWhen`, issue #586 R4-F); picking one is a history entry. **Open in Runs &
   results** goes to `?tab=runs&run=<id>`, named as on EWR (issue #466).
 - **Header.** The shared section header; the context line (`supplySummary`)
   is "8 units · 3 short this week · run “Baseline”, ran today", with the
@@ -8414,12 +8450,12 @@ read it before.
   index on the left of the page, narrower a bar under the header, above the
   tiles (one row), that sticks down the page: **Hydrological unit detail**
   (`#res-farm`, a link with no group name; it read "Each hydrological unit →
-  Hydrological unit detail" until issue #467; **Unit detail** on the bar),
+  Hydrological unit detail" until issue #467),
   then under *Tables for this run* **Hydrological unit results**,
-  **Curtailment targets** (**Curtailment** on the bar), **Assurance of
-  supply**, **Drought restrictions** for a run with the rule and **Other uses
-  of water** (**Other uses**) when there are any (`supply/supply.ts`,
-  `supplyNav`; the panels' headings, issue #462). The unit detail and the
+  **Curtailment targets**, **Assurance of supply**, **Drought restrictions**
+  for a run with the rule and **Other uses of water** when there are any
+  (`supply/supply.ts`, `supplyNav`; the panels' headings word for word, on
+  the bar too, issue #462 and #586 R4-F). The unit detail and the
   results table's header row stick under the bar (its height,
   SectionNav's `barHeight`, as `--nav-h`), or under the header beside the
   index; the page's widths (`supply-page`) are the column beside it. Until
@@ -8427,7 +8463,10 @@ read it before.
   but scrolling. Not shown with no run or no units.
 - **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment`,
   `#res-assurance` or `#res-other-uses` fragment scrolls to its panel once the run is in and holds
-  it there (`holdAnchor`), focus on its heading. An old link to one of them on
+  it there, focus on its heading, through the shared landing (`help/anchor.ts`
+  `landOnAnchor`, issue #586 R4-F: the page's own copy looked the panel up
+  once, and `#res-assurance` was reported leaving the focus on the page;
+  `supply-page.spec.ts` pins it on a fresh load). An old link to one of them on
   Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
   its `run=` and `window=`. The portfolio's and team page's "units short this
   week", the Summary's *Supply by hydrological unit* and its short-units card, and the
@@ -10137,9 +10176,12 @@ gives it an `h1` and **Back to runs**). The full reference is
   What-if 2, each a fieldset (legend = its name) with a coloured top edge
   (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2
   `--series-1`, the same colours in the table keys and the chart), the run's
-  label, one line (the baseline's years, when it ran and its tags; a
+  label, one line (the baseline's years, when it ran, day first as `fmtWhen`
+  says it, and its tags; a
   what-if's lead input change, `summary.ts` `leadChange`, with **all N
-  changes**) and its project and run pickers, each label beside its select.
+  changes**) and its project and run pickers, each label beside its select,
+  the runs named with when each ran day first (`fmtWhen`, as Calibration's
+  picker; year first until issue #586 R4-F).
   With no second what-if the third column is a dashed **+ Add a second
   what-if** card; What-if 2 has **Remove**. Focus moves to the new card's run
   select on add, and back to the add button on remove.
@@ -10148,7 +10190,10 @@ gives it an `h1` and **Back to runs**). The full reference is
   comparison (a 1440 px window) a side index on the left of the panels,
   narrower a bar under the header. The summary's two panels, then every
   panel of the full comparison drawn for the pair, under *Full comparison*,
-  each link its panel's heading (`compare/sections.ts`).
+  each link its panel's heading word for word, on the bar too (issue #586
+  R4-F: it said "Days below, by year", "Reserve by month", "EWR vs observed"
+  and "Plausibility"; at 1280 px the full names still take two rows,
+  `compare/sections.ts`).
 - **What the change does** (left, ~55 %; "What changes" until issue #466): the outcomes table (*EWR not met*, the
   share of days, worded as the Summary's card and the EWR page's tile
   from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
@@ -13142,6 +13187,22 @@ data button or Run button.
   name, such as "Curve" or "Flow record"; `lib/a11y/tableHeaders.test.ts`
   refuses an empty `<th>` in any component) and `landmark-unique` (a tab's
   top panel is not a second region with the tab's own name).
+- **Try again keeps the focus.** Pressing a panel's Try again takes the
+  error (and the button) out of the page; the focus goes to the loading line
+  while it loads, to the new Try again if it fails again, and to the panel's
+  heading once it has loaded (the farm pages, the evidence report: the
+  page's `<h1>`; a Map layer: its checkbox; Preview all data: its search),
+  never to the top of the page (WCAG 2.4.3; `common/LoadState.svelte`, and
+  `common/loadState.ts` `followRetry` for a panel's own Try again;
+  `586-a11y-load-state.spec.ts`, `586-a11y-retry-focus.spec.ts`). A retry
+  with nothing on screen while it loads now shows a line saying so: the
+  Data tab's *Refreshing the series…*, the Project page's *Loading the import
+  record…* and *Loading pending invitations…*, and a map proposal panel's
+  *Loading the …*.
+- **A fold's action word is in its name.** A fold's summary
+  (`common/Fold.svelte`) is named with its visible **Change…** / **Hide** /
+  **Show** at the end ("Default limits: … Change the limits"), so a
+  voice-control user can say it (WCAG 2.5.3; `586-a11y-fold-name.spec.ts`).
 - **Sideways-scrolling boxes** (every `.table-wrap`, and anything marked
   `data-scroll-region`, such as the schematic) become a focusable, named
   group while their content overflows, so Tab reaches them and the arrow keys

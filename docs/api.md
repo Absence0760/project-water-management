@@ -4468,7 +4468,13 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 - `FeedMeta = { id, source, config, targetKind, targetName, enabled, schedule,
   createdAt, updatedAt, actingUser, lastAttemptAt, lastSuccessAt,
   lastDataDate, lastValue, consecutiveFailures, lastError, lastMeta, health,
-  writes, series, versionConflict, replaceFrom, rebuilding }`. `rebuilding`:
+  writes, series, versionConflict, replaceFrom, rebuilding, nextAttemptAt }`.
+  `nextAttemptAt`: when the scheduler next takes the feed (ISO instant;
+  `app_feed_next_attempt`, 243, the rule that decides it is due): its daily
+  slot, or sooner while failing, after the backoff (15 min, or 2 h after an
+  HTTP 403 refusal, doubling, capped at the day). It may be in the past (due,
+  waiting for the next tick); null when nothing is scheduled: switched off,
+  no acting owner, or never scheduled yet (due at once). `rebuilding`:
   a confirmed replacement being backfilled, `{ startDate, through, updatedAt }`
   (the new record so far and when it last grew), or null. `writes`: the product and
   version the feed writes (`{ product: "CHIRPS sat", version: "3.0" }`; null

@@ -4,7 +4,7 @@
 	// legend, `actions` beside it, and a coloured top edge (`colour`).
 	import type { Snippet } from 'svelte';
 	import type { ProjectSummary, RunMeta } from '#lib/api/index.js';
-	import { fmtDate } from '#lib/format/number.js';
+	import { fmtWhen } from '#lib/format/number.js';
 	import { runOptionLabel } from './picker';
 
 	let {
@@ -70,7 +70,7 @@
 			{:else}
 				{#if !runSelected}<option value="" disabled>Choose a run…</option>{/if}
 				{#each runs ?? [] as r, i (r.id)}
-					<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>
+					<option value={r.id}>{runOptionLabel(r, (iso) => fmtWhen(iso), i === 0)}</option>
 				{/each}
 			{/if}
 		</select>
