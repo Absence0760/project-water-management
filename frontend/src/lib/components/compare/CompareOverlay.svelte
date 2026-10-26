@@ -16,6 +16,7 @@
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '#lib/components/charts/series.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { fmtDay } from '#lib/format/number.js';
 	import { forecastBand } from '#lib/components/forecast/forecast.js';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
 	import { toDisplayUnit } from '#lib/components/runs/results.js';
@@ -155,7 +156,7 @@
 	const forecastNote = $derived(
 		[forecastA ? ['A', forecastA] : null, forecastB ? ['B', forecastB] : null]
 			.filter((x): x is [string, string] => x !== null)
-			.map(([s, from]) => `Run ${s} is a forecast run: its days from ${from} ran on forecast rain, so the difference and the read-out stop the day before.`)
+			.map(([s, from]) => `Run ${s} is a forecast run: its days from ${fmtDay(from)} ran on forecast rain, so the difference and the read-out stop the day before.`)
 			.join(' ')
 	);
 

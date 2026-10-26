@@ -147,8 +147,8 @@ describe('draftToBody', () => {
 		const chirps = { ...emptyDraft('chirps', ['rain_chirps_mm']), cells: '-20.12, 25.17' };
 		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { cells: [{ lat: -20.12, lon: 25.17 }], product: 'rnl', startDate: '1985-01-01' } } });
 		expect(draftToBody({ ...chirps, startDate: '1998-01-01' })).toMatchObject({ body: { config: { startDate: '1998-01-01' } } });
-		expect(draftToBody({ ...chirps, startDate: '1997-12-31' })).toEqual({ error: expect.stringMatching(/sat product begins on 1998-01-01\. For earlier days choose the rnl product/), field: 'start' });
-		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1980-12-31' })).toEqual({ error: 'CHIRPS begins on 1981-01-01.', field: 'start' });
+		expect(draftToBody({ ...chirps, startDate: '1997-12-31' })).toEqual({ error: expect.stringMatching(/sat product begins on 1 Jan 1998\. For earlier days choose the rnl product/), field: 'start' });
+		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1980-12-31' })).toEqual({ error: 'CHIRPS begins on 1 Jan 1981.', field: 'start' });
 		expect(draftToBody({ ...chirps, startDate: '1 Jan 2020' })).toEqual({ error: expect.stringMatching(/YYYY-MM-DD/), field: 'start' });
 		// The forecast has no product or start date field.
 		expect(draftToBody({ ...emptyDraft('chirps_gefs'), cells: '-20.12, 25.17', product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { cells: [{ lat: -20.12, lon: 25.17 }] } } });
@@ -397,7 +397,7 @@ describe('the rain feed from the catchment boundary (issue #326 B-rain)', () => 
 		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: true, product: 'rnl', startDate: '1995-01-01' })).toEqual({
 			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, replace: true, product: 'rnl' }
 		});
-		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '1995-01-01' })).toEqual({ error: expect.stringMatching(/^The sat product begins on 1998-01-01/) });
+		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '1995-01-01' })).toEqual({ error: expect.stringMatching(/^The sat product begins on 1 Jan 1998/) });
 		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '' })).toEqual({
 			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, targetName: 'Rainfall CHIRPS (boundary)', product: 'sat' }
 		});

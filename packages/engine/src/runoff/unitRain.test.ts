@@ -534,7 +534,7 @@ describe('fit provenance and run comparison', () => {
 		const a = catchment('absent');
 		const b = everyRule();
 		const changes = diffInputs({ settings: a.settings, model: a.model, series: {} } as never, { settings: b.settings, model: b.model, series: {} } as never).map((c) => c.text);
-		expect(changes, changes.join('\n')).toContain('Runoff from each unit’s own rain: off → on (gauge MAP 500 mm (invented gauge MAP); MAP period 1991-01-01 to 2020-12-31)');
+		expect(changes, changes.join('\n')).toContain('Runoff from each unit’s own rain: off → on (gauge MAP 500 mm (invented gauge MAP); MAP period 1 Jan 1991 to 31 Dec 2020)');
 		expect(changes).toContain('Unit B: MAP none → 700 mm');
 	});
 });

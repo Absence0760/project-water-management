@@ -166,7 +166,7 @@ test('an editor limits a demand scaling to dates, with months, and the run scale
 	await form.getByRole('button', { name: 'Add change' }).click();
 	const changes = page.getByRole('list', { name: `Changes in ${name}` }).getByRole('listitem');
 	await expect(changes).toHaveCount(1);
-	await expect(changes).toContainText("Irrigation demand of Upper farm: 150 % of what they'd take (× 1.5), in Jan, Dec, 2021-12-20 to 2022-01-10");
+	await expect(changes).toContainText("Irrigation demand of Upper farm: 150 % of what they'd take (× 1.5), in Jan, Dec, 20 Dec 2021 to 10 Jan 2022");
 
 	await page.getByRole('button', { name: 'Run scenario' }).click();
 	await expect(page.getByRole('region', { name: 'Scenario against its base' }).getByRole('region', { name: 'Hydrological units' })).toBeVisible();

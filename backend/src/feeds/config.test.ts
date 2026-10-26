@@ -69,7 +69,7 @@ describe('FeedInput', () => {
 	it('takes a CHIRPS start date from the first day of the record', () => {
 		expect(FeedInput.parse({ source: 'chirps', config: { cells, startDate: CHIRPS_FIRST_DAY, product: 'rnl' } }).config).toMatchObject({ startDate: '1981-01-01' });
 		const r = FeedInput.safeParse({ source: 'chirps', config: { cells, startDate: '1970-01-01', product: 'rnl' } });
-		expect(r.error!.issues[0]).toMatchObject({ path: ['config', 'startDate'], message: 'CHIRPS begins on 1981-01-01' });
+		expect(r.error!.issues[0]).toMatchObject({ path: ['config', 'startDate'], message: 'CHIRPS begins on 1 Jan 1981' });
 	});
 
 	// Issue #40 part c: v3's sat product starts in 1998. An earlier start is
@@ -77,7 +77,7 @@ describe('FeedInput', () => {
 	it('takes a CHIRPS sat start date from 1998 only, and points an earlier one at the rnl product', () => {
 		expect(FeedInput.parse({ source: 'chirps', config: { cells, startDate: '1998-01-01' } }).config).toMatchObject({ startDate: '1998-01-01' });
 		const r = FeedInput.safeParse({ source: 'chirps', config: { cells, startDate: '1997-12-31' } });
-		expect(r.error!.issues[0]).toMatchObject({ path: ['config', 'startDate'], message: expect.stringMatching(/sat daily product begins on 1998-01-01; for earlier days use the rnl product for the whole record/) });
+		expect(r.error!.issues[0]).toMatchObject({ path: ['config', 'startDate'], message: expect.stringMatching(/sat daily product begins on 1 Jan 1998; for earlier days use the rnl product for the whole record/) });
 		expect(FeedInput.parse({ source: 'chirps', config: { cells, startDate: '1985-01-01', product: 'rnl' } }).config).toMatchObject({ product: 'rnl' });
 	});
 

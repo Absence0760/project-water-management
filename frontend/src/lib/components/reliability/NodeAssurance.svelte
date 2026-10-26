@@ -13,7 +13,7 @@
 	import { STRESS_LABEL, type SupplyAssurance } from '@water-management/engine';
 	import type { Snippet } from 'svelte';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { classCounts, nodeAssurance, notComputedText, pctText, reliabilityLine, STRESS_BIN, STRESS_ORDER, STRESS_SHORT, stressLegend } from './reliability';
 
 	let {
@@ -63,7 +63,7 @@
 	{:else}
 		<p class="small facts" data-testid="node-reliability">
 			{reliabilityLine(node.reliability)}
-			<span class="muted">({assurance.reportStart} to {assurance.reportEnd})</span>
+			<span class="muted">({fmtDay(assurance.reportStart)} to {fmtDay(assurance.reportEnd)})</span>
 		</p>
 		<!-- Twelve cells, each with its month and class in words; six to a row in a narrow column, so nothing scrolls or clips. -->
 		<ol class="strip" aria-label="Stress class by calendar month, the reporting window's years pooled" data-testid="node-stress-strip">

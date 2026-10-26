@@ -5,6 +5,10 @@
 // indices into one run. Dates are calendar days (engine calendar helpers, UTC
 // epoch days), so no time zone can move a window by a day.
 import { fromEpochDay, toEpochDay, type ForecastRainDays, type ReportWindow } from '@water-management/engine';
+import { fmtDay } from '#lib/format/number.js';
+
+/** An epoch day as a person reads it, "6 Oct 2020". */
+const dayOf = (n: number) => fmtDay(fromEpochDay(n));
 
 /** The URL search parameter that holds the choice (absent = the run's own window). */
 export const WINDOW_PARAM = 'window';
@@ -130,7 +134,7 @@ export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { repor
 	const from = forecastStart(run);
 	// The record's last day: the day before a forecast run's forecast, else the run's.
 	const rec = from ? Math.min(d1, Math.max(d0, toEpochDay(from) - 1)) : d1;
-	const beforeForecast = `It ends on ${fromEpochDay(rec)}, the last day before the forecast.`;
+	const beforeForecast = `It ends on ${dayOf(rec)}, the last day before the forecast.`;
 	if (choice.preset === 'project') return { ok: true, window: fromDays(d0, toEpochDay(own.reportStart), toEpochDay(own.reportEnd)), note: null };
 	if (choice.preset === 'all') return { ok: true, window: fromDays(d0, d0, rec), note: rec < d1 ? beforeForecast : null };
 	const n = LAST_DAYS[choice.preset];
@@ -147,7 +151,7 @@ export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { repor
 			e < d1
 				? forecast
 					? beforeForecast
-					: `Ends on the last day of recorded rain, ${until}; the run goes on to ${run.endDate} without it.`
+					: `Ends on the last day of recorded rain, ${fmtDay(until)}; the run goes on to ${fmtDay(run.endDate)} without it.`
 				: null
 		].filter((x): x is string => x !== null);
 		return { ok: true, window: w, note: notes.length ? notes.join(' ') : null };
@@ -156,8 +160,8 @@ export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { repor
 	const a = toEpochDay(choice.start);
 	const b = toEpochDay(choice.end);
 	if (a > b) return { ok: false, error: 'The window must start before it ends.' };
-	if (b < d0 || a > d1) return { ok: false, error: `The window ${choice.start} to ${choice.end} is outside this run (${run.startDate} to ${run.endDate}).` };
-	if (a > rec) return { ok: false, error: `The window ${choice.start} to ${choice.end} is in the forecast: this run's record ends on ${fromEpochDay(rec)}.` };
+	if (b < d0 || a > d1) return { ok: false, error: `The window ${fmtDay(choice.start)} to ${fmtDay(choice.end)} is outside this run (${fmtDay(run.startDate)} to ${fmtDay(run.endDate)}).` };
+	if (a > rec) return { ok: false, error: `The window ${fmtDay(choice.start)} to ${fmtDay(choice.end)} is in the forecast: this run's record ends on ${dayOf(rec)}.` };
 	const ca = Math.max(a, d0);
 	const cb = Math.min(b, rec);
 	return {
@@ -165,9 +169,9 @@ export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { repor
 		window: fromDays(d0, ca, cb),
 		note:
 			cb < Math.min(b, d1)
-				? `Cut to the record before the forecast: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.`
+				? `Cut to the record before the forecast: ${dayOf(ca)} to ${dayOf(cb)}.`
 				: ca !== a || cb !== b
-					? `Cut to the run: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.`
+					? `Cut to the run: ${dayOf(ca)} to ${dayOf(cb)}.`
 					: null
 	};
 }
@@ -182,9 +186,9 @@ export function presetLabel(preset: WindowPreset): string {
 	return WINDOW_PRESETS.find((p) => p.preset === preset)?.label ?? 'Project window';
 }
 
-/** "2022-01-22 to 2022-01-28 (7 days)": the period a figure covers. */
+/** "22 Jan 2022 to 28 Jan 2022 (7 days)": the period a figure covers. */
 export function describePeriod(w: { reportStart: string; reportEnd: string; days: number }): string {
-	return `${w.reportStart} to ${w.reportEnd} (${w.days} day${w.days === 1 ? '' : 's'})`;
+	return `${fmtDay(w.reportStart)} to ${fmtDay(w.reportEnd)} (${w.days} day${w.days === 1 ? '' : 's'})`;
 }
 
 /** How many days of the window used forecast rain (RunSummary.forecastRain); 0 without any. */

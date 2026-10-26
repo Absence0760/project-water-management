@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { accountDeletedMail, erratumNoticeMail, mfaCodeMail, mfaResetMail, resetWhen, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { accountDeletedMail, erratumNoticeMail, licenceRecordMail, mfaCodeMail, mfaResetMail, resetWhen, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
 import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
@@ -407,5 +407,15 @@ describe('the two-step sign-in code by email (206)', () => {
 		const m = mfaCodeMail('ann@example.com', '012345', 'sign-in', 'af');
 		expect(m.html).toMatch(/<html lang="(af|en)">/);
 		expect(m.text).toMatch(/^012345$/m);
+	});
+});
+
+describe('licenceRecordMail (161_licence_record)', () => {
+	it('writes the review or closing date day first (issue #586)', () => {
+		const review = licenceRecordMail('o@example.com', { projectId: 'p1', projectName: 'Kleinberg', event: 'review', dueOn: '2031-10-01' });
+		expect(review.text).toContain('Its review was due on 1 Oct 2031, and no licence outcome is recorded.');
+		const closes = licenceRecordMail('o@example.com', { projectId: 'p1', projectName: 'Kleinberg', event: 'closes', dueOn: '2029-03-01' });
+		expect(closes.text).toContain('reached its closing date on 1 Mar 2029:');
+		expect(closes.text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
 	});
 });

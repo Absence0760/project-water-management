@@ -7,7 +7,7 @@ import { REACH_LOSS_FRAC_MAX } from '../network/reachLoss';
 import { EWR_SPLIT_METHODS, type EwrSplitMethod } from '../network/ewrSplit';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
-import { isIsoDate } from '../calendar';
+import { dayText, isIsoDate } from '../calendar';
 /** An ISO calendar date that exists (not 2021-02-30): the calendar's own, here for the scenario code that imports it from this module. */
 export { isIsoDate };
 import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '../names';
@@ -663,7 +663,7 @@ export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; mont
 	}
 	// A part is one part of a unit's demand (engine ≥ 1.45.0): an other water user's demand has none.
 	if (op.part !== undefined && op.category === 'user') return "part is a part of a hydrological unit's demand; an other water user's demand is scaled whole";
-	if (typeof op.from === 'string' && typeof op.to === 'string' && op.from > op.to) return `from ${op.from} is after to ${op.to}`;
+	if (typeof op.from === 'string' && typeof op.to === 'string' && op.from > op.to) return `from ${dayText(op.from)} is after to ${dayText(op.to)}`;
 	return null;
 }
 
@@ -813,7 +813,7 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 		const [k, ...rest] = e.slice(1).split(': ');
 		return [k!, rest.join(': ')];
 	});
-	if (typeof a.validFrom === 'string' && typeof a.validTo === 'string' && a.validFrom > a.validTo) issues.push(['validTo', `is before valid from (${a.validFrom})`]);
+	if (typeof a.validFrom === 'string' && typeof a.validTo === 'string' && a.validFrom > a.validTo) issues.push(['validTo', `is before valid from (${dayText(a.validFrom)})`]);
 	// A storage-only (21b) row is a dam's storage: no take, a storage, surface water (as the API's 137 CHECK).
 	if (a.waterUse === '21b') {
 		if (a.volumeM3PerYear !== 0) issues.push(['volumeM3PerYear', 'must be 0 on a storage-only (21b) row: it registers no take']);
@@ -1385,7 +1385,7 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 				if (isIsoDate(raw[k])) s[k] = raw[k];
 				else errors.push(`${where}.${k}: must be an ISO date (YYYY-MM-DD)`);
 			}
-			if (s.from && s.to && s.from > s.to) errors.push(`${where}: from ${s.from} is after to ${s.to}`);
+			if (s.from && s.to && s.from > s.to) errors.push(`${where}: from ${dayText(s.from)} is after to ${dayText(s.to)}`);
 			op = s;
 			break;
 		}
@@ -1409,7 +1409,7 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 				if (isIsoDate(raw[k])) s[k] = raw[k];
 				else errors.push(`${where}.${k}: must be an ISO date (YYYY-MM-DD)`);
 			}
-			if (s.from && s.to && s.from > s.to) errors.push(`${where}: from ${s.from} is after to ${s.to}`);
+			if (s.from && s.to && s.from > s.to) errors.push(`${where}: from ${dayText(s.from)} is after to ${dayText(s.to)}`);
 			op = s;
 			break;
 		}

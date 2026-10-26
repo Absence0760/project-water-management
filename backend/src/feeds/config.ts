@@ -2,7 +2,7 @@
 // that source to read (grid cells, a box of them, or a gauge station), and which of the
 // project's series the values merge into. Pure: the routes, the handlers and
 // the fetcher Lambda all validate with these schemas.
-import type { SeriesKind } from '@water-management/engine';
+import { dayText, type SeriesKind } from '@water-management/engine';
 // The subpath, not the package root: the fetcher Lambda reaches this module (lambda-fetcher.test.ts).
 import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, type SeriesProvenance } from '@water-management/engine/provenance';
 import { z } from 'zod';
@@ -194,7 +194,7 @@ export const GridConfig = z
 		/** Listed cells only: the land unit's polygon they were computed from (UnitMark); never with `boundary`. */
 		unit: UnitMark.optional(),
 		/** First day to fetch when the feed has no data yet (default: 60 days back), and never fetched before. */
-		startDate: SeriesStartDate.refine((d) => d >= CHIRPS_FIRST_DAY, `CHIRPS begins on ${CHIRPS_FIRST_DAY}`).optional(),
+		startDate: SeriesStartDate.refine((d) => d >= CHIRPS_FIRST_DAY, `CHIRPS begins on ${dayText(CHIRPS_FIRST_DAY)}`).optional(),
 		staleAfterDays: z.number().int().min(-15).max(3650).optional(),
 		/** CHIRPS only: which v3 daily product (absent = `sat`). FeedInput checks it against the source and the start date. */
 		product: z.enum(CHIRPS_DAILY_PRODUCTS).optional(),
@@ -358,7 +358,7 @@ export const FeedInput = z
 				ctx.addIssue({
 					code: 'custom',
 					path: ['config', 'startDate'],
-					message: `CHIRPS v3’s ${grid.product ?? 'sat'} daily product begins on ${first}; for earlier days use the rnl product for the whole record`
+					message: `CHIRPS v3’s ${grid.product ?? 'sat'} daily product begins on ${dayText(first)}; for earlier days use the rnl product for the whole record`
 				});
 				return z.NEVER;
 			}

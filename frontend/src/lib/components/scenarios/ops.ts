@@ -346,7 +346,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		}
 		case 'series.scale': {
 			const pct = (op.factor - 1) * 100;
-			const days = op.from || op.to ? `, ${op.from ?? 'start'} to ${op.to ?? 'end'}` : '';
+			const days = op.from || op.to ? `, ${op.from ? fmtDay(op.from) : 'start'} to ${op.to ? fmtDay(op.to) : 'end'}` : '';
 			return `${kindLabel(op.kind)}: × ${fmtNum(op.factor, 4, true)} (${pct > 0 ? '+' : ''}${fmtNum(pct, 2, true)} %)${days}`;
 		}
 		case 'demand.scale': {
@@ -357,7 +357,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const part = op.part ? (DEMAND_PART_OPTIONS.find((p) => p.value === op.part)?.label ?? op.part) : null;
 			const whose = part ? `${part} demand` : user ? 'Demand' : 'Irrigation demand';
 			// Dates (engine ≥ 1.82.0), worded as series.scale's.
-			const days = op.from || op.to ? `, ${op.from ?? 'start'} to ${op.to ?? 'end'}` : '';
+			const days = op.from || op.to ? `, ${op.from ? fmtDay(op.from) : 'start'} to ${op.to ? fmtDay(op.to) : 'end'}` : '';
 			return `${whose} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}${days}`;
 		}
 		case 'ewrRule.set': {
@@ -407,7 +407,7 @@ function scheduleText(w: DemandObject['schedule']): string {
 /** A registered volume in words (docs/allocations.md): "surface 120,000 m³/a, valid 2020-10-01 to …, Oct–Mar only, at most 0.05 m³/s". */
 export function volumeText(a: AllocationEntry): string {
 	const parts = [a.waterUse === '21b' ? `${a.waterSource} storage only (s21b)` : `${a.waterSource} ${fmtNum(a.volumeM3PerYear)} m³/a`];
-	if (a.validFrom || a.validTo) parts.push(`valid ${a.validFrom ?? '…'} to ${a.validTo ?? '…'}`);
+	if (a.validFrom || a.validTo) parts.push(`valid ${a.validFrom ? fmtDay(a.validFrom) : '…'} to ${a.validTo ? fmtDay(a.validTo) : '…'}`);
 	if (a.storageM3 != null) parts.push(`storage ${fmtNum(a.storageM3)} m³`);
 	if (a.months?.length) parts.push(`${monthsText(a.months)} only`);
 	if (a.maxRateM3s != null) parts.push(`at most ${fmtNum(a.maxRateM3s, 4, true)} m³/s`);

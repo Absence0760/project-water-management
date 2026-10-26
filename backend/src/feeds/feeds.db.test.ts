@@ -1541,7 +1541,7 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		const { owner, pid } = await withV2('Backfill');
 		const later = await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true });
 		expect(later.status).toBe(409);
-		expect(later.body).toMatchObject({ error: expect.stringMatching(/start date must be 2001-01-01 or earlier/), details: { code: 'series_backfill', firstDay: '2001-01-01' } });
+		expect(later.body).toMatchObject({ error: expect.stringMatching(/start date must be 1 Jan 2001 or earlier/), details: { code: 'series_backfill', firstDay: '2001-01-01' } });
 		const confirm = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true });
 		expect(confirm.status).toBe(201);
 		expect(confirm.body.feed).toMatchObject({ versionConflict: true, replaceFrom: 'CHIRPS/2.0', config: { startDate: '2001-01-01' } });
@@ -1717,7 +1717,7 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '1990-06-01', values: [null, 1, 2], ...V2 });
 		const sat = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true });
 		expect(sat.status).toBe(409);
-		expect(sat.body.error).toMatch(/starts on 1990-06-02, before CHIRPS v3’s sat product begins \(1998-01-01\).*use the rnl product/);
+		expect(sat.body.error).toMatch(/starts on 2 Jun 1990, before CHIRPS v3’s sat product begins \(1 Jan 1998\).*use the rnl product/);
 		const rnl = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], product: 'rnl' }, replaceSeries: true });
 		expect(rnl.status).toBe(201);
 		// From the first day with a value.

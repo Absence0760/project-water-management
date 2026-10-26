@@ -1,6 +1,7 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
 import {
+	dayText,
 	CROPS_TAKE_KEY,
 	EWR_SPLIT_LABEL,
 	USER_PRIORITY_LABEL,
@@ -783,7 +784,7 @@ export function* rainSourceCsvLines(r: RunSummary['rainSource']): Generator<stri
 		yield csvRow([p.start, p.end, series, p.reason, p.runDays, p.seriesDays, p.chirpsDays, p.reanalysisDays, p.forecastDays, p.noneDays, p.seriesRawMm, p.seriesMm, rainSourceFactorOrigin(p), rainSourceFallbackText(p.fallback)]);
 	}
 	yield csvRow(['Factor per month', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
-	for (const p of r.periods) yield csvRow([`${p.start} to ${p.end}`, ...WY_CALENDAR_MONTHS.map((m) => p.factors[m - 1] ?? '')]);
+	for (const p of r.periods) yield csvRow([`${dayText(p.start)} to ${dayText(p.end)}`, ...WY_CALENDAR_MONTHS.map((m) => p.factors[m - 1] ?? '')]);
 	// The daily-intensity check and the quantile map (engine ≥ 1.21.0, issue #66): absent on older runs.
 	const withIntensity = r.periods.filter((p) => p.intensity);
 	if (!withIntensity.length) return;
@@ -802,7 +803,7 @@ export function* rainSourceCsvLines(r: RunSummary['rainSource']): Generator<stri
 	for (const p of withIntensity) {
 		const i = p.intensity!;
 		yield csvRow([
-			`${p.start} to ${p.end}`,
+			`${dayText(p.start)} to ${dayText(p.end)}`,
 			i.heavyDayMm,
 			rainSourceIntensityReferenceText(i.reference),
 			pct(i.reference.share),

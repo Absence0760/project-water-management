@@ -437,7 +437,7 @@ describe('the setting', () => {
 		const b = withReference({ gauge: 'rain_catchment_mm', unitId: 'B' });
 		const changes = diffInputs({ settings: a.settings, model: a.model, series: {} } as never, { settings: b.settings, model: b.model, series: {} } as never).map((c) => c.text);
 		expect(changes).toEqual([
-			'Runoff from each unit’s own rain: on (no gauge MAP; MAP period 1991-01-01 to 2020-12-31; reference gauge rain_catchment_mm at the unit C) → on (no gauge MAP; MAP period 1991-01-01 to 2020-12-31; reference gauge rain_catchment_mm at the unit B)'
+			'Runoff from each unit’s own rain: on (no gauge MAP; MAP period 1 Jan 1991 to 31 Dec 2020; reference gauge rain_catchment_mm at the unit C) → on (no gauge MAP; MAP period 1 Jan 1991 to 31 Dec 2020; reference gauge rain_catchment_mm at the unit B)'
 		]);
 	});
 

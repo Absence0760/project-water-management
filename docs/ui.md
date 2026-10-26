@@ -226,7 +226,13 @@ it is. Machine text (a day count, a sort key, a file name, a CSV cell) takes
 write their moments through the catalogue's words ("07:42 on 19 Jan 2024",
 `fmtStampTime`). The engine's warnings write their days day first too
 (`dayText`, engine ≥ 1.100.0). Runs & results, the Summary and History use
-them.
+them, as do the reporting-window and supply period lines, Share the pain's
+table names, the assurance of supply, the licence record's status, the
+calibration rules' sign-off, History's lines (a day edited by hand, a licence
+outcome, rain for each unit's start), the scenario ops' descriptions and
+errors, the run comparison's sentences and the API's errors that name a day
+(issue #586 R4-P). The printable run report and the printed evidence report
+keep ISO days (#586 D9; ui-playbook § Dates), and so do the workbook files.
 
 ### Day fields
 

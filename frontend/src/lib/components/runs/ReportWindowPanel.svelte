@@ -11,6 +11,7 @@
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtDay } from '#lib/format/number.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type Run, type RunSeriesRef } from '#lib/api/index.js';
@@ -171,7 +172,7 @@
 			<label for="rw-preset">Reporting window <HelpTip key="report-window" label="About the period the targets cover" /></label>
 			<select id="rw-preset" value={choice.preset} disabled={!!unavailable} aria-describedby="rw-status" onchange={(e) => pickPreset(e.currentTarget.value as WindowPreset)}>
 				{#each WINDOW_PRESETS as p (p.preset)}
-					<option value={p.preset}>{p.label}{p.preset === 'project' ? ` (${stored.reportStart} to ${stored.reportEnd})` : ''}</option>
+					<option value={p.preset}>{p.label}{p.preset === 'project' ? ` (${fmtDay(stored.reportStart)} to ${fmtDay(stored.reportEnd)})` : ''}</option>
 				{/each}
 			</select>
 		</div>

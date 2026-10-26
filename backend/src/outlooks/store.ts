@@ -31,7 +31,8 @@ import {
 	type ReviewTriggers,
 	type ScenarioOp,
 	type SeasonalOutlook,
-	type TriggerBandMembers
+	type TriggerBandMembers,
+	dayText
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -157,12 +158,12 @@ export async function createOutlook(db: Db, projectId: string, body: CreateOutlo
 	if (body.decisionDate !== undefined && body.seasonEnd !== undefined) {
 		const d = toEpochDay(body.decisionDate);
 		if (d <= toEpochDay(run.start) || d - 1 > toEpochDay(run.end)) {
-			throw new ApiError(422, `the decision date must fall after the base run's first day (${run.start}) and at most the day after its last (${run.end}): the season starts from the run's state on the day before`);
+			throw new ApiError(422, `the decision date must fall after the base run's first day (${dayText(run.start)}) and at most the day after its last (${dayText(run.end)}): the season starts from the run's state on the day before`);
 		}
 		season = { decisionDate: body.decisionDate, seasonEnd: body.seasonEnd };
 	} else {
 		const s = outlookSeasonFor(setting.season, run.start, run.end);
-		if (!s) throw new ApiError(422, `the base run (${run.start} to ${run.end}) holds no decision date of the project's season with a day before it`);
+		if (!s) throw new ApiError(422, `the base run (${dayText(run.start)} to ${dayText(run.end)}) holds no decision date of the project's season with a day before it`);
 		season = s;
 	}
 	// The review date (R6): the body's, else the setting's (or the engine's default) when the catchment has a farm dam to band; null = no table.
@@ -171,7 +172,7 @@ export async function createOutlook(db: Db, projectId: string, body: CreateOutlo
 	if (typeof body.reviewDate === 'string') {
 		if (!dams) throw new ApiError(422, 'review triggers need a farm dam: their bands are dam storage (give no review date for an outlook without them)');
 		if (body.reviewDate <= season.decisionDate || body.reviewDate > season.seasonEnd) {
-			throw new ApiError(422, `the review date must fall after the decision date (${season.decisionDate}) and on or before the season end (${season.seasonEnd})`);
+			throw new ApiError(422, `the review date must fall after the decision date (${dayText(season.decisionDate)}) and on or before the season end (${dayText(season.seasonEnd)})`);
 		}
 		reviewDate = body.reviewDate;
 	} else if (body.reviewDate === undefined && dams) {

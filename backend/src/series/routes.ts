@@ -7,7 +7,7 @@ import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { isUnitRainKind, siteProblem, type SiteNode } from './site.js';
 import { z } from 'zod';
-import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
+import { dayText, hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
 import {
 	bodyOrigin,
 	bodyProvenance,
@@ -346,7 +346,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			// A data feed's confirmed replacement swaps a whole new record in when its backfill finishes, which would drop the edit.
 			if (s.rebuilding) throw new ApiError(409, 'a data feed is replacing this series: edit its days once the replacement is in');
 			if (day.data < s.startDate || day.data > s.endDate) {
-				throw new ApiError(400, `date: a day of the series, ${s.startDate} to ${s.endDate}. Add days outside it from a file or by pasting them`);
+				throw new ApiError(400, `date: a day of the series, ${dayText(s.startDate)} to ${dayText(s.endDate)}. Add days outside it from a file or by pasting them`);
 			}
 			const series = parseDay({ kind: s.kind, name: s.name, unit: body.unit ?? s.unit, startDate: day.data, values: [body.value] });
 			// keepOnNull false: a blank typed in clears the day.

@@ -1,7 +1,7 @@
 // Who changed each line of a run comparison's input diff (issue #42): the
 // model_revision, between the two runs, that set the line's final value.
 // Pure, no I/O. docs/run-comparison.md § What changed.
-import { THOUSANDS_SEP, type InputChange } from '@water-management/engine';
+import { daysInText, THOUSANDS_SEP, type InputChange } from '@water-management/engine';
 
 /** A revision's id and its own change lines (diffInputs from the state before it). */
 export interface Attributable {
@@ -30,12 +30,15 @@ function tail(text: string): string | null {
 }
 
 /**
- * A revision's stored line with its figures in today's thousands separator: a
- * revision saved before D10 (issue #76) says "750,000 m³", today's diff
- * "750 000 m³" (a narrow no-break space). Only a comma between digits followed by exactly three
- * more is a group, so a list ("Oct, Nov") or a decimal comma is left alone.
+ * A revision's stored line in today's words: its figures in today's thousands
+ * separator (a revision saved before D10, issue #76, says "750,000 m³", today's
+ * diff "750 000 m³", a narrow no-break space; only a comma between digits
+ * followed by exactly three more is a group, so a list ("Oct, Nov") or a decimal
+ * comma is left alone), and its days day first (a revision saved before engine
+ * 1.100.0 says "MAP period 1991-01-01 to 2020-12-31", today's diff "1 Jan 1991
+ * to 31 Dec 2020", issue #586).
  */
-const regrouped = (text: string) => text.replace(/(\d),(?=\d{3}(?!\d))/g, `$1${THOUSANDS_SEP}`);
+const regrouped = (text: string) => daysInText(text.replace(/(\d),(?=\d{3}(?!\d))/g, `$1${THOUSANDS_SEP}`));
 
 /**
  * Whether revision line `r` set what diff line `l` describes. The same text

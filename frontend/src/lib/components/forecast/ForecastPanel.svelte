@@ -7,6 +7,7 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { ForecastSummary } from '@water-management/engine';
 	import { forecastHeading, forecastRows, outletLine } from './forecast';
+	import { fmtDay } from '#lib/format/number.js';
 
 	let { forecast, nodeNames = new Map() }: { forecast: ForecastSummary; nodeNames?: ReadonlyMap<string, string> } = $props();
 
@@ -21,7 +22,7 @@
 	<p>{forecastHeading(forecast)}</p>
 	<p class="muted small">
 		Forecast rain is uncertain, and so is everything modelled on it. Read these figures as a guide to the coming days. Every
-		other figure of this run (hydrological unit totals, curtailment, EWR days, calibration) covers the days before {forecast.from} only; on the
+		other figure of this run (hydrological unit totals, curtailment, EWR days, calibration) covers the days before {fmtDay(forecast.from)} only; on the
 		charts these days are the hatched band marked “Forecast”.
 	</p>
 	{#if rows.length}

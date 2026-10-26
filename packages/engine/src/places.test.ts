@@ -117,7 +117,7 @@ describe('warningInCurrentWords', () => {
 		resolveReportWindow({ reportStart: '2019-12-01', reportEnd: '2020-02-29' }, toEpochDay('2020-01-01'), 31, today);
 		resolveReportWindow({ reportStart: '2020-03-01', reportEnd: '2020-02-01' }, toEpochDay('2020-01-01'), 31, today);
 		expect(today).toEqual([
-			'gauge "Weir": abstraction start "1 Jan 2021" ignored (a gauge takes no water)',
+			'gauge "Weir": abstraction start 1 Jan 2021 ignored (a gauge takes no water)',
 			'reporting window 1 Dec 2019 … 29 Feb 2020 is clipped to the run (1 Jan 2020 … 31 Jan 2020)',
 			'reporting window 1 Mar 2020 … 1 Feb 2020 does not overlap the run (1 Jan 2020 … 31 Jan 2020); the curtailment report covers the whole run'
 		]);
@@ -131,6 +131,9 @@ describe('warningInCurrentWords', () => {
 			expect(old).toMatch(/\b20\d\d-\d\d-\d\d\b/);
 			expect(warningInCurrentWords(old)).toBe(w);
 		}
+		// 1.99.0 quoted the abstraction start's day; 1.100.0 doesn't, and a value that isn't a day stays quoted.
+		expect(warningInCurrentWords('gauge "Weir": abstraction start "2021-01-01" ignored (a gauge takes no water)')).toBe(today[0]);
+		expect(warningInCurrentWords('farm "A": abstraction start "2021-02-30" ignored (not a date, YYYY-MM-DD)')).toBe('farm "A": abstraction start "2021-02-30" ignored (not a date, YYYY-MM-DD)');
 		expect(warningInCurrentWords('Catchment rain accumulations spread over the days they cover: 1 window, 3 run days: 2024-01-01 to 2024-01-03 (3 days, 40 mm read on 2024-01-03, detected).')).toBe(
 			'Catchment rain accumulations spread over the days they cover: 1 window, 3 run days: 1 Jan 2024 to 3 Jan 2024 (3 days, 40 mm read on 3 Jan 2024, detected).'
 		);

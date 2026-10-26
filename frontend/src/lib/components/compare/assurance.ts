@@ -6,6 +6,7 @@
 // of days not fully met, each with the change B − A. Read off the two runs'
 // summary.supplyAssurance; a run from before engine 0.32.0 has none.
 import type { MetricDelta, SupplyAssurance, SupplyReliability } from '@water-management/engine';
+import { fmtDay } from '#lib/format/number.js';
 
 export interface AssuranceDeltaRow {
 	/** Name in run B. */
@@ -37,7 +38,7 @@ export interface AssuranceComparison {
 
 const delta = (a: number | null, b: number | null): MetricDelta => ({ a, b, delta: a === null || b === null ? null : b - a });
 const years = (r: SupplyReliability) => (r.waterYears > 0 ? `${r.waterYearsMet} of ${r.waterYears}` : '–');
-const window = (s: SupplyAssurance) => `${s.reportStart} to ${s.reportEnd}`;
+const window = (s: SupplyAssurance) => `${fmtDay(s.reportStart)} to ${fmtDay(s.reportEnd)}`;
 
 /** Null when neither run has an assurance of supply, or neither has a farm or water user in it. */
 export function compareAssurance(a: SupplyAssurance | undefined, b: SupplyAssurance | undefined): AssuranceComparison | null {

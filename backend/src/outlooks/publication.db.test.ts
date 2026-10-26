@@ -122,7 +122,7 @@ describe('publishing an outlook to farmers', () => {
 		const past = await plantCompleteOutlook(c.owner.id, c.projectId, c.runId, [{ nodeId: c.farmId }], { season: ['2019-10-01', '2020-04-30'] });
 		const pastRes = await publish(past);
 		expect(pastRes.status).toBe(409);
-		expect(pastRes.body.error).toMatch(/season ended on 2020-04-30/);
+		expect(pastRes.body.error).toMatch(/season ended on 30 Apr 2020/);
 		const pending = await withUser(c.owner.id, async (db) => {
 			const { rows } = await db.query(
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels) VALUES ($1, $2, 'Pending', '2099-10-01', '2100-04-30', '[{"id": "0", "label": "x", "ops": []}]') RETURNING id`,

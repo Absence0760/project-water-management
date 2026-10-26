@@ -4,7 +4,7 @@
 // route loads what it needs inside its transaction, and the body is written
 // from memory as the client reads it. export.json is built in memory and
 // keeps the JSON cap (MAX_JSON_EXPORT_BYTES), so it always imports back.
-import { damCapacityOn, fromEpochDay, parseGaugeSeriesKey, parseUnitRainSeriesKey, toEpochDay, type NetworkNode, type RunSummary, isIsoDate } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, parseGaugeSeriesKey, parseUnitRainSeriesKey, toEpochDay, type NetworkNode, type RunSummary, dayText, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -252,7 +252,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const columns: DailyColumn[] = [...(flag ? [flag] : []), ...daily.series.map((s) => ({ header: s.header, values: s.values }))];
 			const length = Math.max(...daily.series.map((s) => s.values.length));
 			const range = dayRange(run.startDate, length, q.from, q.to);
-			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
+			if (!range) throw new ApiError(400, `the window is outside the run (${dayText(run.startDate)} … ${dayText(run.endDate)})`);
 
 			// A farm's file also says how big its dam was in the run's model (it bounds the storage columns).
 			const dam = daily.kind === 'farm' && q.nodeId ? ((await loadDamCapacities(db, runId))[q.nodeId] ?? null) : undefined;
@@ -298,7 +298,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const columns: DailyColumn[] = [...(flag ? [flag] : []), ...farms.map((f) => ({ header: nodeColumnHeader(q.key, f.name, f.unit, 'farm'), values: f.values }))];
 			const length = Math.max(...farms.map((f) => f.values.length));
 			const range = dayRange(run.startDate, length, q.from, q.to);
-			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
+			if (!range) throw new ApiError(400, `the window is outside the run (${dayText(run.startDate)} … ${dayText(run.endDate)})`);
 
 			return csvDownload(
 				c,

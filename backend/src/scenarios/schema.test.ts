@@ -92,7 +92,7 @@ describe('checkOps', () => {
 		expect(checkOps([{ op: 'demand.scale', factor: 2.5, nodeIds: ['x'] }]).errors).toEqual(['ops[0].factor: must be at most 2']);
 		// demand.scale's dates (engine 1.82.0, issue #514), checked as series.scale's are and kept as sent (they are hashed).
 		expect(checkOps([{ op: 'demand.scale', factor: 1.3, from: '2015-10-31', to: '2015-02-30' }]).errors).toEqual(['ops[0].to: must be an ISO date (YYYY-MM-DD)']);
-		expect(checkOps([{ op: 'demand.scale', factor: 1.3, from: '2016-10-01', to: '2016-09-30' }]).errors).toEqual(['ops[0]: from 2016-10-01 is after to 2016-09-30']);
+		expect(checkOps([{ op: 'demand.scale', factor: 1.3, from: '2016-10-01', to: '2016-09-30' }]).errors).toEqual(['ops[0]: from 1 Oct 2016 is after to 30 Sep 2016']);
 		const dated = checkOps([{ op: 'demand.scale', factor: 1.3, nodeIds: [a], months: [12, 1], from: '2015-10-01', to: '2016-09-30', extra: 1 }]);
 		expect(dated.errors).toEqual([]);
 		expect(dated.ops).toEqual([{ op: 'demand.scale', factor: 1.3, nodeIds: [a], months: [12, 1], from: '2015-10-01', to: '2016-09-30' }]);

@@ -74,7 +74,7 @@ test('the owner sets up a CHIRPS feed for each unit with a parcel, and the feed 
 	await expect(panel.getByTestId('unit-rain-words')).toHaveText('Creates 1 CHIRPS feed, one into each unit’s own rain series.');
 	await panel.getByLabel(/^Start date/).fill('1975-01-01');
 	await panel.getByTestId('unit-rain-apply').click();
-	await expect(panel.getByRole('alert')).toHaveText('CHIRPS begins on 1981-01-01.');
+	await expect(panel.getByRole('alert')).toHaveText('CHIRPS begins on 1 Jan 1981.');
 	await expect(panel.getByLabel(/^Start date/)).toBeFocused();
 	await expect(panel.getByLabel(/^Start date/)).toHaveAttribute('aria-invalid', 'true');
 	await panel.getByLabel(/^Start date/).fill('');

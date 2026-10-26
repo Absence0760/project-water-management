@@ -68,6 +68,6 @@ describe('compareAssurance', () => {
 		expect(compareAssurance(assurance([rel('Upper farm')]), undefined)!.missing).toBe('b');
 		const differ = compareAssurance(assurance([rel('X')]), assurance([rel('X')], { annualThreshold: 0.8, reportStart: '2021-10-01' }))!;
 		expect(differ.thresholds).toEqual({ a: 0.9, b: 0.8 });
-		expect(differ.windows).toEqual({ a: '2020-10-01 to 2024-09-30', b: '2021-10-01 to 2024-09-30' });
+		expect(differ.windows).toEqual({ a: '1 Oct 2020 to 30 Sep 2024', b: '1 Oct 2021 to 30 Sep 2024' });
 	});
 });

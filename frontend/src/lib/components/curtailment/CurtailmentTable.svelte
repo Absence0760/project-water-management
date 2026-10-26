@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
 	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary, type RunSummary } from '@water-management/engine';
-	import { fmtNum, fmtPct } from '#lib/format/number.js';
+	import { fmtDay, fmtNum, fmtPct } from '#lib/format/number.js';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol, userPriorityText } from './curtailment';
 	import ShareThePainBoard from './ShareThePainBoard.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -34,7 +34,7 @@
 	} = $props();
 
 	const c = $derived(curtailment === undefined ? (summary.curtailment ?? null) : curtailment);
-	const range = $derived(c ? `${c.reportStart} – ${c.reportEnd}` : '');
+	const range = $derived(c ? `${fmtDay(c.reportStart)} – ${fmtDay(c.reportEnd)}` : '');
 	const rows = $derived(c ? curtailmentRows(c, farmNames) : []);
 	const cuts = $derived(c ? cutCount(c) : 0);
 	const sites = $derived(c ? ewrSiteRows(c, farmNames) : []);
@@ -81,7 +81,7 @@
 		<div class="table-wrap">
 			<table class="data">
 				<caption class="visually-hidden">
-					Curtailment targets per hydrological unit, {period ? `${period}, ` : ''}{c.reportStart} to {c.reportEnd}. Negative changes are
+					Curtailment targets per hydrological unit, {period ? `${period}, ` : ''}{fmtDay(c.reportStart)} to {fmtDay(c.reportEnd)}. Negative changes are
 					reductions, positive ones are below the equitable share; EWR charges are volumes charged.
 				</caption>
 				<thead>
