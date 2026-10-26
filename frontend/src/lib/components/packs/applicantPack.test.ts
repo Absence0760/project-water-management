@@ -25,7 +25,7 @@ describe('applicantPackHref', () => {
 describe('standingLine', () => {
 	const at = '2026-09-30T10:00:00Z';
 	it('says whether the pack stands, and why not', () => {
-		expect(standingLine({ status: 'issued', version: 2, issuedAt: at, withdrawnReason: null })).toMatch(/^Version 2, issued 2026-09-30\. It stands/);
+		expect(standingLine({ status: 'issued', version: 2, issuedAt: at, withdrawnReason: null })).toMatch(/^Version 2, issued 30 Sep 2026\. It stands/);
 		expect(standingLine({ status: 'superseded', version: 1, issuedAt: at, withdrawnReason: null })).toMatch(/replaced by a newer version\. It no longer stands\.$/);
 		expect(standingLine({ status: 'withdrawn', version: 1, issuedAt: at, withdrawnReason: 'An error in the rule table' })).toContain('was withdrawn: An error in the rule table. It no longer stands.');
 	});

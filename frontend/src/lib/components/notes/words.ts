@@ -10,6 +10,7 @@
 // "shown to the farm" badge and checkbox, the team audience lines) stay in
 // NotesList in English.
 import type { Note } from '#lib/api/types.js';
+import { fmtStamp } from '#lib/format/number.js';
 
 export interface NotesWords {
 	/** "Couldn’t load the notes: …", with the reason already worded. */
@@ -24,9 +25,11 @@ export interface NotesWords {
 	formerMember: string;
 	edited: string;
 	editedAt: (date: string) => string;
+	/** A moment as the list writes it (a note written, edited, replaced): "26 Sep 2026 14:05" in the workspace. */
+	stamp: (iso: string) => string;
 	edit: string;
 	delete: string;
-	/** Visually hidden after Edit / Delete: " note from 2026-09-26 14:05". */
+	/** Visually hidden after Edit / Delete: " note from 26 Sep 2026 14:05". */
 	noteFrom: (date: string) => string;
 	/** The delete question's heading (the app's confirm dialog); confirmDelete is its detail. */
 	deleteTitle: string;
@@ -55,6 +58,7 @@ export const NOTES_EN: NotesWords = {
 	formerMember: 'A former member',
 	edited: 'edited',
 	editedAt: (date) => `Edited ${date}`,
+	stamp: fmtStamp,
 	edit: 'Edit',
 	delete: 'Delete',
 	noteFrom: (date) => ` note from ${date}`,

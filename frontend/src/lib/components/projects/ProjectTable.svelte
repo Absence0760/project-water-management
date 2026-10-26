@@ -29,7 +29,7 @@
 		withheldText
 	} from '#lib/components/portfolio/portfolio.js';
 	import { agoText } from '#lib/format/age.js';
-	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { fmtDate, isoDay } from '#lib/format/number.js';
 	import { dataFreshness, daysSince } from './freshness';
 	import type { SortKey } from './grouping';
 	import type { Outcomes } from './outcomes';
@@ -71,7 +71,7 @@
 	const now = new Date();
 
 	/** "today", "yesterday", "3 days ago", "5 months ago": the one age wording ($lib/format/age). */
-	const ago = (iso: string) => agoText(Math.max(0, daysSince(fmtDate(iso), now)));
+	const ago = (iso: string) => agoText(Math.max(0, daysSince(isoDay(iso), now)));
 
 	/** Why a row has no figures: still loading, the request failed, or none for this role. */
 	const noFigures = (p: ProjectSummary) =>
@@ -163,13 +163,13 @@
 <!-- The folded Last run column, labelled as its neighbour "Lowest dam: …" is, so the two don't read as one phrase. -->
 {#snippet lastRun(p: ProjectSummary)}
 	{#if p.lastRunAt}
-		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">Last run: {fmtDay(fmtDate(p.lastRunAt))}</span>
+		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">Last run: {fmtDate(p.lastRunAt)}</span>
 	{:else if hasRole(p.role, 'viewer')}
 		<!-- A farmer sees no runs (lastRunAt is null for them), so "Not run yet" would be wrong. -->
 		<span class="run">Not run yet</span>
 	{/if}
 	{#if p.publishedAt}
-		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">Published: {fmtDay(fmtDate(p.publishedAt))}</span>
+		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">Published: {fmtDate(p.publishedAt)}</span>
 	{/if}
 {/snippet}
 
@@ -232,7 +232,7 @@
 							<span class="role" data-testid="project-role">{roleLabel(p.role)}</span>
 							<span aria-hidden="true">·</span>
 							<!-- When the project itself (model, settings, data) last changed: not how current its data is (the Data column). -->
-							<span title="Project last changed: {fmtDate(p.updatedAt, true)}">edited {fmtDay(fmtDate(p.updatedAt))}</span>
+							<span title="Project last changed: {fmtDate(p.updatedAt, true)}">edited {fmtDate(p.updatedAt)}</span>
 						</span>
 						{#if p.description}<span class="desc">{p.description}</span>{/if}
 						<!-- Narrow tables: the columns that fold away, as lines under the name. -->
@@ -273,7 +273,7 @@
 							<span class="lift" title="Newest run: {fmtDate(p.lastRunAt, true)}">{ago(p.lastRunAt)}</span>
 							{#if p.publishedAt}
 								<span class="sub lift" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {ago(p.publishedAt)}</span>
-							{:else}<span class="sub">{fmtDay(fmtDate(p.lastRunAt))}</span>{/if}
+							{:else}<span class="sub">{fmtDate(p.lastRunAt)}</span>{/if}
 						{:else if hasRole(p.role, 'viewer')}<span class="muted">Not run yet</span>{/if}
 </td>
 <td class="wide xwide c-alerts">{#if o}{@render alerts(o)}{:else}<span class="muted">–</span>{/if}</td>

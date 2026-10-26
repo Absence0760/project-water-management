@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { dayPrefix, fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, pastDayMoment, parseNum, tidyDay, zonedIsoDate } from './number';
+import { dayPrefix, fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, isoDay, localIsoDate, parseDay, pastDayMoment, parseNum, tidyDay, zonedIsoDate } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -67,11 +67,48 @@ describe('fmtPct', () => {
 	});
 });
 
-describe('fmtDate', () => {
-	it('keeps plain dates and handles empty input', () => {
-		expect(fmtDate('2020-01-05T12:00:00')).toBe('2020-01-05');
+describe('fmtDate: a moment or a day as a person reads it, day first (issue #586 R4-O)', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	it('writes the day first, with its time when asked, and handles empty input', () => {
+		expect(fmtDate('2020-01-05T12:00:00')).toBe('5 Jan 2020');
+		expect(fmtDate('2020-01-05T12:00:00', true)).toBe('5 Jan 2020 12:00');
 		expect(fmtDate(null)).toBe('–');
+		expect(fmtDate(undefined, true)).toBe('–');
 		expect(fmtDate('garbage')).toBe('garbage');
+	});
+	it('reads a moment in the viewer’s zone, either side of the date line', () => {
+		// 23:30 UTC on 29 Sep: 30 Sep east of the line, still 29 Sep west of it.
+		process.env.TZ = 'Pacific/Kiritimati';
+		expect(fmtDate('2026-09-29T23:30:00Z')).toBe('30 Sep 2026');
+		expect(fmtDate('2026-09-29T23:30:00Z', true)).toBe('30 Sep 2026 13:30');
+		process.env.TZ = 'Pacific/Pago_Pago';
+		expect(fmtDate('2026-09-29T23:30:00Z')).toBe('29 Sep 2026');
+		expect(fmtDate('2026-09-29T23:30:00Z', true)).toBe('29 Sep 2026 12:30');
+	});
+	it('keeps a bare day the day it is in any zone (it has no time to move)', () => {
+		for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'UTC']) {
+			process.env.TZ = zone;
+			expect(fmtDate('2026-10-01'), zone).toBe('1 Oct 2026');
+			expect(fmtDate('2026-10-01', true), zone).toBe('1 Oct 2026');
+		}
+	});
+});
+
+describe('isoDay: the viewer’s day of a moment, as machine text', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	it('stays ISO, in the viewer’s zone; a bare day is itself; anything else as it is', () => {
+		process.env.TZ = 'Pacific/Kiritimati';
+		expect(isoDay('2026-09-29T23:30:00Z')).toBe('2026-09-30');
+		process.env.TZ = 'Pacific/Pago_Pago';
+		expect(isoDay('2026-09-29T23:30:00Z')).toBe('2026-09-29');
+		expect(isoDay('2026-10-01')).toBe('2026-10-01');
+		expect(isoDay('garbage')).toBe('garbage');
 	});
 });
 
@@ -150,7 +187,8 @@ describe('pastDayMoment: a picked day the server takes as passed', () => {
 		expect(sent).toBe('2026-10-11T22:30:00.000Z');
 		expect(new Date(sent).getTime()).toBeLessThanOrEqual(now.getTime());
 		// Read back in the viewer's zone, it is still the day they picked.
-		expect(fmtDate(sent)).toBe('2026-10-12');
+		expect(fmtDate(sent)).toBe('12 Oct 2026');
+		expect(isoDay(sent)).toBe('2026-10-12');
 	});
 	it('sends an earlier day as itself, in any zone', () => {
 		for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'Africa/Johannesburg']) {

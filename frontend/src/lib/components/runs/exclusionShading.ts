@@ -3,6 +3,7 @@
 // so it is unit-tested; RunsTab.svelte picks the run's own exclusions and
 // ModelQuality.svelte shades them.
 import { exclusionError, exclusionLabel, exclusionRange, waterYearLabel, type CalibrationExclusion, type ExclusionRange } from '@water-management/engine';
+import { fmtDay } from '#lib/format/number.js';
 
 /** One excluded period, as the chart shades it and its key lists it. */
 export interface ExcludedPeriod {
@@ -19,7 +20,7 @@ export interface ExcludedPeriod {
 /** A range that is exactly one water year (1 Oct Y – 30 Sep Y + 1) is labelled as one. */
 function rangeLabel(r: ExclusionRange): string {
 	const y = Number(r.start.slice(0, 4));
-	return r.start === `${y}-10-01` && r.end === `${y + 1}-09-30` ? `WY ${waterYearLabel(y)}` : `${r.start} – ${r.end}`;
+	return r.start === `${y}-10-01` && r.end === `${y + 1}-09-30` ? `WY ${waterYearLabel(y)}` : `${fmtDay(r.start)} – ${fmtDay(r.end)}`;
 }
 
 /**

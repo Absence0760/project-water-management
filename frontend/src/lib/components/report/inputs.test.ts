@@ -134,7 +134,7 @@ describe('settingsRows', () => {
 			reason: 'automatic station'
 		};
 		expect(Object.fromEntries(settingsRows(effectiveSettings({ rainSource: [period] }), run))['Rain source periods']).toBe(
-			'2005-10-01 to 2010-09-30: alternative catchment gauge, fitted against reanalysis 1995/96–2004/05 (automatic station)'
+			'1 Oct 2005 to 30 Sep 2010: alternative catchment gauge, fitted against reanalysis 1995/96–2004/05 (automatic station)'
 		);
 	});
 

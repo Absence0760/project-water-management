@@ -18,7 +18,6 @@
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { api, NOTE_MAX, type Note, type NoteRevision, type NoteVisibility } from '#lib/api/index.js';
-	import { fmtDate } from '#lib/format/number.js';
 	import {
 		AUDIENCE_BADGE,
 		AUDIENCE_LABEL,
@@ -254,17 +253,17 @@
 					{/if}
 					<p class="meta muted">
 						<span>{n.mine ? words.you : (n.author ?? words.formerMember)}</span>
-						· <time datetime={n.createdAt}>{fmtDate(n.createdAt, true)}</time>
+						· <time datetime={n.createdAt}>{words.stamp(n.createdAt)}</time>
 						{#if n.editedAt && (n.scenarioId || n.packId)}
-							· <button type="button" class="btn btn-ghost btn-sm" aria-expanded={historyOf === n.id} onclick={() => toggleHistory(n)} title={words.editedAt(fmtDate(n.editedAt, true))}
-								>{words.edited}: history<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button
+							· <button type="button" class="btn btn-ghost btn-sm" aria-expanded={historyOf === n.id} onclick={() => toggleHistory(n)} title={words.editedAt(words.stamp(n.editedAt))}
+								>{words.edited}: history<span class="visually-hidden">{words.noteFrom(words.stamp(n.createdAt))}</span></button
 							>
-						{:else if n.editedAt}<span title={words.editedAt(fmtDate(n.editedAt, true))}>· {words.edited}</span>{/if}
+						{:else if n.editedAt}<span title={words.editedAt(words.stamp(n.editedAt))}>· {words.edited}</span>{/if}
 						{#if n.visibility === 'farm' && !farmer}<span class="badge">Shown to its farmers</span>{/if}
 						{#if n.scenarioId || n.packId}<span class="badge" data-testid="note-audience-badge">{AUDIENCE_BADGE[n.visibility]}</span>{/if}
 						{#if canWrite && editing !== n.id}
-							{#if n.mine}<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={() => startEdit(n)}>{words.edit}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
-							{#if n.canDelete}<button type="button" class="btn btn-ghost btn-sm btn-danger" disabled={busy} onclick={() => remove(n)}>{words.delete}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
+							{#if n.mine}<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={() => startEdit(n)}>{words.edit}<span class="visually-hidden">{words.noteFrom(words.stamp(n.createdAt))}</span></button>{/if}
+							{#if n.canDelete}<button type="button" class="btn btn-ghost btn-sm btn-danger" disabled={busy} onclick={() => remove(n)}>{words.delete}<span class="visually-hidden">{words.noteFrom(words.stamp(n.createdAt))}</span></button>{/if}
 						{/if}
 					</p>
 					{#if historyOf === n.id}
@@ -280,7 +279,7 @@
 									{#each history as r, i (i)}
 										<li>
 											<p class="body">{r.body}</p>
-											<p class="muted small">Written <time datetime={r.writtenAt}>{fmtDate(r.writtenAt, true)}</time>, replaced <time datetime={r.editedAt}>{fmtDate(r.editedAt, true)}</time></p>
+											<p class="muted small">Written <time datetime={r.writtenAt}>{words.stamp(r.writtenAt)}</time>, replaced <time datetime={r.editedAt}>{words.stamp(r.editedAt)}</time></p>
 										</li>
 									{/each}
 								</ol>

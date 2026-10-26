@@ -219,8 +219,14 @@ Dates a person reads are **day first**: a calendar day is `fmtDay` ("1 Oct
 2021"), a period "1 Oct 2021 – 28 Jan 2022"; a moment is `fmtStamp` ("11 Oct
 2026 14:05", the viewer's time zone) or, in a list or a status line,
 `fmtWhen` ("today 14:05", "yesterday 09:30", else as `fmtStamp`; never after
-"on" in a sentence). `fmtDate`'s ISO form ("2026-10-11 14:05") is for file
-names and codes. Runs & results, the Summary and History use them.
+"on" in a sentence). `fmtDate` takes either, day first: a moment's day in
+the viewer's zone ("11 Oct 2026"; with its time, as `fmtStamp`), a bare day as
+it is. Machine text (a day count, a sort key, a file name, a CSV cell) takes
+`isoDay`, the viewer's day of a moment as "2026-10-11". The farm view's notes
+write their moments through the catalogue's words ("07:42 on 19 Jan 2024",
+`fmtStampTime`). The engine's warnings write their days day first too
+(`dayText`, engine ≥ 1.100.0). Runs & results, the Summary and History use
+them.
 
 ### Day fields
 

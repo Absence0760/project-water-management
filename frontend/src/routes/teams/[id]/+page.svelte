@@ -55,7 +55,7 @@
 	import TeamSettings from '#lib/components/teams/TeamSettings.svelte';
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import { STALE_DAYS } from '#lib/format/age.js';
-	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { fmtDate } from '#lib/format/number.js';
 	import { followRetry } from '#lib/components/common/loadState.js';
 
 	const teamId = $derived(page.params.id ?? '');
@@ -341,7 +341,7 @@
 					</div>
 					<p class="muted facts">
 						{plural(team.projectCount, 'project')}{#if totals && totals.catchments}{' '}({statusSummary(totals.counts)}){/if} ·
-						{plural(team.memberCount, 'member')} · created {fmtDay(fmtDate(team.createdAt))}
+						{plural(team.memberCount, 'member')} · created {fmtDate(team.createdAt)}
 					</p>
 				</div>
 				<div class="head-actions">

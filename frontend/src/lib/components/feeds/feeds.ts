@@ -6,7 +6,7 @@ import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, compareSeriesNames, provenanceLabel, same
 import type { Api } from '#lib/api/index.js';
 import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '#lib/api/types.js';
 import { ApiError } from '#lib/api/client.js';
-import { fmtDate, fmtDay, fmtNum, fmtStamp, localIsoDate } from '#lib/format/number.js';
+import { fmtDay, fmtNum, fmtStamp, fmtWhen, localIsoDate } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
 
 export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
@@ -465,16 +465,16 @@ export const STATE_LABELS: Record<FeedState, string> = {
 	disabled: 'Off'
 };
 
-/** "Last data 21 Sep 2026 · checked 2026-09-24 06:00", or what is missing. */
-export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'>): string {
+/** "Last data 21 Sep 2026 · checked today 06:00" (fmtWhen: "yesterday 06:00", "24 Sep 2026 06:00"), or what is missing. */
+export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'>, now: Date = new Date()): string {
 	const data = f.lastDataDate ? `Last data ${fmtDay(f.lastDataDate)}` : 'No data yet';
-	return f.lastAttemptAt ? `${data} · checked ${fmtDate(f.lastAttemptAt, true)}` : `${data} · not checked yet`;
+	return f.lastAttemptAt ? `${data} · checked ${fmtWhen(f.lastAttemptAt, now)}` : `${data} · not checked yet`;
 }
 
 /**
  * When a failing feed tries again, after its health sentence (issue #586:
  * "tries again later" said no time): "It tries again after 10:13." today,
- * "It tries again after 2026-10-27 08:45." on another day (describeTimes'
+ * "It tries again after 27 Oct 2026 08:45." on another day (describeTimes'
  * style, the reader's clock), or, when that time has come or the feed was
  * never scheduled, that the scheduler's next pass takes it. The time is the
  * server's (FeedMeta.nextAttemptAt, from the same SQL rule the scheduler

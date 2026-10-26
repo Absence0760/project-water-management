@@ -214,7 +214,23 @@ describe('descriptions', () => {
 
 	it('say when data last arrived as a calendar day, whatever the time zone', () => {
 		expect(describeTimes({ lastDataDate: '2026-09-21', lastAttemptAt: null })).toBe('Last data 21 Sep 2026 · not checked yet');
-		expect(describeTimes({ lastDataDate: null, lastAttemptAt: '2026-09-24T06:00:00Z' })).toMatch(/^No data yet · checked 2026-09-2\d \d\d:\d\d$/);
+	});
+
+	it('say when the feed was last checked as the reader’s clock does: today, yesterday, else the day first (issue #586 R4-O)', () => {
+		const tz = process.env.TZ;
+		const at = { lastDataDate: null, lastAttemptAt: '2026-09-24T22:30:00Z' };
+		try {
+			// 00:30 on 25 Sep in South Africa.
+			process.env.TZ = 'Africa/Johannesburg';
+			expect(describeTimes(at, new Date('2026-09-25T06:00:00Z'))).toBe('No data yet · checked today 00:30');
+			expect(describeTimes(at, new Date('2026-09-26T06:00:00Z'))).toBe('No data yet · checked yesterday 00:30');
+			expect(describeTimes(at, new Date('2026-10-02T06:00:00Z'))).toBe('No data yet · checked 25 Sep 2026 00:30');
+			// 11:30 on 24 Sep in Pago Pago: the same moment, the reader's own day.
+			process.env.TZ = 'Pacific/Pago_Pago';
+			expect(describeTimes(at, new Date('2026-10-02T06:00:00Z'))).toBe('No data yet · checked 24 Sep 2026 11:30');
+		} finally {
+			process.env.TZ = tz;
+		}
 	});
 
 	describe('the health sentence, written from the server’s reason code with its days as "1 Sep 2026"', () => {

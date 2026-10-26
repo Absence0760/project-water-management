@@ -51,9 +51,9 @@ describe('packStamp', () => {
 		process.env.TZ = 'Africa/Johannesburg';
 		const issuedAt = '2026-09-29T08:00:00.000Z';
 		expect(packStamp(pack())).toBe('Draft pack · not issued');
-		expect(packStamp(pack({ status: 'issued', version: 2, issuedAt }))).toBe('Issued · version 2 · 2026-09-29');
-		expect(packStamp(pack({ status: 'superseded', issuedAt }))).toBe('Superseded · version 1 · issued 2026-09-29');
-		expect(packStamp(pack({ status: 'withdrawn', issuedAt }))).toBe('Withdrawn · version 1 · issued 2026-09-29');
+		expect(packStamp(pack({ status: 'issued', version: 2, issuedAt }))).toBe('Issued · version 2 · 29 Sep 2026');
+		expect(packStamp(pack({ status: 'superseded', issuedAt }))).toBe('Superseded · version 1 · issued 29 Sep 2026');
+		expect(packStamp(pack({ status: 'withdrawn', issuedAt }))).toBe('Withdrawn · version 1 · issued 29 Sep 2026');
 		// Withdrawn as a draft: never issued, so no date.
 		expect(packStamp(pack({ status: 'withdrawn' }))).toBe('Withdrawn · version 1');
 	});
@@ -61,9 +61,9 @@ describe('packStamp', () => {
 	it('dates the issue in the viewer’s zone, on either side of the date line (skewed TZ)', () => {
 		const issuedAt = '2026-09-29T23:30:00.000Z';
 		process.env.TZ = 'Pacific/Kiritimati';
-		expect(packStamp(pack({ status: 'issued', issuedAt }))).toBe('Issued · version 1 · 2026-09-30');
+		expect(packStamp(pack({ status: 'issued', issuedAt }))).toBe('Issued · version 1 · 30 Sep 2026');
 		process.env.TZ = 'Pacific/Pago_Pago';
-		expect(packStamp(pack({ status: 'issued', issuedAt }))).toBe('Issued · version 1 · 2026-09-29');
+		expect(packStamp(pack({ status: 'issued', issuedAt }))).toBe('Issued · version 1 · 29 Sep 2026');
 	});
 });
 
@@ -319,11 +319,11 @@ describe('reproductionNote', () => {
 		process.env.TZ = 'Pacific/Kiritimati';
 		const both = reproductionNote(state({ status: 'reproduced', engineVersion: '9.1.0', runEngines: ['9.1.0'], checkedAt: '2026-09-30T23:30:00Z', checks: [ok('stored'), ok('reproduce:baseline'), ok('reproduce:application')] }))!;
 		expect(both.tone).toBe('good');
-		expect(both.text).toMatch(/^Reproduced on the server on 2026-10-01: re-run with engine 9\.1\.0 .*both its runs gave the same results, and every one of its 3 checks passed/);
+		expect(both.text).toMatch(/^Reproduced on the server on 1 Oct 2026: re-run with engine 9\.1\.0 .*both its runs gave the same results, and every one of its 3 checks passed/);
 		expect(both.failed).toEqual([]);
 		const one = reproductionNote(state({ status: 'reproduced', engineVersion: '9.1.0', checks: [ok('reproduce:baseline')] }))!;
 		expect(one.text).toContain('its run gave the same results');
-		expect(one.text).not.toContain(' on 2');
+		expect(one.text).not.toMatch(/ on \d/);
 		// The headline board's pair at full allocation (bundle-2, #523 G2) is named apart, never counted as a third run.
 		const headline = reproductionNote(
 			state({ status: 'reproduced', engineVersion: '9.1.0', checks: [ok('reproduce:baseline'), ok('reproduce:application'), ok('headline'), ok('reproduce:headline')] })

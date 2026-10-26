@@ -40,9 +40,9 @@ describe('a key’s state', () => {
 
 	it('shows the made date in the viewer’s own zone', () => {
 		process.env.TZ = 'Pacific/Pago_Pago';
-		expect(keyRow(key(), NOW).created).toBe('2026-08-31 by Jo Owner');
+		expect(keyRow(key(), NOW).created).toBe('31 Aug 2026 by Jo Owner');
 		process.env.TZ = 'Pacific/Kiritimati';
-		expect(keyRow(key(), NOW).created).toBe('2026-09-01 by Jo Owner');
+		expect(keyRow(key(), NOW).created).toBe('1 Sep 2026 by Jo Owner');
 	});
 
 	it('is live without an expiry, expired past it, revoked above all', () => {
@@ -65,7 +65,7 @@ describe('a key’s row', () => {
 	it('shows the prefix only, the series, and never-ending and never-used keys in words', () => {
 		const r = keyRow(key(), NOW);
 		expect(r).toMatchObject({ shown: 'wm_3f2a9c1e_…', state: 'live', series: 'Any series', ends: 'Never', lastUsed: 'Never', canRevoke: true });
-		expect(r.created).toMatch(/^2026-09-01 by Jo Owner$/);
+		expect(r.created).toMatch(/^1 Sep 2026 by Jo Owner$/);
 	});
 
 	it('lists the allowed series by label and says who revoked it', () => {
@@ -81,8 +81,15 @@ describe('a key’s row', () => {
 			NOW
 		);
 		expect(r.series).toBe('Flow — logger “Weir”, Rainfall — catchment');
-		expect(r.ends).toBe('Revoked 2026-09-20 by Jo Owner');
+		expect(r.ends).toBe('Revoked 20 Sep 2026 by Jo Owner');
 		expect(r.canRevoke).toBe(false);
+	});
+
+	it('says when it was last used as a status line does, in the viewer’s zone (issue #586 R4-O)', () => {
+		// NOW is 14:00 on 26 Sep in South Africa (beforeEach's zone).
+		expect(keyRow(key({ lastUsedAt: '2026-09-26T09:00:00Z' }), NOW).lastUsed).toBe('today 11:00');
+		expect(keyRow(key({ lastUsedAt: '2026-09-25T21:30:00Z' }), NOW).lastUsed).toBe('yesterday 23:30');
+		expect(keyRow(key({ lastUsedAt: '2026-09-16T12:00:00Z' }), NOW).lastUsed).toBe('16 Sep 2026 14:00');
 	});
 
 	it('asks before a revoke, naming the key', () => {

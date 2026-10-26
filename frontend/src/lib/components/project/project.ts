@@ -1,5 +1,5 @@
 // View helpers for the Project page (ProjectTab.svelte, issue #17).
-import { fmtDate, fmtDay } from '#lib/format/number.js';
+import { fmtDate } from '#lib/format/number.js';
 
 /** The zone a project dates its downloads by when the API sends none (issue #45). */
 export const DEFAULT_TIME_ZONE = 'Africa/Johannesburg';
@@ -12,7 +12,7 @@ export const DEFAULT_TIME_ZONE = 'Africa/Johannesburg';
 export function projectContext(p: { team: { name: string | null } | null; createdAt: string; timeZone?: string }): string {
 	const owner = p.team ? (p.team.name ? `Team “${p.team.name}”` : 'A team project') : 'Personal project';
 	const created = fmtDate(p.createdAt);
-	return [owner, created === '–' ? null : `created ${fmtDay(created)}`, `time zone ${p.timeZone ?? DEFAULT_TIME_ZONE}`]
+	return [owner, created === '–' ? null : `created ${created}`, `time zone ${p.timeZone ?? DEFAULT_TIME_ZONE}`]
 		.filter(Boolean)
 		.join(' · ');
 }

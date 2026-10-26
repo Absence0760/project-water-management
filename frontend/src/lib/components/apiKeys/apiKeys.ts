@@ -4,7 +4,7 @@
 import { SERIES_KINDS } from '@water-management/engine';
 import type { ApiKey, ApiKeySeries } from '#lib/api/types.js';
 import type { FileFormat } from '#lib/components/common/formatHelp.js';
-import { fmtDate } from '#lib/format/number.js';
+import { fmtDate, fmtWhen } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
 
 /** How long a new key lives: the choices offered (the API takes any 1–3650 days, or none). */
@@ -57,7 +57,7 @@ export function keyRow(key: ApiKey, now: number = Date.now()): KeyRow {
 		series: key.allowedSeries === null ? 'Any series' : key.allowedSeries.map(seriesText).join(', '),
 		created: `${fmtDate(key.createdAt)}${by(key.createdBy)}`,
 		ends: state === 'revoked' ? `Revoked ${fmtDate(key.revokedAt)}${by(key.revokedBy)}` : key.expiresAt === null ? 'Never' : fmtDate(key.expiresAt),
-		lastUsed: key.lastUsedAt ? fmtDate(key.lastUsedAt, true) : 'Never',
+		lastUsed: key.lastUsedAt ? fmtWhen(key.lastUsedAt, new Date(now)) : 'Never',
 		canRevoke: state === 'live'
 	};
 }
