@@ -1141,20 +1141,20 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   on the run's stored series (a `series.scale` can only be checked there).
 - **Compound settings.** `settings.set pe` (GR4J's PE input) is edited as a
   whole: the kind, and for `monthly` the 12 values and the required source.
-  The form reuses the Settings tab's PE helpers (`settings/peInput.ts`:
+  The form reuses Flow calibration's PE helpers (on Calibration) (`settings/peInput.ts`:
   `peFormError`, `withPeKind`, `peText`), so its rules and wording match, and
   describes the op as "GR4J potential evaporation: pan coefficient × A-pan →
   monthly, entered directly: 1,200 mm a year (source)". Like every
   `settings.set`, it is a baseline assumption.
 - **The drought restriction rule** (`settings.set droughtRestriction`,
-  engine ≥ 1.54.0) is edited whole in the Settings tab's own editor
+  engine ≥ 1.54.0) is edited whole in Model settings' own editor
   (`settings/DroughtRestrictionFields.svelte`, loaded when picked),
   starting from the rule the scenario meets (or off); its first problem
-  blocks Add, in the same words as Settings. Described as "Drought
+  blocks Add, in the same words as Model settings. Described as "Drought
   restriction rule: off → reviewed 5 Oct; Level 1 (below 70 %): crops 50 %".
   A baseline assumption, like every `settings.set`.
 - **The daily EWR at the outlet** (`settings.set ewrDailySource`, engine ≥
-  1.80.0, issue #460) is edited whole in the Settings tab's own editor
+  1.80.0, issue #460) is edited whole in Model settings' own editor
   (`settings/EwrDailySourceFields.svelte`, loaded when picked: the method,
   the scaling, typed or pasted tables, or a DRM .tab / .rul file), starting
   from the source the scenario meets, tables and all (or the pragmatic EWR).
@@ -1184,7 +1184,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
 - **Set an EWR site's rule table** (`ewrRule.set`, engine ≥ 1.6.0): pick
   the site (the outlet, or a gauge still marked as an EWR site), with
   "Now: …" naming the table it has (source, confidence line, what it covers,
-  % points) or "no rule table"; the form then shows the Settings tab's own
+  % points) or "no rule table"; the form then shows Model settings' own
   table editor (`settings/EwrRuleTablesEditor.svelte`, lazy-loaded, limited
   to that site), starting from a copy of the site's table or a blank one, so
   source, kind of source, grids, paste, low and high flows work as there,
