@@ -199,7 +199,7 @@
 		stopAnchors = followAnchors({
 			page: 'runs',
 			onLoad: false,
-			land: (id) => (fragmentShown ? landResult(id) : undefined),
+			land: (id) => (fragmentShown ? landOnceShown(id) : undefined),
 			forward: (to) => {
 				forwarded = true;
 				void goto(to, { replace: true, reset: false });
@@ -303,6 +303,24 @@
 		fragmentShown = true;
 		const hash = untrack(() => hashId(page.url.hash));
 		if (hash) releaseFragment = landResult(hash);
+	});
+	// A link that also picks another run (`?run=r2#res-notes`, nav/anchorLandingEnv.svelte.ts) arrives while the
+	// run shown is still the old one: landing then would focus the old run's panel, which the new run's replace.
+	// So hold the landing until the picked run's details are in.
+	let pendingHash = $state<string | null>(null);
+	const shownIsPicked = $derived(!!detail && (!selectedId || detail.run.id === selectedId));
+	function landOnceShown(hash: string): (() => void) | void {
+		if (untrack(() => shownIsPicked)) return landResult(hash);
+		pendingHash = hash;
+		return () => {
+			if (pendingHash === hash) pendingHash = null;
+		};
+	}
+	$effect(() => {
+		if (!shownIsPicked || !pendingHash) return;
+		const hash = pendingHash;
+		pendingHash = null;
+		untrack(() => landResult(hash));
 	});
 	/** Land on the results panel `hash` names, or on the line saying this run lacks it; the release function. */
 	function landResult(hash: string): () => void {
