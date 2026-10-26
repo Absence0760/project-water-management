@@ -702,7 +702,8 @@ token, a malformed or unknown one, a live invite for another address) is
   (§ Throttles that don't depend on the WAF). The fetcher and renderer
   Lambdas log a failed answer as `feed_fetch_failed` (the feed's and fetch
   job's ids, its source, a reason code and `detail`, which is only the HTTP
-  status or one of the live client's own fixed texts, checked against an
+  status, one of the live client's own fixed texts, or a fixed label we wrote
+  for a server error page or a DWS format check, each checked against an
   allowlist (`failureDetail`): never the stored message, which can name a grid
   cell or a station) and `report_render_failed` (the report and project ids,
   `render`/`store` and `retry`: never the error text or the render token), and

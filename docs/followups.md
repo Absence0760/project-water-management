@@ -3349,6 +3349,12 @@ role and not before it.
         page differs, the feed fails loudly (nothing is written) and
         `sources/dws.ts` plus its fixture change together. Codes that say
         the data is missing (151, 165, 170, 172, 246, 247, 255) become gaps;
+        2026-10-26: the first live fetches (A2H012, a ten-year window) got
+        DWS's ScriptServer error page twice. The feed now treats that page as
+        the source unavailable (retried on the backoff, logged
+        `unavailable` / `ScriptServer error page`) and asks for two years a
+        request; the next live fetch says whether DWS was down or choked on
+        the span;
         the rest are counted: agree with the hydrologist whether flagged flows
         (60 above rating, 150 extrapolated, 173 unreliable…) should be kept.
         Only H (river gauge) codes are accepted, sent as `SiteType=RIV`

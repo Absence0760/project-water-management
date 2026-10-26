@@ -8,7 +8,9 @@
 //                          timeout, HTTP 5xx, a response too large). Nothing is
 //                          written; the next scheduled fetch tries again.
 //                          FeedThrottledError is the HTTP 429 / 503 case,
-//                          FeedRefusedError the HTTP 403 one.
+//                          FeedRefusedError the HTTP 403 one, FeedServerError
+//                          a page that says the source's own backend failed
+//                          (DWS's ScriptServer error page, sent with HTTP 200).
 //
 // Either way the feed's health records the failure (feeds/store.ts), and a
 // feed that keeps failing shows as failing, then stale.
@@ -60,6 +62,27 @@ export class FeedRefusedError extends FeedUnavailableError {
 }
 
 /**
+ * The source answered, but with a page saying its own backend failed: the DWS
+ * site's Kisters ScriptServer error page, which it sends with HTTP 200. That
+ * is the source being down for a while, not a page whose layout changed, so
+ * it is a FeedUnavailableError (the scheduler's backoff retries it: 15
+ * minutes, doubling up to the day) rather than a FeedFormatError. `what` is
+ * our fixed wording of what came back, and `label` the short, fixed text the
+ * fetcher logs as the failure's detail (lambda-fetcher.ts failureDetail);
+ * neither ever carries the page's own text.
+ */
+export class FeedServerError extends FeedUnavailableError {
+	readonly label: string;
+	constructor(what: string, label: string) {
+		super(what);
+		this.label = label;
+	}
+}
+
+/** How a server error's stored message starts (feedErrorMessage). */
+export const FEED_SERVER_ERROR_PREFIX = 'the source had a server error';
+
+/**
  * How a refused fetch's stored message starts. app_feed_is_due
  * (242_feed_refused_backoff.sql) matches this exact text: change both
  * together (feeds.db.test.ts pins them to each other).
@@ -73,6 +96,7 @@ export const FEED_ERROR_MAX = 500;
 export function feedErrorMessage(err: unknown): string {
 	const clip = (s: string) => (s.length > FEED_ERROR_MAX ? `${s.slice(0, FEED_ERROR_MAX - 1)}…` : s);
 	if (err instanceof FeedFormatError) return clip(`the source’s data could not be read: ${err.message}`);
+	if (err instanceof FeedServerError) return clip(`${FEED_SERVER_ERROR_PREFIX} (${err.message}), so the feed tries again later`);
 	if (err instanceof FeedRefusedError) return `${FEED_REFUSED_PREFIX} (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again`;
 	if (err instanceof FeedUnavailableError) return clip(`the source is unreachable: ${err.message}`);
 	return 'the fetch failed with an internal error';

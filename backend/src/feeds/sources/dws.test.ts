@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { FeedFormatError } from '../errors.js';
+import { FeedFormatError, FeedServerError, FeedUnavailableError, feedErrorMessage } from '../errors.js';
 import { FIXTURE_DIR } from '../fixtures.js';
-import { dwsSiteType, dwsUrl, parseDwsDaily } from './dws.js';
+import { DWS_FORMAT_FAILURES, DWS_SERVER_ERROR_LABEL, dwsFailureLabel, dwsSiteType, dwsUrl, parseDwsDaily } from './dws.js';
 
 const sample = readFileSync(`${FIXTURE_DIR}dws-sample.html`, 'utf8');
 const page = (table: string) => `<html><body><pre>\nStation : X0H000100.00\n\n${table}\n</pre></body></html>`;
@@ -76,9 +76,30 @@ describe('parseDwsDaily on other pages', () => {
 		expect(r.values).toEqual([1.5, 2.5]);
 	});
 
+	// Production, 2026-10-26: station A2H012's first fetch got this page twice. It is
+	// the site's backend down (aquascope: "downstream Kisters ScriptServer is
+	// unavailable"), not a changed layout, so it is retried like any outage.
+	it.each([
+		['Client unable to establish connection to ScriptServerODBC'],
+		["Error: can't connect to ScriptServer"],
+		['<pre>DATE D_AVG_FR QUAL</pre><p>ScriptServer error</p>']
+	])('a ScriptServer error page is the source unavailable (FeedServerError), never a format error: %s', (text) => {
+		let err: unknown;
+		try {
+			parseDwsDaily(`<html><body>${text}</body></html>`);
+		} catch (e) {
+			err = e;
+		}
+		expect(err).toBeInstanceOf(FeedServerError);
+		expect(err).toBeInstanceOf(FeedUnavailableError);
+		expect(err).not.toBeInstanceOf(FeedFormatError);
+		expect((err as FeedServerError).label).toBe(DWS_SERVER_ERROR_LABEL);
+		// The stored message: a server error that will be retried, with none of the page's text.
+		expect(feedErrorMessage(err)).toBe('the source had a server error (the DWS site answered with its ScriptServer error page instead of data), so the feed tries again later');
+	});
+
 	describe('fails loudly (FeedFormatError) rather than write garbage', () => {
 		const cases: [string, string, RegExp][] = [
-			['the server’s ScriptServer error page (HTTP 200)', '<html><body>Client unable to establish connection to ScriptServerODBC</body></html>', /server error page/],
 			['an HTML page with no table', '<html><body><h1>Access denied</h1></body></html>', /no data table/],
 			['a table without a DATE header', page('20210101 1.5 1'), /no DATE header/],
 			['changed columns', page('DATE COR_LEVEL QUAL\n20210101 1.5 1'), /columns changed/],
@@ -91,6 +112,27 @@ describe('parseDwsDaily on other pages', () => {
 			expect(() => parseDwsDaily(body)).toThrow(FeedFormatError);
 			expect(() => parseDwsDaily(body)).toThrow(message);
 		});
+
+		// The fetcher logs which check failed by a fixed label, never the message (which quotes the page).
+		it.each(cases)('%s: a fixed label for the log', (_, body) => {
+			let message = '';
+			try {
+				parseDwsDaily(body);
+			} catch (e) {
+				message = (e as Error).message;
+			}
+			const label = dwsFailureLabel(message);
+			expect(label).not.toBeNull();
+			expect(Object.values(DWS_FORMAT_FAILURES).map(([, l]) => l)).toContain(label);
+		});
+	});
+
+	it('labels only its own messages: another source’s, or a look-alike, gets none', () => {
+		expect(dwsFailureLabel('the DWS table lists a day twice: 2021-01-01')).toBe('a day listed twice');
+		expect(dwsFailureLabel('the DWS page was not found')).toBe('page not found');
+		expect(dwsFailureLabel('the DWS page has no data tables at X0H000')).toBeNull();
+		expect(dwsFailureLabel('the grid has no data at -20.27, 25.37')).toBeNull();
+		expect(dwsFailureLabel('')).toBeNull();
 	});
 
 	it('treats non-numeric values as gaps', () => {

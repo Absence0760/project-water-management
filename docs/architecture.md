@@ -1033,7 +1033,7 @@ merges into:
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Settings → Data feeds → Attach a feed → Area: the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default for a catchment feed, from 1998) or `rnl` (from 1981; the feeds a project sets up for its hydrological units read `rnl`, so each unit's record covers the whole 1991–2020 MAP period its rain level is computed over, issue #500 item 3, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit), [model.md §2.4h](./model.md#24h-runoff-from-each-units-own-rain-engine--1780-issue-482)) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old (on 2026-10-09 `daily/final/rnl/` ended at 2026-08-31 and `daily/prelim/sat/` at 2026-10-05). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
-| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
+| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
   [maps.md § Rain for each unit](./maps.md#rain-for-each-unit)): one CHIRPS
@@ -1088,9 +1088,20 @@ merges into:
   snaps the float32-rounded 0.05° pixel scale, which otherwise drifts a whole
   pixel across the grid.
 - **Parsers fail loudly.** A changed page, a corrupt grid, a cell over the sea
-  or outside the grid, a server error page answered with HTTP 200: the fetch
-  fails with a message we wrote (`feeds/errors.ts`), nothing is merged, and the
-  feed shows as failing. A DWS row without a usable value (blank, text or
+  or outside the grid: the fetch fails with a message we wrote
+  (`feeds/errors.ts`), nothing is merged, and the feed shows as failing. Each
+  DWS check's message starts with a fixed text (`DWS_FORMAT_FAILURES`,
+  `sources/dws.ts`), so the fetcher logs which check failed as the failure's
+  `detail` (`no data table`, `columns changed`, …) without the page's own
+  text. The DWS site's Kisters ScriptServer error page, sent with HTTP 200,
+  is not a format failure: it is the site's backend down (both open-source
+  clients read it so), a `FeedServerError` (a `FeedUnavailableError`;
+  `unavailable` in the fetcher's log, `detail` `ScriptServer error page`),
+  stored as "the source had a server error (the DWS site answered with its
+  ScriptServer error page instead of data), so the feed tries again later"
+  and retried on the scheduler's backoff (15 minutes, doubling up to the day).
+  Production's first DWS fetches (2026-10-26, #92) got this page, then logged
+  as `format` with no detail. A DWS row without a usable value (blank, text or
   negative, such as -999), or with a quality code that says the data is missing
   (`DWS_GAP_CODES`), is a gap, never a zero. The row reading lives in the
   engine's pure `@water-management/engine/dws` (`parseDwsRow`, `dwsTableText`),
@@ -1102,9 +1113,20 @@ merges into:
   fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
   reads the newest complete issue and merges all 16 days, so each issue
   replaces the last from its issue date on; one caught half-written is never
-  merged (the fetch falls back to yesterday's, or fails and retries). DWS re-reads a year before its newest day (verified
-  data is revised in arrears), 10 years on the first fetch; rows the page
-  dates outside that window, or after today, are dropped (`outside`).
+  merged (the fetch falls back to yesterday's, or fails and retries). DWS asks for at most two years a request (`DWS_WINDOW_DAYS`, 730 days;
+  the site allows 20, which is what both open-source clients ask for, but
+  production's first ten-year request got the ScriptServer error page twice,
+  and from outside South Africa we can't tell whether the span was to blame),
+  so a first fetch's 10 years, or an earlier `startDate`, is walked a window
+  at a time, the backfill chain below queuing each next window a minute
+  later (six requests for ten years). It re-reads a year before its newest
+  day (verified data is revised in arrears) only in the window that reaches
+  today: as much of that year as still lets the window end today, so a
+  caught-up feed's daily window (newest day, months behind, less a year, to
+  today) is one request. A window that can't reach today starts the day after
+  the newest day (or the last day read), so a backfill moves a whole window
+  each fetch. Rows the page dates outside the window, or after today, are
+  dropped (`outside`).
   A feed's `startDate` is a floor for every fetch, not just the first: the re-read
   never reaches before it, where the series may hold the owner's own data.
   Each successful answer records the last day it asked for (`last_meta.through`):
@@ -1369,7 +1391,7 @@ merges into:
   vouches that it already is what the feed writes.
 - **Backfill continues at once.** A fetch whose window stopped short of the
   newest day the source can have (CHIRPS and DWS windows are capped: 120
-  days for CHIRPS) queues the feed's next fetch a minute later
+  days for CHIRPS, two years for DWS) queues the feed's next fetch a minute later
   (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts; 5 s, `CACHED_NEXT_SECONDS`,
   after a CHIRPS window the cell cache held whole) instead of waiting for the
   schedule, so a long backfill (a replacement, or an early start date) goes a
