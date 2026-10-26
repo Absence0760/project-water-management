@@ -1,5 +1,5 @@
-// Display helpers for the validation signatures (RunSummary.plausibility.
-// signatures, engine ≥ 1.55.0; docs/model.md §2.10d "Validation signatures",
+// Display helpers for the hydrological signatures (RunSummary.plausibility.
+// signatures, engine ≥ 1.55.0; docs/model.md §2.10d "Hydrological signatures",
 // docs/ui.md). Pure, unit-tested.
 import { BFI_WARN_DIFF, FDC_LOW_WARN_PCT, HOLDOUT_SKILL_WARN, RECESSION_MIN_SEGMENTS, type ValidationSignatures } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
@@ -7,7 +7,7 @@ import { fmtNum } from '#lib/format/number.js';
 const RECORD: Record<string, string> = { flow_observed_m3s: 'gauge', flow_logger_m3s: 'logger' };
 
 /**
- * PROVISIONAL warning limits of the validation signatures, pending the
+ * PROVISIONAL warning limits of the hydrological signatures, pending the
  * hydrologist: see docs/followups.md § Hydrologist (CR-16's thresholds).
  * The engine owns the numbers (packages/engine/src/plausibility/signatures.ts),
  * since its run warnings and each signature's withinLimit / agrees use them;

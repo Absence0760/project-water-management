@@ -458,7 +458,7 @@ describe('GR4J per unit', () => {
 		x.settings.calibration = { rainThresholdMm: 0, catchmentAreaKm2: 40 };
 		const o = runModel(x);
 		expect(o.summary.runoff!.areaKm2).toBe(20.5);
-		expect(o.summary.warnings.some((w) => /runs on the units' areas \(20\.5 km²\), not the catchment area set in Settings \(40 km²\)/.test(w))).toBe(true);
+		expect(o.summary.warnings.some((w) => /runs on the units' areas \(20\.5 km²\), not the catchment area set in Calibration → Flow calibration \(40 km²\)/.test(w))).toBe(true);
 	});
 
 	it('resumes from a snapshot to the bit, each unit from its own state', () => {

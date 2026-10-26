@@ -44,7 +44,7 @@ export const KIND_ROLES: Record<string, KindRole> = {
 	},
 	flow_observed_m3s: {
 		role: 'Calibration target',
-		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS). A record attached to a gauge inside the network is checked against the simulated flow there (Plausibility checks), and calibrated against only when Settings → Calibration record scores the fit at that gauge.',
+		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS). A record attached to a gauge inside the network is checked against the simulated flow there (Plausibility checks), and calibrated against only when Calibration → Calibration record scores the fit at that gauge.',
 		driver: false
 	},
 	flow_logger_m3s: {
@@ -247,7 +247,7 @@ export function roleBadge(
 				: { label: 'Not used: its gauge is no longer in the model', unused, why: null };
 		return s.siteNodeId === ctx.calibrationSite
 			? { label: 'Gauge record (calibration site)', unused, why: 'Checked against the simulated flow at its gauge, and calibration scores it there; the EWR test uses the outlet’s records.' }
-			: { label: 'Gauge record (checks only)', unused, why: 'Checked against the simulated flow at its gauge; calibration scores it only if Settings → Calibration record picks this gauge.' };
+			: { label: 'Gauge record (checks only)', unused, why: 'Checked against the simulated flow at its gauge; calibration scores it only if Calibration → Calibration record picks this gauge.' };
 	}
 	if (ctx.inUse.has(s.id) || s.kind === 'flow_reference_m3s') return { label: role.role, unused, why: null };
 	if (s.kind === 'flow_logger_m3s' && !kindRead(s.kind)) return { label: 'Calibration if chosen in settings', unused, why: null };

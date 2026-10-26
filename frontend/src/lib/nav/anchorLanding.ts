@@ -1,5 +1,5 @@
-// A workspace page's #anchor landing, shared by Settings, Runs & results, Data
-// and Project (issue #586). A link into the page, on load or followed while the
+// A workspace page's #anchor landing, shared by Settings, Runs & results, Data,
+// Project, Calibration and the Summary (issue #586). A link into the page, on load or followed while the
 // page is open (a `#…` typed in the address bar, a link to the same page, a
 // `location.hash =`), either goes on to a panel that moved (anchorMoves.ts,
 // replacing the history entry so Back skips it) or lands on the panel: the
@@ -33,6 +33,8 @@ export interface AnchorLanding {
 	land: (id: string) => (() => void) | void;
 	/** Go to a moved panel's new address, replacing this history entry (SvelteKit's `goto(href, { replace: true, reset: false })`). */
 	forward: (href: string) => void;
+	/** Values for the parameters a moved panel's row keeps that the link lacks (anchorForward `fill`): the Summary passes the run it shows. */
+	fill?: () => Readonly<Record<string, string | null | undefined>>;
 	/** Land on load too (default). Runs & results lands once the run is drawn, so it lands itself then, and here only on a change. */
 	onLoad?: boolean;
 	env?: LandingEnv;
@@ -57,14 +59,14 @@ export function queryHashLink(e: LinkClick, here: Pick<URL, 'origin' | 'pathname
  * landing before. Returns the stop function (call it when the page goes): it ends the landing and stops
  * listening. When the load forwards, nothing more is followed here (the page is going).
  */
-export function followAnchors({ page, land, forward, onLoad = true, env = browserEnv() }: AnchorLanding): () => void {
+export function followAnchors({ page, land, forward, fill, onLoad = true, env = browserEnv() }: AnchorLanding): () => void {
 	let stopLanding: () => void = () => {};
 	/** Forward a moved panel's link (true), else land on the panel unless `landHere` is false. */
 	const follow = (landHere: boolean): boolean => {
 		stopLanding();
 		stopLanding = () => {};
 		const url = env.url();
-		const to = anchorForward(page, url);
+		const to = anchorForward(page, url, undefined, fill?.());
 		if (to) {
 			forward(to);
 			return true;

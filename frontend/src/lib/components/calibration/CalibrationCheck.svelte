@@ -45,7 +45,6 @@
 		toolbar: Snippet;
 	} = $props();
 
-	const uid = $props.id();
 	const RECENT = 3 * 365;
 	let log = $state(false);
 
@@ -111,8 +110,9 @@
 </script>
 
 {#if gauges.length}
-	<section class="check" aria-labelledby="{uid}-h" data-testid="calibration-check">
-		<h3 id="{uid}-h">Calibration check: flow against use, per gauge</h3>
+	<!-- Its heading has Calibration's index line (calibration/page.ts CAL_SUBSECTIONS, issue #586 D4): one per page. -->
+	<section class="check" aria-labelledby="res-calibration-check" data-testid="calibration-check">
+		<h3 id="res-calibration-check">Calibration check: flow against use, per gauge</h3>
 		<p class="muted small how">
 			How to read it: simulated should track observed; natural sits above simulated by roughly the use upstream{anyBedLoss
 				? ' plus the bed losses in the reaches above the gauge'

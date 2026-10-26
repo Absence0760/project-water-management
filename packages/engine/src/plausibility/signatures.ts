@@ -1,4 +1,4 @@
-// Validation signatures (engine ≥ 1.55.0, docs/model.md §2.10d "Validation
+// Hydrological signatures (engine ≥ 1.55.0, docs/model.md §2.10d "Hydrological
 // signatures"; calibration-research.md CR-16): three signatures of the scored
 // record (the calibration site's when settings.calibrationSiteNodeId picks a
 // gauge, else the outlet's) against the simulated outflow on the same days.
@@ -348,7 +348,7 @@ const RECORD: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'observ
 const f2 = (v: number) => v.toFixed(2);
 const pct = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(0)} %`;
 
-/** The run warnings of the validation signatures, in order: BFI, low-flow FDC, held-out recessions. */
+/** The run warnings of the hydrological signatures, in order: BFI, low-flow FDC, held-out recessions. */
 export function signatureWarnings(sig: ValidationSignatures | null | undefined): string[] {
 	if (!sig) return [];
 	const where = `the ${RECORD[sig.flowKind]} record${sig.siteName ? ` at gauge "${sig.siteName}"` : ''}`;
@@ -365,9 +365,9 @@ export function signatureWarnings(sig: ValidationSignatures | null | undefined):
 			.map(([name, p]) => `${f2(p!.simulated)} simulated against ${f2(p!.observed)} observed by the ${name} filter`);
 		const high = [bf.hughes, bf.eckhardt].some((p) => p && p.difference > BFI_WARN_DIFF);
 		out.push(
-			`Validation signatures (provisional limits): on the ${bf.days} scored days of ${where}, the base-flow index is ${parts.join(', and ')}, more than ${BFI_WARN_DIFF} apart. ` +
+			`Hydrological signatures (provisional limits): on the ${bf.days} scored days of ${where}, the base-flow index is ${parts.join(', and ')}, more than ${BFI_WARN_DIFF} apart. ` +
 				(high ? 'The model gives too much of its flow as slow base flow' : 'The model gives too little of its flow as slow base flow') +
-				': check the routing store and groundwater exchange (GR4J X2, X3) and the split between quick and slow flow. The Plausibility checks panel lists the signatures.'
+				': check the routing store and groundwater exchange (GR4J X2, X3) and the split between quick and slow flow. Calibration → Plausibility checks lists the signatures.'
 		);
 	}
 	const fdc = sig.lowFlowFdc;
@@ -382,8 +382,8 @@ export function signatureWarnings(sig: ValidationSignatures | null | undefined):
 			parts.push(`the low-flow volume bias (%BiasFLV) is ${pct(fdc.lowVolumeBiasPct)}`);
 		}
 		out.push(
-			`Validation signatures (provisional limits): on the ${fdc.days} scored days of ${where}, ${parts.join(', and ')}, beyond ±${FDC_LOW_WARN_PCT} %. ` +
-				'The model’s low flows fall away at a different pace from the river’s: check the base flow (GR4J X3), abstraction in dry spells and dam capture. The Plausibility checks panel lists the signatures.'
+			`Hydrological signatures (provisional limits): on the ${fdc.days} scored days of ${where}, ${parts.join(', and ')}, beyond ±${FDC_LOW_WARN_PCT} %. ` +
+				'The model’s low flows fall away at a different pace from the river’s: check the base flow (GR4J X3), abstraction in dry spells and dam capture. Calibration → Plausibility checks lists the signatures.'
 		);
 	}
 	const h = sig.recessionHoldout;
@@ -391,8 +391,8 @@ export function signatureWarnings(sig: ValidationSignatures | null | undefined):
 		const law = h.lawSkill === null ? '' : ` (the river’s own recession curve, fitted on the other segments, scores ${f2(h.lawSkill)})`;
 		out.push(
 			h.modelSkill === null
-				? `Validation signatures (provisional limits): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated outflow reaches zero on every one, so its recessions can’t be scored. The model dries the river out where it recedes: check the routing store (GR4J X3) and abstraction during dry spells.`
-				: `Validation signatures (provisional limits): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated recessions score ${f2(h.modelSkill)} against no recession at all${law}: the simulated flow doesn’t fall the way the river does after rain. Check the routing and groundwater parameters (GR4J X2, X3) and dry-spell abstraction. The Plausibility checks panel lists the signatures.`
+				? `Hydrological signatures (provisional limits): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated outflow reaches zero on every one, so its recessions can’t be scored. The model dries the river out where it recedes: check the routing store (GR4J X3) and abstraction during dry spells.`
+				: `Hydrological signatures (provisional limits): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated recessions score ${f2(h.modelSkill)} against no recession at all${law}: the simulated flow doesn’t fall the way the river does after rain. Check the routing and groundwater parameters (GR4J X2, X3) and dry-spell abstraction. Calibration → Plausibility checks lists the signatures.`
 		);
 	}
 	return out;

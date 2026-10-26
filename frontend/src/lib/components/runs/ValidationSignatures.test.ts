@@ -1,4 +1,4 @@
-// The validation signatures' display (ValidationSignatures.svelte, engine ≥ 1.55.0, docs/ui.md), rendered
+// The hydrological signatures' display (ValidationSignatures.svelte, engine ≥ 1.55.0, docs/ui.md), rendered
 // to HTML with Svelte's server renderer, and its place in the Plausibility checks panel: shown on a run
 // that carries signatures, a quiet note when there is no observed record (null), nothing at all on a run
 // made before 1.55.0 (undefined). The browser flow is pinned by e2e/tests/plausibility.spec.ts.
@@ -51,7 +51,7 @@ const sig: Signatures = {
 const checks = (over: Partial<PlausibilityChecks>): PlausibilityChecks => ({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null, ...over });
 const panel = (c: PlausibilityChecks) => text(render(PlausibilityPanel, { props: { checks: c, projectId: 'p', runId: 'r', runoffModel: 'gr4j', runs: [] } }).body);
 
-describe('the validation signatures display', () => {
+describe('the hydrological signatures display', () => {
 	it('keeps the provisional limits in one named place, the engine’s numbers', () => {
 		expect(PROVISIONAL_SIGNATURE_LIMITS).toEqual({ bfiDiff: 0.15, lowFlowPct: 50, holdoutSkill: 0, holdoutMinSegs: 8 });
 	});
@@ -84,17 +84,17 @@ describe('the validation signatures display', () => {
 		const none = { flowKind: 'flow_observed_m3s', baseflow: null, lowFlowFdc: null, recessionHoldout: null } as const;
 		expect(text(render(ValidationSignatures, { props: { signatures: none } }).body)).toContain('Not judged: too few scored days or recession segments.');
 		const nul = text(render(ValidationSignatures, { props: { signatures: null } }).body);
-		expect(nul).toContain('Validation signatures');
+		expect(nul).toContain('Hydrological signatures');
 		expect(nul).toContain('Not computed: needs an observed flow record.');
 		expect(nul).not.toContain('Provisional limit');
 	});
 });
 
-describe('the validation signatures in the Plausibility checks panel', () => {
+describe('the hydrological signatures in the Plausibility checks panel', () => {
 	it('six checks and the section on a run from engine 1.55.0', () => {
 		const body = panel(checks({ signatures: sig }));
 		expect(body).toContain('Six checks a reviewing hydrologist makes by hand');
-		expect(body).toContain('Validation signatures: see below');
+		expect(body).toContain('Hydrological signatures: see below');
 		expect(body).toContain('Provisional limit');
 	});
 
@@ -107,6 +107,6 @@ describe('the validation signatures in the Plausibility checks panel', () => {
 	it('nothing on a run made before engine 1.55.0 (undefined): five checks, no section', () => {
 		const body = panel(checks({}));
 		expect(body).toContain('Five checks a reviewing hydrologist makes by hand');
-		expect(body).not.toContain('Validation signatures');
+		expect(body).not.toContain('Hydrological signatures');
 	});
 });

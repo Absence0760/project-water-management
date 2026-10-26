@@ -165,8 +165,9 @@
 {/if}
 
 {#if showTrace}
-<section aria-labelledby="{uid}-tr">
-	<h3 id="{uid}-tr">Trace a day <HelpTip key="run.gross_demand" /></h3>
+<!-- Its heading has the side index's line (runs/sections.ts RUN_SUBSECTIONS, issue #586 D4): one per page. -->
+<section aria-labelledby="res-trace">
+	<h3 id="res-trace">Trace a day <HelpTip key="run.gross_demand" /></h3>
 	<p class="muted small">
 		Every column of one hydrological unit's day, with the formula the model used, so the day can be checked by hand. The hydrological unit's daily CSV has the same
 		columns for every day. Pick the catchment to see how the runoff model turned the day's rain into natural flow.

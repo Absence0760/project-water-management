@@ -40,15 +40,9 @@ export function riverAnchor(hash: string): boolean {
 
 /**
  * The Summary's old ids for the reserve strip (issue #558 moved it to the EWR page): an old
- * `?tab=overview#strip-h` link opens it there.
+ * `?tab=overview#strip-h` link opens it there (a row of nav/anchorMoves.ts, as the EWR panels are).
  */
 export const SUMMARY_STRIP_ANCHORS: readonly string[] = ['strip-h', 'reserve-strip'];
-
-/** Where an old Summary fragment now lives on the EWR page (without the `#`), or null when it is still the Summary's. */
-export function summaryToRiverAnchor(hash: string): string | null {
-	if (SUMMARY_STRIP_ANCHORS.includes(hash)) return RIVER_STRIP_ANCHOR;
-	return riverAnchor(hash) ? hash : null;
-}
 
 /** `?tab=river` (the EWR page), with the run (`&run=`) and a panel (`#res-…`) when given. */
 export function riverHref(runId?: string | null, anchor?: string | null): string {

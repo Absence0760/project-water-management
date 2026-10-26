@@ -1,12 +1,12 @@
 // The Calibration page (`?tab=calibration`, issue #586): fitting the runoff
-// parameters and judging the fit, brought together from Settings (now Model
-// settings) and Runs & results. Round 2 gave the page its row, its header and
-// its two parts; round 3 moved the settings panels into "Set up the fit"
-// (settings/CalibrationSettings.svelte). Until Model quality moves in, "How
-// the shown run fits" links to its panels on Runs & results, by their headings
-// word for word, so the page is never a dead end. Pure helpers, so the links
-// and the forwarding are unit-tested without the page.
-import type { NavGroup } from '#lib/components/common/sectionNav.js';
+// parameters and judging the fit, brought together from Settings &
+// calibration and Runs & results. Round 2 gave the page its row, its header
+// and its two parts; Round 3 moved the panels in. Its side index lists them
+// under the two parts, each by its heading word for word. Pure helpers, so
+// the index, the links and the forwarding are unit-tested without the page.
+import type { NavGroup, NavSection } from '#lib/components/common/sectionNav.js';
+import { modelQualitySections } from '#lib/components/runs/modelQuality.js';
+import { CALIBRATION_SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
 import { defaultRunId } from '#lib/components/runs/runList.js';
 import type { Role } from '#lib/api/types.js';
 
@@ -18,9 +18,36 @@ export const CAL_PARTS = [
 
 export type CalPartId = (typeof CAL_PARTS)[number]['id'];
 
-/** The side index: one group, a link per part, each its heading. */
-export function calibrationNavGroups(): NavGroup[] {
-	return [{ label: null, sections: CAL_PARTS.map((p) => ({ id: p.id, label: p.label })) }];
+/**
+ * The sub-headings of Calibration against observed flow with an index line of their own (issue #586, D4), each
+ * its heading's id and words: the flow-against-use check per gauge (CalibrationCheck.svelte sets the id) and
+ * where the run's parameters came from (FitProvenance.svelte, given `headingId`). Each is drawn only on some
+ * runs, so the page says which it shows.
+ */
+export const CAL_SUBSECTIONS = {
+	check: { id: 'res-calibration-check', label: 'Calibration check: flow against use, per gauge' },
+	provenance: { id: 'res-fit-provenance', label: 'Where the parameters came from' }
+} as const;
+
+/** Every anchor How the shown run fits lands on beyond Model quality's panels: the sub-headings above. */
+export const isCalSubsection = (id: string): boolean => Object.values(CAL_SUBSECTIONS).some((s) => s.id === id);
+
+/**
+ * The side index (issue #586 round 3): a group for each part, named by its heading, listing its panels by
+ * theirs. Set up the fit: the four settings panels. How the shown run fits: Model quality's panels for the run
+ * shown (runs/modelQuality.ts; none until a run is shown), with a line under Calibration against observed flow
+ * for each sub-heading the page draws (`shown`).
+ */
+export function calibrationNavGroups(
+	summary: Parameters<typeof modelQualitySections>[0] | null = null,
+	shown: { check?: boolean; provenance?: boolean } = {}
+): NavGroup[] {
+	const subs: NavSection[] = [...(shown.check ? [CAL_SUBSECTIONS.check] : []), ...(shown.provenance ? [CAL_SUBSECTIONS.provenance] : [])].map((s) => ({ id: s.id, label: s.label }));
+	const results = summary ? modelQualitySections(summary).flatMap((s) => (s.id === 'res-calibration' ? [s, ...subs] : [s])) : [];
+	return [
+		{ label: CAL_PARTS[0].label, sections: CALIBRATION_SETTINGS_SECTIONS.map((s) => ({ id: s.id, label: s.label })) },
+		{ label: CAL_PARTS[1].label, sections: results }
+	];
 }
 
 export const isCalPart = (id: string): id is CalPartId => CAL_PARTS.some((p) => p.id === id);

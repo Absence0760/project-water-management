@@ -12,27 +12,15 @@ import type { NavSection } from '#lib/components/common/sectionNav.js';
 import { runoffModelName } from './runoff';
 import { unitRainOf } from './unitRain';
 import { stationsOf } from './stationRain';
+import { isModelQualityAnchor } from '#lib/components/calibration/links.js';
 
 type SectionInput = Pick<RunSummary, 'runoff' | 'wr2012' | 'plausibility' | 'unitRain' | 'stations'> & {
 	calibration?: Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'> | null;
 };
 
-/** Every anchor a Model quality panel can have, in page order (some only on some runs). */
-export const MODEL_QUALITY_ANCHORS = [
-	'res-hydrograph',
-	'res-fdc',
-	'res-gauges',
-	'res-calibration',
-	'res-runoff',
-	'res-unit-rain',
-	'res-wr2012',
-	'res-ewr-agreement',
-	'res-plausibility'
-] as const;
-
-export type ModelQualityAnchor = (typeof MODEL_QUALITY_ANCHORS)[number];
-
-export const isModelQualityAnchor = (id: string): id is ModelQualityAnchor => (MODEL_QUALITY_ANCHORS as readonly string[]).includes(id);
+// The anchors live with the Calibration page's links (calibration/links.ts), so the forwarding table, which every
+// page loads, needn't load this module's helpers.
+export { MODEL_QUALITY_ANCHORS, isModelQualityAnchor, type ModelQualityAnchor } from '#lib/components/calibration/links.js';
 
 /**
  * The panels ModelQuality draws after the hydrograph has been painted (the hydrograph and the flow-duration curve

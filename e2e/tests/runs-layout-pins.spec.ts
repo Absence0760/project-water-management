@@ -15,11 +15,11 @@ import { openRuns, runsList } from '../support/runs.ts';
 
 const VIEW = { width: 1440, height: 960 };
 
-/** The page's group headings and #res-* panels in DOM order: `## group`, then `id: its first heading`. */
+/** The page's group headings and #res-* panels in DOM order: `## group`, then `id: its first heading` (a sub-heading with an id of its own, `res-changes`, its own words). */
 const panelOrder = (page: Page) =>
 	page.evaluate(() =>
 		[...document.querySelectorAll('.detail h2.group-h, .detail [id^="res-"]:not(#res-h)')].map((el) =>
-			el.matches('h2') ? `## ${el.textContent!.trim()}` : `${el.id}: ${el.querySelector('h2, h3, h4')?.textContent?.trim() ?? ''}`
+			el.matches('h2.group-h') ? `## ${el.textContent!.trim()}` : `${el.id}: ${(el.matches('h3, h4') ? el : el.querySelector('h2, h3, h4'))?.textContent?.trim() ?? ''}`
 		)
 	);
 
@@ -45,10 +45,13 @@ const RECORD_AND_DEEPER = [
 	'res-notes: Run notes',
 	'res-evidence: Evidence',
 	'res-reproduce: Reproduction',
+	// The sub-headings with a line in the side index (issue #586, D4) have ids of their own.
+	'res-changes: Changes since this run',
 	'res-validation: Validation statement',
 	'res-publication: Publication',
 	'## Dig deeper',
 	'res-checks: Self-checks',
+	'res-trace: Trace a day',
 	'res-explore: Explore any output'
 ];
 
@@ -57,11 +60,16 @@ const RAIL_RECORD_AND_AFTER = [
 	'Run notes → #res-notes',
 	'Evidence → #res-evidence',
 	'Reproduction → #res-reproduce',
+	'Changes since this run → #res-changes',
 	'Validation statement → #res-validation',
 	'Publication → #res-publication',
 	'## Dig deeper',
 	'Self-checks → #res-checks',
+	'Trace a day → #res-trace',
 	'Explore any output → #res-explore',
+	'## On Calibration',
+	'Hydrograph↗ → ?tab=calibration&run=RUN#res-hydrograph',
+	'Calibration against observed flow↗ → ?tab=calibration&run=RUN#res-calibration',
 	'## On EWR',
 	'Reserve rules met, by month↗ → ?tab=river&run=RUN#res-reserve',
 	'Days below the EWR, by month↗ → ?tab=river&run=RUN#res-ewr-grid',
@@ -127,7 +135,7 @@ test('a run with every optional panel: Forecast beside the Summary, and none of 
 
 test('every #res-* anchor on the page lands on its panel, in view, with the focus on its heading', async ({ page, owner }) => {
 	void owner;
-	test.setTimeout(120_000); // twelve fresh page loads
+	test.setTimeout(120_000); // fourteen fresh page loads
 	await page.setViewportSize(VIEW);
 	const { id, runId } = await seedEveryPanel(page.request, 'Pins anchors');
 	// Each anchor and the heading it lands on (the panel's first h2–h4; #res-h is the run's own heading).
@@ -139,9 +147,11 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		['res-notes', 'Run notes'],
 		['res-evidence', 'Evidence'],
 		['res-reproduce', 'Reproduction'],
+		['res-changes', 'Changes since this run'],
 		['res-validation', 'Validation statement'],
 		['res-publication', 'Publication'],
 		['res-checks', 'Self-checks'],
+		['res-trace', 'Trace a day'],
 		['res-explore', 'Explore any output']
 	];
 	// The pins cover every #res-* id the page renders.
@@ -154,7 +164,8 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		await page.goto(`/projects/${id}?tab=runs&run=${runId}#${anchor}`);
 		await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${runId}#${anchor}$`));
 		const panel = page.locator(`#${anchor}`);
-		const h = anchor === 'res-h' ? panel : panel.locator('h2, h3, h4').first();
+		// #res-h, and the sub-headings with an index line (res-changes, res-trace), are headings themselves.
+		const h = ['res-h', 'res-changes', 'res-trace'].includes(anchor) ? panel : panel.locator('h2, h3, h4').first();
 		await expect(h, anchor).toHaveText(heading);
 		// The lazy Forecast panel included: the page waits for the panel, then its heading (issue #586).
 		await expect(h, anchor).toBeFocused();

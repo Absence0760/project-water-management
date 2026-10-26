@@ -42,8 +42,8 @@ export const BASEFLOW_PASSES = 1;
 /** Days reflected at each end before filtering (Ladson et al. 2013). */
 export const BASEFLOW_REFLECT_DAYS = 30;
 /**
- * The base-flow index filters of the validation signatures (engine ≥ 1.55.0,
- * docs/model.md §2.10d "Validation signatures", CR-16). Pending the
+ * The base-flow index filters of the hydrological signatures (engine ≥ 1.55.0,
+ * docs/model.md §2.10d "Hydrological signatures", CR-16). Pending the
  * hydrologist (followups.md § Hydrologist).
  *
  * Hughes, Hannart & Watkins (2003) as South African practice applies it to

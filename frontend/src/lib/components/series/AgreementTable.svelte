@@ -28,7 +28,7 @@
 	<p class="muted small">
 		Two instruments on the same river should roughly agree. A year where one reads a small fraction of the other usually means a
 		problem at one instrument (damaged or silted weir, rating change, bypass, zero-filled gaps). Calibrate against the record you
-		trust, under <a href="?tab=calibration#set-record">Calibration record → Compare with</a> on Calibration.
+		trust, under <a href="?tab=calibration#set-record">Calibration → Calibration record → Compare with</a>.
 	</p>
 	<p class="verdict" class:bad={flagged.length > 0}>
 		{#if flagged.length}

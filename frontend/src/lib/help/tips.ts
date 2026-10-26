@@ -1532,7 +1532,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'plausibility-signatures',
-		term: 'Validation signatures',
+		term: 'Hydrological signatures',
 		short: 'Base-flow index by two filters, the low-flow duration curve’s slope and bias, and skill on held-out recessions.',
 		units: 'ratio; %',
 		category: 'results'

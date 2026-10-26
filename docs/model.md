@@ -2290,7 +2290,7 @@ confirm where the flow gauge is and what area it drains; take the catchment's
 MAP from an independent source; divide by the forcing's mean annual rain;
 check the implied runoff ratio against a Budyko curve and the published MAR;
 then fit GR4J at the fixed factor (and at a small grid of factors around it,
-to report how much the fit and the results depend on it). Settings → Flow
+to report how much the fit and the results depend on it). Calibration → Flow
 calibration → **Areal rainfall correction** edits it (ui.md).
 
 ### 2.4h Runoff from each unit's own rain (engine ≥ 1.78.0, issue #482)
@@ -6511,6 +6511,27 @@ regression suite is unchanged.
 | (none: the node-based model's stress classes, §4) | Reliability per farm, stress class per month, the water account | `RunSummary.supplyAssurance` + the Runs tab's Assurance of supply and Water account panels and three CSV blocks (§2.11a–b, engine ≥ 0.32.0) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
+**Where a warning sends the reader (engine ≥ 1.98.0, issue #586 D19).** A
+run's warnings (`RunSummary.warnings`) are plain sentences: stored on the run,
+printed in the report and written to the summary CSV. Each place one names is
+written as its page and the panel's heading, word for word: "Model settings →
+Rain gaps → Flagged rain", "Calibration → Fit the parameters → Calibration
+rules", "Calibration → Plausibility checks" (`places.ts` `WARNING_PLACES`,
+`placeName`). The app finds those names in the text (`placesIn`) and makes
+each a link to its panel; it finds the older spellings too ("Settings →
+Calibration record", "The Plausibility checks panel", used up to engine
+1.97.0, when the four calibration panels were on Settings), so an older run's
+warnings link to the panel's place now. A warning names no repository
+document: up to 1.97.0 some ended "(docs/model.md §2.4i)", which a reader of
+the app can't open. `places.test.ts` scans the engine's source for a place it
+doesn't know. The same release renamed the validation signatures' warnings
+"Hydrological signatures (provisional limits): …" (§2.10d). Only words
+changed: no figure moves. The warnings are part of a run's summary, so a
+1.97.0 run made again at 1.98.0 has another results digest (`reproduce:pack`
+reports it, as for any engine change), and auto-publish's "no new warning"
+reads an older run's warnings in today's words first
+(`warningInCurrentWords`), so the reworded ones aren't new.
+
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
 (`network/damLevel.ts` `damFigures`), so the Summary's Dams today card
@@ -7101,7 +7122,7 @@ rule table has no such dependence.
 Institution of Engineers Australia, 89–93 (the filter) · Eckhardt 2005,
 *Hydrological Processes* 19:507 (the two-parameter causal filter, set
 aside here; engine ≥ 1.55.0 uses it, and the Hughes form, for the
-validation signatures' BFI, §2.10d) · Nathan & McMahon
+hydrological signatures' BFI, §2.10d) · Nathan & McMahon
 1990, *WRR* 26:1465 (three passes, engines 1.3.0–1.86.0; α 0.925) · Smakhtin & Watkins 1997, WRC
 494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
 Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
@@ -7952,7 +7973,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   It reads only the rain and the scored days, so it never changes a fit or a
   score. Fit automatically shows it as **How representative is the record**
   ([ui.md](./ui.md)).
-- **In the app:** Settings → Fit the parameters → Fit automatically runs it in a
+- **In the app:** Calibration → Fit the parameters → Fit automatically runs it in a
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
   stores a `FitRecord` with the parameters: when (`fittedAt`), the engine
@@ -8762,7 +8783,7 @@ confirm):
   simulated fit), sets `agrees` false and warns, pointing at GR4J's routing
   and groundwater parameters (X2, X3) and dry-spell abstraction.
 
-The Runs tab's Plausibility checks panel plots log(−dQ/dt) against log Q for
+The Calibration page's Plausibility checks panel plots log(−dQ/dt) against log Q for
 both, with the two lines ([ui.md](./ui.md)); the points are rebuilt in the
 browser from the run's stored `observed_flow` and `simulated_outflow` with
 the engine's `recessionPoints`, so the summary keeps only the segments and
@@ -8771,7 +8792,7 @@ fits. The summary CSV has a *Recession diagnostics* block
 gauges inside the network. Per-segment fits, bootstrap bands and seasonal
 tags are CR-15.
 
-#### Validation signatures (engine ≥ 1.55.0, calibration-research.md CR-16)
+#### Hydrological signatures (engine ≥ 1.55.0, calibration-research.md CR-16)
 
 A sixth check (`packages/engine/src/plausibility/signatures.ts`, kept in
 `RunSummary.plausibility.signatures`; absent on older runs, null without an
@@ -8888,12 +8909,14 @@ hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)):
 | Low-flow FDC | \|slope bias\| or \|%BiasFLV\| > **50 %** (`FDC_LOW_WARN_PCT`) | the ensemble's default low-flow limit (§2.10e); low-flow gauging error runs to ±50–100 % (McMillan, Krueger & Freer 2012) |
 | Held-out recessions | simulated skill < **0** (`HOLDOUT_SKILL_WARN`) with **8** or more segments (`RECESSION_MIN_SEGMENTS`), or a simulated flow that reaches zero on every held-out segment | worse than assuming the river doesn't fall at all; below 8 segments not judged, as the recession check |
 
-Each warning starts "Validation signatures (provisional limits): …", names the
-record (and the gauge, at a site) and points at the GR4J parameters to look
-at. The Plausibility checks panel lists them under **Validation signatures**
-([ui.md](./ui.md)), the summary CSV has a *Validation signatures* block
-([api.md](./api.md#export)), and the check list a *Validation signatures*
-line. The fit record is unchanged: it already keeps the fit's %BiasFLV and
+Each warning starts "Hydrological signatures (provisional limits): …" (named
+"Validation signatures" up to engine 1.97.0; issue #586 D17 renamed them so they
+no longer read like Runs & results' Validation statement), names the record
+(and the gauge, at a site) and points at the GR4J parameters to look at. The
+Plausibility checks panel on Calibration lists them under **Hydrological
+signatures** ([ui.md](./ui.md)), the summary CSV has a *Hydrological
+signatures* block ([api.md](./api.md#export)), and the check list a
+*Hydrological signatures* line. The fit record is unchanged: it already keeps the fit's %BiasFLV and
 %BiasFMS, and the BFI and the held-out recessions are signatures of a run,
 not of the objective.
 
@@ -9418,7 +9441,7 @@ revised engine 1.84.0, issue #523 A1; engine-audit C3, QF-3).** A zero-flow read
 or a logger that failed (a broken or blocked logger also reads zero; the
 client's has been known to fail). `settings.qualityFlags.zeroFlowMonths`
 lists the calendar months (1–12) the river is known to stop in (default
-none; Settings → *Calibration record* → *Months the river stops*). A
+none; Calibration → *Calibration record* → *Months the river stops*). A
 **zero-flow stretch** is a maximal run of consecutive readings of exactly 0
 (a blank, NaN or negative day ends it), found over the **whole stored
 record**, so its length doesn't depend on the run window
@@ -9487,7 +9510,7 @@ gaugings behind the rating table, neither the highest nor the lowest
 measured flow. The rule: the rating table's extrapolated flows above the
 highest measured flow are used **as they are**; no day is flagged or
 discounted as outside the rating, and each record's gauged range in
-Settings → Calibration record stays blank. That is the behaviour with no
+Calibration → Calibration record stays blank. That is the behaviour with no
 range entered, so nothing changes. The data-quality panel's note that no day
 can be flagged as extrapolated stays, so the limitation is visible.
 
@@ -9577,7 +9600,7 @@ fills gaps in the observed gauge (`flow_observed_m3s`) and logger
 (`flow_logger_m3s`) records **in a run only**: the stored series is never
 changed, and turning it off undoes it. **Off by default** (every record
 `null`), so a project that never sets it runs exactly as before, to the bit.
-Settings → Calibration record → *Flow gaps*.
+Calibration → Calibration record → *Flow gaps*.
 
 Only **interior** gaps are filled: a run of missing days (blank, non-finite or
 negative, as a run reads a flow) with a reading on both sides. A record's
@@ -9735,7 +9758,7 @@ score overfits and is easy to game. `settings.calibrationRules`
 advance, and the server applies them end to end (`planAutoCalibration`,
 `runAutoCase` and `finishAutoCalibration` in `calibrate/auto.ts`, run by
 `backend/src/calibration/`), so no one steers the result. An assessor then
-challenges the rules, not the fit. Settings → Fit the parameters →
+challenges the rules, not the fit. Calibration → Fit the parameters →
 *Calibration rules* and *Automated calibration*.
 
 The rule set:

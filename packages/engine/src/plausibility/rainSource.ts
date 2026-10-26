@@ -170,7 +170,7 @@ export function rainSourceWarnings(r: RainSourceEwr | null): string[] {
 	if (!r.good.years) {
 		return r.hasStation
 			? [
-					`Every water year of the run is a fallback-rain year (${shown}): most of its rain came from CHIRPS, forecast, spread or blank days, not the catchment station, so the EWR results rest on fallback rain. The Plausibility checks panel lists each year's rain source.`
+					`Every water year of the run is a fallback-rain year (${shown}): most of its rain came from CHIRPS, forecast, spread or blank days, not the catchment station, so the EWR results rest on fallback rain. Calibration → Plausibility checks lists each year's rain source.`
 				]
 			: [];
 	}
@@ -180,7 +180,7 @@ export function rainSourceWarnings(r: RainSourceEwr | null): string[] {
 	if (g !== null && f !== null && Math.abs(f - g) >= RAIN_SOURCE_WARN_DIFF) {
 		out.push(
 			`EWR days not met differ by rain source: ${pct(f)} of days in the ${r.fallback.years} fallback-rain water year${r.fallback.years === 1 ? '' : 's'} (${shown}) against ${pct(g)} in the ${r.good.years} good-rain year${r.good.years === 1 ? '' : 's'}. ` +
-				'Fallback years ran mostly on CHIRPS, forecast, spread or blank days rather than the catchment station, so part of the EWR result may come from the rain source, not the river. The Plausibility checks panel has the split.'
+				'Fallback years ran mostly on CHIRPS, forecast, spread or blank days rather than the catchment station, so part of the EWR result may come from the rain source, not the river. Calibration → Plausibility checks has the split.'
 		);
 	}
 	for (const s of r.reserve) {

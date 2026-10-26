@@ -105,7 +105,7 @@ describe('the plausibility checks in the run comparison', () => {
 		expect(c.flowDoubleMass).toBeNull();
 	});
 
-	it('sets each run’s stored recession diagnostics and validation signatures side by side, recomputing nothing', () => {
+	it('sets each run’s stored recession diagnostics and hydrological signatures side by side, recomputing nothing', () => {
 		const a = gaugedRun(3);
 		const b = gaugedRun(1);
 		const c = compareRuns(a, b).plausibility!;
@@ -198,7 +198,7 @@ describe('comparePlausibility matching', () => {
 	});
 });
 
-describe('comparePlausibility: the recession diagnostics and the validation signatures', () => {
+describe('comparePlausibility: the recession diagnostics and the hydrological signatures', () => {
 	const bare: PlausibilityChecks = { drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null };
 	const fit = (b: number) => ({ a: 0.05, b, points: 40, segments: 10, minQM3s: 0.1, maxQM3s: 3 });
 	const rec = (over: Partial<RecessionCheck> = {}): RecessionCheck => ({

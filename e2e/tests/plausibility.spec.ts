@@ -3,7 +3,7 @@
 // panel, with the latest run of another runoff model overlaid on the
 // dry-season low-flow curves: an old legacy run (engine < 1.0.0, planted, as the
 // API can't make one any more). Then the Compare page sets two runs' recession
-// diagnostics and validation signatures side by side, and says so when a run
+// diagnostics and hydrological signatures side by side, and says so when a run
 // made before engine 1.55.0 has none. Names and numbers are invented.
 import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -33,10 +33,10 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
 	await expect(panel.getByText(/^Six checks a reviewing hydrologist makes by hand\..*Dry season: .*, the six months with the lowest mean flow in the gauge record\.$/)).toBeVisible();
 	const results = panel.getByRole('list', { name: 'Check results' });
-	// Six on a run from engine 1.55.0: the recession diagnostics (CR-13) are the fifth, the validation signatures (CR-16) the sixth.
+	// Six on a run from engine 1.55.0: the recession diagnostics (CR-13) are the fifth, the hydrological signatures (CR-16) the sixth.
 	await expect(results.getByRole('listitem')).toHaveCount(6);
 	await expect(results.getByRole('listitem').filter({ hasText: /^Recessions: / })).toHaveCount(1);
-	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveCount(1);
+	await expect(results.getByRole('listitem').filter({ hasText: /^Hydrological signatures: / })).toHaveCount(1);
 	// Three years is too few for the double-mass check.
 	await expect(results.getByRole('listitem').filter({ hasText: 'Observed flow vs rain' })).toHaveText('Observed flow vs rain: not checked');
 
@@ -90,16 +90,16 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// 5. Recession diagnostics (engine ≥ 1.19.0): the section is there, judged or not.
 	await expect(panel.getByRole('heading', { level: 4, name: /^Recession diagnostics/ })).toBeVisible();
 
-	// 6. Validation signatures (engine ≥ 1.55.0): three years of the outlet's gauge record against the model, one row per signature.
-	await expect(panel.getByRole('heading', { level: 4, name: /^Validation signatures/ })).toBeVisible();
+	// 6. Hydrological signatures (engine ≥ 1.55.0): three years of the outlet's gauge record against the model, one row per signature.
+	await expect(panel.getByRole('heading', { level: 4, name: /^Hydrological signatures/ })).toBeVisible();
 	// A regex getByText sees the text as written, source line breaks included: \s+ between words that wrap there.
 	await expect(panel.getByText(/^On the gauge record at the outlet \(the record the calibration statistics score\), 1\u202f096 days, against the simulated\s+outflow/)).toBeVisible();
 	await expect(panel.getByText(/The limits are provisional, for the hydrologist to confirm\./)).toBeVisible();
 	// The verdict line (the synthetic record is deterministic: its low flows fall away faster than the model's
 	// store drains, so the low-flow FDC is outside its limit), which the check list and the run's warnings agree with.
 	await expect(panel.getByRole('status').filter({ hasText: 'A signature is outside its limit: see the run’s warnings.' })).toHaveCount(1);
-	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveText('Validation signatures: see below');
-	const sig = panel.getByRole('table', { name: /^Validation signatures/ });
+	await expect(results.getByRole('listitem').filter({ hasText: /^Hydrological signatures: / })).toHaveText('Hydrological signatures: see below');
+	const sig = panel.getByRole('table', { name: /^Hydrological signatures/ });
 	await expect(sig.getByRole('columnheader', { name: 'Provisional limit' })).toBeVisible();
 	await expect(sig.getByRole('row')).toHaveCount(6);
 	await expect(sig.getByRole('row', { name: /^Base-flow index, Hughes et al\. \(2003\) \d\.\d\d \d\.\d\d [+−]\d\.\d\d ±0\.15 (within|outside)$/ })).toBeVisible();
@@ -112,10 +112,10 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// The run's things to check, on its Summary on Runs & results, show the first 3 (issue #521): this one is further down the list.
 	await page.goto(`/projects/${project.id}?tab=runs&run=${gr4j}`);
 	await page.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
-	await expect(page.getByRole('listitem').filter({ hasText: /^Validation signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
+	await expect(page.getByRole('listitem').filter({ hasText: /^Hydrological signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
 });
 
-test('the compare page sets two runs’ recession diagnostics and validation signatures side by side', async ({ page, owner }) => {
+test('the compare page sets two runs’ recession diagnostics and hydrological signatures side by side', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Compare signatures');
 	await putModel(page.request, project.id, sampleModel());
@@ -155,7 +155,7 @@ test('the compare page sets two runs’ recession diagnostics and validation sig
 
 	// Against a run made before engine 1.55.0: its side says so, with no change, and a note says why.
 	await page.goto(`/compare?a=${project.id}:${older}&b=${project.id}:${after}`);
-	await expect(cmp.getByRole('note')).toHaveText('Run A was made before engine 1.55.0, so it has no validation signatures: run the model again to compare them.');
+	await expect(cmp.getByRole('note')).toHaveText('Run A was made before engine 1.55.0, so it has no hydrological signatures: run the model again to compare them.');
 	for (const check of ['Base-flow index, Hughes et al. (2003)', 'Low-flow volume bias (%BiasFLV)', 'Skill on held-out recessions, simulated']) {
 		await expect(row(check).getByRole('cell').nth(1)).toHaveText('not in this run (made before engine 1.55.0)');
 		await expect(row(check).getByRole('cell').nth(3)).toHaveText('–');

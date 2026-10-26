@@ -174,9 +174,11 @@ describe('guides', () => {
 // "Settings → X → Y" paths. Help and the app's own words name where a setting
 // is; when a panel is renamed or moved (Flow generation became Flow
 // calibration → Rain into GR4J) the old path kept being printed. Every path
-// that starts at Settings, or at a Settings panel's name, must name a real
-// panel (components/settings/sections.ts) and, after it, headings that panel
-// really shows (its slice of the page and the components rendered in it).
+// that starts at a page (Settings or Model settings, or Calibration, where the
+// fit's panels moved in issue #586 round 3), or at a panel's name, must name a
+// real panel on that page (components/settings/sections.ts) and, after it,
+// headings that panel really shows (its slice of the page and the components
+// rendered in it).
 // ---------------------------------------------------------------------------
 
 const dirOf = (rel: string) => fileURLToPath(new URL(rel, import.meta.url)).replace(/\/$/, '');
@@ -236,15 +238,15 @@ function panelHeadings(id: string): string[] {
 }
 
 // Every panel Model settings has, by its heading: the menu's, plus the one above it. Data feeds, API keys and
-// Scheduled reports moved to Data and Project (issue #586 round 1), so "Settings → Data feeds" is a broken path.
-// The panels that set up a fit are on Calibration (round 3): "Model settings → Fit the parameters" is broken,
-// "Calibration → Fit the parameters" is right, and the old "Settings → …" shorthand (and a path that starts
-// with a panel's own name) may name either page's.
+// Scheduled reports moved to Data and Project (issue #586 round 1), so "Settings → Data feeds" is a broken path,
+// and the fit's four to Calibration (round 3), so is "Settings → Fit the parameters": it is "Calibration → Fit the
+// parameters", as is the Plausibility checks panel the engine's warnings name (packages/engine/src/places.ts).
 const SETTINGS_PANELS = new Map<string, string>([...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]), ['Judge results by', 'set-judge']]);
-const CALIBRATION_PANELS = new Map<string, string>(CALIBRATION_SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]));
+const CALIBRATION_PANELS = new Map<string, string>([...CALIBRATION_SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]), ['Plausibility checks', 'res-plausibility']]);
 const PANELS = new Map<string, string>([...SETTINGS_PANELS, ...CALIBRATION_PANELS]);
-type Page = 'settings' | 'calibration' | 'either';
-const PAGE_PANELS: Record<Page, Map<string, string>> = { settings: SETTINGS_PANELS, calibration: CALIBRATION_PANELS, either: PANELS };
+type PathPage = 'settings' | 'calibration' | 'any';
+const PAGE_PANELS: Record<PathPage, Map<string, string>> = { settings: SETTINGS_PANELS, calibration: CALIBRATION_PANELS, any: PANELS };
+const PAGE_NAMES: Record<PathPage, string> = { settings: 'Model settings', calibration: 'Calibration', any: '' };
 const panelCache = new Map<string, string[]>();
 const headingsOf = (id: string) => panelCache.get(id) ?? (panelCache.set(id, panelHeadings(id)), panelCache.get(id)!);
 
@@ -255,16 +257,13 @@ function stripAll(text: string, re: RegExp): string {
 	return text;
 }
 
-function settingsPaths(text: string): string[][] {
-	return pagePaths(text).map((p) => p.steps);
+/** A path in a text: the page it starts at ('any' when it starts at a panel's name) and its steps. */
+interface SettingsPath {
+	page: PathPage;
+	steps: string[];
 }
 
-/**
- * Each path with the page it names: "Model settings → " (Model settings' panels), "Calibration → " (Calibration's),
- * or the old "Settings → " or a panel's own name (either page's). The page's old name, "Settings & calibration → ",
- * names no page now.
- */
-function pagePaths(text: string): { page: Page | 'old'; steps: string[] }[] {
+function settingsPaths(text: string): SettingsPath[] {
 	// A link's decorative arrow (aria-hidden) ends the link, not a step: "EWR →" before the next link is no path (issue #558).
 	const plain = stripAll(text.replace(/<span aria-hidden="true">→<\/span>/g, ''), /<\/?[A-Za-z][^<>]*>/g)
 		.replace(/&amp;/g, '&')
@@ -273,21 +272,18 @@ function pagePaths(text: string): { page: Page | 'old'; steps: string[] }[] {
 		.replace(/\s+/g, ' ')
 		.replace(/ -> /g, ' → ');
 	const labels = [...PANELS.keys()].map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-	const starts: [number, Page | 'old'][] = [
-		...[...plain.matchAll(/\bModel settings → /g)].map((m) => [m.index + m[0].length, 'settings'] as [number, Page]),
-		...[...plain.matchAll(/(?<!Model )\bSettings → /g)].map((m) => [m.index + m[0].length, 'either'] as [number, Page]),
-		...[...plain.matchAll(/\bSettings & calibration → /g)].map((m) => [m.index + m[0].length, 'old'] as [number, 'old']),
-		// "Calibration → " names the page, not "Calibration record → " (a panel) or a "→" step after one.
-		...[...plain.matchAll(/(?<![\w-] → |[\w-])Calibration → /g)].map((m) => [m.index + m[0].length, 'calibration'] as [number, Page]),
+	const starts: [number, PathPage][] = [
+		...[...plain.matchAll(/(?:\bModel settings|\bSettings(?: & calibration)?) → /g)].map((m): [number, PathPage] => [m.index + m[0].length, 'settings']),
+		...[...plain.matchAll(/(?<!& )\bCalibration → /g)].map((m): [number, PathPage] => [m.index + m[0].length, 'calibration']),
 		// A panel's own name starting a path, unless a "→" before it already did.
-		...[...plain.matchAll(new RegExp(`(?<![\\w-])(?:${labels}) → `, 'g'))].filter((m) => !/→ $/.test(plain.slice(0, m.index))).map((m) => [m.index, 'either'] as [number, Page])
+		...[...plain.matchAll(new RegExp(`(?<![\\w-])(?:${labels}) → `, 'g'))].filter((m) => !/→ $/.test(plain.slice(0, m.index))).map((m): [number, PathPage] => [m.index, 'any'])
 	];
-	return starts.map(([at, page]) => ({ page, steps: steps(plain, at) }));
+	return starts.map(([at, page]) => ({ page, steps: steps(plain.slice(at)) }));
 }
 
-/** The steps of the path that starts at `at`. */
-function steps(plain: string, at: number): string[] {
-	let rest = plain.slice(at);
+/** A path's steps from where it starts, up to the end of its last step's words. */
+function steps(text: string): string[] {
+	let rest = text;
 	const out: string[] = [];
 	for (;;) {
 		const arrow = rest.indexOf(' → ');
@@ -304,11 +300,10 @@ function steps(plain: string, at: number): string[] {
 }
 
 /** Why a path doesn't resolve, or null. The last step may run on into the sentence, so it only has to start with a name. */
-function pathProblem(steps: string[], page: Page | 'old' = 'either'): string | null {
-	if (page === 'old') return 'the page is Model settings or Calibration now';
+function pathProblem(steps: string[], page: PathPage = 'any'): string | null {
 	const names = (i: number) => (i === steps.length - 1 ? (n: string) => steps[i] === n || steps[i]!.startsWith(`${n} `) : (n: string) => steps[i] === n);
 	const panel = [...PAGE_PANELS[page].keys()].sort((a, b) => b.length - a.length).find(names(0));
-	if (!panel) return `“${steps[0]}” is no ${page === 'calibration' ? 'Calibration' : page === 'settings' ? 'Model settings' : 'Settings'} panel`;
+	if (!panel) return page === 'any' ? `“${steps[0]}” is no Settings panel` : `“${steps[0]}” is no panel on ${PAGE_NAMES[page]}`;
 	const heads = headingsOf(PANELS.get(panel)!);
 	for (let i = 1; i < steps.length; i++) {
 		const own = steps[i]!;
@@ -336,21 +331,20 @@ describe('Settings paths named in help and in the app', () => {
 		]);
 
 	it('finds the paths it checks', () => {
-		expect(settingsPaths('Open **Calibration → Flow calibration → Rain into GR4J**, then save.')).toEqual([['Flow calibration', 'Rain into GR4J']]);
-		// Each page's panels under its own name (issue #586 round 3); the old page name is no path.
-		expect(pagePaths('On **Model settings → Demand**, then **Calibration → Calibration record → Flow gaps**.').map((p) => [p.page, p.steps])).toEqual([
-			['settings', ['Demand']],
-			['calibration', ['Calibration record', 'Flow gaps']]
-		]);
-		expect(pathProblem(['Fit the parameters'], 'settings')).toMatch(/no Model settings panel/);
-		expect(pathProblem(['Demand'], 'calibration')).toMatch(/no Calibration panel/);
-		expect(pathProblem(['Calibration record'], 'calibration')).toBeNull();
-		expect(pathProblem(['Demand'], pagePaths('in Settings & calibration → Demand')[0]!.page)).toMatch(/Model settings or Calibration now/);
-		expect(settingsPaths('switched on in **Fit the parameters → Fit automatically**, makes')).toEqual([['Fit the parameters', 'Fit automatically']]);
-		expect(settingsPaths('Settings → Calibration record → Flow gaps can fill them')).toEqual([['Calibration record', 'Flow gaps can fill them']]);
-		expect(settingsPaths('`pick a gauge in Settings → Calibration record`')).toEqual([['Calibration record']]);
-		expect(settingsPaths('keep them dry in Settings -> Rain gaps -> Flagged rain')).toEqual([['Rain gaps', 'Flagged rain']]);
+		expect(settingsPaths('Open **Calibration → Flow calibration → Rain into GR4J**, then save.')).toEqual([{ page: 'calibration', steps: ['Flow calibration', 'Rain into GR4J'] }]);
+		expect(settingsPaths('switched on in **Fit the parameters → Fit automatically**, makes')).toEqual([{ page: 'any', steps: ['Fit the parameters', 'Fit automatically'] }]);
+		expect(settingsPaths('Calibration → Calibration record → Flow gaps can fill them')).toEqual([{ page: 'calibration', steps: ['Calibration record', 'Flow gaps can fill them'] }]);
+		expect(settingsPaths('`pick a gauge in Calibration → Calibration record`')).toEqual([{ page: 'calibration', steps: ['Calibration record'] }]);
+		expect(settingsPaths('keep them dry in Settings -> Rain gaps -> Flagged rain')).toEqual([{ page: 'settings', steps: ['Rain gaps', 'Flagged rain'] }]);
+		expect(settingsPaths('as Model settings → Rain gaps → Flagged rain says')).toEqual([{ page: 'settings', steps: ['Rain gaps', 'Flagged rain says'] }]);
+		// "Settings & calibration" is the old page's name, never the Calibration page's.
+		expect(settingsPaths('Open Settings & calibration → Demand.').map((p) => p.page)).toEqual(['settings']);
 		expect(pathProblem(['Flow share', 'Method'])).toMatch(/no Settings panel/);
+		// The fit's panels are on Calibration since issue #586 round 3, the rest on Model settings.
+		expect(pathProblem(['Fit the parameters'], 'settings')).toMatch(/no panel on Model settings/);
+		expect(pathProblem(['Fit the parameters', 'Fit automatically'], 'calibration')).toBeNull();
+		expect(pathProblem(['Rain gaps'], 'calibration')).toMatch(/no panel on Calibration/);
+		expect(pathProblem(['Plausibility checks lists the signatures'], 'calibration')).toBeNull();
 		expect(pathProblem(['Flow generation', 'Units without a station'])).toBeNull();
 		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);
 	});
@@ -362,9 +356,9 @@ describe('Settings paths named in help and in the app', () => {
 
 	it('name a real panel, and headings that panel shows', () => {
 		const broken = [...helpTexts, ...appTexts].flatMap(([where, text]) =>
-			pagePaths(text).flatMap(({ page, steps }) => {
+			settingsPaths(text).flatMap(({ page, steps }) => {
 				const p = pathProblem(steps, page);
-				return p ? [`${where}: ${page} → ${steps.join(' → ')} (${p})`] : [];
+				return p ? [`${where}: ${PAGE_NAMES[page] || 'Settings'} → ${steps.join(' → ')} (${p})`] : [];
 			})
 		);
 		expect(broken).toEqual([]);

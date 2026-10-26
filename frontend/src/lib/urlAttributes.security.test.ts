@@ -28,6 +28,8 @@ import { farmDrawerHref } from './components/crops/farmDrawer';
 import { farmHref, farmReturn, wordsHref } from './components/farm/load';
 import { fieldHistoryHref } from './components/history/fieldLine';
 import { noteHref } from './components/notes/notes';
+import { calibrationHref } from './components/calibration/links';
+import { warningParts, warningPlaceHref } from './components/runs/warningText';
 import { runHref } from './components/overview/attention';
 import { curtailmentHref } from './components/portfolio/portfolio';
 import { riverHref } from './components/river/links';
@@ -120,7 +122,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	},
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	issueHref: { why: 'BUILDER: "?tab=<area>" with the item id encodeURIComponent-ed (model/validate.ts issueHref)', in: ['lib/components/model/IssueList.svelte'] },
-	'p.href': { why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page)', in: ['lib/components/model/ProblemLinks.svelte'] },
+	'p.href': {
+		why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page); WarningText: runs/warningText.ts warningParts, each href warningPlaceHref (BUILDER "?tab=settings#" + a fixed set- id, or calibrationHref with the encoded run id and a fixed anchor), never text from the warning',
+		in: ['lib/components/model/ProblemLinks.svelte', 'lib/components/runs/WarningText.svelte']
+	},
 	plantedHref: { why: 'NodeDetail: NetworkTab builds "?" + URLSearchParams of the current page with farm=<node id>, or leaves it null', in: ['lib/components/network/NodeDetail.svelte'] },
 	transfersHref: { why: 'NodeDetail: NetworkTab passes the literal "?tab=transfers" or null', in: ['lib/components/network/NodeDetail.svelte'] },
 	main: { why: 'farm why/dam pages: farmHref(…)', in: ['routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte'] },
@@ -593,7 +598,11 @@ describe('URL attributes', () => {
 				curtailmentHref({ id, sourceRunId: id }),
 				fieldHistoryHref({ filter: id }, id),
 				noteHref({ target: 'node', nodeId: id, runId: null, settingKey: null }) ?? '',
-				noteHref({ target: 'run', nodeId: null, runId: id, settingKey: null }) ?? ''
+				noteHref({ target: 'run', nodeId: null, runId: id, settingKey: null }) ?? '',
+				noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: id }) ?? '',
+				calibrationHref(id, 'res-calibration'),
+				warningPlaceHref('plausibility', id),
+				...warningParts(`${id} Calibration → Fit the parameters ${id}`, (p) => warningPlaceHref(p, id)).flatMap((p) => (p.href ? [p.href] : []))
 			];
 			for (const h of hrefs) expect(lands(h), `${JSON.stringify(id)} → ${h}`).toBe(origin);
 		}

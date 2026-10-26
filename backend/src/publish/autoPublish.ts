@@ -9,7 +9,8 @@
 //   - none of the run's self-checks failed;
 //   - it raises no warning the published run didn't (newWarnings: the same
 //     sentence with different numbers or dates, e.g. "CHIRPS stands in on
-//     2131 days" → "… 2132 days", is the same warning);
+//     2131 days" → "… 2132 days", is the same warning, and so is one an
+//     older engine worded differently, warningInCurrentWords);
 //   - publishRun accepts it (not a legacy-runoff run, a projectable summary);
 //   - no API key pushed into a series too short for the outlier limit since
 //     the latest run a person made (series.unchecked, series/hold.ts
@@ -22,15 +23,18 @@
 // (publishRun records it, with the decision log's fields, decision.ts), and
 // so does the publication (run_publication.auto, 141: the farms_short alert
 // watches automatic publications only).
-import type { NoticeText } from '@water-management/engine';
+import { warningInCurrentWords, type NoticeText } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { uncheckedSinceLastRun } from '../series/hold.js';
 import { publishRun } from './publish.js';
 
-/** A warning's shape: its text with every number (and so every date) masked. */
-const shape = (w: string) => w.replace(/\d+(?:[.,]\d+)*/g, '#');
+/**
+ * A warning's shape: its text in today's words (an older engine's "Settings → Calibration record" reads as
+ * "Calibration → Calibration record", issue #586 D19), with every number (and so every date) masked.
+ */
+const shape = (w: string) => warningInCurrentWords(w).replace(/\d+(?:[.,]\d+)*/g, '#');
 
 /** The warnings of `next` whose shape isn't among `prev`'s. */
 export function newWarnings(prev: readonly string[], next: readonly string[]): string[] {

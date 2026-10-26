@@ -131,7 +131,7 @@ describe('plausibilityRows', () => {
 	});
 });
 
-// The recession diagnostics (engine ≥ 1.19.0) and the validation signatures (engine ≥ 1.55.0) as each run
+// The recession diagnostics (engine ≥ 1.19.0) and the hydrological signatures (engine ≥ 1.55.0) as each run
 // stored them, built through the engine's comparePlausibility from hand-made checks.
 const bare: PlausibilityChecks = { drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null };
 const fit = (b: number) => ({ a: 0.05, b, points: 40, segments: 10, minQM3s: 0.1, maxQM3s: 3 });
@@ -198,7 +198,7 @@ const text = (html: string) => {
 	return out.replace(/\s+/g, ' ');
 };
 
-describe('plausibilityRows: the recession diagnostics and the validation signatures', () => {
+describe('plausibilityRows: the recession diagnostics and the hydrological signatures', () => {
 	it('gives each run’s recession rate ratio, b difference and verdict, and the change in each', () => {
 		const c = cmp({ ...bare, recession: rec({ rateRatio: 2.6, bDiff: 0.7, agrees: false }) }, { ...bare, recession: rec() });
 		expect(newRows(c)[0]).toEqual({
@@ -253,7 +253,7 @@ describe('plausibilityRows: the recession diagnostics and the validation signatu
 			expect(r.a).toBe('not in this run (made before engine 1.55.0)');
 			expect([r.okA, r.change]).toEqual([null, '–']);
 		}
-		expect(plausibilityNotes(c)).toEqual(['Run A was made before engine 1.55.0, so it has no validation signatures: run the model again to compare them.']);
+		expect(plausibilityNotes(c)).toEqual(['Run A was made before engine 1.55.0, so it has no hydrological signatures: run the model again to compare them.']);
 	});
 
 	it('says a run with no observed record has no signatures, and a run before 1.19.0 no recession diagnostics', () => {
@@ -261,7 +261,7 @@ describe('plausibilityRows: the recession diagnostics and the validation signatu
 		expect(plausibilityNotes(c)).toEqual(['Run A was made before engine 1.19.0, so it has no recession diagnostics: run the model again to compare them.']);
 		const d = cmp({ ...bare, signatures: sig() }, { ...bare, signatures: null });
 		expect(newRows(d).find((r) => r.key === 'sig|bfi-hughes')!.b).toBe('not computed (no observed record)');
-		expect(plausibilityNotes(d)).toEqual(['Run B has no validation signatures: it has no observed flow record to score.']);
+		expect(plausibilityNotes(d)).toEqual(['Run B has no hydrological signatures: it has no observed flow record to score.']);
 		expect(plausibilityNotes(cmp(bare, { ...bare, drySeason: null }))).toEqual([]);
 	});
 
@@ -271,7 +271,7 @@ describe('plausibilityRows: the recession diagnostics and the validation signatu
 		expect(rows.map((r) => r.change)).toEqual(['–', '–', '–', '–', '–']);
 		expect(rows[0]!.site).toBe('Scored record');
 		expect(plausibilityNotes(c)).toEqual([
-			'The validation signatures score different records (run A the gauge record at the outlet, run B the logger record at gauge “Middle weir”), so no change is given.'
+			'The hydrological signatures score different records (run A the gauge record at the outlet, run B the logger record at gauge “Middle weir”), so no change is given.'
 		]);
 	});
 });
@@ -281,7 +281,7 @@ describe('PlausibilityCompare', () => {
 		const c = cmp({ ...bare, recession: rec(), signatures: null }, { ...bare, recession: rec(), signatures: sig() });
 		const html = render(PlausibilityCompare, { props: { comparison: c } }).body;
 		const t = text(html);
-		expect(t).toContain('Run A has no validation signatures: it has no observed flow record to score.');
+		expect(t).toContain('Run A has no hydrological signatures: it has no observed flow record to score.');
 		expect(t).toContain('Recessions, simulated vs observed (rate ratio, b difference) rate 1.50×, b +0.30 (agrees) rate 1.50×, b +0.30 (agrees) rate +0.00×; b +0.00');
 		expect(t).toContain('Base-flow index, Hughes et al. (2003) not computed (no observed record) 0.40 observed, 0.45 simulated (+0.05, within ±0.15) –');
 		expect(t).toContain('Skill on held-out recessions, simulated not computed (no observed record) 0.40 (the river’s own curve 0.60) –');

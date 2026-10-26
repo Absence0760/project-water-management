@@ -5,7 +5,8 @@
 	// its Other uses section); the printable report passes them back in through
 	// `units`, in their old place.
 	import type { Snippet } from 'svelte';
-	import type { RunSummary } from '@water-management/engine';
+	import type { RunSummary, WarningPlace } from '@water-management/engine';
+	import WarningText from './WarningText.svelte';
 	import type { EwrHeadline } from '#lib/api/types.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import WithheldUnitsNote from './WithheldUnitsNote.svelte';
@@ -26,7 +27,8 @@
 		otherUsesHref,
 		headline = null,
 		foldChecks = false,
-		calibrationHref
+		calibrationHref,
+		placeHref = null
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
@@ -49,6 +51,11 @@
 		 * where the model-checks line's calibration, plausibility and WR2012 items go (issue #586 Round 3).
 		 */
 		calibrationHref?: (anchor: string) => string;
+		/**
+		 * Where each place a warning names is (warningText.ts warningPlaceHref, issue #586 D19): the workspace makes them
+		 * links; null (the printable report) keeps the plain words.
+		 */
+		placeHref?: ((place: WarningPlace) => string) | null;
 	} = $props();
 
 	const CHECKS_SHOWN = 3;
@@ -85,7 +92,7 @@
 {#if groups.check.length}
 	<div class="alert alert-warning" role="status" data-testid="warnings-check">
 		<strong>{groups.check.length === 1 ? '1 thing' : `${groups.check.length} things`} to check before relying on this run</strong>
-		<ul id="{uid}-checks">{#each shownChecks as w, i (i)}<li>{w}</li>{/each}</ul>
+		<ul id="{uid}-checks">{#each shownChecks as w, i (i)}<li><WarningText text={w} {placeHref} /></li>{/each}</ul>
 		{#if checksFolded}
 			<button type="button" class="checks-toggle" aria-expanded={checksOpen} aria-controls="{uid}-checks" onclick={() => (checksOpen = !checksOpen)}
 				>{checksOpen ? 'Show only the first 3 things to check' : `Show all ${groups.check.length} things to check`}</button
@@ -96,7 +103,7 @@
 {#if groups.data.length}
 	<details class="data-notes" data-testid="warnings-data">
 		<summary>{groups.data.length === 1 ? '1 note' : `${groups.data.length} notes`} on how the input data were handled</summary>
-		<ul>{#each groups.data as w, i (i)}<li>{w}</li>{/each}</ul>
+		<ul>{#each groups.data as w, i (i)}<li><WarningText text={w} {placeHref} /></li>{/each}</ul>
 	</details>
 {/if}
 <ul class="cred" aria-label="Model checks" data-testid="credibility">

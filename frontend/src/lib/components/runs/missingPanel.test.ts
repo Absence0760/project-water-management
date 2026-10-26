@@ -1,8 +1,8 @@
 import type { RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { missingPanel } from './missingPanel';
-import { resultSections } from './sections';
 import { modelQualitySections } from './modelQuality';
+import { resultSections } from './sections';
 
 const bare = { farms: [] };
 const full = {
@@ -29,7 +29,7 @@ describe('missingPanel', () => {
 	});
 
 	it('is null for a panel the run draws', () => {
-		// The forecast on Runs & results, the rest in Model quality on Calibration (issue #586 Round 3).
+		// Forecast on Runs & results; the rest are Model quality's, on Calibration (issue #586 round 3).
 		const drawn = [...resultSections(full, true), ...modelQualitySections(full)].map((s) => s.id);
 		for (const id of OPTIONAL) {
 			expect(drawn, id).toContain(id);

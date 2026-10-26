@@ -408,7 +408,7 @@ describe('double-mass run warning with a fit period', () => {
 		const out = runModel(input(s, ERAS));
 		const w = out.summary.warnings.find((x) => x.startsWith('CHIRPS fills catchment-rain gaps'))!;
 		expect(w).toBe(
-			'CHIRPS fills catchment-rain gaps with factors fitted per listed water-year range (Settings → Rain gaps → CHIRPS gap filling → Fit ranges): ' +
+			'CHIRPS fills catchment-rain gaps with factors fitted per listed water-year range (Model settings → Rain gaps → CHIRPS gap filling → Fit ranges): ' +
 				'366 days up to 1999/00 with the factors of range 1990/91–1999/00 (old gauge network) (pooled catchment / CHIRPS 2.00); ' +
 				"365 days from 2000/01 on with the factors of range 2000/01–2009/10 (new gauge network) (pooled catchment / CHIRPS 1.20). The Data tab's double-mass chart shows the segments."
 		);

@@ -53,7 +53,7 @@ test('the Data tab shades the gap days a run fills, and Calibration turns the fi
 	await page.getByRole('row', { name: /Weir/ }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.locator('figure.chart')).toHaveAttribute('data-shaded', '1');
 	await expect(
-		page.getByText('Shaded: 3 days interpolated across gaps of up to 5 days, in a run only (Settings → Calibration record → Flow gaps); the stored record is unchanged. 1 gap (20 days) stay open.')
+		page.getByText('Shaded: 3 days interpolated across gaps of up to 5 days, in a run only (Calibration → Calibration record → Flow gaps); the stored record is unchanged. 1 gap (20 days) stay open.')
 	).toBeVisible();
 
 	// Calibration (the Calibration record's page since issue #586 round 3): the record's spec as saved, and switching it off clears the shading.

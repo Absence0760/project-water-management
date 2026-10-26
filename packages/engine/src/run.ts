@@ -507,7 +507,7 @@ function runNetwork(
 	// snapshot's day, this input has none before its start) can't judge the suspect class, which reads the whole
 	// record: it leaves the class out and says so, rather than flag other days than the uninterrupted run.
 	let outletFlowFlags: Uint8Array | null = null;
-	// The scored record's classes, wherever it is: the validation signatures' recession segments leave its flagged days out.
+	// The scored record's classes, wherever it is: the hydrological signatures' recession segments leave its flagged days out.
 	let scoredFlowFlags: Uint8Array | null = null;
 	let flowRecordHistory = false;
 	if (calKind) {
@@ -1098,7 +1098,7 @@ function runNetwork(
 		upstream: topo.upstream,
 		flowFill,
 		outletFlowFlags,
-		// The scored record (engine ≥ 1.55.0): the validation signatures follow the calibration site.
+		// The scored record (engine ≥ 1.55.0): the hydrological signatures follow the calibration site.
 		scored:
 			calKind && scoredFlowFlags
 				? { kind: calKind, observedM3s: calScored, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
@@ -1370,7 +1370,7 @@ function runPlausibility(r: {
 	const flowFlagged = kind
 		? flaggedDayMask(r.outletFlowFlags ?? recordFlowFlags({ kind, series: series[kind], start, days, settings, siteNodeId: null, flowFill: r.flowFill }))
 		: null;
-	// The scored record's flagged days (engine ≥ 1.55.0), for the validation signatures' recession segments: the
+	// The scored record's flagged days (engine ≥ 1.55.0), for the hydrological signatures' recession segments: the
 	// classes the run stores as `observed_flow_quality` (at a calibration site without a gauged range or gap fill).
 	const sc = r.scored;
 	const scoredFlagged = sc ? flaggedDayMask(sc.flags) : null;
@@ -1430,7 +1430,7 @@ function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflo
 	const node = nodes.findIndex((n) => n.id === siteNodeId);
 	if (!calibrationRecordsAt(input.series, siteNodeId).length) {
 		warnings.push(
-			`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Settings → Calibration record. Until then, ${fallback}.`
+			`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Calibration → Calibration record. Until then, ${fallback}.`
 		);
 		return null;
 	}
@@ -1673,7 +1673,7 @@ export function buildNetworkPlan(
 	// the dams: a river abstraction's pool is storage only from engine 1.86.0 (issue #523 B2), with no evaporation.
 	if (!anyApan && days > 0) {
 		if (nodes.some((n) => n.kind === 'farm' && n.damCapacityM3 > 0))
-			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
+			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Model settings → Demand) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
 	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource, settings.rainStations), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
@@ -1715,8 +1715,8 @@ export function buildNetworkPlan(
 	if (reaches.some((p) => p))
 		warnings.push(
 			ewrSource
-				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too (docs/model.md §2.6b)`
-				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
+				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too`
+				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet'
 		);
 	// The Priority users' fixed restriction % (engine 1.86.0, issue #523 B3, ./network/restriction.ts): the curtailment
 	// table reads it always, the drought restriction rule when there is one.
@@ -2221,7 +2221,7 @@ function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim:
 	warnings.push(...ga538Warnings(nodes, plan));
 	if (depleting && observed) {
 		warnings.push(
-			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice (docs/model.md §2.7d)`
+			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice`
 		);
 	}
 }
@@ -3175,7 +3175,7 @@ const USER_LABELS: Record<string, string> = {
 /** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */
 export const DEFAULT_GAUGE_PICK_WARNING =
 	'calibrated against the observed gauge flow by default: the project also has a logger flow record and no calibration record is chosen. ' +
-	'The two may not measure the same river; choose the record in Settings → Calibration record → Compare with.';
+	'The two may not measure the same river; choose the record in Calibration → Calibration record → Compare with.';
 
 /**
  * The flow record calibration compares against ([Flow data] rUseFlow): the

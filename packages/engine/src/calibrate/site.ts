@@ -16,7 +16,7 @@ export interface CalibrationSite {
 /**
  * The gauges inside the network (a gauge node that drains into another node)
  * with an observed record attached, in node-name order (then id): what
- * Settings → Calibration record offers besides the outlet.
+ * Calibration → Calibration record offers besides the outlet.
  */
 export function calibrationSites(model: Pick<ProjectModel, 'nodes'>, series: Readonly<Record<string, unknown>> | undefined): CalibrationSite[] {
 	return model.nodes
@@ -34,9 +34,9 @@ export function calibrationSites(model: Pick<ProjectModel, 'nodes'>, series: Rea
  */
 export function calibrationSiteError(nodes: ProjectModel['nodes'], outflow: number, siteNodeId: string): string | null {
 	const i = nodes.findIndex((n) => n.id === siteNodeId);
-	if (i < 0) return 'the calibration site is no longer in the model: pick a gauge, or the outlet, in Settings → Calibration record';
+	if (i < 0) return 'the calibration site is no longer in the model: pick a gauge, or the outlet, in Calibration → Calibration record';
 	const n = nodes[i]!;
-	if (n.kind !== 'gauge') return `the calibration site "${n.name}" is not a gauge: pick a gauge, or the outlet, in Settings → Calibration record`;
+	if (n.kind !== 'gauge') return `the calibration site "${n.name}" is not a gauge: pick a gauge, or the outlet, in Calibration → Calibration record`;
 	if (i === outflow) return `the calibration site "${n.name}" is the outlet: leave the site at the outlet, whose records are the ones with no site`;
 	return null;
 }

@@ -32,6 +32,7 @@
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { supplyHref } from '#lib/components/supply/links.js';
 	import { calibrationHref } from '#lib/components/calibration/links.js';
+	import { warningPlaceHref } from './warningText';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { historyDays, ranAgo } from '#lib/components/overview/latestRun.js';
 	import { focusAnchor, hashId, holdAnchor, landOnAnchor } from '#lib/help/anchor.js';
@@ -820,7 +821,7 @@
 				<section id="res-summary" aria-labelledby="summary-h">
 					<!-- Named as the side index and the bar name it (#586 D4). -->
 					<h3 id="summary-h" class="summary-h">Summary</h3>
-					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} calibrationHref={(hash) => calibrationHref(shownRunId, hash)} />
+					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} calibrationHref={(hash) => calibrationHref(shownRunId, hash)} placeHref={(place) => warningPlaceHref(place, shownRunId)} />
 					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
 						<Lazy load={loadRunScaledEwr}>
 							{#snippet children(RunScaledEwrTables)}

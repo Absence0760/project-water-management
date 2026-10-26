@@ -220,7 +220,7 @@ export function agreementWarning(ag: ObservedAgreement | null): string | null {
 	return (
 		`Observed flow records disagree — the ${OBSERVED_FLOW_LABEL[ag.a]} as a share of the ${OBSERVED_FLOW_LABEL[ag.b]} volume ` +
 		`(days both have readings; expected ${Math.round(ag.minRatio * 100)}–${Math.round(ag.maxRatio * 100)} %): ${parts.join('; ')}. ` +
-		`Check which record to calibrate against (Settings → Calibration record → Compare with).`
+		`Check which record to calibrate against (Calibration → Calibration record → Compare with).`
 	);
 }
 
@@ -785,7 +785,7 @@ const listed = (parts: string[]) =>
 	parts.length > MAX_LISTED ? `${parts.slice(0, MAX_LISTED).join('; ')}; and ${parts.length - MAX_LISTED} more` : parts.join('; ');
 const FALLBACK_NOTE =
 	'A zero counts as a reading, so on its own it blocks the fallback to CHIRPS (then forecast) rain that a blank day gets. ' +
-	'A run treats these runs as missing, so CHIRPS fills them, unless Settings → Rain gaps → Flagged rain keeps them as recorded; the run says what it filled';
+	'A run treats these runs as missing, so CHIRPS fills them, unless Model settings → Rain gaps → Flagged rain keeps them as recorded; the run says what it filled';
 
 /** A zero run for a warning: its dates, length and what its rule counted. */
 function zeroRunText(r: ZeroRun, z: ZeroRainRuns, byUsual: boolean): string {
@@ -823,7 +823,7 @@ export function zeroRainCheck(z: ZeroRainRuns): SeriesCheck | null {
 	const head = z.runs.length
 		? `Rainfall (catchment): ${runsWord(z.runs.length)} of zero rain covering ${rule}: ${listed(parts)}.${chirpsNote}${dryNote} ` +
 			`Real dry spells, or missing data? ${FALLBACK_NOTE}`
-		: `Rainfall (catchment): no zero-rain run is flagged.${dryNote} A run keeps ${dry.length === 1 ? 'it' : 'them'} as recorded (Settings → Data quality turns the CHIRPS check off)`;
+		: `Rainfall (catchment): no zero-rain run is flagged.${dryNote} A run keeps ${dry.length === 1 ? 'it' : 'them'} as recorded (Model settings → Data quality turns the CHIRPS check off)`;
 	return {
 		seriesKind: 'rain_catchment_mm',
 		check: 'zerorun',

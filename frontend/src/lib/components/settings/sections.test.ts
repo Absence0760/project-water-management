@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findElsewhere } from '#lib/components/common/sectionNav.js';
 import { ANCHOR_MOVES, anchorMoved } from '#lib/nav/anchorMoves.js';
-import { CALIBRATION_SETTINGS_SECTIONS, isCalibrationSetting, saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsElsewhere, settingsNavGroups, settingsPageOf } from './sections';
+import { CALIBRATION_SETTINGS_ANCHORS, CALIBRATION_SETTINGS_SECTIONS, isCalibrationSetting, saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsElsewhere, settingsNavGroups, settingsPageOf } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
 	it('has unique ids, in page order, grouped by task', () => {
@@ -14,7 +14,8 @@ describe('SETTINGS_SECTIONS', () => {
 			'set-demand',
 			'set-restrict',
 			'set-reporting',
-			// Flow generation (issue #553 round 3) keeps the Flow share panel's id; the four that set up a fit moved to Calibration (issue #586 round 3).
+			// Flow generation (issue #553 round 3) keeps the Flow share panel's id: Runoff's one panel, since the
+			// runoff parameters and their fit moved to Calibration (issue #586 round 3).
 			'set-share',
 			'set-ewr',
 			'set-reserve',
@@ -30,7 +31,7 @@ describe('SETTINGS_SECTIONS', () => {
 		expect(groups.filter((g, i) => g !== groups[i - 1])).toEqual([
 			'Data & rain',
 			'Demand & supply',
-			'Runoff & calibration',
+			'Runoff',
 			'EWR & Reserve',
 			'Reading results',
 			// Its one panel's heading, word for word (issue #586, C9).
@@ -60,7 +61,16 @@ describe('settingsElsewhere (issue #586)', () => {
 	it('offers API keys to an owner only, since Project shows no such panel to anyone else', () => {
 		expect(settingsElsewhere(true).map((e) => e.text)).toContain('API keys');
 		expect(settingsElsewhere(false).map((e) => e.text)).not.toContain('API keys');
-		expect(settingsElsewhere(false).map((e) => e.text)).toEqual(['Comparison band', 'Data feeds', 'Scheduled reports', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']);
+		expect(settingsElsewhere(false).map((e) => e.text)).toEqual([
+			'Comparison band',
+			'Data feeds',
+			'Scheduled reports',
+			'Flow calibration',
+			'Calibration record',
+			'Fit the parameters',
+			'WR2012 check',
+			'Evaporation from the map'
+		]);
 	});
 });
 
@@ -96,15 +106,36 @@ describe('SETTINGS_ELSEWHERE (issue #521)', () => {
 		}
 		// Each one points where its old anchor forwards to.
 		for (const move of ANCHOR_MOVES.filter((m) => m.from === 'settings')) {
-			expect(SETTINGS_ELSEWHERE.map((e) => e.href), String(move.hash)).toContain(`?tab=${move.tab}#${move.to}`);
+			for (const hash of typeof move.hash === 'string' ? [move.hash] : (move.hash as readonly string[])) {
+				expect(SETTINGS_ELSEWHERE.map((e) => e.href), hash).toContain(`?tab=${move.tab}#${move.to ?? hash}`);
+			}
 		}
+	});
+
+	it('finds the calibration panels on Calibration, by their headings and the settings they hold (issue #586 round 3)', () => {
+		for (const [q, id] of [
+			['flow calibration', 'set-flow'],
+			['X3', 'set-flow'],
+			['pan coefficient', 'set-flow'],
+			['dPET', 'set-evaporation'],
+			['calibration record', 'set-record'],
+			['exclusions', 'set-record'],
+			['fit automatically', 'set-fit'],
+			['calibration rules', 'set-fit'],
+			['quaternary', 'set-wr2012']
+		] as const) {
+			expect(findElsewhere(SETTINGS_ELSEWHERE, q).map((e) => [e.href, e.page]), q).toContainEqual([`?tab=calibration#${id}`, 'Calibration']);
+		}
+		// Every moved anchor has its entry, each by its heading.
+		expect(SETTINGS_ELSEWHERE.filter((e) => e.page === 'Calibration').map((e) => e.href.split('#')[1])).toEqual([...CALIBRATION_SETTINGS_ANCHORS]);
+		for (const sec of CALIBRATION_SETTINGS_SECTIONS) expect(SETTINGS_ELSEWHERE.find((e) => e.href.endsWith(`#${sec.id}`))?.text, sec.id).toBe(sec.label);
 	});
 });
 
 describe('settingsNavGroups', () => {
 	it('lists every panel under its task, the last group Automatic runs alone, on the bar and in the rail alike', () => {
 		const groups = settingsNavGroups();
-		expect(groups.map((g) => g.label)).toEqual(['Data & rain', 'Demand & supply', 'Runoff & calibration', 'EWR & Reserve', 'Reading results', 'Automatic runs']);
+		expect(groups.map((g) => g.label)).toEqual(['Data & rain', 'Demand & supply', 'Runoff', 'EWR & Reserve', 'Reading results', 'Automatic runs']);
 		expect(groups[0]!.sections.map((s) => s.label)).toEqual(['Simulation period', 'Rain gaps', 'Data quality']);
 		expect(groups.at(-1)!.sections).toEqual([{ id: 'set-auto', label: 'Automatic runs' }]);
 		// Every panel has its own link, in page order, and none stands for another.
@@ -116,6 +147,13 @@ describe('settingsNavGroups', () => {
 describe('the moved anchors (nav/anchorMoves.ts)', () => {
 	it('moves no anchor of a panel still here', () => {
 		for (const sec of SETTINGS_SECTIONS) expect(anchorMoved('settings', sec.id), sec.id).toBe(false);
+	});
+
+	it('moves every calibration panel, and lists none of them here', () => {
+		for (const sec of CALIBRATION_SETTINGS_SECTIONS) {
+			expect(anchorMoved('settings', sec.id), sec.id).toBe(true);
+			expect(SETTINGS_SECTIONS.map((s) => s.id as string), sec.id).not.toContain(sec.id);
+		}
 	});
 });
 
@@ -138,6 +176,19 @@ describe('saveBlockers', () => {
 			{ id: 'set-period', label: 'Simulation period', message: 'Simulation start must be before the end.' },
 			{ id: 'set-quality', label: 'Data quality', message: 'Lowest ratio must be below the highest.' },
 			{ id: 'set-flow', label: 'Flow calibration', message: 'Give each exclusion a reason.' }
+		]);
+	});
+
+	it('lists Model settings’ panels, then Calibration’s, each on its page (issue #586 round 3)', () => {
+		const list = saveBlockers([
+			{ id: 'set-wr2012', message: 'Give the quaternary.' },
+			{ id: 'set-ewr', message: 'The EWR must be 0 or more.' },
+			{ id: 'set-record', message: 'Give each exclusion a reason.' }
+		]);
+		expect(list.map((b) => [b.id, settingsPageOf(b.id)])).toEqual([
+			['set-ewr', 'settings'],
+			['set-record', 'calibration'],
+			['set-wr2012', 'calibration']
 		]);
 	});
 });

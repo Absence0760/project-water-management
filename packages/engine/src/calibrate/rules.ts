@@ -40,7 +40,7 @@ export function typicalParamsFilter(params: ParamSet, free: readonly string[]): 
  * 'note'). Not applicable without a WR2012 reference.
  */
 export function wr2012MarFilter(w: Wr2012Report | null | undefined, band: { marLowMm3: number | null; marHighMm3: number | null }): FilterResult {
-	if (!w) return { id: 'wr2012Mar', status: 'notApplicable', detail: 'no WR2012 reference in Settings, so the MAR could not be checked' };
+	if (!w) return { id: 'wr2012Mar', status: 'notApplicable', detail: 'no WR2012 reference (Calibration → WR2012 check), so the MAR could not be checked' };
 	const sim = w.flag.basis === 'overlap' && w.overlap ? w.overlap.simulatedMarMm3 : w.whole.simulatedMarMm3;
 	if (band.marLowMm3 !== null && band.marHighMm3 !== null) {
 		const inside = sim >= band.marLowMm3 && sim <= band.marHighMm3;

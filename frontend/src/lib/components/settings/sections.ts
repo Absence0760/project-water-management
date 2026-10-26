@@ -2,13 +2,13 @@
 // grouped by task (issue #468), and the list of what blocks Save, each
 // pointing at its panel. The ids are set on the panels in SettingsTab.svelte
 // (and around EwrRulesSection). Each label is its panel's heading, word for
-// word. The four panels that set up a fit (Flow calibration, Calibration
-// record, Fit the parameters, WR2012 check) moved to the Calibration page
-// (issue #586 round 3, CalibrationSettings.svelte): CALIBRATION_SETTINGS_SECTIONS
-// lists them, and they share the one draft and its Save blockers. Data feeds, API keys and Scheduled reports, which
-// followed the form and saved on their own, moved to Data and Project (issue
-// #586 round 1): SETTINGS_ELSEWHERE finds them there, and their old anchors
-// are sent on by nav/anchorMoves.ts.
+// word. Data feeds, API keys and Scheduled reports, which followed the form and
+// saved on their own, moved to Data and Project (issue #586 round 1), and Flow
+// calibration, Calibration record, Fit the parameters and WR2012 check to
+// Calibration (round 3), sharing this page's draft and save bar:
+// SETTINGS_ELSEWHERE finds them all there, and their old anchors are sent on
+// by nav/anchorMoves.ts.
+import { calibrationHref } from '#lib/components/calibration/links.js';
 
 export const SETTINGS_SECTIONS = [
 	// Data & rain: what the model runs on.
@@ -22,9 +22,9 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-restrict', label: 'Drought restrictions', group: 'Demand & supply' },
 	// The reporting window and the annual assurance threshold (issue #521, moved from EWR): how supply results are read.
 	{ id: 'set-reporting', label: 'Reporting', group: 'Demand & supply' },
-	// Runoff & calibration: rain to natural flow. How its parameters are fitted and checked moved to Calibration (below).
-	// How natural flow is made, Fragmentation or Per unit (issue #553 round 3); the id is the Flow share panel's, so its links still land.
-	{ id: 'set-share', label: 'Flow generation', group: 'Runoff & calibration' },
+	// Runoff: how rain becomes natural flow, Fragmentation or Per unit (issue #553 round 3); the id is the Flow share
+	// panel's, so its links still land. The runoff parameters and their fit moved to Calibration (issue #586 round 3).
+	{ id: 'set-share', label: 'Flow generation', group: 'Runoff' },
 	// EWR & Reserve: what must stay in the river. Judge results by (#set-judge) heads the page, above the menu's first panel.
 	{ id: 'set-ewr', label: 'EWR', group: 'EWR & Reserve' },
 	{ id: 'set-reserve', label: 'Reserve rule tables', group: 'EWR & Reserve' },
@@ -71,20 +71,22 @@ export const settingsPageOf = (id: string): 'settings' | 'calibration' => (isCal
  * Settings that moved to another page, for Find a setting (issue #521): the registered-volumes
  * comparison band went to Allocations in round 1, so a search for it, or its other names, offers
  * a link to that card (`#alloc-band`, which AllocationsTab lands on). Data feeds went to Data, and
- * API keys and Scheduled reports to Project (issue #586 round 1); a search finds them at their new
- * homes. API keys is an owner's panel, so `settingsElsewhere` leaves it out for anyone else: Project
- * shows them no such panel, and a link to it would land nowhere.
+ * API keys and Scheduled reports to Project (issue #586 round 1), and the calibration panels to
+ * Calibration (round 3); a search finds them at their new homes. API keys is an owner's panel, so
+ * `settingsElsewhere` leaves it out for anyone else: Project shows them no such panel, and a link to
+ * it would land nowhere.
  */
 export const SETTINGS_ELSEWHERE = [
 	{ text: 'Comparison band', words: 'registered volumes allocation tolerance licence WARMS modelled use', href: '?tab=allocations#alloc-band', page: 'Allocations' },
 	{ text: 'Data feeds', words: 'CHIRPS forecast DWS gauging station fetch automatically', href: '?tab=series#data-feeds', page: 'Data' },
 	{ text: 'API keys', words: 'ingest logger token integration', href: '?tab=project#project-api-keys', page: 'Project' },
 	{ text: 'Scheduled reports', words: 'schedule email PDF monthly weekly', href: '?tab=project#project-report-schedules', page: 'Project' },
-	// The panels that set up a fit (issue #586 round 3), found on Calibration with what they hold.
-	{ text: 'Flow calibration', words: 'GR4J parameters X1 X2 X3 X4 catchment area warm-up runoff model pan coefficient potential evaporation PE areal rainfall evaporation from the map', href: '?tab=calibration#set-flow', page: 'Calibration' },
-	{ text: 'Calibration record', words: 'calibration window observed flow gauge logger compare with exclusions low flows quality flags gauged range flow gaps infilled', href: '?tab=calibration#set-record', page: 'Calibration' },
-	{ text: 'Fit the parameters', words: 'fit automatically objective KGE NSE validation fit record calibration rules MAR penalty', href: '?tab=calibration#set-fit', page: 'Calibration' },
-	{ text: 'WR2012 check', words: 'WR2012 naturalised flow quaternary MAR reference', href: '?tab=calibration#set-wr2012', page: 'Calibration' }
+	// The runoff parameters and their fit (issue #586 round 3), each by its heading and the settings it holds.
+	{ text: 'Flow calibration', words: 'GR4J parameters X1 X2 X3 X4 catchment area warm-up areal rainfall correction potential evaporation pan coefficient runoff model PE from the map', href: calibrationHref(null, 'set-flow'), page: 'Calibration' },
+	{ text: 'Calibration record', words: 'calibration window gauge site observed flow record exclusions quality flags low flow compare with flow gaps logger flows gauged range infilled', href: calibrationHref(null, 'set-record'), page: 'Calibration' },
+	{ text: 'Fit the parameters', words: 'fit automatically auto calibration rules fit record objective NSE KGE MAR penalty validation', href: calibrationHref(null, 'set-fit'), page: 'Calibration' },
+	{ text: 'WR2012 check', words: 'WR2012 quaternary naturalised flow MAR reference', href: calibrationHref(null, 'set-wr2012'), page: 'Calibration' },
+	{ text: 'Evaporation from the map', words: 'ET0 dPET potential evaporation map proposal', href: calibrationHref(null, 'set-evaporation'), page: 'Calibration' }
 ] as const;
 
 /** The moved settings this reader can follow: API keys only for an owner (issue #586 round 1). */

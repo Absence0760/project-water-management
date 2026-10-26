@@ -1,6 +1,6 @@
 <!--
-	Validation signatures (RunSummary.plausibility.signatures, engine ≥ 1.55.0;
-	docs/model.md §2.10d "Validation signatures"): the base-flow index by the
+	Hydrological signatures (RunSummary.plausibility.signatures, engine ≥ 1.55.0;
+	docs/model.md §2.10d "Hydrological signatures"): the base-flow index by the
 	Hughes et al. (2003) and Eckhardt (2005) filters, the low-flow FDC's slope
 	and volume bias, and the skill on held-out recession segments, of the
 	scored record against the simulated outflow on the same days. Part of the
@@ -20,7 +20,7 @@
 	const days = $derived(signatures?.lowFlowFdc?.days ?? signatures?.baseflow?.days ?? null);
 </script>
 
-<h4 id="{uid}-h">Validation signatures <HelpTip key="plausibility-signatures" /></h4>
+<h4 id="{uid}-h">Hydrological signatures <HelpTip key="plausibility-signatures" /></h4>
 {#if signatures}
 	<p class="small">
 		On {scoredRecordText(signatures)} (the record the calibration statistics score){days === null ? '' : `, ${fmtNum(days)} days`}, against the simulated

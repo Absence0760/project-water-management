@@ -1,5 +1,5 @@
 // End to end: the hydrologist plausibility checks (docs/model.md §2.10d) and
-// the validation signatures, run on a record that IS the model's simulated
+// the hydrological signatures, run on a record that IS the model's simulated
 // outflow (every comparison must then agree exactly), and on records known
 // to be too high or too low (the documented warnings must fire). Invented
 // catchments and values only (the repo is public).
@@ -97,7 +97,7 @@ describe('a record equal to the simulated outflow agrees with it in every check'
 		for (const b of p.flowDoubleMass?.breaks ?? []) expect(b.hint).toBe('rain');
 	});
 
-	it('validation signatures: BFI and low-flow FDC differences are 0', () => {
+	it('hydrological signatures: BFI and low-flow FDC differences are 0', () => {
 		const s = p.signatures!;
 		if (s.baseflow?.hughes) expect(s.baseflow.hughes.difference).toBeCloseTo(0, 12);
 		if (s.baseflow?.eckhardt) expect(s.baseflow.eckhardt.difference).toBeCloseTo(0, 12);

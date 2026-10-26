@@ -15,7 +15,7 @@ const VIEW = { width: 1440, height: 960 };
 
 /** Model quality's #res-* panels in DOM order: `id: its first heading`. */
 const panelOrder = (page: Page) =>
-	page.evaluate(() => [...document.querySelectorAll('#cal-fit [id^="res-"]')].map((el) => `${el.id}: ${el.querySelector('h2, h3, h4')?.textContent?.trim() ?? ''}`));
+	page.evaluate(() => [...document.querySelectorAll('#cal-fit [id^="res-"]:not(h2, h3, h4)')].map((el) => `${el.id}: ${el.querySelector('h2, h3, h4')?.textContent?.trim() ?? ''}`));
 
 const PANELS: [string, string][] = [
 	['res-hydrograph', 'Hydrograph'],
@@ -38,6 +38,9 @@ test('a run with every optional panel: Model quality’s panels in page order, e
 	await openCalibration(page, id, `&run=${runId}`);
 	await expect(page.locator('#res-plausibility')).toBeAttached();
 	expect(await panelOrder(page)).toEqual(PANELS.map(([a, h]) => `${a}: ${h}`));
+	// Two sub-headings of Calibration against observed flow have ids of their own, for the side index's lines (issue #586 D4).
+	await expect(page.locator('#res-calibration h3#res-calibration-check')).toHaveText('Calibration check: flow against use, per gauge');
+	await expect(page.locator('#res-calibration h3#res-fit-provenance')).toContainText('Where the parameters came from');
 
 	for (const [anchor, heading] of PANELS) {
 		// From another tab, so each is a fresh load and the page's landing runs.
@@ -58,7 +61,7 @@ test('a link to a Model quality panel this run doesn’t have says what the pane
 	const project = await seedRunnableProject(page.request, 'Calibration missing panels');
 	const runId = await createRun(page.request, project.id, 'Plain');
 	for (const [anchor, needs, href] of [
-		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=settings#set-wr2012'],
+		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=calibration#set-wr2012'],
 		['res-gauges', 'It needs a flow record at a gauge that is not the calibration site', '?tab=series'],
 		['res-unit-rain', 'It needs Per unit flow generation', '?tab=settings#set-share']
 	] as const) {

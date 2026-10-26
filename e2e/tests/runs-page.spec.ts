@@ -151,8 +151,8 @@ test('with twenty long-labelled runs the rail sits beside the run and fits the w
 		expect(metaLines.length).toBe(20);
 		expect(Math.max(...metaLines)).toBe(1);
 		// Scrolled down the results (mid-page: at the very end the grid's bottom edge lifts a sticky rail), it is still in view.
-		// The side index (1440) gives Run notes a line of its own; the bar (1280) one "Notes & evidence" link (issue #521).
-		await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: width === 1440 ? 'Run notes' : 'Notes & evidence', exact: true }).click();
+		// Run notes has a link of its own on the bar (1280) and in the side index (1440) alike (issue #586, D4).
+		await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Run notes', exact: true }).click();
 		await expect(page).toHaveURL(/#res-notes$/);
 		await expect(runsList(page)).toBeInViewport();
 		// Stuck at the top, it grows to the window's height, still no further.
