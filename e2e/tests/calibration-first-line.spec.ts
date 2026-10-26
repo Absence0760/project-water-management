@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { addMember, createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, syntheticRain, updateSettings } from '../support/api.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { settingsBar } from '../support/settings.ts';
@@ -81,12 +82,14 @@ test.describe('1440×960', () => {
 		const p = await seedRunnableProject(page.request, 'Calibration picker dates');
 		await createRun(page.request, p.id, 'Older run');
 		await createRun(page.request, p.id, 'Newest run');
+		// The clock on the newest run, so both ran "today" (support/clock.ts): a hedge over today | yesterday | a date would pass any day.
+		await pinClockToProject(page, p.id, 'lastRunAt');
 		await page.goto(`/projects/${p.id}?tab=calibration#cal-fit`);
 		const options = page.locator('#cal-fit').getByRole('combobox', { name: 'Run', exact: true }).locator('option');
 		await expect(options).toHaveCount(2);
 		for (const text of await options.allTextContents()) {
 			expect(text, 'no year-first date').not.toMatch(/\d{4}-\d{2}-\d{2}/);
-			expect(text).toMatch(/ · (today|yesterday|\d{1,2} [A-Z][a-z]{2} \d{4}) \d{2}:\d{2} · /);
+			expect(text).toMatch(/ · today \d{2}:\d{2} · /);
 		}
 	});
 
