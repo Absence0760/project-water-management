@@ -73,7 +73,6 @@
 	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
 	import { saveBlockers, settingsElsewhere, settingsNavGroups } from './sections';
-	import { anchorForward } from '#lib/nav/anchorMoves.js';
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import type { CatchmentStation } from './unitRain';
@@ -368,21 +367,15 @@
 	// moved away (#set-feeds, #set-api-keys, #set-report-schedules: an old email, a bookmark, a note) goes on
 	// to its new page instead, every other parameter kept, replacing this entry so Back skips it; that page
 	// lands on the panel (nav/anchorMoves.ts, issue #586 round 1). reset: false, so SvelteKit leaves the
-	// focus to the new page's landing. `?tab=calibration`, which has no page of its own yet, opens at Flow
-	// calibration (issue #586).
+	// focus to the new page's landing. (`?tab=calibration` opened this page at Flow calibration until
+	// Calibration got a page of its own, issue #586; its #set- links come here.)
 	onMount(() => {
 		const stopAnchors = followAnchors({
 			page: 'settings',
 			land: (id) => (id.startsWith('set-') ? landOnAnchor(id) : undefined),
 			forward: (to) => void goto(to, { replace: true, reset: false })
 		});
-		const hash = page.url.hash.slice(1);
-		const calibration = !hash && page.url.searchParams.get('tab') === 'calibration' && !anchorForward('settings', page.url);
-		const stopCalibration = calibration ? landOnAnchor('set-flow') : undefined;
-		return () => {
-			stopAnchors();
-			stopCalibration?.();
-		};
+		return stopAnchors;
 	});
 </script>
 

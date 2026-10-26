@@ -17,8 +17,12 @@ session exists. A **Skip to content** link comes first.
   counts as Projects), the page's own navigation in the slot (below), and the
   account menu at the foot. It is spaced so that, with a project open, every
   section an owner sees fits a 1440 × 960 window with the account menu in
-  view and room for one more row (a two-line catchment name included;
-  `app-sidebar.spec.ts`). On a shorter window (1280 × 800) the slot scrolls
+  view (a two-line catchment name included; `app-sidebar.spec.ts`), and a
+  viewer's with the model inputs shown, whose **Show model inputs** row (32 px,
+  as a link) stands in for the Applications row they don't have. Calibration
+  took the last spare row (issue #586): a new section must free one first
+  (hide one by default, as History is), and the spec fails on either side, a
+  row too many or a row free again. On a shorter window (1280 × 800) the slot scrolls
   on its own instead of the whole sidebar, so the brand, Main and the account
   menu stay on screen, and the open section is scrolled into view in it (the
   slot's `scroll-padding` keeps it clear of the edges). Only below about
@@ -837,7 +841,7 @@ the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections, in this order: **Review**
 (Project, Applications, History), **Build the model** (Network, Map, Crops &
-demand, Transfers, Data, Settings & calibration) and **Outcomes** (Summary,
+demand, Transfers, Data, Settings & calibration, Calibration) and **Outcomes** (Summary,
 EWR, Hydrological units, Runs & results, Dams, Compare runs,
 Scenarios, Allocations). The operator chose this order on 2026-10-05 (before
 it, Outcomes led: issue #17's option A, and issue #162). A project still
@@ -892,7 +896,7 @@ new page's title, its `h1` (`focusPageStart`), so Tab carries on in the page
 rather than from the top of the sidebar (issue #586).
 
 The links to the tabs that show one run (Runs & results, EWR, Hydrological
-units, Allocations) keep the run picked on any of them (`&run=<id>`,
+units, Allocations, and Calibration, which reads that run's fit) keep the run picked on any of them (`&run=<id>`,
 `workspace/tabLinks.ts`): an older run picked on Runs & results is still the
 one shown after a visit to Settings, and EWR opens on it. Only a pick is
 carried: while the run shown is the default (the newest, or a viewer's
@@ -914,7 +918,8 @@ shown sets nothing for a later Back or link.
 | Crops & demand | `crops` | `demand` | `lib/components/crops/` |
 | Transfers | `transfers` | | `lib/components/transfers/` |
 | Data | `series` | `data`, `timeseries` | `lib/components/series/` |
-| Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
+| Settings & calibration | `settings` | | `lib/components/settings/` |
+| Calibration | `calibration` (`&run=<id>`) | | `lib/components/calibration/CalibrationTab.svelte` ([§ Calibration](#calibration)) |
 | Project | `project` | `details`, `members`, `sharing` | `lib/components/project/` ([§ Project](#project)) |
 | Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
@@ -926,7 +931,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
+| viewer | Summary, EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Calibration, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -6358,8 +6363,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   differs from the charge's, a line under the select says which test the
   charge follows.
 - **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
-  Project page's recent notes, `notes.ts` `noteHref`; `?tab=calibration`
-  still works, and with no fragment opens at **Flow calibration**) land on
+  Project page's recent notes, `notes.ts` `noteHref`; an old
+  `?tab=calibration#set-…`, from when that opened this page, goes on here
+  from the Calibration page, § Calibration) land on
   that group once the tab's chunk has drawn it, held while the page settles
   (`holdAnchor`), with focus on its heading. The panels that are lazy chunks
   of their own (Evaporation from the map, Data feeds, API keys, Scheduled
@@ -7689,6 +7695,54 @@ two.
   and Compare runs use the same words. An invalid rule blocks
   Save (the engine's `declaredRuleError`, as the API checks it). Viewers see
   it read-only.
+
+## Calibration
+
+`?tab=calibration` (`lib/components/calibration/CalibrationTab.svelte`,
+helpers in `calibration/page.ts`; issue #586). Fitting the runoff parameters
+and judging the fit, on one page, so the calibration loop (set the
+parameters, run, read the fit, adjust) no longer crosses two. Its sidebar row
+is under **Build the model**, after Settings & calibration; it is `core`
+(owners, editors and viewers; the fit controls will be editors' only, as the
+Map's edit tools are). Until issue #586 round 2 `?tab=calibration` was an
+alias that opened Settings at Flow calibration.
+
+**Round 2 is the shell; the panels arrive in Round 3.** For now the page
+has:
+
+- **Header.** The title (`TAB_LABELS`), the context line "Fit the runoff
+  parameters to observed flow, then judge the fit", and the page's Add data
+  and Run model. Its guide is *Calibration* (`calibration-page`).
+- **A lead** saying the panels are moving here and, until they arrive, where
+  to set up the fit (Settings & calibration) and read how a run fits (Runs &
+  results), each a link.
+- **Set up the fit** (`#cal-setup`): links to Flow calibration, Calibration
+  record, Fit the parameters and WR2012 check on Settings & calibration
+  (`#set-flow`, `#set-record`, `#set-fit`, `#set-wr2012`), named from
+  Settings' own section list so they follow a rename, each with a line of
+  what it holds, each landing on its heading (Settings' `landOnAnchor`).
+- **How the shown run fits** (`#cal-fit`): the run Runs & results shows (the
+  one picked, `run=`, else its default: the newest, or a viewer's published
+  baseline; `shownRun`), by its label and when it ran, then links to the
+  Model quality panels every run has (Hydrograph, Flow-duration curve,
+  Calibration against observed flow, EWR test: model against observed flow;
+  `page.test.ts` checks they are Runs' headings, in its order), and a line
+  that the rest of Model quality follows them there for the runs that have
+  it. The links keep a picked run (`?tab=runs&run=<id>#res-…`); without a
+  pick they carry none, so Runs & results shows its own default. With no run
+  yet the part says so and links to Runs & results.
+- **Side index** (`SectionNav`, "Calibration sections"): the two parts, by
+  their headings; a rail from 80rem of page (1440 px), the bar narrower. A
+  loaded `#cal-setup` / `#cal-fit` lands on its heading, focused.
+
+Side by side from 760 px of page, stacked narrower (a container query). The
+Calibration row's link carries a run picked on Runs & results
+(`workspace/tabLinks.ts` `RUN_TABS`). An old `?tab=calibration#set-…` link (a
+bookmark, a note's link, from when the tab opened Settings) goes on to that
+panel on Settings, every other parameter kept, replacing the history entry
+(`calibrationForward`); Settings sends a moved one (`#set-feeds`) on again.
+Specs: `calibration-page.spec.ts`, and `settings-layout-pins.spec.ts` for
+the old links.
 
 ## EWR
 

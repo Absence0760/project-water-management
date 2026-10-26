@@ -11,6 +11,7 @@
 		transfers: () => import('#lib/components/transfers/TransfersTab.svelte'),
 		series: () => import('#lib/components/series/SeriesTab.svelte'),
 		settings: () => import('#lib/components/settings/SettingsTab.svelte'),
+		calibration: () => import('#lib/components/calibration/CalibrationTab.svelte'),
 		runs: () => import('#lib/components/runs/RunsTab.svelte'),
 		river: () => import('#lib/components/river/RiverTab.svelte'),
 		supply: () => import('#lib/components/supply/SupplyTab.svelte'),
@@ -106,7 +107,6 @@
 		data: 'series',
 		timeseries: 'series',
 		demand: 'crops',
-		calibration: 'settings',
 		results: 'runs',
 		// The EWR page (issue #558) keeps its old id, so a saved choice of sections and old links still work.
 		ewr: 'river',
@@ -1032,6 +1032,10 @@
 							/>
 						{/snippet}
 					</Lazy>
+				{:else if tab === 'calibration'}
+					<Lazy load={LOAD.calibration}>
+						{#snippet children(CalibrationTab)}<CalibrationTab {runs} role={project!.role} />{/snippet}
+					</Lazy>
 				{:else if tab === 'series'}
 					<Lazy load={LOAD.series}>
 						{#snippet children(SeriesTab)}
@@ -1443,6 +1447,15 @@
 	}
 	.project-side .tabs a {
 		min-height: 32px;
+	}
+	/* A viewer's toggle takes one 32 px row in the sidebar, as a link does: Calibration took the sidebar's last
+	   spare row (issue #586), and a viewer, who has no Applications row, has the toggle in its place, so with the
+	   inputs shown they fit 1440×960 exactly as an owner's sections do (app-sidebar.spec.ts). Its taller 40 px
+	   row and gap above had cost 16 px more. */
+	.project-side .inputs-toggle {
+		min-height: 32px;
+		margin-top: 0;
+		padding-top: 0;
 	}
 	/* Phones: the catchment's name and your role, in the app's bar (fillPhoneTitle): at most two lines of name
 	   (whole in its title), the role badge beside it. */

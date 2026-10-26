@@ -2,7 +2,7 @@
 // Model settings and a new Calibration page. These pins hold today's page, so a later round that moves a panel has
 // to move its pin with it and can't lose one silently: the panels and their #set-* anchors in page order, the side
 // index in the same order and pointing at them, every anchor landing on its heading with the focus there,
-// ?tab=calibration opening the page, and the one save bar saving edits from both halves together. Round 1 moved
+// ?tab=calibration's old #set- links landing there (it has a page of its own since round 2), and the one save bar saving edits from both halves together. Round 1 moved
 // Data feeds to Data and API keys and Scheduled reports to Project: their old anchors forward there. The detailed checks live elsewhere and aren't
 // repeated: the index's keys and find box (settings-index.spec.ts), the bar's rows at 1280 and More at 1024
 // (section-nav.spec.ts), the header's fit line and jump (settings-page.spec.ts), Discard's Cancel and a Save
@@ -283,37 +283,38 @@ test('a click on the sidebar link of the page already shown sets no title focus 
 	await expect(pageTitle(page)).toBeFocused();
 });
 
-test('?tab=calibration opens Settings & calibration under its own sidebar row at Flow calibration, and lands its anchors', async ({ page, owner }) => {
+test('?tab=calibration opens the Calibration page under its own sidebar row, and its old #set- links land on Settings', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Settings pins alias');
+	// Until issue #586 round 2 it opened Settings at Flow calibration: now the page of its own.
 	await page.goto(`/projects/${project.id}?tab=calibration`);
-	await expect(pageTitle(page)).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=calibration$`));
-	// It opens at Flow calibration, its heading focused, not at the top of Settings (issue #586).
-	const flow = panelHeading(page, 'set-flow');
-	await expect(flow).toHaveText('Flow calibration', { useInnerText: true });
-	await expect(flow).toBeInViewport();
-	await expect(flow).toBeFocused();
-	// The sidebar marks Settings & calibration: there is no Calibration row (yet).
-	await expect(sections(page).getByRole('link', { name: 'Settings & calibration', exact: true })).toHaveAttribute('aria-current', 'page');
-	await expect(sections(page).getByRole('link', { name: /^Calibration/ })).toHaveCount(0);
-	await expect(settingsMenu(page).getByRole('link')).toHaveCount(INDEX.flatMap(([, l]) => l).length);
+	await expect(sections(page).getByRole('link', { name: 'Calibration', exact: true })).toHaveAttribute('aria-current', 'page');
+	await expect(sections(page).getByRole('link', { name: 'Settings & calibration', exact: true })).not.toHaveAttribute('aria-current', 'page');
+	await expect(pageTitle(page)).toHaveCount(0);
 
-	// The calibration panels' anchors land from the alias as from ?tab=settings.
+	// An old link into a Settings panel through it (a bookmark, a note) goes on to the panel there, replacing the entry,
+	// so Back skips it; the calibration panels and the rest alike.
 	for (const [id, heading] of [
 		['set-fit', 'Fit the parameters'],
 		['set-flow', 'Flow calibration'],
 		['set-record', 'Calibration record'],
-		['set-wr2012', 'WR2012 check']
+		['set-wr2012', 'WR2012 check'],
+		['set-ewr', 'EWR']
 	] as const) {
 		await page.goto('about:blank');
 		await page.goto(`/projects/${project.id}?tab=calibration#${id}`);
+		await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=settings#${id}$`));
+		await expect(pageTitle(page)).toBeVisible();
 		const h = panelHeading(page, id);
 		await expect(h).toHaveText(heading, { useInnerText: true });
 		await expect(h).toBeInViewport();
 		await expect(h).toBeFocused();
 	}
+	await page.goBack();
+	await expect(page).toHaveURL('about:blank');
 });
 
 test('the save bar: edits in a model-input panel and a calibration panel show it, go along to another page, and save together; Discard asks and restores both', async ({ page, owner }) => {
