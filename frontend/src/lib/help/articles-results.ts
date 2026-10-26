@@ -135,7 +135,7 @@ export const RESULTS_ARTICLES: Record<string, HelpArticle> = {
 		long: 'Each daily flow record (observed, simulated outflow, natural flow) is sorted from highest to lowest and plotted against how often it is equalled or exceeded, using Weibull plotting positions (rank ÷ (days + 1)), with linear interpolation between ranks. The table reads the curve at 10, 50, 90 and 95 %: Q50 is the median flow, Q90 and Q95 the usual low-flow indices.\n\nThe curves only compare like with like when they rank the same days: when the observed record covers part of the run, the chart offers to rank only the days with an observation. A forecast run’s curves rank its history only. The curve says how often a flow occurs, not when: two records with the same curve can have their dry spells in different years.',
 		aliases: ['FDC', 'Q95', 'Q90', 'Q50', 'Q10', 'exceedance', 'duration curve'],
 		related: ['fdc-signatures', 'natural-flow', 'plausibility-low-flow'],
-		source: 'packages/engine/src/views/fdc.ts; frontend runs/RunCharts.svelte'
+		source: 'packages/engine/src/views/fdc.ts; frontend runs/ModelQuality.svelte'
 	},
 
 	// ---- Comparing runs, uncertainty, planning outputs, yield and forecasts ----

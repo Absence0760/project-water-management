@@ -50,7 +50,7 @@
 
 	const get = (key: string, nodeId: string): Promise<DailySeries> => cachedSeries(runId, key, nodeId, () => api.runs.series(projectId, runId, key, nodeId));
 
-	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte). Replace, never mutate.
+	// $state.raw: long daily arrays must not become deep proxies (ModelQuality.svelte). Replace, never mutate.
 	type Flows = { observed: DailySeries; simulated: DailySeries } | { error: string };
 	let flows = $state.raw<Record<string, Flows>>({});
 	let loadedRun = '';

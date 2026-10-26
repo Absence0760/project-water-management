@@ -61,7 +61,7 @@
 	// The outlet's Reserve rule requirement too, when it has a table (issue #51): the headline judges that line.
 	const SLOTS = [['simulated', 'simulated_outflow'], ['ewr', 'ewr'], EWR_RULE_KEY, ['shortfall', 'ewr_shortfall']] as const;
 
-	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte).
+	// $state.raw: long daily arrays must not become deep proxies (ModelQuality.svelte).
 	let flows = $state.raw<CatchmentFlows & { shortfall?: DailySeries }>({});
 	let loading = $state(true);
 	/** The run drawn, set with its flows: another run's keep the chart on screen (aria-busy) until they are in, so EWR's

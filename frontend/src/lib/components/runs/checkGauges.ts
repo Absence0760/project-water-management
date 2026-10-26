@@ -4,7 +4,7 @@
 // outlet's, from the run's `observed_flow_check` at the gauge (engine ≥
 // 1.90.0) against its `outflow`, with the record's NSE, KGE and PBIAS as an
 // out-of-sample check, read from the run summary (plausibility.gauges[].fit,
-// computed once by the engine). Pure; RunCharts' GaugeCheckFlows draws it.
+// computed once by the engine). Pure; ModelQuality's GaugeCheckFlows draws it.
 import {
 	beforeForecast,
 	CHECK_GAUGE_FLOW_KEY,

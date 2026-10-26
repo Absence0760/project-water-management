@@ -40,7 +40,7 @@
 		nodes: readonly CheckNode[];
 		nodeNames: Map<string, string>;
 		forecastFrom?: string | null;
-		/** The page's flow unit (Runs & results' one switch, RunCharts), and the switch itself for each chart's toolbar. */
+		/** The page's flow unit (Runs & results' one switch, ModelQuality), and the switch itself for each chart's toolbar. */
 		flowUnit: 'm³/s' | 'm³/day';
 		toolbar: Snippet;
 	} = $props();

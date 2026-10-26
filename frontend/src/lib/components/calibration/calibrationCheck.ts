@@ -125,7 +125,7 @@ export interface CheckFlows {
 
 /**
  * The lines cut before a forecast run's forecast (engine beforeForecast, as
- * RunCharts cuts its flow duration curves): the check reads simulated against
+ * ModelQuality cuts its flow duration curves): the check reads simulated against
  * observed, and the forecast days have no observed flow, so they're left off
  * rather than drawn in a band. Unchanged for an ordinary run (null).
  */

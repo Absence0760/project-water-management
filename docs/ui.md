@@ -8263,7 +8263,9 @@ read it before.
   bar and the menu.
 - **Page order.** The results are grouped by the question they answer
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
-  as a quiet heading, `RunCharts.svelte`), so the panels that are read
+  as a quiet heading, `RunCharts.svelte`; Model quality's panels are
+  `ModelQuality.svelte`, which takes the run and reads the rest from it, so the
+  Calibration page can show it next, issue #586), so the panels that are read
   together sit together:
   1. **Summary**. The run header carries the evidence line and a one-line
      preview of the run's notes (`notesPreview`), each a link to the Record
@@ -8288,7 +8290,7 @@ read it before.
      (compared together on every calibration iteration; a run scored at a
      gauge inside the network, engine ≥ 1.41.0, adds under the outlet's
      hydrograph "Flow at &lt;gauge&gt;, the calibration site": that gauge's
-     record against the simulated flow there, `runs/RunCharts.svelte` from
+     record against the simulated flow there, `runs/ModelQuality.svelte` from
      the node's `observed_flow` and `outflow` series; and under the
      flow-duration curve, **Flow at gauges in the network (checks only)**,
      below), calibration (its
@@ -8297,6 +8299,9 @@ read it before.
      check**, below), the **water balance** by water year
      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
      hydrologist hands a client first, its own section since issue #137;
+     not Model quality's own, so Runs & results passes it into
+     `ModelQuality`'s `afterCalibration` snippet and keeps it when Model
+     quality moves to Calibration, issue #586;
      described under [Self-checks](#self-checks); a line under its equation
      links to the EWR page's **Water account** for the same run, the
      catchment's own; it fits its column at 1440 and 1280 rather than scrolling
@@ -8315,8 +8320,9 @@ read it before.
      check at &lt;gauge&gt;: observed, simulated, natural and upstream demand"
      (", with bed losses" after it when it has them),
      four lines on one axis in the page's flow unit (Runs & results' one
-     m³/s / m³/day switch, shared with the hydrograph through `RunCharts`'s
-     `modelTail` snippet; demand converted the same), a log switch and the last 3 years with the
+     m³/s / m³/day switch, shared with the hydrograph inside
+     `ModelQuality`, and with Dig deeper's explorer through its bindable
+     `flowUnit`, `runs/FlowUnitSwitch.svelte`; demand converted the same), a log switch and the last 3 years with the
      whole record a click away, none hidden at first. *Natural* is the outlet's
      `natural_flow`, or inside the network the sum of the contributing units'
      `runoff` plus `landcover_reduction` (their natural runoff before land
@@ -8401,7 +8407,8 @@ read it before.
   Everything after the flow-duration curve (the rest of Model quality,
   Record, Dig deeper) renders once the hydrograph has drawn and been painted,
   so the first chart isn't held behind a second of rendering on a busy
-  machine (`runs/RunCharts.svelte`); a link to a panel down there
+  machine (`runs/ModelQuality.svelte`, whose bindable `settled` lets
+  `RunCharts.svelte` render Record and Dig deeper at the same moment); a link to a panel down there
   (`#res-notes`, `#res-calibration`) renders them at once, and the page waits
   for the panel and then its heading (lazy panels too: Forecast, Rain for each
   unit, WR2012; `landOnAnchor`) before landing and focusing it. A link to a

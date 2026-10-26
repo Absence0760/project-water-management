@@ -98,7 +98,7 @@
 	let project = $state.raw<Project | null>(null);
 	let run = $state.raw<Run | null>(null);
 	let series = $state.raw<SeriesMeta[]>([]);
-	// $state.raw: daily arrays, replaced and never mutated (as in RunCharts).
+	// $state.raw: daily arrays, replaced and never mutated (as in ModelQuality).
 	let flows = $state.raw<CatchmentFlows>({});
 	/** Gauge or logger behind each observed series (issue #45). */
 	let sources = $state.raw<ObservedSources>({});

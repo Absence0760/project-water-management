@@ -1,7 +1,7 @@
 // The Runs hydrograph's shading of the periods left out of calibration
 // (settings.calibrationExclusions, docs/model.md §2.10; ui.md § Runs). Pure,
 // so it is unit-tested; RunsTab.svelte picks the run's own exclusions and
-// RunCharts.svelte shades them.
+// ModelQuality.svelte shades them.
 import { exclusionError, exclusionLabel, exclusionRange, waterYearLabel, type CalibrationExclusion, type ExclusionRange } from '@water-management/engine';
 
 /** One excluded period, as the chart shades it and its key lists it. */

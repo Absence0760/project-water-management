@@ -78,7 +78,7 @@
 	});
 
 	const idOf = (k: SeriesKey) => `${k.nodeId ?? ''}|${k.key}`;
-	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte). Replace, never mutate.
+	// $state.raw: long daily arrays must not become deep proxies (ModelQuality.svelte). Replace, never mutate.
 	let loaded = $state.raw<{ runId: string; series: ReadonlyMap<string, Stored> }>({ runId: '', series: new Map() });
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);

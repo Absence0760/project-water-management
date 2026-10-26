@@ -7,34 +7,23 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { resolveQualityFlags, toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '#lib/series/provenance.js';
+	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { rebuildingNote } from '#lib/series/provenance.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
-	import CalibrationCheck from '#lib/components/calibration/CalibrationCheck.svelte';
-	import type { CheckNode } from '#lib/components/calibration/calibrationCheck.js';
-	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
-	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
-	import EwrAgreementTable from '#lib/components/ewr/EwrAgreementTable.svelte';
-	import AgreementTable from '#lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
 	import { downloads, runDownloadItems, type FarmTableItem } from '#lib/export/index.js';
 	import { fmtDay, fmtNum, fmtStamp, fmtWhen } from '#lib/format/number.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { dataEnd, newDataSinceRun } from '#lib/components/series/freshness.js';
-	import { runForcingOfSummary } from '@water-management/engine';
 	import { detailCache, forgetRun, prefetchSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
-	import { checksOnlyGauges, recordHref } from './checkGauges';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
-	import RunoffPanel from './RunoffPanel.svelte';
-	import { unitRainOf } from './unitRain';
 	import Lazy from '#lib/components/common/Lazy.svelte';
-	import { stationsOf } from './stationRain';
 	import RunNotes from './RunNotes.svelte';
 	import ValidationPanel from '#lib/components/liability/ValidationPanel.svelte';
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
@@ -56,20 +45,14 @@
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
 	// with the other unit panels (issue #17).
-	// The plausibility checks (engine ≥ 0.25.0) render for every run that has them, which is every
-	// run since, so they are in this chunk too (tab chunks have their own ceiling,
-	// scripts/guards/check_web_bundle_budget.mjs).
-	import PlausibilityPanel from './PlausibilityPanel.svelte';
+	// Model quality (ModelQuality.svelte, through RunCharts) is in this chunk too, the plausibility checks with it
+	// (tab chunks have their own ceiling, scripts/guards/check_web_bundle_budget.mjs).
 	import EvidencePanel from './EvidencePanel.svelte';
 	import ReproducePanel from './ReproducePanel.svelte';
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '#lib/components/history/RunInputsPanel.svelte';
-	import { runExclusions } from './exclusionShading';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
-	// The WR2012 report: its own chunk, only a run that has one loads it.
-	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
-	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
-	const loadUnitRainPanel = () => import('./UnitRainPanel.svelte');
+	// The WR2012 report and Rain for each unit are chunks of their own, loaded by ModelQuality.svelte.
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -722,9 +705,8 @@
 			</div>
 		{:else if detail}
 			{@const summary = detail.run.summary}
-			<!-- The run's own settings: older cached details lack them, so fall back to the project's. -->
+			<!-- The run's own settings: older cached details lack them (ModelQuality falls back to the project's for its calibration window). -->
 			{@const shownSettings = detail.run.settings}
-			{@const runSettings = shownSettings ?? project.settings}
 			{@const runSeries = detail.series}
 			{@const shownRunId = detail.run.id}
 			{@const shownRun = detail.run}
@@ -815,84 +797,12 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<RunCharts
-				{projectId}
-				runId={detail.run.id}
-				refs={detail.series}
-				{nodeNames}
-				{nodeOrder}
-				forecastFrom={summary.forecast?.from ?? null}
-				exclusions={runExclusions(shownSettings, summary.calibration?.exclusions)}
-				flagUse={shownSettings ? resolveQualityFlags(shownSettings.qualityFlags) : null}
-				checkGauges={checksOnlyGauges(summary.plausibility?.gauges, detail.series, summary.calibration?.siteNodeId, nodeOrder)}
-				recordHref={(g) => recordHref(series, g.nodeId, g.flowKind)}
-			>
-				{#snippet modelTail(flow)}
-					<div class="panel" id="res-calibration">
-						<CalibrationPanel
-							calibration={summary.calibration}
-							requestedStart={runSettings.calibrationStart ?? null}
-							requestedEnd={runSettings.calibrationEnd ?? null}
-						/>
-						<!-- Flow against use at each gauge with a record (issue #444): where a calibration gap is read. -->
-						<CalibrationCheck
-							{projectId}
-							runId={shownRunId}
-							refs={runSeries}
-							nodes={(shownRun.model?.nodes ?? []) as unknown as CheckNode[]}
-							{nodeNames}
-							forecastFrom={summary.forecast?.from ?? null}
-							flowUnit={flow.flowUnit}
-							toolbar={flow.toolbar}
-						/>
-						{#if shownSettings}
-							<div class="provenance">
-								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} apanDaily={apanDailyOfInput(shownRun.inputSeries)} chirpsFactors={runChirpsFactors(shownRun.summary)} runForcing={runForcingOfSummary(shownRun.summary)} observedOrigin={originOfFit(shownRun.inputSeries, shownSettings.fitRecord)} />
-							</div>
-						{/if}
-						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
-							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
-						{/if}
-					</div>
+			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder} {runs} {series} projectSettings={project.settings}>
+				{#snippet waterBalance()}
 					<!-- The water balance per water year (issue #137): the table a hydrologist hands a client first. -->
 					<div class="panel" id="res-water-balance">
 						<WaterBalanceTable {summary} accountHref={riverHref(shownRunId, 'res-water-account')} />
 					</div>
-					{#if summary.runoff}
-						<div class="panel" id="res-runoff">
-							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} forecastFrom={summary.forecast?.from ?? null} />
-						</div>
-					{/if}
-					{#if unitRainOf(summary) || stationsOf(summary)}
-						<div class="panel" id="res-unit-rain">
-							<Lazy load={loadUnitRainPanel}>
-								{#snippet children(UnitRainPanel)}
-									<UnitRainPanel result={unitRainOf(summary)} stations={stationsOf(summary)} order={summary.farms.map((f) => f.nodeId)} />
-								{/snippet}
-							</Lazy>
-						</div>
-					{/if}
-					{#if summary.wr2012}
-						<div class="panel" id="res-wr2012">
-							<Lazy load={loadWr2012Panel}>
-								{#snippet children(Wr2012Panel)}
-									<Wr2012Panel report={summary.wr2012!} />
-								{/snippet}
-							</Lazy>
-						</div>
-					{/if}
-					<div class="panel" id="res-ewr-agreement">
-						<EwrAgreementTable {summary} />
-						<!-- The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0). -->
-						{#each summary.catchment?.ewrAgreementSites ?? [] as site (site.nodeId)}
-							<EwrAgreementTable {summary} {site} title="EWR test at {site.name}: model against its observed flow" />
-						{/each}
-					</div>
-					{#if summary.plausibility}
-						<div class="panel" id="res-plausibility">
-							<PlausibilityPanel checks={summary.plausibility} {projectId} runId={shownRunId} runoffModel={shownRun.runoffModel} {runs} />
-						</div>
-					{/if}
 				{/snippet}
 				{#snippet record()}
 					<!-- The Record group (issue #521): Run notes, Evidence and Reproduction are panels of their own, each with its action where it is seen. -->
@@ -1028,11 +938,6 @@
 	.evidence-line {
 		display: block;
 		margin: 0.15rem 0;
-	}
-	.provenance {
-		margin-top: 1rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
 	}
 	/* In the section header's actions: label, field and buttons on one row, wrapping on a phone. */
 	.run-form {
@@ -1372,11 +1277,6 @@
 	.placeholder {
 		text-align: center;
 		padding: 3rem 1rem;
-	}
-	.agree {
-		margin-top: 1rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
 	}
 	.linkish {
 		all: unset;
