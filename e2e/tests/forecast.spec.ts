@@ -55,7 +55,7 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	const hydro = page.locator('#res-hydrograph figure');
 	await expect(hydro).toHaveAttribute('data-ready', 'true');
 	await expect(hydro).toHaveAttribute('data-band-from', FROM);
-	await expect(hydro.getByText(`(hatched, from ${FROM})`)).toBeVisible();
+	await expect(hydro.getByText('(hatched, from 29 Jan 2022)')).toBeVisible();
 	await expect(hydro.locator('.band-key strong')).toHaveText('Forecast');
 	await expectNoViolations(page, { include: '#res-hydrograph' });
 	// EWR vs outflow, on EWR now, shades the forecast days too.

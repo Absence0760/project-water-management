@@ -83,7 +83,7 @@ async function expectReportLists(notes: Locator, unmapped: Locator) {
 async function expectImportRecord(page: Page, importedBy: string) {
 	const record = page.getByRole('region', { name: 'Import record' });
 	await expect(record.getByRole('paragraph').first()).toHaveText(
-		new RegExp(`^Imported from the Water Balance Tool workbook synthetic_b023\\.xlsx on \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} by ${importedBy}\\.$`)
+		new RegExp(`^Imported from the Water Balance Tool workbook synthetic_b023\\.xlsx on \\d{1,2} [A-Z][a-z]{2} \\d{4} \\d{2}:\\d{2} by ${importedBy}\\.$`)
 	);
 	const notes = record.getByRole('region', { name: 'Importer notes' });
 	const unmapped = record.getByRole('region', { name: /^Unmapped report/ });

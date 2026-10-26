@@ -540,6 +540,6 @@ test('share links before anything is published link to where a run is published,
 	const note = page.getByTestId('share-unpublished');
 	await expect(note).toHaveText('Nothing is published yet: a link opens only once a run is published, from its Publication on Runs & results.');
 	await note.getByRole('link', { name: 'Publication on Runs & results' }).click();
-	await expect(page).toHaveURL(/\?tab=runs#res-publication$/);
+	await expect(page).toHaveURL(/\?tab=runs&run=[0-9a-f-]+#res-publication$/);
 	await expect(page.getByRole('heading', { name: 'Publication', exact: true })).toBeFocused();
 });

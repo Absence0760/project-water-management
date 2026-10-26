@@ -459,7 +459,7 @@ test('the series table, the CSV period and Edit a day read day first, and fit a 
 	await expect(row.getByRole('cell').first()).toContainText('10 Oct 2021');
 	await expect(row.getByRole('cell').nth(1)).toHaveText('1 Oct 2021');
 	await row.getByRole('button', { name: /^CSV/ }).click();
-	await expect(page.getByText('1 Oct 2021 → 10 Oct 2021')).toBeVisible();
+	await expect(page.getByText('1 Oct 2021 → 10 Oct 2021', { exact: true })).toBeVisible();
 	await page.keyboard.press('Escape');
 	await row.getByRole('button', { name: 'View', exact: true }).click();
 	await chartReady(page);
