@@ -92,8 +92,8 @@ as before. With no rain value at all the span is kept. Whenever a default end
 leaves out days on which the observed, logger or reference flow or the daily
 A-pan series has values (trimmed blanks, or a series that starts before the
 rain), the run says so: *the run covers the rain record, … to …, and leaves
-out … days of observed flow before it (no rain there): set Settings →
-simulation start to include them*. The b023 importers
+out … days of observed flow before it (no rain there): set the simulation start (Model settings →
+Simulation period) to include them*. The b023 importers
 also set `simulationStart` / `End` from the workbook's `[Home]` window when it
 cuts the flow record short.
 
@@ -1109,8 +1109,8 @@ factors come from:
 **The double-mass breaks only propose ranges.** There is no automatic mode.
 `proposeChirpsFitRanges` (`doublemass.ts`) turns the reported segments into
 one range each (from a segment's first judged year to the year before the
-next one's), with a reason that says it is a proposal, and Settings →
-*Propose from the double-mass breaks* fills the list with them. Nothing
+next one's), with a reason that says it is a proposal, and Model settings →
+Rain gaps → *Propose from the double-mass breaks* fills the list with them. Nothing
 changes until the hydrologist saves. A detected break can land a year or two
 from the real network change (the 5-year minimum segment and dry years move
 it), and a break that is partly **CHIRPS's** (a product change, or v2
@@ -2106,7 +2106,7 @@ tail and with it. Its output is
 The daily series run on into the tail, so anything that ranks or fits over
 a saved run's whole record must cut them first, or the forecast days leak
 back in:
-- the flow-duration curve and its Q10–Q95 table (the Runs tab, the summary
+- the flow-duration curve and its Q10–Q95 table (the Calibration page, the summary
   CSV, the `.xlsx` workbook, the report): `fdcPercentileTable(flows, { startDate,
   forecastFrom })` cuts every record at `forecastFrom` and reports the days it
   left out (`forecastDays`); a chart drawing the curves cuts its series with
@@ -4384,7 +4384,7 @@ Values are the modeller's. Twelve equal values give exactly the
 single-factor run.
 
 *Presets* (engine ≥ 1.49.0, `LAKE_FACTOR_PRESETS`,
-`packages/engine/src/evaporation/lakeFactorPresets.ts`). Settings →
+`packages/engine/src/evaporation/lakeFactorPresets.ts`). Model settings →
 Demand → **Dam evaporation preset** writes the 12 factors and a source note
 (`settings.lakeEvapFactorSource`, free text up to 600 characters, both
 still editable). Nothing is filled unless the user picks one, so no default
@@ -7519,8 +7519,8 @@ window the whole overlap is scored; with no flow kind the engine uses the gauge
 series if present, else the logger. From engine 0.5.1 that default is never
 silent: when a project has **both** a gauge and a logger series and no flow
 kind is set, the run (and an automatic fit) adds a warning that the gauge was
-picked by default and that the record should be chosen in Settings →
-calibration flow series (`pickObservedKind`, `DEFAULT_GAUGE_PICK_WARNING` in
+picked by default and that the record should be chosen in Calibration →
+Calibration record (engine ≥ 1.98.0; Settings → calibration flow series before) (`pickObservedKind`, `DEFAULT_GAUGE_PICK_WARNING` in
 `run.ts`; issue #1). A project with only one of the two, or with the kind set,
 gets no such warning. The setting only picks which record the statistics are
 scored against; results change only when the parameters are re-tuned. Where
@@ -8271,7 +8271,7 @@ in both records: present, finite and not negative.
 
 The three thresholds are a project setting, `settings.dataQuality`
 (`agreementMinRatio` 2/3, `agreementMaxRatio` 1.5, `agreementMinDays` 90 by
-default; Settings tab → *Data quality*), beside the other checks' limits
+default; Model settings → *Data quality*), beside the other checks' limits
 (*Data-quality limits as settings* below). They change only which years are
 flagged, never a model result. An invalid stored value (min ratio outside
 0 < r ≤ 1, max ratio below 1, days not a whole number in 1–366) falls back to
@@ -8546,8 +8546,8 @@ Not in the workbook. Six checks (four before engine 1.19.0, five before 1.55.0) 
 ([followups.md](./followups.md), *Issue #4 Phase 6: simulated review
 findings*), run on every run by `packages/engine/src/plausibility/`. They
 **only report and warn**: no check changes a model result. The run keeps them
-in `RunSummary.plausibility`; the Runs & results tab has a *Plausibility
-checks* panel ([ui.md](./ui.md)) and the summary CSV a *Plausibility checks*
+in `RunSummary.plausibility`; the Calibration page has a *Plausibility
+checks* panel for the run it shows ([ui.md](./ui.md)) and the summary CSV a *Plausibility checks*
 block ([api.md](./api.md#export)). Every threshold below is an engine
 constant, with its reasoning; the values are for the hydrologist to confirm
 ([followups.md](./followups.md), *Hydrologist plausibility checks*).
@@ -9400,7 +9400,7 @@ censored, which is wrong here: a wrong high reading doesn't say the flow was
 at least that much. `settings.qualityFlags.lowFlowPeriods` lists periods,
 each `{ kind, start, end, maxM3s, reason, source }`: the record
 (`flow_observed_m3s` or `flow_logger_m3s`), the inclusive dates, the
-threshold in m³/s (> 0) and a required reason and source (Settings →
+threshold in m³/s (> 0) and a required reason and source (Calibration →
 *Calibration record* → *Low flows only*). Inside a period, a reading of
 that record above the threshold is flagged `periodHigh`; a reading at or
 below it is classed as usual. Where periods of one record overlap, the
@@ -12107,7 +12107,7 @@ residual (the dam terms from engine 0.16.0, §2.7a; seepage is inside the
 outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
 so both are shown. The residual is float noise; anything else is a bug.
 
-The results page shows both (Self-checks panel, [ui.md](./ui.md#self-checks)),
+Runs & results shows both (Arithmetic checks under The model's working, [ui.md](./ui.md#self-checks)),
 and the summary CSV has them as blocks.
 
 They run on:

@@ -237,8 +237,8 @@ For a run, per farm or water user, per water source and per **water year**
   volume, marked **part**, and isn't counted in the summary. A forecast
   run (WP-2.12) is compared on its record only, the days before its
   forecast (issue #51), so its last water year may end as a part year.
-- **Status**, with the project's band, ±10 % unless set (Settings ›
-  Registered volumes, `settings.allocationTolerance`, pending the
+- **Status**, with the project's band, ±10 % unless set (Allocations ›
+  Comparison band, moved from Settings in issue #521, `settings.allocationTolerance`, pending the
   hydrologist; `?tolerance=` on the API overrides it for one request):
   *above registered* (modelled > registered × 1.1),
   *within band*, *below registered* (< × 0.9), *no registered volume*
@@ -266,7 +266,7 @@ diversion capacities, boreholes. Registered and licensed volumes, their
 months of use and maximum rates are used only in separate outputs: this
 comparison (modelled use against the licensed volume) and the storage
 comparison (dam capacity against the licensed dam volume). So a project's
-own settings are always **Compare only**: Settings › Registered volumes shows
+own settings are always **Compare only**: the comparison shows
 the mode without a choice, `PATCH /projects/:id` refuses another one (400,
 [api.md](./api.md)), and a project file, a copy or a restore of an older
 revision or run comes in comparing only, with a note in the History
