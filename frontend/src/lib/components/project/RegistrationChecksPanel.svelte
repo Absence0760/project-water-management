@@ -17,6 +17,7 @@
 	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '#lib/api/index.js';
 	import { REGISTRATION_BODIES, registrationBody as bodyInfo, registrationCategoriesOf, type RegistrationBodyCode } from '@water-management/engine';
 	import { fmtDate, localIsoDate, pastDayMoment } from '#lib/format/number.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	let { projectId, isOwner, actsForAuthority = false }: { projectId: string; isOwner: boolean; actsForAuthority?: boolean } = $props();
 
@@ -136,11 +137,20 @@
 		<div class="alert alert-error" role="alert">
 			{error}
 			<!-- The list never loaded: a way to ask again, not only a reload. -->
-			{#if checks === null}<button type="button" class="btn btn-sm" onclick={load}>Try again</button>{/if}
+			{#if checks === null}<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						// The loading line takes its place: the focus follows (followRetry).
+						followRetry(e.currentTarget);
+						load();
+					}}>Try again</button
+				>{/if}
 		</div>
 	{/if}
 	{#if checks === null && !error}
-		<p class="muted" role="status">Loading…</p>
+		<p class="muted" role="status" data-loading>Loading…</p>
 	{:else if checks?.length}
 		<div class="table-wrap">
 			<table class="data">

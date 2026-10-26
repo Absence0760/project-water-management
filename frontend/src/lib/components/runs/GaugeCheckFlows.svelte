@@ -15,6 +15,7 @@
 	import { api } from '#lib/api/index.js';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import { foldList } from '#lib/components/common/fold.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { cachedSeries } from './cache';
 	import { checkFdc, checkHydrograph, gaugeStatsLine, type CheckGauge } from './checkGauges';
@@ -107,11 +108,20 @@
 		<div class="gauge" data-testid="check-gauge" data-node={g.nodeId}>
 			<h4>{g.name}</h4>
 			{#if !f}
-				<div class="chart-ph" style:height="390px" role="status">Loading flows at {g.name}…</div>
+				<div class="chart-ph" style:height="390px" role="status" data-loading>Loading flows at {g.name}…</div>
 			{:else if 'error' in f}
 				<div class="alert alert-error" role="alert">
 					Couldn’t load the flows at {g.name}: {f.error}
-					<button type="button" class="btn btn-sm" onclick={() => retry(g.nodeId)}>Try again</button>
+					<!-- The loading line takes its place: the focus follows (followRetry), within this gauge. -->
+					<button
+						type="button"
+						class="btn btn-sm"
+						data-retry
+						onclick={(e) => {
+							followRetry(e.currentTarget);
+							retry(g.nodeId);
+						}}>Try again</button
+					>
 				</div>
 			{:else}
 				{@const fdc = checkFdc(f.observed, f.simulated, g.flowKind, conv, forecastFrom)}

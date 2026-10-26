@@ -11,6 +11,7 @@
 	// from a report that may be issued (a new version of the application's
 	// issued pack, when there is one).
 	import { untrack } from 'svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { basePath } from '#lib/nav/base.js';
@@ -147,7 +148,17 @@
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The evidence report could not be loaded: {error}
-			<button type="button" class="btn btn-sm" onclick={() => load(projectId, runId)}>Try again</button>
+			<!-- The preparing line takes its place: the focus follows, then lands on the report's heading (followRetry). -->
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					const main = e.currentTarget.closest('main');
+					followRetry(e.currentTarget, { landing: () => main?.querySelector<HTMLElement>('h1') });
+					load(projectId, runId);
+				}}>Try again</button
+			>
 		</div>
 	{:else if status === 'chunk-failed'}
 		<ChunkFailed what="The evidence report" />
@@ -159,7 +170,7 @@
 			<button type="button" class="btn btn-primary" disabled={!ready || !!report?.refused} onclick={() => window.print()}>Download draft PDF</button>
 			<a class="btn" href={resolve(`projects/${projectId}/report?run=${runId}`)}>Catchment report</a>
 			<HelpTip key="evidence-report" label="About the evidence report" />
-			<p class="muted small" role="status">
+			<p class="muted small" role="status" data-loading={!ready || undefined}>
 				{#if !ready}Preparing the evidence report…{:else}A draft: every page says “{DRAFT_STAMP}”. To issue it, with a hash, a short code and a public verify link, make it an evidence pack (below the checks).{/if}
 			</p>
 		</div>

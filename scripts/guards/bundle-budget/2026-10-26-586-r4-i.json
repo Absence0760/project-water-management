@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "followRetry in common/loadState.ts and the Try again handlers, loading lines and data-retry/data-loading marks across 30 panels (issue #586 R4-I, WCAG 2.4.3); measured 2091 KB against 2089 KB"
+}

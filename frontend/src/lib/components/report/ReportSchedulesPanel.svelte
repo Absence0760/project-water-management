@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { onMount, tick } from 'svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { api, type Member } from '#lib/api/index.js';
@@ -153,10 +154,19 @@
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
 			Couldn’t load the report schedules: {loadError}
-			<button type="button" class="btn btn-sm" onclick={reload}>Try again</button>
+			<!-- The loading line takes its place: the focus follows (followRetry). -->
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					followRetry(e.currentTarget);
+					reload();
+				}}>Try again</button
+			>
 		</div>
 	{:else if !schedules}
-		<p class="muted" role="status">Loading…</p>
+		<p class="muted" role="status" data-loading>Loading…</p>
 	{:else}
 		<!-- Always in the page, so screen readers announce each new message. -->
 		<div role="status">{#if message}<p class="muted msg">{message}</p>{/if}</div>

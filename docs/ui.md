@@ -13095,6 +13095,22 @@ data button or Run button.
   name, such as "Curve" or "Flow record"; `lib/a11y/tableHeaders.test.ts`
   refuses an empty `<th>` in any component) and `landmark-unique` (a tab's
   top panel is not a second region with the tab's own name).
+- **Try again keeps the focus.** Pressing a panel's Try again takes the
+  error (and the button) out of the page; the focus goes to the loading line
+  while it loads, to the new Try again if it fails again, and to the panel's
+  heading once it has loaded (the farm pages, the evidence report: the
+  page's `<h1>`; a Map layer: its checkbox; Preview all data: its search),
+  never to the top of the page (WCAG 2.4.3; `common/LoadState.svelte`, and
+  `common/loadState.ts` `followRetry` for a panel's own Try again;
+  `586-a11y-load-state.spec.ts`, `586-a11y-retry-focus.spec.ts`). A retry
+  with nothing on screen while it loads now shows a line saying so: the
+  Data tab's *Refreshing the series…*, the Project page's *Loading the import
+  record…* and *Loading pending invitations…*, and a map proposal panel's
+  *Loading the …*.
+- **A fold's action word is in its name.** A fold's summary
+  (`common/Fold.svelte`) is named with its visible **Change…** / **Hide** /
+  **Show** at the end ("Default limits: … Change the limits"), so a
+  voice-control user can say it (WCAG 2.5.3; `586-a11y-fold-name.spec.ts`).
 - **Sideways-scrolling boxes** (every `.table-wrap`, and anything marked
   `data-scroll-region`, such as the schematic) become a focusable, named
   group while their content overflows, so Tab reaches them and the arrow keys

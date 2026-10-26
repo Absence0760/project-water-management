@@ -60,6 +60,7 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { prefetch } from '#lib/components/common/lazy.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { downloads } from '#lib/export/index.js';
@@ -147,6 +148,8 @@
 	let loadError = $state<string | null>(null);
 	// A refresh that failed while a list was already drawn: a slim note with Try again; the table stays.
 	let refreshError = $state<string | null>(null);
+	/** Its Try again's refresh, in flight: a slim line in its place, which the focus follows (followRetry). */
+	let refreshing = $state(false);
 	let actionError = $state<string | null>(null);
 
 	// Full values per series (for coverage and the chart). Input series are few
@@ -272,6 +275,7 @@
 			else loadError = msg(e);
 		} finally {
 			loading = false;
+			refreshing = false;
 		}
 	}
 	onMount(() => {
@@ -943,7 +947,7 @@
 
 <!-- The notices: one slim line each under the section header, as the page's own. "New data since the latest run"
      is the page's notice (newDataSinceRun, with Re-run model or the queued automatic re-run), here as on every tab. -->
-{#if actionError || refreshError || goneSeries || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
+{#if actionError || refreshError || refreshing || goneSeries || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
 	<div class="notes">
 		{#if actionError}<p class="note err" role="alert">{actionError}</p>{/if}
 		{#if goneSeries}
@@ -951,10 +955,23 @@
 				The series that link named is no longer stored{viewing ? `: showing ${viewing.name || kindLabel(viewing.kind)} instead` : ''}.
 			</p>
 		{/if}
+		{#if refreshing}
+			<p class="note note-info" role="status" data-loading>Refreshing the series…</p>
+		{/if}
 		{#if refreshError}
 			<p class="note err" role="alert" data-testid="refresh-error">
 				Couldn't refresh the series ({refreshError}); showing the list as last loaded.
-				<button type="button" class="btn btn-sm" onclick={load}>Try again</button>
+				<!-- The notices may all go with it: the focus lands on the series list it refreshed (followRetry). -->
+				<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget, { scope: e.currentTarget.closest('.notes')?.parentElement, landing: document.getElementById('data-series') });
+						refreshing = true;
+						load();
+					}}>Try again</button
+				>
 			</p>
 		{/if}
 		{#if rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
