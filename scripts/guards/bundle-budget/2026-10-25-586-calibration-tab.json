@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #586 Round 2 A: the Calibration tab shell, a lazy tab chunk of its own (calibration/CalibrationTab.svelte + page.ts, 2.2 KB gzipped), its sidebar row and the calibration-page help guide. Measured 2079 KB against 2076 KB on feat/586-r2-a off test/586-round0-pins @ ff35082e5 (+3 KB). Headroom 0 KB."
+}
