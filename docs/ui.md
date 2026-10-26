@@ -3012,8 +3012,10 @@ itself.
     three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
     viewer), the node picker (‹ select ›, labelled "Hydrological unit to edit") and under it
     the form's section menu (the pages' `common/SectionNav` as a bar,
-    "Sections of the form": Catchment area, Flow share, Dam, …, Bed losses,
-    short names on the bar and each legend in More; one press opens that
+    "Sections of the form": Catchment area, Flow share, Dam, …, Bed losses in
+    the reach below, each by its legend word for word, on the bar and in More
+    alike (a unit with a dam's thirteen fit the bar's two rows at 1280 px;
+    issue #586 R4-N; on a phone the strip scrolls sideways); one press opens that
     section's card and folds the other sections, scrolls the form to it and
     focuses its heading, with no fragment in the URL, and the section being
     read is marked; issue #462, [§ On this page
@@ -5393,9 +5395,10 @@ its panel's heading (`label`), so the menu and the page read alike ("EWR by
 month" against *EWR compliance by month* was one of the navigation review's
 findings, issue #462), on the bar too: every page names every heading word
 for word (issue #586, D4; EWR, Hydrological units and Compare runs dropped
-their shorter bar names in R4-F, and still fit two rows at 1280 px, one on
-Hydrological units). A section's `bar` name, the heading's first words, is
-legacy and no page uses it. With
+their shorter bar names in R4-F, Data in R4-M and the node sheet in R4-N, and
+still fit two rows at 1280 px, one on Hydrological units). There is no
+shorter bar name: a section has only its `label`, the `bar` field went in
+R4-N. With
 `groupNames` the bar shows the names too: a small muted label before each
 group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
