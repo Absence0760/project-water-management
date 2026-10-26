@@ -15,10 +15,11 @@ describe('warningGroups', () => {
 			'a warning the engine adds next year'
 		]);
 		expect(g.data).toHaveLength(5);
+		// Each item starts with a capital, whatever the engine's text (#586 round 2).
 		expect(g.check).toEqual([
-			'farm flow shares sum to 80.00%, not 100% (tolerance ±0.02%): natural flow and EWR are not fully allocated to farms',
+			'Farm flow shares sum to 80.00%, not 100% (tolerance ±0.02%): natural flow and EWR are not fully allocated to farms',
 			'Simulated natural flow is 30 % above the WR2012 naturalised MAR for X99Z … Query it',
-			'a warning the engine adds next year'
+			'A warning the engine adds next year'
 		]);
 		expect(warningGroups(undefined)).toEqual({ check: [], data: [] });
 	});

@@ -1778,6 +1778,14 @@ Interaction details that bit:
   a radio moved the choice and then threw the keyboard's focus to the page.
   Keep the controls live, mark the card `aria-busy`, and send one item's
   saves in order, taking the server's answer once the last is back.
+  A button is the same: `disabled={saving}` on the focused Check
+  reproduction, Trace or Publish threw the focus to the page mid-action,
+  and Save notes, disabled once nothing was left to save, did it the moment
+  a save succeeded. Mark it `aria-disabled` instead (still focusable,
+  `.btn[aria-disabled='true']` in `app.css` dims it as `:disabled` does) and
+  have its handler ignore the press; keep `disabled` for a reason that holds
+  before the press (an empty required field). Test it with `toBeFocused()`
+  after the action (`runs-record-actions.spec.ts`, issue #586).
 - **A joined switch of radios: cover the border box.** A radio laid over
   its segment with `inset: 0` sits inside the border, so a 32 px segment
   gave a 30 px target; use `inset: -1px` and `calc(100% + 2px)`. And

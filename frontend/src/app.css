@@ -296,7 +296,7 @@ p a:not(.btn),
 	cursor: pointer;
 	white-space: nowrap;
 }
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled):not([aria-disabled='true']) {
 	background: var(--surface-2);
 }
 .btn:disabled {
@@ -316,7 +316,20 @@ p a:not(.btn),
 	color: var(--text-muted);
 	opacity: 1;
 }
-.btn-primary:hover:not(:disabled) {
+/* A button that stays focusable while it can't act (its own save is out, nothing to save): marked with
+   aria-disabled rather than disabled, which would throw the keyboard's focus to the page (ui-playbook § 4,
+   "Don't disable a control while its own change saves"). Its handler ignores the press. */
+.btn[aria-disabled='true'] {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+.btn-primary[aria-disabled='true'] {
+	background: var(--surface-2);
+	border-color: var(--border-strong);
+	color: var(--text-muted);
+	opacity: 1;
+}
+.btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
 	background: var(--accent-hover);
 	border-color: var(--accent-hover);
 }

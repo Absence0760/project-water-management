@@ -9,13 +9,13 @@ describe('differenceText', () => {
 	it('names the value and how it differs', () => {
 		expect(differenceText({ kind: 'summary', path: 'farms[0].deficitDays' }, names)).toBe('Summary value farms[0].deficitDays');
 		expect(differenceText({ kind: 'series', key: 'dam_storage', nodeId: 'n1', label: 'Dam storage', days: 3, firstDate: '2020-02-01', maxAbsDiff: 12.5 }, names)).toBe(
-			'Upper farm: Dam storage differs on 3 days from 2020-02-01, by up to 12.50'
+			'Upper farm: Dam storage differs on 3 days from 1 Feb 2020, by up to 12.50'
 		);
 		expect(differenceText({ kind: 'series', key: 'q', nodeId: null, label: 'Outflow', days: 1, firstDate: '2020-02-01', maxAbsDiff: 2e-9 }, names)).toBe(
-			'Catchment: Outflow differs on 1 day from 2020-02-01, by up to 2.00e-9'
+			'Catchment: Outflow differs on 1 day from 1 Feb 2020, by less than 0.0001'
 		);
 		expect(differenceText({ kind: 'series', key: 'q', nodeId: 'gone', label: 'Outflow', days: 2, firstDate: '2020-02-01', maxAbsDiff: null }, names)).toBe(
-			'a node: Outflow differs on 2 days from 2020-02-01'
+			'a node: Outflow differs on 2 days from 1 Feb 2020'
 		);
 		expect(differenceText({ kind: 'series_missing', key: 'q', nodeId: null, label: 'Q' }, names)).toBe('Catchment: Q is stored with the run but not produced now');
 		expect(differenceText({ kind: 'series_extra', key: 'q', nodeId: 'n1', label: 'Q' }, names)).toBe("Upper farm: Q is produced now but wasn't stored with the run");

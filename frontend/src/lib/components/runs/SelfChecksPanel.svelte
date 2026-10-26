@@ -43,6 +43,11 @@
 
 	const uid = $props.id();
 	const v = $derived(summary.verification);
+	// Every check passed: the headline says so, and the list (13 long lines, a phone's screen and more) waits behind
+	// one button, as the things to check fold (#586 round 2). A failed check shows them all. The printable report
+	// (no trace) lists them all.
+	const foldable = $derived(showTrace && !!v && v.checks.length > 0 && v.checks.every((c) => c.passed));
+	let checksOpen = $state(false);
 	const headline = $derived(checksHeadline(v));
 	const closure = $derived(balanceClosure(summary.waterBalance));
 
@@ -88,6 +93,7 @@
 
 	async function trace(e: SubmitEvent) {
 		e.preventDefault();
+		if (tracing) return;
 		const picked = readDay();
 		if (!picked) {
 			dayInput?.focus();
@@ -122,7 +128,12 @@
 		{headline.text}
 	</p>
 	{#if v}
-		<ul class="checks">
+		{#if foldable}
+			<button type="button" class="checks-toggle" aria-expanded={checksOpen} aria-controls="{uid}-list" onclick={() => (checksOpen = !checksOpen)}
+				>{checksOpen ? 'Hide the checks' : `Show the ${v.checks.length} checks`}</button
+			>
+		{/if}
+		<ul class="checks" id="{uid}-list" hidden={foldable && !checksOpen}>
 			{#each v.checks as c (c.id)}
 				<li class:failed={!c.passed}>
 					<span class="mark" aria-hidden="true">{c.passed ? '✓' : '✗'}</span>
@@ -188,7 +199,8 @@
 				aria-describedby="{uid}-day-msg"
 			/>
 		</label>
-		<button type="submit" class="btn btn-sm" disabled={tracing || !nodeId}>{tracing ? 'Tracing…' : 'Trace'}</button>
+		<!-- aria-disabled while it traces: disabled would throw the keyboard's focus to the page (ui-playbook § 4). -->
+		<button type="submit" class="btn btn-sm" disabled={!nodeId} aria-disabled={tracing}>{tracing ? 'Tracing…' : 'Trace'}</button>
 	</form>
 	<!-- One line under the form: the run's days, or what's wrong with the typed day (a fresh alert, so it is announced). -->
 	{#if dayError}
@@ -197,8 +209,10 @@
 		<p id="{uid}-day-msg" class="day-msg muted small">Run days {fmtDay(startDate)} to {fmtDay(endDate)}, day first.</p>
 	{/if}
 	{#if traceError}<p class="alert alert-error" role="alert">{traceError}</p>{/if}
+	<!-- One short line is announced when a day is traced, not the whole table (a live region round the table read every row). -->
+	<p class="visually-hidden" role="status">{day ? `Traced ${day.name} on ${fmtDay(day.date)}: ${rows.length} columns.` : ''}</p>
 	{#if day}
-		<div class="table-wrap" aria-live="polite">
+		<div class="table-wrap">
 			<table class="data compact trace">
 				<caption>{day.name}{day.kind === 'catchment' ? ` (${day.runoffModel === 'gr4j' ? 'GR4J' : day.runoffModel})` : ''} on {fmtDay(day.date)}</caption>
 				<thead>
@@ -264,8 +278,31 @@
 		padding: 0;
 		margin: 0.5rem 0;
 	}
+	/* A wrapped line starts under the text, not under the mark. */
 	.checks li {
-		padding: 0.2rem 0;
+		padding: 0.2rem 0 0.2rem 1.2rem;
+		text-indent: -1.2rem;
+	}
+	.checks .detail {
+		text-indent: 0;
+	}
+	/* A link-like button (as the things to check's), a 24 px target (WCAG 2.5.8). */
+	.checks-toggle {
+		all: unset;
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+		margin: 0.25rem 0 0.5rem;
+		color: var(--accent);
+		font-size: var(--font-sm);
+		font-weight: 600;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
+	}
+	.checks-toggle:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
 	}
 	.mark {
 		display: inline-block;
@@ -277,8 +314,8 @@
 	.bad .mark {
 		color: var(--danger);
 	}
+	/* Under the check's text (the item's padding), not under its mark. */
 	.detail {
-		margin-left: 1.2rem;
 		font-size: var(--font-sm);
 		color: var(--danger);
 		overflow-wrap: anywhere;

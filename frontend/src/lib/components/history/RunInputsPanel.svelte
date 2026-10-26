@@ -10,7 +10,7 @@
 	import { api, type HistoryRevision, type Relink, type RunMeta } from '#lib/api/index.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import ChangesList from '#lib/components/compare/ChangesList.svelte';
-	import { fmtDate } from '#lib/format/number.js';
+	import { fmtStamp } from '#lib/format/number.js';
 	import { revisionLines, revisionTitle } from './timeline';
 
 	let {
@@ -68,7 +68,9 @@
 		confirmOpen = true;
 		if (changes === null) await load();
 	}
-	const canRestore = $derived(!restoring && changes !== null && changes.some((c) => c.area !== 'series'));
+	/** Something to restore (the button is disabled without it, its reason said above it); restoring marks it aria-disabled instead, so the focus stays on it. */
+	const hasRestore = $derived(changes !== null && changes.some((c) => c.area !== 'series'));
+	const canRestore = $derived(!restoring && hasRestore);
 	async function restore() {
 		if (restoring) return;
 		restoring = true;
@@ -106,7 +108,7 @@
 				<ul class="revs">
 					{#each revisions as r (r.id)}
 						<li>
-							<span class="muted">{fmtDate(r.createdAt, true)}{r.actor ? ` · ${r.actor}` : ''}</span> — {revisionTitle(r)}:
+							<span class="muted">{fmtStamp(r.createdAt)}{r.actor ? ` · ${r.actor}` : ''}</span> — {revisionTitle(r)}:
 							{revisionLines(r).join('; ')}{#if r.reason} <em>({r.reason})</em>{/if}
 						</li>
 					{/each}
@@ -142,7 +144,7 @@
 
 <Dialog bind:open={confirmOpen} title="Restore this run’s inputs?" wide>
 	<p>
-		The settings and model go back to what the run “{run.label || 'Untitled run'}” of {fmtDate(run.createdAt, true)} used. This is saved as a new change in the
+		The settings and model go back to what the run “{run.label || 'Untitled run'}” of {fmtStamp(run.createdAt)} used. This is saved as a new change in the
 		History tab. Series values aren’t part of it.
 	</p>
 	{#if changes === null && error}
@@ -171,7 +173,7 @@
 	{#if restoreError}<div class="alert alert-error" role="alert">{restoreError}</div>{/if}
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (confirmOpen = false)}>Cancel</button>
-		<button type="submit" form="{uid}-restore" class="btn btn-primary" disabled={!canRestore}>
+		<button type="submit" form="{uid}-restore" class="btn btn-primary" disabled={!hasRestore} aria-disabled={restoring}>
 			{restoring ? 'Restoring…' : 'Restore'}
 		</button>
 	{/snippet}
@@ -186,10 +188,10 @@
 	summary {
 		cursor: pointer;
 	}
+	/* The page's h3 size, as every other panel heading on Runs & results. */
 	summary h3 {
 		display: inline;
 		margin: 0;
-		font-size: 1rem;
 	}
 	h4 {
 		margin: 0.75rem 0 0.3rem;
