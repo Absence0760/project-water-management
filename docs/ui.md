@@ -7302,8 +7302,8 @@ The page has:
   and a failed run with **Try again** (or **Show the newest run** for a run
   that's gone). Each **Try again** here (the runs list's, the run's, and the
   calibration check's series) keeps the focus as LoadState's does
-  (`calibration/retryFocus.ts` on `common/loadState.ts` `retryLanding`, WCAG
-  2.4.3, issue #586 R4-A): on the loading line while it loads, on the new Try
+  (`common/loadState.ts` `followRetry`, WCAG 2.4.3, issue #586 R4-A, moved
+  onto the shared helper in R4-L): on the loading line while it loads, on the new Try
   again if it fails again, on the part's (or the check's) heading once
   loaded; the runs list's is `aria-disabled` while it loads, never disabled
   (`calibration-retry-focus.spec.ts`). Calibration against observed flow's no-statistics line links
@@ -13155,7 +13155,17 @@ data button or Run button.
   page's `<h1>`; a Map layer: its checkbox; Preview all data: its search),
   never to the top of the page (WCAG 2.4.3; `common/LoadState.svelte`, and
   `common/loadState.ts` `followRetry` for a panel's own Try again;
-  `586-a11y-load-state.spec.ts`, `586-a11y-retry-focus.spec.ts`). A retry
+  `586-a11y-load-state.spec.ts`, `586-a11y-retry-focus.spec.ts`). A page's
+  own Try again does the same and lands on the page's title: the root
+  layout's *Could not reach the API*, Alert emails, Invitations (whose
+  loading line now says *Loading…*, not a bare ellipsis), an evidence pack's
+  page (and its *Reading the pack again…* after a failed re-read; the
+  server PDF's Try again stays `aria-disabled` while it asks, then goes to
+  the line saying where the PDF is), an applicant's pack, the public
+  participation record, a report PDF's page, the catchment report, a team's
+  Projects panel, `/share` and `/verify` (`586-a11y-retry-focus-pages.spec.ts`,
+  issue #586 R4-L). The layout's Try again also no longer sends a signed-in
+  page to the sign-in form before `/auth/me` has answered. A retry
   with nothing on screen while it loads now shows a line saying so: the
   Data tab's *Refreshing the series…*, the Project page's *Loading the import
   record…* and *Loading pending invitations…*, and a map proposal panel's

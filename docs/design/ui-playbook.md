@@ -1765,9 +1765,18 @@ Interaction details that bit:
   calls `followRetry` (`common/loadState.ts`) before the retry starts, the
   button carries `data-retry` and the loading line `data-loading`, and the
   scope it watches (the alert's parent unless given) stays on the page
-  through the retry (issue #586 R4-I; `586-a11y-retry-focus.spec.ts`). A Try
-  again that can't act while a load is out is `aria-disabled`, never
-  `disabled`.
+  through the retry (issue #586 R4-I; `586-a11y-retry-focus.spec.ts`). A
+  page's own Try again (the whole page failed to load) passes
+  `landing: () => pageStart()` (`lib/a11y/focusPage.ts`), so it lands on the
+  page's `<h1>`, or `#main` when the answer has none; where the alert's
+  parent leaves the page with it (`/share`'s card, the root layout's
+  `<main>`), it passes a `scope` that stays (issue #586 R4-L;
+  `586-a11y-retry-focus-pages.spec.ts`). Only a line that goes once the
+  retry has answered is `data-loading`: a line that can stay for minutes
+  (an evidence pack's "printing") is not, or every retry in its scope would
+  wait on it. A Try again that can't act while a load is out is
+  `aria-disabled`, never `disabled`. One helper, not one per screen: a new
+  Try again calls `followRetry`.
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
