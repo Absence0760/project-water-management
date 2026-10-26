@@ -37,7 +37,7 @@
 
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { withParam } from '#lib/workspace/overlays.js';
@@ -108,7 +108,9 @@
 	import { outcomesError } from '#lib/components/outcomes/outcomeSettings.js';
 	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
-	import { saveBlockers, settingsElsewhere, settingsForward, settingsNavGroups } from './sections';
+	import { saveBlockers, settingsElsewhere, settingsNavGroups } from './sections';
+	import { anchorForward } from '#lib/nav/anchorMoves.js';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import type { CatchmentStation } from './unitRain';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
@@ -488,27 +490,29 @@
 	);
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 
-	// A link to a panel that moved away (#set-feeds, #set-api-keys, #set-report-schedules: an old email, a
-	// bookmark, a note) goes on to its new page, every other parameter kept, replacing this entry so Back
-	// skips it; that page lands on the panel (issue #586 round 1). On load, and for such a link followed
-	// while the page is open (the query is unchanged, so only the #fragment moves).
-	// reset: false, so SvelteKit leaves the focus to the new page's landing, which focuses the heading.
-	$effect(() => {
-		const to = settingsForward(page.url);
-		if (to) untrack(() => void goto(to, { replace: true, reset: false }));
-	});
-
-	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
-	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
-	// panels settle (as EWR does), and focus its heading once that is drawn too: some panels (Evaporation
-	// from the map) are lazy chunks of their own, drawn after this mounts (landOnAnchor waits for them).
-	// `?tab=calibration`, which has no page of its own yet, opens at Flow calibration (issue #586). A
-	// moved panel's link lands nowhere here: the effect above sends it on.
+	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link), on load or followed while
+	// the page is open (a #fragment typed or followed here, finding R2-D): the tab is a lazy chunk, so the
+	// browser's own jump found nothing. Land on the group once drawn, hold it while the panels settle (as EWR
+	// does), and focus its heading once that is drawn too: some panels (Evaporation from the map) are lazy
+	// chunks of their own, drawn after this mounts (landOnAnchor waits for them). A link to a panel that
+	// moved away (#set-feeds, #set-api-keys, #set-report-schedules: an old email, a bookmark, a note) goes on
+	// to its new page instead, every other parameter kept, replacing this entry so Back skips it; that page
+	// lands on the panel (nav/anchorMoves.ts, issue #586 round 1). reset: false, so SvelteKit leaves the
+	// focus to the new page's landing. `?tab=calibration`, which has no page of its own yet, opens at Flow
+	// calibration (issue #586).
 	onMount(() => {
-		if (settingsForward(page.url)) return;
+		const stopAnchors = followAnchors({
+			page: 'settings',
+			land: (id) => (id.startsWith('set-') ? landOnAnchor(id) : undefined),
+			forward: (to) => void goto(to, { replace: true, reset: false })
+		});
 		const hash = page.url.hash.slice(1);
-		const id = hash.startsWith('set-') ? hash : !hash && page.url.searchParams.get('tab') === 'calibration' ? 'set-flow' : null;
-		return id ? landOnAnchor(id) : undefined;
+		const calibration = !hash && page.url.searchParams.get('tab') === 'calibration' && !anchorForward('settings', page.url);
+		const stopCalibration = calibration ? landOnAnchor('set-flow') : undefined;
+		return () => {
+			stopAnchors();
+			stopCalibration?.();
+		};
 	});
 </script>
 

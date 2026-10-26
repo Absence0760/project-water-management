@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { navText } from '#lib/components/common/sectionNav.js';
 import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '#lib/components/river/links.js';
 import { supplyAnchor } from '#lib/components/supply/links.js';
-import { movedHref, otherPageGroups, resultGroups, resultSections } from './sections';
+import { anchorMoved } from '#lib/nav/anchorMoves.js';
+import { otherPageGroups, resultGroups, resultSections } from './sections';
 
 describe('resultGroups', () => {
 	it('groups the panels by the question they answer, in page order', () => {
@@ -158,22 +159,9 @@ describe('otherPageGroups', () => {
 	});
 });
 
-describe('movedHref', () => {
-	it('sends a moved panel to its page with the run, and the reporting window to Hydrological units', () => {
-		expect(movedHref('res-ewr-grid', 'r1')).toBe('?tab=river&run=r1#res-ewr-grid');
-		expect(movedHref('res-curtailment', 'r1', 'last7')).toBe('?tab=supply&run=r1&window=last7#res-curtailment');
-		expect(movedHref('res-assurance', null)).toBe('?tab=supply#res-assurance');
-	});
-
-	it('sends the old link rows to the page itself, keeping the run', () => {
-		expect(movedHref('res-river', 'r1')).toBe('?tab=river&run=r1');
-		expect(movedHref('res-units', 'r1')).toBe('?tab=supply&run=r1');
-		expect(movedHref('res-units', null, 'last30')).toBe('?tab=supply&window=last30');
-	});
-
-	it('leaves the panels still on Runs & results alone', () => {
+describe('the moved anchors (nav/anchorMoves.ts)', () => {
+	it('moves no panel still on Runs & results', () => {
 		for (const s of resultSections({ farms: [], runoff: {} as RunSummary['runoff'], wr2012: {} as RunSummary['wr2012'], plausibility: {} as RunSummary['plausibility'], forecast: {} as RunSummary['forecast'] }))
-			expect(movedHref(s.id, 'r1')).toBeNull();
-		expect(movedHref('', 'r1')).toBeNull();
+			expect(anchorMoved('runs', s.id), s.id).toBe(false);
 	});
 });

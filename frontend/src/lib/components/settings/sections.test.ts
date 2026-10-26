@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findElsewhere } from '#lib/components/common/sectionNav.js';
-import { saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_MOVED, SETTINGS_SECTIONS, settingsElsewhere, settingsForward, settingsNavGroups } from './sections';
+import { ANCHOR_MOVES, anchorMoved } from '#lib/nav/anchorMoves.js';
+import { saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsElsewhere, settingsNavGroups } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
 	it('has unique ids, in page order, grouped by task', () => {
@@ -69,8 +70,8 @@ describe('SETTINGS_ELSEWHERE (issue #521)', () => {
 			expect(findElsewhere(SETTINGS_ELSEWHERE, q).map((e) => [e.href, e.page]), q).toEqual([[href, page]]);
 		}
 		// Each one points where its old anchor forwards to.
-		for (const [old, to] of Object.entries(SETTINGS_MOVED)) {
-			expect(SETTINGS_ELSEWHERE.map((e) => e.href), old).toContain(`?tab=${to.tab}#${to.hash}`);
+		for (const move of ANCHOR_MOVES.filter((m) => m.from === 'settings')) {
+			expect(SETTINGS_ELSEWHERE.map((e) => e.href), String(move.hash)).toContain(`?tab=${move.tab}#${move.to}`);
 		}
 	});
 });
@@ -87,37 +88,9 @@ describe('settingsNavGroups', () => {
 	});
 });
 
-describe('settingsForward (issue #586 round 1)', () => {
-	const at = (path: string) => new URL(path, 'https://example.org');
-
-	it('sends each moved anchor to its new page and anchor', () => {
-		expect(settingsForward(at('/projects/p1?tab=settings#set-feeds'))).toBe('/projects/p1?tab=series#data-feeds');
-		expect(settingsForward(at('/projects/p1?tab=settings#set-api-keys'))).toBe('/projects/p1?tab=project#project-api-keys');
-		expect(settingsForward(at('/projects/p1?tab=settings#set-report-schedules'))).toBe('/projects/p1?tab=project#project-report-schedules');
-	});
-
-	it('keeps every other parameter, in its place', () => {
-		expect(settingsForward(at('/projects/p1?tab=settings&rain=boundary#set-feeds'))).toBe('/projects/p1?tab=series&rain=boundary#data-feeds');
-		expect(settingsForward(at('/projects/p1?rain=units&tab=settings&run=r9#set-feeds'))).toBe('/projects/p1?rain=units&tab=series&run=r9#data-feeds');
-		// The calibration alias forwards too, and a percent-encoded hash is read as its id.
-		expect(settingsForward(at('/projects/p1?tab=calibration#set%2Dfeeds'))).toBe('/projects/p1?tab=series#data-feeds');
-		// A base path (a production deploy under a prefix) stays.
-		expect(settingsForward(at('/app/projects/p1?tab=settings#set-api-keys'))).toBe('/app/projects/p1?tab=project#project-api-keys');
-	});
-
-	it('sends a map proposal’s link (?rain=boundary, ?rain=units) to Data feeds without its #', () => {
-		expect(settingsForward(at('/projects/p1?tab=settings&rain=boundary'))).toBe('/projects/p1?tab=series&rain=boundary#data-feeds');
-		expect(settingsForward(at('/projects/p1?tab=settings&rain=units'))).toBe('/projects/p1?tab=series&rain=units#data-feeds');
-		expect(settingsForward(at('/projects/p1?tab=settings&rain=other'))).toBeNull();
-		// Another panel's anchor wins: the rain= is for Data feeds only.
-		expect(settingsForward(at('/projects/p1?tab=settings&rain=boundary#set-ewr'))).toBeNull();
-	});
-
-	it('leaves every other anchor here', () => {
-		for (const hash of ['', '#set-auto', '#set-ewr', '#set-feeds-x', '#data-feeds', '#%E0', '#constructor', '#toString']) {
-			expect(settingsForward(at(`/projects/p1?tab=settings${hash}`)), hash).toBeNull();
-		}
-		for (const s of SETTINGS_SECTIONS) expect(SETTINGS_MOVED[s.id], s.id).toBeUndefined();
+describe('the moved anchors (nav/anchorMoves.ts)', () => {
+	it('moves no anchor of a panel still here', () => {
+		for (const sec of SETTINGS_SECTIONS) expect(anchorMoved('settings', sec.id), sec.id).toBe(false);
 	});
 });
 

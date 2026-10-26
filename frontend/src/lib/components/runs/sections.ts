@@ -5,11 +5,11 @@
 // its panel's heading, and on the bar a shorter name where the heading is long
 // (issue #462). The river and unit panels have their own pages (issue #17):
 // the run header links there, the side index lists the main ones under their
-// pages (otherPageGroups), and their old anchors here are sent on (movedHref).
+// pages (otherPageGroups), and their old anchors here are sent on (nav/anchorMoves.ts).
 import type { RunSummary } from '@water-management/engine';
 import type { NavGroup, NavSection } from '#lib/components/common/sectionNav.js';
-import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor, riverHref } from '#lib/components/river/links.js';
-import { supplyAnchor, supplyHref } from '#lib/components/supply/links.js';
+import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverHref } from '#lib/components/river/links.js';
+import { supplyHref } from '#lib/components/supply/links.js';
 import { runoffModelName } from './runoff';
 import { unitRainOf } from './unitRain';
 import { stationsOf } from './stationRain';
@@ -135,18 +135,3 @@ export function otherPageGroups(runId: string | null): NavGroup[] {
 
 /** Every section in page order: the scroll spy's list. */
 export const resultSections = (summary: SectionInput, rail = false): ResultSection[] => resultGroups(summary, rail).flatMap((g) => g.sections);
-
-/**
- * Where a `#res-…` fragment on Runs & results now lives, when it moved: a panel
- * of EWR or Hydrological units (the same panel there, keeping the run
- * and the curtailment's reporting window), or the link rows those groups left
- * here for a while (`#res-river`, `#res-units`: the page itself). null for a
- * panel that is still on this page.
- */
-export function movedHref(hash: string, runId: string | null, window: string | null = null): string | null {
-	if (hash === 'res-river') return riverHref(runId);
-	if (riverAnchor(hash)) return riverHref(runId, hash);
-	if (hash === 'res-units') return supplyHref(runId, { window });
-	if (supplyAnchor(hash)) return supplyHref(runId, { window, hash });
-	return null;
-}

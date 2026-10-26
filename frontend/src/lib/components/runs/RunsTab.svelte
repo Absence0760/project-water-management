@@ -28,11 +28,13 @@
 	import ValidationPanel from '#lib/components/liability/ValidationPanel.svelte';
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
-	import { movedHref, otherPageGroups, resultGroups } from './sections';
+	import { otherPageGroups, resultGroups } from './sections';
+	import { anchorMoved } from '#lib/nav/anchorMoves.js';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { supplyHref } from '#lib/components/supply/links.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { historyDays, ranAgo } from '#lib/components/overview/latestRun.js';
-	import { focusAnchor, holdAnchor, landOnAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, hashId, holdAnchor, landOnAnchor } from '#lib/help/anchor.js';
 	import { missingPanel, type MissingPanel } from './missingPanel';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
@@ -185,16 +187,25 @@
 			publicationError = msg(e);
 		}
 	}
+	let stopAnchors = () => {};
 	onMount(() => {
 		// A link to a panel that moved to EWR (#res-reserve, #res-ewr, …) or Hydrological units
 		// (#res-curtailment from a bookmarked "units short this week", …), or to the link rows those
 		// groups left here for a while (#res-river, #res-units), issue #17: there instead, for the same
-		// run (and reporting window), replacing this entry so Back skips it.
-		const moved = movedHref(page.url.hash.slice(1), page.url.searchParams.get('run'), page.url.searchParams.get('window'));
-		if (moved) {
-			goto(moved, { replace: true, reset: false });
-			return;
-		}
+		// run (and reporting window), replacing this entry so Back skips it (nav/anchorMoves.ts). On
+		// load, and for a #fragment typed or followed while the page is open, which lands on its panel
+		// too (finding R2-D); the load's own landing waits for the run (below).
+		let forwarded = false;
+		stopAnchors = followAnchors({
+			page: 'runs',
+			onLoad: false,
+			land: (id) => (fragmentShown ? landResult(id) : undefined),
+			forward: (to) => {
+				forwarded = true;
+				void goto(to, { replace: true, reset: false });
+			}
+		});
+		if (forwarded) return;
 		load();
 		loadPublication();
 	});
@@ -279,7 +290,7 @@
 	// heading (landOnAnchor), scroll there and hold it while the panels above load, with focus
 	// on the heading so Tab carries on from there. A panel this run doesn't have (#res-wr2012 on
 	// a run without a WR2012 reference, issue #586) shows a line saying what it needs instead,
-	// focused. Once: later jumps (the section menu) find their panel on the page and are the browser's.
+	// focused. Later jumps (the section menu, a #fragment typed) land through followAnchors above.
 	let fragmentShown = false;
 	/** The validation statement is open: the known-bug badge opens it (issue #103). */
 	let validationOpen = $state(false);
@@ -290,23 +301,37 @@
 	$effect(() => {
 		if (!detail || fragmentShown) return;
 		fragmentShown = true;
-		const hash = untrack(() => page.url.hash.slice(1));
-		if (!hash.startsWith('res-') || movedHref(hash, null)) return;
+		const hash = untrack(() => hashId(page.url.hash));
+		if (hash) releaseFragment = landResult(hash);
+	});
+	/** Land on the results panel `hash` names, or on the line saying this run lacks it; the release function. */
+	function landResult(hash: string): () => void {
+		releaseFragment();
+		releaseFragment = () => {};
+		if (!detail || !hash.startsWith('res-') || anchorMoved('runs', hash)) return () => {};
 		// The known-bug badge's link (issue #103): the statement opens on load too, not only on a click.
 		if (hash === 'res-validation') validationOpen = true;
 		const lacking = missingPanel(hash, detail.run.summary);
-		if (lacking) missingLink = { runId: detail.run.id, hash, panel: lacking };
+		missingLink = lacking ? { runId: detail.run.id, hash, panel: lacking } : null;
+		let release = () => {};
+		let gone = false;
 		tick().then(() => {
-			if (destroyed) return;
+			if (destroyed || gone) return;
 			const line = lacking ? document.getElementById('res-missing') : null;
 			if (line) {
-				releaseFragment = holdAnchor(line);
+				release = holdAnchor(line);
 				focusAnchor(line);
-			} else releaseFragment = landOnAnchor(hash);
+			} else release = landOnAnchor(hash);
 		});
-	});
+		releaseFragment = () => {
+			gone = true;
+			release();
+		};
+		return releaseFragment;
+	}
 	onDestroy(() => {
 		destroyed = true;
+		stopAnchors();
 		releaseFragment();
 	});
 

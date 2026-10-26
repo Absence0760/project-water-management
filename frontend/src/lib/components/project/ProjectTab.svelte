@@ -9,7 +9,8 @@
 	// reading page: it scrolls, it isn't fitted to the window.
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
-	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import type { Project, RunMeta } from '#lib/api/index.js';
 	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
 	import RecentNotes from '#lib/components/notes/RecentNotes.svelte';
@@ -109,8 +110,12 @@
 	let authorityVersion = $state(0);
 	let stopLanding = () => {};
 	onMount(() => {
-		const hash = page.url.hash.slice(1);
-		if (projectAnchor(hash) && body) stopLanding = landOnAnchor(hash, body);
+		// On load, and for a #fragment typed or followed while the page is open (finding R2-D, nav/anchorLanding.ts).
+		stopLanding = followAnchors({
+			page: 'project',
+			land: (hash) => (projectAnchor(hash) && body ? landOnAnchor(hash, body) : undefined),
+			forward: (to) => void goto(to, { replace: true, reset: false })
+		});
 	});
 	onDestroy(() => stopLanding());
 

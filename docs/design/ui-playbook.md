@@ -43,9 +43,13 @@ section it belongs to, with the example that taught it.
    simpler chart; that is a bug, not a simplification.
 5. **Old links keep working.** `?tab=` values, overlay params and `#res-…`
    fragments are in emails, bookmarks, help and other pages. When a view
-   moves, redirect its old URL (the Runs tab redirects moved `#res-…`
-   anchors to River & reserve and Hydrological units; the Summary sends its
-   panels' heading ids, `#members-h` and the rest, to the Project page) and
+   moves, redirect its old URL (a moved `#anchor` is one row of
+   `ANCHOR_MOVES`, `lib/nav/anchorMoves.ts`: the Runs tab's `#res-…` to EWR
+   and Hydrological units, Settings' `#set-feeds` and the rest to Data and
+   Project, each keeping the parameters the row names, and the page lands
+   through `lib/nav/anchorLanding.ts` `followAnchors`, on load and on a hash
+   change; the Summary sends its panels' heading ids, `#members-h` and the
+   rest, to the Project page) and
    grep the app, the help guides, `docs/` and `backend/src/alerts` for links
    to repoint. Grep the prose too: "on the Summary tab" in History's
    restore notes and the team pages' empty states pointed at panels that

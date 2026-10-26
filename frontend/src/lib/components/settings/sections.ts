@@ -4,10 +4,8 @@
 // (and around Wr2012Section and EwrRulesSection). Each label is its panel's
 // heading, word for word. Data feeds, API keys and Scheduled reports, which
 // followed the form and saved on their own, moved to Data and Project (issue
-// #586 round 1): SETTINGS_ELSEWHERE finds them there, and settingsForward
-// sends their old anchors on.
-
-import { hashId } from '#lib/help/anchor.js';
+// #586 round 1): SETTINGS_ELSEWHERE finds them there, and their old anchors
+// are sent on by nav/anchorMoves.ts.
 
 export const SETTINGS_SECTIONS = [
 	// Data & rain: what the model runs on.
@@ -62,31 +60,6 @@ export const SETTINGS_ELSEWHERE = [
 /** The moved settings this reader can follow: API keys only for an owner (issue #586 round 1). */
 export function settingsElsewhere(owner: boolean) {
 	return owner ? SETTINGS_ELSEWHERE : SETTINGS_ELSEWHERE.filter((e) => e.text !== 'API keys');
-}
-
-/**
- * Where each Settings anchor that moved away now lives (issue #586 round 1): `?tab=settings#set-feeds`
- * in an old email, a bookmark or a note goes to Data feeds on Data, and the other two to Project.
- */
-export const SETTINGS_MOVED: Readonly<Record<string, { tab: string; hash: string }>> = {
-	'set-feeds': { tab: 'series', hash: 'data-feeds' },
-	'set-api-keys': { tab: 'project', hash: 'project-api-keys' },
-	'set-report-schedules': { tab: 'project', hash: 'project-report-schedules' }
-};
-
-/**
- * The link a Settings URL forwards to when its #anchor names a panel that moved, or null: the same URL
- * on the panel's new page and anchor, every other query parameter kept (`rain=boundary`, `run=`), so
- * the panel opens as the old link meant. The caller replaces the history entry, so Back skips it.
- */
-export function settingsForward(url: Pick<URL, 'pathname' | 'search' | 'hash'>): string | null {
-	const params = new URLSearchParams(url.search);
-	// `?rain=boundary` or `?rain=units` asks Data feeds for a map proposal, so such a link goes there even without its #.
-	const hash = hashId(url.hash) || (/^(boundary|units)$/.test(params.get('rain') ?? '') ? 'set-feeds' : '');
-	const moved = Object.hasOwn(SETTINGS_MOVED, hash) ? SETTINGS_MOVED[hash]! : null;
-	if (!moved) return null;
-	params.set('tab', moved.tab);
-	return `${url.pathname}?${params}#${moved.hash}`;
 }
 
 /**
