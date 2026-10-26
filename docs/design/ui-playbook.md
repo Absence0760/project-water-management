@@ -1510,7 +1510,11 @@ Interaction details that bit:
   included ("GR4J fit of 2026-09-24 14:05 UTC"), stay YYYY-MM-DD:
   unambiguous in any locale and reproducible byte for byte from the bundle.
   Don't run them through `fmtDay`; the screens around it read day first
-  (issue #521 round 3, decided by the operator).
+  (issue #521 round 3, decided by the operator). Text the engine writes
+  into the manifest (the appendix's input changes from `diffInputs`, its
+  warnings) is printed as the engine wrote it: day first from engine
+  1.100.0, ISO before (#586 R4-O/R4-P). It still matches the hashed text,
+  since a pack is reproduced at its own engine version.
 - **A small chart's month letters keep their room at 320 px.** The farm
   charts' "J F M A M …" nearly touched beside a "100 %" axis column on a
   320 px phone (issue #521). Below 20 px a month (`chartGeometry.ts`
