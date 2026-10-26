@@ -32,6 +32,8 @@
 	import { fmtDate } from '#lib/format/number.js';
 	import { reportPageRule } from '#lib/components/report/printPage.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const scenarioId = $derived(page.params.sid ?? '');
@@ -149,10 +151,20 @@
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The evidence pack could not be loaded: {error}
-			<button type="button" class="btn btn-sm" onclick={() => load(projectId, scenarioId, packId)}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// Its alert leaves the page: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new
+					// Try again or the page's title.
+					followRetry(e.currentTarget, { landing: () => pageStart() });
+					void load(projectId, scenarioId, packId);
+				}}>Try again</button
+			>
 		</div>
 	{:else if status === 'loading'}
-		<p class="muted" role="status">Loading the evidence pack…</p>
+		<p class="muted" role="status" data-loading>Loading the evidence pack…</p>
 	{/if}
 
 	{#if status === 'loaded' && view && pack}

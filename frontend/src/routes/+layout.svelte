@@ -14,6 +14,8 @@
 	import { isLandingRoot, isPublicPath, isTranslatedPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '#lib/auth/session.svelte.js';
 	import { dropProjectPage, startProjectPage } from '#lib/workspace/firstLoad.js';
 	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
+	import { pageStart } from '#lib/a11y/focusPage.js';
 	import ConfirmHost from '#lib/components/common/ConfirmHost.svelte';
 	import { installLeaveGuard } from '#lib/nav/leaveGuard.js';
 	import { installBackScroll } from '#lib/nav/backScroll.js';
@@ -38,6 +40,9 @@
 
 	async function checkSession() {
 		bootError = null;
+		// Unchecked again while a Try again asks: else the signed-out answer the failure left would send the page to the
+		// sign-in form before /auth/me has answered (the boot state, so the first ask is unchanged).
+		session.checked = false;
 		if (isLandingRoot(page.url.pathname, basePath(), false)) loadLanding().catch(() => {});
 		// The catchment page's own requests go out beside /auth/me, not after it
 		// (workspace/firstLoad.ts); the page still mounts only once it answers.
@@ -295,7 +300,17 @@
 		<main class="page">
 			<div class="alert alert-error" role="alert">
 				Could not reach the API: {bootError}
-				<button type="button" class="btn btn-sm" onclick={checkSession}>Try again</button>
+				<!-- This <main> leaves the page on Try again: the focus follows in its parent (followRetry, WCAG 2.4.3), onto the
+				     loading line, then a new Try again or the page's title. -->
+				<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget, { scope: e.currentTarget.closest('main')?.parentElement, landing: () => pageStart() });
+						void checkSession();
+					}}>Try again</button
+				>
 			</div>
 		</main>
 	{:else if i18nFailed && translated && !staticPage}
@@ -317,7 +332,7 @@
 	{:else if shown}
 		<div id="main" tabindex="-1">{@render children()}</div>
 	{:else}
-		<main class="page"><p class="muted" role="status">Loading…</p></main>
+		<main class="page"><p class="muted" role="status" data-loading>Loading…</p></main>
 	{/if}
 {/snippet}
 
