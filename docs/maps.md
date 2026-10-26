@@ -1068,7 +1068,7 @@ unit, averaged over the unit's own polygon, so that under
 
 ## Quaternary lookup
 
-Settings → WR2012 check → **Propose from the map** looks up the quaternary
+Calibration → WR2012 check → **Propose from the map** looks up the quaternary
 catchment that contains a point (the boundary's centre, a gauge, or typed
 coordinates; `GET /projects/:id/map/quaternary`) and lists its reference
 values (code, area, MAP, naturalised MAR, reference period, monthly means,

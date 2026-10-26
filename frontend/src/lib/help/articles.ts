@@ -30,7 +30,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §6'
 	},
 	'evidence-run': {
-		long: 'On Runs & results, Notes & evidence, an editor can nominate the run shown with Nominate as evidence and a required reason. Nominating another run later replaces it; both stay in the nomination history, with who nominated each, when and why. In the runs list the current one carries an Evidence badge and a replaced one Former evidence, and comparing runs says when either side is or was the evidence.\n\nA run of the legacy runoff model (removed in engine 1.0.0) can’t be nominated: it is workbook comparison only. When the nominated run is such a legacy run and a later run uses GR4J, the results say so: the nomination still stands until another run is nominated, with a reason.',
+		long: 'On Runs & results, under Record → Evidence, an editor can nominate the run shown with Nominate as evidence and a required reason. Nominating another run later replaces it; both stay in the nomination history, with who nominated each, when and why. In the runs list the current one carries an Evidence badge and a replaced one Former evidence, and comparing runs says when either side is or was the evidence.\n\nA run of the legacy runoff model (removed in engine 1.0.0) can’t be nominated: it is workbook comparison only. When the nominated run is such a legacy run and a later run uses GR4J, the results say so: the nomination still stands until another run is nominated, with a reason.',
 		aliases: ['nominate', 'nominated run', 'nomination history', 'former evidence'],
 		related: ['run', 'runoff-model', 'roles'],
 		source: 'docs/ui.md § Evidence nomination; docs/data-model.md'
