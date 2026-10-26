@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { navText } from '#lib/components/common/sectionNav.js';
 import { compareNavGroups, COMPARE_HEADINGS } from './sections';
 
 const all = { overrides: true, reserve: true, plausibility: true, assurance: true };
@@ -43,8 +42,6 @@ describe('compareNavGroups', () => {
 			COMPARE_HEADINGS.assurance,
 			COMPARE_HEADINGS.series
 		]);
-		// The bar says the same words (issue #586 R4-F): no shorter bar names.
-		expect(flat.map((s) => navText(s, 'bar'))).toEqual(flat.map((s) => s.label));
 	});
 
 	it('lists only the panels drawn: the optional ones by the pair, nothing before a comparison loads', () => {

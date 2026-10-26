@@ -4,14 +4,12 @@
 
 export interface NavSection {
 	id: string;
-	/** Its name: the panel's heading, as the page shows it (issue #462), in the rail, the More menu and the find box. */
-	label: string;
 	/**
-	 * A shorter name for the bar, where every link has to fit two rows (issue
-	 * #462): the heading's first words ("Calibration" for "Calibration against
-	 * observed flow"). The rail, with a line of its own for each link, shows `label`.
+	 * Its name: the panel's heading word for word, as the page shows it (issue #462), on the bar, in the rail, the
+	 * More menu and the find box alike (issue #586 D4). There is no shorter bar name: a bar that can't fit two rows
+	 * has too many panels for one menu.
 	 */
-	bar?: string;
+	label: string;
 	/** Marks the link with a dot and "(has a problem)" for screen readers. */
 	problem?: boolean;
 	/**
@@ -48,14 +46,9 @@ export interface NavGroup {
  * aria-label; null for a link on this page, which its text names. Not a hidden span after the text: the
  * hidden class positions it, and Chromium then spaces it off ("by month , on EWR").
  */
-export function pageLinkName(sec: Pick<NavSection, 'label' | 'bar' | 'page' | 'problem'>, where: 'bar' | 'rail'): string | null {
+export function pageLinkName(sec: Pick<NavSection, 'label' | 'page' | 'problem'>): string | null {
 	if (!sec.page) return null;
-	return `${navText(sec, where)}, on ${sec.page}${sec.problem ? ' (has a problem)' : ''}`;
-}
-
-/** What a link says: its short name on the bar, its whole name in the rail and the More menu (issue #462). */
-export function navText(sec: Pick<NavSection, 'label' | 'bar'>, where: 'bar' | 'rail'): string {
-	return where === 'bar' ? (sec.bar ?? sec.label) : sec.label;
+	return `${sec.label}, on ${sec.page}${sec.problem ? ' (has a problem)' : ''}`;
 }
 
 /** True when the groups list no section at all: the menu then draws nothing, only the page's content. */

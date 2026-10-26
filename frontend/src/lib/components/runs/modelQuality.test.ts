@@ -55,7 +55,6 @@ describe('modelQualitySections', () => {
 			'EWR test: model against observed flow',
 			'Plausibility checks'
 		]);
-		expect(sections.some((s) => s.bar)).toBe(false);
 	});
 
 	it('uses only the anchors MODEL_QUALITY_ANCHORS names, in its order, none of them still on Runs & results', () => {

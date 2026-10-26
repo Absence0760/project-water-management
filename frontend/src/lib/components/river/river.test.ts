@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '#lib/api/types.js';
-import { navText } from '#lib/components/common/sectionNav.js';
 import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
 import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
@@ -75,9 +74,6 @@ describe('riverNavGroups', () => {
 	});
 	it('puts the findings first, the water account straight after them, and the run-it-yourself tools last (issue #465)', () => {
 		expect(riverNavGroups(false, false).map((g) => g.label)).toEqual(['The reserve', 'Water balance', 'How sure, and what if']);
-		// The bar says each panel's heading word for word, as the side index does (issue #586 R4-F).
-		const sections = riverNavGroups(false, false).flatMap((g) => g.sections);
-		expect(sections.map((s) => navText(s, 'bar'))).toEqual(sections.map((s) => s.label));
 	});
 	it('names each link as its panel’s heading (issue #462)', () => {
 		const labels = (ruleTable: boolean) => riverNavGroups(false, ruleTable).flatMap((g) => g.sections.map((s) => s.label));
