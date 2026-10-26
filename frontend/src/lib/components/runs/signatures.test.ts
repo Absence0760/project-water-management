@@ -1,4 +1,4 @@
-// The validation signatures' display helpers (engine ≥ 1.55.0, docs/model.md §2.10d, docs/ui.md).
+// The hydrological signatures' display helpers (engine ≥ 1.55.0, docs/model.md §2.10d, docs/ui.md).
 import { lowFlowFdcSignature, recessionHoldout, type RecessionSegment, type ValidationSignatures } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { holdoutText, scoredRecordText, signatureRows, signaturesOk } from './signatures';
@@ -25,7 +25,7 @@ const sig: ValidationSignatures = {
 	recessionHoldout: recessionHoldout(rec, rec, segs)
 };
 
-describe('validation signatures display', () => {
+describe('hydrological signatures display', () => {
 	it('names the scored record: the outlet’s or the calibration site’s', () => {
 		expect(scoredRecordText(base)).toBe('the gauge record at the outlet');
 		expect(scoredRecordText({ flowKind: 'flow_logger_m3s', siteName: 'Weir' })).toBe('the logger record at gauge “Weir”');

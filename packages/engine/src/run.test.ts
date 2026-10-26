@@ -1447,7 +1447,7 @@ describe('runModel — calibration statistics', () => {
 		const auto = runModelWith(i, nat);
 		expect(auto.summary.calibration!.flowKind).toBe('flow_observed_m3s');
 		expect(auto.summary.warnings.filter((w) => w === DEFAULT_GAUGE_PICK_WARNING)).toHaveLength(1);
-		expect(DEFAULT_GAUGE_PICK_WARNING).toMatch(/Settings → Calibration record → Compare with/);
+		expect(DEFAULT_GAUGE_PICK_WARNING).toMatch(/Calibration → Calibration record → Compare with/);
 
 		// Positive controls: a chosen record (either one) gets no default-pick warning.
 		for (const kind of ['flow_observed_m3s', 'flow_logger_m3s'] as const) {

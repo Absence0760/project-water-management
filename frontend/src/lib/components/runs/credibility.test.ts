@@ -63,7 +63,7 @@ describe('credibility', () => {
 		expect([item({ days: 0, nse: 0, pbias: 0 }).text, item(null).tone]).toEqual(['not scored: no observed flow in the run', 'none']);
 	});
 
-	it('counts the validation signatures (engine ≥ 1.55.0) among the plausibility findings', () => {
+	it('counts the hydrological signatures (engine ≥ 1.55.0) among the plausibility findings', () => {
 		const plausibility = (withinLimit: boolean) => ({
 			naturalised: null,
 			rainSource: null,

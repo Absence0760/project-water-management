@@ -248,7 +248,7 @@ export function referenceFit(
 	const node = nodes.find((n) => n.id === ref.unitId);
 	if (!node || !isLandUnit(node)) {
 		warnings.push(
-			`unit rain: the reference unit (${node ? `"${node.name}"` : ref.unitId}) is not a unit with land, so it has no CHIRPS cell to fit the reference factors on: each unit's CHIRPS is levelled as without a reference (docs/model.md §2.4h)`
+			`unit rain: the reference unit (${node ? `"${node.name}"` : ref.unitId}) is not a unit with land, so it has no CHIRPS cell to fit the reference factors on: each unit's CHIRPS is levelled as without a reference`
 		);
 		return null;
 	}
@@ -337,7 +337,7 @@ export function unitRainRecipes(
 	if (u?.mode !== 'perUnit') return null;
 	const units = ctx.nodes.filter(isLandUnit).sort((a, b) => cmpStr(a.id, b.id));
 	if (!units.length) {
-		warnings.push('Runoff from each unit’s own rain is on, but no unit has an area: GR4J runs on the catchment rain (docs/model.md §2.4h)');
+		warnings.push('Runoff from each unit’s own rain is on, but no unit has an area: GR4J runs on the catchment rain');
 		return null;
 	}
 	const series = ctx.series;

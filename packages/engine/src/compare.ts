@@ -242,7 +242,7 @@ export interface RunComparison {
 	 * per site (the outlet, then each gauge with a record of its own) the failing
 	 * water years of check 1 and the Q90 ratio of check 4, with pass or fail,
 	 * the catchment-wide checks 2 and 3, the recession diagnostics (rate ratio
-	 * and b difference) and the validation signatures (BFI by both filters,
+	 * and b difference) and the hydrological signatures (BFI by both filters,
 	 * the low-flow slope bias and %BiasFLV, the held-out recession skill).
 	 * null when neither run has them (both before engine 0.25.0).
 	 */

@@ -101,7 +101,7 @@
 		const i = lf?.points.indexOf(p) ?? -1;
 		return i >= 0 ? c.flowsM3s[i]! : null;
 	};
-	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth, the validation signatures (engine 1.55.0) the sixth.
+	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth, the hydrological signatures (engine 1.55.0) the sixth.
 	const checkCount = $derived(checks.recession === undefined ? 'Four' : checks.signatures === undefined ? 'Five' : 'Six');
 </script>
 

@@ -241,7 +241,7 @@ export interface CalibrationParams {
  * model, which engine 1.0.0 removed (issue #16): it ran GR4J instead.
  */
 export const LEGACY_UPGRADED_WARNING =
-	'LEGACY_UPGRADED: this project was set to the legacy runoff model (the original workbook’s), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Settings → Flow calibration) or refit them.';
+	'LEGACY_UPGRADED: this project was set to the legacy runoff model (the original workbook’s), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Calibration → Flow calibration) or refit them.';
 
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
 export const RETIRED_CALIBRATION_KEYS = [
@@ -1297,7 +1297,7 @@ export const AREAL_RAIN_COLUMN = { key: 'rain_areal', label: 'Areal catchment ra
 
 /** The run warning for an areal factor fitted to the flow record (method 'fitted'). */
 export const AREAL_RAIN_FITTED_WARNING =
-	'the areal rainfall correction was fitted to the flow record, so the rain level is a calibrated multiplier: it trades off against GR4J’s production store and the evaporation, and the fit cannot tell a rain error from a parameter error. Prefer a factor from an independent MAP or rain gauges (docs/model.md §2.4g)';
+	'the areal rainfall correction was fitted to the flow record, so the rain level is a calibrated multiplier: it trades off against GR4J’s production store and the evaporation, and the fit cannot tell a rain error from a parameter error. Prefer a factor from an independent MAP or rain gauges';
 
 /** The areal factor per water-year month (Oct–Sep), or null for none. */
 export const arealRainFactors = (a: ArealRain | null | undefined): readonly number[] | null => (a ? a.factors : null);

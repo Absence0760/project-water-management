@@ -1778,7 +1778,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Simulated recession agrees (indicative),yes');
 	});
 
-	it('writes the validation signatures of the scored record (engine ≥ 1.55.0)', () => {
+	it('writes the hydrological signatures of the scored record (engine ≥ 1.55.0)', () => {
 		expect([...plausibilityLines(checks)]).toContain('Not computed: the run has no observed flow record');
 		const obs = Array.from({ length: days }, (_, t) => 0.05 + 0.04 * Math.sin(t / 20) ** 2);
 		const { checks: scored } = plausibilityChecks({
@@ -1802,7 +1802,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 			scored: { flowKind: 'flow_observed_m3s', site: { nodeId: 'H', name: 'Upper weir' }, observedM3s: obs, simulatedM3Day: obs.map((q) => q * 86_400), segmentMask: new Uint8Array(days) }
 		});
 		const lines = [...plausibilityLines(scored)];
-		expect(lines).toContain('Validation signatures (the scored record against the simulated outflow on the same days)');
+		expect(lines).toContain('Hydrological signatures (the scored record against the simulated outflow on the same days)');
 		expect(lines).toContain('Record,observed gauge,at,gauge Upper weir');
 		expect(lines).toContain('Base-flow index,Parameters,Days,Stretches,Observed,Simulated,Difference (simulated − observed),Within ±0.15');
 		const h = scored.signatures!.baseflow!.hughes!;
@@ -1849,7 +1849,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		const judged = [...plausibilityLines({ ...checks, signatures: { ...signatures, recessionHoldout: { ...signatures.recessionHoldout!, segments: 9, agrees: false, law: null } } })];
 		expect(judged).toContain(',9,3,2,15,,,-0.25,0.9,0.4,0.1,no');
 		// A run from engines 1.50.0–1.54.0 has no signatures key at all: the gate is its absence, not a version compare.
-		expect([...plausibilityLines({ ...checks, signatures: undefined })]).toContain('Run made before engine 1.55.0: no validation signatures');
+		expect([...plausibilityLines({ ...checks, signatures: undefined })]).toContain('Run made before engine 1.55.0: no hydrological signatures');
 	});
 
 	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
@@ -1887,7 +1887,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(none).toContain('Not checked: the run has no rainfall series');
 		expect(none).toContain('Not computed: no dry season');
 		expect(none).toContain('Run made before engine 1.19.0: no recession diagnostics');
-		expect(none).toContain('Run made before engine 1.55.0: no validation signatures');
+		expect(none).toContain('Run made before engine 1.55.0: no hydrological signatures');
 		expect([...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null })]).toContain(
 			'Not checked: needs an observed flow record and catchment rain'
 		);

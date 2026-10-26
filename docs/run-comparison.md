@@ -377,7 +377,7 @@ bottom:
    side, stacked on narrow screens. Compare runs over the same observed days:
    if the day counts differ, part of the difference comes from the record.
 5. **Plausibility checks** (engine ≥ 1.4.0 compares them, issue #64; the
-   recession diagnostics and the validation signatures from engine 1.55.0;
+   recession diagnostics and the hydrological signatures from engine 1.55.0;
    `plausibility/compare.ts` `comparePlausibility`,
    `compare/PlausibilityCompare.svelte`), under its own heading; see
    [Plausibility checks](#plausibility-checks) below.
@@ -513,7 +513,7 @@ and site, with run A, run B and the change:
   flow) and b difference with its stored verdict ("rate 1.50×, b +0.30
   (agrees)", "no simulated fit (disagrees)", "not judged: 5 of 8
   segments"), and the change in each ("rate −1.10×; b −0.40").
-- **Validation signatures** (engine ≥ 1.55.0, CR-16,
+- **Hydrological signatures** (engine ≥ 1.55.0, CR-16,
   `RunComparison.plausibility.signatures`, on each run's scored record: the
   outlet's, or the calibration site's gauge, named in the Site column):
   a row each for the base-flow index by the Hughes et al. (2003) and the

@@ -212,7 +212,7 @@ describe('chirpsBiasFactors', () => {
 		expect(keepDryDoubtWarnings(c)).toEqual([
 			`Kept-dry zero run ${d.start} to ${d.end} looks doubtful: bias-corrected CHIRPS reads ${Math.round(d.chirpsMm)} mm over its ${run.length} kept-dry days, ` +
 				`above the ${Math.round(d.limitMm)} mm limit (the larger of 50 mm and 25 % of the catchment's usual annual rain). ` +
-				'Those days still run dry, but water year 2002/03 stay out of the CHIRPS factor fit. Check the Keep dry list in Settings → Rain gaps → Flagged rain.'
+				'Those days still run dry, but water year 2002/03 stay out of the CHIRPS factor fit. Check the Keep dry list in Model settings → Rain gaps → Flagged rain.'
 		]);
 		expect(fitExclusionText(c)).toBe(' Left out of the fit as suspect catchment rain: water years of kept-dry runs that CHIRPS contradicts (2002/03).');
 		// In mode 'none' (CHIRPS already corrected to the catchment) the guard reads it as stored:
@@ -525,7 +525,7 @@ describe('zero-rain runs treated as missing (CR-20, B2)', () => {
 			new RegExp(`^Catchment rain treated as missing on ${FILL_N} days: ${RUN_FROM} to ${RUN_TO} \\(${FILL_N} days, flagged zero run\\)\\. CHIRPS \\(bias-corrected\\) then forecast rain stand in, ${Math.round(filled)} mm in all\\. The stored series is unchanged\\.`)
 		);
 		expect(out.summary.warnings).toContain(
-			`Flagged zero runs kept as recorded (dry) on ${DRY_N} days where CHIRPS reads 2 mm or less: only days CHIRPS reads more on are treated as missing (Settings → Rain gaps → Flagged rain).`
+			`Flagged zero runs kept as recorded (dry) on ${DRY_N} days where CHIRPS reads 2 mm or less: only days CHIRPS reads more on are treated as missing (Model settings → Rain gaps → Flagged rain).`
 		);
 	});
 
@@ -539,7 +539,7 @@ describe('zero-rain runs treated as missing (CR-20, B2)', () => {
 		expect(dry.series.some((s) => s.key === ZERO_RAIN_COLUMN.key)).toBe(false);
 		expect(dry.summary.zeroRainInfill).toMatchObject({ mode: 'asRecorded', periods: [], days: 0, asRecordedDays: RUN_N });
 		expect(dry.summary.warnings).toContain(
-			`Flagged zero runs run as recorded (dry) on ${RUN_N} days: Settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)", so CHIRPS doesn't fill them.`
+			`Flagged zero runs run as recorded (dry) on ${RUN_N} days: Model settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)", so CHIRPS doesn't fill them.`
 		);
 		const flow = (o: typeof dry) => o.series.find((s) => s.key === 'natural_flow')!.values.reduce((a, b) => a + b, 0);
 		expect(flow(filled)).toBeGreaterThan(flow(dry));
@@ -560,7 +560,7 @@ describe('zero-rain runs treated as missing (CR-20, B2)', () => {
 		expect(z.keptDry).toEqual([{ ...keepDry[0], days: kept.length }]);
 		expect(z.days).toBe(FILL.filter((i) => dateAt(i) > '2003-06-30').length);
 		expect(out.summary.warnings.find((w) => w.startsWith('Flagged zero runs kept as recorded'))).toBe(
-			`Flagged zero runs kept as recorded (dry) on ${kept.length} days, as Settings → Rain gaps → Flagged rain says: 2003-04-01 to 2003-06-30 (${kept.length} days: hydrologist: real drought).`
+			`Flagged zero runs kept as recorded (dry) on ${kept.length} days, as Model settings → Rain gaps → Flagged rain says: 2003-04-01 to 2003-06-30 (${kept.length} days: hydrologist: real drought).`
 		);
 	});
 

@@ -268,7 +268,7 @@ describe('engine invariants on random networks', () => {
 		}
 	});
 
-	it('engine 1.55.0: the validation signatures stay in range and only report (CR-16, model.md §2.10d)', () => {
+	it('engine 1.55.0: the hydrological signatures stay in range and only report (CR-16, model.md §2.10d)', () => {
 		const inRange = (v: number) => v >= 0 && v <= 1;
 		let seen = 0;
 		for (let seed = 1; seed <= 60 && seen < 8; seed++) {
