@@ -123,7 +123,7 @@ export function recessionWarnings(r: RecessionCheck | null | undefined): string[
 		return [
 			`Recession diagnostics (indicative): on the ${n} rain-free recession segments of the ${RECORD[r.flowKind]} record, the simulated outflow barely falls ` +
 				'(too few falling days to fit). The model holds its flow up where the river recedes: check the groundwater exchange and routing store (GR4J X2, X3), and dam releases. ' +
-				'The Plausibility checks panel plots −dQ/dt against Q for both.'
+				'Calibration → Plausibility checks plots −dQ/dt against Q for both.'
 		];
 	}
 	const parts: string[] = [];
@@ -139,6 +139,6 @@ export function recessionWarnings(r: RecessionCheck | null | undefined): string[
 	return [
 		`Recession diagnostics (indicative): on the ${n} rain-free recession segments of the ${RECORD[r.flowKind]} record, ${parts.join(', and ')}. ` +
 			'The model drains its stores at a different pace from the river: check the routing and groundwater parameters (GR4J X2, X3), and abstraction during dry spells. ' +
-			'The Plausibility checks panel plots −dQ/dt against Q for both.'
+			'Calibration → Plausibility checks plots −dQ/dt against Q for both.'
 	];
 }

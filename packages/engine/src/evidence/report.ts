@@ -306,10 +306,10 @@ export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
 		id: 'declaredRule',
 		label: 'The project declares its uncertainty rule',
 		passed: !!rule,
-		detail: rule ? 'Settings › Evidence declares the sample and thresholds a cited ensemble must use.' : 'No uncertainty rule is declared in the baseline’s settings.',
+		detail: rule ? 'Model settings → Evidence declares the sample and thresholds a cited ensemble must use.' : 'No uncertainty rule is declared in the baseline’s settings.',
 		refuses: false,
 		blocksIssue: true,
-		fix: 'An editor declares the rule under Settings › Evidence, runs the model again and nominates that run.'
+		fix: 'An editor declares the rule under Model settings → Evidence, runs the model again and nominates that run.'
 	});
 	const cited = citedEnsemble(input.ensembles.baseline, rule);
 	add({
@@ -2010,7 +2010,7 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	for (const r of rows) if (r.notAssessed) out.push(`${r.label}${r.subject ? ` at ${r.subject}` : ''}: ${r.notAssessed}`);
 	const noRec = river.filter((s) => s.category === null).map((s) => s.name);
 	if (noRec.length)
-		out.push(`The recommended ecological category (REC) is not given at ${noRec.join(', ')}: expect the assessor to ask which Reserve determination applies (ER-D2); enter it on the rule table in Settings.`);
+		out.push(`The recommended ecological category (REC) is not given at ${noRec.join(', ')}: expect the assessor to ask which Reserve determination applies (ER-D2); enter it on the rule table (Model settings → Reserve rule tables).`);
 	if (!(input.baseline.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord)
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');

@@ -148,7 +148,7 @@ export function fillPlanEwrShares(nodes: { ewrShare?: number }[], split: EwrSpli
 export function ewrSplitNote(info: EwrSplitInfo): string | null {
 	if (info.method === 'flowShare') return null;
 	if (info.why === 'catchmentRain')
-		return 'the EWR split by each unit’s natural MAR is the flow share here: GR4J runs once on the catchment rain, so a unit’s natural runoff is its flow share of it (docs/model.md §2.5b)';
+		return 'the EWR split by each unit’s natural MAR is the flow share here: GR4J runs once on the catchment rain, so a unit’s natural runoff is its flow share of it';
 	if (info.why === 'noRunoff') return 'no unit made natural runoff over the run, so the EWR is split between the units by the flow share, not by their natural MAR';
 	if (info.why === 'resumed') return 'this run resumes from a snapshot of a run that split the EWR by the flow share, so it keeps the flow share rather than work natural MAR shares out on its own days';
 	const p = info.period!;

@@ -603,7 +603,7 @@ export interface FitRecordStatus {
 	 */
 	catchmentStationChanged?: true;
 	/**
-	 * The flow generation method (Settings → Flow generation, issue #553,
+	 * The flow generation method (Model settings → Flow generation, issue #553,
 	 * docs/model.md §2.4h, §2.5) differs from the one the fit ran under:
 	 * Fragmentation (one GR4J run on the catchment rain, split by flow share;
 	 * settings.unitRain absent, null or `catchment`) or Per unit (GR4J per land
@@ -852,7 +852,7 @@ export function fitFlowMethod(record: Pick<FitRecord, 'forcing'>): FlowGeneratio
 	return record.forcing.unitRain ? 'perUnit' : 'fragmentation';
 }
 
-/** The flow generation method settings.unitRain chooses (Settings → Flow generation, issue #553): Per unit for `perUnit`, else Fragmentation. */
+/** The flow generation method settings.unitRain chooses (Model settings → Flow generation, issue #553): Per unit for `perUnit`, else Fragmentation. */
 export function flowMethodOf(unitRain: unknown): FlowGenerationMethod {
 	return resolveUnitRain(unitRain, [])?.mode === 'perUnit' ? 'perUnit' : 'fragmentation';
 }
@@ -1070,17 +1070,17 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.chirpsFactorsChanged) {
 		out.push(
-			`The monthly CHIRPS factors this run applies differ by more than ${CHIRPS_FACTOR_TOLERANCE * 100} % in some month from those the fit ran on: new days shared by the catchment rain and CHIRPS, or preliminary CHIRPS turned final, moved them, and with them the rain on every day CHIRPS fills. Refit, or fit the factors on fixed water years (Settings → Rain gaps → CHIRPS gap filling → Fit ranges).`
+			`The monthly CHIRPS factors this run applies differ by more than ${CHIRPS_FACTOR_TOLERANCE * 100} % in some month from those the fit ran on: new days shared by the catchment rain and CHIRPS, or preliminary CHIRPS turned final, moved them, and with them the rain on every day CHIRPS fills. Refit, or fit the factors on fixed water years (Model settings → Rain gaps → CHIRPS gap filling → Fit ranges).`
 		);
 	}
 	if (status.observedOriginChanged) {
 		out.push('The calibration record now comes from another source, or was given in another unit, than the one the fit ran on. Check the record, then refit before relying on the parameters.');
 	}
 	if (status.flowFillChanged) {
-		out.push('The gap filling of the calibration record has changed since the fit, so the filled days the fit read are not the ones a run reads now (Settings → Calibration record → Flow gaps). Refit before relying on the parameters.');
+		out.push('The gap filling of the calibration record has changed since the fit, so the filled days the fit read are not the ones a run reads now (Calibration → Calibration record → Flow gaps). Refit before relying on the parameters.');
 	}
 	if (status.draftRules) {
-		out.push('Automated calibration picked this fit under draft rules, not yet signed off by the hydrologist, so it is not evidence until they are (Settings → Fit the parameters → Calibration rules).');
+		out.push('Automated calibration picked this fit under draft rules, not yet signed off by the hydrologist, so it is not evidence until they are (Calibration → Fit the parameters → Calibration rules).');
 	}
 	if (status.rulesChanged) out.push('The calibration rules have changed since automated calibration picked this fit: run it again under the current rules.');
 	if (status.catchmentStationChanged) {
@@ -1090,7 +1090,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.methodChanged) {
 		out.push(
-			'Parameters not fitted for this method: the fit ran under the other flow generation method (Settings → Flow generation: Fragmentation, one GR4J run on the catchment rain, or Per unit, GR4J on each unit’s own rain). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
+			'Parameters not fitted for this method: the fit ran under the other flow generation method (Model settings → Flow generation: Fragmentation, one GR4J run on the catchment rain, or Per unit, GR4J on each unit’s own rain). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
 		);
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {

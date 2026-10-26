@@ -178,6 +178,6 @@ export function naturalisedWarning(c: NaturalisedCheck | null): string | null {
 		`beyond the ${Math.round(c.tolerance * 100)} % allowed for gauging error (worst ${wyLabel(worst.waterYear)}: ` +
 		`${amount(worst.naturalisedMm3, 2)} Mm³ implied against ${amount(worst.naturalMm3, 2)} Mm³ simulated). ` +
 		'Natural flow may be simulated too low (rain, parameters), abstraction over-estimated, or the record wrong in those years. ' +
-		'The Plausibility checks panel splits the abstraction into use, dams and land cover.'
+		'Calibration → Plausibility checks splits the abstraction into use, dams and land cover.'
 	);
 }

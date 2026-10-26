@@ -165,6 +165,6 @@ export function lowFlowWarning(lf: LowFlowCurves | null): string | null {
 		(high
 			? 'The model keeps too much water in the river in the dry season: check the base flow (GR4J X3), dam releases and the abstraction. '
 			: 'The model dries the river out faster than it did: check the base flow (GR4J X3), abstraction and dam capture. ') +
-		'The Plausibility checks panel overlays the curves.'
+		'Calibration → Plausibility checks overlays the curves.'
 	);
 }

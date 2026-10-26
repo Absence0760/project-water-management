@@ -462,7 +462,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	if (idx.length < 30) {
 		throw new Error(
 			`only ${idx.length} of the ${allIdx.length} observed days inside the calibration window are left once the quality flags leave out extrapolated, suspect or infilled days; ` +
-				'at least 30 are needed: check the gauged range and how flagged days are treated (Settings → Calibration record)'
+				'at least 30 are needed: check the gauged range and how flagged days are treated (Calibration → Calibration record)'
 		);
 	}
 
@@ -593,7 +593,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
  * EWR test stays the outlet's.
  */
 export const siteNote = (name: string): string =>
-	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Settings → Calibration record are the outlet records', so none applies to this record. A run scores its calibration statistics here too; the outlet's EWR test stays the outlet's.`;
+	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Calibration → Calibration record are the outlet records', so none applies to this record. A run scores its calibration statistics here too; the outlet's EWR test stays the outlet's.`;
 
 /** Observed and simulated values on the given days. */
 function pair(obs: Float64Array, sim: Float64Array, idx: Int32Array): [Float64Array, Float64Array] {

@@ -62,7 +62,7 @@ const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 
 function resolveAssignment(raw: unknown, where: string, warnings: string[]): RainStationAssignment | null {
 	const a = raw as Partial<RainStationAssignment> | null;
 	if (!a || typeof a !== 'object' || Array.isArray(a) || !isId(a.stationId)) {
-		warnings.push(`rain stations: ${where} names no station, so it is ignored (docs/model.md §2.4i)`);
+		warnings.push(`rain stations: ${where} names no station, so it is ignored`);
 		return null;
 	}
 	if (a.scaleToMap !== undefined && typeof a.scaleToMap !== 'boolean') warnings.push(`rain stations: ${where}'s scaleToMap isn't true or false; scaling to MAP`);
@@ -85,7 +85,7 @@ function resolveAssignment(raw: unknown, where: string, warnings: string[]): Rai
 export function resolveRainStations(raw: unknown, warnings: string[]): RainStationSettings | null {
 	if (raw === null || raw === undefined) return null;
 	if (typeof raw !== 'object' || Array.isArray(raw)) {
-		warnings.push('rain stations: the setting is not an object, so it is ignored (docs/model.md §2.4i)');
+		warnings.push('rain stations: the setting is not an object, so it is ignored');
 		return null;
 	}
 	const r = raw as RainStationSettings;
@@ -350,7 +350,7 @@ export function catchmentStationPlan(ctx: StationContext, warnings: string[]): C
 	const stationId = a.stationId;
 	const rec = ctx.record(stationId);
 	if (!rec) {
-		warnings.push(`station: the catchment’s station "${ctx.name(stationId)}" has no record in this run’s input, so the catchment rain is read as without a station (docs/model.md §2.4i)`);
+		warnings.push(`station: the catchment’s station "${ctx.name(stationId)}" has no record in this run’s input, so the catchment rain is read as without a station`);
 		return null;
 	}
 	const scaleToMap = a.scaleToMap !== false;
@@ -456,7 +456,7 @@ export interface UnitStationRecipe {
 export function unitStationRecipe(ctx: StationContext, node: NetworkNode, a: RainStationAssignment, warnings: string[]): UnitStationRecipe | null {
 	const stationId = a.stationId;
 	if (!ctx.record(stationId)) {
-		warnings.push(`station: "${node.name}"’s station "${ctx.name(stationId)}" has no record in this run’s input, so the unit keeps its own rain rule (docs/model.md §2.4h)`);
+		warnings.push(`station: "${node.name}"’s station "${ctx.name(stationId)}" has no record in this run’s input, so the unit keeps its own rain rule`);
 		return null;
 	}
 	const scaleToMap = a.scaleToMap !== false;

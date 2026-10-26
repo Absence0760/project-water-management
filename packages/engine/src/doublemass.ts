@@ -342,8 +342,8 @@ export function doubleMassCheck(dm: DoubleMass | null, fitPeriod: ChirpsFitPerio
 			`catchment rain changes slope ${parts.join(' and ')}. A station change, a moved gauge or a change in how the catchment average is built can do this; ` +
 			'so can a change in CHIRPS. ' +
 			(fitPeriod === 'ranges'
-				? 'The CHIRPS factors are fitted per listed water-year range (Settings → Rain gaps → CHIRPS gap filling → Fit ranges; see the Data tab\'s double-mass chart)'
-				: 'The CHIRPS factors are fitted over all segments: this check does not change them. Settings → Rain gaps → CHIRPS gap filling → Fit ranges can fit them per water-year range, and propose ranges from these breaks (see the Data tab\'s double-mass chart)')
+				? 'The CHIRPS factors are fitted per listed water-year range (Model settings → Rain gaps → CHIRPS gap filling → Fit ranges; see the Data tab\'s double-mass chart)'
+				: 'The CHIRPS factors are fitted over all segments: this check does not change them. Model settings → Rain gaps → CHIRPS gap filling → Fit ranges can fit them per water-year range, and propose ranges from these breaks (see the Data tab\'s double-mass chart)')
 	};
 }
 
@@ -397,7 +397,7 @@ export function doubleMassRunWarning(
 		`CHIRPS fills catchment-rain gaps with factors fitted on the whole record (pooled catchment / CHIRPS ${f2(pooled)}), ` +
 		`but the double-mass check finds the ratio changed: ${parts.join('; ')}. ` +
 		"Those days may run too wet or too dry. The Data tab's double-mass chart shows the segments; " +
-		'Settings → Rain gaps → CHIRPS gap filling → Fit ranges can fit the factors per water-year range instead, and propose ranges from these breaks.'
+		'Model settings → Rain gaps → CHIRPS gap filling → Fit ranges can fit the factors per water-year range instead, and propose ranges from these breaks.'
 	);
 }
 
@@ -456,7 +456,7 @@ function segmentedRunWarning(
 			})
 		: [];
 	return (
-		`CHIRPS fills catchment-rain gaps with factors fitted per listed water-year range (Settings → Rain gaps → CHIRPS gap filling → Fit ranges): ${filled.join('; ')}.` +
+		`CHIRPS fills catchment-rain gaps with factors fitted per listed water-year range (Model settings → Rain gaps → CHIRPS gap filling → Fit ranges): ${filled.join('; ')}.` +
 		(off.length ? ` But the double-mass check finds the ratio differs from the factors that filled: ${off.join('; ')}. Those days may run too wet or too dry.` : '') +
 		" The Data tab's double-mass chart shows the segments."
 	);

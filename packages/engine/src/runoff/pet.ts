@@ -17,4 +17,4 @@ export const hasPotentialEvaporation = (
 
 /** Why a GR4J run is refused when potential evaporation is 0 in every month. */
 export const GR4J_NO_PET =
-	'GR4J needs potential evaporation: it is 0 in every month (A-pan × pan coefficient, or the monthly PE row), so the catchment would never dry out. Enter A-pan evaporation (Settings → Demand, or a daily A-pan series on the Data tab) or a monthly PE row (Settings → Flow calibration).';
+	'GR4J needs potential evaporation: it is 0 in every month (A-pan × pan coefficient, or the monthly PE row), so the catchment would never dry out. Enter A-pan evaporation (Model settings → Demand, or a daily A-pan series on the Data tab) or a monthly PE row (Calibration → Flow calibration).';

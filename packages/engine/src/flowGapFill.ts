@@ -138,7 +138,7 @@ export function resolveFlowGapFill(raw: unknown, warnings: string[] = []): FlowG
 	for (const k of GAP_FILL_KINDS) out[k] = resolveSpec(k, r[k], warnings);
 	// Retired before any deploy: settings.qualityFlags.infilled is the one control now.
 	if (r.useFilledDays === true) {
-		warnings.push('flow gap filling useFilledDays is retired and ignored: whether filled days are scored is Settings → Calibration record → Quality flags for Fit automatically → Infilled days');
+		warnings.push('flow gap filling useFilledDays is retired and ignored: whether filled days are scored is Calibration → Calibration record → Quality flags for Fit automatically → Infilled days');
 	}
 	return out;
 }

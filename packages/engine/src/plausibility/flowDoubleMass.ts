@@ -200,6 +200,6 @@ export function flowDoubleMassWarning(dm: FlowDoubleMass | null): string | null 
 	});
 	return (
 		`Observed flow against rain: the double-mass curve of the ${RECORD[dm.flowKind]} record against catchment rain (${dm.years.length} water years) changes slope ${parts.join(' and ')}. ` +
-		'The model keeps development fixed over the run, so a real change in use would bias the fit before or after it. Check the gauge\'s records and the development history; the Plausibility checks panel has the table.'
+		'The model keeps development fixed over the run, so a real change in use would bias the fit before or after it. Check the gauge\'s records and the development history; Calibration → Plausibility checks has the table.'
 	);
 }

@@ -324,7 +324,7 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	// dimension that changes nothing: drop it and say so.
 	if (settings.pe.kind === 'monthly' && panOffset > 0) {
 		notes.push(
-			'The pan coefficient is not varied: GR4J’s potential evaporation comes from the monthly PE row (Settings), which does not use it. The ensemble does not vary potential evaporation.'
+			'The pan coefficient is not varied: GR4J’s potential evaporation comes from the monthly PE row (Calibration → Flow calibration), which does not use it. The ensemble does not vary potential evaporation.'
 		);
 		panOffset = 0;
 	}

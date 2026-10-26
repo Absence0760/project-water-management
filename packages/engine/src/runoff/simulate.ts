@@ -324,7 +324,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 	// A calibration override is the catchment's area under catchment rain; here the units' areas are (resolveCatchmentAreaKm2).
 	const override = ctx.settings.calibration.catchmentAreaKm2;
 	if (override != null && override > 0 && Math.abs(override - area) > 0.01 * area)
-		warnings.push(`runoff from each unit's own rain runs on the units' areas (${Math.round(area * 100) / 100} km²), not the catchment area set in Settings (${override} km²)`);
+		warnings.push(`runoff from each unit's own rain runs on the units' areas (${Math.round(area * 100) / 100} km²), not the catchment area set in Calibration → Flow calibration (${override} km²)`);
 	const idle = input.model.nodes.filter((n) => n.kind === 'farm' && !(n.areaKm2 > 0)).sort((a, b) => cmpStr(a.id, b.id));
 	if (idle.length && ctx.settings.flowShareMethod !== 'area')
 		warnings.push(`runoff from each unit's own rain: ${idle.map((n) => `"${n.name}"`).join(', ')} ${idle.length === 1 ? 'has' : 'have'} no area, so no runoff of ${idle.length === 1 ? 'its' : 'their'} own, whatever flow share`);

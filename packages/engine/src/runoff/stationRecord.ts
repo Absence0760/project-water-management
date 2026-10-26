@@ -167,7 +167,7 @@ export function checkedStationRecord(
 	if (z && z.days > 0)
 		warnings.push(`${who} is treated as missing on ${plural(z.days, 'day')} of flagged zero runs (§2.4c, with the catchment’s settings). The stored series is unchanged.`);
 	if (z && z.asRecordedDays > 0)
-		warnings.push(`${who} has flagged zero runs on ${plural(z.asRecordedDays, 'day')} run as recorded (dry): Settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)".`);
+		warnings.push(`${who} has flagged zero runs on ${plural(z.asRecordedDays, 'day')} run as recorded (dry): Model settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)".`);
 	const acc = r.accumulation?.info;
 	if (!opts.fitExcludeAccumulations && acc && acc.spreadWindows > 0)
 		warnings.push(`${who} has ${plural(acc.spreadWindows, 'multi-day accumulation')} spread over ${plural(acc.spreadDays, 'day')} (${mm(acc.spreadMm)}) in proportion to CHIRPS (§2.4d, with the catchment’s settings). The stored series is unchanged.`);
@@ -175,7 +175,7 @@ export function checkedStationRecord(
 	if (outages > 0) warnings.push(`${who} has ${plural(outages, 'reading')} after a blank outage set aside as missing (§2.4d): each may hold the outage’s rain.`);
 	const asRecorded = (acc?.windows ?? []).filter((w) => w.status === 'asRecorded').length;
 	if (asRecorded > 0)
-		warnings.push(`${who} has ${plural(asRecorded, 'multi-day accumulation')} run as recorded, because Settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)".`);
+		warnings.push(`${who} has ${plural(asRecorded, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)".`);
 	if (unreliable > 0) warnings.push(`${who} is treated as missing on ${plural(unreliable, 'day')} the user marked unreliable. The stored series is unchanged.`);
 
 	return { record: { startDate: fromEpochDay(d0), values }, setAside: { checks, unreliable }, warnings, ...(forcing ? { forcing: { startDate: fromEpochDay(d0), values: forcing } } : {}) };
