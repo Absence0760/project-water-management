@@ -11,8 +11,8 @@
 > report renderer is created, and `infra/scripts/postapply-check.sh` passes. The map
 > serves the basemap, its label fonts and the relief, and delineation is on
 > (`delineation_dem`; [§ Map tiles](#map-tiles)). SES production access was
-> granted 2026-10-06, so mail reaches any address (sign-up stays invite-only,
-> `signup_open`). Still open: tracing a dam (`water.pmtiles`,
+> granted 2026-10-06, so mail reaches any address, and sign-up has been open
+> since that day (`signup_open = true`, [§ Who can sign up](#who-can-sign-up)). Still open: tracing a dam (`water.pmtiles`,
 > `dam_trace_water`) and the first restore rehearsal; [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws) tracks
 > them. This page describes the setup and the steps that built it.
 
