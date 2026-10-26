@@ -29,11 +29,12 @@ const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 		// Engine ≥ 1.81.0 (issue #507 item 3): only the flagged run's days CHIRPS reads more than 2 mm on are filled; the rest stay dry.
 		/^Catchment rain treated as missing on 61 days: 2019-06-01 to 2019-08-15 \(47 days, flagged zero run\); 2021-07-05 to 2021-07-18 \(14 days, listed: /,
 		/^Flagged zero runs kept as recorded \(dry\) on 29 days where CHIRPS reads 2 mm or less/,
-		/^Rainfall \(catchment\): 1 run of zero rain .*2019-06-01 to 2019-08-15/,
+		// Engine ≥ 1.99.0 (issue #586): a data check writes its dates day first.
+		/^Rainfall \(catchment\): 1 run of zero rain .*1 Jun 2019 to 15 Aug 2019/,
 		// A week read in one go (B4): 6 blank days and the reading day.
 		/^Catchment rain accumulations spread over the days they cover: 1 window, 7 run days: 2017-06-20 to 2017-06-26 /,
 		// The drowned weir's flat top in the excluded water year.
-		/^Observed flow: 1 flat stretch of more days than a slow recession holds one value at the record.s resolution .*\(2014-/
+		/^Observed flow: 1 flat stretch of more days than a slow recession holds one value at the record.s resolution .*\(\d{1,2} [A-Z][a-z]{2} 2014: /
 	],
 	'Example · Droëvlei (water-stressed)': [
 		/^Observed flow records disagree .*2020\/21/,

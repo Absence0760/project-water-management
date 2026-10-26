@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { placeName, placesIn, WARNING_PLACES, warningInCurrentWords, type WarningPlace } from './places';
+import { checkSeries } from './quality';
 
 const named = (text: string) => placesIn(text).map((m) => [text.slice(m.start, m.end), m.place]);
 
@@ -87,6 +88,28 @@ describe('warningInCurrentWords', () => {
 		expect(warningInCurrentWords('Validation signatures (provisional limits): on the 3 scored days')).toBe('Hydrological signatures (provisional limits): on the 3 scored days');
 		expect(warningInCurrentWords('Set the monthly A-pan (Settings) or load a daily A-pan series')).toBe('Set the monthly A-pan (Model settings → Demand) or load a daily A-pan series');
 		expect(warningInCurrentWords('An editor declares the rule under Settings › Evidence.')).toBe('An editor declares the rule under Model settings → Evidence.');
+	});
+
+	it('reads a data check from before engine 1.99.0, its dates year first, in today’s words (issue #586)', () => {
+		// Today's words, from the check itself; the same text with its dates year first is how 1.98.0 wrote it.
+		const v = [1, 2, 3, 4, -0.4, 2, ...new Array(6).fill(5.35), 3, 2, 1];
+		const checks = checkSeries('rain_chirps_mm', { startDate: '2020-10-02', values: v });
+		expect(checks.length).toBeGreaterThan(1);
+		const iso: Record<string, string> = { '6 Oct 2020': '2020-10-06', '8 Oct 2020': '2020-10-08' };
+		for (const c of checks) {
+			const old = c.text.replace(/\d{1,2} [A-Z][a-z]{2} \d{4}/g, (d) => iso[d]!);
+			expect(old).toMatch(/\(2020-10-0\d: /);
+			expect(warningInCurrentWords(old)).toBe(c.text);
+		}
+		const zero = 'Rainfall (catchment): 1 run of zero rain covering 60+ days of the wet season (Jun, Jul): 2012-06-01 to 2012-08-15 (76 days, 76 in the wet season, which usually brings about 120 mm). Real dry spells?';
+		expect(warningInCurrentWords(zero)).toBe(
+			'Rainfall (catchment): 1 run of zero rain covering 60+ days of the wet season (Jun, Jul): 1 Jun 2012 to 15 Aug 2012 (76 days, 76 in the wet season, which usually brings about 120 mm). Real dry spells?'
+		);
+	});
+
+	it('keeps the dates of a warning that isn’t a data check as they are', () => {
+		const w = 'Catchment rain accumulations spread over 2024-01-01 to 2024-01-03';
+		expect(warningInCurrentWords(w)).toBe(w);
 	});
 
 	it('leaves a warning in today’s words as it is', () => {

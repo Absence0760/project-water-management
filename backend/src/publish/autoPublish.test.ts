@@ -32,6 +32,23 @@ describe('newWarnings', () => {
 		expect(newWarnings(at197.slice(1), at198)).toEqual([at198[0]]);
 	});
 
+	it('reads a data check from before engine 1.99.0, its dates year first, as the same warning (issue #586 R4-G)', () => {
+		const at198 = [
+			'Observed flow: 1 negative value (2020-10-06: -0.4 m³/s). Flow can’t be negative',
+			'Rainfall (catchment): 1 run of zero rain covering 60+ days: 2012-06-01 to 2012-08-15 (76 days). Real dry spells?'
+		];
+		const at199 = [
+			'Observed flow: 1 negative value (6 Oct 2020: -0.4 m³/s). Flow can’t be negative',
+			'Rainfall (catchment): 1 run of zero rain covering 60+ days: 1 Jun 2012 to 15 Aug 2012 (76 days). Real dry spells?'
+		];
+		expect(newWarnings(at198, at199)).toEqual([]);
+		// A date in another month is the same warning, as a year-first date in another month always was.
+		expect(newWarnings(at199, ['Observed flow: 1 negative value (4 Mar 2021: -0.5 m³/s). Flow can’t be negative'])).toEqual([]);
+		// Positive control: a data check the published run didn't raise still counts.
+		const added = 'Observed flow: 1 flat stretch of 14 or more days with the same value (6 Oct 2020: 5.35 m³/s for 20 days). A stuck logger or a filled-in gap?';
+		expect(newWarnings(at198, [...at199, added])).toEqual([added]);
+	});
+
 	it('ignores warnings that went away', () => {
 		expect(newWarnings(['one thing', 'another'], ['one thing'])).toEqual([]);
 	});

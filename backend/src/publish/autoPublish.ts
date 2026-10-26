@@ -30,11 +30,15 @@ import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { uncheckedSinceLastRun } from '../series/hold.js';
 import { publishRun } from './publish.js';
 
+/** A date in a warning, either way the engine writes one: "2020-10-06", or day first, "6 Oct 2020" (data checks, engine ≥ 1.99.0). */
+const DATE = /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}\b/g;
+
 /**
  * A warning's shape: its text in today's words (an older engine's "Settings → Calibration record" reads as
- * "Calibration → Calibration record", issue #586 D19), with every number (and so every date) masked.
+ * "Calibration → Calibration record", issue #586 D19, and a data check's "2020-10-06" as "6 Oct 2020", #586 R4-G),
+ * with every date, whatever its month, and every number masked.
  */
-const shape = (w: string) => warningInCurrentWords(w).replace(/\d+(?:[.,]\d+)*/g, '#');
+const shape = (w: string) => warningInCurrentWords(w).replace(DATE, '#date').replace(/\d+(?:[.,]\d+)*/g, '#');
 
 /** The warnings of `next` whose shape isn't among `prev`'s. */
 export function newWarnings(prev: readonly string[], next: readonly string[]): string[] {

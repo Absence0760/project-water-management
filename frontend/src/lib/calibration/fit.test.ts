@@ -163,7 +163,7 @@ describe('scoreColumns', () => {
 			['dsst-cal', false],
 			['dsst-val', true]
 		]);
-		expect(cols[3]!.period).toBe('2006-01-01 – 2008-12-31');
+		expect(cols[3]!.period).toBe('1 Jan 2006 – 31 Dec 2008');
 		expect(cols[5]!.period).toBe('WY 2003/04, 2007/08');
 		expect(scoreColumns(report()).map((c) => c.id)).toEqual(['before', 'fit']);
 	});
@@ -217,7 +217,7 @@ describe('scoreColumns', () => {
 			}
 		});
 		const last = scoreColumns(r).at(-1)!;
-		expect(last).toMatchObject({ id: 'record-val', label: 'Independent record: Logger flow', period: '2005-10-01 – 2008-09-30', validation: true });
+		expect(last).toMatchObject({ id: 'record-val', label: 'Independent record: Logger flow', period: '1 Oct 2005 – 30 Sep 2008', validation: true });
 		expect(last.scores.kgePrime).toBe(0.5);
 	});
 });

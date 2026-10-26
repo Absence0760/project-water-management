@@ -20,7 +20,7 @@
 //
 // None of these change a model result. They become run warnings and
 // RunSummary.dataQuality, and the Time series tab shows them before a run.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
 import {
 	defaultDataQualitySettings,
 	LOW_VS_CHIRPS_BASELINES,
@@ -355,6 +355,21 @@ const SERIES_NAME: Record<SeriesKind, string> = {
 	flow_reference_m3s: 'Reference gauge (other catchment)',
 	evap_apan_mm: 'A-pan evaporation (daily)'
 };
+/** The names the data checks' warnings start with ("Observed flow: …"), longest first. */
+const CHECK_PREFIXES = Object.values(SERIES_NAME)
+	.map((n) => `${n}: `)
+	.sort((a, b) => b.length - a.length);
+
+/**
+ * A data check's warning in the words engine 1.99.0 uses: its dates day first ("Observed flow: 1 negative value
+ * (2020-10-06: -0.4 m³/s)" → "… (6 Oct 2020: -0.4 m³/s)"), as checkSeries now writes them. Only a warning that
+ * starts with a series' name, as every data check does, is touched; any other text is returned unchanged. For
+ * comparing an older run's warnings with a newer one's (places.ts warningInCurrentWords).
+ */
+export function seriesCheckInCurrentWords(text: string): string {
+	if (!CHECK_PREFIXES.some((p) => text.startsWith(p))) return text;
+	return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (iso) => dayText(iso));
+}
 const unitOf = (k: SeriesKind) => (k.endsWith('_mm') ? 'mm' : 'm³/s');
 /**
  * The outlier factor for a kind: depths (rain, and daily A-pan evaporation,
@@ -467,7 +482,7 @@ export function checkSeries(kind: SeriesKind, s: DailySeries, dq: DataQualitySet
 	const name = SERIES_NAME[kind] ?? kind;
 	const unit = unitOf(kind);
 	const eg = (xs: SeriesCheck['examples']) =>
-		xs.map((x) => `${x.date}: ${fmt(x.value)} ${unit}${x.runDays ? ` for ${x.runDays} days` : ''}`).join('; ');
+		xs.map((x) => `${dayText(x.date)}: ${fmt(x.value)} ${unit}${x.runDays ? ` for ${x.runDays} days` : ''}`).join('; ');
 	const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 	// Negative values: impossible for rain and for flow.
@@ -790,9 +805,9 @@ const FALLBACK_NOTE =
 /** A zero run for a warning: its dates, length and what its rule counted. */
 function zeroRunText(r: ZeroRun, z: ZeroRainRuns, byUsual: boolean): string {
 	const chirps = r.chirpsShare != null ? `; CHIRPS read ${pctText(r.chirpsShare)} of its usual rain over it` : r.verdict === null ? '; too little CHIRPS to judge it' : '';
-	if (!z.wetMonths) return `${r.startDate} to ${r.endDate} (${r.days} days${chirps})`;
-	if (byUsual) return `${r.startDate} to ${r.endDate} (${r.days} days, which usually bring about ${Math.round(r.usualMm!)} mm${chirps})`;
-	return `${r.startDate} to ${r.endDate} (${r.days} days, ${r.wetDays} in the wet season, which usually brings about ${Math.round(r.usualMm!)} mm${chirps})`;
+	if (!z.wetMonths) return `${dayText(r.startDate)} to ${dayText(r.endDate)} (${r.days} days${chirps})`;
+	if (byUsual) return `${dayText(r.startDate)} to ${dayText(r.endDate)} (${r.days} days, which usually bring about ${Math.round(r.usualMm!)} mm${chirps})`;
+	return `${dayText(r.startDate)} to ${dayText(r.endDate)} (${r.days} days, ${r.wetDays} in the wet season, which usually brings about ${Math.round(r.usualMm!)} mm${chirps})`;
 }
 
 /**

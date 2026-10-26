@@ -176,7 +176,7 @@ describe('checkSeries', () => {
 		v[4] = -2;
 		const [c] = checkSeries('rain_catchment_mm', { startDate: '2020-02-27', values: v });
 		expect(c).toMatchObject({ check: 'negative', days: 1, examples: [{ date: '2020-03-02', value: -2 }] });
-		expect(c!.text).toMatch(/^Rainfall \(catchment\): 1 negative value \(2020-03-02: -2 mm\)/);
+		expect(c!.text).toMatch(/^Rainfall \(catchment\): 1 negative value \(2 Mar 2020: -2 mm\)/);
 	});
 
 	it('flags values far above the 99th percentile, largest first, once there are enough wet days', () => {
@@ -202,7 +202,7 @@ describe('checkSeries', () => {
 		const [c] = checkSeries('flow_logger_m3s', { startDate: '2021-01-01', values: v });
 		expect(c).toMatchObject({ check: 'flatline', days: n, examples: [{ date: '2021-01-03', value: 5.35, runDays: n }] });
 		expect(c!.text).toBe(
-			"Logger flow: 1 flat stretch of more days than a slow recession holds one value at the record's resolution of 0.15 m³/s (14 to 90 days by flow) with the same value (2021-01-03: 5.35 m³/s for 14 days). A stuck logger or a filled-in gap?"
+			"Logger flow: 1 flat stretch of more days than a slow recession holds one value at the record's resolution of 0.15 m³/s (14 to 90 days by flow) with the same value (3 Jan 2021: 5.35 m³/s for 14 days). A stuck logger or a filled-in gap?"
 		);
 		// Rain: five identical wet days in a row.
 		expect(checkSeries('rain_chirps_mm', { startDate: '2021-01-01', values: [0, 4.2, 4.2, 4.2, 4.2, 4.2, 0] })[0]).toMatchObject({
@@ -409,7 +409,7 @@ describe('zeroRainRuns (issue #2)', () => {
 			examples: [{ date: '2012-06-01', endDate: '2012-08-15', value: 0, runDays: 76 }]
 		});
 		expect(c!.text).toMatch(/^Rainfall \(catchment\): 1 run of zero rain covering 60\+ days of the wet season \(Apr, May, Jun, Jul, Aug, Sep: this series' six wettest months\)/);
-		expect(c!.text).toMatch(/2012-06-01 to 2012-08-15 \(76 days, 76 in the wet season, which usually brings about \d+ mm\)/);
+		expect(c!.text).toMatch(/1 Jun 2012 to 15 Aug 2012 \(76 days, 76 in the wet season, which usually brings about \d+ mm\)/);
 		expect(c!.text).toMatch(/on its own it blocks the fallback to CHIRPS \(then forecast\) rain that a blank day gets\. A run treats these runs as missing, so CHIRPS fills them, unless Model settings → Rain gaps → Flagged rain keeps them as recorded/);
 		// CHIRPS and forecast zeros block nothing that matters here: not checked.
 		expect(checkSeries('rain_chirps_mm', { startDate: S, values: v })).toEqual([]);
@@ -427,8 +427,8 @@ describe('zeroRainRuns (issue #2)', () => {
 		}));
 		const c = zeroRainCheck({ wetMonths: WINTER, runs })!;
 		expect(c.text).toMatch(/^Rainfall \(catchment\): 14 runs/);
-		expect(c.text).toContain('2011-06-01 to 2011-08-15');
-		expect(c.text).not.toContain('2012-06-01');
+		expect(c.text).toContain('1 Jun 2011 to 15 Aug 2011');
+		expect(c.text).not.toContain('1 Jun 2012');
 		expect(c.text).toMatch(/; and 2 more\./);
 		expect(c.examples).toHaveLength(5);
 		expect(c.days).toBe(76 * 14);
@@ -640,7 +640,7 @@ describe('data-quality limits as settings (engine 1.20.0, issue #66)', () => {
 			const z = zeroRainRuns(s, { dq: usual });
 			expect(z.runs).toHaveLength(1);
 			expect(z.runs[0]!.usualMm!).toBeGreaterThanOrEqual(0.2 * annual);
-			expect(zeroRainCheck(z)!.text).toMatch(new RegExp(`covering 45\\+ days that the series' monthly means would give 20 % or more of its usual ${Math.round(annual)} mm a year: 2012-06-01 to 2012-07-20 \\(50 days, which usually bring about \\d+ mm\\)`));
+			expect(zeroRainCheck(z)!.text).toMatch(new RegExp(`covering 45\\+ days that the series' monthly means would give 20 % or more of its usual ${Math.round(annual)} mm a year: 1 Jun 2012 to 20 Jul 2012 \\(50 days, which usually bring about \\d+ mm\\)`));
 			// The length floor.
 			expect(zeroRainRuns(s, { dq: { ...usual, zeroRunMinDays: 51 } }).runs).toEqual([]);
 			// A share the run's usual rain doesn't reach.
