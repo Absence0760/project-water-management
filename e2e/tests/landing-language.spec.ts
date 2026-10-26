@@ -16,6 +16,9 @@ const TITLE = 'IC-WBT: daily water balance for a catchment';
 const OTHER = (await languages()).filter((l) => l.code !== 'en');
 
 const h1 = (page: Page, name: string) => page.getByRole('heading', { level: 1, name });
+/** The language switch's accessible name: the visible code, then the language's name (WCAG 2.5.3 Label in Name). */
+const linkName = (l: { code: string; name: string }) => `${l.code.toUpperCase()} ${l.name}`;
+const ENGLISH = linkName({ code: 'en', name: 'English' });
 const storedChoice = (page: Page) => page.evaluate(() => localStorage.getItem('wm.locale'));
 
 test('/welcome is English in its HTML, and points at every language', async ({ request }) => {
@@ -51,9 +54,9 @@ for (const l of OTHER) {
 		await page.goto(`/welcome/${l.code}`);
 		await expect(page.locator('html')).toHaveAttribute('lang', l.code);
 		await expect(h1(page, w(HEADLINE))).toBeVisible();
-		const current = page.getByRole('link', { name: l.name, exact: true });
+		const current = page.getByRole('link', { name: linkName(l), exact: true });
 		await expect(current).toHaveAttribute('aria-current', 'true');
-		await page.getByRole('link', { name: 'English', exact: true }).click();
+		await page.getByRole('link', { name: ENGLISH, exact: true }).click();
 		await expect(page).toHaveURL('/welcome');
 		await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 		await expect(h1(page, HEADLINE)).toBeVisible();
@@ -70,14 +73,14 @@ for (const l of OTHER) {
 		await expect(page.locator('html')).toHaveAttribute('lang', l.code);
 		await expect(page).toHaveURL(`/welcome/${l.code}`);
 
-		await page.getByRole('link', { name: 'English', exact: true }).click();
+		await page.getByRole('link', { name: ENGLISH, exact: true }).click();
 		await expect(page).toHaveURL('/welcome');
 		await expect(h1(page, HEADLINE)).toBeVisible();
 		await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-		await expect(page.getByRole('link', { name: 'English', exact: true })).toHaveAttribute('aria-current', 'true');
+		await expect(page.getByRole('link', { name: ENGLISH, exact: true })).toHaveAttribute('aria-current', 'true');
 		expect(await storedChoice(page)).toBe('en');
 
-		await page.getByRole('link', { name: l.name, exact: true }).click();
+		await page.getByRole('link', { name: linkName(l), exact: true }).click();
 		await expect(page).toHaveURL(`/welcome/${l.code}`);
 		await expect(h1(page, w(HEADLINE))).toBeVisible();
 		await expect(page.locator('html')).toHaveAttribute('lang', l.code);
@@ -118,6 +121,17 @@ for (const l of OTHER) {
 		});
 	}
 }
+
+test('each language link is named by the code it shows, then the language, in that language (WCAG 2.5.3)', async ({ page }) => {
+	await page.goto('/welcome');
+	const links = page.getByRole('group', { name: 'Language' }).getByRole('link');
+	await expect(links).toHaveCount((await languages()).length);
+	for (const l of await languages()) {
+		const link = page.getByRole('link', { name: linkName(l), exact: true });
+		await expect(link).toHaveText(l.code.toUpperCase());
+		await expect(link).toHaveAttribute('lang', l.code);
+	}
+});
 
 test('an English visitor stays on /welcome, in English', async ({ page }) => {
 	await page.goto('/welcome');

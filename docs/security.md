@@ -4505,7 +4505,11 @@ nothing else.
   and the frontend deploy refuses a build without that meta policy
   (`infra/scripts/check-csp.mjs`). This needs `csp.mode = 'hash'` in
   `frontend/vite.config.ts`'s `sveltekit({…})`. Styles keep `'unsafe-inline'`, because Svelte
-  templates and uPlot set inline `style` attributes. CSS injection can't run
+  templates and uPlot set inline `style` attributes, and the prerendered pages
+  (`/welcome`, the legal pages) and the SPA's `index.html` carry the app's CSS
+  in a `<style>` block (`inlineStyleThreshold`, issue #92: linked, its
+  stylesheets blocked the landing's first paint); Kit adds no `style-src` to its
+  `<meta>` policy, since none is configured. CSS injection can't run
   script; Svelte's escaping and the ban on `{@html}` with user data remain the
   first XSS defence.
 - Registration is open to anyone who can reach the site. Registering grants no

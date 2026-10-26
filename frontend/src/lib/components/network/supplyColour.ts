@@ -4,10 +4,9 @@
 import type { FarmSummary, NetworkNode, RunSummary } from '@water-management/engine';
 import { fmtPct, localIsoDate } from '#lib/format/number.js';
 import { daysSince } from '#lib/components/projects/freshness.js';
-import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
+import { LOW_SUPPLY, SUPPLY_TARGET } from './supplyThresholds';
 
-/** Below this share of demand supplied a farm is in the lowest band. */
-export const LOW_SUPPLY = 0.7;
+export { LOW_SUPPLY };
 
 /**
  * - `met`: at or above SUPPLY_TARGET (the farm table's flag threshold)

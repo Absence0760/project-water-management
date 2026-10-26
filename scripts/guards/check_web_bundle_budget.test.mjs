@@ -13,6 +13,8 @@ import {
 	newEntry,
 	pageBuildWorkerViolations,
 	landingChunks,
+	landingFirstLoad,
+	measureLandingFirstLoad,
 	mapChunks,
 	measure,
 	parseEntry,
@@ -22,7 +24,7 @@ import {
 	violations,
 } from './check_web_bundle_budget.mjs';
 
-const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3, landingKb: 6, mapKb: 20 };
+const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3, landingKb: 6, landingFirstLoadKb: 10, mapKb: 20 };
 
 test('kb rounds up once, not per file', () => {
 	assert.equal(kb(0), 0);
@@ -347,6 +349,37 @@ test('the landing page is found by its modules, summed with its CSS, and has its
 	assert.match(landingChunks({}).errors.join('\n'), /Found no chunk holding/);
 	const inLayout = landingChunks({ '_app/immutable/nodes/0.js': { modules: ['src/routes/+layout.svelte', 'src/lib/components/landing/Landing.svelte'], css: [] } });
 	assert.match(inLayout.errors.join('\n'), /in the chunk of src\/routes\/\+layout\.svelte/);
+});
+
+test("the landing's first load: its HTML and every module it preloads, no blocking stylesheet, its own ceiling (issue #92)", () => {
+	const html = [
+		'<html><head>',
+		'<link rel="icon" href="./favicon.svg" />',
+		'<link href="./_app/immutable/entry/start.js" rel="modulepreload">',
+		'<link href="/_app/immutable/chunks/A.js" rel="modulepreload">',
+		'<link href="./_app/immutable/assets/inlined.css" rel="stylesheet" disabled media="(max-width: 0)">',
+		'<style>body{margin:0}</style>',
+		'</head></html>',
+	].join('\n');
+	assert.deepEqual(landingFirstLoad(html), { modules: ['_app/immutable/entry/start.js', '_app/immutable/chunks/A.js'], blockingCss: [] });
+	const files = [
+		{ path: '_app/immutable/entry/start.js', gzipBytes: 3 * 1024 },
+		{ path: '_app/immutable/chunks/A.js', gzipBytes: 8 * 1024 },
+		{ path: '_app/immutable/chunks/lazy.js', gzipBytes: 50 * 1024 },
+	];
+	const r = measureLandingFirstLoad(html, files);
+	assert.deepEqual(r.errors, []);
+	assert.equal(r.modules, 2);
+	assert.equal(r.kb, 12, 'the HTML (gzipped, under 1 KB) and the two preloaded modules; not the lazy chunk');
+	const m = { ...measure([{ path: 'a.js', gzipBytes: 1024 }]), landingFirstLoadKb: r.kb };
+	assert.match(violations(m, budget).join('\n'), /first visit to \/welcome downloads 12 KB before its scripts run .* over the 10 KB budget/);
+	assert.deepEqual(violations({ ...m, landingFirstLoadKb: 10 }, budget), []);
+
+	const linked = html.replace('<style>', '<link href="./_app/immutable/assets/app.css" rel="stylesheet">\n<style>');
+	assert.deepEqual(landingFirstLoad(linked).blockingCss, ['_app/immutable/assets/app.css']);
+	assert.match(measureLandingFirstLoad(linked, files).errors.join('\n'), /links the stylesheet _app\/immutable\/assets\/app\.css, which blocks its first paint/);
+	assert.match(measureLandingFirstLoad(html, []).errors.join('\n'), /preloads _app\/immutable\/entry\/start\.js, which is not in the build/);
+	assert.match(measureLandingFirstLoad(null, files).errors.join('\n'), /No welcome\.html in the build/);
 });
 
 test('the map library has a ceiling of its own, outside the total and the per-chunk ceiling, and must stay lazy (issue #288)', () => {

@@ -54,6 +54,36 @@ test('a signed-in / is still the projects list, and /welcome still shows the lan
 	await expect(headline(page)).toHaveCount(0);
 	await page.goto('/welcome');
 	await expect(headline(page)).toBeVisible();
+	// /welcome doesn't ask who is signed in; the next page does, and this visitor is sent on into the app.
+	await page.getByRole('main').getByRole('link', { name: 'Sign in' }).first().click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await expect(page).toHaveURL('/');
+});
+
+test('/welcome asks the API nothing, so a signed-out visit logs no failed request; the next page asks for the session', async ({ page }) => {
+	// The session check answered 401 for a signed-out visitor, which the
+	// browser logs as a console error on a page that needs no API (Lighthouse
+	// Best Practices, issue #92). The landing reads nothing of the session.
+	const api: string[] = [];
+	const errors: string[] = [];
+	page.on('request', (r) => {
+		if (new URL(r.url()).pathname.includes('/auth/')) api.push(r.url());
+	});
+	page.on('console', (m) => {
+		if (m.type() === 'error') errors.push(m.text());
+	});
+	await page.goto('/welcome');
+	await expect(headline(page)).toBeVisible();
+	// The app has run: the landing's lazy art is armed once it has hydrated.
+	await expect(page.locator('.audiences')).toHaveAttribute('data-armed', 'yes');
+	await scrollThrough(page);
+	expect(api).toEqual([]);
+	expect(errors).toEqual([]);
+
+	const me = page.waitForRequest((r) => new URL(r.url()).pathname.endsWith('/auth/me'));
+	await page.getByRole('main').getByRole('link', { name: 'Sign in' }).first().click();
+	await me;
+	await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
 });
 
 test('every other signed-out route still goes to /login, remembering where', async ({ page }) => {
@@ -247,8 +277,8 @@ test('the prerendered page loads every asset it asks for, the contour texture am
 	for (const p of [await (await browser.newContext({ javaScriptEnabled: false })).newPage(), page]) {
 		const failed: string[] = [];
 		p.on('response', (r) => {
-			// Assets, not the API (the layout's session check may answer 401).
-			if (!['fetch', 'xhr'].includes(r.request().resourceType()) && r.status() >= 400) failed.push(`${r.status()} ${r.url()}`);
+			// Nothing fails, the API included: the landing asks it nothing (issue #92).
+			if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`);
 		});
 		const texture = p.waitForResponse((r) => r.url().endsWith('/landing/contours.svg'));
 		await p.goto('/welcome', { waitUntil: 'load' });
@@ -295,6 +325,59 @@ test('the largest contentful paint is the hero render, never the background text
 		});
 		expect(lcp, `${size.width} px`).toMatch(/^IMG \/landing\/hero-(day|dusk)-\d+\.(avif|webp)$/);
 	}
+});
+
+test('the hero and the story ask for their render at the width the layout shows it, so a phone fetches no oversized file', async ({ browser }) => {
+	// Each picture's `sizes` is worked out from the page's CSS (Diorama.svelte):
+	// the width it names, as the browser evaluates it, must be the width the
+	// page shows, at every breakpoint. On a phone the hero's picture is drawn at
+	// 150 % of its box and clipped to it, and its sizes names the box, the part
+	// shown (issue #92). The browser's own reading of `sizes`: an image with one
+	// `w` candidate takes that width as its natural width.
+	for (const width of [360, 412, 600, 760, 900, 1100, 1280, 1440]) {
+		const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
+		const page = await context.newPage();
+		await page.goto('/welcome');
+		await expect(page.locator('.hero .scene')).toHaveClass(/\bloaded\b/);
+		for (const [img, box] of [
+			['.hero .scene img', '.hero .art'],
+			['.story .scene img', '.story .crop'],
+		] as const) {
+			const { named, shown } = await page.evaluate(
+				async ({ img, box }: { img: string; box: string }) => {
+					const el = document.querySelector<HTMLImageElement>(img)!;
+					const probe = new Image();
+					probe.sizes = el.sizes;
+					probe.srcset = `${new URL('/landing/hero-day-800.avif', location.href).href} 800w`;
+					await probe.decode();
+					return { named: probe.naturalWidth, shown: document.querySelector(box)!.getBoundingClientRect().width };
+				},
+				{ img, box }
+			);
+			// Within the scrollbar's width (vw counts it, the layout doesn't), or 3 %.
+			expect(Math.abs(named - shown), `${img} at ${width} px: sizes ${named}, shown ${shown}`).toBeLessThanOrEqual(Math.max(16, shown * 0.03));
+		}
+		await context.close();
+	}
+
+	// A 412 px phone at 1.75x (Lighthouse's mobile preset) takes the 800 w render, not the 1200 w one.
+	const phone = await browser.newContext({ viewport: { width: 412, height: 823 }, deviceScaleFactor: 1.75, isMobile: true, hasTouch: true });
+	const page = await phone.newPage();
+	await page.goto('/welcome');
+	await expect(page.locator('.hero .scene')).toHaveClass(/\bloaded\b/);
+	const src = await page.locator('.hero .scene img').evaluate((img) => new URL((img as HTMLImageElement).currentSrc).pathname);
+	expect(src).toMatch(/^\/landing\/hero-day-800\.(avif|webp)$/);
+	await phone.close();
+});
+
+test('/welcome blocks its first paint on no stylesheet: its CSS is in the HTML', async ({ request }) => {
+	// 13 linked stylesheets each held up the first paint (issue #92); the
+	// prerendered pages inline them (vite.config.ts inlineStyleThreshold). Kit
+	// leaves each as a disabled link for its client router, which never loads.
+	const html = await (await request.get('/welcome')).text();
+	const links = html.match(/<link\b[^>]*rel="stylesheet"[^>]*>/g) ?? [];
+	expect(links.filter((l) => !/\sdisabled\b/.test(l))).toEqual([]);
+	expect(html).toMatch(/<style>[^<]*\.landing\b/);
 });
 
 test('on a desktop the story’s pinned scene fits the window, and the step in the middle lights its part', async ({ page }) => {

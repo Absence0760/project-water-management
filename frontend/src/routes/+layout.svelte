@@ -28,8 +28,8 @@
 	// The landing page (issue #57): a signed-out visitor to `/` sees it in place
 	// of the projects list, loaded as its own chunk, fetched beside /auth/me so
 	// it is usually in by the time the answer is. /welcome is the same page
-	// prerendered once per language (routes/welcome/[[lang=locale]]), shown at once, before the session is known,
-	// since nothing on it depends on who is looking.
+	// prerendered once per language (routes/welcome/[[lang=locale]]), shown at once and never asking
+	// for the session (onLanding, below), since nothing on it depends on who is looking.
 	const loadLanding = () => import('#lib/components/landing/Landing.svelte');
 	// By route, not by path: while prerendering, `base` is relative ('.'), so a
 	// path comparison would miss it and the page would prerender as "Loading…".
@@ -52,7 +52,22 @@
 		session.checked = true;
 	}
 
-	onMount(checkSession);
+	// The landing page (/welcome, /welcome/<code>) is the same for everyone and
+	// reads nothing of the session, so it doesn't ask: for a signed-out visitor
+	// GET /auth/me answers 401, which the browser logs as a failed request on a
+	// page that needs no API at all (Lighthouse's Best Practices, issue #92).
+	// The check runs once the visitor goes on to any other page (a client
+	// navigation leaves the landing route); until then the landing's language
+	// is the address's, this device's choice or the browser's, never the
+	// account's (applyLocale), and its language links keep a choice on this
+	// device only (LanguageSwitch). Every other page asks as it loads.
+	const onLanding = $derived(page.route.id === LANDING_ROUTE);
+	let sessionAsked = false;
+	$effect(() => {
+		if (onLanding || sessionAsked) return;
+		sessionAsked = true;
+		untrack(checkSession);
+	});
 	// A client navigation commits only once the new page's stylesheets have
 	// loaded; otherwise SvelteKit + Vite can render it unstyled for a moment
 	// and a scroll or measurement made then is wrong ($lib/nav/stylesheets).
@@ -165,8 +180,9 @@
 			// The landing page's language is its address's (issue #137): the
 			// page set it as it rendered. /welcome itself is also the address
 			// for anyone whose language isn't known yet, so a visitor whose
-			// choice (the account's, this device's, the browser's) is another
-			// language goes on to that one's address; /welcome/<code> is kept
+			// choice (this device's, else the browser's: the landing never asks
+			// for the session, so never the account's) is another language goes
+			// on to that one's address; /welcome/<code> is kept
 			// as it is. Reading it there counts as this device's choice when it
 			// has none, so the sign-in pages it leads to carry on in it.
 			if (page.route.id === LANDING_ROUTE) {
@@ -185,7 +201,8 @@
 	}
 	$effect(() => {
 		const chosen = accountLocale;
-		if (!session.checked || !translated) return;
+		// The landing page doesn't wait for the session: it never asks for it (above).
+		if (!(session.checked || onLanding) || !translated) return;
 		untrack(() => applyLocale(chosen));
 	});
 	// <html lang> names the language the page's words are in (wordsLang: it
