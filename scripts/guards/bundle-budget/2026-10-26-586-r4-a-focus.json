@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Calibration's Try again focus (calibration/retryFocus.ts and its wiring in CalibrationResults and CalibrationCheck), on top of the merged R4-D/R4-E work: total measured 2091 KB against 2090 KB after pnpm build:frontend"
+}

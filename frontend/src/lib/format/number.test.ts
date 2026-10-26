@@ -195,6 +195,8 @@ describe('fmtDay', () => {
 		expect(fmtDay('2021-10-01')).toBe('1 Oct 2021');
 		expect(fmtDay('2024-02-29')).toBe('29 Feb 2024');
 		expect(fmtDay('not a date')).toBe('not a date');
+		for (const s of ['2021-02-29', '1900-02-29', '2020-01-00', '2020-04-31']) expect(fmtDay(s)).toBe(s);
+		expect(fmtDay('2000-02-29')).toBe('29 Feb 2000');
 		expect(fmtDay('2021-13-01')).toBe('2021-13-01');
 	});
 	it('never shifts the day, whatever the time zone', () => {

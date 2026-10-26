@@ -122,6 +122,20 @@ section it belongs to, with the example that taught it.
   disclosure: a fixed set of eight facts isn't a long list to fold, and the
   Summary's old `#model-h` link still lands on them without opening
   anything.
+- **A long page whose answer sits below its inputs says it in a first
+  line.** Calibration puts the settings that set up a fit above the run's
+  fit (the loop is set, run, read), so the shown run's NSE was ~3,800 px down
+  at 1440 × 960 and ~6,000 px on a phone, and a project with no flow record
+  heard so only at the page's foot (#586 R4-A). Reordering would have put
+  3,000 px of charts between the reader and the fields they edit. One slim
+  line under the header (`calibration/status.ts`, `role="status"`) now says
+  how the shown run fits, toned and in words, with a link on to the tiles,
+  or what to do first when there's nothing to read; it keeps its place
+  while loading ("Loading the shown run…") so the panels don't jump. When
+  the page edits what the shown result came from, say so where the result
+  is read: an edited X1 left the old run's scores under it with nothing
+  saying they weren't the edit's, so the line and a note over the results
+  now list the parameters that differ ("X1 350 → 321 mm").
 - **Don't fit a first screen that has more below it.** The Summary was a
   fitted first screen (KPIs, reserve strip, Needs attention beside Supply by
   unit) with the alerts, published baseline, links and setup checklist
@@ -315,7 +329,10 @@ section it belongs to, with the example that taught it.
   results take the whole width; the second run brings the rail back. A grid
   that auto-fills then gains columns: the Summary's six cards went 4 + 2
   beside an empty half row until their minimum became a third of the row
-  (`runs-page.spec.ts` checks 3 + 3).
+  (`runs-page.spec.ts` checks 3 + 3). Calibration's six score tiles did the
+  same at 1440 (`auto-fill, minmax(210px, 1fr)`); with a fixed count, set the
+  columns by container query to a divisor of it (1, 2, 3), not `auto-fill`
+  (`calibration-first-line.spec.ts`).
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with goto's `replace`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
