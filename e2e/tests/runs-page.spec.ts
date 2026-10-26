@@ -88,7 +88,7 @@ test('the run header links to the river and hydrological unit pages for its run,
 	await expect(page.locator('#res-water-balance')).toBeInViewport();
 });
 
-test('the run summary keeps the spaces round its separators, and Explore any output names each series in the unit it is drawn in', async ({ page, owner }) => {
+test('the run summary keeps the spaces round its separators, and Chart any daily series names each series in the unit it is drawn in', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs words');
 	await createRun(page.request, project.id, 'Baseline');
@@ -98,7 +98,7 @@ test('the run summary keeps the spaces round its separators, and Explore any out
 	await expect(outflow).toHaveText(/^[\d.]+ Mm³\/a\s+·\s+\d+% of natural$/);
 
 	// The Series picker said "(m³/day)" over a chart drawn in m³/s; it follows the chart's switch.
-	const explore = page.getByRole('region', { name: 'Explore any output' });
+	const explore = page.getByRole('region', { name: 'Chart any daily series' });
 	await explore.scrollIntoViewIfNeeded();
 	const picker = explore.getByLabel('Series');
 	await expect(picker.locator('option:checked')).toHaveText('Simulated outflow (m³/s)');
@@ -161,6 +161,67 @@ test('with twenty long-labelled runs the rail sits beside the run and fits the w
 		expect(stuck.y + stuck.height).toBeLessThanOrEqual(height);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
 	}
+});
+
+test('with one run, the runs list is one slim row above the results, which take the whole width; a second run brings the rail back', async ({ page, owner }) => {
+	void owner;
+	// A 250 px rail holding one row beside an empty column down the whole page (#586 D21).
+	const project = await seedRunnableProject(page.request, 'Runs one run');
+	await createRun(page.request, project.id, 'Only run');
+	const card = page.getByTestId('runs-card');
+	for (const [width, height] of [
+		[1440, 960],
+		[1280, 800]
+	] as const) {
+		await page.setViewportSize({ width, height });
+		await openRuns(page, project.id);
+		const c = (await card.boundingBox())!;
+		const results = (await page.locator('#res-h').locator('xpath=ancestor::section[1]').boundingBox())!;
+		// Above the results, not beside them, and as wide as they are or wider (the side index sits beside the results).
+		expect(results.y, `${width}`).toBeGreaterThan(c.y + c.height);
+		expect(Math.abs(results.x - c.x), `${width}`).toBeLessThan(2);
+		expect(c.width, `${width}`).toBeGreaterThanOrEqual(results.width - 1);
+		// One slim row: its heading, the run (label, when, tags, pin and delete) and the tags' key on one line.
+		expect(c.height, `${width}`).toBeLessThan(70);
+		const row = runsList(page).getByRole('listitem');
+		await expect(row).toHaveCount(1);
+		await expect(row.getByRole('button', { name: /^Only run/ })).toHaveAttribute('aria-current', 'true');
+		for (const control of [row.getByRole('button', { name: /^Pin run/ }), row.getByRole('button', { name: /^Delete run/ }), card.getByText('What the tags mean')]) {
+			const b = (await control.boundingBox())!;
+			expect(b.y, `${width}`).toBeGreaterThanOrEqual(c.y);
+			expect(b.y + b.height, `${width}`).toBeLessThanOrEqual(c.y + c.height);
+		}
+		// The summary starts on the first screen, its six headline cards three to a row in the wider column (four
+		// left two under them beside an empty half row).
+		await expect(page.getByRole('region', { name: 'Summary', exact: true })).toBeInViewport();
+		const tops = await page.locator('#res-summary .stats .stat').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+		expect(tops.length, `${width}`).toBe(6);
+		const perRow = [...new Set(tops)].map((t) => tops.filter((x) => x === t).length);
+		expect(perRow, `${width}`).toEqual([3, 3]);
+		await expectNoSidewaysScroll(page);
+	}
+	// The tags' key opens under the row, inside the card.
+	await card.getByText('What the tags mean').click();
+	await expect(card.getByRole('term').filter({ hasText: 'latest' })).toBeVisible();
+	await expectNoViolations(page);
+
+	// A second run: the list is a rail beside the results again.
+	await createRun(page.request, project.id, 'Second run');
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await openRuns(page, project.id);
+	const rail = (await card.boundingBox())!;
+	const results = (await page.locator('#res-h').boundingBox())!;
+	expect(results.x).toBeGreaterThan(rail.x + rail.width);
+	expect(results.y).toBeLessThan(rail.y + 150);
+
+	// On a phone, one run stacks with no sideways scroll, and the run's heading is on the first screen.
+	const phone = await seedRunnableProject(page.request, 'Runs one run phone');
+	await createRun(page.request, phone.id, 'Only run');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openRuns(page, phone.id);
+	await expectNoSidewaysScroll(page);
+	await expect(page.locator('#res-h')).toBeInViewport({ ratio: 1 });
+	await expectNoViolations(page);
 });
 
 test('on a phone the page stacks, the runs list folds to its first rows, and the results start on the first screen', async ({ page, owner }) => {

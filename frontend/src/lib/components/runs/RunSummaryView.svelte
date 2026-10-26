@@ -265,9 +265,10 @@
 	h3:first-of-type {
 		margin-top: 0;
 	}
-	/* Six headline cards: 3 + 3 on a desktop results column, 2 + … on phones. */
+	/* Six headline cards: 3 + 3 on a desktop results column, 2 + … on phones. At most three a row: in a full-width
+	   column (one run, #586 D21) auto-fill put four, then two under them beside an empty half row. */
 	.stats {
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(max(min(100%, 210px), calc((100% - 2rem) / 3)), 1fr));
 	}
 	@media (max-width: 640px) {
 		.stats {

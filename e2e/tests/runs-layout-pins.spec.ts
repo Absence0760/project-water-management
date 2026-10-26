@@ -49,10 +49,10 @@ const RECORD_AND_DEEPER = [
 	'res-changes: Changes since this run',
 	'res-validation: Validation statement',
 	'res-publication: Publication',
-	'## Dig deeper',
-	'res-checks: Self-checks',
+	'## The model’s working',
+	'res-checks: Arithmetic checks',
 	'res-trace: Trace a day',
-	'res-explore: Explore any output'
+	'res-explore: Chart any daily series'
 ];
 
 const RAIL_RECORD_AND_AFTER = [
@@ -63,10 +63,10 @@ const RAIL_RECORD_AND_AFTER = [
 	'Changes since this run → #res-changes',
 	'Validation statement → #res-validation',
 	'Publication → #res-publication',
-	'## Dig deeper',
-	'Self-checks → #res-checks',
+	'## The model’s working',
+	'Arithmetic checks → #res-checks',
 	'Trace a day → #res-trace',
-	'Explore any output → #res-explore',
+	'Chart any daily series → #res-explore',
 	'## On Calibration',
 	'Hydrograph↗ → ?tab=calibration&run=RUN#res-hydrograph',
 	'Calibration against observed flow↗ → ?tab=calibration&run=RUN#res-calibration',
@@ -79,7 +79,7 @@ const RAIL_RECORD_AND_AFTER = [
 	'Assurance of supply↗ → ?tab=supply&run=RUN#res-assurance'
 ];
 
-test('a plain run: its panels in page order, Record and Dig deeper, and the side index lists them so; Model quality is on Calibration', async ({ page, owner }) => {
+test('a plain run: its panels in page order, Record and The model’s working, and the side index lists them so; Model quality is on Calibration', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize(VIEW);
 	const project = await seedRunnableProject(page.request, 'Pins plain');
@@ -122,11 +122,12 @@ test('a run with every optional panel: Forecast beside the Summary, and none of 
 		...RAIL_RECORD_AND_AFTER
 	]);
 
-	// Beside the results: the runs rail on the left, the run form (with Run forecast) in the section header.
+	// Its one run: the runs list one row above the results (#586 D21; two or more make it a rail beside them,
+	// runs-page.spec.ts), the run form (with Run forecast) in the section header.
 	const rail = page.getByRole('region', { name: 'Runs & results' }).getByRole('complementary');
 	await expect(rail.getByRole('region', { name: 'Runs', exact: true })).toBeVisible();
 	const railBox = (await rail.boundingBox())!;
-	expect((await page.locator('#res-h').boundingBox())!.x).toBeGreaterThan(railBox.x + railBox.width);
+	expect((await page.locator('#res-h').boundingBox())!.y).toBeGreaterThan(railBox.y + railBox.height);
 	const header = page.getByTestId('section-header');
 	await expect(header.getByLabel(/^Run label/)).toBeVisible();
 	await expect(header.getByRole('button', { name: 'Run forecast' })).toBeVisible();
@@ -150,9 +151,9 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		['res-changes', 'Changes since this run'],
 		['res-validation', 'Validation statement'],
 		['res-publication', 'Publication'],
-		['res-checks', 'Self-checks'],
+		['res-checks', 'Arithmetic checks'],
 		['res-trace', 'Trace a day'],
-		['res-explore', 'Explore any output']
+		['res-explore', 'Chart any daily series']
 	];
 	// The pins cover every #res-* id the page renders.
 	await openAll(page, id, runId);
@@ -209,7 +210,7 @@ test('following a side-index link puts the focus on its panel’s heading, again
 	for (const [name, anchor] of [
 		['Water balance by water year', 'res-water-balance'],
 		['Publication', 'res-publication'],
-		['Explore any output', 'res-explore']
+		['Chart any daily series', 'res-explore']
 	] as const) {
 		await rail.getByRole('link', { name, exact: true }).click();
 		await expect(page).toHaveURL(new RegExp(`#${anchor}$`));
@@ -218,7 +219,7 @@ test('following a side-index link puts the focus on its panel’s heading, again
 		await expect(h, anchor).toBeInViewport();
 	}
 	// The same link again (no hashchange): the heading still takes the focus.
-	await rail.getByRole('link', { name: 'Explore any output', exact: true }).click();
+	await rail.getByRole('link', { name: 'Chart any daily series', exact: true }).click();
 	await expect(page.locator('#res-explore').locator('h2, h3, h4').first()).toBeFocused();
 });
 

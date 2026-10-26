@@ -9,8 +9,8 @@ const check = (passed: boolean) => ({ id: 'balance' as const, label: 'x', passed
 describe('checksHeadline', () => {
 	it('says all passed, how many failed, or that the run predates the checks', () => {
 		const v = (p: boolean[]): RunVerification => ({ passed: p.every(Boolean), checks: p.map(check), maxResidual: null });
-		expect(checksHeadline(v([true, true, true]))).toEqual({ tone: 'ok', text: 'All 3 self-checks passed.' });
-		expect(checksHeadline(v([true, false, false]))).toMatchObject({ tone: 'bad', text: expect.stringMatching(/^2 of 3 self-checks failed/) });
+		expect(checksHeadline(v([true, true, true]))).toEqual({ tone: 'ok', text: 'All 3 arithmetic checks passed.' });
+		expect(checksHeadline(v([true, false, false]))).toMatchObject({ tone: 'bad', text: expect.stringMatching(/^2 of 3 arithmetic checks failed/) });
 		expect(checksHeadline(undefined)).toMatchObject({ tone: 'none', text: expect.stringMatching(/before .*engine 0\.12\.0/) });
 	});
 });

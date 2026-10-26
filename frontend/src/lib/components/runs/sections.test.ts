@@ -14,7 +14,18 @@ describe('resultGroups', () => {
 		expect(resultGroups({}).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
 			[null, ['res-summary', 'res-water-balance']],
 			['Record', ['res-notes', 'res-evidence', 'res-reproduce', 'res-validation', 'res-publication']],
-			['Dig deeper', ['res-checks', 'res-explore']]
+			['The model’s working', ['res-checks', 'res-explore']]
+		]);
+	});
+
+	it('names the group and its panels in plain words, with the ids links already use (#586 E14)', () => {
+		const groups = resultGroups({ forecast }, true);
+		const names = groups.flatMap((g) => [g.label, ...g.sections.map((s) => s.label)]).filter((n): n is string => !!n);
+		for (const jargon of ['Dig deeper', 'Self-checks', 'Explore any output']) expect(names).not.toContain(jargon);
+		expect(groups[2]!.sections.map((s) => [s.id, s.label])).toEqual([
+			['res-checks', 'Arithmetic checks'],
+			[RUN_SUBSECTIONS.trace, 'Trace a day'],
+			['res-explore', 'Chart any daily series']
 		]);
 	});
 
@@ -47,8 +58,8 @@ describe('resultGroups', () => {
 			'Reproduction',
 			'Validation statement',
 			'Publication',
-			'Self-checks',
-			'Explore any output'
+			'Arithmetic checks',
+			'Chart any daily series'
 		]);
 		for (const s of resultSections({ forecast }, true)) {
 			expect(s.bar, s.id).toBeUndefined();
@@ -67,9 +78,9 @@ describe('resultGroups', () => {
 			[RUN_SUBSECTIONS.changes, 'Changes since this run'],
 			['res-validation', 'Validation statement'],
 			['res-publication', 'Publication'],
-			['res-checks', 'Self-checks'],
+			['res-checks', 'Arithmetic checks'],
 			[RUN_SUBSECTIONS.trace, 'Trace a day'],
-			['res-explore', 'Explore any output']
+			['res-explore', 'Chart any daily series']
 		]);
 		const bar = resultSections({}).map((s) => s.id);
 		expect(bar).not.toContain(RUN_SUBSECTIONS.changes);

@@ -24,4 +24,10 @@ describe('runTags (#586 D18)', () => {
 		]);
 		expect(tagKey([[]])).toEqual([]);
 	});
+	it('says what an old run without its inputs can’t do, in plain words, and names the Model settings page (#586 E14)', () => {
+		const tag = runTags({ ...run, id: 'r2', reproducible: false }, ctx).find((t) => t.id === 'noInputs')!;
+		expect(tag.label).toBe('Can’t be re-run');
+		expect(TAG_MEANINGS.noInputs).toMatch(/^Made before runs stored their input series/);
+		expect(TAG_MEANINGS.auto).toContain('Model settings → Automatic runs');
+	});
 });

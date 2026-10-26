@@ -123,7 +123,7 @@
 </script>
 
 <section aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Self-checks <HelpTip key="run.balance_residual" /></h3>
+	<h3 id="{uid}-h">Arithmetic checks <HelpTip key="run.balance_residual" /></h3>
 	<p class="alert {headline.tone === 'bad' ? 'alert-error' : 'alert-info'}" class:ok={headline.tone === 'ok'} role="status">
 		{headline.text}
 	</p>
@@ -158,7 +158,7 @@
 	     year's residual, and a link to the table (followups § UI, issue #175's overlap check). The report keeps the table here. -->
 	<p class="balance-link small" class:bad={closure.tone === 'bad'} data-testid="checks-balance-link">
 		{#if closure.tone !== 'none'}<span class="mark" aria-hidden="true">{closure.tone === 'ok' ? '✓' : '✗'}</span><span class="visually-hidden">{closure.tone === 'ok' ? 'Passed:' : 'Failed:'}</span>{/if}
-		{closure.text} The balance itself, term by term: <a href={balanceHref}>Water balance</a>.
+		{closure.text} The balance itself, term by term: <a href={balanceHref}>Water balance by water year</a>.
 	</p>
 {:else}
 	<div class="wb"><WaterBalanceTable {summary} /></div>

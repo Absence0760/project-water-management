@@ -1,4 +1,4 @@
-// Pure helpers for the Self-checks panel (SelfChecksPanel.svelte): the
+// Pure helpers for the Arithmetic checks panel (the engine's self-checks) (SelfChecksPanel.svelte): the
 // headline, the water-balance table in Mm³, and the day trace built from
 // GET …/runs/:runId/day with the engine's column catalogue (letters and
 // formulas), so the UI and the CSV column guide say the same thing.
@@ -11,8 +11,8 @@ export type Tone = 'ok' | 'bad' | 'none';
 export function checksHeadline(v: RunVerification | undefined): { tone: Tone; text: string } {
 	if (!v) return { tone: 'none', text: 'This run was made before the model checked itself (engine 0.12.0). Run it again to check it.' };
 	const failed = v.checks.filter((c) => !c.passed).length;
-	if (failed === 0) return { tone: 'ok', text: `All ${v.checks.length} self-checks passed.` };
-	return { tone: 'bad', text: `${failed} of ${v.checks.length} self-checks failed. That is a bug in the model, not in your data: please report it.` };
+	if (failed === 0) return { tone: 'ok', text: `All ${v.checks.length} arithmetic checks passed.` };
+	return { tone: 'bad', text: `${failed} of ${v.checks.length} arithmetic checks failed. That is a bug in the model, not in your data: please report it.` };
 }
 
 /**

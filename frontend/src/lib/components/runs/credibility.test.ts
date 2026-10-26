@@ -43,7 +43,7 @@ describe('credibility', () => {
 		} as unknown as Parameters<typeof credibility>[0];
 		// The fit has no verdict (issue #177): its scores, untoned, in the Summary's words (PBIAS −12.3 is 12.3% too wet).
 		expect(credibility(summary).map((i) => [i.label, i.text, i.tone, i.href])).toEqual([
-			['Self-checks', 'all 5 passed', 'ok', '#res-checks'],
+			['Arithmetic checks', 'all 5 passed', 'ok', '#res-checks'],
 			['Calibration', 'NSE 0.71, volume bias 12.3% too wet', 'none', '?tab=calibration#res-calibration'],
 			['Plausibility', '1 of 3 checks found something', 'warn', '?tab=calibration#res-plausibility'],
 			['WR2012', 'Note the difference', 'warn', '?tab=calibration#res-wr2012']
@@ -79,7 +79,7 @@ describe('credibility', () => {
 	it('says a failed self-check in red and leaves out what the run has no panel for', () => {
 		const items = credibility({ verification: checks(2) } as unknown as Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012'>);
 		expect(items.map((i) => [i.label, i.text, i.tone])).toEqual([
-			['Self-checks', '2 of 5 failed', 'bad'],
+			['Arithmetic checks', '2 of 5 failed', 'bad'],
 			['Calibration', 'not scored: no observed flow in the run', 'none']
 		]);
 	});

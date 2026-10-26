@@ -892,7 +892,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'With unsaved changes, **Run model** asks first and offers **Save and run**.',
 							'Press **Run model** in the header of any section and optionally type a **Run label** (on **Runs & results** the field is in the header itself), then **Run model**. It needs a network and a rainfall series; until then the form says what is missing.',
-							'The runs are listed on the left, newest first, beside the run shown; pick one to show it. Its header links to **EWR** and **Hydrological units** for that run.',
+							'The runs are listed on the left, newest first, beside the run shown; pick one to show it (with a single run, the list is one row above it). Its header links to **EWR** and **Hydrological units** for that run. A run tagged **Can’t be re-run** was made before runs stored their inputs.',
 							'The new run opens when it finishes. A run keeps a snapshot of the inputs it used, so later edits never change it.'
 						]
 					}
@@ -904,10 +904,10 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag), each linking to its panel. Then a sentence or two in plain words (which hydrological units fell short, then how often the river’s requirement was met), and the headline figures, the calibration NSE and PBIAS among them when there is observed flow. The table per hydrological unit is on **Hydrological units** (see below).',
-							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend) with the **Flow duration** curve under it, then **Flow at gauges in the network (checks only)** when another gauge has its own flow record (its hydrograph and flow-duration curve, an out-of-sample NSE, KGE and PBIAS that is never the calibration score, and a link to the record’s Series details, where its Upload unit is), **Calibration** with, under its statistics, the **calibration check** (a chart for each gauge with an observed record: observed, simulated, natural flow and the demand upstream on one axis, plus the **bed losses** in the reaches above the gauge when the model has any, so a gap between simulated and observed can be read against the water used, and lost, above the gauge; a forecast run’s lines stop where its forecast starts) and **Where the parameters came from**, the **Water balance** by water year (summed over the hydrological units: rain with the runoff coefficient under it, storage at the start and end, each gain and loss, in Mm³, and the residual with the runoff model’s under it, each of which should be 0; with a link to EWR’s water account, the catchment’s own), the **Runoff model** (GR4J runs), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
+							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (arithmetic checks, calibration, plausibility, the WR2012 flag), each linking to its panel. Then a sentence or two in plain words (which hydrological units fell short, then how often the river’s requirement was met), and the headline figures, the calibration NSE and PBIAS among them when there is observed flow. The table per hydrological unit is on **Hydrological units** (see below).',
+							'**Water balance by water year**: summed over the hydrological units (rain with the runoff coefficient under it, storage at the start and end, each gain and loss, in Mm³, and the residual with the runoff model’s under it, each of which should be 0), with a link to EWR’s water account, the catchment’s own. How the run fits observed flow (the hydrograph, flow duration, calibration, the runoff model, the WR2012 check, EWR vs observed and the plausibility checks) is on **Calibration**, for the same run: the Summary’s model checks link there.',
 							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), and its publication.',
-							'**Dig deeper**: **Self-checks** (whether each hydrological unit’s daily balance closes and the reports add up, the list behind **Show the N checks** when every check passed; whether the water balance closes in every water year, with a link to the table; and **Trace a day**; see [[balance-check|the self-checks]]) and **Outputs** (*Explore any output*): any stored daily series of the catchment, a hydrological unit or a gauge.'
+							'**The model’s working**: **Arithmetic checks** (the engine’s own checks on the run: whether each hydrological unit’s daily balance closes and the reports add up, the list behind **Show the N checks** when every check passed; whether the water balance closes in every water year, with a link to the table; and **Trace a day**; see [[balance-check|the arithmetic checks]]; a failed one is a bug in the model, not your data) and **Chart any daily series**: any stored daily series of the catchment, a hydrological unit or a gauge.'
 						]
 					},
 					{
@@ -1398,7 +1398,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'Flows and volumes are m³/day inside the model. Nothing is rounded mid-calculation; rounding is for display only.',
-							'Every hydrological unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Self-checks**).',
+							'Every hydrological unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Arithmetic checks** on Runs & results).',
 							'A run is a snapshot: it records its inputs and engine version, so its results can always be explained and reproduced.',
 							'Where the engine departs from the Water Balance Tool workbook, the engine audit records why.'
 						]

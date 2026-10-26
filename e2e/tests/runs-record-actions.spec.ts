@@ -1,4 +1,4 @@
-// Runs & results → the Record and Dig deeper panels after an action (issue #586, Round 2): the focus never
+// Runs & results → the Record and The model’s working panels after an action (issue #586, Round 2): the focus never
 // falls to the page after a save, a nomination, a withdrawal, a publish, a notice edit, a reproduction check
 // or a traced day (ui-playbook § 4: don't disable a control while its own change saves; when a state
 // replaces the focused control, focus the title); dates read day first; the passed self-checks fold behind
@@ -115,8 +115,8 @@ test('the passed self-checks fold behind one button; Trace keeps the focus and s
 	const p = await seed(page, 'Self-checks fold');
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto(`/projects/${p.id}?tab=runs&run=${p.run}#res-checks`);
-	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 13 self-checks passed.');
+	const checks = page.getByRole('region', { name: /^Arithmetic checks/ });
+	await expect(checks.getByRole('status').filter({ hasText: 'arithmetic checks' })).toHaveText('All 13 arithmetic checks passed.');
 	// All passed: the headline says so, and the list waits behind one button.
 	await expect(checks.getByRole('listitem')).toHaveCount(0);
 	const show = checks.getByRole('button', { name: 'Show the 13 checks' });
@@ -143,7 +143,7 @@ test('the passed self-checks fold behind one button; Trace keeps the focus and s
 	await expectNoViolations(page, { include: '#res-checks' });
 });
 
-test('the things to check start with a capital, and Explore any output names its picker for what it lists', async ({ page, owner, fetchRoute }) => {
+test('the things to check start with a capital, and Chart any daily series names its picker for what it lists', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	const p = await seed(page, 'Warnings case');
 	await fetchRoute(page, new RegExp(`/projects/${p.id}/runs/[^/?]+(?:\\?.*)?$`), async (route) => {

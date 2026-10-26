@@ -17,7 +17,7 @@ export interface RunTag {
 /** What each tag means, in the key's order (the rows' order too). */
 export const TAG_MEANINGS: Record<RunTagId, string> = {
 	latest: 'The newest run.',
-	auto: 'Made automatically after new data arrived (Settings → Automatic runs). Only the newest automatic run is kept, unless it is pinned or published.',
+	auto: 'Made automatically after new data arrived (Model settings → Automatic runs). Only the newest automatic run is kept, unless it is pinned or published.',
 	forecast: 'A forecast run: the days after the last recorded rain run on forecast rain and are shown apart; its other figures cover the record before them. Only the newest forecast run is kept, unless it is pinned or published.',
 	published: 'The published baseline: stakeholders and farmers see this run’s figures. Kept while a publication holds it.',
 	evidence: 'The project’s nominated evidence run. Kept for good: it can’t be deleted.',
@@ -25,7 +25,7 @@ export const TAG_MEANINGS: Record<RunTagId, string> = {
 	pinned: 'Pinned: newer runs never push it out, and it can’t be deleted until it is unpinned.',
 	scenario: 'Made by a scenario: its changes applied to its base run.',
 	scenarioBase: 'The base of a scenario: kept for good while the scenario exists, so it can’t be deleted or unpinned.',
-	noInputs: 'Made before runs stored their input series: it can’t be re-run from them, only compared by hash.',
+	noInputs: 'Made before runs stored their input series, so it can’t be re-run from them, only compared by hash.',
 	signedOff: 'Signed off (see its report). Kept for good: it can’t be deleted.',
 	errata: 'May be affected by a known engine bug, which changes results only under its conditions. See the run’s validation statement, and re-run on the current engine to compare.',
 	legacy: 'Legacy runoff model (the original workbook’s, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.'
@@ -51,7 +51,7 @@ export function runTags(
 	if (r.pinned) add('pinned', 'Pinned');
 	if (r.scenarioName) add('scenario', 'Scenario', 'plain', `Made by the scenario “${r.scenarioName}”.`);
 	if (bases.length) add('scenarioBase', 'Scenario base', 'plain', `The base of ${quoted(bases)}.`);
-	if (r.reproducible === false) add('noInputs', 'Inputs not stored');
+	if (r.reproducible === false) add('noInputs', 'Can’t be re-run');
 	if (signers.length) add('signedOff', 'Signed off', 'owner', `Signed off by ${signers.join(', ')}.`);
 	if (r.errata?.length) add('errata', 'May be affected', 'warn', `${r.errata.length === 1 ? 'A known engine bug' : `${r.errata.length} known engine bugs`}: ${r.errata.join(', ')}.`);
 	if (r.legacy) add('legacy', 'Workbook comparison', 'warn');

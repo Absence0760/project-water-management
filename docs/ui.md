@@ -8384,7 +8384,15 @@ read it before.
   list fails to load, the rail says "Couldn’t load the runs: <reason>" with
   **Try again**, the header says the same, and there is no results column:
   the header used to say "No runs yet" and a second card "Pick a run" with
-  nothing to pick (#586 D3).
+  nothing to pick (#586 D3). With **one run** there is nothing to pick
+  between, so the Runs card is one slim row across the page above the
+  results (its heading and "1 stored", the run's row with its tags, pin and
+  ✕, and **What the tags mean**, wrapping on a phone), and the results take
+  the whole width: the 250 px rail held one row beside an empty column down
+  the whole page (#586 D21, `RunsTab.svelte` `singleRun`). From the second run
+  the list is the rail again (`runs-page.spec.ts`). The Summary's headline
+  cards stay at most three to a row in the wider column, so six read 3 + 3
+  rather than 4 + 2.
 - **Outcomes for this run.** The run header has one line, "For this run:
   EWR → · Hydrological units →" (a navigation landmark, *Outcomes
   for this run*; the links are named "EWR for this run" and
@@ -8440,16 +8448,16 @@ read it before.
 - **On this page.** The same menu as Settings &
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
-  `runs/sections.ts` in groups: Summary with Forecast and Water balance, Record, Dig deeper;
+  `runs/sections.ts` in groups: Summary with Forecast and Water balance, Record, The model’s working;
   Model quality moved to [Calibration](#calibration), issue #586 Round 3),
   each group a list labelled by its name. From 62rem of results (a 1440 px
   window; `RESULTS_RAIL_FROM_REM`) it is a **side index on the right** of the
   results (`railSide="right"`: the runs list is the page's left column),
   every group named over its links, each link named as its panel's heading
   (**Water balance by water year**, **Run notes**, **Evidence**, **Reproduction**, **Validation
-  statement**, **Explore any output**), with a line for two sub-headings a reader looks for, each
+  statement**, **Chart any daily series**), with a line for two sub-headings a reader looks for, each
   under its panel and on its heading's id (**Changes since this run**, `#res-changes`, under
-  Reproduction; **Trace a day**, `#res-trace`, under Self-checks; `RUN_SUBSECTIONS`, issue #586 D4),
+  Reproduction; **Trace a day**, `#res-trace`, under Arithmetic checks; `RUN_SUBSECTIONS`, issue #586 D4),
   and three last groups for the panels that moved to their own pages
   (issue #17, issue #586 round 3), linked with the run shown: *On Calibration* (**Hydrograph**,
   **Calibration against observed flow**), *On EWR* (**Reserve
@@ -8499,9 +8507,9 @@ read it before.
      run shown (`runs/warningText.ts`, `WarningText.svelte`); an older run's
      "Settings → Calibration record" or "The Plausibility checks panel" links
      to the panel's place now. The printable report keeps the plain words. Then one line of **model checks** (`credibility`): the
-     self-checks, the calibration, the plausibility findings and the WR2012
+     arithmetic checks, the calibration, the plausibility findings and the WR2012
      flag, each in words with a coloured edge and a link to its panel: the
-     self-checks below, the rest on Calibration for the run shown
+     arithmetic checks below, the rest on Calibration for the run shown
      (`calibration/links.ts` `calibrationHref`, `?tab=calibration&run=…#res-…`;
      #586 D12). The calibration item says the NSE and the volume bias in the
      NSE and volume bias cards' words ("NSE 0.71, volume bias 12.3% too
@@ -8615,8 +8623,13 @@ read it before.
      statement loads as its own chunk, its headings (Calibration, Data
      quality, Known limitations) one level under the panel's. Nothing is
      computed twice: both call the engine's `validationStatement`.
-  4. **Dig deeper**: self-checks (with Trace a day, and a line linking to
-     the water balance), Explore outputs.
+  4. **The model’s working** (was *Dig deeper*): **Arithmetic checks** (the
+     engine's self-checks, was *Self-checks*; with Trace a day, and a line
+     linking to the water balance), **Chart any daily series** (was *Explore
+     any output*). #586 E14 named the group and its panels in plain words, apart
+     from Calibration's **Plausibility checks** and the Summary's things to
+     check; their ids (`#res-checks`, `#res-explore`) are unchanged, so old
+     links land.
 
   The run summary no longer draws the land-cover, groundwater,
   demand-object and other-user tables, which had no menu entry: they are
@@ -8674,8 +8687,8 @@ read it before.
   ("today 15:06 · 1979–2024", or "23 Sep 2026 15:06 · …" before
   yesterday, `fmtWhen`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
-  base, **Inputs not stored** for a run from before stored inputs, which
-  can't be re-run from them, **May be affected** for a run whose engine (or
+  base, **Can’t be re-run** (was *Inputs not stored*, #586 E14) for a run
+  from before stored inputs, which can't be re-run from them, **May be affected** for a run whose engine (or
   its fit's) had a known bug, its errata ids in the tooltip (the header
   badge says it in words), Workbook comparison; `runs/runTags.ts`). Each
   tag's meaning is in words under the list, **What the tags mean**, a
@@ -8869,7 +8882,7 @@ read it before.
   (the series it fetches, each preset); `e2e/tests/report-window.spec.ts`
   checks whole rows, the binding site included, against a second run in the
   app, the URL, back / forward, and axe in both themes and on a phone.
-- <a id="self-checks"></a>**Self-checks** (`#res-checks`,
+- <a id="self-checks"></a>**Arithmetic checks** (the engine's self-checks; `#res-checks`,
   `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.12.0,
   [model.md § Verification](./model.md#verification)). It has three
   parts. First, one line saying all checks passed, or how many failed (a failure
@@ -8884,7 +8897,7 @@ read it before.
   made the run and ran its checks, and the largest daily balance error of any
   unit (column V). Second, the **water balance by water year**
   (`runs/WaterBalanceTable.svelte`): on Runs & results its own
-  section under the Summary (`#res-water-balance`, issue #137), and the self-checks keep only
+  section under the Summary (`#res-water-balance`, issue #137), and the arithmetic checks keep only
   its closure check: one line, ✓ or ✗ in text, saying the balance closes in
   every water year and over the whole run, or naming the years whose
   residual isn't float noise with their residuals (the first five, then "and
@@ -9169,14 +9182,14 @@ read it before.
   flow series is picked), and one click sets all of them: its group is named
   "Flow units, for every flow chart on this page", and on Runs & results each
   chart's switches are a group named by its chart ("Hydrograph controls",
-  "Flow-duration curve controls", "Explore any output controls", "Model
+  "Flow-duration curve controls", "Chart any daily series controls", "Model
   stores controls"; `LineChart`'s `toolsLabel`), so the repeated Earlier /
   Later, Log scale and time-window buttons say which chart they move (issue
   #586). The Hydrograph and Flow-duration curve panels show their headings,
   word for word the side index's, so the focus ring a `#res-hydrograph` link
   puts on the heading can be seen. When a chart's series fail to load, the
   hydrograph, the flow-duration curve, the calibration site's chart, the
-  model stores and Explore any output each say "Couldn't load the flows: <why>"
+  model stores and Chart any daily series each say "Couldn't load the flows: <why>"
   (the stores, "the model stores"; Explore, "the series") with **Try again**,
   which loads them again (the flow-duration curve used to say "No positive
   values to plot on a log scale", which wasn't what happened). (Explore's **Series**
@@ -9560,7 +9573,7 @@ read it before.
   observed record) or on two runs that scored different records
   ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
-  stored series (`runs/RunChart.svelte`, *Explore any output*), its first picker
+  stored series (`runs/RunChart.svelte`, *Chart any daily series*), its first picker
   **Catchment, hydrological unit or gauge** (the catchment first, then each in
   network order; it read "Hydrological unit" over a list that opens on the
   catchment, #586 round 2). The catchment's series include the final

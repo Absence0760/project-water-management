@@ -925,7 +925,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'balance-check',
-		term: 'Self-checks and the balance check',
+		term: 'Arithmetic checks and the balance check',
 		short: 'Every run checks its own output: each hydrological unit’s day must balance, and the reports must add up to the daily series.',
 		units: 'm³/day',
 		category: 'results',

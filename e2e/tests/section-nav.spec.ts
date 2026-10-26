@@ -138,12 +138,12 @@ test('Settings: at 1280 px every link is on the bar, in at most two rows; at 144
 
 /** Runs & results' bar, each link its panel's heading word for word (issue #586, D4), and the side index's lines (issue #462). */
 // Model quality moved to Calibration (issue #586 Round 3); the water balance stays, after the summary.
-const RUNS_BAR = ['Summary', 'Water balance by water year', 'Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication', 'Self-checks', 'Explore any output'];
+const RUNS_BAR = ['Summary', 'Water balance by water year', 'Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication', 'Arithmetic checks', 'Chart any daily series'];
 const RUNS_RAIL: [string | null, string[]][] = [
 	[null, ['Summary', 'Water balance by water year']],
 	// The side index also has a line for each sub-heading a reader looks for (D4).
 	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Changes since this run', 'Validation statement', 'Publication']],
-	['Dig deeper', ['Self-checks', 'Trace a day', 'Explore any output']],
+	['The model’s working', ['Arithmetic checks', 'Trace a day', 'Chart any daily series']],
 	['On Calibration', ['Hydrograph, on Calibration', 'Calibration against observed flow, on Calibration']],
 	['On EWR', ['Reserve rules met, by month, on EWR', 'Days below the EWR, by month, on EWR', 'Water account, on EWR']],
 	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]
@@ -152,6 +152,8 @@ const RUNS_RAIL: [string | null, string[]][] = [
 test('Runs & results: at 1280 px every link is on the bar, in at most two rows; at 1440 px a side index on the right, with the moved panels under their pages', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Menu rows runs');
+	// Two runs: the runs rail beside the results, as the bar is measured (one run puts the list in a row above, #586 D21).
+	await createRun(page.request, project.id, 'Earlier');
 	const run = await createRun(page.request, project.id, 'Baseline');
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.goto(`/projects/${project.id}?tab=runs`);

@@ -108,6 +108,12 @@
 	const noRuns = $derived(!loading && !loadError && runs.length === 0);
 	/** The list failed to load and holds no run: the rail's alert is the page's one message, with no results column (#586 D3). */
 	const listFailed = $derived(!loading && !!loadError && runs.length === 0);
+	/**
+	 * One run: nothing to pick between, so the runs list is one slim row across the top and the results take the
+	 * whole width, rather than a 250 px rail of one row beside an empty column down the whole page (#586 D21).
+	 * From the second run the list is the rail again.
+	 */
+	const singleRun = $derived(!loading && runs.length === 1);
 	const RESULTS_SHOW =
 		"A run's results: its summary and water balance, with the fit to observed flow on Calibration, EWR compliance on EWR and each hydrological unit's supply and dam storage on Hydrological units.";
 	let actionError = $state<string | null>(null);
@@ -616,7 +622,7 @@
 			{:else if overAllocated}
 				<span class="warn" data-testid="shares-over">
 					The run can't start: {overAllocated}. See the <a href="?tab=network">network</a> or
-					<a href="?tab=settings">settings</a>.
+					<a href="?tab=settings">model settings</a>.
 				</span>
 			{:else if modelDirty}
 				<span class="warn">The model has unsaved changes: Run model asks to save them first, since a run uses the saved model.</span>
@@ -641,10 +647,10 @@
 
 <!-- No runs: one empty state, the Runs card across the page, saying what a run will show (a second
      "Results appear here" card beside or under it was mostly empty space, a screen of it on a phone). -->
-<div class="layout" class:no-runs={noRuns || listFailed} bind:this={layoutEl} style:--rail-top="{railTop}px">
+<div class="layout" class:no-runs={noRuns || listFailed} class:single={singleRun} bind:this={layoutEl} style:--rail-top="{railTop}px">
 	<!-- The rail: the runs list, in view beside the long results page (sticky on wide screens). -->
 	<aside class="rail" bind:this={railEl}>
-		<section class="panel list" aria-labelledby="runs-h">
+		<section class="panel list" aria-labelledby="runs-h" data-testid="runs-card">
 			<div class="panel-head">
 				<h2 id="runs-h">Runs</h2>
 				{#if runs.length >= 2}
@@ -1322,6 +1328,56 @@
 	}
 	.no-runs .empty {
 		text-align: left;
+	}
+	/* One run (#586 D21): the card is one row across the page, its heading, the run's row and the tags' key side by
+	   side (wrapping on a phone), and the results take the whole width under it. */
+	.layout.single {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.single .rail {
+		position: static;
+		max-height: none;
+	}
+	.single .list {
+		display: flex;
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1.25rem;
+		padding-block: 0.6rem;
+		margin-bottom: 0;
+	}
+	.single .list .panel-head {
+		margin-bottom: 0;
+		gap: 0.75rem;
+	}
+	.single .runs {
+		flex: 1 1 20rem;
+		max-height: none;
+		min-height: 0;
+		min-width: 0;
+	}
+	/* The row's label, when and tags on one line where they fit, its pin and delete side by side at its end. */
+	.single .runs li.active {
+		align-items: center;
+		border-radius: var(--radius-sm);
+	}
+	.single .pick {
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.15rem 0.75rem;
+		padding-block: 0.4rem;
+	}
+	.single .tags {
+		margin-top: 0;
+	}
+	.single .acts {
+		flex-direction: row;
+		padding: 0 0.3rem 0 0;
+	}
+	.single .list-foot {
+		margin-top: 0;
 	}
 	.placeholder {
 		text-align: center;

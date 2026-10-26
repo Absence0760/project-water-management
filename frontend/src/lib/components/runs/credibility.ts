@@ -67,7 +67,7 @@ export function credibility(summary: CredibilityInput, onCalibration: (anchor: s
 	const v = summary.verification;
 	const head = checksHeadline(v);
 	out.push({
-		label: 'Self-checks',
+		label: 'Arithmetic checks',
 		text: !v ? 'not run (older engine)' : head.tone === 'ok' ? `all ${fmtNum(v.checks.length)} passed` : `${fmtNum(v.checks.filter((c) => !c.passed).length)} of ${fmtNum(v.checks.length)} failed`,
 		tone: head.tone === 'ok' ? 'ok' : head.tone === 'bad' ? 'bad' : 'none',
 		href: '#res-checks'

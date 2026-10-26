@@ -125,7 +125,7 @@
 	<LoadState {loading} {error} retry={() => attempt++}>
 		<LineChart
 			{title}
-			toolsLabel="Explore any output controls"
+			toolsLabel="Chart any daily series controls"
 			{unit}
 			series={data}
 			logToggle={isFlow}

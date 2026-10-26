@@ -240,7 +240,7 @@ test('every daily results chart moves through the record like the hydrograph, an
 	// Each chart's switches are one group named by its chart, so the repeated Earlier / Later, Log scale and
 	// window buttons say which chart they move; the unit switch's own name says it sets every flow chart (issue #586).
 	const flowUnits = 'Flow units, for every flow chart on this page';
-	const exploreTools = explore.getByRole('group', { name: 'Explore any output controls', exact: true });
+	const exploreTools = explore.getByRole('group', { name: 'Chart any daily series controls', exact: true });
 	await expect(exploreTools.getByRole('button', { name: 'Log scale' })).toBeVisible();
 	await expect(exploreTools.getByRole('group', { name: flowUnits, exact: true })).toBeVisible();
 
@@ -273,6 +273,9 @@ test('every daily results chart moves through the record like the hydrograph, an
 test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Results menu');
+	// Two runs, so the runs rail sits beside the results and the menu is the bar at this width (one run puts the
+	// list in a row above, and the wider results get the side index, #586 D21).
+	await createRun(page.request, project.id, 'Earlier');
 	const runId = await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
@@ -286,20 +289,20 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Reproduction',
 		'Validation statement',
 		'Publication',
-		'Self-checks',
-		'Explore any output'
+		'Arithmetic checks',
+		'Chart any daily series'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
-	const groups = ['Record', 'Dig deeper'];
-	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Units & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
+	const groups = ['Record', 'The model’s working'];
+	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Units & users|Model quality|Record|The model’s working)$/ })).toHaveText(groups);
 	// The river and unit groups have their own pages, linked from the run header (runs-page.spec.ts), not the menu.
 	await expect(menu.getByRole('list', { name: 'River & Reserve' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Units & users' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Model quality' })).toHaveCount(0);
-	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore any output']);
+	await expect(menu.getByRole('list', { name: 'The model’s working' }).getByRole('link')).toHaveText(['Arithmetic checks', 'Chart any daily series']);
 	// The summary opens with the model checks, each linking to its panel.
 	const checks = page.getByRole('list', { name: 'Model checks' });
-	await expect(checks.getByRole('link', { name: /^Self-checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');
+	await expect(checks.getByRole('link', { name: /^Arithmetic checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');
 	// The fit and the plausibility checks are on Calibration, for this run (#586 D12).
 	await expect(checks.getByRole('link', { name: /^Calibration NSE / })).toHaveAttribute('href', `?tab=calibration&run=${runId}#res-calibration`);
 	await expect(checks.getByRole('link', { name: /^Plausibility / })).toHaveAttribute('href', `?tab=calibration&run=${runId}#res-plausibility`);
@@ -323,8 +326,8 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	expect(menuBox!.y).toBeGreaterThanOrEqual(-1);
 	expect(top!.y).toBeGreaterThanOrEqual(menuBox!.y + menuBox!.height);
 
-	await menu.getByRole('link', { name: 'Explore any output', exact: true }).click();
-	await expect(page.getByRole('region', { name: 'Explore any output' })).toBeInViewport();
+	await menu.getByRole('link', { name: 'Chart any daily series', exact: true }).click();
+	await expect(page.getByRole('region', { name: 'Chart any daily series' })).toBeInViewport();
 	await expect(page).toHaveURL(/#res-explore$/);
 
 	// Phone: the menu is one strip that scrolls inside itself, never the page.
@@ -404,7 +407,7 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 	await page.goto(`/projects/${project.id}?tab=runs`);
 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
-	await expect(menu.getByRole('link', { name: 'Explore any output', exact: true })).toBeVisible();
+	await expect(menu.getByRole('link', { name: 'Chart any daily series', exact: true })).toBeVisible();
 	// The list scrolls inside its own panel rather than running off the rail.
 	const runs = page.getByRole('region', { name: 'Runs', exact: true }).getByRole('list');
 	expect(await runs.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
@@ -417,7 +420,7 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 	// The runs rail (the app sidebar is a complementary landmark too, since issue #17's shell).
 	const rail = page.getByRole('region', { name: 'Runs & results' }).getByRole('complementary');
 	await expect.poll(() => rail.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(0);
-	for (const name of ['Summary', 'Explore any output']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
+	for (const name of ['Summary', 'Chart any daily series']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
 
 	// A long list gets a filter over the labels.
 	const filter = page.getByRole('searchbox', { name: 'Filter runs by label' });

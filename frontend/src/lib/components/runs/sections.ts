@@ -1,6 +1,7 @@
 // The Runs & results page's in-page menu: the results panels in page order,
 // grouped by the question they answer (the run itself, the record, then
-// digging deeper). Each id is set on its panel (RunsTab.svelte,
+// the model's working: its arithmetic checks and any daily series; #586 E14 named
+// these plainly, ids kept). Each id is set on its panel (RunsTab.svelte,
 // RunCharts.svelte); each group's heading is on the page too. Model quality
 // (the hydrograph to the plausibility checks) moved to Calibration (issue #586
 // round 3, runs/modelQuality.ts), and its old anchors here are sent on
@@ -32,7 +33,7 @@ type SectionInput = Partial<RunSummary>;
 /**
  * The sub-headings with a line of their own in the side index (`rail`), each its heading's id (the heading sets
  * it): the changes to the inputs since the run, under Reproduction (history/RunInputsPanel.svelte), and Trace a day,
- * under Self-checks (SelfChecksPanel.svelte). Not on the bar, which keeps to the panels so it fits two rows.
+ * under Arithmetic checks (SelfChecksPanel.svelte). Not on the bar, which keeps to the panels so it fits two rows.
  */
 export const RUN_SUBSECTIONS = { changes: 'res-changes', trace: 'res-trace' } as const;
 
@@ -66,11 +67,11 @@ export function resultGroups(summary: SectionInput, rail = false): ResultGroup[]
 			]
 		},
 		{
-			label: 'Dig deeper',
+			label: 'The model’s working',
 			sections: [
-				{ id: 'res-checks', label: 'Self-checks' },
+				{ id: 'res-checks', label: 'Arithmetic checks' },
 				...(rail ? [{ id: RUN_SUBSECTIONS.trace, label: 'Trace a day' }] : []),
-				{ id: 'res-explore', label: 'Explore any output' }
+				{ id: 'res-explore', label: 'Chart any daily series' }
 			]
 		}
 	];

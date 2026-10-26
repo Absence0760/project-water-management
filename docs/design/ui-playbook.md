@@ -305,6 +305,15 @@ section it belongs to, with the example that taught it.
   card is now the page's one empty state, across its width with no results
   column, its first line the old message (specs and help quote it) and a
   second line saying what a run's results hold.
+- **A picker rail with one item is a row, not a rail.** With one run, Runs &
+  results' 250 px sticky rail held one row beside an empty column down the
+  whole page, and nothing to pick (#586 D21). One run now makes the Runs card
+  one slim row across the top (heading, the run's row with its tags, pin and
+  delete, the tags' key), restyled with the same markup (`.single`), and the
+  results take the whole width; the second run brings the rail back. A grid
+  that auto-fills then gains columns: the Summary's six cards went 4 + 2
+  beside an empty half row until their minimum became a third of the row
+  (`runs-page.spec.ts` checks 3 + 3).
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with goto's `replace`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and

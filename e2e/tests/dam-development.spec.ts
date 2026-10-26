@@ -58,7 +58,7 @@ test('date a dam’s survey, sediment and service, and a unit’s abstraction st
 	await page.getByLabel(/^Run label/).fill('Dated');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Dated' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
-	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText(/^All \d+ self-checks passed\.$/);
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Arithmetic checks' }).click();
+	const checks = page.getByRole('region', { name: /^Arithmetic checks/ });
+	await expect(checks.getByRole('status').filter({ hasText: 'arithmetic checks' })).toHaveText(/^All \d+ arithmetic checks passed\.$/);
 });
