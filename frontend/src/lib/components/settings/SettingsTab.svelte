@@ -502,13 +502,12 @@
 	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
 	// panels settle (as EWR does), and focus its heading once that is drawn too: some panels (Evaporation
 	// from the map) are lazy chunks of their own, drawn after this mounts (landOnAnchor waits for them).
-	// `?tab=calibration`, which has no page of its own yet, opens at Flow calibration (issue #586). A
-	// moved panel's link lands nowhere here: the effect above sends it on.
+	// A moved panel's link lands nowhere here: the effect above sends it on. (`?tab=calibration` opened this
+	// page at Flow calibration until Calibration got a page of its own, issue #586; its #set- links come here.)
 	onMount(() => {
 		if (settingsForward(page.url)) return;
 		const hash = page.url.hash.slice(1);
-		const id = hash.startsWith('set-') ? hash : !hash && page.url.searchParams.get('tab') === 'calibration' ? 'set-flow' : null;
-		return id ? landOnAnchor(id) : undefined;
+		return hash.startsWith('set-') ? landOnAnchor(hash) : undefined;
 	});
 </script>
 

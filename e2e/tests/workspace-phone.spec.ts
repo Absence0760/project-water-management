@@ -34,6 +34,7 @@ const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'crops', ready: '+ Add crop' },
 	{ tab: 'transfers', ready: '+ Add transfer' },
 	{ tab: 'settings', ready: 'Fit the parameters' },
+	{ tab: 'calibration', ready: 'Add data' },
 	{ tab: 'series', ready: 'Preview all data' },
 	{ tab: 'runs', ready: 'Run model' },
 	{ tab: 'river', ready: 'Open in Runs & results' },

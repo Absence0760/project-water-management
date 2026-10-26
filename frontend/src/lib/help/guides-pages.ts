@@ -425,6 +425,35 @@ export const PAGE_GUIDES: Guide[] = [
 		related: ['create-a-project', 'applications-page', 'two-step-sign-in']
 	},
 	{
+		id: 'calibration-page',
+		title: 'Calibration: fit the runoff parameters and judge the fit',
+		summary: 'Where the fit is set up and where a run’s fit is read: one page for the calibration loop, its panels on their way here.',
+		kind: 'page',
+		tab: 'calibration',
+		sections: [
+			{
+				heading: 'What the page is for',
+				blocks: [
+					{
+						type: 'p',
+						text: '[[calibration|Calibration]] is a loop: set the runoff model’s parameters, run the model, compare the modelled flow with the observed record, and adjust. This page brings the two halves of that loop together, so the loop stays on one page. It is under **Build the model**, after **Settings & calibration**, and every member sees it.'
+					},
+					{
+						type: 'p',
+						text: '**Set up the fit** links to **Flow calibration**, **Calibration record**, **Fit the parameters** and **WR2012 check** on Settings & calibration, each landing on its heading. **How the shown run fits** links to the Model quality panels on Runs & results (**Hydrograph**, **Flow-duration curve**, **Calibration against observed flow** and **EWR test: model against observed flow**) for the run picked there, or the latest one. With no run yet it says so and links to Runs & results.'
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'The panels themselves are moving onto this page. Until they arrive, follow the links: [[guide:fit-automatically|Fit the runoff model automatically]] and [[guide:run-and-read-results|Run the model and read the results]] cover them where they are.'
+					}
+				]
+			}
+		],
+		terms: ['calibration', 'gr4j'],
+		related: ['fit-automatically', 'calibrate-by-hand', 'how-calibration-works']
+	},
+	{
 		id: 'history-page',
 		title: 'History: every change, who made it and when',
 		summary: 'The model’s change log: read any earlier version, see how it differs from now, and restore it as a new change.',

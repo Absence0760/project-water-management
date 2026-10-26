@@ -35,6 +35,8 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by hydrological unit' })).toBeVisible() },
 	{ id: 'transfers', ready: (p) => expect(p.getByLabel('From, transfer 1', { exact: true })).toBeVisible() },
 	{ id: 'settings', ready: (p) => expect(p.getByRole('heading', { name: 'Flow calibration' })).toBeVisible() },
+	// Its two parts and their links to the panels where they are until they move in (issue #586).
+	{ id: 'calibration', ready: (p) => expect(p.getByTestId('calibration-run')).toBeVisible() },
 	{ id: 'series', ready: (p) => expect(p.getByRole('button', { name: 'View', exact: true })).toHaveCount(2) },
 	{
 		id: 'runs',

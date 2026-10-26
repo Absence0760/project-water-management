@@ -26,6 +26,9 @@ export const TAB_GROUP = {
 	transfers: 'inputs',
 	series: 'core',
 	settings: 'inputs',
+	// Fitting the runoff parameters and judging the fit, on one page (issue #586): core, as viewers read the fit's
+	// results on Runs & results today; its fit controls are editors', as the Map's edit tools are.
+	calibration: 'core',
 	runs: 'core',
 	// One run's river against its EWR (issue #17, option A): the Runs tab's River & Reserve group, moved; named EWR
 	// since issue #558 (?tab=ewr and ?tab=reserve open it too), the id kept so saved section choices still hold.
@@ -63,6 +66,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	transfers: 'Transfers',
 	series: 'Data',
 	settings: 'Settings & calibration',
+	calibration: 'Calibration',
 	runs: 'Runs & results',
 	river: 'EWR',
 	supply: 'Hydrological units',
@@ -122,6 +126,7 @@ export const TAB_GUIDE: Readonly<Record<TabId, string>> = {
 	transfers: 'add-a-transfer',
 	series: 'add-data',
 	settings: 'fit-automatically',
+	calibration: 'calibration-page',
 	runs: 'run-and-read-results',
 	river: 'river-page',
 	supply: 'units-page',
@@ -258,7 +263,8 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
  */
 export const NAV_SECTIONS = [
 	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
-	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings'] },
+	// Calibration after Settings (issue #586): fitting the runoff parameters is the last step of building the model.
+	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration'] },
 	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 

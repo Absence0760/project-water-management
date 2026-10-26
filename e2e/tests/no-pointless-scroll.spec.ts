@@ -11,7 +11,7 @@ import { rulesCard } from '../support/transfers.ts';
 const GUTTER = 14;
 
 const TABS = [
-	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'runs', 'river',
+	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river',
 	'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'
 ];
 

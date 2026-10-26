@@ -439,7 +439,14 @@ section it belongs to, with the example that taught it.
   row (#326 D3) took that one: the last link sat 14 % below the window and a
   viewer with the inputs shown overflowed 20 px, so the rows went to 32 px
   (still past the 24 px target) and the gaps to 0.5rem, which keeps a 32 px
-  row to spare with all 17. Below that height the slot scrolls on its own
+  row to spare with all 17. Calibration (issue #586) took that row, and a
+  viewer with the inputs shown then overflowed 13 px: the owner's spare row
+  had hidden that the viewer's **Show model inputs** row (40 px and a 0.5rem
+  gap) was 16 px taller than the Applications row it stands in for. In the
+  sidebar it is a 32 px row now, so both roles fit with the same few pixels
+  and no row to spare; the spec fails on a row too many and on a row free
+  again. Count every role's rows, not just the owner's, when you budget.
+  Below that height the slot scrolls on its own
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
   never leaves the screen; `app-sidebar.spec.ts` pins both. The slot also
   sets `overflow-x: hidden`, since `overflow-y: auto` alone makes x auto too:
