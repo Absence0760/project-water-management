@@ -49,6 +49,15 @@ export interface FeedMeta {
 	 * none is staged.
 	 */
 	rebuilding: { startDate: string; through: string; updatedAt: string } | null;
+	/**
+	 * When the scheduler next takes the feed (243_feed_next_attempt.sql
+	 * app_feed_next_attempt, the rule app_feed_is_due reads): its daily slot, or
+	 * sooner while failing, after the backoff (15 min, or 2 h after a refusal,
+	 * doubling to the day). It may be past: due, waiting for the next tick.
+	 * Null when nothing is scheduled: switched off, no acting owner, or never
+	 * scheduled yet (due at once).
+	 */
+	nextAttemptAt: string | null;
 }
 
 /** The row the handlers work from. */
@@ -94,7 +103,9 @@ const COLS = `f.id, f.source, f.config, f.target_kind AS "targetKind", f.target_
 		'startDate', to_char(st.start_date, 'YYYY-MM-DD'),
 		'through', to_char(st.start_date + cardinality(st."values") - 1, 'YYYY-MM-DD'),
 		'updatedAt', st.updated_at) END AS rebuilding,
-	(SELECT p.time_zone FROM project p WHERE p.id = f.project_id) AS "timeZone"`;
+	(SELECT p.time_zone FROM project p WHERE p.id = f.project_id) AS "timeZone",
+	CASE WHEN f.enabled AND f.acting_user_id IS NOT NULL
+		THEN app_feed_next_attempt(f.source, f.schedule, f.consecutive_failures, f.last_scheduled_at, f.last_error) END AS "nextAttemptAt"`;
 const FROM = `data_feed f LEFT JOIN app_user u ON u.id = f.acting_user_id
 	LEFT JOIN time_series t ON t.project_id = f.project_id AND t.kind = f.target_kind AND t.name = f.target_name
 	LEFT JOIN feed_stage st ON st.feed_id = f.id`;
