@@ -3,7 +3,7 @@ import { createProject, putSeries } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { anySaveBar, openFold, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
+import { anySaveBar, openCalibration, openFold, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
 
 test('monthly A-pan and EWR values are saved and survive a reload', async ({ page, owner }) => {
 	void owner;
@@ -148,10 +148,6 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Drought restrictions',
 		'Reporting',
 		'Flow generation',
-		'Flow calibration',
-		'Calibration record',
-		'Fit the parameters',
-		'WR2012 check',
 		'EWR',
 		'Reserve rule tables',
 		'Outcome matrix',
@@ -220,11 +216,12 @@ test('flow calibration is split into its own groups, and a bad exclusion points 
 	const project = await createProject(page.request, 'Settings groups');
 	await page.goto(`/projects/${project.id}?tab=settings`);
 
-	// Each part of calibration is its own panel with its own heading.
+	// Each part of calibration is its own panel with its own heading: Rain gaps on Model settings, the rest on Calibration.
 	const rain = page.getByRole('region', { name: 'Rain gaps', exact: true });
 	await openFold(rain, 'rain-defaults');
 	await expect(rain.getByLabel('CHIRPS bias correction', { exact: true })).toBeVisible();
 	await expect(rain.getByLabel('Flagged zero runs', { exact: true })).toBeVisible();
+	await openCalibration(page, project.id);
 	const record = page.getByRole('region', { name: 'Calibration record' });
 	await expect(record.getByRole('group', { name: /^Calibration exclusions/ })).toBeVisible();
 	await expect(page.getByRole('region', { name: /^Fit automatically/ })).toBeVisible();

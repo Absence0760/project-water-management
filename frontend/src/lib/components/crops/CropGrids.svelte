@@ -445,10 +445,10 @@
 	{#if !apanSet}
 		<div class="alert alert-info">
 			{#if apanDaily}
-				{DAILY_APAN_NO_MEANS} <a href="?tab=settings#set-demand">Enter the monthly A-pan values</a> (Settings & calibration, Demand) for the other days.
+				{DAILY_APAN_NO_MEANS} <a href="?tab=settings#set-demand">Enter the monthly A-pan values</a> (Model settings, Demand) for the other days.
 			{:else}
 				A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings#set-demand">Enter the monthly A-pan values</a>
-				(Settings & calibration, Demand).
+				(Model settings, Demand).
 			{/if}
 		</div>
 	{:else if apanNote}

@@ -1,4 +1,4 @@
-// The Settings & calibration page (?tab=settings, issue #17 option A): locators
+// The Model settings page (?tab=settings, issue #17 option A; Settings & calibration until issue #586 round 3) and the Calibration page's settings panels: locators
 // the specs share. Invented data only.
 import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
@@ -10,16 +10,26 @@ export const fitSummary = (page: Page) => header(page).getByTestId('fit-summary'
 
 export async function openSettings(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=settings`);
-	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Model settings' })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
+}
+
+/**
+ * Opens the Calibration page (?tab=calibration), whose "Set up the fit" holds Flow calibration, Calibration record,
+ * Fit the parameters and the WR2012 check (issue #586 round 3; they were on Settings until then), and waits for them.
+ */
+export async function openCalibration(page: Page, projectId: string) {
+	await page.goto(`/projects/${projectId}?tab=calibration`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeVisible();
 }
 
 /**
  * The workspace's one save bar (frontend model/SaveBar.svelte), named for
  * what is unsaved: "Unsaved settings" with only the settings, "Unsaved model
  * changes" once the model has edits too, "Unsaved changes" with only a number
- * that needs fixing. Settings has no save bar of its own (docs/ui.md §
- * Settings & calibration).
+ * that needs fixing. Neither settings page has a save bar of its own (docs/ui.md §
+ * Model settings).
  */
 export const settingsBar = (page: Page) => page.getByRole('region', { name: 'Unsaved settings' });
 export const anySaveBar = (page: Page) => page.getByRole('region', { name: /^Unsaved / });

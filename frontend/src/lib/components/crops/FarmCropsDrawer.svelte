@@ -125,7 +125,7 @@
 			default system and the systems' efficiencies are set.
 		</p>
 		{#if !apanSet}
-			<p class="muted small">A-pan evaporation isn't set yet, so this hydrological unit's demand is zero (<a href="?tab=settings#set-demand">Settings &amp; calibration, Demand</a>).</p>
+			<p class="muted small">A-pan evaporation isn't set yet, so this hydrological unit's demand is zero (<a href="?tab=settings#set-demand">Model settings, Demand</a>).</p>
 		{:else if demand && planting.totalM2 > 0}
 			<p class="small" data-testid="farm-demand">
 				Irrigation demand before rain: <strong>{fmtNum(demand.meanM3Day)} m³/day</strong> on average,

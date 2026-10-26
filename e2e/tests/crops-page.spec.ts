@@ -273,7 +273,7 @@ test('with a daily A-pan series the demand chart says it shows the monthly means
 	await page.reload();
 	const alert = page.getByRole('region', { name: /^Irrigation demand by month/ }).locator('.alert');
 	await expect(alert).toHaveText(
-		"The monthly A-pan means aren't set, so this preview shows no demand. Runs use the daily A-pan series (Data tab) on the days it has a value. Enter the monthly A-pan values (Settings & calibration, Demand) for the other days."
+		"The monthly A-pan means aren't set, so this preview shows no demand. Runs use the daily A-pan series (Data tab) on the days it has a value. Enter the monthly A-pan values (Model settings, Demand) for the other days."
 	);
 	await expect(alert.getByRole('link', { name: 'Enter the monthly A-pan values' })).toHaveAttribute('href', '?tab=settings#set-demand');
 	await expect(page.getByTestId('crops-demand-apan')).toHaveCount(0);

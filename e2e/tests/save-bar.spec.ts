@@ -202,7 +202,7 @@ test('Run model with unsaved settings saves them first; a settings problem is a 
 	await sections(page).getByRole('link', { name: 'Runs & results' }).click();
 	await run.click();
 	await answerConfirm(page, false, 'A run uses the saved model, and your unsaved settings can’t be saved yet');
-	await sections(page).getByRole('link', { name: /^Settings/ }).click();
+	await sections(page).getByRole('link', { name: 'Model settings', exact: true }).click();
 	await page.getByLabel('Simulation start').fill('');
 	await page.getByLabel('Simulation end').fill('');
 

@@ -43,7 +43,7 @@ test('unsaved model edits: a tab change keeps them without asking; leaving asks,
 	await expect(confirmBox(page)).toBeHidden();
 });
 
-test('unsaved settings: another section keeps them without asking; another page asks, and Stay keeps the form', async ({ page, owner }) => {
+test('unsaved settings: another section, Calibration included, keeps them without asking; another page asks, and Stay keeps the form', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Guard settings');
 	await page.goto(`/projects/${project.id}?tab=settings`);
@@ -57,7 +57,17 @@ test('unsaved settings: another section keeps them without asking; another page 
 	await expect(confirmBox(page)).toBeHidden();
 	await expect(page.getByRole('region', { name: 'Unsaved settings' })).toContainText('Unsaved changes to the settings');
 	await expect(page.getByTestId('section-header').getByText('Unsaved changes', { exact: true })).toBeVisible();
-	await sections(page).getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await sections(page).getByRole('link', { name: 'Model settings', exact: true }).click();
+	await expect(apan).toHaveValue('152');
+	// Calibration edits the same settings (issue #586 round 3): going there and back asks nothing, and an edit there joins.
+	await sections(page).getByRole('link', { name: 'Calibration', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
+	await expect(confirmBox(page)).toBeHidden();
+	const x1 = page.getByLabel(/^Production store capacity X1/);
+	await x1.fill('432');
+	await x1.blur();
+	await sections(page).getByRole('link', { name: 'Model settings', exact: true }).click();
+	await expect(confirmBox(page)).toBeHidden();
 	await expect(apan).toHaveValue('152');
 
 	// The projects list: asked, naming the settings; Stay keeps the form.

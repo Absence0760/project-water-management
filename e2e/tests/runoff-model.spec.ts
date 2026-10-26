@@ -1,5 +1,5 @@
 // The runoff model (issue #16): GR4J is the only one since engine 1.0.0
-// removed the legacy b023 model, so Settings has no model to pick and a new run
+// removed the legacy b023 model, so Calibration's Flow calibration has no model to pick and a new run
 // is GR4J. A run of the legacy model stored before then still opens, read-only
 // and badged "Workbook comparison": it can't be nominated, published or signed
 // off, and compares against a GR4J run. The API can't make such a run any more,
@@ -16,7 +16,7 @@ const sections = (page: Page) => page.getByRole('navigation', { name: 'Result se
 test('GR4J is the only runoff model: no picker, its parameters save, and a run reports the runoff balance', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'GR4J settings');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const flow = page.getByRole('region', { name: 'Flow calibration', exact: true });
 	await expect(flow.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
@@ -141,13 +141,17 @@ test('run comparison shows an old legacy run against a GR4J run', async ({ page,
 	}
 });
 
-test('GR4J without A-pan evaporation: Settings warns, and a run is refused with the reason', async ({ page, owner }) => {
+test('GR4J without A-pan evaporation: Flow calibration warns, and a run is refused with the reason', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'No A-pan');
 	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
-	await expect(page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ })).toBeVisible();
+	const warning = page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ });
+	await expect(warning).toBeVisible();
+	// The A-pan row is Demand's, on Model settings (issue #586 round 3): the warning links there.
+	await expect(warning).toContainText('GR4J needs A-pan evaporation (Demand, on Model settings)');
+	await expect(warning.getByRole('link', { name: 'Demand', exact: true })).toHaveAttribute('href', '?tab=settings#set-demand');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('No evaporation');
@@ -156,7 +160,7 @@ test('GR4J without A-pan evaporation: Settings warns, and a run is refused with 
 
 	// Positive control: with A-pan the warning goes and the run goes through.
 	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(150) });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
 	await expect(page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ })).toHaveCount(0);
 	await page.goto(`/projects/${project.id}?tab=runs`);

@@ -54,6 +54,7 @@
 	import { issueHref } from '#lib/model/validate.js';
 	import { ProjectDetailsDraft } from '#lib/components/project/detailsDraft.svelte.js';
 	import { SettingsDraft } from '#lib/components/settings/settingsDraft.svelte.js';
+	import { blockerHref } from '#lib/components/settings/blockers.js';
 	import { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import type { UnsavedEdits } from '#lib/preview/overlay.js';
 	import IssueList from '#lib/components/model/IssueList.svelte';
@@ -158,8 +159,9 @@
 	// The project details being edited on the Project page (issue #162 item 12):
 	// held here, so they survive a tab change and share the model's save bar.
 	const details = new ProjectDetailsDraft();
-	// The Settings & calibration form's unsaved settings: held here for the same reasons, so a tab
-	// change keeps them and the one save bar saves them (settings/settingsDraft.svelte.ts).
+	// The settings' unsaved edits, on Model settings and on Calibration alike: held here for the same reasons, so a tab
+	// change keeps them, an edit on one page and one on the other are one draft, and the one save bar saves them
+	// (settings/settingsDraft.svelte.ts).
 	const settings = new SettingsDraft();
 	// Fit automatically's choices, running fit and result: held here too, so a fit keeps running and its
 	// result waits to be applied while another tab is open (calibration/fitSession.svelte.ts).
@@ -181,7 +183,9 @@
 	// own prompt, lib/nav/leaveGuard.ts).
 	provideUnsaved(() => editor.dirty || details.dirty || settings.dirty || invalidFields.count > 0);
 	// Leaving the project (not just changing tab) with any of them unsaved asks first, in
-	// the app's dialog (lib/nav/leaveGuard.ts); a tab change keeps them all.
+	// the app's dialog (lib/nav/leaveGuard.ts); a tab change keeps them all, so going between Model settings and
+	// Calibration, whose panels share the settings draft, never asks (issue #586 round 3), and neither does a link
+	// to a panel that moved to another tab (#set-feeds), which forwards with the draft kept and the save bar still shown.
 	guardUnsaved({ dirty: () => editor.dirty, what: 'model edits' });
 	guardUnsaved({ dirty: () => details.dirty, what: 'project details' });
 	guardUnsaved({ dirty: () => settings.dirty, what: 'settings' });
@@ -230,15 +234,18 @@
 		get saveError() {
 			return settings.saveError;
 		},
-		// Each group with a problem, linked to its panel: on the Settings tab in place, from elsewhere through it.
+		// Each panel with a problem, linked to it on its page (Model settings or Calibration, issue #586 round 3): in
+		// place on that page, from any other tab through it.
 		get problems() {
-			return settings.blockers.map((b) => ({ message: `${b.label}: ${b.message}`, href: `${tab === 'settings' ? '' : '?tab=settings'}#${b.id}` }));
+			return settings.blockers.map((b) => ({ message: `${b.label}: ${b.message}`, href: blockerHref(b.id, tab) }));
 		},
 		revert: () => settings.revert()
 	};
 	const pageDrafts: PageDraft[] = [detailsDraft, settingsDraft];
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
+	// What the settings panels read from the series list, on Model settings and Calibration alike.
+	const seriesKinds = $derived(series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null);
 	// A daily A-pan series: runs use it before the monthly means, which the Crops demand preview shows (issue #173).
 	const apanDaily = $derived(series?.some((x) => x.kind === 'evap_apan_mm' && !x.siteNodeId) ?? false);
 	let runs = $state<RunMeta[] | null>(null);
@@ -539,7 +546,7 @@
 		}
 	}
 	/**
-	 * The settings (the Settings & calibration form), through the same bar, with the bar's reason (which the
+	 * The settings (Model settings' and Calibration's panels, one draft), through the same bar, with the bar's reason (which the
 	 * model's save then takes too, and clears); true once saved.
 	 */
 	async function saveSettings(): Promise<boolean> {
@@ -1017,24 +1024,34 @@
 								project={project!}
 								{editor}
 								draft={settings}
-								{fit}
-								seriesKinds={series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null}
-								gaugeRecords={series?.flatMap((x) => (x.siteNodeId ? [{ kind: x.kind, siteNodeId: x.siteNodeId }] : [])) ?? null}
-								chirpsSource={chirpsSourceOf(series)}
-								observedOrigins={observedOriginsOf(series)}
-								apanSeries={series ? (firstOutletSeries(series, 'evap_apan_mm') ?? null) : undefined}
-								flowRecordId={series ? ((firstOutletSeries(series, 'flow_observed_m3s') ?? firstOutletSeries(series, 'flow_logger_m3s'))?.id ?? null) : null}
+								{seriesKinds}
 								catchmentRain={series ? (firstOutletSeries(series, 'rain_catchment_mm') ?? null) : undefined}
 								rainSeries={series?.filter((x) => x.kind === 'rain_catchment_mm' && !x.siteNodeId)}
 								readonly={!canEdit}
-								{onProjectChange}
 								onModelChanged={reloadInputs}
 							/>
 						{/snippet}
 					</Lazy>
 				{:else if tab === 'calibration'}
 					<Lazy load={LOAD.calibration}>
-						{#snippet children(CalibrationTab)}<CalibrationTab {runs} role={project!.role} />{/snippet}
+						{#snippet children(CalibrationTab)}
+							<CalibrationTab
+								{runs}
+								role={project!.role}
+								project={project!}
+								{editor}
+								draft={settings}
+								{fit}
+								{seriesKinds}
+								gaugeRecords={series?.flatMap((x) => (x.siteNodeId ? [{ kind: x.kind, siteNodeId: x.siteNodeId }] : [])) ?? null}
+								chirpsSource={chirpsSourceOf(series)}
+								observedOrigins={observedOriginsOf(series)}
+								apanSeries={series ? (firstOutletSeries(series, 'evap_apan_mm') ?? null) : undefined}
+								flowRecordId={series ? ((firstOutletSeries(series, 'flow_observed_m3s') ?? firstOutletSeries(series, 'flow_logger_m3s'))?.id ?? null) : null}
+								readonly={!canEdit}
+								{onProjectChange}
+							/>
+						{/snippet}
 					</Lazy>
 				{:else if tab === 'series'}
 					<Lazy load={LOAD.series}>

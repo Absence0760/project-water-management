@@ -26,7 +26,7 @@ const OWNER_TABS = [
 	'Crops & demand',
 	'Transfers',
 	'Data',
-	'Settings & calibration',
+	'Model settings',
 	'Calibration',
 	'Summary',
 	'EWR',

@@ -119,7 +119,7 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 		await expect(r.getByRole('button', { name: /^Use / })).toHaveCount(0);
 	}
 	await expect(grid.getByTestId('map-area-sources').getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText('From the map “Upper farm”');
-	await expect(grid.getByRole('link', { name: 'Settings → WR2012 check' })).toBeVisible();
+	await expect(grid.getByRole('link', { name: 'Calibration → WR2012 check' })).toBeVisible();
 	await expect(grid.getByTestId('map-sources').getByRole('listitem')).toHaveCount(3);
 	// A row's name picks it and closes the grid.
 	await table.getByRole('button', { name: 'Lower farm', exact: true }).click();
@@ -240,7 +240,7 @@ test('the quaternary under the boundary proposes the WR2012 values, one at a tim
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 
-	await page.goto(`${at}?tab=settings`);
+	await page.goto(`${at}?tab=calibration`);
 	await page.getByLabel('Compare runs with WR2012 naturalised flow').check();
 	await page.getByRole('button', { name: 'Propose from the map' }).click();
 	const proposal = page.getByTestId('quaternary-proposal');

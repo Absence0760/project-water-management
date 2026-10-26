@@ -342,7 +342,8 @@ test('gauge vs logger flows with the page: the flagged and latest water years, t
 	expect(await innerScrollers(page)).toEqual([]);
 
 	await panel.getByRole('link', { name: 'Calibration record → Compare with' }).click();
-	await expect(page).toHaveURL(/[?&]tab=settings#set-record$/);
+	// Calibration record is on the Calibration page (issue #586 round 3): the link goes there, directly or forwarded.
+	await expect(page).toHaveURL(/[?&]tab=calibration#set-record$/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Calibration record' })).toBeFocused();
 });
 

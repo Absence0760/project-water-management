@@ -1,19 +1,20 @@
-// Settings → Flow generation (issue #553 round 3; docs/ui.md § Settings & calibration; docs/model.md §2.4h, §2.4i,
+// Model settings → Flow generation (issue #553 round 3; docs/ui.md § Model settings; docs/model.md §2.4h, §2.4i,
 // §2.5). On the sample model with two invented rainfall stations beside its catchment rain series:
 // - The panel leads Runoff & calibration with the Fragmentation / Per unit radio. Fragmentation (the default) shows
 //   the flow share; Per unit shows a row per land unit: its station (stations only, no satellite option), Scale to
 //   unit MAP with the ratio it gives, and the station correcting its CHIRPS; and each station in use once, with its
 //   MAP. Ticking units gives them one station at once. Saved, the settings hold the radio as settings.unitRain and
 //   the rows as settings.rainStations.units, and a reload shows them again; Fragmentation keeps them, unused.
-// - A fit made under one method, with the other chosen, reads "Parameters not fitted for this method" in the panel
-//   and in the fit record, until the method the fit ran under is chosen again.
+// - A fit made under one method (on Calibration, issue #586 round 3), with the other chosen on Model settings, reads
+//   "Parameters not fitted for this method" in the panel, linking to Fit the parameters on Calibration, and in the
+//   fit record there, until the method the fit ran under is chosen again.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { putModel, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { openFold, openSettings, saveSettings } from '../support/settings.ts';
+import { openCalibration, openFold, openSettings, saveSettings } from '../support/settings.ts';
 
 type Node = { id: string; name: string; kind: string; mapMm?: number | null; mapSource?: string | null };
 
@@ -158,23 +159,31 @@ test('switching method marks the fit as not fitted for this method, until its ow
 	void owner;
 	const { id } = await seed(page.request, 'Flow generation fit');
 	await updateSettings(page.request, id, { runoffModel: 'gr4j' });
-	await openSettings(page, id);
+	// The fit is on Calibration (issue #586 round 3); Flow generation stays on Model settings.
+	await openCalibration(page, id);
 	await fitAndApply(page);
 	await saveSettings(page);
+	const sidebar = page.getByRole('navigation', { name: 'Project sections' });
+	await sidebar.getByRole('link', { name: 'Model settings', exact: true }).click();
 	const refit = panel(page).getByTestId('flowgen-refit');
+	await expect(panel(page).getByRole('radio', { name: 'Per unit' })).toBeVisible();
 	await expect(refit).toHaveCount(0);
 
 	await panel(page).getByRole('radio', { name: 'Per unit' }).check();
-	await expect(refit).toHaveText('Parameters not fitted for this method: the GR4J parameters were fitted under Fragmentation. Fit the parameters again before relying on the results.');
-	await expect(refit.getByRole('link', { name: 'Fit the parameters' })).toHaveAttribute('href', '#set-fit');
+	await expect(refit).toHaveText('Parameters not fitted for this method: the GR4J parameters were fitted under Fragmentation. Fit the parameters again on Calibration before relying on the results.');
+	await expect(refit.getByRole('link', { name: 'Fit the parameters' })).toHaveAttribute('href', '?tab=calibration#set-fit');
+	// The unsaved switch goes along to Calibration: its fit record says so too.
+	await sidebar.getByRole('link', { name: 'Calibration', exact: true }).click();
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
 	await expect(record).toContainText('Parameters not fitted for this method: the fit ran under the other flow generation method');
 	// Saved, it still says so.
 	await saveSettings(page);
-	await page.reload();
+	await openSettings(page, id);
 	await expect(refit).toBeVisible();
 
 	await panel(page).getByRole('radio', { name: 'Fragmentation' }).check();
 	await expect(refit).toHaveCount(0);
+	await sidebar.getByRole('link', { name: 'Calibration', exact: true }).click();
+	await expect(record).toBeVisible();
 	await expect(record).not.toContainText('Parameters not fitted for this method');
 });

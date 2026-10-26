@@ -634,7 +634,7 @@
 			</div>
 		{:else}
 		<p class="muted small intro">
-				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Settings &amp; calibration</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
+				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Model settings</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
 				<span class="wide-only">The help buttons beside each heading and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
 			<!-- The grid's actions above it, not under a long table and field guide where they went unseen (issue #463, as #461 did for the EWR settings). -->
@@ -808,7 +808,7 @@
 					{#each NODE_FIELDS as f (f.key)}
 						<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
 					{/each}
-					<div><dt>{GROUPS.share}: In use (%)</dt><dd>The hydrological unit's share of catchment natural flow and of the EWR with the method chosen in <a href="?tab=settings#set-share">Settings &amp; calibration</a> (by area, high/low MAP split or manual), from the saved settings. Computed, not edited; the shares should add up to 100 %.</dd></div>
+					<div><dt>{GROUPS.share}: In use (%)</dt><dd>The hydrological unit's share of catchment natural flow and of the EWR with the method chosen in <a href="?tab=settings#set-share">Model settings</a> (by area, high/low MAP split or manual), from the saved settings. Computed, not edited; the shares should add up to 100 %.</dd></div>
 				</dl>
 			</details>
 			{#if !readonly}

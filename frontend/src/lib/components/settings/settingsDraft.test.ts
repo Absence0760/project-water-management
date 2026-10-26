@@ -28,6 +28,27 @@ describe('SettingsDraft', () => {
 		expect(d.kept).toEqual({});
 	});
 
+	it('works out what blocks Save itself, for the panels on both pages, whichever page is shown (issue #586 round 3)', () => {
+		const d = new SettingsDraft();
+		// Nothing is checked before the settings load.
+		expect(d.blockers).toEqual([]);
+		d.load(saved());
+		expect(d.blockers).toEqual([]);
+		// A Model settings panel's own check, a Calibration panel's own check and a section's reported problem.
+		d.s.simulationStart = '2020-01-01';
+		d.s.simulationEnd = '2019-01-01';
+		d.s.pe = { kind: 'monthly', mm: new Array(12).fill(10), source: '' };
+		d.errors.calWindow = 'The calibration window must start before it ends.';
+		expect(d.blockers.map((b) => [b.id, b.label])).toEqual([
+			['set-period', 'Simulation period'],
+			['set-flow', 'Flow calibration'],
+			['set-record', 'Calibration record']
+		]);
+		expect(d.blockers[0]!.message).toBe('Simulation start must be before the end.');
+		d.revert();
+		expect(d.blockers).toEqual([]);
+	});
+
 	it('opens X2 when the saved value isn’t 0', () => {
 		const d = new SettingsDraft();
 		d.load(saved({ gr4j: { ...defaultProjectSettings().gr4j, x2: 0.4 } }));

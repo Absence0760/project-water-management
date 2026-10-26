@@ -112,7 +112,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await expect(chart).toHaveAttribute('data-shaded', '26');
 
 	// Keep the run dry: a period needs a reason before Save is allowed.
-	await tab('Settings & calibration').click();
+	await tab('Model settings').click();
 	const mode = page.getByLabel('Flagged zero runs');
 	await expect(mode).toHaveValue('missing');
 	await openFold(page, 'rain-defaults');
@@ -136,7 +136,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await expect(chart).not.toHaveAttribute('data-shaded');
 
 	// "Run as recorded" hides the keep-dry list and survives a reload.
-	await tab('Settings & calibration').click();
+	await tab('Model settings').click();
 	await expect(page.getByRole('group', { name: /^Keep dry/ }).getByLabel('Reason')).toHaveValue('Farm records show no rain');
 	await mode.selectOption('asRecorded');
 	await expect(page.getByRole('group', { name: /^Keep dry/ })).toHaveCount(0);

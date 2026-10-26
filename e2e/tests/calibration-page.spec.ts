@@ -1,7 +1,9 @@
-// The Calibration page (?tab=calibration, issue #586 round 2): its own sidebar row, one title, its two parts in the
-// side index, and, until round 3 moves the panels in, links that land on each panel's heading where it is today
-// (Settings & calibration, Runs & results), keeping the run picked. Old ?tab=calibration#set- links go on to Settings
-// (settings-layout-pins.spec.ts pins each). The a11y scans at 1440 and 390 are a11y.spec.ts's. Synthetic data only.
+// The Calibration page (?tab=calibration, issue #586): its own sidebar row, one title, its two parts in the side
+// index; "Set up the fit" holds the settings panels (round 3: Flow calibration, Calibration record, Fit the
+// parameters, WR2012 check), and "How the shown run fits" links, until Model quality moves in, to its panels on
+// Runs & results, keeping the run picked. Old ?tab=calibration#set- links to a panel still on Model settings go on
+// there; the settings panels' anchors land here (settings-layout-pins.spec.ts pins each, and the save bar across
+// the two pages). The a11y scans at 1440 and 390 are a11y.spec.ts's. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, seedRunnableProject } from '../support/api.ts';
@@ -17,7 +19,7 @@ const part = (page: Page, id: string) => page.locator(`#${id}`).getByRole('headi
 test.describe('1440×960', () => {
 	test.use({ viewport: { width: 1440, height: 960 } });
 
-	test('one title, its two parts in the side index, and links that land on each panel where it is today', async ({ page, owner }) => {
+	test('one title, the fit in the header, its two parts in the side index, the settings panels here and links to the rest', async ({ page, owner }) => {
 		void owner;
 		const p = await seedRunnableProject(page.request, 'Calibration page');
 		await createRun(page.request, p.id, 'Older run');
@@ -26,7 +28,9 @@ test.describe('1440×960', () => {
 		await expect(title(page)).toBeVisible();
 		// One page title: no heading of the page's own repeats it.
 		await expect(page.getByRole('heading', { name: 'Calibration', exact: true })).toHaveCount(1);
-		await expect(sectionHeader(page).getByTestId('calibration-context')).toHaveText('Fit the runoff parameters to observed flow, then judge the fit');
+		// The header says where the parameters came from, and goes to Fit the parameters (Settings' until round 3).
+		await expect(sectionHeader(page).getByTestId('fit-summary')).toHaveText(/^GR4J/);
+		await expect(sectionHeader(page).getByRole('link', { name: 'Fit the parameters', exact: true })).toHaveAttribute('href', '#set-fit');
 		await expect(sidebar(page).getByRole('link', { name: 'Calibration', exact: true })).toHaveAttribute('aria-current', 'page');
 
 		// The side index (a rail at 1440) lists the two parts, each by its heading; a click focuses the heading.
@@ -36,9 +40,9 @@ test.describe('1440×960', () => {
 		await expect(page).toHaveURL(/\?tab=calibration#cal-fit$/);
 		await expect(part(page, 'cal-fit')).toBeFocused();
 
-		// Set up the fit: the four panels on Settings, named by their headings, in its order.
+		// Set up the fit: the four settings panels, by their headings, in order.
 		const setup = page.locator('#cal-setup');
-		await expect(setup.getByRole('link')).toHaveText(['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']);
+		await expect(setup.getByRole('heading', { level: 2 })).toHaveText(['Set up the fit', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check'], { useInnerText: true });
 		// How the shown run fits: the newest run by default, its Model quality panels on Runs & results.
 		await expect(page.getByTestId('calibration-run')).toContainText('for Newest run (ran ');
 		const fit = page.locator('#cal-fit');
@@ -46,14 +50,12 @@ test.describe('1440×960', () => {
 		// Without a pick the links carry no run: Runs & results shows its own default.
 		await expect(fit.getByRole('link', { name: 'Hydrograph' })).toHaveAttribute('href', '?tab=runs#res-hydrograph');
 
-		// A link lands on its panel's heading there, focused, and Back comes home.
-		await setup.getByRole('link', { name: 'Fit the parameters' }).click();
-		await expect(page).toHaveURL(/\?tab=settings#set-fit$/);
+		// The header's link lands on Fit the parameters here, focused.
+		await sectionHeader(page).getByRole('link', { name: 'Fit the parameters', exact: true }).click();
+		await expect(page).toHaveURL(/\?tab=calibration#set-fit$/);
 		const fitHeading = page.locator('#set-fit').getByRole('heading', { level: 2 }).first();
 		await expect(fitHeading).toBeInViewport();
 		await expect(fitHeading).toBeFocused();
-		await page.goBack();
-		await expect(title(page)).toBeVisible();
 
 		await fit.getByRole('link', { name: 'Flow-duration curve' }).click();
 		// Runs & results opens on its default, the newest run, and writes it into the URL in place (RunsTab).
@@ -110,12 +112,12 @@ test.describe('1440×960', () => {
 		await expect(none).toHaveText('No run yet. Once the model has run, its fit is on Runs & results, under Model quality.');
 		await expect(none.getByRole('link', { name: 'Runs & results' })).toHaveAttribute('href', '?tab=runs');
 		await expect(page.locator('#cal-fit').getByRole('listitem')).toHaveCount(0);
-		// The setup links don't need a run.
-		await expect(page.locator('#cal-setup').getByRole('link')).toHaveCount(4);
+		// The settings panels don't need a run.
+		await expect(page.locator('#cal-setup #set-fit')).toBeVisible();
 		await expectNoViolations(page);
 	});
 
-	test('a viewer: the row without the model inputs, the same links, no editing actions', async ({ page, owner, signIn }) => {
+	test('a viewer: the row without the model inputs, the settings panels read-only with no fit controls', async ({ page, owner, signIn }) => {
 		void owner;
 		const p = await seedRunnableProject(page.request, 'Calibration viewer');
 		await createRun(page.request, p.id, 'Baseline');
@@ -128,15 +130,22 @@ test.describe('1440×960', () => {
 		await sidebar(v).getByRole('link', { name: 'Calibration', exact: true }).click();
 		await expect(title(v)).toBeFocused();
 		await expect(v.getByTestId('calibration-run')).toContainText('for Baseline');
-		await expect(v.locator('#cal-setup').getByRole('link')).toHaveCount(4);
 		await expect(sectionHeader(v).getByRole('button', { name: 'Add data' })).toHaveCount(0);
+		// The panels show, every field read-only, with no jump to a fit they can't keep: as on Settings before, a viewer
+		// may try Fit automatically in the browser but never apply it (fit-panel-layout.spec.ts).
+		const setup = v.locator('#cal-setup');
+		await expect(setup.getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeVisible();
+		await expect(setup.getByLabel(/^Production store capacity X1/)).not.toBeEditable();
+		await expect(setup.getByRole('button', { name: /^Apply to form/ })).toHaveCount(0);
+		await expect(setup.getByTestId('flow-fit-link')).toHaveCount(0);
+		await expect(sectionHeader(v).getByRole('link', { name: 'Fit the parameters', exact: true })).toHaveCount(0);
 	});
 });
 
 test.describe('1280×800', () => {
 	test.use({ viewport: { width: 1280, height: 800 } });
 
-	test('the index is the bar above the parts, which sit side by side', async ({ page, owner }) => {
+	test('the index is the bar above the parts, which stack: the settings panels need the width', async ({ page, owner }) => {
 		void owner;
 		const p = await seedRunnableProject(page.request, 'Calibration 1280');
 		await createRun(page.request, p.id, 'Baseline');
@@ -144,10 +153,8 @@ test.describe('1280×800', () => {
 		await expect(title(page)).toBeVisible();
 		await expect(index(page).getByRole('link')).toHaveText(['Set up the fit', 'How the shown run fits']);
 		await expect(page.locator('nav.rail-nav')).toHaveCount(0);
-		const a = (await page.locator('#cal-setup').boundingBox())!;
-		const b = (await page.locator('#cal-fit').boundingBox())!;
-		expect(Math.abs(a.y - b.y)).toBeLessThanOrEqual(1);
-		expect(b.x).toBeGreaterThan(a.x + a.width);
+		await expectAbove(page.locator('#cal-setup'), page.locator('#cal-fit'));
+		await expectNoSidewaysScroll(page);
 	});
 });
 

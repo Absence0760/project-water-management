@@ -1,12 +1,12 @@
 // The Calibration page (`?tab=calibration`, issue #586): fitting the runoff
-// parameters and judging the fit, brought together from Settings &
-// calibration and Runs & results. Round 2 gives the page its row, its header
-// and its two parts; the panels move in with Round 3. Until then each part
-// links to the panels where they are today, by their headings word for word,
-// so the page is never a dead end. Pure helpers, so the links and the
-// forwarding are unit-tested without the page.
+// parameters and judging the fit, brought together from Settings (now Model
+// settings) and Runs & results. Round 2 gave the page its row, its header and
+// its two parts; round 3 moved the settings panels into "Set up the fit"
+// (settings/CalibrationSettings.svelte). Until Model quality moves in, "How
+// the shown run fits" links to its panels on Runs & results, by their headings
+// word for word, so the page is never a dead end. Pure helpers, so the links
+// and the forwarding are unit-tested without the page.
 import type { NavGroup } from '#lib/components/common/sectionNav.js';
-import { SETTINGS_SECTIONS, type SettingsSectionId } from '#lib/components/settings/sections.js';
 import { defaultRunId } from '#lib/components/runs/runList.js';
 import type { Role } from '#lib/api/types.js';
 
@@ -34,23 +34,6 @@ export interface PanelLink {
 	hint: string;
 }
 
-const SETUP_HINTS: Partial<Record<SettingsSectionId, string>> = {
-	'set-flow': 'the GR4J parameters, the catchment area and the warm-up',
-	'set-record': 'the window, the gauge it is scored at, exclusions and quality flags',
-	'set-fit': 'fit automatically, the fit record and the calibration rules',
-	'set-wr2012': 'the WR2012 naturalised flow a run is compared with'
-};
-
-/**
- * "Set up the fit": the four panels on Settings & calibration, in its page order, named from its own
- * section list (settings/sections.ts), so a renamed heading renames the link.
- */
-export const SETUP_LINKS: readonly PanelLink[] = SETTINGS_SECTIONS.filter((s) => s.id in SETUP_HINTS).map((s) => ({
-	id: s.id,
-	label: s.label,
-	hint: SETUP_HINTS[s.id]!
-}));
-
 /**
  * "How the shown run fits": the Model quality panels every run has on Runs & results, by their headings
  * there (runs/sections.ts resultGroups; page.test.ts checks they agree). The ones only some runs have
@@ -62,9 +45,6 @@ export const RESULT_LINKS: readonly PanelLink[] = [
 	{ id: 'res-calibration', label: 'Calibration against observed flow', hint: 'the fit’s scores and the calibration check' },
 	{ id: 'res-ewr-agreement', label: 'EWR test: model against observed flow', hint: 'whether the model meets the EWR on the days the record does' }
 ];
-
-/** A link to a Settings & calibration panel. */
-export const settingsHref = (id: string): string => `?tab=settings#${id}`;
 
 /** A link to a Runs & results panel, keeping the run picked (`run=`), so the panel opens on that run. */
 export function runsHref(id: string, run: string | null): string {

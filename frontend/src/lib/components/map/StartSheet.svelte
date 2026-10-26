@@ -439,7 +439,7 @@
 				<ol class="todo">
 					{#if boundary}<li><a href="?tab=series&rain=boundary#data-feeds">Rain from the boundary</a>: the CHIRPS feed over its cells (Data → Data feeds).</li>{/if}
 					<li><a href="?tab=series#data-feeds">Observed flow</a>: the nearest gauging stations to the outlet (Data → Data feeds).</li>
-					<li><a href="?tab=settings#set-demand">Evaporation</a>: the monthly A-pan the dams and crops lose (Settings &amp; calibration → Demand; Evaporation from the map under Flow calibration proposes it). An ET₀ row from the map feeds the runoff model only; with no A-pan the dams lose nothing.</li>
+					<li><a href="?tab=settings#set-demand">Evaporation</a>: the monthly A-pan the dams and crops lose (Model settings → Demand; <a href="?tab=calibration#set-evaporation">Evaporation from the map</a>, on Calibration under Flow calibration, proposes it). An ET₀ row from the map feeds the runoff model only; with no A-pan the dams lose nothing.</li>
 					<li><a href="?tab=dams">Each unit’s composite dam</a>: its volume and the area draining to it are yours to enter (Dams; the register of dams there is a reference only, since many farm dams aren’t on it).</li>
 					<li><a href="?tab=crops">Cultivated area</a> from land cover, per unit (Crops).</li>
 					<li><a href="?tab=network">The Network</a>: anything not ticked (areas, the order), dam sizes and irrigation.</li>

@@ -598,7 +598,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
   `settings.ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`,
-  [ui.md § Settings & calibration](./ui.md#settings--calibration), *Judge
+  [ui.md § Model settings](./ui.md#model-settings), *Judge
   results by*) is which EWR test the results are judged by: always present,
   default `{ source: 'auto' }` (the outlet's Reserve rule table, else the
   first site's, else the pragmatic EWR, as before it existed); `{ source:
@@ -655,7 +655,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   engine's `ewrDailySourceIssues` checks it (`400 daily EWR source: <field>:
   …`). A model input: runs record it, and changing it moves `updatedAt`.
   `settings.evidenceUncertaintyRule` (issue #71, [design/evidence-report.md](./design/evidence-report.md)
-  ER3 and G4; [ui.md § Settings & calibration](./ui.md#settings--calibration)) is the uncertainty rule an
+  ER3 and G4; [ui.md § Model settings](./ui.md#model-settings)) is the uncertainty rule an
   evidence report's cited ensemble must follow: `{ members, bounds:
   'wide' | 'typical', panOffset, thresholds: { objective, minSkill,
   wr2012MaxLevel: 'ok' | 'note' | 'query' | 'unusable', maxLowFlowBiasPct:

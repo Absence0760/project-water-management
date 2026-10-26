@@ -1,8 +1,10 @@
-// The Settings & calibration page (?tab=settings, issue #17 option A). A reading page: the long form scrolls,
-// under the section header, which says where the GR4J parameters came from (the fit's day and in-sample score,
-// or that there is no fit record) and carries "Fit the parameters", a jump to Fit automatically. The sticky menu
-// is grouped by task, Automatic runs last (Data feeds, API keys and Scheduled reports moved to Data and Project,
-// issue #586 round 1). Synthetic data, plus the invented example catchments for a real fit record.
+// The Model settings page (?tab=settings, issue #17 option A; Settings & calibration until issue #586 round 3). A
+// reading page: the long form scrolls under the section header, whose line says the runoff fit is on Calibration. The
+// sticky menu is grouped by task, Automatic runs last (Data feeds, API keys and Scheduled reports moved to Data and
+// Project, issue #586 round 1; the four panels that set up a fit to Calibration, round 3). Calibration's header says
+// where the GR4J parameters came from (the fit's day and in-sample score, or that there is no fit record) and carries
+// "Fit the parameters", a jump to Fit automatically. Synthetic data, plus the invented example catchments for a real
+// fit record.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
@@ -12,29 +14,31 @@ import { loadSyntheticQuaternaries } from '../support/map.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
-import { anySaveBar, fitSummary, header, isProjectPatch, openFold, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
+import { anySaveBar, fitSummary, header, isProjectPatch, openCalibration, openFold, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 import { headerControl } from '../support/sectionHeader.ts';
 
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
+const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const SETTINGS_INDEX: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
-	['Runoff & calibration', ['Flow generation', 'Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['Runoff & calibration', ['Flow generation']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automatic runs', ['Automatic runs']]
 ];
 
-test('the header says there is no fit record and jumps to Fit the parameters; the side index is grouped by task and reaches its last panel', async ({ page, owner }) => {
+test('Model settings’ header points at Calibration for the fit, and its side index is grouped by task and reaches its last panel', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Settings page');
 	await openSettings(page, project.id);
 
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-	await expect(fitSummary(page)).toHaveText('GR4J · no fit record: the parameters were set by hand or imported');
-	const jump = header(page).getByRole('link', { name: 'Fit the parameters', exact: true });
-	await expect(jump).toHaveAttribute('href', '#set-fit');
+	// The fit's line and its jump are Calibration's (issue #586 round 3): this header says where they went.
+	await expect(fitSummary(page)).toHaveCount(0);
+	await expect(header(page).getByRole('link', { name: /^Fit (the parameters|record)$/ })).toHaveCount(0);
+	await expect(header(page).getByTestId('settings-context').getByRole('link', { name: 'Calibration', exact: true })).toHaveAttribute('href', '?tab=calibration');
 	// The header's Run model opens a form to name the run (the one on every section but Runs & results).
 	await expect(header(page).getByTestId('header-run')).toHaveAttribute('aria-expanded', 'false');
 	// The old intro paragraph is gone: the header and the menu's groups say it.
@@ -52,12 +56,11 @@ test('the header says there is no fit record and jumps to Fit the parameters; th
 		}
 	}
 
-	// The jump lands on the fit panel, at the top of the window beside the index, and the index marks it.
-	await jump.click();
-	await expect(page).toHaveURL(/\?tab=settings#set-fit$/);
-	const fit = page.locator('#set-fit');
-	await expect(fit.getByRole('heading', { name: 'Fit automatically' })).toBeInViewport();
-	await expect(menu.getByRole('link', { name: 'Fit the parameters' })).toHaveAttribute('aria-current', 'location');
+	// A link lands on its panel, at the top of the window beside the index, and the index marks it.
+	await menu.getByRole('link', { name: 'Flow generation' }).click();
+	await expect(page).toHaveURL(/\?tab=settings#set-share$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Flow generation' })).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Flow generation' })).toHaveAttribute('aria-current', 'location');
 	await expect(menu).toBeInViewport();
 
 	// The last panel has its own link.
@@ -68,8 +71,8 @@ test('the header says there is no fit record and jumps to Fit the parameters; th
 
 	// Back returns to the fragment before, on the same page.
 	await page.goBack();
-	await expect(page).toHaveURL(/#set-fit$/);
-	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
+	await expect(page).toHaveURL(/#set-share$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Model settings' })).toBeVisible();
 
 	// Each anchor's landing from a page load is pinned in settings-layout-pins.spec.ts. Scrolled to the foot of
 	// the page, the index still sticks beside the last panel and marks it.
@@ -79,12 +82,31 @@ test('the header says there is no fit record and jumps to Fit the parameters; th
 	await expect(menu).toBeInViewport();
 });
 
+test('Calibration’s header says there is no fit record and jumps to Fit the parameters (issue #586 round 3)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Calibration header');
+	await openCalibration(page, project.id);
+	await expect(fitSummary(page)).toHaveText('GR4J · no fit record: the parameters were set by hand or imported');
+	const jump = header(page).getByRole('link', { name: 'Fit the parameters', exact: true });
+	await expect(jump).toHaveAttribute('href', '#set-fit');
+	await jump.click();
+	await expect(page).toHaveURL(/\?tab=calibration#set-fit$/);
+	const fit = page.locator('#set-fit');
+	await expect(fit.getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeFocused();
+	await expect(fit.getByRole('heading', { name: 'Fit automatically' })).toBeInViewport();
+	// Back returns to the page as it was.
+	await page.goBack();
+	await expect(page).toHaveURL(/\?tab=calibration$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
+});
+
 test('a link into a group (?tab=calibration, a note’s #set- link) opens the page on that group, below the menu', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1280, height: 800 });
 	const project = await createProject(page.request, 'Settings links');
 	await page.goto(`/projects/${project.id}?tab=calibration#set-ewr`);
-	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Model settings' })).toBeVisible();
 	const ewr = page.getByRole('heading', { name: 'EWR', exact: true });
 	await expect(ewr).toBeInViewport();
 	await expect(ewr).toBeFocused();
@@ -127,7 +149,10 @@ test('Vary it by month sits beside its box, and the page reflows at 1280 and on 
 
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openSettings(page, project.id);
-	// In the header's More actions list on a phone.
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+	// Calibration's header: Fit the parameters in its More actions list on a phone, and the fit's line.
+	await openCalibration(page, project.id);
 	await expect(await headerControl(page, 'link', 'Fit the parameters')).toBeVisible();
 	await expect(fitSummary(page)).toBeVisible();
 	await expectNoSidewaysScroll(page);
@@ -184,13 +209,16 @@ test('a viewer reads where the parameters came from, with nothing to fit and no 
 	const v = viewer.page;
 	await v.setViewportSize({ width: 1440, height: 960 });
 	await openSettings(v, project.id);
-	await expect(fitSummary(v)).toHaveText('GR4J · no fit record: the parameters were set by hand or imported');
-	// No fit record to show and nothing to fit: the header has no jump.
-	await expect(header(v).getByRole('link', { name: /^Fit (the parameters|record)$/ })).toHaveCount(0);
 	await expect(v.getByText(/save as you change them/)).toHaveCount(0);
 	// The same one group link (API keys, an owner's panel, isn't on the page for a viewer).
 	await expect(settingsMenu(v).getByRole('list', { name: 'Automatic runs' }).getByRole('link')).toHaveText(['Automatic runs']);
 	await expect(v.locator('#set-api-keys')).toHaveCount(0);
+	await expect(anySaveBar(v)).toHaveCount(0);
+	// Where the parameters came from is on Calibration's header.
+	await openCalibration(v, project.id);
+	await expect(fitSummary(v)).toHaveText('GR4J · no fit record: the parameters were set by hand or imported');
+	// No fit record to show and nothing to fit: the header has no jump.
+	await expect(header(v).getByRole('link', { name: /^Fit (the parameters|record)$/ })).toHaveCount(0);
 	await expect(anySaveBar(v)).toHaveCount(0);
 });
 
@@ -210,8 +238,8 @@ test.describe('with a fitted example catchment', () => {
 		await page.getByRole('button', { name: 'Sign in' }).click();
 		await page.locator('table.projects').getByRole('link', { name: KLEINBERG, exact: true }).click();
 		await expect(page.getByTestId('section-header')).toBeVisible();
-		await page.goto(`${page.url().split('?')[0]}?tab=settings`);
-		await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
+		await page.goto(`${page.url().split('?')[0]}?tab=calibration`);
+		await expect(page.getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeVisible();
 	}
 
 	test('the header names the fit and its score, and says when an edit leaves the fit behind; parameters show three decimals', async ({ page }) => {
@@ -220,7 +248,7 @@ test.describe('with a fitted example catchment', () => {
 		const fitted = /^GR4J · fitted \d{1,2} [A-Z][a-z]{2} \d{4} · KGE′ \d\.\d\d in calibration$/;
 		await expect(fitSummary(page)).toHaveText(fitted);
 		// The header, the menu and the first panel are on the first screen.
-		await expect(page.getByRole('heading', { level: 2, name: 'Simulation period' })).toBeInViewport();
+		await expect(page.getByRole('heading', { level: 2, name: 'Flow calibration' })).toBeInViewport();
 
 		// A fit writes nine decimals; the field shows three and keeps the value (nothing to save).
 		const x1 = page.getByLabel(/^Production store capacity X1/);
@@ -259,7 +287,8 @@ test('a note or a quaternary lookup doesn’t save the settings: their forms are
 	await expect(dialog.getByRole('list', { name: 'Notes' }).getByRole('listitem')).toContainText('Trying the WR90 A-pan');
 	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 
-	// The quaternary lookup, submitted with Enter in its coordinates.
+	// The quaternary lookup on Calibration (the same draft, kept going there), submitted with Enter in its coordinates.
+	await sidebar(page).getByRole('link', { name: 'Calibration', exact: true }).click();
 	const wr = page.getByRole('region', { name: /^WR2012 check/ });
 	await wr.getByLabel('Compare runs with WR2012 naturalised flow').check();
 	await wr.getByRole('button', { name: 'Propose from the map' }).click();
@@ -273,6 +302,7 @@ test('a note or a quaternary lookup doesn’t save the settings: their forms are
 	// Neither saved the settings: they are still unsaved, and the A-pan is as stored.
 	expect(patches).toEqual([]);
 	await expect(settingsBar(page)).toBeVisible();
+	await sidebar(page).getByRole('link', { name: 'Model settings', exact: true }).click();
 	await expect(page.getByLabel('A-pan evaporation, Oct, mm')).toHaveValue('150');
 	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings.apanMm[0];
 	expect(stored).toBe(0);
@@ -286,7 +316,7 @@ test('with model and settings edits there is one save bar, one Discard, one reas
 	await page.goto(`/projects/${project.id}?tab=transfers`);
 	await page.getByLabel('Priority of transfer 1 (lower moves first)', { exact: true }).fill('3');
 	await page.getByLabel('Priority of transfer 1 (lower moves first)', { exact: true }).blur();
-	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await sidebar(page).getByRole('link', { name: 'Model settings', exact: true }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
 	await page.getByLabel('A-pan evaporation, Oct, mm').fill('150');
 	await page.getByLabel('A-pan evaporation, Oct, mm').blur();
@@ -361,13 +391,14 @@ test('on a phone a monthly row’s label takes a narrow column, so the months ge
 test('the long panels’ sub-groups are headings, in the order shown, and Fit the parameters lands on its own heading', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Settings headings');
-	await openSettings(page, project.id);
 	// The headings on the page: a closed notes drawer's title (a dialog, in the DOM while shut) is not one.
 	const names = (id: string) =>
 		page
 			.locator(`#${id}`)
 			.locator('h2, h3')
 			.evaluateAll((els) => els.filter((e) => !e.closest('dialog:not([open])')).map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
+	// Calibration's panels (issue #586 round 3).
+	await openCalibration(page, project.id);
 	// The lazy panels first: Evaporation from the map, the quality flags and the flow gaps.
 	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
 	// The quality flags and flow gaps are folded into one line of their values (issue #521): open it to see them.
@@ -377,6 +408,16 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	// Its cards (issue #521), each an h3; the switches inside Rain into GR4J are h4s under it.
 	expect((await names('set-flow')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
 	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Areal rainfall correction' })).toBeVisible();
+	const record = await names('set-record');
+	expect(record[0]).toBe('Calibration record');
+	expect(record).toContain('Quality flags for Fit automatically');
+	expect(record).toContain('Flow gaps');
+	const fit = await names('set-fit');
+	expect(fit[0]).toBe('Fit the parameters');
+	expect(fit[1]).toBe('Fit automatically');
+
+	// Model settings' panels.
+	await openSettings(page, project.id);
 	// Flow generation (issue #553 round 3): Fragmentation by default, its one card the flow share.
 	expect(await names('set-share')).toEqual(['Flow generation', 'Flow share']);
 	// Rain gaps: two cards, the second's three topics under it (h4).
@@ -387,28 +428,24 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 			.locator('h4')
 			.evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()))
 	).toEqual(['Zero-rain runs in the catchment rain', 'Multi-day accumulations', 'Rain source periods']);
-	const record = await names('set-record');
-	expect(record[0]).toBe('Calibration record');
-	expect(record).toContain('Quality flags for Fit automatically');
-	expect(record).toContain('Flow gaps');
-	const fit = await names('set-fit');
-	expect(fit[0]).toBe('Fit the parameters');
-	expect(fit[1]).toBe('Fit automatically');
 
 	// A link from elsewhere (a fresh load: from this same page, a goto would only move to the fragment).
 	await page.goto('about:blank');
-	await page.goto(`/projects/${project.id}?tab=settings#set-fit`);
+	await page.goto(`/projects/${project.id}?tab=calibration#set-fit`);
 	await expect(page.locator('#set-fit').getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeFocused();
 });
 
 test('every help tip on the page has its own name, and the annual assurance threshold isn’t part of the reporting window', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Settings tip names');
-	await openSettings(page, project.id);
-	await expect(page.getByRole('button', { name: /^About / }).first()).toBeVisible();
-	const tips = await page.getByRole('button', { name: /^About / }).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
-	const dupes = tips.filter((t, i) => tips.indexOf(t) !== i);
-	expect(dupes).toEqual([]);
+	// On each of the two settings pages (issue #586 round 3).
+	for (const open of [openCalibration, openSettings]) {
+		await open(page, project.id);
+		await expect(page.getByRole('button', { name: /^About / }).first()).toBeVisible();
+		const tips = await page.getByRole('button', { name: /^About / }).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
+		const dupes = tips.filter((t, i) => tips.indexOf(t) !== i);
+		expect(dupes).toEqual([]);
+	}
 	const window = page.getByRole('group', { name: /^Curtailment reporting window/ });
 	await expect(window.getByLabel(/^Annual assurance threshold/)).toHaveCount(0);
 	await expect(page.getByLabel(/^Annual assurance threshold/)).toBeVisible();

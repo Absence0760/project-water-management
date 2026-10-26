@@ -3,6 +3,7 @@
 // for a note's target. Pure, so the rules are unit-tested.
 import { NOTE_MAX, type Note, type NoteCounts, type NoteCreate, type NotesQuery, type NoteVisibility } from '#lib/api/types.js';
 import { NOTES_EN, type NotesWords } from './words';
+import { settingsPageOf } from '#lib/components/settings/sections.js';
 
 /** What a drawer or list holds notes about. */
 export type NoteTarget =
@@ -231,7 +232,8 @@ export function noteHref(n: Pick<Note, 'target' | 'nodeId' | 'runId' | 'settingK
 			return n.runId ? `?tab=runs&run=${encodeURIComponent(n.runId)}#res-notes` : '?tab=runs';
 		case 'setting': {
 			const group = n.settingKey?.split('.')[0];
-			return group && group in SETTING_NOTE_GROUPS ? `?tab=settings#set-${group}` : '?tab=settings';
+			// On its panel's page: Model settings, or Calibration for the four that set up a fit (issue #586 round 3).
+			return group && group in SETTING_NOTE_GROUPS ? `?tab=${settingsPageOf(`set-${group}`)}#set-${group}` : '?tab=settings';
 		}
 	}
 }

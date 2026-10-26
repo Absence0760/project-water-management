@@ -1549,9 +1549,10 @@ Interaction details that bit:
   count trailing margins; and when a layout check fails only in CI, run it
   in CI's browser before guessing (`e2e/README.md` § Fonts).
 - **A reading page's header says what the page decides.** A long form has
-  no count to show; Settings & calibration's context line says where the
+  no count to show; Calibration's context line says where the
   runoff parameters came from (the fit's day and score, "changed since the
-  fit", or no fit record) and its action jumps to the fit. Find the one fact
+  fit", or no fit record) and its action jumps to the fit (Settings &
+  calibration's, until issue #586 split it into Model settings and Calibration). Find the one fact
   a user opens the page to check, and put it there. It describes the
   section, not the filter: History's "Latest change today 14:05 by Ann:
   Model changed" stays the latest of all while the list is filtered to one

@@ -245,7 +245,7 @@ export const NODE_FIELDS: NodeField[] = [
 		farmOnly: true,
 		nullable: true,
 		aria: (n) => `Manual flow share of ${n}, %`,
-		help: "This hydrological unit's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; hydrological unit shares should add up to 100 %."
+		help: "This hydrological unit's share of catchment natural flow and of the EWR. Only used when the flow-share method (Model settings) is Manual; hydrological unit shares should add up to 100 %."
 	},
 	{
 		key: 'boreholeCapacityM3Day', // gitleaks:allow (a field name, not a secret)
@@ -385,8 +385,8 @@ const UNUSED_TEXT: Record<UnusedReason, string> = {
 	outlet: 'Not used: the outlet has no reach below it in the model.',
 	noLoss: 'Not used: no bed losses (the share is 0 %). Enter a share to cap it.',
 	noDam: 'Not used: no dam (capacity 0). Enter a capacity to use it.',
-	notHiLo: 'Not used: the flow-share method isn’t the high/low MAP split (Settings & calibration). Pick it there to use this.',
-	notManual: 'Not used: the flow-share method isn’t Manual (Settings & calibration). Pick it there to use this.'
+	notHiLo: 'Not used: the flow-share method isn’t the high/low MAP split (Model settings). Pick it there to use this.',
+	notManual: 'Not used: the flow-share method isn’t Manual (Model settings). Pick it there to use this.'
 };
 
 type UnusedNode = Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3' | 'downstreamNodeId' | 'reachLossFrac'>>;
@@ -434,9 +434,9 @@ export function unusedLine(r: UnusedReason, method: FlowShareMethod = 'area'): {
 		case 'noDam':
 			return { why: 'Not used without a dam (capacity 0)', fix: 'Enter a capacity to use these.' };
 		case 'notHiLo':
-			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick the high/low MAP split in Settings & calibration to use these.' };
+			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick the high/low MAP split in Model settings to use these.' };
 		case 'notManual':
-			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick Manual in Settings & calibration to use it.' };
+			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick Manual in Model settings to use it.' };
 	}
 }
 

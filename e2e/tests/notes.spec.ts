@@ -87,14 +87,12 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	// The groups whose sources and determinations most need a "why" take notes too (WR2012, Reserve rules, restrictions, Evidence).
 	// Every panel but Judge results by takes notes (issue #586, C12), and Notes is the last thing in each panel's head,
 	// after the panel's own action.
-	for (const group of ['WR2012 check', 'Reserve rule tables', 'Drought restrictions', 'Reporting', 'Evidence', 'Fit the parameters', 'Outcome matrix', 'Seasonal outlook', 'Automatic runs']) {
+	for (const group of ['Reserve rule tables', 'Drought restrictions', 'Reporting', 'Evidence', 'Outcome matrix', 'Seasonal outlook', 'Automatic runs']) {
 		await expect(page.getByRole('button', { name: `Notes on ${group}`, exact: true })).toBeVisible();
 	}
 	const lastInHead = (id: string) => page.locator(`${id} .panel-head`).first().locator('button:visible, a:visible').last();
 	for (const [id, group] of [
-		['#set-wr2012', 'WR2012 check'],
 		['#set-reserve', 'Reserve rule tables'],
-		['#set-fit', 'Fit the parameters'],
 		['#set-auto', 'Automatic runs']
 	] as const) {
 		await expect(lastInHead(id), id).toHaveAccessibleName(`Notes on ${group}`);
@@ -106,6 +104,17 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	const reportingNotes = page.locator('#set-reporting .notes-btn');
 	await expect(reportingNotes).toHaveText('Notes');
 	await expect(reportingNotes).toHaveAccessibleName('Notes on Reporting');
+	// The panels that set up a fit take notes on Calibration (issue #586 round 3), Notes last in each head there too.
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	for (const group of ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']) {
+		await expect(page.getByRole('button', { name: `Notes on ${group}`, exact: true })).toBeVisible();
+	}
+	for (const [id, group] of [
+		['#set-wr2012', 'WR2012 check'],
+		['#set-fit', 'Fit the parameters']
+	] as const) {
+		await expect(lastInHead(id), id).toHaveAccessibleName(`Notes on ${group}`);
+	}
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByRole('button', { name: 'Notes on this run', exact: true }).click();

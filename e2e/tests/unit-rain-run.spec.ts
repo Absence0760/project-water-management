@@ -1,5 +1,5 @@
 // Rain for each hydrological unit, the whole path through the UI (issue #482;
-// docs/ui.md § Data feeds, § Network, § Settings & calibration, § Runs &
+// docs/ui.md § Data feeds, § Network, § Model settings, § Runs &
 // results; docs/model.md §2.4h). A synthetic catchment: an outflow gauge and
 // three land units, each with a parcel inside the CHIRPS fixture's cover
 // (21.0–25.4° E, 20.0–34.0° S), and a catchment gauge record with a 20-day

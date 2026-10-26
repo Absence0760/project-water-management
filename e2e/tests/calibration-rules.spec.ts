@@ -12,7 +12,7 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Calibration rules');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const rules = page.getByTestId('calibration-rules');
 	await expect(rules.getByTestId('rules-status')).toContainText('Revision 1 · draft, not signed off by the hydrologist');
@@ -82,7 +82,7 @@ test('a sign-off is a typed signature the server dates, and a viewer can read th
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Calibration rules sign-off');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const rules = page.getByTestId('calibration-rules');
 	const sign = rules.getByRole('button', { name: 'Sign off these rules' });
 	await expect(sign).toBeDisabled();
@@ -98,7 +98,7 @@ test('a sign-off is a typed signature the server dates, and a viewer can read th
 
 	const viewer = await signIn('Rules viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
 	const seen = viewer.page.getByTestId('calibration-rules');
 	await expect(seen.getByTestId('rules-status')).toContainText('signed off by A. Hydrologist');
 	await expect(seen.getByLabel('on the held-out test')).toBeDisabled();
@@ -110,7 +110,7 @@ test('the flagged-days rule: its checkbox sits beside its words, and off and on 
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Calibration rules share');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const rules = page.getByTestId('calibration-rules');
 	const leaveOut = rules.getByRole('checkbox', { name: 'Leave out a water year by its flagged days' });
 	// Not stretched across its field: the box is box-sized and its words start right after it.
@@ -148,7 +148,7 @@ test('a running run of the rules stays with its project: another project never s
 	});
 	// The page's own clock, so the 1.5 s polls are stepped through rather than waited for.
 	await page.clock.install();
-	await page.goto(`/projects/${a.id}?tab=settings`);
+	await page.goto(`/projects/${a.id}?tab=calibration`);
 	const auto = page.getByRole('region', { name: /^Automated calibration/ });
 	const sections = page.getByRole('navigation', { name: 'Project sections' });
 	const fitting = auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ });
@@ -160,7 +160,7 @@ test('a running run of the rules stays with its project: another project never s
 	// Through the project list to B: the workspace closes, A's polling ends, and B shows no run.
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 	await page.getByRole('link', { name: 'Rules not run here', exact: true }).click();
-	await sections.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await sections.getByRole('link', { name: 'Calibration', exact: true }).click();
 	await expect(page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
 	const seen = polls.length;
 	await page.clock.runFor(6_000);
@@ -170,7 +170,7 @@ test('a running run of the rules stays with its project: another project never s
 
 	// Straight from B back to A (Back, the same workspace page reused): A's run is still followed.
 	await page.evaluate(() => history.go(-3));
-	await expect(page).toHaveURL(new RegExp(`/projects/${a.id}\\?tab=settings`));
+	await expect(page).toHaveURL(new RegExp(`/projects/${a.id}\\?tab=calibration`));
 	await expect(fitting).toBeVisible();
 	// Hold A's next poll on the wire, then go straight on to B: the reply lands after B is open,
 	// the race a slow network makes. Nothing of A's may show on B, and A's polling must end with it.
@@ -192,7 +192,7 @@ test('a running run of the rules stays with its project: another project never s
 	const bLoaded = page.waitForResponse((r) => r.request().method() === 'GET' && r.url().endsWith(`/projects/${b.id}/auto-calibrations`));
 	await page.evaluate(() => history.go(3));
 	await (await bLoaded).finished();
-	await expect(page).toHaveURL(new RegExp(`/projects/${b.id}\\?tab=settings`));
+	await expect(page).toHaveURL(new RegExp(`/projects/${b.id}\\?tab=calibration`));
 	await expect(page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
 	const seenAgain = polls.length;
 	const stale = page.waitForResponse((r) => r.url().includes(`/projects/${a.id}/auto-calibrations/`));
@@ -215,7 +215,7 @@ test('a running run of the rules stays with its project: another project never s
 	// Back on A, the run finishes and shows there.
 	await runJobsTick({ projects: [a.id], schedule: false });
 	await page.evaluate(() => history.go(-3));
-	await expect(page).toHaveURL(new RegExp(`/projects/${a.id}\\?tab=settings`));
+	await expect(page).toHaveURL(new RegExp(`/projects/${a.id}\\?tab=calibration`));
 	await page.clock.runFor(1_600);
 	await expect(auto.getByRole('table', { name: 'Fits the rules tried' })).toBeVisible();
 	await expect(fitting).toHaveCount(0);
@@ -225,7 +225,7 @@ test('with no flow record, the rules’ run says why beside it, and it and Fit a
 	void owner;
 	const project = await createProject(page.request, 'Calibration rules, no record');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const rules = page.getByTestId('calibration-rules');
 	const run = rules.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' });
 	await expect(run).toBeDisabled();

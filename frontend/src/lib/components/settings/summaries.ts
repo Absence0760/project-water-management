@@ -1,27 +1,22 @@
-// One line under each Settings & calibration panel's heading saying what it is
-// set to now (issue #468), so the page reads as a list of current values and a
-// panel needn't be scanned field by field to know whether it matters. They
-// follow the unsaved form. Pure: SettingsTab and CalibrationSettings pass the derived figures in.
+// One line under each settings panel's heading saying what it is set to now
+// (issue #468), so the page reads as a list of current values and a panel
+// needn't be scanned field by field to know whether it matters. They follow the
+// unsaved form. Pure: SettingsTab (Model settings, settingsSummaries) and
+// CalibrationSettings (the Calibration page's four panels, calibrationSummaries)
+// pass the derived figures in.
 import { defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
 import { ewrSplitSummary } from './ewrSplit';
 
+/** What Model settings' lines read. */
 export interface SummaryInput {
 	s: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
-	/** The sum of the hydrological units' areas (km²), the catchment area when none is set. */
-	unitAreaKm2: number;
-	/** The PE GR4J runs on in a year (mm). */
-	peAnnualMm: number;
 	/** The pragmatic EWR in a year (Mm³). */
 	ewrAnnualMm3: number;
 	/** Where the daily EWR at the outlet comes from (the EWR panel's own line). */
 	ewrSource: string;
-	/** The header's line about the fit (fitSummary). */
-	fit: string;
-	/** The calibration site's name when it isn't the outlet. */
-	siteName?: string | null;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -44,12 +39,22 @@ export function changedLimits(dq: Record<string, unknown> | undefined): number {
 	return Object.keys(d).filter((k) => k in dq && JSON.stringify(dq[k]) !== JSON.stringify(d[k])).length;
 }
 
-/** What the calibration panels' lines read (issue #586): they move to the Calibration page with their panels. */
-export type CalibrationSummaryInput = Pick<SummaryInput, 's' | 'unitAreaKm2' | 'peAnnualMm' | 'fit' | 'siteName'>;
+/** What the Calibration page's settings panels' lines read (issue #586). */
+export interface CalibrationSummaryInput {
+	s: SummaryInput['s'];
+	/** The sum of the hydrological units' areas (km²), the catchment area when none is set. */
+	unitAreaKm2: number;
+	/** The PE GR4J runs on in a year (mm). */
+	peAnnualMm: number;
+	/** The header's line about the fit (fitSummary). */
+	fit: string;
+	/** The calibration site's name when it isn't the outlet. */
+	siteName?: string | null;
+}
 
 /**
- * The lines of the four calibration panels, Flow calibration, Calibration record, Fit the parameters and the WR2012
- * check (CalibrationSettings.svelte). settingsSummaries includes them, so the whole page's lines stay one call.
+ * The lines of the four panels on the Calibration page, Flow calibration, Calibration record, Fit the parameters and
+ * the WR2012 check (CalibrationSettings.svelte, issue #586 round 3).
  */
 export function calibrationSummaries(i: CalibrationSummaryInput): Partial<Record<SettingsSectionId, string>> {
 	const s = i.s;
@@ -132,7 +137,6 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 						.filter(Boolean)
 						.join(' · '),
 		'set-restrict': restrict ? `On: ${plural(restrict.levels?.length ?? 0, 'level')}, reviewed on ${plural(restrict.reviewDates?.length ?? 0, 'date')}` : 'Off',
-		...calibrationSummaries(i),
 		'set-ewr': [
 			i.ewrSource,
 			s.ewrDailySource && s.ewrDailySource.method !== 'pragmatic' ? null : `${fmtQty(i.ewrAnnualMm3, 3)} Mm³ a year`,

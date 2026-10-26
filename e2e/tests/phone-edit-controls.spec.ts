@@ -220,7 +220,7 @@ test('the fit record folds into its line on a phone and stands open on a wide sc
 	const p = await seedRunnableProject(page.request, 'Fit record fold');
 	await updateSettings(page.request, p.id, { runoffModel: 'gr4j' });
 	await page.setViewportSize({ width: 1440, height: 960 });
-	await page.goto(`/projects/${p.id}?tab=settings`);
+	await page.goto(`/projects/${p.id}?tab=calibration`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');

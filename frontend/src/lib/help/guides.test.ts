@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { HELP, helpFor } from './content';
 import { SHOTS } from './pictures';
 import { TOUR } from './tour';
-import { SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
+import { CALIBRATION_SETTINGS_SECTIONS, SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
 import { ALL_TABS, TAB_GUIDE } from '#lib/workspace/tabs.js';
 import {
 	DIAGRAM_IDS,
@@ -235,9 +235,16 @@ function panelHeadings(id: string): string[] {
 	return heads;
 }
 
-// Every panel the page has, by its heading: the menu's, plus the one above it. Data feeds, API keys and
+// Every panel Model settings has, by its heading: the menu's, plus the one above it. Data feeds, API keys and
 // Scheduled reports moved to Data and Project (issue #586 round 1), so "Settings → Data feeds" is a broken path.
-const PANELS = new Map<string, string>([...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]), ['Judge results by', 'set-judge']]);
+// The panels that set up a fit are on Calibration (round 3): "Model settings → Fit the parameters" is broken,
+// "Calibration → Fit the parameters" is right, and the old "Settings → …" shorthand (and a path that starts
+// with a panel's own name) may name either page's.
+const SETTINGS_PANELS = new Map<string, string>([...SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]), ['Judge results by', 'set-judge']]);
+const CALIBRATION_PANELS = new Map<string, string>(CALIBRATION_SETTINGS_SECTIONS.map((s) => [s.label, s.id] as [string, string]));
+const PANELS = new Map<string, string>([...SETTINGS_PANELS, ...CALIBRATION_PANELS]);
+type Page = 'settings' | 'calibration' | 'either';
+const PAGE_PANELS: Record<Page, Map<string, string>> = { settings: SETTINGS_PANELS, calibration: CALIBRATION_PANELS, either: PANELS };
 const panelCache = new Map<string, string[]>();
 const headingsOf = (id: string) => panelCache.get(id) ?? (panelCache.set(id, panelHeadings(id)), panelCache.get(id)!);
 
@@ -249,6 +256,15 @@ function stripAll(text: string, re: RegExp): string {
 }
 
 function settingsPaths(text: string): string[][] {
+	return pagePaths(text).map((p) => p.steps);
+}
+
+/**
+ * Each path with the page it names: "Model settings → " (Model settings' panels), "Calibration → " (Calibration's),
+ * or the old "Settings → " or a panel's own name (either page's). The page's old name, "Settings & calibration → ",
+ * names no page now.
+ */
+function pagePaths(text: string): { page: Page | 'old'; steps: string[] }[] {
 	// A link's decorative arrow (aria-hidden) ends the link, not a step: "EWR →" before the next link is no path (issue #558).
 	const plain = stripAll(text.replace(/<span aria-hidden="true">→<\/span>/g, ''), /<\/?[A-Za-z][^<>]*>/g)
 		.replace(/&amp;/g, '&')
@@ -257,34 +273,42 @@ function settingsPaths(text: string): string[][] {
 		.replace(/\s+/g, ' ')
 		.replace(/ -> /g, ' → ');
 	const labels = [...PANELS.keys()].map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-	const starts = [
-		...[...plain.matchAll(/\bSettings(?: & calibration)? → /g)].map((m) => m.index + m[0].length),
+	const starts: [number, Page | 'old'][] = [
+		...[...plain.matchAll(/\bModel settings → /g)].map((m) => [m.index + m[0].length, 'settings'] as [number, Page]),
+		...[...plain.matchAll(/(?<!Model )\bSettings → /g)].map((m) => [m.index + m[0].length, 'either'] as [number, Page]),
+		...[...plain.matchAll(/\bSettings & calibration → /g)].map((m) => [m.index + m[0].length, 'old'] as [number, 'old']),
+		// "Calibration → " names the page, not "Calibration record → " (a panel) or a "→" step after one.
+		...[...plain.matchAll(/(?<![\w-] → |[\w-])Calibration → /g)].map((m) => [m.index + m[0].length, 'calibration'] as [number, Page]),
 		// A panel's own name starting a path, unless a "→" before it already did.
-		...[...plain.matchAll(new RegExp(`(?<![\\w-])(?:${labels}) → `, 'g'))].filter((m) => !/→ $/.test(plain.slice(0, m.index))).map((m) => m.index)
+		...[...plain.matchAll(new RegExp(`(?<![\\w-])(?:${labels}) → `, 'g'))].filter((m) => !/→ $/.test(plain.slice(0, m.index))).map((m) => [m.index, 'either'] as [number, Page])
 	];
-	return starts.map((at) => {
-		let rest = plain.slice(at);
-		const steps: string[] = [];
-		for (;;) {
-			const arrow = rest.indexOf(' → ');
-			// A backtick ends a template literal in source: the path's text stops there.
-			const stop = rest.search(/[.,;:()’'"`?!]|$/);
-			if (arrow >= 0 && arrow < stop) {
-				steps.push(rest.slice(0, arrow).trim());
-				rest = rest.slice(arrow + 3);
-			} else {
-				steps.push(rest.slice(0, stop).trim());
-				return steps;
-			}
+	return starts.map(([at, page]) => ({ page, steps: steps(plain, at) }));
+}
+
+/** The steps of the path that starts at `at`. */
+function steps(plain: string, at: number): string[] {
+	let rest = plain.slice(at);
+	const out: string[] = [];
+	for (;;) {
+		const arrow = rest.indexOf(' → ');
+		// A backtick ends a template literal in source: the path's text stops there.
+		const stop = rest.search(/[.,;:()’'"`?!]|$/);
+		if (arrow >= 0 && arrow < stop) {
+			out.push(rest.slice(0, arrow).trim());
+			rest = rest.slice(arrow + 3);
+		} else {
+			out.push(rest.slice(0, stop).trim());
+			return out;
 		}
-	});
+	}
 }
 
 /** Why a path doesn't resolve, or null. The last step may run on into the sentence, so it only has to start with a name. */
-function pathProblem(steps: string[]): string | null {
+function pathProblem(steps: string[], page: Page | 'old' = 'either'): string | null {
+	if (page === 'old') return 'the page is Model settings or Calibration now';
 	const names = (i: number) => (i === steps.length - 1 ? (n: string) => steps[i] === n || steps[i]!.startsWith(`${n} `) : (n: string) => steps[i] === n);
-	const panel = [...PANELS.keys()].sort((a, b) => b.length - a.length).find(names(0));
-	if (!panel) return `“${steps[0]}” is no Settings panel`;
+	const panel = [...PAGE_PANELS[page].keys()].sort((a, b) => b.length - a.length).find(names(0));
+	if (!panel) return `“${steps[0]}” is no ${page === 'calibration' ? 'Calibration' : page === 'settings' ? 'Model settings' : 'Settings'} panel`;
 	const heads = headingsOf(PANELS.get(panel)!);
 	for (let i = 1; i < steps.length; i++) {
 		const own = steps[i]!;
@@ -312,7 +336,16 @@ describe('Settings paths named in help and in the app', () => {
 		]);
 
 	it('finds the paths it checks', () => {
-		expect(settingsPaths('Open **Settings & calibration → Flow calibration → Rain into GR4J**, then save.')).toEqual([['Flow calibration', 'Rain into GR4J']]);
+		expect(settingsPaths('Open **Calibration → Flow calibration → Rain into GR4J**, then save.')).toEqual([['Flow calibration', 'Rain into GR4J']]);
+		// Each page's panels under its own name (issue #586 round 3); the old page name is no path.
+		expect(pagePaths('On **Model settings → Demand**, then **Calibration → Calibration record → Flow gaps**.').map((p) => [p.page, p.steps])).toEqual([
+			['settings', ['Demand']],
+			['calibration', ['Calibration record', 'Flow gaps']]
+		]);
+		expect(pathProblem(['Fit the parameters'], 'settings')).toMatch(/no Model settings panel/);
+		expect(pathProblem(['Demand'], 'calibration')).toMatch(/no Calibration panel/);
+		expect(pathProblem(['Calibration record'], 'calibration')).toBeNull();
+		expect(pathProblem(['Demand'], pagePaths('in Settings & calibration → Demand')[0]!.page)).toMatch(/Model settings or Calibration now/);
 		expect(settingsPaths('switched on in **Fit the parameters → Fit automatically**, makes')).toEqual([['Fit the parameters', 'Fit automatically']]);
 		expect(settingsPaths('Settings → Calibration record → Flow gaps can fill them')).toEqual([['Calibration record', 'Flow gaps can fill them']]);
 		expect(settingsPaths('`pick a gauge in Settings → Calibration record`')).toEqual([['Calibration record']]);
@@ -329,9 +362,9 @@ describe('Settings paths named in help and in the app', () => {
 
 	it('name a real panel, and headings that panel shows', () => {
 		const broken = [...helpTexts, ...appTexts].flatMap(([where, text]) =>
-			settingsPaths(text).flatMap((steps) => {
-				const p = pathProblem(steps);
-				return p ? [`${where}: Settings → ${steps.join(' → ')} (${p})`] : [];
+			pagePaths(text).flatMap(({ page, steps }) => {
+				const p = pathProblem(steps, page);
+				return p ? [`${where}: ${page} → ${steps.join(' → ')} (${p})`] : [];
 			})
 		);
 		expect(broken).toEqual([]);

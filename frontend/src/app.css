@@ -510,6 +510,25 @@ textarea {
 .explain-scope:not(.explained) .explain {
 	display: none;
 }
+/* The settings panels' shared frame (issue #586 round 3): Model settings (SettingsTab.svelte) and the Calibration
+   page's "Set up the fit" (CalibrationSettings.svelte) each wrap their panels in `.settings-form`. The explanations
+   switch's place, each panel's current values (the line under its heading) and a panel's cards, two forms in one
+   panel (ui-playbook.md § 2, "Two forms in one panel are two cards"). */
+.settings-form > .explain-switch.check {
+	margin: 0 0 0.75rem;
+}
+.settings-form .summary {
+	margin: -0.35rem 0 0.6rem;
+	font-size: 0.85rem;
+	color: var(--text-2);
+	font-variant-numeric: tabular-nums;
+}
+.settings-form .sub-card {
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 0.75rem 0.9rem;
+	margin: 0.75rem 0;
+}
 /* Rarely changed settings folded into one line of their values (ui-playbook.md § 2, "Rarely changed
    settings fold into their values"): common/Fold.svelte writes the markup, <details class="fold"><summary>
    <span class="fold-name">Search:</span> <span>values</span><span class="fold-problem">needs fixing</span>

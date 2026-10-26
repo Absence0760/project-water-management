@@ -35,7 +35,7 @@ const NEEDS: Record<string, MissingPanel> = {
 	},
 	'res-wr2012': {
 		text: 'This run has no WR2012 check. It needs a WR2012 reference for the catchment, set under WR2012 check.',
-		link: { href: '?tab=settings#set-wr2012', label: 'WR2012 check' }
+		link: { href: '?tab=calibration#set-wr2012', label: 'WR2012 check' }
 	},
 	'res-plausibility': {
 		text: 'This run has no plausibility checks: it was made by an older version of the model. Run the model again to get them.',

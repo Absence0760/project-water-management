@@ -288,7 +288,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	const checks = page.getByRole('list', { name: 'Model checks' });
 	await expect(checks.getByRole('link', { name: /^Self-checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');
 
-	// The menu sits above the results, as on Settings & calibration, and stays in view as the
+	// The menu sits above the results, as on Model settings, and stays in view as the
 	// page scrolls, marking the section being read.
 	await expect(menu.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
 	await menu.getByRole('link', { name: 'Hydrograph' }).click();

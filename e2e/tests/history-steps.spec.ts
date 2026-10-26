@@ -116,7 +116,7 @@ test('the calibration rules’ fits say when they couldn’t be read, and Try ag
 	await page.route(new RegExp(`/projects/${project.id}/auto-calibrations$`), (route) =>
 		fail && route.request().method() === 'GET' ? route.fulfill({ status: 500, json: { error: 'Something went wrong' } }) : route.continue()
 	);
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const auto = page.getByRole('region', { name: /^Automated calibration/ });
 	await expect(auto.getByTestId('auto-load-error')).toContainText('Couldn’t load the calibration rules’ fits:');
 	fail = false;

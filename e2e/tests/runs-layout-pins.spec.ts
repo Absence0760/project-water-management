@@ -257,7 +257,7 @@ test('a link to a panel this run doesn’t have says what the panel needs, with 
 	const runId = await createRun(page.request, project.id, 'Plain');
 	// A plain run has no WR2012 check, no checks-only gauge, no forecast and no rain for each unit (issue #586).
 	for (const [anchor, needs, href] of [
-		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=settings#set-wr2012'],
+		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=calibration#set-wr2012'],
 		['res-gauges', 'It needs a flow record at a gauge that is not the calibration site', '?tab=series'],
 		['res-forecast', 'A forecast run needs forecast rain', '?tab=series#data-feeds'],
 		['res-unit-rain', 'It needs Per unit flow generation', '?tab=settings#set-share']
@@ -315,9 +315,9 @@ test('the sidebar keeps a picked run: Runs → Settings → Runs and Runs → EW
 
 	await openRuns(page, project.id, `&run=${older}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Older', exact: true })).toBeVisible();
-	await sidebar.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await sidebar.getByRole('link', { name: 'Model settings', exact: true }).click();
 	await expect(page).toHaveURL(/\?tab=settings$/);
-	await expect(title('Settings & calibration')).toBeFocused();
+	await expect(title('Model settings')).toBeFocused();
 	await sidebar.getByRole('link', { name: 'Runs & results', exact: true }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${older}$`));
 	await expect(page.getByRole('heading', { level: 2, name: 'Older', exact: true })).toBeVisible();
