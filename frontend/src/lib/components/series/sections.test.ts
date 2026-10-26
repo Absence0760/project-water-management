@@ -19,14 +19,14 @@ describe('dataNavGroups', () => {
 		expect(ids({ ...ALL, agreement: false })).toEqual(['data-series', 'data-chart', 'data-feeds', 'data-double-mass', 'data-checks', 'data-uses']);
 	});
 
-	it('names each link as its panel’s heading, the long ones shorter on the bar (issue #462)', () => {
+	it('names each link as its panel’s heading, on the bar too (issue #462, #586 R4-M)', () => {
 		const names = dataNavGroups(ALL).flatMap((g) => g.sections.map((s) => [s.label, navText(s, 'bar')]));
 		expect(names).toEqual([
 			['Input time series', 'Input time series'],
 			['Series chart', 'Series chart'],
 			['Data feeds', 'Data feeds'],
-			['Gauge vs logger agreement', 'Gauge vs logger'],
-			['Double mass: catchment rain vs CHIRPS', 'Double mass'],
+			['Gauge vs logger agreement', 'Gauge vs logger agreement'],
+			['Double mass: catchment rain vs CHIRPS', 'Double mass: catchment rain vs CHIRPS'],
 			['Data checks', 'Data checks'],
 			['What the model uses', 'What the model uses']
 		]);

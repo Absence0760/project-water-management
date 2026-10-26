@@ -5716,15 +5716,16 @@ with the table the data needs).
   ([§ On this page menu](#on-this-page-menu)): from 80rem of page (a 1440 px
   window) a side index on the left of the panels, narrower a bar under the
   header, above the table, that sticks down the whole page as it scrolls:
-  **Input time series** (`#data-series`; **Series** on the bar), **Series
-  chart** (`#data-chart`, with a series picked; **Chart**), **Data feeds**
-  (`#data-feeds`, always), **Gauge vs logger
-  agreement** (`#data-agreement`; **Gauge vs logger**), **Double mass:
-  catchment rain vs CHIRPS** (`#data-double-mass`; **Double mass**), **Data
-  checks** (`#data-checks`) and **What the model uses** (`#data-uses`), each
-  only when the page draws it (`series/sections.ts`, `dataNavGroups`; the
-  panels' headings, issue #462), in three groups (Series, Checks,
-  Reference), named on the bar too. The table's widths (`data-page`) are
+  **Input time series** (`#data-series`), **Series chart** (`#data-chart`,
+  with a series picked), **Data feeds** (`#data-feeds`, always), **Gauge vs
+  logger agreement** (`#data-agreement`), **Double mass: catchment rain vs
+  CHIRPS** (`#data-double-mass`), **Data checks** (`#data-checks`) and
+  **What the model uses** (`#data-uses`), each only when the page draws it
+  (`series/sections.ts`, `dataNavGroups`), in three groups (Series, Checks,
+  Reference), named on the bar too. Each link says its panel's heading word
+  for word, on the bar as in the side index (issue #462; #586 R4-M dropped
+  the bar's last short names); with all seven drawn the bar takes two rows at
+  1280 px. The table's widths (`data-page`) are
   the column beside the index. A loaded
   `?tab=series#data-…` link lands on its panel once it is drawn, held there
   with focus on its heading (`landOnAnchor`, `help/anchor.ts`, which also
