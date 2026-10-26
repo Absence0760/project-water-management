@@ -194,7 +194,13 @@ export const LICENSING_ARTICLES: Record<string, HelpArticle> = {
 	'registered-volume': {
 		long: 'An allocation is one volume a year, from one water source (surface or groundwater), held under one authorisation, for a hydrological unit or other water user, with its purpose and the dates it is valid (inclusive; either end may be open). The registration or licence number and the property are kept to match it to a unit; the registered user’s name, a reference and the file it was imported from (name and SHA-256) are kept beside it. A unit may have several, such as a registration and a later licence, or surface and groundwater: the comparison adds up every one in force on each day.\n\nEvery run’s input carries the volumes in force (never the names). So a stored run replays with the volumes it ran on, changing a volume makes the latest run out of date, and comparing two runs lists the volumes that changed. A scenario can set or remove a volume for one run.\n\nA registered volume is what an authorisation says, not an entitlement, and the app never decides whether a use is lawful.',
 		aliases: ['allocation', 'allocations', 'registered', 'licensed volume', 'volume', 'valid from', 'valid to', 'registration number', 'property', 'registered user', 'holder'],
-		related: ['authorisation-type', 's21-water-use', 'registered-vs-modelled', 'allocation-mode', 'allocation-viewer-access'],
+		related: ['authorisation-type', 's21-water-use', 'registered-irrigated-area', 'registered-vs-modelled', 'allocation-mode', 'allocation-viewer-access'],
+		source: 'docs/allocations.md § What is stored'
+	},
+	'registered-irrigated-area': {
+		long: 'A WARMS registration of irrigation states the area irrigated beside the volume taken, and a licence often does too. The app keeps it on the take (a 21(a) row) in hectares: imported from a WARMS extract’s irrigated-area column (“Irrigated Area (ha)”, “Area under irrigation” …; a bare “Area (ha)” isn’t read, as it may be the property’s extent) or the template’s `irrigated_area_ha`, or typed into **+ Add volume**. A dam’s storage row (21(b)) has none: an area there would be counted twice beside the property’s take, so the import refuses it.\n\nIt is a record of what the authorisation says. The model never reads it: the area a unit irrigates in a run is its planted crop areas, and changing a registered area leaves the latest run current.',
+		aliases: ['irrigated area', 'registered area', 'irrigation area', 'hectares', 'irrigated_area_ha'],
+		related: ['registered-volume', 's21-water-use', 'cultivated-area'],
 		source: 'docs/allocations.md § What is stored'
 	},
 	'authorisation-type': {

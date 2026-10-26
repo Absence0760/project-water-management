@@ -9,7 +9,7 @@
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { fmtNum } from '#lib/format/number.js';
 	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
-	import { ALLOCATIONS_FORMAT, AUTHORISATION_LABEL, MATCHED_BY_LABEL, previewOrder, SOURCE_LABEL, TEMPLATE_CSV, volumeCell } from './allocations';
+	import { ALLOCATIONS_FORMAT, AUTHORISATION_LABEL, MATCHED_BY_LABEL, previewOrder, SOURCE_LABEL, TEMPLATE_CSV, areaHa, volumeCell } from './allocations';
 
 	let { projectId, open = $bindable(false), onimported }: { projectId: string; open?: boolean; onimported: (message: string) => void } = $props();
 
@@ -169,7 +169,7 @@
 							<th scope="col">Registration</th>
 							<th scope="col">Farm in the file</th>
 							<th scope="col">Type · source</th>
-							<th scope="col" class="num">Volume (m³/a)</th>
+							<th scope="col" class="num">Volume (m³/a)<span class="note">irrigated area</span></th>
 							<th scope="col">Matched to</th>
 						</tr>
 					</thead>
@@ -181,7 +181,7 @@
 								<td>{r.farm || r.propertyRef || '–'}</td>
 								<td>{r.authorisation ? AUTHORISATION_LABEL[r.authorisation] : '–'}<span class="note">{r.waterSource ? SOURCE_LABEL[r.waterSource] : '–'}</span></td>
 								<!-- A 21(b) row is a dam's storage, never a take (issue #72). -->
-								<td class="num">{#if r.waterUse === '21b' && !r.errors.length}{volumeCell(r)}<span class="note">storage {fmtNum(r.storageM3)} m³</span>{:else}{fmtNum(r.volumeM3PerYear)}{/if}</td>
+								<td class="num">{#if r.waterUse === '21b' && !r.errors.length}{volumeCell(r)}<span class="note">storage {fmtNum(r.storageM3)} m³</span>{:else}{fmtNum(r.volumeM3PerYear)}{#if r.irrigatedAreaHa !== null}<span class="note">{areaHa(r.irrigatedAreaHa)} irrigated</span>{/if}{/if}</td>
 								<td>
 									{#if r.errors.length}
 										<span class="err">{r.errors.join('; ')}</span>

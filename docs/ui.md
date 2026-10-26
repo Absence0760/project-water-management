@@ -10591,7 +10591,10 @@ volume** (`volume=new`), each a side sheet that closes in place, so Back goes
 to where it was opened from. A viewer opening a sheet link gets the page.
 The volume sheet's **Water use** picks a take (s21a) or a dam's storage
 (s21b, issue #72); a storage row has no volume field, its water source is
-surface and its storage is required.
+surface and its storage is required. A take has an optional **Irrigated
+area (ha)** (244), the area it is registered to irrigate, kept to two
+decimals; a storage row has no area field, and switching back to a take
+brings the typed area back.
 
 **Under the header**, a sentence naming the run and saying modelled use is
 *modelled, not metered* and a difference is something to look into, not a
@@ -10695,7 +10698,9 @@ offered to a viewer who sees totals only. Tests: `allocations/useMap.test.ts`,
 fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
 with the registration number under it, the registered user for editors only,
 authorisation with purpose, volume with source (**Storage only (s21b)** for a
-dam's registered storage, which is never a take, issue #72), storage, validity with where
+dam's registered storage, which is never a take, issue #72), storage with the
+registered irrigated area under it (`areaHa`, "42.5 ha", or – when none is
+stated; the picked unit's volumes say "· 42.5 ha irrigated"), validity with where
 it came from (the file name and the first 12 hex digits of its SHA-256, or
 "Entered by hand") and, when it states any, its licence conditions in one
 line ("Oct–Mar only · at most 0.05 m³/s · 2 conditions", `conditionsSummary`,

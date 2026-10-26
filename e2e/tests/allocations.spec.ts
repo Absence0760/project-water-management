@@ -255,3 +255,28 @@ test('a storage-only (s21b) row is entered as storage and compared with the dam'
 		`Registered storage ${grouped(100000)} m³ · dam capacity in the run ${grouped(150000)} m³: the dam is ${grouped(50000)} m³ larger than the storage registered for it (outside the ±10 % band).`
 	);
 });
+
+// 244: the irrigated area a take is registered for, typed in by hand. A dam's storage row has none.
+test('a take is entered with its registered irrigated area, and a storage row has no area field', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Allocations area');
+	await page.goto(`/projects/${project.id}?tab=allocations`);
+	await expect(page.getByTestId('allocations-empty')).toBeVisible();
+
+	await page.getByTestId('section-header').getByRole('link', { name: '+ Add volume' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Add a registered volume' });
+	await sheet.getByLabel('Unit or water user').selectOption({ label: 'Upper farm' });
+	await sheet.getByLabel('Volume (m³ per year)').fill('120000');
+	await sheet.getByLabel('Irrigated area (ha)').fill('42.5');
+	await sheet.getByLabel('Registration or licence number').fill('E2E-AREA');
+	// A dam's storage registers no area: the field goes with the volume.
+	await sheet.getByLabel('Water use', { exact: true }).selectOption({ label: 'Storing water in a dam (s21b)' });
+	await expect(sheet.getByLabel('Irrigated area (ha)')).toHaveCount(0);
+	await sheet.getByLabel('Water use', { exact: true }).selectOption({ label: 'Taking water (s21a)' });
+	await expect(sheet.getByLabel('Irrigated area (ha)')).toHaveValue('42.5');
+	await expectNoViolations(page);
+	await sheet.getByRole('button', { name: 'Save' }).click();
+	await expect(sheet).toBeHidden();
+	const row = page.getByTestId('allocation-list').getByRole('row', { name: /Upper farm/ });
+	await expect(row.getByTestId('allocation-storage-area')).toContainText('42.5 ha');
+});

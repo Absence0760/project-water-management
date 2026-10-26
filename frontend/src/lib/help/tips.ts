@@ -374,6 +374,13 @@ export const TIPS: HelpTipText[] = [
 		category: 'licensing'
 	},
 	{
+		id: 'registered-irrigated-area',
+		term: 'Registered irrigated area',
+		short: 'The area a take is registered or licensed to irrigate, from WARMS or typed in. Kept beside the volume; the model never reads it.',
+		units: 'ha',
+		category: 'licensing'
+	},
+	{
 		id: 'authorisation-type',
 		term: 'Authorisation',
 		short: 'How a volume is held: a WARMS registration, a licence, a general authorisation, Schedule 1, or existing lawful use, claimed or verified.',
