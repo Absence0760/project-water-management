@@ -62,7 +62,7 @@
 	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { projectToday } from '#lib/components/projects/freshness.js';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '#lib/series/csv.js';
-	import { defaultUnit, KIND_OPTIONS, kindLabel } from '#lib/series/kinds.js';
+	import { defaultUnit, KIND_OPTIONS, kindLabel, seriesKindLabel } from '#lib/series/kinds.js';
 	import { CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote } from '#lib/series/provenance.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { asksSite, productField, rowSiteMark, siteText, uploadUnitText } from './details';
@@ -598,16 +598,8 @@
 	});
 	// The role badges' view of the units and the stations (roles.ts roleBadge, issue #553).
 	const unitNames = $derived(new Map(nodes.filter(isLandUnit).map((n) => [n.id, n.name])));
-	const assignedStations = $derived.by(() => {
-		const rs = settings?.rainStations;
-		const out = new Set<string>();
-		for (const a of [rs?.catchment, ...Object.values(rs?.units ?? {})]) {
-			if (!a?.stationId) continue;
-			out.add(a.stationId);
-			if (a.correctAgainst) out.add(a.correctAgainst);
-		}
-		return out;
-	});
+	// Where each station's rain goes, as a run reads it (groups.ts stationUses): the row's line and its badge both read it.
+	const stationUseMap = $derived(new Map(list.filter(asksStation).map((s) => [s.id, stationUses(s.id, settings, nodes)])));
 	const areaOf = (it: AreaItem) => areaNames(it, areaCtx);
 	const areaInfo = (it: AreaItem) => areaRowInfo(it, areaCtx);
 	const areaPanelId = (itemId: string) => `area-${itemId.replace(':', '-')}`;
@@ -789,19 +781,19 @@
 	{@const end = endDate(s)}
 	{@const span = dataSpan(s, st)}
 	{@const age = daysBetween(span.to, today)}
-	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite, units: unitNames, unitRainOn: settings?.unitRain?.mode === 'perUnit', assignedStations })}
+	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite, units: unitNames, unitRainOn: settings?.unitRain?.mode === 'perUnit', stationUses: stationUseMap, catchmentStationId: settings?.rainStations?.catchment?.stationId ?? null })}
 	{@const behind = behindAge.get(s.id)}
 	{@const fed = feedMark(s.feed, st?.present)}
 	<!-- Pointer shortcut only; the View button is the accessible control. -->
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_no_redundant_roles -->
 	<tr role="row" id="ser-row-{s.id}" class="pick" class:sub class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
 		<th scope="row" role="rowheader">
-			<span class="kind">{kindLabel(s.kind)}</span>
+			<span class="kind">{seriesKindLabel(s)}</span>
 			<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
 			<!-- A rainfall station (issue #553): its MAP and where its rain goes, so the group reads without opening each one. -->
 			{#if asksStation(s)}
 				<span class="prov" data-testid="series-station">{s.station?.mapMm != null ? `MAP ${fmtNum(s.station.mapMm, 1)} mm${s.station.mapSource ? ` (${s.station.mapSource})` : ''}` : 'No MAP recorded'}</span>
-				<span class="prov" data-testid="series-station-uses">{stationUsesText(stationUses(s.id, settings, nodes))}</span>
+				<span class="prov" data-testid="series-station-uses">{stationUsesText(stationUseMap.get(s.id) ?? stationUses(s.id, settings, nodes))}</span>
 			{/if}
 			{#if s.rebuilding}
 				<span class="rebuilding" data-testid="series-rebuilding" title="A data feed is backfilling a replacement; this series stays as it is until it completes">Being replaced</span>
@@ -1038,7 +1030,7 @@
 		<h2 id="chart-h" class="visually-hidden">Series chart</h2>
 		{#if values[viewing.id]}
 			<LineChart
-				title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
+				title="{seriesKindLabel(viewing)}{viewing.name ? ` · ${viewing.name}` : ''}"
 				unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
 				height={CHART_H}
 				series={[
@@ -1087,7 +1079,7 @@
 									id="series-name-input"
 									data-testid="series-name"
 									maxlength="100"
-									placeholder="Not named: shown as {kindLabel(viewing.kind)}"
+									placeholder="Not named: shown as {seriesKindLabel(viewing)}"
 									aria-describedby={saveId(viewing, 'name')}
 									aria-invalid={saveFailed(saveId(viewing, 'name')) ? 'true' : undefined}
 									value={viewing.name}
@@ -1214,7 +1206,7 @@
 					<li>
 						<span class="badge badge-warn">{CHECK_LABEL[c.check.check]}</span>
 						<strong>{c.series.name || kindLabel(c.series.kind)}</strong>
-						<span class="muted">({kindLabel(c.series.kind)})</span>:
+						<span class="muted">({seriesKindLabel(c.series)})</span>:
 						{c.check.text.slice(c.check.text.indexOf(':') + 1).trim()}
 					</li>
 				{/each}

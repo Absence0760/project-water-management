@@ -272,6 +272,11 @@ describe('coverageRows', () => {
 		const logger: SeriesMeta = { id: '1', kind: 'rain_catchment_mm', name: 'Logger', unit: 'mm', startDate: '2026-09-01', length: 27, lastValueDate: '2026-09-25' };
 		expect(coverageRows([logger], { startDate: '2026-09-01', endDate: '2026-09-27' })).toEqual([['Rainfall — catchment · Logger', '2026-09-01', '2026-09-25', '27', '27']]);
 	});
+
+	it('names a rainfall station as a station (issue #589)', () => {
+		const station: SeriesMeta = { id: '1', kind: 'rain_catchment_mm', name: 'Bergwater', unit: 'mm', startDate: '2026-09-01', length: 3, station: { mapMm: 745, mapSource: 'Station record', lat: null, lon: null } };
+		expect(coverageRows([station], { startDate: '2026-09-01', endDate: '2026-09-03' })[0]![0]).toBe('Rainfall — station · Bergwater');
+	});
 });
 
 describe('stationRows and stationPairingRows (issue #553)', () => {

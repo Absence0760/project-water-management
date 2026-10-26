@@ -160,39 +160,65 @@ export function areaSentence(
 export const catchmentMap = (settings: ProjectSettings | null | undefined, nodes: readonly NetworkNode[]) => catchmentMapOf(settings?.rainStations, nodes);
 
 /**
- * Which areas a station serves (settings.rainStations): the catchment and the
- * units whose rain it is, and those whose CHIRPS gaps it corrects without
- * being their station. Unit names in the model's order.
+ * Which areas a station serves, as a run reads settings.rainStations
+ * (docs/model.md §2.4i): the catchment and the units whose rain it is, and
+ * those whose CHIRPS gaps it corrects without being their station. A unit's
+ * assignment is read only under per-unit rain (settings.unitRain `perUnit`,
+ * the engine's unitRain.ts) and only for a land unit of the model; units it
+ * is assigned to while per-unit rain is off are `idle`, read by no run until
+ * it is on. Unit names in the model's order. The row's line
+ * (stationUsesText) and its role badge (roles.ts roleBadge) both read this,
+ * so they never disagree (issue #589).
  */
-export function stationUses(stationId: string, settings: ProjectSettings | null | undefined, nodes: readonly NetworkNode[]): { rainFor: string[]; corrects: string[] } {
+export function stationUses(stationId: string, settings: ProjectSettings | null | undefined, nodes: readonly NetworkNode[]): StationUses {
 	const rs = settings?.rainStations;
 	const rainFor: string[] = [];
 	const corrects: string[] = [];
+	const idle: string[] = [];
+	const names = (a: RainStationAssignment | null | undefined) => !!a?.stationId && (a.stationId === stationId || a.correctAgainst === stationId);
 	const add = (a: RainStationAssignment | null | undefined, name: string) => {
 		if (!a?.stationId) return;
 		if (a.stationId === stationId) rainFor.push(name);
 		else if (a.correctAgainst === stationId) corrects.push(name);
 	};
 	add(rs?.catchment, 'the catchment');
-	for (const n of nodes.filter(isLandUnit)) add(rs?.units?.[n.id], n.name);
-	return { rainFor, corrects };
+	for (const n of nodes.filter(isLandUnit)) {
+		const a = rs?.units?.[n.id];
+		if (perUnitOn(settings)) add(a, n.name);
+		else if (names(a)) idle.push(n.name);
+	}
+	return { rainFor, corrects, idle };
 }
+
+/** Where a station's rain goes (stationUses). */
+export interface StationUses {
+	rainFor: string[];
+	corrects: string[];
+	/** Units it is assigned to (as their station or their CHIRPS correction) while per-unit rain is off: no run reads it there. */
+	idle: string[];
+}
+
+/** Whether a run reads the station for some area (stationUses): as its rain or its CHIRPS correction. */
+export const stationRead = (uses: Pick<StationUses, 'rainFor' | 'corrects'>) => uses.rainFor.length > 0 || uses.corrects.length > 0;
+
+const nameList = (xs: string[]) => {
+	const names = (ys: string[]) => (ys.length < 2 ? (ys[0] ?? '') : `${ys.slice(0, -1).join(', ')} and ${ys[ys.length - 1]}`);
+	if (xs.length <= 3) return names(xs);
+	const units = xs.filter((x) => x !== 'the catchment').length;
+	return names([...(xs.includes('the catchment') ? ['the catchment'] : []), `${units} units`]);
+};
 
 /**
  * A station row's line about where its rain goes: "Rain for the catchment and Unit A. Corrects the CHIRPS gaps of
  * Unit C." Past three areas the units are counted ("the catchment and 15 units"), so a row stays short whatever the
- * model's size; each unit's own row names its station.
+ * model's size; each unit's own row names its station. Units it is assigned to while per-unit rain is off are said
+ * apart: "Assigned to Unit A, read only under per-unit rain."
  */
-export function stationUsesText(uses: { rainFor: string[]; corrects: string[] }): string {
-	const names = (xs: string[]) => (xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
-	const list = (xs: string[]) => {
-		if (xs.length <= 3) return names(xs);
-		const units = xs.filter((x) => x !== 'the catchment').length;
-		return names([...(xs.includes('the catchment') ? ['the catchment'] : []), `${units} units`]);
-	};
+export function stationUsesText(uses: { rainFor: string[]; corrects: string[]; idle?: string[] }): string {
 	const parts: string[] = [];
-	if (uses.rainFor.length) parts.push(`Rain for ${list(uses.rainFor)}.`);
-	if (uses.corrects.length) parts.push(`Corrects the CHIRPS gaps of ${list(uses.corrects)}.`);
+	if (uses.rainFor.length) parts.push(`Rain for ${nameList(uses.rainFor)}.`);
+	if (uses.corrects.length) parts.push(`Corrects the CHIRPS gaps of ${nameList(uses.corrects)}.`);
+	if (uses.idle?.length) parts.push(`Assigned to ${nameList(uses.idle)}, read only under per-unit rain.`);
 	return parts.length ? parts.join(' ') : 'Not assigned to the catchment or a unit.';
 }
 
