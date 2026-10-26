@@ -2556,7 +2556,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `observedAgreement` (gauge vs logger per water year, with the thresholds
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
   'flatline' | 'zerorun' | 'lowvschirps' | 'doublemass', days, examples: [{ date, value,
-  runDays?, endDate? }], text }[]`; `zerorun` and `lowvschirps`, engine ≥ 0.5.2, are the
+  runDays?, endDate? }], text }[]`; `date`/`endDate` stay ISO, while `text`
+  writes its dates day first, "6 Oct 2020", from engine 1.99.0; `zerorun` and `lowvschirps`, engine ≥ 0.5.2, are the
   catchment-rain checks of issue #2, under the project's `settings.dataQuality`
   limits (engine ≥ 1.20.0; with `zeroRunChirpsCheck` a `zerorun` check can
   have `days: 0` and no examples when CHIRPS reads every long zero run as

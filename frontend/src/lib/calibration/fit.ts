@@ -196,7 +196,8 @@ export type ScoredFit = Pick<CalibrationReport, 'before' | 'fit' | 'splitSample'
 
 /** The report's periods as table columns: before, fitted, then each test's calibration and validation part. */
 export function scoreColumns(r: ScoredFit): ScoreColumn[] {
-	const p = (x: { start: string; end: string }) => `${x.start} – ${x.end}`;
+	// Day first, as every date a person reads (#586 D9): "1 Oct 2001 – 30 Sep 2010".
+	const p = (x: { start: string; end: string }) => `${fmtDay(x.start)} – ${fmtDay(x.end)}`;
 	const col = (id: string, label: string, period: string, x: ScoredPeriod, validation: boolean): ScoreColumn => ({
 		id,
 		label,

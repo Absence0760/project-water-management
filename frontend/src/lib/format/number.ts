@@ -112,8 +112,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  */
 export function fmtDay(iso: string): string {
 	const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-	const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
-	return m && month ? `${Number(m[3])} ${month} ${m[1]}` : iso;
+	if (!m) return iso;
+	const y = Number(m[1]);
+	const mo = Number(m[2]);
+	const d = Number(m[3]);
+	const month = MONTHS[mo - 1];
+	// The day must exist in its month (Gregorian leap years), as the engine's dayText checks.
+	const days = mo === 2 ? ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28) : [4, 6, 9, 11].includes(mo) ? 30 : 31;
+	return month && d >= 1 && d <= days ? `${d} ${month} ${m[1]}` : iso;
 }
 
 const MONTHS_LONG = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
