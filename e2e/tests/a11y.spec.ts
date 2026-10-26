@@ -237,7 +237,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				const project = await seedRunnableProject(page.request, 'A11y GR4J run');
 				await updateSettings(page.request, project.id, GR4J);
 				await createRun(page.request, project.id, 'GR4J');
-				await page.goto(`/projects/${project.id}?tab=runs`);
+				// The runoff model is in Model quality, on Calibration (issue #586 Round 3).
+				await page.goto(`/projects/${project.id}?tab=calibration`);
 				const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
 				await expect(runoff.getByRole('rowheader', { name: /Groundwater exchange/ })).toBeVisible();
 				await expect(runoff.getByRole('img', { name: /^Model stores/ }).locator('canvas')).toBeVisible();

@@ -191,10 +191,12 @@ test('a new user builds a catchment through the UI, runs it and reads the result
 	const stat = (term: string) => summary.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd[1]');
 	await expect(stat('Mean natural flow')).toHaveText(/^[\d\s,.]+m³\/s$/);
 	await expect(stat('Mean simulated outflow')).toHaveText(/^[\d\s,.]+m³\/s$/);
+	await expect(page.getByRole('img', { name: /^Catchment · .*: line chart/ }).locator('canvas')).toBeVisible();
+
+	// The fit is on Calibration (issue #586 Round 3): the sidebar carries the run there.
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Calibration', exact: true }).click();
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' }).locator('xpath=following-sibling::dd[1]')).toContainText('730 days');
-
-	await expect(page.getByRole('img', { name: /^Catchment · .*: line chart/ }).locator('canvas')).toBeVisible();
 });
 
 test('crops and a transfer, entered through the UI, feed a run and each unit’s results', async ({ page, owner }) => {
