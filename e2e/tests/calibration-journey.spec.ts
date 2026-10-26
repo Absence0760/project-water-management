@@ -222,7 +222,8 @@ test('old links land on the moved panels: a Runs link with no run, on a project 
 	await expect(link).toHaveAttribute('href', '?tab=calibration#set-fit');
 	await link.click();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=calibration#set-fit$`));
-	const fitHeading = page.locator('#set-fit').getByRole('heading', { level: 2 }).first();
+	// Under the page's part headings (h2), the panels are h3 on Calibration.
+	const fitHeading = page.locator('#set-fit').getByRole('heading', { level: 3 }).first();
 	await expect(fitHeading).toHaveText(/^Fit the parameters/);
 	await expect(fitHeading).toBeFocused();
 	await expect(fitHeading).toBeInViewport();
