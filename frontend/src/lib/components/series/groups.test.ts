@@ -98,10 +98,11 @@ describe('areaSentence', () => {
 describe('stationUses', () => {
 	it('names the areas a station is the rain of, and those whose gaps it only corrects', () => {
 		const settings = {
+			unitRain: { mode: 'perUnit' },
 			rainStations: { catchment: { stationId: 'Bergwater' }, units: { A: { stationId: 'Bergwater' }, B: { stationId: 'Kloof', correctAgainst: 'Bergwater' } } }
 		} as unknown as ProjectSettings;
 		const uses = stationUses('Bergwater', settings, NODES);
-		expect(uses).toEqual({ rainFor: ['the catchment', 'Unit A'], corrects: ['Unit B'] });
+		expect(uses).toEqual({ rainFor: ['the catchment', 'Unit A'], corrects: ['Unit B'], idle: [] });
 		expect(stationUsesText(uses)).toBe('Rain for the catchment and Unit A. Corrects the CHIRPS gaps of Unit B.');
 		expect(stationUsesText(stationUses('Kloof', settings, NODES))).toBe('Rain for Unit B.');
 		expect(stationUsesText(stationUses('Bergwater', null, NODES))).toBe('Not assigned to the catchment or a unit.');
@@ -109,6 +110,19 @@ describe('stationUses', () => {
 		const many = { rainFor: ['the catchment', ...Array.from({ length: 30 }, (_, i) => `Unit ${i}`)], corrects: ['U1', 'U2', 'U3', 'U4'] };
 		expect(stationUsesText(many)).toBe('Rain for the catchment and 30 units. Corrects the CHIRPS gaps of 4 units.');
 		expect(stationUsesText({ rainFor: ['A', 'B', 'C'], corrects: [] })).toBe('Rain for A, B and C.');
+	});
+
+	it('reads a unit’s assignment only under per-unit rain, and only for a land unit, as a run does (issue #589)', () => {
+		const rainStations = { catchment: { stationId: 'Bergwater' }, units: { A: { stationId: 'Kloof' }, B: { stationId: 'Bergwater', correctAgainst: 'Kloof' }, gone: { stationId: 'Kloof' } } };
+		const fragmentation = { rainStations } as unknown as ProjectSettings;
+		// Fragmentation: the catchment's station is read; the units' assignments wait for per-unit rain.
+		expect(stationUses('Bergwater', fragmentation, NODES)).toEqual({ rainFor: ['the catchment'], corrects: [], idle: ['Unit B'] });
+		expect(stationUses('Kloof', fragmentation, NODES)).toEqual({ rainFor: [], corrects: [], idle: ['Unit A', 'Unit B'] });
+		expect(stationUsesText(stationUses('Kloof', fragmentation, NODES))).toBe('Assigned to Unit A and Unit B, read only under per-unit rain.');
+		expect(stationUsesText(stationUses('Bergwater', fragmentation, NODES))).toBe('Rain for the catchment. Assigned to Unit B, read only under per-unit rain.');
+		// Per unit: a unit no longer in the model ("gone") is not an area it serves.
+		const perUnit = { unitRain: { mode: 'perUnit' }, rainStations } as unknown as ProjectSettings;
+		expect(stationUses('Kloof', perUnit, NODES)).toEqual({ rainFor: ['Unit A'], corrects: ['Unit B'], idle: [] });
 	});
 });
 

@@ -226,8 +226,14 @@ export function roleBadge(
 		units?: ReadonlyMap<string, string>;
 		/** Per-unit rain is on (settings.unitRain `perUnit`): a unit's own rain is read for it. */
 		unitRainOn?: boolean;
-		/** The rainfall stations settings.rainStations assigns to an area or a pairing (issue #553). */
-		assignedStations?: ReadonlySet<string>;
+		/**
+		 * Where each rainfall station's rain goes, by series id (groups.ts stationUses, issue #553): the areas a run
+		 * reads it for, as their rain or their CHIRPS correction, and the units it is assigned to while per-unit rain
+		 * is off. The row's "Rain for …" line reads the same, so the two never disagree (issue #589).
+		 */
+		stationUses?: ReadonlyMap<string, { rainFor: readonly string[]; corrects: readonly string[]; idle?: readonly string[] }>;
+		/** settings.rainStations.catchment's station id: when it is one of the project's stations, it is the catchment rain, not the catchment rain series read by name (docs/model.md §2.4i). */
+		catchmentStationId?: string | null;
 	}
 ): { label: string; unused: boolean; why: string | null } | null {
 	const role = KIND_ROLES[s.kind];
@@ -238,8 +244,21 @@ export function roleBadge(
 	const unit = s.siteNodeId ? ctx.units?.get(s.siteNodeId) : undefined;
 	if (unit !== undefined)
 		return ctx.unitRainOn ? { label: `${unit}’s own rain`, unused: false, why: null } : { label: 'Not used: per-unit rain is off', unused: true, why: null };
-	// A station a run reads for an area, though not the catchment rain read by name: its row says which areas.
-	if (!s.siteNodeId && s.kind === 'rain_catchment_mm' && !ctx.inUse.has(s.id) && ctx.assignedStations?.has(s.id)) return { label: 'Rainfall station', unused: false, why: null };
+	// A rainfall station (catchment rain at no site, issue #553): the catchment rain a run reads by name keeps its role;
+	// any other is read only for the areas settings.rainStations assigns it, as a run reads them (stationUses), and
+	// says so in station terms, never as a second catchment rain series (issue #589). Its row's line names the areas.
+	// With a station for the catchment, that station's rule is the catchment rain and the series read by name is read
+	// only where it is assigned itself (the engine's catchmentStationPlan; a station no longer listed is not one).
+	if (!s.siteNodeId && s.kind === 'rain_catchment_mm') {
+		const cs = ctx.catchmentStationId;
+		const catchmentStation = !!cs && ctx.list.some((x) => x.id === cs && !x.siteNodeId && x.kind === 'rain_catchment_mm');
+		if (ctx.inUse.has(s.id) && !catchmentStation) return { label: role.role, unused: false, why: null };
+		const uses = ctx.stationUses?.get(s.id);
+		if (uses && (uses.rainFor.length > 0 || uses.corrects.length > 0)) return { label: 'Rainfall station', unused: false, why: null };
+		if (uses?.idle?.length) return { label: 'Not used: per-unit rain is off', unused: true, why: null };
+		if (ctx.inUse.has(s.id)) return { label: 'Not used: the catchment runs on its station', unused: true, why: null };
+		return { label: 'Not used: no area is assigned to it', unused: true, why: null };
+	}
 	if (s.siteNodeId) {
 		if (!ctx.gaugeInUse.has(s.id))
 			return ctx.gaugeIds.has(s.siteNodeId)

@@ -31,7 +31,7 @@ import {
 	type StationRainDaySource
 } from '@water-management/engine';
 import { dayPrefix } from '#lib/format/number.js';
-import { kindLabel } from '#lib/series/kinds.js';
+import { seriesKindLabel } from '#lib/series/kinds.js';
 import { firstOutletSeries } from '#lib/series/pick.js';
 import type { Daily } from './coverage';
 import type { AreaRainLines } from './derivedRain';
@@ -114,7 +114,7 @@ export const m3DayColumnId = (seriesId: string): string => `m3day:${seriesId}`;
 
 /** One column per series in `list` (same order, labels and units as the Input time series table), plus a m³/day column for each flow series and the derived "how the model used it" columns. */
 export function buildPreviewColumns(list: readonly SeriesMeta[]): PreviewColumn[] {
-	const label = (s: SeriesMeta) => `${kindLabel(s.kind)}${s.name ? ` · ${s.name}` : ''}`;
+	const label = (s: SeriesMeta) => `${seriesKindLabel(s)}${s.name ? ` · ${s.name}` : ''}`;
 	const seriesCols: PreviewColumn[] = list.map((s) => ({
 		id: seriesColumnId(s.id),
 		label: label(s),

@@ -7,7 +7,7 @@ import { findSystem, systemLabel } from '#lib/model/systems.js';
 import { describeWindow, FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
 import { describeMonths, WATER_YEAR_MONTHS } from '#lib/format/months.js';
 import { fmtNum, fmtPct } from '#lib/format/number.js';
-import { kindLabel } from '#lib/series/kinds.js';
+import { seriesKindLabel } from '#lib/series/kinds.js';
 import { peText } from '#lib/components/settings/peInput.js';
 import { dataEnd } from '#lib/components/series/freshness.js';
 import { chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, ratioText, stationAreas, stationsOf } from '#lib/components/runs/stationRain.js';
@@ -224,7 +224,7 @@ export function coverageRows(series: readonly SeriesMeta[], run: { startDate: st
 			const s0 = toEpochDay(s.startDate);
 			const s1 = s0 + Math.max(s.length, 1) - 1;
 			const inRun = Math.max(0, Math.min(s1, r1) - Math.max(s0, r0) + 1);
-			return [kindLabel(s.kind) + (s.name ? ` · ${s.name}` : ''), s.startDate, dataEnd(s), fmtNum(s.length), fmtNum(inRun)];
+			return [seriesKindLabel(s) + (s.name ? ` · ${s.name}` : ''), s.startDate, dataEnd(s), fmtNum(s.length), fmtNum(inRun)];
 		});
 }
 

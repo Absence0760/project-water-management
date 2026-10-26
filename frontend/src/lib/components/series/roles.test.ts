@@ -121,9 +121,9 @@ describe('roleBadge', () => {
 	});
 
 	it('names the role of a series a run reads, and marks the others unused with the reason in the badge', () => {
-		const a = meta('a', 'rain_catchment_mm', 'A');
-		const b = meta('b', 'rain_catchment_mm', 'B');
-		expect(roleBadge(a, ctx([a, b]))).toEqual({ label: 'Main rainfall', unused: false, why: null });
+		const a = meta('a', 'rain_chirps_mm', 'A');
+		const b = meta('b', 'rain_chirps_mm', 'B');
+		expect(roleBadge(a, ctx([a, b]))).toEqual({ label: 'Rain gap-filler', unused: false, why: null });
 		expect(roleBadge(b, ctx([a, b]))).toEqual({ label: 'Not used (another series of this kind is)', unused: true, why: null });
 	});
 
@@ -144,12 +144,39 @@ describe('roleBadge', () => {
 		expect(roleBadge(own, ctx([own], { units, unitRainOn: false }))).toEqual({ label: 'Not used: per-unit rain is off', unused: true, why: null });
 		// Without the units known it reads as before (a record at a node that isn't a gauge).
 		expect(roleBadge(own, ctx([own]))?.label).toBe('Not used: its gauge is no longer in the model');
+	});
+
+	describe('a rainfall station (issue #589)', () => {
 		const a = meta('a', 'rain_catchment_mm', 'A');
 		const b = meta('b', 'rain_catchment_mm', 'Kloof');
-		expect(roleBadge(b, ctx([a, b], { assignedStations: new Set(['b']) }))).toEqual({ label: 'Rainfall station', unused: false, why: null });
-		// The catchment rain read by name keeps its role; an unassigned station is still not used.
-		expect(roleBadge(a, ctx([a, b], { assignedStations: new Set(['a', 'b']) }))?.label).toBe('Main rainfall');
-		expect(roleBadge(b, ctx([a, b], { assignedStations: new Set() }))?.label).toBe('Not used (another series of this kind is)');
+		const uses = (u: Partial<{ rainFor: string[]; corrects: string[]; idle: string[] }>) => ({ rainFor: [], corrects: [], idle: [], ...u });
+
+		it('a station a run reads for an area or a pairing is a rainfall station, never “Not used”', () => {
+			expect(roleBadge(b, ctx([a, b], { stationUses: new Map([['b', uses({ rainFor: ['Lower unit'] })]]) }))).toEqual({ label: 'Rainfall station', unused: false, why: null });
+			// Correcting a unit's CHIRPS gaps alone is a use too.
+			expect(roleBadge(b, ctx([a, b], { stationUses: new Map([['b', uses({ corrects: ['Lower unit'] })]]) }))?.label).toBe('Rainfall station');
+			// The catchment rain read by name keeps its role.
+			expect(roleBadge(a, ctx([a, b], { stationUses: new Map([['a', uses({ rainFor: ['Upper unit'] })]]) }))?.label).toBe('Main rainfall');
+		});
+
+		it('an unassigned station says so in station terms, not as a second catchment rain series', () => {
+			expect(roleBadge(b, ctx([a, b], { stationUses: new Map([['b', uses({})]]) }))).toEqual({ label: 'Not used: no area is assigned to it', unused: true, why: null });
+			// Without the stations' uses known it reads the same.
+			expect(roleBadge(b, ctx([a, b]))?.label).toBe('Not used: no area is assigned to it');
+		});
+
+		it('a station assigned only to units while per-unit rain is off is not read, and says why', () => {
+			expect(roleBadge(b, ctx([a, b], { stationUses: new Map([['b', uses({ idle: ['Lower unit'] })]]) }))).toEqual({ label: 'Not used: per-unit rain is off', unused: true, why: null });
+		});
+
+		it('with a station for the catchment, the catchment rain read by name is read only where it is assigned', () => {
+			const withB = { catchmentStationId: 'b', stationUses: new Map([['a', uses({})], ['b', uses({ rainFor: ['the catchment'] })]]) };
+			expect(roleBadge(b, ctx([a, b], withB))?.label).toBe('Rainfall station');
+			expect(roleBadge(a, ctx([a, b], withB))).toEqual({ label: 'Not used: the catchment runs on its station', unused: true, why: null });
+			expect(roleBadge(a, ctx([a, b], { ...withB, stationUses: new Map([['a', uses({ rainFor: ['Upper unit'] })]]) }))?.label).toBe('Rainfall station');
+			// A catchment station no longer in the project isn't one: runs read the catchment rain by name again.
+			expect(roleBadge(a, ctx([a, b], { ...withB, catchmentStationId: 'gone' }))?.label).toBe('Main rainfall');
+		});
 	});
 });
 
