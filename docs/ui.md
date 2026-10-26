@@ -6468,7 +6468,10 @@ other sections.
   "0.75") rather than the EWR row's six-digit m³/day, so the label "A-pan
   evaporation mm" stays on one line with the year total inside the panel at
   1440 and 1280 (it wrapped to three lines and the total ran past the panel;
-  issue #586 R4-B, `settings-model-layout.spec.ts`). Narrower (1280 px and
+  issue #586 R4-B, `settings-model-layout.spec.ts`). EWR's Pragmatic EWR row
+  keeps the six-digit cells and fits as it is: its box doesn't scroll sideways
+  and Sep is whole inside it at 1440 and 1280, pinned by the same spec
+  (`ewr-row`). Narrower (1280 px and
   down) it is the bar under the header, its links evenly spaced, the same
   fourteen links as the index, in
   two rows at 1280 px in CI's fonts; on a phone the sideways strip. Both have

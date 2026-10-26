@@ -37,7 +37,7 @@ for (const [width, height] of [
 	[1440, 960],
 	[1280, 800]
 ] as const) {
-	test(`at ${width}: the head panel’s line clears its heading, and Demand’s A-pan row fits on one line with its year total`, async ({ page, owner }) => {
+	test(`at ${width}: the head panel’s line clears its heading, Demand’s A-pan row fits on one line with its year total, and EWR’s row fits its box`, async ({ page, owner }) => {
 		void owner;
 		await page.setViewportSize({ width, height });
 		const project = await seedShowcaseModel(page.request, `Model settings layout ${width}`);
@@ -65,6 +65,17 @@ for (const [width, height] of [
 		await expect(table.locator('tbody td').last()).toHaveText('1 780');
 		// Each month's value whole in its field.
 		for (const input of await table.getByRole('spinbutton').all()) expect(await input.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+		// EWR's Pragmatic EWR row (six-digit m³/day cells) and its l/s row: nothing scrolls sideways in its box, and
+		// Sep, the last month, is whole inside it (issue #586 R4-B follow-up).
+		const ewr = page.getByTestId('ewr-row');
+		await ewr.scrollIntoViewIfNeeded();
+		const ewrWrap = ewr.locator('xpath=..');
+		expect(await ewrWrap.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+		const sep = (await ewr.locator('tbody tr').first().locator('td').last().boundingBox())!;
+		const ewrBox = (await ewrWrap.boundingBox())!;
+		expect(sep.x + sep.width).toBeLessThanOrEqual(ewrBox.x + ewrBox.width + 0.5);
+		for (const input of await ewr.getByRole('spinbutton').all()) expect(await input.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 		await expectNoSidewaysScroll(page);
 	});
 }

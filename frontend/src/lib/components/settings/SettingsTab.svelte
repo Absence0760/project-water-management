@@ -816,7 +816,7 @@
 		{#if dailyFromDrm}<p class="hint" data-testid="pragmatic-unused">Not used while the daily EWR comes from the DRM tables: kept for switching back.</p>{/if}
 		<div class="ewr">
 			<div class="table-wrap">
-				<table class="data compact monthly">
+				<table class="data compact monthly" data-testid="ewr-row">
 					<thead>
 						<tr>
 							<th scope="col" class="sticky">Month</th>
