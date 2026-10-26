@@ -6165,7 +6165,13 @@ editors run one now and read the map's proposals, viewers read.
   in `feeds.ts`, its days like the rest of the app's calendar days; a source
   that answered HTTP 403 reads "the source refused this server’s requests
   (HTTP 403): it may have blocked this server’s address, so the feed waits
-  hours before asking again", architecture.md § Data feeds → Throttling), and
+  hours before asking again", architecture.md § Data feeds → Throttling),
+  followed on a failing feed by when it tries again ("It tries again after
+  10:13." today, "It tries again after 2026-10-27 08:45." on another day, in
+  the reader's clock; "It is due to try again: the scheduler takes it on its
+  next pass." once that time has come or it was never scheduled; nothing for
+  a feed switched off or with no acting owner): the server's `nextAttemptAt`,
+  from the scheduler's own rule (`nextTryNote` in `feeds.ts`), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.
@@ -6183,8 +6189,19 @@ editors run one now and read the map's proposals, viewers read.
   tabs note that runs use the current series until it completes.
 - **A warning** above the list counts the feeds that are stale or failing
   ("1 feed needs attention: …", `role="alert"`).
-- **Run now** (editors) queues a fetch at once and says so; the status
-  updates once the background worker has run it (**Refresh status**).
+- **Run now** (editors) queues a fetch at once and says so ("Fetch queued.
+  …"), then follows it (issue #586 Round 4, `feeds/follow.ts`): the panel
+  re-reads the list every 2 s for the first 10 s, then every 5 s, then every
+  10 s, about two minutes in all, until the feed's `lastAttemptAt` moves (a
+  result was recorded; in production when the fetcher's answer comes back).
+  Then the card updates and the live region says how it went, focus staying
+  on the button: "Fetch done: Rainfall — forecast. OK; newest data …" or
+  "Fetch failed: Rainfall — CHIRPS: <why>. It tries again after 10:13."
+  Polling stops when the panel unmounts and pauses while the page is hidden
+  (one poll at once when it shows again); a failed poll just waits for the
+  next, and never overwrites a newer list. If the two minutes run out it
+  says "The fetch is still waiting to run. Refresh status will show it once
+  it has." **Refresh status** still re-reads at any time.
   Pressed too often (6 fetches, then one every 10 minutes per feed), the
   section's error line shows the server's words, with the wait in whole
   minutes and a reminder that the feed also runs daily.

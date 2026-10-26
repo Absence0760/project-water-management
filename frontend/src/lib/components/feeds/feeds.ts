@@ -78,6 +78,12 @@ export interface FeedMeta {
 	replaceFrom: string | null;
 	/** A confirmed replacement being backfilled in its stage: the new record so far. */
 	rebuilding?: { startDate: string; through: string; updatedAt: string } | null;
+	/**
+	 * When the scheduler next takes the feed (backend 243_feed_next_attempt.sql,
+	 * the rule that decides it is due): may be past (due, waiting for the next
+	 * tick). Null: switched off, no acting owner, or never scheduled (due at once).
+	 */
+	nextAttemptAt?: string | null;
 }
 
 /** Why a feed is in its state (backend/src/feeds/health.ts HealthReason); days are YYYY-MM-DD, UTC. */
@@ -463,6 +469,24 @@ export const STATE_LABELS: Record<FeedState, string> = {
 export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'>): string {
 	const data = f.lastDataDate ? `Last data ${fmtDay(f.lastDataDate)}` : 'No data yet';
 	return f.lastAttemptAt ? `${data} · checked ${fmtDate(f.lastAttemptAt, true)}` : `${data} · not checked yet`;
+}
+
+/**
+ * When a failing feed tries again, after its health sentence (issue #586:
+ * "tries again later" said no time): "It tries again after 10:13." today,
+ * "It tries again after 2026-10-27 08:45." on another day (describeTimes'
+ * style, the reader's clock), or, when that time has come or the feed was
+ * never scheduled, that the scheduler's next pass takes it. The time is the
+ * server's (FeedMeta.nextAttemptAt, from the same SQL rule the scheduler
+ * uses), never worked out here. Null for a feed that isn't failing, is
+ * switched off, or has no acting owner (describeRunsAs says so).
+ */
+export function nextTryNote(f: Pick<FeedMeta, 'enabled' | 'consecutiveFailures' | 'actingUser' | 'nextAttemptAt'>, now: Date = new Date()): string | null {
+	if (!f.enabled || f.consecutiveFailures === 0 || !f.actingUser) return null;
+	const at = f.nextAttemptAt ? new Date(f.nextAttemptAt) : null;
+	if (!at || Number.isNaN(at.getTime()) || at.getTime() <= now.getTime()) return 'It is due to try again: the scheduler takes it on its next pass.';
+	const when = fmtDate(at.toISOString(), true);
+	return `It tries again after ${when.slice(0, 10) === fmtDate(now.toISOString()) ? when.slice(11) : when}.`;
 }
 
 /**
