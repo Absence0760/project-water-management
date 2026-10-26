@@ -112,7 +112,7 @@
 {#if gauges.length}
 	<!-- Its heading has Calibration's index line (calibration/page.ts CAL_SUBSECTIONS, issue #586 D4): one per page. -->
 	<section class="check" aria-labelledby="res-calibration-check" data-testid="calibration-check">
-		<h3 id="res-calibration-check">Calibration check: flow against use, per gauge</h3>
+		<h4 id="res-calibration-check">Calibration check: flow against use, per gauge</h4>
 		<p class="muted small how">
 			How to read it: simulated should track observed; natural sits above simulated by roughly the use upstream{anyBedLoss
 				? ' plus the bed losses in the reaches above the gauge'
@@ -156,8 +156,10 @@
 	.check {
 		margin-top: 1rem;
 	}
-	h3 {
+	/* Under Calibration against observed flow's h3 (issue #586 round 3), at an h3's size. */
+	h4 {
 		margin: 0 0 0.25rem;
+		font-size: 0.95rem;
 	}
 	.small {
 		font-size: 0.85rem;

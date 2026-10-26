@@ -39,7 +39,7 @@
 		heading?: string;
 		/** The heading's id, when a page links to it (Calibration's index, calibration/page.ts CAL_SUBSECTIONS); else one of its own. */
 		headingId?: string;
-		headingLevel?: 3 | 4;
+		headingLevel?: 3 | 4 | 5;
 		/** 'run': a stored run; 'form': the unsaved Settings form. */
 		context?: 'run' | 'form';
 		/** The CHIRPS series' product and version now (the run's, or the project's); undefined when not known. */
@@ -271,8 +271,14 @@
 		margin: 0.25rem 0 0.75rem;
 	}
 	h3,
-	h4 {
+	h4,
+	h5 {
 		margin: 0 0 0.35rem;
+	}
+	/* One level deeper on the Calibration page (issue #586 round 3), at an h3's size. */
+	h4,
+	h5 {
+		font-size: 0.95rem;
 	}
 	.factor-set {
 		display: block;

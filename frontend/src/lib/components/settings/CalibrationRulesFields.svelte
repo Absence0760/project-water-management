@@ -78,7 +78,7 @@
      above the fields, not under ~25 of them; the fields follow in four labelled groups, the search folded into its
      values (ui-playbook.md § 2, "A form's state and actions in its head"). Saving is the page's save bar. -->
 <fieldset class="plain rules" aria-describedby="{uid}-hint" data-testid="calibration-rules">
-	<legend><h3 class="title">Calibration rules <HelpTip key="settings.calibrationRules" label="About the calibration rules" /></h3></legend>
+	<legend><h4 class="title">Calibration rules <HelpTip key="settings.calibrationRules" label="About the calibration rules" /></h4></legend>
 	<p class="hint explain" id="{uid}-hint">
 		Automated calibration makes its choices by these rules, saved before any fit is seen: which water years to leave out, which fits to try and which
 		one to keep. It only runs on the saved rules, and saving a change raises the revision.
@@ -273,8 +273,10 @@
 	.rules {
 		container: cal-rules / inline-size;
 	}
+	/* A card's heading under Fit the parameters (an h3 on the Calibration page, issue #586 round 3): an h4 at an h3's size. */
 	.title {
 		margin: 0;
+		font-size: 0.95rem;
 	}
 	legend {
 		font-weight: 500;
