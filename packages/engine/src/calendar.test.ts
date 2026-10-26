@@ -68,4 +68,11 @@ describe('dayText (engine 1.99.0, issue #586)', () => {
 	it('returns anything that isn’t a calendar day unchanged', () => {
 		for (const s of ['', '2020-13-01', '2020-10', '2020-10-06T00:00:00Z', 'WY 2020/21']) expect(dayText(s)).toBe(s);
 	});
+
+	it('checks the day against its month, leap years by the Gregorian rule', () => {
+		expect(dayText('2020-02-29')).toBe('29 Feb 2020');
+		expect(dayText('2000-02-29')).toBe('29 Feb 2000');
+		expect(dayText('1899-03-01')).toBe('1 Mar 1899');
+		for (const s of ['2021-02-29', '1900-02-29', '2020-01-00', '2020-01-32', '2020-04-31']) expect(dayText(s)).toBe(s);
+	});
 });

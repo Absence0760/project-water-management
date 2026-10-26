@@ -7,7 +7,8 @@
 // without the warning carrying anything but its words; it also finds the names
 // runs made before engine 1.98.0 used ("Settings → Calibration record", "The
 // Plausibility checks panel"), so their warnings link too, to the panel's
-// place now. Words only: which page and anchor a place is lives in the app.
+// place now. Words only: which page and anchor a place is lives in the app. The
+// one value import is quality.ts's seriesCheckInCurrentWords (engine 1.99.0 day-first dates).
 import { seriesCheckInCurrentWords } from './quality';
 
 /** Each place a warning names: the page it is on and the panel's heading there. */
