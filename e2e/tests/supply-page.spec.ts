@@ -344,6 +344,25 @@ test('the run follows run= and the header picker; Runs & results links here for 
 	await expect(page.getByTestId('supply-summary')).toContainText('run “Latest”');
 });
 
+test('a fresh load of a link to a table lands on it with the focus on its heading (WCAG 2.4.3, issue #586 R4-F)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedSupplyProject(page.request, 'Supply fresh link');
+	const run = await createRun(page.request, project.id, 'Baseline');
+	// A later run too, so the link's run= isn't the one the page would show by itself.
+	await createRun(page.request, project.id, 'Second');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "today" on the run's own day (support/clock.ts)
+	// #res-assurance left the focus on the page's body; #res-curtailment didn't.
+	for (const anchor of ['res-assurance', 'res-curtailment', 'res-farms']) {
+		await page.goto(`/projects/${project.id}?tab=overview`);
+		await page.goto(`/projects/${project.id}?tab=supply&run=${run}#${anchor}`);
+		const heading = page.locator(`#${anchor}`).getByRole('heading').first();
+		await expect(heading).toBeFocused();
+		await expect(heading).toBeInViewport();
+	}
+	// The run picker says when each run was made as Calibration's does, not year first (issue #586 R4-F).
+	await expect(page.getByRole('combobox', { name: 'Run shown' }).locator(`option[value="${run}"]`)).toHaveText(/^Baseline · today \d{2}:\d{2} · \d{4}(–\d{4})?$/);
+});
+
 test('empty states: no run yet (owner and viewer), and no hydrological units in the model', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedSupplyProject(page.request, 'Supply empty');

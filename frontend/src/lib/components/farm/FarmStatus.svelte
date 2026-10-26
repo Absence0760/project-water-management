@@ -8,6 +8,7 @@
 	import { t } from '#lib/i18n/locale.svelte.js';
 	import { contactText, stateText, stillFailing } from './cards';
 	import { farmHref } from './load';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	let {
 		kind,
@@ -35,13 +36,22 @@
 		projectId?: string | null;
 		farms?: { nodeId: string; name: string }[];
 	} = $props();
+
+	// Try again takes the error (and itself) off the page for the loading skeleton: the focus follows it there,
+	// to the new Try again if it fails again, and to the page's heading once loaded (followRetry).
+	function onretry(e: MouseEvent) {
+		const button = e.currentTarget as HTMLElement;
+		const main = button.closest('main');
+		followRetry(button, { landing: () => main?.querySelector<HTMLElement>('h1') });
+		retry?.();
+	}
 </script>
 
 {#if kind === 'error'}
 	<div class="error" role="alert">
 		<h1>{title ?? stateText('errorTitle')}</h1>
 		<p>{stateText('errorText')}</p>
-		{#if retry}<button type="button" class="btn btn-primary" onclick={retry}>{t('Try again')}</button>{/if}
+		{#if retry}<button type="button" class="btn btn-primary" data-retry onclick={onretry}>{t('Try again')}</button>{/if}
 		{#if attempts > 1}<p>{stillFailing(offline, wuaName)}</p>{/if}
 	</div>
 {:else if kind === 'removed'}

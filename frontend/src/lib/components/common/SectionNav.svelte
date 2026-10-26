@@ -17,8 +17,8 @@
 	(`railSide="right"`: on the right, beside a page's own left column, Runs &
 	results' runs list) instead, every group's name shown as a heading over its
 	links, and the arrow keys move between its links; narrower it is the bar
-	above. Each link says its panel's heading (`label`); on the bar a section may
-	say a shorter `bar` name, to keep the bar to two rows (issue #462). A group
+	above. Each link says its panel's heading (`label`), on the bar too (issue
+	#586 D4); a section's shorter `bar` name is legacy, used by no page now. A group
 	with no sections draws nothing, and with none at all the menu draws nothing
 	but the content (a page before its results load). `find`
 	adds a box that narrows the menu to the sections and the settings inside

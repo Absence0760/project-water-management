@@ -2,11 +2,11 @@
 // wider its links flow across at most two rows (groups may break across them; as whole blocks, Runs &
 // results took three rows at 1280 px), and what doesn't fit goes into a More menu at the end of the bar.
 // From a 1440 px window it is a side index instead, every group named and every link named as its panel's
-// heading (issue #462; the bar keeps shorter names). It is on Model settings, Runs & results,
-// EWR, Hydrological units and Data. Synthetic data.
+// heading (issue #462), and the bar says the same words (issue #586 D4, R4-F). It is on Model settings,
+// Runs & results, EWR, Hydrological units, Data, Compare runs and Project. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
 import { seedWhatIfs } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { layoutSettled } from '../support/reflow.ts';
@@ -41,6 +41,18 @@ const SETTINGS_RAIL: [string | null, string[]][] = [
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automatic runs', ['Automatic runs']]
+];
+/** EWR's panels, each by its heading (river/river.ts riverNavGroups): on the bar and in the side index alike. */
+const EWR_LINKS = [
+	'Flow vs reserve',
+	'Days below the reserve, each water year',
+	'Reserve rules met, by month',
+	'Days below the EWR, by month',
+	'Water account',
+	'Uncertainty bands',
+	'Sensitivity runs',
+	'Outcome matrix',
+	'Seasonal outlook'
 ];
 const moreButton = (menu: Locator) => menu.getByRole('button', { name: /^More sections/ });
 
@@ -288,9 +300,10 @@ test('EWR has the menu: every panel by its heading, a jump that lands, and a loa
 	await openRiver(page, id);
 	const menu = page.getByRole('navigation', { name: 'EWR sections' });
 	// On the bar: findings first, the water account straight after them, the run-it-yourself tools last; Reserve rules
-	// met is listed without a rule table too, as its panel then says what it needs (issue #465). Shorter names there.
-	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
-	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
+	// met is listed without a rule table too, as its panel then says what it needs (issue #465). Each link says its
+	// panel's heading word for word, as the side index does (issue #586 R4-F), and they still fit two rows at 1280.
+	await expect(menu.getByRole('link')).toHaveText(EWR_LINKS);
+	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'Seasonal outlook']);
 	// Its group names would take it to another row, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
 	await expect(moreButton(menu)).toHaveCount(0);
@@ -301,7 +314,7 @@ test('EWR has the menu: every panel by its heading, a jump that lands, and a loa
 	await expectRail(
 		menu,
 		[
-			['The reserve', ['Flow vs reserve', 'Days below the reserve, each water year', 'Reserve rules met, by month', 'Days below the EWR, by month']],
+			['The reserve', EWR_LINKS.slice(0, 4)],
 			['Water balance', ['Water account']],
 			['How sure, and what if', ['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'Seasonal outlook']]
 		],
@@ -334,7 +347,8 @@ test('Hydrological units has the menu: the unit detail and each table, with a ju
 	await page.setViewportSize({ width: 1280, height: 960 });
 	await openSupply(page, project.id);
 	const menu = page.getByRole('navigation', { name: 'Hydrological units sections' });
-	await expect(menu.getByRole('link')).toHaveText(['Unit detail', 'Hydrological unit results', 'Curtailment', 'Assurance of supply']);
+	// Each link says its panel's heading word for word (issue #586 R4-F); they still fit one row at 1280.
+	await expect(menu.getByRole('link')).toHaveText(['Hydrological unit detail', 'Hydrological unit results', 'Curtailment targets', 'Assurance of supply']);
 	expect(await barRows(menu)).toBe(1);
 	// The unit detail's one link needs no group name (issue #467).
 	await expectNamedGroups(menu, ['Tables for this run']);
@@ -361,9 +375,9 @@ test('Hydrological units has the menu: the unit detail and each table, with a ju
 	await expect(menu.getByRole('link', { name: 'Assurance of supply' })).toHaveAttribute('aria-current', 'location');
 
 	await page.setViewportSize({ width: 390, height: 844 });
-	await menu.getByRole('link', { name: 'Curtailment' }).click();
+	await menu.getByRole('link', { name: 'Curtailment targets' }).click();
 	await expect(page.locator('#res-curtailment')).toBeInViewport();
-	await expect(menu.getByRole('link', { name: 'Curtailment' })).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Curtailment targets' })).toBeInViewport();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
@@ -403,6 +417,55 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 		page.locator('#data-series')
 	);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+/** Every Data panel, each by its heading (series/sections.ts dataNavGroups): on the bar and in the side index alike. */
+const DATA_ALL: [string, string[]][] = [
+	['Series', ['Input time series', 'Series chart', 'Data feeds']],
+	['Checks', ['Gauge vs logger agreement', 'Double mass: catchment rain vs CHIRPS', 'Data checks']],
+	['Reference', ['What the model uses']]
+];
+
+test('Data with every panel drawn: the bar names each by its heading and fits two rows at 1280, the index at 1440, the strip on a phone', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Menu data all');
+	// Sixteen synthetic water years (a double mass needs ten): catchment rain twice CHIRPS (a double mass), and a gauge that reads 80 % of a logger
+	// (an agreement table).
+	const start = Date.UTC(2000, 9, 1);
+	const days = (Date.UTC(2016, 9, 1) - start) / 86_400_000;
+	const chirps = Array.from({ length: days }, (_, i) => (i % 3 === 0 ? 4 : 0));
+	const logger = Array.from({ length: days }, (_, i) => 1 + (i % 7) / 10);
+	await Promise.all([
+		putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Catchment rain', unit: 'mm', startDate: '2000-10-01', values: chirps.map((v) => v * 2) }),
+		putSeries(page.request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS', unit: 'mm', startDate: '2000-10-01', values: chirps }),
+		putSeries(page.request, project.id, { kind: 'flow_logger_m3s', name: 'Logger', unit: 'm3/s', startDate: '2000-10-01', values: logger }),
+		putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge', unit: 'm3/s', startDate: '2000-10-01', values: logger.map((v) => Math.round(v * 0.8 * 1000) / 1000) })
+	]);
+	await page.setViewportSize({ width: 1280, height: 960 });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const menu = page.getByRole('navigation', { name: 'Data sections' });
+	const all = DATA_ALL.flatMap(([, links]) => links);
+	// Word for word as the side index (issue #586 R4-M), with every group named, in two rows and no More.
+	await expect(menu.getByRole('link')).toHaveText(all);
+	await expectNamedGroups(menu, ['Series', 'Checks', 'Reference']);
+	expect(await barRows(menu)).toBeLessThanOrEqual(2);
+	await expect(moreButton(menu)).toHaveCount(0);
+	await menu.getByRole('link', { name: 'Double mass: catchment rain vs CHIRPS' }).click();
+	await expect(page).toHaveURL(/#data-double-mass$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Double mass: catchment rain vs CHIRPS' })).toBeInViewport();
+	await expectNoViolations(page);
+
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await expectRail(menu, DATA_ALL, page.locator('#data-series'));
+
+	// A phone: the same words on a strip that scrolls inside itself, the page never sideways.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(menu.getByRole('link')).toHaveText(all);
+	await menu.getByRole('link', { name: 'Gauge vs logger agreement' }).click();
+	await expect(page.locator('#data-agreement')).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Gauge vs logger agreement' })).toBeInViewport();
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	await expectNoViolations(page);
 });
 
 test('on a 320 px phone the Data strip scrolls sideways inside itself, and every link Tab reaches shows whole (issue #586)', async ({ page, owner }) => {
@@ -465,6 +528,8 @@ test('Compare runs has the menu: every panel drawn, by its heading, a side index
 	const onBar = menu.locator('.groups').getByRole('link');
 	const kept = await onBar.count();
 	expect((await onBar.evaluateAll((els) => els.map((el) => el.getAttribute('href'))))).toEqual(drawn.slice(0, kept).map((x) => x.href));
+	// Each says its panel's heading word for word, as the side index does (issue #586 R4-F).
+	await expect(onBar).toHaveText(drawn.slice(0, kept).map((x) => x.heading));
 	expect(await barRows(menu)).toBeLessThanOrEqual(2);
 	await expectEvenGaps(menu);
 

@@ -11,6 +11,8 @@
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { cached } from './cache';
 	import EmailText from '#lib/components/common/EmailText.svelte';
+	import { fmtNum } from '#lib/format/number.js';
+	import { byName, foldRows, PEOPLE_SHOWN } from './project';
 
 	let {
 		projectId,
@@ -35,7 +37,11 @@
 	const hadCache = !!memo.members;
 	let members = $state<Member[]>(memo.members ?? []);
 	// Farmers are listed, with their farms, in FarmersPanel.
-	const shown = $derived(members.filter((m) => m.role !== 'farmer'));
+	// By role as the server groups them (owners first), then by name as a reader counts (issue #586 R4-F).
+	const shown = $derived(byName(members.filter((m) => m.role !== 'farmer'), (m) => m.role));
+	// The first few, the reader's own row always among them, until "Show all N members" (issue #586 R4-F).
+	let allMembers = $state(false);
+	const fold = $derived(foldRows(shown, allMembers, PEOPLE_SHOWN, (m) => m.userId === currentUserId));
 	let loading = $state(!hadCache);
 	$effect(() => {
 		if (!loading && !loadError) memo.members = $state.snapshot(members);
@@ -146,7 +152,7 @@
 		try {
 			await api.members.remove(projectId, m.userId);
 			if (self) return onLeftProject();
-			const at = shown.findIndex((x) => x.userId === m.userId);
+			const at = fold.shown.findIndex((x) => x.userId === m.userId);
 			members = members.filter((x) => x.userId !== m.userId);
 			// Its row, and the Remove that had the focus, have gone: the member now in its place takes it, on their role.
 			await focusAfterRemove(at, 'select[aria-label^="Role for "]', 'mem-email');
@@ -186,7 +192,7 @@
 		     rows are grids there, so the table keeps its roles explicitly (Safari drops them otherwise). -->
 		<div class="table-wrap members-wrap">
 			<!-- svelte-ignore a11y_no_redundant_roles -->
-			<table class="data member-rows" role="table" aria-labelledby="members-h-t">
+			<table class="data member-rows" id="members-table" role="table" aria-labelledby="members-h-t">
 				<thead role="rowgroup">
 					<tr role="row">
 						<th scope="col" role="columnheader">Name</th>
@@ -196,14 +202,14 @@
 					</tr>
 				</thead>
 				<tbody role="rowgroup">
-					{#each shown as m (m.userId)}
+					{#each fold.shown as m (m.userId)}
 						{@const canAct = isOwner || m.userId === currentUserId}
 						<tr role="row" class:extras={m.role === 'contributor' || !!m.party || m.role === 'editor' || m.role === 'owner'}>
 							<th scope="row" role="rowheader">
 								{m.displayName}{#if m.userId === currentUserId}&nbsp;<span class="muted">(you)</span>{/if}
 								<span class="sub-email"><EmailText email={m.email} breakAfter="." /></span>
 							</th>
-							<td role="cell" class="email"><EmailText email={m.email} /></td>
+							<td role="cell" class="email"><EmailText email={m.email} breakAfter="." /></td>
 							<td role="cell" class="role">
 								{#if isOwner}
 									<select
@@ -274,6 +280,11 @@
 				</tbody>
 			</table>
 		</div>
+		{#if allMembers || fold.hidden}
+			<button type="button" class="btn btn-sm more" aria-expanded={allMembers} aria-controls="members-table" onclick={() => (allMembers = !allMembers)}>
+				{allMembers ? `Show the first ${PEOPLE_SHOWN} members` : `Show all ${fmtNum(shown.length)} members`}
+			</button>
+		{/if}
 	</LoadState>
 	{/if}
 
@@ -305,6 +316,14 @@
 </section>
 
 <style>
+	/* The page is the one scroll: the table grows with its rows (the first few until Show all) rather than
+	   scrolling inside its card at 70vh (issue #586 R4-F). */
+	.members-wrap {
+		max-height: none;
+	}
+	.more {
+		margin-top: 0.5rem;
+	}
 	/* An email, a role and Add: a form's width, not the one wide column's (issue #586 R4-B). */
 	.add {
 		margin-top: 1rem;
@@ -384,9 +403,6 @@
 		}
 		/* Each member a grid of two lines: the name (the email under it) beside the role, then the row's action
 		   under both (issue #521 round 5: Leave read "Lea" and Remove "Remo" at 390 px, the role select 25 px tall). */
-		.members-wrap {
-			max-height: none;
-		}
 		.member-rows,
 		.member-rows tbody,
 		.member-rows thead {

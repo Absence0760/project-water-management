@@ -83,6 +83,8 @@
 	import ServerPdf from '#lib/components/report/ServerPdf.svelte';
 	// Evidence mode's shell is small; its report is a chunk of its own (EvidencePage loads it).
 	import EvidencePage from '#lib/components/report/evidence/EvidencePage.svelte';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
@@ -302,7 +304,17 @@
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The report could not be loaded: {error}
-			<button type="button" class="btn btn-sm" onclick={() => load(projectId, runParam, againstParam)}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// Its alert leaves the page: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new
+					// Try again or the page's title.
+					followRetry(e.currentTarget, { landing: () => pageStart() });
+					void load(projectId, runParam, againstParam);
+				}}>Try again</button
+			>
 		</div>
 	{:else if status === 'forbidden'}
 		<div class="alert alert-info" role="status">
@@ -330,7 +342,8 @@
 			{#if run && (!againstParam || impact)}
 				<ServerPdf {projectId} runId={run!.id} against={againstParam} />
 			{/if}
-			<p class="muted small" role="status">
+			<!-- data-loading until ready: a Try again's focus waits here (followRetry). -->
+			<p class="muted small" role="status" data-loading={!ready || undefined}>
 				{#if ready}
 					Opens your browser’s print dialog: choose <strong>Save as PDF</strong> as the destination. The report prints on A4, in the light
 					theme.

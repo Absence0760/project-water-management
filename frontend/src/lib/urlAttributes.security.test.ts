@@ -69,6 +69,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	evidenceRunHref: { why: 'EvidencePanel: a literal "?tab=runs&run=" + encodeURIComponent(the current evidence run id from the API) + "#res-evidence", or null (issue #521)', in: ['lib/components/runs/EvidencePanel.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
+	calibrationHref: { why: 'BUILDER: "?tab=calibration" + "&run=" + encoded run id (or none) + "#" + a fixed id (calibration/links.ts); SettingsTab passes a literal set- id', in: ['lib/components/settings/SettingsTab.svelte'] },
+	'status.link.href': { why: 'CalibrationTab: calibration/status.ts calibrationStatus, whose link is one of the literals "#cal-fit", "#res-calibration" or "?tab=series", or null (#586 R4-A)', in: ['lib/components/calibration/CalibrationTab.svelte'] },
 	stationHref: { why: 'BUILDER: "?tab=series&series=" + encoded series id + "#data-chart" (settings/unitRain.ts, issue #553)', in: ['lib/components/settings/UnitRainFields.svelte', 'lib/components/settings/FlowGenerationUnits.svelte'] },
 	packHref: {
 		why: 'BUILDER: "<base>/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',

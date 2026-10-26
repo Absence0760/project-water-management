@@ -382,6 +382,14 @@ section it belongs to, with the example that taught it.
   (`dam-proposals.spec.ts`). Land cover's tables fit as columns; the
   evaporation table's twelve months keep their sideways scroll with the
   sticky row label (a variant that can never fit).
+  A new read-only table takes app.css's `.table-stack` rather than another
+  copy: wrap its `.table-wrap` in `<div class="table-stack">` and give each
+  `td` a `data-label`; below 50rem of wrapper the rows are blocks, the cells
+  as many to a line as fit at 6rem (three at 390 px: two to a line made
+  Calibration's twelve-month EWR breakdown ~1,700 px tall). Calibration's
+  EWR test (nine columns, 299 px past its 323 px box) and plausibility
+  tables use it (#586 R4-K, `calibration-tables-phone.spec.ts`, which reads
+  every table box's `scrollWidth`, not just the page's).
 - **In a narrow column, a row's actions get their own line.** The team
   page's Members panel (a 20–24rem side column) had Name · Role · actions,
   and the third column clipped "Reset two-step" to "Reset two-" and
@@ -714,9 +722,13 @@ section it belongs to, with the example that taught it.
   (`app.css`): the summary is one line naming the group and its current
   values ("Search: Wide bounds · 1 500 runs × 5 starts · seed 1", from a pure
   helper such as `calibration/fit.ts` `searchSummary`, unit-tested), with
-  **Change** at its end (`aria-hidden`, since the summary already announces
-  expanded/collapsed; **Hide** while open; **Show** for a viewer, who can
+  **Change** at its end (**Hide** while open; **Show** for a viewer, who can
   change nothing inside: pass `readonly`), and the fields open in place. The
+  visible word ends the summary's accessible name ("Default limits: … Change
+  the limits"), so a voice-control user who says "click Change" reaches it;
+  it was `aria-hidden` until issue #586 R4-I (WCAG 2.5.3 Label in Name;
+  `586-a11y-fold-name.spec.ts`). Never hide a visible action word from the
+  name of the control it sits in. The
   values shrink and wrap in their own box (`.fold-line`), so a long line
   keeps its name and action on its row instead of dropping under the name
   and orphaning the action (issue #586; `expectFoldOnOneRow`). The
@@ -915,8 +927,10 @@ section it belongs to, with the example that taught it.
   duration", "Notes & evidence" standing for three panels) makes the bar and
   the page read differently, so when a bar can't fit two rows, the page has
   too many panels for one menu, and the fix is moving panels (as #586 moved
-  Model quality to Calibration), not shortening names. EWR and Compare runs
-  still carry `bar` names from before the rule. Two traps on the way: River's
+  Model quality to Calibration), not shortening names. EWR, Hydrological
+  units and Compare runs dropped theirs too (R4-F), and Data (R4-M: "Gauge vs
+  logger agreement", "Double mass: catchment rain vs CHIRPS"); their full
+  headings still fit two rows at 1280 px. Two traps on the way: River's
   chart-beside-bars switch was a window media query (1100 px), which beside
   a 13rem rail sees a column 13rem wider than it is, so it became a
   container query on the page's own column; and a page that only had a
@@ -1757,7 +1771,22 @@ Interaction details that bit:
   the loading line while the retry loads, on the new Try again if it failed
   again, and on the panel's heading once it has loaded
   (`common/loadState.ts` `retryTarget`; `586-a11y-load-state.spec.ts`).
-  A panel with its own Try again should hand the focus on the same way.
+  A panel with its own Try again hands the focus on the same way: its click
+  calls `followRetry` (`common/loadState.ts`) before the retry starts, the
+  button carries `data-retry` and the loading line `data-loading`, and the
+  scope it watches (the alert's parent unless given) stays on the page
+  through the retry (issue #586 R4-I; `586-a11y-retry-focus.spec.ts`). A
+  page's own Try again (the whole page failed to load) passes
+  `landing: () => pageStart()` (`lib/a11y/focusPage.ts`), so it lands on the
+  page's `<h1>`, or `#main` when the answer has none; where the alert's
+  parent leaves the page with it (`/share`'s card, the root layout's
+  `<main>`), it passes a `scope` that stays (issue #586 R4-L;
+  `586-a11y-retry-focus-pages.spec.ts`). Only a line that goes once the
+  retry has answered is `data-loading`: a line that can stay for minutes
+  (an evidence pack's "printing") is not, or every retry in its scope would
+  wait on it. A Try again that can't act while a load is out is
+  `aria-disabled`, never `disabled`. One helper, not one per screen: a new
+  Try again calls `followRetry`.
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling

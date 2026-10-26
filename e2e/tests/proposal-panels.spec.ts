@@ -70,7 +70,7 @@ test('evaporation: a failed load says why, and Try again loads the proposal', as
 	const project = await seedRunnableProject(page.request, 'Panel frame evaporation');
 	await feature(page, project.id, { kind: 'catchment_boundary', name: 'Catchment', geometry: { type: 'Polygon', coordinates: [box(21.26, -33.74, 0.18)] } });
 	await failOnce(page, /\/evaporation-proposals(\?|$)/, 'Test outage');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration#set-evaporation`);
 	const panel = page.getByTestId('evaporation-proposal');
 	await expect(panel.getByTestId('evaporation-body')).toHaveAttribute('data-ready', 'true');
 	await expect(panel.getByRole('alert')).toHaveText(/^The evaporation summary couldn’t be loaded \(Test outage\)\.\s*Try again$/);

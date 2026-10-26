@@ -47,8 +47,8 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	await expect(nat.getByRole('row', { name: /^2019\/20 366 days (passes|fails|not judged) / })).toBeVisible();
 	await expect(nat.getByRole('row', { name: /^2021\/22 365 days (passes|fails) / })).toBeVisible();
 	await expect(nat.getByRole('columnheader')).toHaveText([/^Water year/, 'Result', /^Natural/, /^Gap/, /^Observed/, /^Use/, /^Land cover/]);
-	// Paired figures share a column: the whole table fits beside the side index at 1440 and 1280, and on a phone,
-	// where it may still scroll, the verdict column is in view.
+	// Paired figures share a column: the whole table fits beside the side index at 1440 and 1280, with the verdict in
+	// view; on a phone each year is a block (table-stack, #586 R4-K), so the box doesn't scroll sideways either.
 	const verdictInView = () =>
 		nat.evaluate((t) => {
 			const box = t.closest('.table-wrap')!.getBoundingClientRect();
@@ -60,7 +60,7 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 		await expect.poll(verdictInView, { message: `${width}` }).toEqual({ fits: true, verdict: true });
 	}
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect.poll(async () => (await verdictInView()).verdict, { message: '390' }).toBe(true);
+	await expect.poll(async () => (await verdictInView()).fits, { message: '390' }).toBe(true);
 	await page.setViewportSize({ width: 1280, height: 720 });
 
 	// 2. The blank third year ran on CHIRPS: one fallback-rain year, two good-rain years.

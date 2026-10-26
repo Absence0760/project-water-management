@@ -35,7 +35,8 @@
 </script>
 
 {#snippet breakdown(rows: AgreementRow[], caption: string, first: string)}
-	<div class="table-wrap">
+	<!-- table-stack (app.css): on a phone each row is a block, its cells under their data-labels, not nine columns sideways. -->
+	<div class="table-stack"><div class="table-wrap">
 		<table class="data compact">
 			<caption class="visually-hidden">{caption}</caption>
 			<thead>
@@ -55,19 +56,19 @@
 				{#each rows as r (r.key)}
 					<tr class:empty={r.days === 0}>
 						<th scope="row">{r.label}</th>
-						<td class="num">{fmtNum(r.days)}</td>
-						<td class="num">{r.days ? fmtNum(r.bothBelow) : '–'}</td>
-						<td class="num">{r.days ? fmtNum(r.falseAlarm) : '–'}</td>
-						<td class="num">{r.days ? fmtNum(r.miss) : '–'}</td>
-						<td class="num">{r.days ? fmtNum(r.bothAbove) : '–'}</td>
-						<td class="num">{fmtRatio(r.hitRate)}</td>
-						<td class="num">{fmtRatio(r.falseAlarmRatio)}</td>
-						<td class="num">{fmtRatio(r.frequencyBias)}</td>
+						<td class="num" data-label="Days">{fmtNum(r.days)}</td>
+						<td class="num" data-label="Both below">{r.days ? fmtNum(r.bothBelow) : '–'}</td>
+						<td class="num" data-label="False alarm">{r.days ? fmtNum(r.falseAlarm) : '–'}</td>
+						<td class="num" data-label="Miss">{r.days ? fmtNum(r.miss) : '–'}</td>
+						<td class="num" data-label="Both above">{r.days ? fmtNum(r.bothAbove) : '–'}</td>
+						<td class="num" data-label="Hit rate">{fmtRatio(r.hitRate)}</td>
+						<td class="num" data-label="False-alarm ratio">{fmtRatio(r.falseAlarmRatio)}</td>
+						<td class="num" data-label="Bias">{fmtRatio(r.frequencyBias)}</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
-	</div>
+	</div></div>
 {/snippet}
 
 <section class="ewr-agreement" aria-labelledby="{uid}-h">
@@ -84,7 +85,7 @@
 			below the EWR when the observed flow was? {#if site}The gauge's own record measures the river where this EWR site's test runs, against
 				its own requirement, so it shows whether the model's EWR failures there are real.{:else}The observed record measures the same river the
 				outlet EWR test uses, so it shows whether the model's EWR failures are real.{/if} Every observed day counts, including those the parameters were fitted
-			to.{#if a.excludedDays} {fmtNum(a.excludedDays)} excluded days are left out.{/if}
+			to.{#if a.excludedDays}{' '}{fmtNum(a.excludedDays)} excluded days are left out.{/if}
 		</p>
 		<p class="verdict"><strong>{biasVerdict(o)}</strong></p>
 
@@ -106,7 +107,7 @@
 			</div>
 		</dl>
 
-		<div class="table-wrap">
+		<div class="table-stack"><div class="table-wrap">
 			<table class="data compact matrix">
 				<caption>Observed days by EWR result, model against observed</caption>
 				<thead>
@@ -120,25 +121,25 @@
 				<tbody>
 					<tr>
 						<th scope="row">Model below EWR</th>
-						<td class="num">{fmtNum(o.bothBelow)} <span class="tag">both below</span></td>
-						<td class="num">{fmtNum(o.falseAlarm)} <span class="tag">false alarm</span></td>
-						<td class="num">{fmtNum(o.bothBelow + o.falseAlarm)}</td>
+						<td class="num" data-label="Observed below EWR">{fmtNum(o.bothBelow)} <span class="tag">both below</span></td>
+						<td class="num" data-label="Observed at or above">{fmtNum(o.falseAlarm)} <span class="tag">false alarm</span></td>
+						<td class="num" data-label="Total">{fmtNum(o.bothBelow + o.falseAlarm)}</td>
 					</tr>
 					<tr>
 						<th scope="row">Model at or above</th>
-						<td class="num">{fmtNum(o.miss)} <span class="tag">miss</span></td>
-						<td class="num">{fmtNum(o.bothAbove)} <span class="tag">both above</span></td>
-						<td class="num">{fmtNum(o.miss + o.bothAbove)}</td>
+						<td class="num" data-label="Observed below EWR">{fmtNum(o.miss)} <span class="tag">miss</span></td>
+						<td class="num" data-label="Observed at or above">{fmtNum(o.bothAbove)} <span class="tag">both above</span></td>
+						<td class="num" data-label="Total">{fmtNum(o.miss + o.bothAbove)}</td>
 					</tr>
 					<tr>
 						<th scope="row">Total</th>
-						<td class="num">{fmtNum(o.bothBelow + o.miss)}</td>
-						<td class="num">{fmtNum(o.falseAlarm + o.bothAbove)}</td>
-						<td class="num">{fmtNum(o.days)}</td>
+						<td class="num" data-label="Observed below EWR">{fmtNum(o.bothBelow + o.miss)}</td>
+						<td class="num" data-label="Observed at or above">{fmtNum(o.falseAlarm + o.bothAbove)}</td>
+						<td class="num" data-label="Total">{fmtNum(o.days)}</td>
 					</tr>
 				</tbody>
 			</table>
-		</div>
+		</div></div>
 
 		<svelte:element this={sub} class="bd-h">By month</svelte:element>
 		{@render breakdown(monthRows(a), `${title}: by month`, 'Month')}

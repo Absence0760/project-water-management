@@ -178,7 +178,7 @@ export function reserveStubText(projectHasTable: boolean, canEdit: boolean): { l
  * it answers: the findings first (the reserve, then the water account), then
  * the run-it-yourself tools (issue #465). Reserve rules met is always listed:
  * without a rule table its panel says what it needs. Each link says its
- * panel's heading; the bar says the long ones shorter (issue #462).
+ * panel's heading word for word, on the bar too (issue #586 R4-F).
  * `ruleLine`: the run stored the outlet's rule requirement, so the flow chart
  * draws it and keeps its "Flow vs reserve" name (summaryChart.ts flowHeading).
  * `headlineRuleTable`: the headline judges by a rule table (the project's
@@ -191,17 +191,17 @@ export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, da
 			label: 'The reserve',
 			sections: [
 				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine, daily) },
-				{ id: 'res-reserve-years', label: reserveYearsWords(headlineRuleTable, daily).heading, bar: 'Days below, by year' },
-				{ id: 'res-reserve', label: RESERVE_MONTHS_HEADING, bar: 'Reserve rules met' },
-				{ id: 'res-ewr-grid', label: EWR_MONTHS_HEADING, bar: 'Days below, by month' }
+				{ id: 'res-reserve-years', label: reserveYearsWords(headlineRuleTable, daily).heading },
+				{ id: 'res-reserve', label: RESERVE_MONTHS_HEADING },
+				{ id: 'res-ewr-grid', label: EWR_MONTHS_HEADING }
 			]
 		},
 		{ label: 'Water balance', sections: [{ id: 'res-water-account', label: 'Water account' }] },
 		{
 			label: 'How sure, and what if',
 			sections: [
-				{ id: 'res-uncertainty', label: 'Uncertainty bands', bar: 'Uncertainty' },
-				{ id: 'res-sensitivity', label: 'Sensitivity runs', bar: 'Sensitivity' },
+				{ id: 'res-uncertainty', label: 'Uncertainty bands' },
+				{ id: 'res-sensitivity', label: 'Sensitivity runs' },
 				{ id: 'res-outcomes', label: 'Outcome matrix' },
 				{ id: 'res-outlook', label: 'Seasonal outlook' }
 			]

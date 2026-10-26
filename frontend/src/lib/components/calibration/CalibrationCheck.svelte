@@ -21,7 +21,7 @@
 	import { observedLabels, observedSources } from '#lib/components/runs/flowSeries.js';
 	import { toDisplayUnit } from '#lib/components/runs/results.js';
 	import { fmtNum } from '#lib/format/number.js';
-	import { RetryFocus } from './retryFocus';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { allKeys, beforeForecastFlows, checkGauges, checkKeys, checkSeries, sumDaily, type CheckFlows, type CheckNode, type SeriesKey } from './calibrationCheck';
 
 	let {
@@ -93,17 +93,6 @@
 		};
 	});
 
-	// Try again takes its alert out of the page: the focus follows the retry (retryFocus.ts, WCAG 2.4.3), onto the
-	// loading line, then the new Try again or this check's heading.
-	const retryFocus = new RetryFocus();
-	let statusEl = $state<HTMLElement>();
-	let retryEl = $state<HTMLElement>();
-	$effect(() => {
-		const state = error ? 'failed' : loaded ? 'loaded' : 'loading';
-		const [st, bt] = [statusEl, retryEl];
-		retryFocus.follow(state, st, bt);
-	});
-
 	const conv = (d: DailySeries) => toDisplayUnit(d.values, 'm³/day', flowUnit).values;
 	const charts = $derived(
 		plans.map(({ gauge, keys }) => {
@@ -136,15 +125,17 @@
 				<button
 					type="button"
 					class="btn btn-sm"
-					bind:this={retryEl}
+					data-retry
 					onclick={(e) => {
-						retryFocus.press(e.currentTarget);
+						// Its alert leaves the page: the focus follows the retry (followRetry, WCAG 2.4.3), onto the loading
+						// line, then the new Try again or this check's heading.
+						followRetry(e.currentTarget);
 						attempt++;
 					}}>Try again</button
 				>
 			</div>
 		{:else if !loaded}
-			<div class="chart-ph" role="status" tabindex="-1" bind:this={statusEl}>Loading the calibration check ({fmtNum(done)} of {fmtNum(total)} series)…</div>
+			<div class="chart-ph" role="status" data-loading>Loading the calibration check ({fmtNum(done)} of {fmtNum(total)} series)…</div>
 		{:else}
 			{#each charts as c (c.gauge ?? 'outlet')}
 				<LineChart
@@ -188,7 +179,7 @@
 		margin: 0 0 0.5rem;
 		max-width: 75ch;
 	}
-	/* Focused only by a retry (retryFocus.ts), never by Tab. */
+	/* Focused only by a retry (followRetry gives it tabindex -1), never by Tab. */
 	.chart-ph:focus {
 		outline: none;
 	}

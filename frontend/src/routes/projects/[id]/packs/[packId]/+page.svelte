@@ -61,6 +61,8 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '#lib/components/packs/pack.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	const loadReport = () => import('#lib/components/report/evidence/EvidenceReport.svelte');
 
@@ -154,6 +156,34 @@
 			renderingAgain = false;
 		}
 	}
+	// Each Try again in the pack's bar takes its alert out of the page: the focus follows (followRetry, WCAG 2.4.3).
+	// The reload's goes to "Reading the pack again…" while it reads, then to a new Try again or the bar's first control;
+	// the PDF's stays on itself while the server takes the request (aria-disabled, never disabled, which drops the focus),
+	// then goes to the line that says where the PDF is now ("printing"), or to its download once ready. That line isn't a
+	// data-loading line: it can stay for minutes, and the page's own Try again must not wait on it.
+	let rereading = $state(false);
+	async function retryReload(e: MouseEvent) {
+		followRetry(e.currentTarget as HTMLElement);
+		rereading = true;
+		try {
+			await reload();
+		} finally {
+			rereading = false;
+		}
+	}
+	function retryRender(e: MouseEvent) {
+		if (renderingAgain) return;
+		const bar = (e.currentTarget as HTMLElement).closest('.bar');
+		followRetry(e.currentTarget as HTMLElement, {
+			scope: bar,
+			landing: () => {
+				const line = bar?.querySelector<HTMLElement>('[data-testid="pack-pdf-state"]');
+				if (line && !line.hasAttribute('tabindex')) line.tabIndex = -1;
+				return line ?? bar?.querySelector<HTMLElement>('[data-testid="pack-pdf-download"]');
+			}
+		});
+		void renderAgain();
+	}
 	let rerunning = $state(false);
 	let rerunError = $state<string | null>(null);
 	/** An editor asks the server to re-run the pack again (POST …/reproduce), then reads the pack again. */
@@ -233,20 +263,32 @@
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The evidence pack could not be loaded: {error}
-			<button type="button" class="btn btn-sm" onclick={() => load(projectId, packId)}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// Its alert leaves the page: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new
+					// Try again or the page's title.
+					followRetry(e.currentTarget, { landing: () => pageStart() });
+					void load(projectId, packId);
+				}}>Try again</button
+			>
 		</div>
 	{:else if status === 'chunk-failed'}
 		<ChunkFailed what="The evidence pack" />
 	{:else if status === 'loading'}
-		<p class="muted" role="status">Loading the evidence pack…</p>
+		<p class="muted" role="status" data-loading>Loading the evidence pack…</p>
 	{/if}
 
 	{#if status === 'loaded' && detail && pack && report}
 		{#if reloadError}
 			<div class="alert alert-error no-print" role="alert" data-testid="pack-reload-error">
 				The pack changed, but reading it again failed ({reloadError}), so what shows below may be out of date.
-				<button type="button" class="btn btn-sm" onclick={reload}>Try again</button>
+				<button type="button" class="btn btn-sm" data-retry onclick={retryReload}>Try again</button>
 			</div>
+		{:else if rereading}
+			<p class="muted no-print" role="status" data-loading>Reading the pack again…</p>
 		{/if}
 		<div class="bar no-print">
 			<a href={back}>← Back</a>
@@ -295,7 +337,7 @@
 			{:else if pdf?.status === 'failed'}
 				<div class="alert alert-error" role="alert" data-testid="pack-pdf-state" data-state="failed">
 					The server couldn’t print this pack’s PDF{pdf.error ? `: ${pdf.error}` : '.'}
-					{#if canEdit}<button type="button" class="btn btn-sm" onclick={renderAgain} disabled={renderingAgain}>Try again</button>{/if}
+					{#if canEdit}<button type="button" class="btn btn-sm" data-retry onclick={retryRender} aria-disabled={renderingAgain || undefined}>Try again</button>{/if}
 					{#if renderError}<span data-testid="pack-pdf-retry-error">({renderError})</span>{/if}
 				</div>
 			{/if}

@@ -16,6 +16,8 @@
 	import { page } from '$app/state';
 	import { api, type MyInvite } from '#lib/api/index.js';
 	import SectionHeader from '#lib/components/workspace/SectionHeader.svelte';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { wordsHref } from '#lib/components/farm/load.js';
 	import { invitesChanged } from '#lib/components/auth-extras/inviteCount.svelte.js';
 	import { fmtDay } from '#lib/format/number.js';
@@ -53,6 +55,11 @@
 		}
 	}
 	onMount(load);
+	/** Try again takes its alert out of the page: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new Try again or the page's title. */
+	function retry(e: MouseEvent) {
+		followRetry(e.currentTarget as HTMLElement, { landing: () => pageStart() });
+		void load();
+	}
 
 	async function accept(inv: MyInvite) {
 		busy = inv.id;
@@ -119,9 +126,9 @@
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
 	{#if loadError}
-		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>{t('Try again')}</button></div>
+		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" data-retry onclick={retry}>{t('Try again')}</button></div>
 	{:else if invites === null}
-		<p class="muted" role="status">…</p>
+		<p class="muted" role="status" data-loading>{t('Loading…')}</p>
 	{:else if !invites.length}
 		<p class="panel empty">{t('You have no invitations waiting.')}</p>
 	{:else}

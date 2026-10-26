@@ -9,7 +9,7 @@
 	calibration/LowFlowPeriods.svelte mirrors this layout with more fields.
 -->
 <script lang="ts">
-	import { localIsoDate } from '#lib/format/number.js';
+	import { fmtDay, localIsoDate } from '#lib/format/number.js';
 	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { exclusionsError, exclusionRange, waterYearLabel, type CalibrationExclusion } from '@water-management/engine';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
@@ -104,7 +104,7 @@
 						<div class="field year">
 							<label for="{uid}-y{i}">Water year <span class="u">(starts Oct)</span></label>
 							<NumberInput id="{uid}-y{i}" min={1800} max={2200} step={1} disabled={readonly} value={x.waterYear} onchange={(v) => setYear(i, v)} aria-describedby="{uid}-y{i}-h" />
-							<span class="hint" id="{uid}-y{i}-h">WY {waterYearLabel(x.waterYear)}: {exclusionRange(x).start} – {exclusionRange(x).end}</span>
+							<span class="hint" id="{uid}-y{i}-h">WY {waterYearLabel(x.waterYear)}: <span class="day">{fmtDay(exclusionRange(x).start)}</span> – <span class="day">{fmtDay(exclusionRange(x).end)}</span></span>
 						</div>
 					{:else}
 						<div class="field">
@@ -142,6 +142,10 @@
 </div>
 
 <style>
+	/* A day never breaks inside itself ("30 / Sep 2022" on a phone). */
+	.day {
+		white-space: nowrap;
+	}
 	.excl {
 		min-width: 0;
 	}

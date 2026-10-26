@@ -50,9 +50,10 @@ export function dataNavGroups(p: DataPanels): NavGroup[] {
 		},
 		{
 			label: 'Checks',
+			// Each by its heading word for word, on the bar too (issue #586 R4-M): all seven still fit two rows at 1280 px.
 			sections: [
-				...(p.agreement ? [{ id: 'data-agreement', label: 'Gauge vs logger agreement', bar: 'Gauge vs logger' }] : []),
-				...(p.doubleMass ? [{ id: 'data-double-mass', label: 'Double mass: catchment rain vs CHIRPS', bar: 'Double mass' }] : []),
+				...(p.agreement ? [{ id: 'data-agreement', label: 'Gauge vs logger agreement' }] : []),
+				...(p.doubleMass ? [{ id: 'data-double-mass', label: 'Double mass: catchment rain vs CHIRPS' }] : []),
 				...(p.checks ? [{ id: 'data-checks', label: 'Data checks' }] : [])
 			]
 		},

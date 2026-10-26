@@ -12,6 +12,8 @@
 	import { api, ApiError } from '#lib/api/index.js';
 	import { describeReport, isPending, type ReportState, type ReportStatus, reportsApi } from '#lib/components/report/serverPdf.js';
 	import { fmtDate } from '#lib/format/number.js';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const jobId = $derived(page.params.jobId ?? '');
@@ -81,7 +83,7 @@
 	</header>
 
 	{#if phase === 'loading'}
-		<p class="muted" role="status">Loading…</p>
+		<p class="muted" role="status" data-loading>Loading…</p>
 	{:else if phase === 'not-found'}
 		<div class="alert alert-error" role="alert">
 			This report doesn't exist any more, or you don't have access to its project. PDFs are kept for 7 days.
@@ -90,7 +92,18 @@
 	{:else if phase === 'error'}
 		<div class="alert alert-error" role="alert">
 			The report could not be loaded: {error}
-			<button type="button" class="btn btn-sm" onclick={() => load(projectId, jobId)}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// Its alert leaves the page: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new
+					// Try again or the page's title.
+					followRetry(e.currentTarget, { landing: () => pageStart() });
+					phase = 'loading';
+					void load(projectId, jobId);
+				}}>Try again</button
+			>
 		</div>
 	{:else if current && jobState}
 		<section class="panel job" data-state={jobState} aria-labelledby="job-status-h">

@@ -38,6 +38,8 @@
 	import LanguageSwitch from '#lib/i18n/LanguageSwitch.svelte';
 	import { t, wordsLang } from '#lib/i18n/locale.svelte.js';
 	import { APP_SHORT_NAME } from '#lib/brand.js';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	let token = $state<string | null>(null);
 	let kind: 'scenario' | 'pack' | null = null;
@@ -139,7 +141,7 @@
 
 	<main class="share-main" class:wide={result?.state === 'ready'} data-share-state={result?.state ?? 'loading'} aria-busy={result ? undefined : 'true'}>
 		{#if !result}
-			<p class="sub" role="status">{t('Loading…')}</p>
+			<p class="sub" role="status" data-loading>{t('Loading…')}</p>
 		{:else if result.state === 'nolink' || result.state === 'dead'}
 			<section class="card dead" aria-labelledby="dead-h">
 				<h1 id="dead-h">{t('This link doesn’t open anything')}</h1>
@@ -149,7 +151,17 @@
 			<section class="card" aria-labelledby="err-h">
 				<h1 id="err-h">{kindTitle}</h1>
 				<p role="alert">{t('Couldn’t load this just now. Check your connection and try again.')}</p>
-				<button type="button" class="btn" onclick={load}>{t('Try again')}</button>
+				<!-- Its card leaves the page: the focus follows in <main> (followRetry, WCAG 2.4.3), onto the loading line, then a new
+				     Try again or the page's title. -->
+				<button
+					type="button"
+					class="btn"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget, { scope: e.currentTarget.closest('main'), landing: () => pageStart() });
+						void load();
+					}}>{t('Try again')}</button
+				>
 			</section>
 		{:else if sview}
 			<ScenarioView view={sview} token={token ?? ''} />
