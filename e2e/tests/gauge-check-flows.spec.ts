@@ -47,7 +47,7 @@ const hydrograph = (page: import('@playwright/test').Page, gauge: string) =>
 test('each gauge with its own record gets a hydrograph, an FDC and an out-of-sample check, with its Series details a click away', async ({ page, owner }) => {
 	void owner;
 	const { project, runId, sideRecordId } = await seedTwoGauges(page.request, 'Gauge checks');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-gauges`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-gauges`);
 	const section = page.locator('#res-gauges');
 	await expect(section.getByRole('heading', { level: 3, name: 'Flow at gauges in the network (checks only)' })).toBeVisible();
 	const gauges = section.getByTestId('check-gauge');
@@ -78,7 +78,7 @@ test('each gauge with its own record gets a hydrograph, an FDC and an out-of-sam
 test('the calibration site keeps its own chart and leaves the checks; a run made before says to re-run', async ({ page, owner }) => {
 	void owner;
 	const { project, runId } = await seedTwoGauges(page.request, 'Gauge checks, site', 'upper');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-gauges`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-gauges`);
 	await expect(page.getByRole('img', { name: /^Flow at Upper weir, the calibration site: simulated and observed/ })).toBeVisible();
 	const gauges = page.locator('#res-gauges').getByTestId('check-gauge');
 	await expect(gauges).toHaveCount(1);
@@ -108,7 +108,7 @@ test('many gauges fold to the first three, the rest a click away', async ({ page
 		expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${id}`, { data: { siteNodeId: w.id } })).status()).toBe(200);
 	}
 	const runId = await createRun(page.request, project.id, 'Many');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-gauges`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-gauges`);
 	const section = page.locator('#res-gauges');
 	await expect(section.getByRole('heading', { level: 4 })).toHaveText(['Weir 1', 'Weir 2', 'Weir 3']);
 	await expect(hydrograph(page, 'Weir 3').locator('canvas')).toBeVisible();

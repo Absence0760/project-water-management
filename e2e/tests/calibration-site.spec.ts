@@ -69,8 +69,9 @@ test('a fit is scored at a gauge inside the network, and its record says where',
 	// A run scores its statistics at the site too: the weir's record against the simulated flow there, charted,
 	// and the weir (an EWR site with its own record) gets its own EWR test beside the outlet's.
 	const runId = await createRun(page.request, project.id, 'At the weir');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
-	await expect(page.getByRole('heading', { level: 2, name: 'At the weir' })).toBeVisible();
+	// Model quality is on Calibration (issue #586 Round 3).
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', runId);
 	await expect(page.getByRole('img', { name: /^Flow at Middle weir, the calibration site/ }).locator('canvas')).toBeVisible();
 	await expect(page.getByTestId('calibration-compared-with')).toContainText('at the gauge “Middle weir” (the calibration site)');
 	await expect(page.getByRole('heading', { name: 'EWR test at Middle weir: model against its observed flow' })).toBeVisible();

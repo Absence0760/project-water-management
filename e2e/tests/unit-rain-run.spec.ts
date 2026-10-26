@@ -122,6 +122,9 @@ test('unit feeds fetched offline, unit MAPs and a gauge MAP give a run on each u
 	await page.getByLabel(/^Run label/).fill('Per unit');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Per unit' })).toBeVisible();
+	// Rain for each unit is in Model quality, on Calibration (issue #586 Round 3): the newest run by default.
+	await page.goto(`/projects/${id}?tab=calibration#res-unit-rain`);
+	await expect(page.getByTestId('calibration-run')).toContainText('Per unit');
 
 	const result = page.getByTestId('run-unit-rain');
 	await expect(result).toContainText(`rain gauge’s MAP ${GAUGE_MAP} mm (the gauge’s synthetic record, 1991–2020).`);

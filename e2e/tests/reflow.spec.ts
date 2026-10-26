@@ -2,7 +2,7 @@
 // page sideways. Genuinely wide content (a monthly table, the section menu)
 // scrolls inside its own box instead. Issue #38. And at 1024 px, a small laptop,
 // where the sidebar and the runs rail leave a panel much less than the window.
-import { createProject, createRun, putModel, sampleModel } from '../support/api.ts';
+import { createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, squashedChecks } from '../support/reflow.ts';
 import { seedRiverProject } from '../support/river.ts';
@@ -43,6 +43,18 @@ test.describe('320 px reflow', () => {
 		expect(await squashedChecks(page)).toEqual([]);
 	});
 
+	// How the shown run fits (issue #586 Round 3): the run picker and Model quality's charts and tables, with a run.
+	test('the Calibration tab fits the screen with a run', async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, 'Reflow calibration');
+		await createRun(page.request, project.id, 'Baseline');
+		await page.goto(`/projects/${project.id}?tab=calibration#res-plausibility`);
+		await expect(page.locator('#res-plausibility')).toBeVisible();
+		await expect(page.locator('#res-hydrograph figure.chart')).toHaveAttribute('data-ready', 'true');
+		await expectNoSidewaysScroll(page);
+		expect(await squashedChecks(page)).toEqual([]);
+	});
+
 	for (const tab of ['overview', 'network', 'crops', 'transfers', 'series', 'runs']) {
 		test(`the ${tab} tab fits the screen`, async ({ page, owner }) => {
 			void owner;
@@ -67,7 +79,9 @@ test('every tab fits a 1024 px window with a five-year run', async ({ page, owne
 	for (const tab of ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'history']) {
 		await page.goto(`/projects/${id}?tab=${tab}`);
 		await expect(page.locator(`#tab-${tab}`)).toHaveAttribute('aria-current', 'page');
-		if (tab === 'runs') await expect(page.getByRole('region', { name: /^Runoff model: GR4J/ }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+		// Model quality, the runoff panel with it, is on Calibration (issue #586 Round 3); Runs keeps the water balance.
+		if (tab === 'calibration') await expect(page.getByRole('region', { name: /^Runoff model: GR4J/ }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+		if (tab === 'runs') await expect(page.locator('#res-water-balance')).toBeVisible();
 		await expectNoSidewaysScroll(page);
 		expect(await squashedChecks(page), tab).toEqual([]);
 	}

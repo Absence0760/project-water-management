@@ -60,9 +60,9 @@ test('a flow record attached to a gauge is checked there, and the comparison sho
 	const runB = await createRun(page.request, project.id, 'Weir record fixed');
 	expect((await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series.find((x: { name: string }) => x.name === 'A weir record').siteNodeId).toBe(weir.id);
 
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runA}`);
-	await expect(page.getByRole('heading', { level: 2, name: 'Weir record too big' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility', exact: true }).click();
+	// Model quality is on Calibration (issue #586 Round 3), for the run `run=` names.
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runA}#res-plausibility`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', runA);
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
 	await expect(panel.getByRole('list', { name: 'Check results' }).getByRole('listitem').filter({ hasText: 'At gauges in the network' })).toHaveText(
 		'At gauges in the network: see below'

@@ -4,14 +4,11 @@
 // and badged "Workbook comparison": it can't be nominated, published or signed
 // off, and compares against a GR4J run. The API can't make such a run any more,
 // so those tests plant one in the database (support/db.ts plantLegacyRun).
-import type { Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { plantLegacyRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { saveSettings } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
-
-const sections = (page: Page) => page.getByRole('navigation', { name: 'Result sections' });
 
 test('GR4J is the only runoff model: no picker, its parameters save, and a run reports the runoff balance', async ({ page, owner }) => {
 	void owner;
@@ -52,7 +49,9 @@ test('GR4J is the only runoff model: no picker, its parameters save, and a run r
 	await expect(page.getByRole('heading', { level: 2, name: 'GR4J' })).toBeVisible();
 	// A new run is GR4J: no legacy badge anywhere.
 	await expect(page.getByText('Workbook comparison', { exact: true })).toHaveCount(0);
-	await expect(sections(page).getByRole('link', { name: 'Runoff model' })).toBeVisible();
+	// The runoff balance is in Model quality, on Calibration (issue #586 Round 3): the newest run by default.
+	await page.goto(`/projects/${project.id}?tab=calibration#res-runoff`);
+	await expect(page.getByTestId('calibration-run')).toContainText('GR4J');
 	const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
 	// Each parameter by its name, as Where the parameters came from writes it (#586 D10).
 	await expect(runoff.getByText('Production store capacity X1 420 mm · Routing store capacity X3 90 mm · Unit hydrograph time base X4 1.7 days')).toBeVisible();
@@ -81,10 +80,6 @@ test('an old legacy run opens read-only with a clear badge, and can’t be nomin
 	await key.getByText('What the tags mean').click();
 	await expect(key.getByRole('definition').filter({ hasText: /removed in engine 1\.0\.0.*can’t be re-run/ })).toBeVisible();
 	await expect(page.locator('.badge').filter({ hasText: 'Workbook comparison' })).toBeVisible();
-	// No stores to show; the calibration still reads.
-	await expect(sections(page).getByRole('link', { name: 'Calibration' })).toBeVisible();
-	await expect(sections(page).getByRole('link', { name: 'Runoff model' })).toHaveCount(0);
-
 	// It can't be nominated as evidence, nor published.
 	const evidence = page.getByRole('region', { name: 'Evidence', exact: true });
 	await expect(evidence.getByText('A run of the legacy runoff model (removed in engine 1.0.0) is workbook comparison only, so it can’t be nominated as evidence.')).toBeVisible();
@@ -92,6 +87,12 @@ test('an old legacy run opens read-only with a clear badge, and can’t be nomin
 	const publication = page.getByRole('region', { name: /^Publication/ });
 	await expect(publication).toContainText('so it can’t be published. Engine 1.0.0 removed that model: run the project again (a new run uses GR4J) and publish that run.');
 	await expect(publication.getByRole('button', { name: 'Publish this run' })).toHaveCount(0);
+
+	// On Calibration: no stores to show; the calibration still reads.
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${legacy}#res-calibration`);
+	await expect(page.getByRole('region', { name: 'Calibration against observed flow' })).toBeVisible();
+	await expect(page.locator('#res-ewr-agreement')).toBeAttached();
+	await expect(page.locator('#res-runoff')).toHaveCount(0);
 
 	// Its report says what it is and offers no sign-off.
 	await page.goto(`/projects/${project.id}/report?run=${legacy}`);

@@ -47,7 +47,7 @@ test('a low-flow period needs a reason and a source, leaves its high readings ou
 
 	// The synthetic record peaks at 0.35 m³/s every 9th day: 11 of those peaks fall in Oct–Dec 2021.
 	const after = await createRun(page.request, project.id, 'After');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${after}`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${after}`);
 	const hydro = page.locator('#res-hydrograph figure').first();
 	await expect(hydro).toHaveAttribute('data-ready', 'true');
 	await expect(hydro).toHaveAttribute('data-lanes', '1');

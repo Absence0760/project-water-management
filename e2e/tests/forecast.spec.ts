@@ -47,15 +47,17 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await expect(panel.getByRole('rowheader', { name: 'Lower farm' })).toBeVisible();
 	await expect(panel.getByTestId('forecast-outlet')).toContainText('The model expects');
 
-	// Every daily chart shades the forecast days, and says so in text.
+	await expectNoViolations(page, { include: '#res-forecast' });
+	const runId = new URL(page.url()).searchParams.get('run')!;
+
+	// Every daily chart shades the forecast days, and says so in text: the hydrograph, on Calibration (issue #586 Round 3).
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}`);
 	const hydro = page.locator('#res-hydrograph figure');
 	await expect(hydro).toHaveAttribute('data-ready', 'true');
 	await expect(hydro).toHaveAttribute('data-band-from', FROM);
 	await expect(hydro.getByText(`(hatched, from ${FROM})`)).toBeVisible();
 	await expect(hydro.locator('.band-key strong')).toHaveText('Forecast');
-	await expectNoViolations(page, { include: '#res-forecast' });
 	await expectNoViolations(page, { include: '#res-hydrograph' });
-	const runId = new URL(page.url()).searchParams.get('run')!;
 	// EWR vs outflow, on EWR now, shades the forecast days too.
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	await expect(page.locator('#res-ewr figure')).toHaveAttribute('data-band-from', FROM);
@@ -88,11 +90,13 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(list.getByRole('button', { name: /^Record only/ })).toHaveAttribute('aria-current', 'true');
 	await expect(page.locator('#res-h').locator('..')).toContainText('1 Oct 2021 – 28 Jan 2022');
+	await expect(page.getByTestId('forecast-panel')).toHaveCount(0);
+	const recordOnly = new URL(page.url()).searchParams.get('run')!;
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${recordOnly}`);
 	await expect(page.locator('#res-hydrograph figure')).toHaveAttribute('data-ready', 'true');
 	await expect(page.locator('#res-hydrograph figure')).not.toHaveAttribute('data-band-from');
-	await expect(page.getByTestId('forecast-panel')).toHaveCount(0);
 	// …and its report has no forecast-rain line.
-	await page.goto(`/projects/${project.id}/report?run=${new URL(page.url()).searchParams.get('run')}`);
+	await page.goto(`/projects/${project.id}/report?run=${recordOnly}`);
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 	await expect(page.getByTestId('report-forecast-note')).toHaveCount(0);
 

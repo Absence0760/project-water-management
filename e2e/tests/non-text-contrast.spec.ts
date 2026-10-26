@@ -108,7 +108,7 @@ test.describe('canvas charts', () => {
 		test.describe(`${colorScheme} theme`, () => {
 			test.use({ colorScheme });
 
-			test('Runs & results and Data: every series, lane strip and axis label is at 3:1 (text 4.5:1)', async ({ page, owner }) => {
+			test('Calibration, Runs & results and Data: every series, lane strip and axis label is at 3:1 (text 4.5:1)', async ({ page, owner }) => {
 				void owner;
 				const project = await seedRunnableProject(page.request, `Contrast canvas runs ${colorScheme}`);
 				// The record with a 20-day flat stretch (suspect by the Data checks), so a double-line strip is drawn beside the
@@ -117,12 +117,19 @@ test.describe('canvas charts', () => {
 				await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: flow });
 				await updateSettings(page.request, project.id, { runoffModel: 'gr4j', qualityFlags: { ratings: { flow_observed_m3s: { gaugedMaxM3s: 0.3, gaugedMinM3s: 0.05, source: 'Synthetic rating table' } } } });
 				const run = await createRun(page.request, project.id, 'Rated');
-				await page.goto(`/projects/${project.id}?tab=runs&run=${run}`);
+				// Model quality's charts are on Calibration (issue #586 Round 3).
+				await page.goto(`/projects/${project.id}?tab=calibration&run=${run}`);
 				const hydro = page.locator('#res-hydrograph figure.chart').first();
 				await expect(hydro).toHaveAttribute('data-lanes', '2');
 				await expect(hydro.locator('.lane-key li[data-doubled] i.doubled')).toHaveCount(1);
 				await expect(hydro.locator('.lane-key p')).toContainText('top to bottom; solid: outside the flow the record can be trusted at; double line: a doubtful reading, or not the river’s own flow');
 				await drawCharts(page, 4);
+				await expectNonTextContrast(page, { within: 'main' });
+
+				// Runs & results keeps the explorer's chart.
+				await page.goto(`/projects/${project.id}?tab=runs&run=${run}`);
+				await expect(page.locator('#res-explore figure.chart')).toBeVisible();
+				await drawCharts(page, 1);
 				await expectNonTextContrast(page, { within: 'main' });
 
 				await page.goto(`/projects/${project.id}?tab=series`);
