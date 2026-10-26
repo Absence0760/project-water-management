@@ -1738,7 +1738,7 @@ Interaction details that bit:
   the loading line while the retry loads, on the new Try again if it failed
   again, and on the panel's heading once it has loaded
   (`common/loadState.ts` `retryTarget`; `586-a11y-load-state.spec.ts`).
-  A panel with its own Try again does the same.
+  A panel with its own Try again should hand the focus on the same way.
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
