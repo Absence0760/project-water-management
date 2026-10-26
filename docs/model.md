@@ -6532,6 +6532,21 @@ reports it, as for any engine change), and auto-publish's "no new warning"
 reads an older run's warnings in today's words first
 (`warningInCurrentWords`), so the reworded ones aren't new.
 
+**Data checks write their dates day first (engine ≥ 1.99.0, issue #586).**
+The data checks' warnings (`quality.ts` `checkSeries` and the zero-rain runs)
+write each date as the app does, day first: "Observed flow: 1 negative value
+(6 Oct 2020: -0.4 m³/s)", "1 Jun 2012 to 15 Aug 2012 (76 days …)"; up to
+1.98.0 they were year first ("2020-10-06: -0.4 m³/s"). `calendar.ts`
+`dayText` writes them from the string, with no `Intl` or `Date`, so no time
+zone or locale moves a day. The check's `examples` keep their ISO `date` and
+`endDate` (data, not text). Only words changed: no figure moves, but a 1.98.0
+run made again at 1.99.0 has another results digest. `warningInCurrentWords`
+reads a 1.98.0 data check's dates day first (`seriesCheckInCurrentWords`,
+which touches only a warning that starts with a series' name), and
+auto-publish's "no new warning" masks a date in either form, whatever its
+month, so the older run's data checks aren't new. The engine's other
+warnings still write ISO dates.
+
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
 (`network/damLevel.ts` `damFigures`), so the Summary's Dams today card

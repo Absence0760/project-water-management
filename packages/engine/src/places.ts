@@ -8,6 +8,7 @@
 // runs made before engine 1.98.0 used ("Settings → Calibration record", "The
 // Plausibility checks panel"), so their warnings link too, to the panel's
 // place now. Words only: which page and anchor a place is lives in the app.
+import { seriesCheckInCurrentWords } from './quality';
 
 /** Each place a warning names: the page it is on and the panel's heading there. */
 export const WARNING_PLACES = {
@@ -87,13 +88,14 @@ const OLD_WORDS: readonly [string, string][] = [
 ];
 
 /**
- * A warning in the words engine 1.98.0 uses (issue #586 D19, D17): each place by its name now ("Settings →
- * Calibration record" → "Calibration → Calibration record"), the validation signatures as hydrological, and no
- * repository document cited. For comparing an older run's warnings with a newer one's (auto-publish's "no new
+ * A warning in the words the engine uses today: each place by its name now ("Settings → Calibration record" →
+ * "Calibration → Calibration record"), the validation signatures as hydrological, and no repository document
+ * cited (engine 1.98.0, issue #586 D19, D17); a data check's dates day first (engine 1.99.0,
+ * seriesCheckInCurrentWords). For comparing an older run's warnings with a newer one's (auto-publish's "no new
  * warning"): the same warning in the old words reads the same. A warning already in today's words is unchanged.
  */
 export function warningInCurrentWords(text: string): string {
-	let out = text.replace(/ \(docs\/model\.md §[^)]*\)/g, '');
+	let out = seriesCheckInCurrentWords(text).replace(/ \(docs\/model\.md §[^)]*\)/g, '');
 	for (const [old, now] of OLD_WORDS) out = out.split(old).join(now);
 	const marks = placesIn(out);
 	for (let i = marks.length - 1; i >= 0; i--) {

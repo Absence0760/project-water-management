@@ -43,6 +43,19 @@ export function isIsoDate(v: unknown): v is string {
 	return !Number.isNaN(ms) && new Date(ms).getUTCDate() === Number(v.slice(8, 10));
 }
 
+const DAY_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A calendar day `YYYY-MM-DD` as a person reads it, day first: "2020-10-06" → "6 Oct 2020", the app's day
+ * format (the frontend's fmtDay). Read from the string, never through Date or Intl, so no time zone or locale
+ * can change it. Anything that isn't a calendar day is returned unchanged. For warning text (engine ≥ 1.99.0).
+ */
+export function dayText(iso: string): string {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+	const month = m ? DAY_MONTHS[Number(m[2]) - 1] : undefined;
+	return m && month ? `${Number(m[3])} ${month} ${m[1]}` : iso;
+}
+
 /** UTC epoch day number → ISO `YYYY-MM-DD`. */
 export function fromEpochDay(day: number): string {
 	return new Date(day * 86_400_000).toISOString().slice(0, 10);
