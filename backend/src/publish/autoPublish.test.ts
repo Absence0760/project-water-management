@@ -16,6 +16,22 @@ describe('newWarnings', () => {
 		expect(newWarnings([], [added])).toEqual([added]);
 	});
 
+	it('reads a warning an older engine worded differently as the same warning (engine 1.98.0, issue #586 D19)', () => {
+		const at197 = [
+			'Calibration site: the gauge "Weir" has no observed flow record attached: attach one on the Data page, or pick another site in Settings → Calibration record. Until then, 3 days.',
+			'Validation signatures (provisional limits): on the 1096 scored days of the outlet, the base-flow index is 0.4. The Plausibility checks panel lists the signatures.',
+			'rain stations: the setting is not an object, so it is ignored (docs/model.md §2.4i)'
+		];
+		const at198 = [
+			'Calibration site: the gauge "Weir" has no observed flow record attached: attach one on the Data page, or pick another site in Calibration → Calibration record. Until then, 4 days.',
+			'Hydrological signatures (provisional limits): on the 1097 scored days of the outlet, the base-flow index is 0.5. Calibration → Plausibility checks lists the signatures.',
+			'rain stations: the setting is not an object, so it is ignored'
+		];
+		expect(newWarnings(at197, at198)).toEqual([]);
+		// A warning the older run didn't raise still counts, whatever its words.
+		expect(newWarnings(at197.slice(1), at198)).toEqual([at198[0]]);
+	});
+
 	it('ignores warnings that went away', () => {
 		expect(newWarnings(['one thing', 'another'], ['one thing'])).toEqual([]);
 	});

@@ -6526,7 +6526,11 @@ document: up to 1.97.0 some ended "(docs/model.md §2.4i)", which a reader of
 the app can't open. `places.test.ts` scans the engine's source for a place it
 doesn't know. The same release renamed the validation signatures' warnings
 "Hydrological signatures (provisional limits): …" (§2.10d). Only words
-changed: no result moves.
+changed: no figure moves. The warnings are part of a run's summary, so a
+1.97.0 run made again at 1.98.0 has another results digest (`reproduce:pack`
+reports it, as for any engine change), and auto-publish's "no new warning"
+reads an older run's warnings in today's words first
+(`warningInCurrentWords`), so the reworded ones aren't new.
 
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`

@@ -3,7 +3,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { placeName, placesIn, WARNING_PLACES, type WarningPlace } from './places';
+import { placeName, placesIn, WARNING_PLACES, warningInCurrentWords, type WarningPlace } from './places';
 
 const named = (text: string) => placesIn(text).map((m) => [text.slice(m.start, m.end), m.place]);
 
@@ -76,5 +76,20 @@ describe('the engine’s warnings', () => {
 				expect(/\(docs\/model\.md §[^)]*\)['"`]/.test(line), `${path}: ${line.trim()}`).toBe(false);
 			}
 		}
+	});
+});
+
+describe('warningInCurrentWords', () => {
+	it('reads a warning from before engine 1.98.0 in today’s words', () => {
+		expect(warningInCurrentWords('pick a gauge, or the outlet, in Settings → Calibration record')).toBe('pick a gauge, or the outlet, in Calibration → Calibration record');
+		expect(warningInCurrentWords('history; the Plausibility checks panel has the table.')).toBe('history; Calibration → Plausibility checks has the table.');
+		expect(warningInCurrentWords('rain stations: the setting is not an object, so it is ignored (docs/model.md §2.4i)')).toBe('rain stations: the setting is not an object, so it is ignored');
+		expect(warningInCurrentWords('Validation signatures (provisional limits): on the 3 scored days')).toBe('Hydrological signatures (provisional limits): on the 3 scored days');
+		expect(warningInCurrentWords('Set the monthly A-pan (Settings) or load a daily A-pan series')).toBe('Set the monthly A-pan (Model settings → Demand) or load a daily A-pan series');
+		expect(warningInCurrentWords('An editor declares the rule under Settings › Evidence.')).toBe('An editor declares the rule under Model settings → Evidence.');
+	});
+
+	it('leaves a warning in today’s words as it is', () => {
+		for (const w of ['Kept as Model settings → Rain gaps → Flagged rain says.', 'No place here.', `See ${placeName('fit', 'Calibration rules')}.`]) expect(warningInCurrentWords(w)).toBe(w);
 	});
 });

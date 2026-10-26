@@ -73,3 +73,32 @@ export function placesIn(text: string): PlaceMention[] {
 	}
 	return found.sort((a, b) => a.start - b.start);
 }
+
+/** Words a warning used before engine 1.98.0 for a place that has no "Settings → " name, each with its words now. */
+const OLD_WORDS: readonly [string, string][] = [
+	['Set the monthly A-pan (Settings)', `Set the monthly A-pan (${placeName('demand')})`],
+	['the high/low MAP split (Settings)', `the high/low MAP split (${placeName('share')})`],
+	['the monthly PE row (Settings)', `the monthly PE row (${placeName('flow')})`],
+	['not the catchment area set in Settings (', `not the catchment area set in ${placeName('flow')} (`],
+	['no WR2012 reference in Settings, so', `no WR2012 reference (${placeName('wr2012')}), so`],
+	['there is no WR2012 reference in Settings.', `there is no WR2012 reference (${placeName('wr2012')}).`],
+	['enter it on the rule table in Settings.', `enter it on the rule table (${placeName('reserve')}).`],
+	['Validation signatures (provisional limits):', 'Hydrological signatures (provisional limits):']
+];
+
+/**
+ * A warning in the words engine 1.98.0 uses (issue #586 D19, D17): each place by its name now ("Settings →
+ * Calibration record" → "Calibration → Calibration record"), the validation signatures as hydrological, and no
+ * repository document cited. For comparing an older run's warnings with a newer one's (auto-publish's "no new
+ * warning"): the same warning in the old words reads the same. A warning already in today's words is unchanged.
+ */
+export function warningInCurrentWords(text: string): string {
+	let out = text.replace(/ \(docs\/model\.md §[^)]*\)/g, '');
+	for (const [old, now] of OLD_WORDS) out = out.split(old).join(now);
+	const marks = placesIn(out);
+	for (let i = marks.length - 1; i >= 0; i--) {
+		const m = marks[i]!;
+		out = out.slice(0, m.start) + placeName(m.place) + out.slice(m.end);
+	}
+	return out;
+}
