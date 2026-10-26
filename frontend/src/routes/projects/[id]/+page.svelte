@@ -43,6 +43,7 @@
 	import { chirpsSourceOf, observedOriginsOf } from '#lib/series/provenance.js';
 	import { api, ApiError, hasRole, type Project, type ProjectSummary, type RunMeta } from '#lib/api/index.js';
 	import { session } from '#lib/auth/session.svelte.js';
+	import { landOnAnchor } from '#lib/help/anchor.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { prefetch } from '#lib/components/common/lazy.js';
@@ -390,18 +391,23 @@
 		};
 	}
 
-	// The new-data line's Re-run model starts a run here and opens it in Runs.
+	// The new-data line's Re-run model starts a run here and opens it in Runs (on Calibration, on the page: startRun).
 	/** The new-data re-run, labelled with the data's end. */
 	const rerun = () => runModel(`Data to ${fresh?.latest ?? today}`);
 	async function startRun(label?: string, forecast = false) {
 		rerunning = true;
 		rerunError = null;
+		// Started on Calibration, the run opens there, on How the shown run fits, so the calibration loop (fit, run,
+		// read the fit) stays on one page (issue #586 round 3); from anywhere else, in Runs & results.
+		const here = runOpensHere;
 		try {
 			const { run: r, removedRunIds } = await api.runs.create(projectId, label, { forecast });
 			const { summary: _s, ...meta } = r;
 			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
-			await goto(`?tab=runs&run=${r.id}`, { reset: false });
+			await goto(here ? `?tab=calibration&run=${r.id}#cal-fit` : `?tab=runs&run=${r.id}`, { reset: false });
+			// A goto the page makes itself lands nowhere (nav/anchorLandingEnv.svelte.ts), so land on the part, focused.
+			if (here && tab === 'calibration') landOnAnchor('cal-fit');
 		} catch (e) {
 			rerunError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -410,6 +416,8 @@
 	}
 
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
+	/** A run started on this tab opens on it (startRun): Calibration shows the new run's fit itself. */
+	const runOpensHere = $derived(tab === 'calibration');
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
@@ -899,6 +907,7 @@
 			running={rerunning}
 			error={rerunError}
 			behind={!banner && behindRun.length > 0}
+			opensHere={runOpensHere}
 			onrun={runModel}
 		/>
 	{/if}

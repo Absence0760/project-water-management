@@ -5,7 +5,8 @@
 	// Run forecast (with forecast rain) and Run model, and says why a run can't start
 	// yet (runs/runReady.ts, the same reasons Runs & results' run form gives). The
 	// page runs it (saving unsaved edits first, with the person's say) and opens it
-	// in Runs & results. The popover follows the Setup complete pill's pattern
+	// in Runs & results, or on Calibration below, under How the shown run fits
+	// (`opensHere`). The popover follows the Setup complete pill's pattern
 	// (overview/SetupPill.svelte): a button with aria-expanded, Escape closes it and
 	// returns focus, a click outside closes it, nudged to stay inside the window.
 	import { tick } from 'svelte';
@@ -20,6 +21,7 @@
 		running,
 		error = null,
 		behind = false,
+		opensHere = false,
 		onrun
 	}: {
 		/** What a run still needs ('a network', 'a rainfall series'). */
@@ -38,6 +40,8 @@
 		error?: string | null;
 		/** Data came in since the last run: on a phone the button says Re-run model, and the notice line under the header drops its own. */
 		behind?: boolean;
+		/** The run opens on this page (Calibration's How the shown run fits), not in Runs & results. */
+		opensHere?: boolean;
 		onrun: (label: string | undefined, forecast: boolean) => void | Promise<void>;
 	} = $props();
 
@@ -138,7 +142,7 @@
 			<input id="{id}-label" bind:this={input} maxlength="200" placeholder="e.g. Baseline" bind:value={label} disabled={running} />
 			<p class="note" id="{id}-note" role="status" aria-live="polite">
 				{#if running}
-					Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. It opens in Runs &amp; results when done.
+					Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. {opensHere ? 'Its fit shows below when done.' : 'It opens in Runs & results when done.'}
 				{:else if error}
 					<span class="err">The run didn’t start: {error}</span>
 				{:else if missing.length}
@@ -150,7 +154,7 @@
 				{:else if modelDirty}
 					<span class="warn">You have unsaved changes: Run model asks to save them first, since a run uses the saved model.</span>
 				{:else}
-					Runs the saved network, crops, transfers, settings and time series, and opens the run in Runs &amp; results.
+					Runs the saved network, crops, transfers, settings and time series, and {opensHere ? 'shows its fit below.' : 'opens the run in Runs & results.'}
 				{/if}
 			</p>
 			<div class="btns">

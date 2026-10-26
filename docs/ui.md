@@ -1260,7 +1260,11 @@ role, freshness, Add data) and each tab's own header:
   run waits for them), that unsaved changes are saved first, the progress with the seconds while it runs, else what
   it runs. The page runs it (`runModel`: unsaved edits go through the same
   **Save your changes and run?** confirm, and a problem that blocks the
-  save stops it with the reason) and opens the run in Runs & results;
+  save stops it with the reason) and opens the run in Runs & results,
+  except on Calibration, where it opens on the page itself
+  (`?tab=calibration&run=<id>#cal-fit`, landing on *How the shown run fits*,
+  focused, and the form says "shows its fit below"), so the calibration loop
+  stays on one page (issue #586 round 3, `calibration-journey.spec.ts`);
   a run that didn't start says so in the notice line. On Runs & results the
   tab's own run form (**Run label**, Run forecast, Run model) takes its
   place, last after Add data (`fillHeader({ main })`, the header slot's
@@ -7216,7 +7220,12 @@ The page has:
   `#cal-setup` / `#cal-fit` lands on its heading, focused.
 
 The two parts are stacked: the settings panels' monthly rows and the charts
-need the page's width. The Calibration row's link carries a run picked on Runs & results
+need the page's width. The header's **Run model**, started here, opens the
+new run here (`+page.svelte` `startRun`, [§ Section header](#section-header)):
+the picker follows it and the page lands on *How the shown run fits*, so
+set the fit, run and read it without leaving the page
+(`calibration-journey.spec.ts` walks that loop, the save bar across the two
+pages, the old links and a viewer's read). The Calibration row's link carries a run picked on Runs & results
 (`workspace/tabLinks.ts` `RUN_TABS`). Old links to the moved panels come
 here (rows of `nav/anchorMoves.ts`, issue #586 round 3), replacing the
 history entry so Back skips it: `?tab=settings#set-fit` (and `#set-flow`,
