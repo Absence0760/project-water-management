@@ -2,14 +2,14 @@
 // valid project document, every engine field present, every self-check
 // passing, and each feature it exists to show actually in the model and
 // doing something in a run.
-import { applyScenario, classifyScenario, proposedRiverWorks, runModelChecked, unboundedRiverWorks, upgradeLegacyModel, validateScenarioOps, type ModelOutput, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, classifyScenario, compareSeriesNames, proposedRiverWorks, runModelChecked, unboundedRiverWorks, upgradeLegacyModel, validateScenarioOps, type ModelOutput, type ScenarioOp } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { modelProblems } from '../../src/model/validate.js';
 import { ProjectFile } from '../../src/projects/document.js';
 import { inputOf, type ExampleProject } from './catchments.js';
 import { buildShowcase, OWN_SYSTEM_ID, SHOWCASE_NAME, showcaseNodeId, UNITS } from './showcase.js';
 import { showcaseMap } from './showcaseMap.js';
-import { showcaseApplication, showcaseScenarios } from './showcaseSeed.js';
+import { SHOWCASE_DWS_FEED_TARGET, showcaseApplication, showcaseScenarios } from './showcaseSeed.js';
 
 let ex: ExampleProject;
 let out: ModelOutput;
@@ -139,5 +139,13 @@ describe('the showcase application (Raise the Vleiplaas dam)', () => {
 		expect(classified).toEqual(ops.map(() => 'proposal'));
 		expect(proposedRiverWorks(ops, classified, base.model, after, window)).toEqual([]);
 		expect([...unboundedRiverWorks(base.model, window), ...unboundedRiverWorks(after, window)]).toEqual([]);
+	});
+});
+
+describe('the showcase seed', () => {
+	it('names the DWS feed so it sorts after the observed record, as the server requires of a new feed series', () => {
+		const observed = ex.series.filter((s) => s.kind === 'flow_observed_m3s').map((s) => s.name);
+		expect(observed.length).toBeGreaterThan(0);
+		for (const name of observed) expect(compareSeriesNames(SHOWCASE_DWS_FEED_TARGET, name), name).toBeGreaterThan(0);
 	});
 });
