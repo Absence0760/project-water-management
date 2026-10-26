@@ -606,7 +606,7 @@
 		</div>
 	{/if}
 	{#if band && isTime && hasData && bandSpan(band, aligned.x)}
-		<p class="band-key"><i aria-hidden="true"></i><span><strong>{band.label}</strong> (hatched, from {band.from}): {band.note}</span></p>
+		<p class="band-key"><i aria-hidden="true"></i><span><strong>{band.label}</strong> (hatched, from {fmtDay(band.from)}): {band.note}</span></p>
 	{/if}
 	{#if print}
 		{#if caption}<p class="hint">{caption}</p>{/if}

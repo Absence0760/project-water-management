@@ -15,7 +15,7 @@
 	import { AutoCalibrationFollower } from '#lib/calibration/autoFollow.svelte.js';
 	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, runBlocker as runBlockerOf, selectionText, triggerText, type RunBlocker } from '#lib/calibration/autoFit.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 	let {
 		projectId,
@@ -94,7 +94,7 @@
 		</p>
 		<dl class="rules small" data-testid="auto-rules">
 			<dt>Rules</dt>
-			<dd>Revision {savedRules.revision}, {savedRules.signedOff ? `signed off by ${savedRules.signedOff.by} on ${savedRules.signedOff.on}` : 'draft (not signed off)'}</dd>
+			<dd>Revision {savedRules.revision}, {savedRules.signedOff ? `signed off by ${savedRules.signedOff.by} on ${fmtDay(savedRules.signedOff.on)}` : 'draft (not signed off)'}</dd>
 			{#each rulesLines(savedRules) as l (l.subject)}
 				<dt>{l.subject}</dt>
 				<dd>{l.text}</dd>

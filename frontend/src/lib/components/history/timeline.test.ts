@@ -258,17 +258,17 @@ describe('what an item says', () => {
 		// Rain for each unit (issue #482): one entry for the action, naming its units.
 		const units = ['Upper', 'Middle', 'Lower', 'Spring'].map((name, i) => ({ nodeId: `n${i}`, name, feedId: `f${i}`, action: i ? 'created' : 'updated', cells: 2 }));
 		expect(eventLine(ev('feed.configured', { action: 'units', source: 'chirps', targetKind: 'rain_chirps_mm', product: 'rnl', startDate: '1981-01-01', created: 3, updated: 1, units }))).toBe(
-			'Set up rain for each unit: CHIRPS rnl feeds for 4 units (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1981-01-01'
+			'Set up rain for each unit: CHIRPS rnl feeds for 4 units (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1 Jan 1981'
 		);
 		expect(eventLine(ev('feed.configured', { action: 'units', source: 'chirps', targetKind: 'rain_chirps_mm', product: 'sat', startDate: '1998-01-01', created: 1, updated: 0, units: units.slice(0, 1) }))).toBe(
-			'Set up rain for each unit: CHIRPS sat feeds for 1 unit (Upper), 1 created, from 1998-01-01'
+			'Set up rain for each unit: CHIRPS sat feeds for 1 unit (Upper), 1 created, from 1 Jan 1998'
 		);
 		expect(eventLine(ev('series.merged', { kind: 'rain_chirps_mm', name: 'grid', daysChanged: 1, feedId: 'f', source: 'chirps' }))).toBe(
 			'The CHIRPS feed added days to the Rainfall — CHIRPS “grid” series: 1 day changed'
 		);
 		// A day set or cleared by hand (issue #477).
 		expect(eventLine(ev('series.merged', { kind: 'rain_chirps_mm', name: 'grid', daysChanged: 1, entry: 'hand', date: '2021-10-02' }))).toBe(
-			'Edited 2021-10-02 of the Rainfall — CHIRPS “grid” series by hand'
+			'Edited 2 Oct 2021 of the Rainfall — CHIRPS “grid” series by hand'
 		);
 		expect(eventLine(ev('series.held', { kind: 'flow_logger_m3s', name: 'weir', negative: 2, outlier: 1 }))).toBe(
 			'Held automatic runs: new days in the Flow — logger “weir” series look wrong (2 negative days, 1 day far above its usual range). Check the data, then run the model'
@@ -318,23 +318,23 @@ describe('what an item says', () => {
 		expect(eventLine(ev('allocation.imported', { fileName: 'extract.csv', rows: 12 }))).toBe('Imported 12 registered volumes from extract.csv');
 		expect(eventLine(ev('allocation.import_deleted', { fileName: 'extract.csv', rows: 1 }))).toBe('Removed the import of extract.csv and its 1 registered volume');
 		expect(eventLine(ev('licence.outcome', { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28', reason: 'DWS letter' }))).toBe(
-			'Recorded the licence outcome: granted on 2026-03-01, expiring 2046-02-28; the record may be deleted from 2049-02-28'
+			'Recorded the licence outcome: granted on 1 Mar 2026, expiring 28 Feb 2046; the record may be deleted from 28 Feb 2049'
 		);
 		expect(eventLine(ev('licence.outcome', { outcome: 'refused', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
-			'Recorded the licence outcome: refused on 2026-03-01; the record may be deleted from 2029-03-01'
+			'Recorded the licence outcome: refused on 1 Mar 2026; the record may be deleted from 1 Mar 2029'
 		);
 		// 233: the authority's words; the events above are 161's, still read as written.
 		expect(eventLine(ev('licence.outcome', { outcome: 'licence_issued', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28' }))).toBe(
-			'Recorded the licence outcome: licence issued on 2026-03-01, expiring 2046-02-28; the record may be deleted from 2049-02-28'
+			'Recorded the licence outcome: licence issued on 1 Mar 2026, expiring 28 Feb 2046; the record may be deleted from 28 Feb 2049'
 		);
 		expect(eventLine(ev('licence.outcome', { outcome: 'application_withdrawn', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
-			'Recorded the licence outcome: application withdrawn on 2026-03-01; the record may be deleted from 2029-03-01'
+			'Recorded the licence outcome: application withdrawn on 1 Mar 2026; the record may be deleted from 1 Mar 2029'
 		);
 		expect(eventLine(ev('licence.outcome', { outcome: 'not_considered', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
-			'Recorded the licence outcome: not considered (use already authorised) on 2026-03-01; the record may be deleted from 2029-03-01'
+			'Recorded the licence outcome: not considered (use already authorised) on 1 Mar 2026; the record may be deleted from 1 Mar 2029'
 		);
 		expect(eventLine(ev('licence.outcome', { outcome: null, reason: 'entered on the wrong project' }))).toBe('Cleared the licence outcome: entered on the wrong project');
-		expect(eventLine(ev('licence.confirmed', { reviewDueOn: '2031-10-01' }))).toBe('Confirmed the licence record is still needed; next review 2031-10-01');
+		expect(eventLine(ev('licence.confirmed', { reviewDueOn: '2031-10-01' }))).toBe('Confirmed the licence record is still needed; next review 1 Oct 2031');
 		expect(eventLine(ev('allocation.viewer_units', { on: true }))).toBe('Let viewers see each farm’s registered volumes');
 		expect(eventLine(ev('allocation.viewer_units', { on: false }))).toBe('Showed viewers registered volumes as totals only');
 		expect(eventLine(ev('map.imported', { fileName: 'parcels.geojson', features: 2, kind: 'farm_parcel' }))).toBe('Imported 2 map features from parcels.geojson');

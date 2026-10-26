@@ -635,7 +635,7 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 		case 'bool':
 			return v === true ? 'yes' : v === false ? 'no' : '–';
 		case 'date':
-			return typeof v === 'string' && v ? v : spec.nullLabel;
+			return typeof v === 'string' && v ? fmtDay(v) : spec.nullLabel;
 		case 'node':
 		case 'system':
 			return typeof v === 'string' ? nodeName(v) : (spec.nullLabel ?? '–');

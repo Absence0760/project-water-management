@@ -36,7 +36,7 @@
 	import { runDamCapacity } from '#lib/components/runs/results.js';
 	import { runYears } from '#lib/components/runs/runList.js';
 	import { dataEndOf } from '#lib/format/age.js';
-	import { fmtNum, fmtPct, fmtQty, fmtWhen, localIsoDate } from '#lib/format/number.js';
+	import { fmtDay, fmtNum, fmtPct, fmtQty, fmtWhen, localIsoDate } from '#lib/format/number.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { withParam } from '#lib/workspace/overlays.js';
 	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
@@ -361,7 +361,7 @@
 						<div class="stat linked" class:flagged={(totals.weekShort ?? 0) > 0} data-kpi="week">
 							<dt><a href={supplyHref(run.id, { window: 'last7', hash: 'res-curtailment' })}>Short {weekText(weekEnd)}</a></dt>
 							<dd class="value" class:none={totals.weekShort === null}>{totals.weekShort === null ? (weekError ? '–' : '…') : fmtNum(totals.weekShort)}<small>of {fmtNum(totals.units)}</small></dd>
-							<dd class="sub">{week ? `${week.reportStart} to ${week.reportEnd}` : ''}</dd>
+							<dd class="sub">{week ? `${fmtDay(week.reportStart)} to ${fmtDay(week.reportEnd)}` : ''}</dd>
 						</div>
 						<div class="stat" class:flagged={totals.shortfallM3Day > 0.5} data-kpi="shortfall">
 							<dt>Total shortfall <HelpTip key="irrigation-deficit" /></dt>

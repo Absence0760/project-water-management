@@ -316,7 +316,7 @@
 
 	const sameRun = $derived(!!refA && !!refX && formatRef(refA) === formatRef(refX));
 	const describe = (s: RunCompareResponse['a']) =>
-		`${s.run.label || 'Untitled run'} · ${s.project.name} · ${s.run.startDate} → ${s.run.endDate} · run ${fmtDate(s.run.createdAt, true)}`;
+		`${s.run.label || 'Untitled run'} · ${s.project.name} · ${fmtDate(s.run.startDate)} → ${fmtDate(s.run.endDate)} · run ${fmtDate(s.run.createdAt, true)}`;
 
 	// --- the header's context line and the cards ---------------------------------
 	const runMeta = (side: Side) => {
@@ -651,8 +651,8 @@
 					{/if}
 					{#if !data.comparison.samePeriod}
 						<div class="alert alert-warning" role="status">
-							The runs cover different periods (A {data.a.run.startDate} → {data.a.run.endDate}, B {data.b.run.startDate} →
-							{data.b.run.endDate}). Figures are averages over each run's own period, so part of each change comes from the dates.
+							The runs cover different periods (A {fmtDate(data.a.run.startDate)} → {fmtDate(data.a.run.endDate)}, B {fmtDate(data.b.run.startDate)} →
+							{fmtDate(data.b.run.endDate)}). Figures are averages over each run's own period, so part of each change comes from the dates.
 						</div>
 					{/if}
 					{#if data.comparison.engineVersionChanged}

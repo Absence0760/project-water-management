@@ -48,24 +48,24 @@ describe('resolveWindow', () => {
 		const forecast = { ...run, forecastFrom: '2022-01-15' };
 		const w = ok({ preset: 'last7' }, forecast);
 		expect(w.window).toMatchObject({ from: 99, to: 105, reportStart: '2022-01-08', reportEnd: '2022-01-14', days: 7 });
-		expect(w.note).toBe('It ends on 2022-01-14, the last day before the forecast.');
+		expect(w.note).toBe('It ends on 14 Jan 2022, the last day before the forecast.');
 		// The whole record and a custom range end there too: a historical figure never averages over forecast days.
 		const all = ok({ preset: 'all' }, forecast);
 		expect(all.window).toMatchObject({ reportStart: '2021-10-01', reportEnd: '2022-01-14', days: 106 });
-		expect(all.note).toBe('It ends on 2022-01-14, the last day before the forecast.');
+		expect(all.note).toBe('It ends on 14 Jan 2022, the last day before the forecast.');
 		const custom = ok({ preset: 'custom', start: '2022-01-01', end: '2022-01-20' }, forecast);
 		expect(custom.window).toMatchObject({ reportStart: '2022-01-01', reportEnd: '2022-01-14', days: 14 });
-		expect(custom.note).toBe('Cut to the record before the forecast: 2022-01-01 to 2022-01-14.');
+		expect(custom.note).toBe('Cut to the record before the forecast: 1 Jan 2022 to 14 Jan 2022.');
 		expect(resolveWindow({ preset: 'custom', start: '2022-01-16', end: '2022-01-20' }, forecast, own)).toEqual({
 			ok: false,
-			error: "The window 2022-01-16 to 2022-01-20 is in the forecast: this run's record ends on 2022-01-14."
+			error: "The window 16 Jan 2022 to 20 Jan 2022 is in the forecast: this run's record ends on 14 Jan 2022."
 		});
 		// A range inside the record is untouched; one past the run's end is cut to the record, which comes first.
 		expect(ok({ preset: 'custom', start: '2022-01-01', end: '2022-01-10' }, forecast).note).toBeNull();
-		expect(ok({ preset: 'custom', start: '2022-01-01', end: '2022-03-01' }, forecast).note).toBe('Cut to the record before the forecast: 2022-01-01 to 2022-01-14.');
+		expect(ok({ preset: 'custom', start: '2022-01-01', end: '2022-03-01' }, forecast).note).toBe('Cut to the record before the forecast: 1 Jan 2022 to 14 Jan 2022.');
 		// Positive controls: an ordinary run's whole record and a custom range reach its last day.
 		expect(ok({ preset: 'all' }, { ...run, forecastFrom: null })).toMatchObject({ window: { reportEnd: '2022-01-28' }, note: null });
-		expect(ok({ preset: 'custom', start: '2022-01-01', end: '2022-03-01' }).note).toBe('Cut to the run: 2022-01-01 to 2022-01-28.');
+		expect(ok({ preset: 'custom', start: '2022-01-01', end: '2022-03-01' }).note).toBe('Cut to the run: 1 Jan 2022 to 28 Jan 2022.');
 		// Positive control: an ordinary run's last 7 days end on its last day.
 		expect(ok({ preset: 'last7' }, { ...run, forecastFrom: null }).window.reportEnd).toBe('2022-01-28');
 	});
@@ -81,7 +81,7 @@ describe('resolveWindow', () => {
 		// Rain ends 2022-01-26, two days before the run: the week is the 7 days to the 26th, and says why.
 		const gap = ok({ preset: 'last7' }, rainTo(118));
 		expect(gap.window).toMatchObject({ reportStart: '2022-01-20', reportEnd: '2022-01-26', from: 111, to: 117, days: 7 });
-		expect(gap.note).toBe('Ends on the last day of recorded rain, 2022-01-26; the run goes on to 2022-01-28 without it.');
+		expect(gap.note).toBe('Ends on the last day of recorded rain, 26 Jan 2022; the run goes on to 28 Jan 2022 without it.');
 		expect(ok({ preset: 'last7' }, rainTo(120))).toMatchObject({ window: { reportEnd: '2022-01-28' }, note: null });
 		// A forecast run: the day before its first forecast day; clamped to the run.
 		expect(runDataUntil({ ...run, summary: { forecast: { from: '2022-01-20' } } })).toBe('2022-01-19');
@@ -96,11 +96,11 @@ describe('resolveWindow', () => {
 		});
 		const cut = ok({ preset: 'custom', start: '2021-01-01', end: '2022-06-30' });
 		expect(cut.window).toMatchObject({ reportStart: '2021-10-01', reportEnd: '2022-01-28', days: 120 });
-		expect(cut.note).toBe('Cut to the run: 2021-10-01 to 2022-01-28.');
+		expect(cut.note).toBe('Cut to the run: 1 Oct 2021 to 28 Jan 2022.');
 		expect(resolveWindow({ preset: 'custom', start: '2021-12-07', end: '2021-12-01' }, run, own)).toEqual({ ok: false, error: 'The window must start before it ends.' });
 		expect(resolveWindow({ preset: 'custom', start: '2022-02-01', end: '2022-02-07' }, run, own)).toEqual({
 			ok: false,
-			error: 'The window 2022-02-01 to 2022-02-07 is outside this run (2021-10-01 to 2022-01-28).'
+			error: 'The window 1 Feb 2022 to 7 Feb 2022 is outside this run (1 Oct 2021 to 28 Jan 2022).'
 		});
 		// One day is a window.
 		expect(ok({ preset: 'custom', start: '2022-01-28', end: '2022-01-28' }).window.days).toBe(1);
@@ -126,8 +126,8 @@ describe('labels', () => {
 	it('names each preset and the period a figure covers', () => {
 		expect(WINDOW_PRESETS.map((p) => p.label)).toEqual(['Project window', 'Last 7 days', 'Last 14 days', 'Last 30 days', 'Whole record', 'Custom range']);
 		expect(presetLabel('last14')).toBe('Last 14 days');
-		expect(describePeriod({ reportStart: '2022-01-22', reportEnd: '2022-01-28', days: 7 })).toBe('2022-01-22 to 2022-01-28 (7 days)');
-		expect(describePeriod({ reportStart: '2022-01-28', reportEnd: '2022-01-28', days: 1 })).toBe('2022-01-28 to 2022-01-28 (1 day)');
+		expect(describePeriod({ reportStart: '2022-01-22', reportEnd: '2022-01-28', days: 7 })).toBe('22 Jan 2022 to 28 Jan 2022 (7 days)');
+		expect(describePeriod({ reportStart: '2022-01-28', reportEnd: '2022-01-28', days: 1 })).toBe('28 Jan 2022 to 28 Jan 2022 (1 day)');
 		expect(sameWindow(own, { ...own })).toBe(true);
 		expect(sameWindow(own, { ...own, reportEnd: '2022-01-01' })).toBe(false);
 	});

@@ -96,8 +96,8 @@ describe('unitRainBody', () => {
 		expect(unitRainBody('rnl', '2001-13-45')).toEqual({ error: 'The start date should be a day, YYYY-MM-DD.' });
 		expect(unitRainBody('rnl', '1/1/2001')).toEqual({ error: 'The start date should be a day, YYYY-MM-DD.' });
 		expect(unitRainBody('rnl', '2001-02-30')).toEqual({ error: 'The start date should be a day, YYYY-MM-DD.' });
-		expect(unitRainBody('sat', '1990-01-01')).toEqual({ error: 'The sat product begins on 1998-01-01. For earlier days choose rnl, which reads 1981 onwards.' });
-		expect(unitRainBody('rnl', '1980-12-31')).toEqual({ error: 'CHIRPS begins on 1981-01-01.' });
+		expect(unitRainBody('sat', '1990-01-01')).toEqual({ error: 'The sat product begins on 1 Jan 1998. For earlier days choose rnl, which reads 1981 onwards.' });
+		expect(unitRainBody('rnl', '1980-12-31')).toEqual({ error: 'CHIRPS begins on 1 Jan 1981.' });
 		expect(unitRainBody('rnl', '1981-01-01')).toEqual({ body: { product: 'rnl', startDate: '1981-01-01' } });
 	});
 });

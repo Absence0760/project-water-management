@@ -222,7 +222,7 @@ export function chirpsStartProblem(product: ChirpsProduct, start: string): strin
 	const first = CHIRPS_PRODUCT_FIRST_DAY[product];
 	if (start && !ISO_DAY.test(start)) return 'The start date should be a day, YYYY-MM-DD.';
 	if (start && start < first) {
-		return product === 'sat' ? `The sat product begins on ${first}. For earlier days choose the rnl product, which reads 1981 onwards for the whole record.` : `CHIRPS begins on ${first}.`;
+		return product === 'sat' ? `The sat product begins on ${fmtDay(first)}. For earlier days choose the rnl product, which reads 1981 onwards for the whole record.` : `CHIRPS begins on ${fmtDay(first)}.`;
 	}
 	return null;
 }

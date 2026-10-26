@@ -3,6 +3,7 @@
 	// days that carry a value: solid = complete, pale = partly missing, red
 	// outline = empty. The accessible name summarises it.
 	import type { CoverageBin } from './coverage';
+	import { fmtDay } from '#lib/format/number.js';
 
 	let { bins, label, byMonth = false }: { bins: CoverageBin[]; label: string; byMonth?: boolean } = $props();
 
@@ -12,7 +13,7 @@
 	const summary = $derived(
 		`${label}: ${bins.length} ${unit}${bins.length === 1 ? '' : 's'}; ${gaps === 0 ? 'no gaps' : `${gaps} with missing days${empty ? `, ${empty} empty` : ''}`}`
 	);
-	const tip = (b: CoverageBin) => `${b.from} → ${b.to}: ${Math.round(b.frac * 100)} % of days present`;
+	const tip = (b: CoverageBin) => `${fmtDay(b.from)} → ${fmtDay(b.to)}: ${Math.round(b.frac * 100)} % of days present`;
 </script>
 
 <svg class="strip" viewBox="0 0 {Math.max(bins.length, 1)} 1" preserveAspectRatio="none" role="img" aria-label={summary}>

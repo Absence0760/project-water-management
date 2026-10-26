@@ -3,7 +3,7 @@
 // (GET …/feeds/chirps/from-units) in words, and the checks on the panel's
 // product and start date. Pure, so they test without a page.
 import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProduct, UnitRainProposal, UnitRainProposalUnit } from '#lib/api/types.js';
-import { fmtNum } from '#lib/format/number.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 import { CHIRPS_PRODUCT_FIRST_DAY, healthMessage, STATE_LABELS, type FeedMeta, type FeedState } from './feeds';
 
 /** The product a new set of unit feeds reads unless the owner picks the other: rnl, the record from 1981 (decided in issue #500, answer 3; the server's DEFAULT_UNIT_PRODUCT). */
@@ -95,7 +95,7 @@ export function unitRainBody(product: UnitRainProduct, startDate: string, nodeId
 	const first = CHIRPS_PRODUCT_FIRST_DAY[product];
 	if (start && !isCalendarDay(start)) return { error: 'The start date should be a day, YYYY-MM-DD.' };
 	if (start && start < first)
-		return { error: product === 'sat' ? `The sat product begins on ${first}. For earlier days choose rnl, which reads 1981 onwards.` : `CHIRPS begins on ${first}.` };
+		return { error: product === 'sat' ? `The sat product begins on ${fmtDay(first)}. For earlier days choose rnl, which reads 1981 onwards.` : `CHIRPS begins on ${fmtDay(first)}.` };
 	return { body: { product, ...(start ? { startDate: start } : {}), ...(nodeIds ? { nodeIds: [...nodeIds] } : {}) } };
 }
 

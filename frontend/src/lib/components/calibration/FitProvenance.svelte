@@ -13,7 +13,7 @@
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '#lib/components/settings/rain.js';
 	import { describeRainChecks } from '#lib/components/settings/dataQuality.js';
 	import { peText } from '#lib/components/settings/peInput.js';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 	import { dayQualityGist, ratingLine } from './dayQuality';
 
@@ -109,7 +109,7 @@
 				<div data-testid="fit-auto">
 					<dt>Picked by <HelpTip key="settings.calibrationRules" label="About how the fit was picked" /></dt>
 					<dd>
-						calibration rules revision {a.rules.revision} ({a.rules.signedOff ? `signed off by ${a.rules.signedOff.by} on ${a.rules.signedOff.on}` : 'draft, not signed off'}): kept
+						calibration rules revision {a.rules.revision} ({a.rules.signedOff ? `signed off by ${a.rules.signedOff.by} on ${fmtDay(a.rules.signedOff.on)}` : 'draft, not signed off'}): kept
 						{a.cases[a.chosen]?.label ?? '–'} of {a.cases.length} fit{a.cases.length === 1 ? '' : 's'}, {a.cases.filter((c) => c.eligible).length} passing the filters
 					</dd>
 				</div>

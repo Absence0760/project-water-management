@@ -6,7 +6,7 @@
 	// it as `extra`, rendered after the contents and before the run choice.
 	import type { Snippet } from 'svelte';
 	import type { Team } from '#lib/api/index.js';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { workspaceNameProblem } from '#lib/format/visibleName.js';
 	import { summarizeImport, type ParsedImport } from './projectFile';
@@ -91,7 +91,7 @@
 						<tr>
 							<th scope="row">{kindLabel(s.kind)}{#if s.name}<span class="muted"> · {s.name}</span>{/if}</th>
 							<td class="num">{fmtNum(s.days)}</td>
-							<td class="dates">{s.startDate}{#if s.endDate} – {s.endDate}{/if}</td>
+							<td class="dates">{fmtDay(s.startDate)}{#if s.endDate} – {fmtDay(s.endDate)}{/if}</td>
 						</tr>
 					{/each}
 				</tbody>
