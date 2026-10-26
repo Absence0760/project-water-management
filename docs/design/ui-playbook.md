@@ -1733,7 +1733,12 @@ Interaction details that bit:
   up …: <reason>" with **Try again** calling its load again, never the bare
   server text with only a reload to retry. An action's failure (a start, an
   apply) keeps its own message: the action's button is its retry
-  (`AutoCalibrationFollower.loadFailed`).
+  (`AutoCalibrationFollower.loadFailed`). Try again takes itself out of
+  the page, so it hands the focus on: `common/LoadState.svelte` puts it on
+  the loading line while the retry loads, on the new Try again if it failed
+  again, and on the panel's heading once it has loaded
+  (`common/loadState.ts` `retryTarget`; `586-a11y-load-state.spec.ts`).
+  A panel with its own Try again does the same.
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
