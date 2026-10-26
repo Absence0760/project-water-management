@@ -11987,7 +11987,8 @@ overview and search the last one opened stays open). With all four open the
 list was ~1180 px tall, so the sticky column scrolled inside itself at
 1440×960 and 1280×800; with one open it is ~715 px at most (Reference) and fits both, with 24 px to
 spare at 1280×800, since a label that just fits on macOS wraps a line taller on Linux; the links are 24 px rows
-for that, not 28 (`help.spec.ts` checks each group, opened from the keyboard, the room left, and that together
+for that, not 28, and *Pages, one by one* lists each page's guide by the page's name alone (`guideNavLabel`; with
+the Calibration and Model settings guides, issue #586, the full titles overflowed 1280×800) (`help.spec.ts` checks each group, opened from the keyboard, the room left, and that together
 they reach every link). The contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
 against the app sidebar, beside the text, sticky while you read, scrolling on their own only in a
 window shorter than the overview plus the longest group (~715 px), where the alternative is

@@ -7,7 +7,9 @@
 	// disclosure button, and the group holding the page you're on opens by
 	// itself. All four open were ~1180 px tall, so the sticky column scrolled
 	// on its own at 1440×960 and 1280×800; one open fits both, the longest
-	// (Reference) at ~715 px (help.spec.ts).
+	// (Reference) at ~715 px (help.spec.ts). A page guide is listed by its
+	// page's name alone (guideNavLabel): with the Calibration and Model
+	// settings guides, their full titles overflowed 1280×800 (issue #586).
 	// The glossary is one page per topic; its terms are found by search, not
 	// listed here.
 	import { resolve } from '$app/paths';
@@ -15,7 +17,7 @@
 	import { page } from '$app/state';
 	import { CATEGORY_TITLES, HELP, type HelpCategory } from '#lib/help/content.js';
 	import { topicPath } from '#lib/help/glossaryLinks.js';
-	import { GUIDE_KIND_TITLES, GUIDES, type GuideKind } from '#lib/help/guides.js';
+	import { GUIDE_KIND_TITLES, GUIDES, guideNavLabel, type GuideKind } from '#lib/help/guides.js';
 
 	let navEl: HTMLElement | undefined = $state();
 
@@ -30,7 +32,7 @@
 		...kinds.map((kind) => ({
 			id: kind,
 			title: GUIDE_KIND_TITLES[kind],
-			links: GUIDES.filter((g) => g.kind === kind).map((g) => ({ href: `/help/guides/${g.id}`, label: g.title }))
+			links: GUIDES.filter((g) => g.kind === kind).map((g) => ({ href: `/help/guides/${g.id}`, label: guideNavLabel(g) }))
 		})),
 		{
 			id: 'reference',
