@@ -58,6 +58,13 @@ describe('activeSectionId', () => {
 		expect(activeSectionId(tops(-900, -200, 400), 68, true)).toBe('s2');
 	});
 
+	it('marks the first section on a page so short that, at the bottom, the first still starts on the screen', () => {
+		expect(activeSectionId(tops(140, 420), 68, true)).toBe('s0');
+		expect(activeSectionId(tops(0, 420), 68, true)).toBe('s0');
+		// A followed link still wins.
+		expect(activeSectionId(tops(140, 420), 68, true, 's1', 960)).toBe('s1');
+	});
+
 	it('at the bottom, keeps the section a followed link named while it still starts on the screen', () => {
 		// #s1 was followed; the page ended before its top reached the line (s2 below it is short).
 		expect(activeSectionId(tops(-900, 108, 400), 68, true, 's1', 960)).toBe('s1');

@@ -8,18 +8,19 @@
 	link landing on its heading; the links to Runs & results keep the run picked
 	(`run=`). A side index lists the two parts. `?tab=calibration` opened Settings
 	until this page had its own, so an old `#set-…` link goes on there
-	(calibrationForward).
+	(nav/anchorMoves.ts).
 -->
 <script lang="ts">
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { Role, RunMeta } from '#lib/api/types.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
-	import { hashId, landOnAnchor } from '#lib/help/anchor.js';
+	import { landOnAnchor } from '#lib/help/anchor.js';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { fmtWhen } from '#lib/format/number.js';
-	import { calibrationForward, calibrationNavGroups, isCalPart, RESULT_LINKS, runsHref, settingsHref, SETUP_LINKS, shownRun } from './page';
+	import { calibrationNavGroups, isCalPart, RESULT_LINKS, runsHref, settingsHref, SETUP_LINKS, shownRun } from './page';
 
 	let { runs, role }: { runs: RunMeta[] | null; role: Role | null | undefined } = $props();
 
@@ -31,23 +32,18 @@
 
 	$effect(() => fillHeader({ context: headerContext }));
 
-	// An old `?tab=calibration#set-ewr` (when this tab opened Settings) goes on to that panel there,
-	// replacing this entry so Back skips it; Settings lands on the panel. On load, and for such a link
-	// followed while the page is open.
-	$effect(() => {
-		const to = calibrationForward(page.url);
-		if (to) untrack(() => void goto(to, { replace: true, reset: false }));
-	});
-
-	// A link to one of the parts (`#cal-fit`): the tab is a lazy chunk, so the browser's own jump found
-	// nothing. Land on it and focus its heading (landOnAnchor, as Settings, Runs and Project do).
+	// A link to one of the parts (`#cal-fit`), on load or followed while the page is open: the tab is a lazy
+	// chunk, so the browser's own jump found nothing. Land on it and focus its heading (landOnAnchor, as
+	// Settings, Runs and Project do). An old `?tab=calibration#set-ewr` (when this tab opened Settings) goes
+	// on to that panel there instead, replacing this entry so Back skips it (nav/anchorMoves.ts).
 	let body: HTMLDivElement | undefined = $state();
-	let stopLanding = () => {};
-	onMount(() => {
-		const hash = hashId(page.url.hash);
-		if (isCalPart(hash) && body) stopLanding = landOnAnchor(hash, body);
-	});
-	onDestroy(() => stopLanding());
+	onMount(() =>
+		followAnchors({
+			page: 'calibration',
+			land: (id) => (isCalPart(id) && body ? landOnAnchor(id, body) : undefined),
+			forward: (to) => void goto(to, { replace: true, reset: false })
+		})
+	);
 </script>
 
 {#snippet headerContext()}<span data-testid="calibration-context">Fit the runoff parameters to observed flow, then judge the fit</span>{/snippet}

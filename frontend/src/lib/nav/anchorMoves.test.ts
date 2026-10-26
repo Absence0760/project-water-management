@@ -80,10 +80,15 @@ describe('anchorForward: the table', () => {
 		const seen = new Set<string>();
 		for (const m of ANCHOR_MOVES) {
 			expect(m.tab, String(m.hash)).not.toBe(m.from);
+			if (typeof m.hash === 'function') continue;
 			for (const h of typeof m.hash === 'string' ? [m.hash] : m.hash) {
 				expect(seen.has(`${m.from}#${h}`), h).toBe(false);
 				seen.add(`${m.from}#${h}`);
 			}
+		}
+		// A row that tests for a family of anchors (every `set-…`) is its page's only row: no named one hides behind it.
+		for (const m of ANCHOR_MOVES.filter((r) => typeof r.hash === 'function')) {
+			expect(ANCHOR_MOVES.filter((r) => r.from === m.from), m.from).toHaveLength(1);
 		}
 	});
 

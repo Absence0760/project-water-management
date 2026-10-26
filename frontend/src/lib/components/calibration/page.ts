@@ -9,7 +9,6 @@ import type { NavGroup } from '#lib/components/common/sectionNav.js';
 import { SETTINGS_SECTIONS, type SettingsSectionId } from '#lib/components/settings/sections.js';
 import { defaultRunId } from '#lib/components/runs/runList.js';
 import type { Role } from '#lib/api/types.js';
-import { hashId } from '#lib/help/anchor.js';
 
 /** The page's two parts, by their headings' anchors (CalibrationTab.svelte sets them). */
 export const CAL_PARTS = [
@@ -80,18 +79,4 @@ export function shownRun<T extends { id: string; published?: boolean }>(runs: re
 	if (!runs?.length) return null;
 	const id = picked && runs.some((r) => r.id === picked) ? picked : defaultRunId(runs, role);
 	return runs.find((r) => r.id === id) ?? null;
-}
-
-/**
- * Where a Calibration URL goes on, or null. `?tab=calibration` opened Settings & calibration until this
- * page had its own (issue #586), so an old `?tab=calibration#set-ewr` (a bookmark, a note's link) goes
- * to that panel on Settings, every other parameter kept; Settings sends a moved one (`#set-feeds`) on
- * again. Round 3 moves the calibration panels here; their anchors then stay (issue #586 R3-C). The caller replaces the history entry, so Back skips it.
- */
-export function calibrationForward(url: Pick<URL, 'pathname' | 'search' | 'hash'>): string | null {
-	const hash = hashId(url.hash);
-	if (!hash.startsWith('set-')) return null;
-	const params = new URLSearchParams(url.search);
-	params.set('tab', 'settings');
-	return `${url.pathname}?${params}#${hash}`;
 }

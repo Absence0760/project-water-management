@@ -67,8 +67,11 @@ export function navEmpty(groups: NavGroup[]): boolean {
  * screen (its top between 0 and `viewH`): when the panels after it are
  * shorter than the window, the page ends before its top can reach the line,
  * and it is the one being read (the EWR page's `#res-outlook` once the
- * water account got shorter, issue #175). `tops` are viewport offsets in page
- * order; sections not rendered yet are simply absent.
+ * water account got shorter, issue #175). And a page short enough that its first
+ * section still starts on the screen at the bottom shows every section at once:
+ * nothing has been scrolled past, so it is the first (the Calibration page's two
+ * parts, issue #586). `tops` are viewport offsets in page order; sections not
+ * rendered yet are simply absent.
  */
 export function activeSectionId(
 	tops: { id: string; top: number }[],
@@ -80,7 +83,8 @@ export function activeSectionId(
 	if (!tops.length) return null;
 	if (atBottom) {
 		const t = target ? tops.find((x) => x.id === target) : undefined;
-		return t && t.top >= 0 && t.top < viewH ? t.id : tops[tops.length - 1]!.id;
+		if (t && t.top >= 0 && t.top < viewH) return t.id;
+		return tops[0]!.top >= 0 ? tops[0]!.id : tops[tops.length - 1]!.id;
 	}
 	let current = tops[0]!.id;
 	for (const t of tops) {

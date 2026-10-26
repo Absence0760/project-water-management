@@ -710,9 +710,4 @@
 		color: var(--danger);
 		font-size: 0.85rem;
 	}
-	/* Busy buttons stay focusable (aria-disabled, not disabled) but look it. */
-	.btn[aria-disabled='true'] {
-		opacity: 0.55;
-		cursor: not-allowed;
-	}
 </style>

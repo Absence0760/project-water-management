@@ -1529,6 +1529,10 @@ Interaction details that bit:
   one glossary entry made Goodness of fit mark the wrong term. Keep a
   just-linked section marked while its heading is on screen
   (`lib/help/spy.ts` `currentSection`'s `linked`).
+  And on a page short enough that the first section still starts on the
+  screen at the bottom, every section is in view and nothing has been
+  scrolled past: mark the first, not the last (`common/sectionNav.ts`
+  `activeSectionId`; the Calibration page's two parts, issue #586).
 - **Nested wrapping groups wrap as whole blocks.** The in-page menu was a
   flex row of groups, each a wrapping flex row of links: a long group took
   full rows of its own, so Runs & results' menu was three rows at 1280 px

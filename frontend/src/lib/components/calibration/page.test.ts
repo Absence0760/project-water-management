@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
 import { resultSections } from '#lib/components/runs/sections.js';
 import { SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
-import { CAL_PARTS, calibrationForward, calibrationNavGroups, isCalPart, RESULT_LINKS, runsHref, settingsHref, SETUP_LINKS, shownRun } from './page';
+import { anchorForward } from '#lib/nav/anchorMoves.js';
+import { CAL_PARTS, calibrationNavGroups, isCalPart, RESULT_LINKS, runsHref, settingsHref, SETUP_LINKS, shownRun } from './page';
 
 const at = (href: string) => new URL(href, 'https://x.test');
 
@@ -56,14 +57,14 @@ describe('shownRun', () => {
 	});
 });
 
-describe('calibrationForward', () => {
+describe('old ?tab=calibration links (nav/anchorMoves.ts)', () => {
 	it('sends an old ?tab=calibration#set-… link on to that panel on Settings, every other parameter kept', () => {
-		expect(calibrationForward(at('/projects/p1?tab=calibration#set-ewr'))).toBe('/projects/p1?tab=settings#set-ewr');
-		expect(calibrationForward(at('/projects/p1?tab=calibration&rain=units#set%2Dfeeds'))).toBe('/projects/p1?tab=settings&rain=units#set-feeds');
+		expect(anchorForward('calibration', at('/projects/p1?tab=calibration#set-ewr'))).toBe('/projects/p1?tab=settings#set-ewr');
+		expect(anchorForward('calibration', at('/projects/p1?tab=calibration&rain=units#set%2Dfeeds'))).toBe('/projects/p1?tab=settings&rain=units#set-feeds');
 	});
 	it('leaves the page itself and its own parts alone', () => {
-		expect(calibrationForward(at('/projects/p1?tab=calibration'))).toBeNull();
-		expect(calibrationForward(at('/projects/p1?tab=calibration#cal-fit'))).toBeNull();
-		expect(calibrationForward(at('/projects/p1?tab=calibration#%E0'))).toBeNull();
+		expect(anchorForward('calibration', at('/projects/p1?tab=calibration'))).toBeNull();
+		expect(anchorForward('calibration', at('/projects/p1?tab=calibration#cal-fit'))).toBeNull();
+		expect(anchorForward('calibration', at('/projects/p1?tab=calibration#%E0'))).toBeNull();
 	});
 });

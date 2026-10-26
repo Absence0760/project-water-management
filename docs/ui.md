@@ -6379,7 +6379,12 @@ section header, which it fills (`fillHeader`) like the other sections.
   mounts again, and `followAnchors` (`lib/nav/anchorLanding.ts`) listens
   for `hashchange` on Settings, Runs & results, Data and Project alike
   (issue #586 R2-D; `e2e/tests/anchor-hash-change.spec.ts`), forwarding a
-  moved panel's anchor first (`lib/nav/anchorMoves.ts`). Back and Forward
+  moved panel's anchor first (`lib/nav/anchorMoves.ts`). A link on the page
+  that changes the query as well (`?run=r2#res-notes`) fires no
+  `hashchange`, since SvelteKit pushes it, so a click on one is noted and
+  followed once the page shows that address
+  (`lib/nav/anchorLandingEnv.svelte.ts`); a `goto` the page makes itself
+  (a picked run, a filter written to `q=`) never lands. Back and Forward
   between two fragments keep the place they return to rather than land
   (ui-playbook, "A pick is a step in history").
 - **On this page** (issue #468). A **Settings sections** menu
@@ -7740,7 +7745,7 @@ Calibration row's link carries a run picked on Runs & results
 (`workspace/tabLinks.ts` `RUN_TABS`). An old `?tab=calibration#set-…` link (a
 bookmark, a note's link, from when the tab opened Settings) goes on to that
 panel on Settings, every other parameter kept, replacing the history entry
-(`calibrationForward`); Settings sends a moved one (`#set-feeds`) on again.
+(a row of `nav/anchorMoves.ts`); Settings sends a moved one (`#set-feeds`) on again.
 Specs: `calibration-page.spec.ts`, and `settings-layout-pins.spec.ts` for
 the old links.
 
@@ -8538,7 +8543,10 @@ read it before.
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
   whose label contains every word typed (any case), with "N of M runs". The
   words are in the URL (`q=`), so a reload and Back keep them; one search is
-  one step in history, as on the project list (issue #521). When the run on
+  one step in history, as on the project list (issue #521). The words go
+  into the URL after a pause, and the URL catching up with words already
+  typed over never puts them back in the box (as History's filter keeps
+  them; a late write used to). When the run on
   screen isn't among the runs the filter keeps, a line under the box says so
   ("Showing “Run 20”, which isn’t in the filter.", #586 D20). Its header links to **Compare
   runs** (the Compare runs tab, `?tab=compare`, [run-comparison.md](./run-comparison.md)).

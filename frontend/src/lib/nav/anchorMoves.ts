@@ -15,8 +15,8 @@ import type { TabId } from '#lib/workspace/tabs.js';
 export interface AnchorMove {
 	/** The page the anchors were on: the workspace tab whose component reads the link (not its `?tab=` spelling, so `?tab=results` counts as Runs). */
 	from: TabId;
-	/** The old anchors, without the `#`. */
-	hash: string | readonly string[];
+	/** The old anchors, without the `#`, or a test for a whole family of them (every `set-…`). */
+	hash: string | readonly string[] | ((id: string) => boolean);
 	/** The page they live on now. */
 	tab: TabId;
 	/** The new anchor: the old one when left out; null for the page itself (no `#`). */
@@ -45,14 +45,19 @@ export const ANCHOR_MOVES: readonly AnchorMove[] = [
 	{ from: 'runs', hash: 'res-river', tab: 'river', to: null, keep: RUN },
 	{ from: 'runs', hash: [...RIVER_ANCHORS, RIVER_STRIP_ANCHOR], tab: 'river', keep: RUN },
 	{ from: 'runs', hash: 'res-units', tab: SUPPLY_TAB, to: null, keep: RUN_WINDOW },
-	{ from: 'runs', hash: SUPPLY_ANCHORS, tab: SUPPLY_TAB, keep: RUN_WINDOW }
+	{ from: 'runs', hash: SUPPLY_ANCHORS, tab: SUPPLY_TAB, keep: RUN_WINDOW },
+	// `?tab=calibration` opened Settings & calibration until Calibration had a page of its own (issue #586 round 2),
+	// so an old `?tab=calibration#set-ewr` (a bookmark, a note's link) goes to that panel there; Settings sends a
+	// moved one (`#set-feeds`) on again. Round 3 moves the calibration panels here, and turns their rows round.
+	{ from: 'calibration', hash: (id) => id.startsWith('set-'), tab: 'settings', keep: 'all' }
 ];
 
-const names = (m: AnchorMove): readonly string[] => (typeof m.hash === 'string' ? [m.hash] : m.hash);
+const names = (m: AnchorMove, hash: string): boolean =>
+	typeof m.hash === 'function' ? m.hash(hash) : typeof m.hash === 'string' ? m.hash === hash : m.hash.includes(hash);
 
 /** The row that moves `hash` away from `from`, or null. With no hash, a row whose `bare` matches the query. */
 export function anchorMove(from: TabId, hash: string, params: URLSearchParams, moves: readonly AnchorMove[] = ANCHOR_MOVES): AnchorMove | null {
-	return moves.find((m) => m.from === from && (hash ? names(m).includes(hash) : !!m.bare?.(params))) ?? null;
+	return moves.find((m) => m.from === from && (hash ? names(m, hash) : !!m.bare?.(params))) ?? null;
 }
 
 /**

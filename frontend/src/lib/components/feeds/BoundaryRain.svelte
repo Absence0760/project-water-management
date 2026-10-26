@@ -281,8 +281,4 @@
 		color: var(--danger);
 		font-size: 0.85rem;
 	}
-	.btn[aria-disabled='true'] {
-		opacity: 0.55;
-		cursor: not-allowed;
-	}
 </style>

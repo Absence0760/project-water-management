@@ -13,14 +13,12 @@ const NARROW = { width: 320, height: 640 };
 test.describe('320 px reflow', () => {
 	test.use({ viewport: NARROW });
 
-	test('the Settings tab fits the screen, the feeds panel included', async ({ page, owner }) => {
+	test('the Settings tab fits the screen', async ({ page, owner }) => {
 		void owner;
 		const project = await createProject(page.request, 'Reflow settings');
 		await putModel(page.request, project.id, sampleModel());
 		await page.goto(`/projects/${project.id}?tab=settings`);
 		await expect(page.getByLabel('A-pan evaporation, Sep, mm')).toBeVisible();
-		await expectNoSidewaysScroll(page);
-		await expect(page.getByRole('region', { name: 'Data feeds' })).toBeVisible();
 		await expectNoSidewaysScroll(page);
 		// At 320 px nearly every checkbox's words wrap: none may shrink its box to fit them.
 		expect(await squashedChecks(page)).toEqual([]);
@@ -32,6 +30,17 @@ test.describe('320 px reflow', () => {
 		await zeroRain.getByRole('button', { name: 'Add a missing date range' }).click();
 		await expect(zeroRain.getByRole('button', { name: /^Remove / })).toHaveCount(2);
 		await expectNoSidewaysScroll(page);
+	});
+
+	// Data feeds moved from Settings to Data (issue #586 round 1): a chunk of its own, drawn after the tab.
+	test('the Data tab fits the screen, the feeds panel included', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Reflow data feeds');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=series#data-feeds`);
+		await expect(page.getByRole('region', { name: 'Data feeds' })).toBeVisible();
+		await expectNoSidewaysScroll(page);
+		expect(await squashedChecks(page)).toEqual([]);
 	});
 
 	for (const tab of ['overview', 'network', 'crops', 'transfers', 'series', 'runs']) {
