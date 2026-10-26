@@ -6368,6 +6368,14 @@ section header, which it fills (`fillHeader`) like the other sections.
   reader scrolls, types or clicks, or for at most about six seconds each
   (`LAND_WAIT_MS`; issue #586). Before, the browser's own jump
   ran before the lazy tab existed and the page opened at the top.
+  A `#…` typed in the address bar, or a link to it followed, while the page
+  is already open lands the same way: only the hash changes, so nothing
+  mounts again, and `followAnchors` (`lib/nav/anchorLanding.ts`) listens
+  for `hashchange` on Settings, Runs & results, Data and Project alike
+  (issue #586 R2-D; `e2e/tests/anchor-hash-change.spec.ts`), forwarding a
+  moved panel's anchor first (`lib/nav/anchorMoves.ts`). Back and Forward
+  between two fragments keep the place they return to rather than land
+  (ui-playbook, "A pick is a step in history").
 - **On this page** (issue #468). A **Settings sections** menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu))
   wraps the whole tab. From a content width of 80rem (a 1440 px window) it is
@@ -6418,9 +6426,10 @@ section header, which it fills (`fillHeader`) like the other sections.
   (`?tab=settings&rain=boundary#set-feeds` opens
   `?tab=series&rain=boundary#data-feeds`; a `?rain=boundary` or
   `?rain=units` link with no `#` goes there too), replacing the entry so Back
-  skips it, on a page load or a link followed with Settings open; the page
-  there lands on the panel and focuses its heading (`settingsForward` in
-  `settings/sections.ts`; `e2e/tests/settings-layout-pins.spec.ts`). No
+  skips it, on a page load or a `#…` followed or typed with Settings open;
+  the page there lands on the panel and focuses its heading (one row each
+  in `ANCHOR_MOVES`, `lib/nav/anchorMoves.ts`;
+  `e2e/tests/settings-layout-pins.spec.ts`). No
   backend email or printed report links to them. A panel with a Save
   blocker gets a red dot ("has a problem").
   The menu marks the panel being read with `aria-current="location"` and,
@@ -8188,7 +8197,8 @@ read it before.
   the two link rows (`#res-river`, `#res-units`) and their groups, which a
   link still reaching Runs & results with those anchors is sent to (the page
   itself, same run, and the reporting window for Hydrological units; the entry
-  is replaced, so Back skips it; `movedHref` in `runs/sections.ts`).
+  is replaced, so Back skips it; rows of `ANCHOR_MOVES` in
+  `lib/nav/anchorMoves.ts`).
 - **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
   When the project has a forecast series (`rain_forecast_mm`, uploaded or
   fed by CHIRPS-GEFS), the run form has **Run forecast** beside Run model: the

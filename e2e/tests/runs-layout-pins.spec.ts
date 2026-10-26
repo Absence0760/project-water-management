@@ -2,7 +2,7 @@
 // § Runs & results; runs/sections.ts): the panels in page order under their
 // group headings, the side index's groups and entries, every #res-* anchor
 // landing on its panel's heading, the run picker (?run=, the default, Back and
-// Forward), and the anchors movedHref sends to EWR and Hydrological units.
+// Forward), and the anchors nav/anchorMoves.ts sends to EWR and Hydrological units.
 // Later rounds move Model quality to a Calibration page; these pins make each
 // move a deliberate edit here rather than a silent loss. runs-page.spec.ts
 // covers the page's layout and a11y, runs.spec.ts the results themselves.
@@ -384,13 +384,13 @@ test('the run picker: the newest by default, ?run= picks one, a pick is a step B
 	await current('Middle');
 });
 
-test('each anchor movedHref sends on lands on its new home’s panel heading, for the same run, Back skipping the old address', async ({ page, owner }) => {
+test('each anchor the moves send on lands on its new home’s panel heading, for the same run, Back skipping the old address', async ({ page, owner }) => {
 	void owner;
 	test.setTimeout(120_000); // nineteen forwarded loads and their Backs
 	await page.setViewportSize(VIEW);
 	const project = await seedRunnableProject(page.request, 'Pins moved');
 	const runId = await createRun(page.request, project.id, 'Moved');
-	// The forwarded anchors, from the source (runs/sections.ts movedHref reads these lists).
+	// The forwarded anchors, from the source (nav/anchorMoves.ts reads these lists).
 	const base = new URL('../../frontend/src/lib/components/', import.meta.url);
 	const river = (await import(new URL('river/links.ts', base).href)) as { RIVER_ANCHORS: readonly string[]; RIVER_STRIP_ANCHOR: string };
 	const supply = (await import(new URL('supply/links.ts', base).href)) as { SUPPLY_ANCHORS: readonly string[] };

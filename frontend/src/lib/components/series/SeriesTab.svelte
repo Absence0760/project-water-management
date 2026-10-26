@@ -23,6 +23,7 @@
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { page } from '$app/state';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
@@ -757,26 +758,31 @@
 	const navGroups = $derived(
 		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
 	);
-	// A link to a panel (`?tab=series#data-checks`, `?rain=units#data-feeds`, the menu's own links reloaded):
-	// the tab is a lazy chunk, most panels wait for the series and Data feeds is a chunk of its own, so land on
-	// it once drawn and hold it while the page settles, with focus on its heading (help/anchor.ts landOnAnchor,
-	// as Settings does).
-	onMount(() => {
-		let hash = page.url.hash.slice(1);
-		// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in
-		// (the fragment dropped, so Back or a reload doesn't reopen it); anyone else lands on the series.
-		const moved = retiredDataAnchor(hash);
-		if (moved) {
-			if (!readonly && onadddata) {
-				history.replaceState(history.state, '', `${page.url.pathname}${page.url.search}`);
-				onadddata();
-				return;
-			}
-			hash = moved;
-		}
-		if (!dataAnchor(hash)) return;
-		return landOnAnchor(hash);
-	});
+	// A link to a panel (`?tab=series#data-checks`, `?rain=units#data-feeds`, the menu's own links reloaded),
+	// on load or a #fragment typed or followed while the page is open (finding R2-D): the tab is a lazy chunk,
+	// most panels wait for the series and Data feeds is a chunk of its own, so land on it once drawn and hold
+	// it while the page settles, with focus on its heading (help/anchor.ts landOnAnchor, through
+	// nav/anchorLanding.ts as Settings, Runs and Project do).
+	onMount(() =>
+		followAnchors({
+			page: 'series',
+			land(hash) {
+				// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in
+				// (the fragment dropped, so Back or a reload doesn't reopen it); anyone else lands on the series.
+				const moved = retiredDataAnchor(hash);
+				if (moved) {
+					if (!readonly && onadddata) {
+						history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+						onadddata();
+						return;
+					}
+					hash = moved;
+				}
+				return dataAnchor(hash) ? landOnAnchor(hash) : undefined;
+			},
+			forward: (to) => void goto(to, { replace: true, reset: false })
+		})
+	);
 
 	// The series panel's link to Data feeds, further down: the browser jumps to the fragment, then the
 	// heading takes the focus, so Tab carries on from there (as SectionNav's links do; the fragment already
