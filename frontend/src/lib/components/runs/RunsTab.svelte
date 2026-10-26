@@ -463,9 +463,14 @@
 	const shownOutsideFilter = $derived(!!runQuery.trim() && !!detail && !shownRuns.some((r) => r.id === detail!.run.id));
 	const queryStep = new SearchStep();
 	let queryTimer: ReturnType<typeof setTimeout> | undefined;
+	/**
+	 * The last words this box wrote to the URL: the URL catching up with them isn't a new filter. Without it, a
+	 * write that landed after more typing put the older words back in the box (as History's filter keeps them).
+	 */
+	let written = untrack(() => page.url.searchParams.get('q') ?? '');
 	$effect(() => {
 		const q = page.url.searchParams.get('q') ?? '';
-		if (untrack(() => runQuery.trim()) !== q) runQuery = q;
+		if (q !== untrack(() => written)) runQuery = written = q;
 	});
 	function writeQuery() {
 		clearTimeout(queryTimer);
@@ -475,6 +480,7 @@
 			if (words) url.searchParams.set('q', words);
 			else url.searchParams.delete('q');
 			if (url.search === page.url.search) return;
+			written = words;
 			void queryStep.write(url.href, (replace) => goto(url, { replace, reset: false }));
 		}, 300);
 	}
