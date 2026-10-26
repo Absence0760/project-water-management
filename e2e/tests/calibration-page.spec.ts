@@ -50,7 +50,7 @@ test.describe('1440×960', () => {
 		await expect(page.locator('#cal-setup').getByRole('heading', { level: 4, name: 'GR4J parameters' })).toBeVisible();
 		await expect(page.locator('#res-hydrograph').getByRole('heading', { level: 3, name: 'Hydrograph' })).toBeVisible();
 		await expect(page.locator('#res-calibration').getByRole('heading', { level: 4, name: /^Where the parameters came from/ })).toBeVisible();
-		await expect(page.getByTestId('calibration-setup-note')).toHaveText('These settings save with Model settings’, from the one save bar.');
+		await expect(page.getByTestId('calibration-setup-note')).toHaveText('Changes here are saved with Model settings’ changes, from the bar that shows at the foot of the window.');
 		const partSize = await part(page, 'cal-setup').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
 		const panelSize = await page.locator('#set-flow h3').first().evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
 		expect(partSize, 'a part’s heading is larger than its panels’').toBeGreaterThan(panelSize);

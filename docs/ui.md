@@ -5926,7 +5926,8 @@ a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
 where they disagree, using the project's thresholds from Settings → *Data
 quality*. A **Data checks** panel lists negative values, outliers and flat
-stretches found in each loaded series (engine `checkSeries`), each naming
+stretches found in each loaded series (engine `checkSeries`; its dates day
+first, "6 Oct 2020: -0.4 m³/s", from engine 1.99.0, issue #586), each naming
 its series as a link-styled button (*Chart Logger* to a screen reader,
 `aria-pressed` while charted) that charts it as its row's **View** does,
 a history entry (issue #586: the check named the series and went nowhere), plus the
@@ -7234,6 +7235,26 @@ The page has:
   fit record compares with (issue #45) is fetched once per version of the
   series and kept for the session (`calibration/apanFingerprint.ts`), for
   the header and the fit record alike.
+- **The first line** (`calibration/status.ts` `statusLine`, issue #586 R4-A):
+  the page's answer on its first screen, one slim line under the header
+  (`role="status"`, `calibration-status`), since the panels are long (the
+  shown run's scores sat ~3,800 px down at 1440 × 960, ~6,000 px on a phone,
+  and a missing flow record was said only at the page's foot). For the shown
+  run, "Shown run, Baseline: NSE −2.26, no better than the mean flow · KGE
+  −0.33 · volume bias 84.1% too dry." with **All the scores** (to
+  `#res-calibration`), its rule toned as the NSE tile when the NSE is no
+  better than the mean flow (the words say so too); a run with no scores says
+  why: no record in the project, with **Add one on Data**, or none inside
+  the window, with **Why** (to the panel, which links its fixes).
+  With no run it says what to do first, as the part's empty state does: **No
+  observed flow record yet.** with *add one on Data*, else **No run yet.**
+  While the runs load it reads "Loading the shown run…", keeping its place,
+  and a failed list points at the part's **Try again**. When the form's GR4J
+  parameters differ from the ones the shown run used (an edit, saved or not, or
+  an applied fit; `gr4jChanges`, to the three decimals the fields show),
+  the line adds that the form's differ and that a run scores them, and a note
+  over the run's results lists them ("X1 350 → 321 mm",
+  `calibration-changed`), so the old run's fit isn't read as the edit's.
 - **Two parts, the page's h2s** (issue #586 R3-D), 1.3rem, 2rem apart, with
   their panels' headings h3 under them, each card's h4 and a card's sub-group
   h5 (every component keeps the size it had one level up on Model settings,
@@ -7241,8 +7262,9 @@ The page has:
   that a reader needs is the line under Set up the fit.
 - **Set up the fit** (`#cal-setup`): the settings panels,
   `settings/CalibrationSettings.svelte`, in a `settings-form explain-scope`
-  wrapper. Its first line says, for editors, "These settings save with Model
-  settings', from the one save bar.", with the **Explain each setting under
+  wrapper. Its first line says, for editors, "Changes here are saved with
+  Model settings' changes, from the bar that shows at the foot of the
+  window.", with the **Explain each setting under
   its field** switch at its end (the same switch and the same panel lines and
   cards as Model settings', app.css `.settings-form`). A viewer reads them
   with every field read-only, no fit controls and no save line.
@@ -7254,7 +7276,9 @@ The page has:
   pick follows the reader between the two pages (the sidebar carries `run=`,
   `workspace/tabLinks.ts` `RUN_TABS`). A select labelled **Run** with each
   run named as the other pages' pickers name it (`compare/picker.ts`
-  `runOptionLabel`, newest first, the newest marked *latest*); with one run,
+  `runOptionLabel`, newest first, the newest marked *latest*), when it ran
+  day first as the run line says it ("today 13:40", "3 Oct 2026 09:12",
+  `fmtWhen`); with one run,
   its name and no select. Choosing one writes `run=`, one step in history
   (the hash kept, focus and scroll kept). The select takes the width its
   labels need up to 44rem, with **Open in Runs & results** for that run at
@@ -7276,7 +7300,13 @@ The page has:
   an editor, whose Run model is the header's, or "An editor can run the
   model." for a viewer; then a line on what a run shows), loading the run,
   and a failed run with **Try again** (or **Show the newest run** for a run
-  that's gone). Calibration against observed flow's no-statistics line links
+  that's gone). Each **Try again** here (the runs list's, the run's, and the
+  calibration check's series) keeps the focus as LoadState's does
+  (`calibration/retryFocus.ts` on `common/loadState.ts` `retryLanding`, WCAG
+  2.4.3, issue #586 R4-A): on the loading line while it loads, on the new Try
+  again if it fails again, on the part's (or the check's) heading once
+  loaded; the runs list's is `aria-disabled` while it loads, never disabled
+  (`calibration-retry-focus.spec.ts`). Calibration against observed flow's no-statistics line links
   its fixes here (Data, and Calibration record on the page; `linked`, words
   in a printed report). A link to a Model quality panel
   (`#res-plausibility`, the Summary's model checks, an old
@@ -7722,7 +7752,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     a scores table. Its columns are current parameters, fitted, then each
     test's fitted part and validation part, then the independent record if
     one was chosen; the validation columns are shaded. Each column header
-    gives its period: a date range, except for the dry → wet test, whose
+    gives its period: a date range, day first ("1 Oct 2001 – 30 Sep 2004", `fit.ts` `scoreColumns` with `fmtDay`, issue #586 D9), except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, the low/high-flow KGE′ on Q and 1/Q (engine ≥ 1.19.0; "–" on a report made
     before it), volume error and the FDC signatures. From engine 1.19.0
@@ -9270,7 +9300,9 @@ read it before.
   "Flow-duration curve controls", "Chart any daily series controls", "Model
   stores controls"; `LineChart`'s `toolsLabel`), so the repeated Earlier /
   Later, Log scale and time-window buttons say which chart they move (issue
-  #586). The Hydrograph and Flow-duration curve panels show their headings,
+  #586). A run with no observed record at the outlet titles both charts
+  "… natural and simulated (no observed record in this run)" and drops the
+  observed line's caption (#586 R4-A). The Hydrograph and Flow-duration curve panels show their headings,
   word for word the side index's, so the focus ring a `#res-hydrograph` link
   puts on the heading can be seen. When a chart's series fail to load, the
   hydrograph, the flow-duration curve, the calibration site's chart, the
@@ -9288,6 +9320,10 @@ read it before.
   a tile no better than the mean flow, NSE or log NSE ≤ 0 or KGE ≤ −0.41, gets a warning edge and "No better
   than the mean flow." as the Summary's NSE card does, #586 D12; its window, observations and exclusions
   are day first, "1 Oct 2021 – 28 Jan 2022", as is the EWR test's intro, #586 D9;
+  its six tiles go 3 + 3 where the panel is 44rem or wider, 2 + 2 + 2 from 28rem, one column on a
+  phone, never 4 + 2 beside an empty half row, and below 38rem the annual water balance stacks each
+  year as a block, its cells under their names ("120 of 120" days observed), instead of scrolling
+  sideways, #586 R4-A;
   from engine 1.19.0 the same **WR2012 statistics** table as the fit results, for the run's scored
   days, above the annual water balance, CR-28),
   then **Where the parameters came from**: the fit record the

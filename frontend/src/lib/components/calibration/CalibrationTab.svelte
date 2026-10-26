@@ -38,6 +38,8 @@
 	import type { RunSummary } from '@water-management/engine';
 	import { calibrationNavGroups, isCalPart, isCalSubsection, type CalShown } from './page';
 	import { apanFingerprint } from './apanFingerprint';
+	import { gr4jChanges, statusLine, type CalState } from './status';
+	import { hasRole } from '#lib/api/index.js';
 
 	let {
 		runs,
@@ -97,6 +99,13 @@
 	const navGroups = $derived(calibrationNavGroups(shown?.summary ?? null, shown?.subs ?? {}));
 	/** An observed or logger flow record a run can be scored against (null while the series list loads), for the empty state. */
 	const hasRecord = $derived(series ? series.some((x) => x.kind === 'flow_observed_m3s' || x.kind === 'flow_logger_m3s') : null);
+	// The page's first line (status.ts): how the shown run fits, or why there's nothing to read yet, on the first
+	// screen; the panels are long, so the scores were ~3,800 px down at 1440 × 960 (issue #586 R4-A).
+	let calState = $state.raw<CalState>({ kind: 'loading' });
+	let runGr4j = $state.raw<Record<string, number | null | undefined> | null>(null);
+	/** The form's GR4J parameters that differ from the shown run's: said on the first line and over the run's results. */
+	const changed = $derived(gr4jChanges(runGr4j, draft.s.gr4j));
+	const status = $derived(statusLine(calState, hasRecord, hasRole(role, 'editor'), changed));
 	/** How the shown run fits' landing (CalibrationResults.svelte): a Model quality anchor waits there for the run. */
 	let landResults: ((id: string) => (() => void) | void) | null = null;
 
@@ -155,6 +164,11 @@
 <!-- The side index from 80rem of page (a 1440 px window), as Project and Data; the bar below that. -->
 <SectionNav groups={navGroups} label="Calibration sections" railFrom={80}>
 	<div class="cal-page" bind:this={body}>
+		<!-- The page's answer on its first screen: one slim line under the header (ui-playbook.md § 2), linking on to the
+		     scores, or to what to do first. role="status": it changes as a run loads or another is picked. -->
+		<p class="cal-status" class:warn={status.tone === 'warn'} class:busy={status.busy} role="status" data-testid="calibration-status">
+			<strong>{status.lead}</strong>{#if status.text}{' '}{status.text}{/if}{#if status.link}{' '}<a href={status.link.href}>{status.link.label}</a>{#if status.link.label === 'add one on Data'}.{/if}{/if}
+		</p>
 		<div class="parts">
 			<!-- The settings panels that set up a fit (issue #586 round 3). Their wrapper gives them the settings pages'
 			     frame (app.css `.settings-form`) and the explanations switch, as on Model settings. A viewer reads them
@@ -164,7 +178,7 @@
 				<div class="settings-form explain-scope" class:explained={explainSwitch.on}>
 					<!-- What the page's old lead said that a reader needs here: these edits are Model settings' draft too. -->
 					<div class="setup-line">
-						{#if !readonly}<p class="muted small" data-testid="calibration-setup-note">These settings save with Model settings’, from the one save bar.</p>{/if}
+						{#if !readonly}<p class="muted small" data-testid="calibration-setup-note">Changes here are saved with Model settings’ changes, from the bar that shows at the foot of the window.</p>{/if}
 						<ExplainSwitch />
 					</div>
 					<CalibrationSettings
@@ -186,7 +200,22 @@
 			<!-- Model quality's panels are panels of their own, so this part is a heading over them, not a panel round them. -->
 			<section class="part" id="cal-fit" aria-labelledby="cal-fit-h">
 				<h2 id="cal-fit-h" class="part-h">How the shown run fits</h2>
-				<CalibrationResults {projectId} {runs} {role} {nodes} {series} {projectSettings} {hasRecord} landing={(land) => (landResults = land)} onshown={(v) => (shown = v)} />
+				<CalibrationResults
+					{projectId}
+					{runs}
+					{role}
+					{nodes}
+					{series}
+					{projectSettings}
+					{hasRecord}
+					{changed}
+					landing={(land) => (landResults = land)}
+					onshown={(v) => (shown = v)}
+					onstate={(v, g) => {
+						calState = v;
+						runGr4j = g;
+					}}
+				/>
 			</section>
 		</div>
 	</div>
@@ -206,6 +235,25 @@
 	}
 	.part {
 		min-width: 0;
+	}
+	/* One slim line, as the workspace's notices: a rule on its left, toned like the NSE tile when the fit is no better
+	   than the mean flow (the words say so too). */
+	.cal-status {
+		margin: 0 0 1rem;
+		padding: 0.35rem 0.75rem;
+		border-left: 3px solid var(--border-strong);
+		background: var(--surface);
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+		max-width: 100%;
+	}
+	.cal-status.warn {
+		border-left-color: var(--warning);
+	}
+	.cal-status.busy {
+		color: var(--text-muted);
+	}
+	.cal-status.busy strong {
+		font-weight: 400;
 	}
 	/* A part's heading over its panels' (h3, 1.1rem): a size up, so the two parts read as the page's two halves. */
 	.part-h {

@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Calibration's first line (calibration/status.ts and its markup in CalibrationTab), the changed-parameters note, and the score tiles' and year table's container queries in CalibrationPanel: total measured 2090 KB against 2089 KB after pnpm build:frontend"
+}
