@@ -480,7 +480,7 @@
 			{#each away as moved (moved.href)}
 				<li>
 					<a data-item href={moved.href} onclick={() => (findOpen = false)} aria-label="{moved.text}, on {moved.page}" data-testid="find-elsewhere"
-						><span>{moved.text}</span><span class="in">on {moved.page} <span aria-hidden="true">↗</span></span></a
+						><span>{moved.text}</span> <span class="in">on {moved.page} <span aria-hidden="true">↗</span></span></a
 					>
 				</li>
 			{/each}
