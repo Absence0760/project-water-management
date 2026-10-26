@@ -69,7 +69,7 @@ for (const name of ['engine', 'frontend', 'backend', 'e2e']) {
 }
 // --passWithNoTests: a workspace no change reaches has nothing to run, which is a pass.
 const vitest = (dir, extra = []) => ['-C', dir, 'exec', 'vitest', 'run', '--changed', base, '--passWithNoTests', ...extra];
-step('unit tests engine (changed)', 'pnpm', vitest(WORKSPACES.engine, ['--project', 'unit']));
+step('unit tests engine (changed)', 'pnpm', vitest(WORKSPACES.engine, ['--project', 'unit', '--project', 'fuzz']));
 step('unit tests frontend (changed)', 'pnpm', vitest(WORKSPACES.frontend));
 step('unit tests backend (changed)', 'pnpm', vitest(WORKSPACES.backend, ['--project', 'unit']));
 if (dbUp) step('db tests backend (changed)', 'pnpm', vitest(WORKSPACES.backend, ['--project', 'db']));

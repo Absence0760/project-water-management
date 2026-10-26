@@ -954,7 +954,7 @@ def gauge_as_reference(
             "WARNING: [Flow data] rUseFlow calibrates against the gauge column, which --gauge-as-reference says is "
             "another river. calibrationFlowKind is left unset"
             + (
-                ", so runs use the logger record. Check that choice in Settings -> Calibration record -> Compare with"
+                ", so runs use the logger record. Check that choice in Calibration -> Calibration record -> Compare with"
                 if has_logger
                 else " and the project has no observed flow record to calibrate against"
             )

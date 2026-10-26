@@ -187,7 +187,7 @@
 </script>
 
 <section class="fit" aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h" tabindex="-1" bind:this={heading}>Fit automatically <HelpTip key="auto-calibration" /></h3>
+	<h4 id="{uid}-h" tabindex="-1" bind:this={heading}>Fit automatically <HelpTip key="auto-calibration" /></h4>
 	<!-- One status line when a result arrives, not the whole result read out (issue #586, C18). In the page from
 	     the start, so a screen reader hears it change. -->
 	<p class="visually-hidden" role="status" data-testid="fit-status">{report ? `Fit finished: ${objectiveName(report.objective)}, ${fmtNum(report.evaluations)} runs. The result is below.` : ''}</p>
@@ -306,7 +306,7 @@
 
 		{#if report}
 			<div class="result">
-				<h4>Result</h4>
+				<h5>Result</h5>
 				<p class="small muted">
 					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed}{report.starts > 1 ? ` · ${report.starts} starts` : ''} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
 				</p>
@@ -429,7 +429,7 @@
 					{@const rep = report.representativeness}
 					<!-- Calibration research CR-34: the record's length and where its years sit in the long-term rain. -->
 					<section class="rep" aria-labelledby="{uid}-rep-h" data-testid="fit-representativeness">
-						<h5 id="{uid}-rep-h">How representative is the record <HelpTip key="record-representativeness" label="About how representative the record is" /> <span class="muted gist">{representativenessGist(rep)}</span></h5>
+						<h6 id="{uid}-rep-h">How representative is the record <HelpTip key="record-representativeness" label="About how representative the record is" /> <span class="muted gist">{representativenessGist(rep)}</span></h6>
 						<p class="small">{rep.summary}</p>
 						{#if rep.years.length}
 							<div class="table-wrap">
@@ -484,11 +484,15 @@
 	.fit {
 		margin: 0;
 	}
-	h3 {
-		margin: 0 0 0.25rem;
-	}
+	/* A card in Fit the parameters (an h3 under the Calibration page's h2 part, issue #586 round 3): h4 for the card,
+	   h5 under it, each at the size it had one level up. */
 	h4 {
+		margin: 0 0 0.25rem;
+		font-size: 0.95rem;
+	}
+	h5 {
 		margin: 0.75rem 0 0.25rem;
+		font-size: 1em;
 	}
 	.hint {
 		font-size: var(--font-sm);
@@ -572,7 +576,7 @@
 	tr.kept td {
 		font-weight: 600;
 	}
-	.rep h5 {
+	.rep h6 {
 		margin: 0.75rem 0 0.25rem;
 		font-size: 0.9rem;
 	}

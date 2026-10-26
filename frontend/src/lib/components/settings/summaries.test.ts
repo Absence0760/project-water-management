@@ -11,7 +11,6 @@ const cal = (patch: Partial<SummaryInput['s']> = {}, siteName?: string): Calibra
 	s: { ...defaultProjectSettings(), ...patch } as SummaryInput['s'],
 	unitAreaKm2: 70,
 	peAnnualMm: 1200,
-	fit: 'GR4J · no fit record: the parameters were set by hand or imported',
 	siteName
 });
 
@@ -109,7 +108,12 @@ describe('calibrationSummaries', () => {
 		const own = calibrationSummaries(cal());
 		expect(Object.keys(own).sort()).toEqual([...CAL].sort());
 		expect(own['set-record']).toBe('The whole flow record · at the outlet');
-		expect(own['set-fit']).toBe('GR4J · no fit record: the parameters were set by hand or imported');
+		// The rules' state, not the header's fit line again (issue #586, C19).
+		expect(own['set-fit']).toBe('Calibration rules revision 1 · draft, not signed off');
+		expect(calibrationSummaries(cal({ calibrationRules: { ...defaultProjectSettings().calibrationRules!, revision: 3, signedOff: { by: 'A. Hydrologist', on: '2026-09-29' } } }))['set-fit']).toBe(
+			'Calibration rules revision 3 · signed off by A. Hydrologist'
+		);
+		expect(calibrationSummaries(cal({ calibrationRules: undefined }))['set-fit']).toBe('No calibration rules');
 		expect(own['set-wr2012']).toBe('Off: runs aren’t compared with WR2012');
 		const page = settingsSummaries(base());
 		for (const id of CAL) expect(page[id], id).toBeUndefined();

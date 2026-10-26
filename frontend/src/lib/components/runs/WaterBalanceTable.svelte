@@ -113,14 +113,15 @@
 	}
 	/* A run with the optional terms (groundwater, other users, losses: up to
 	   twenty-one columns) can't fit any column; it scrolls inside its box, with
-	   the water year held at the left edge so every row stays named. */
-	.balance :is(thead th:first-child, tbody th) {
+	   the water year held at the left edge so every row stays named. Only while it scrolls (`data-scrolls-x`,
+	   lib/a11y/scrollRegions.ts), as app.css pins row names on a phone: a table that fits fixes nothing. */
+	.balance-wrap:global([data-scrolls-x]) .balance :is(thead th:first-child, tbody th) {
 		position: sticky;
 		left: 0;
 		z-index: 1;
 		background: var(--surface);
 	}
-	.balance thead th:first-child {
+	.balance-wrap:global([data-scrolls-x]) .balance thead th:first-child {
 		background: var(--surface-2);
 	}
 	tr.total th,

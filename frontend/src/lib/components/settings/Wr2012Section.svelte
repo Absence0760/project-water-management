@@ -110,7 +110,7 @@
 
 <section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
-		<h2 id="{uid}-h">WR2012 check <HelpTip key="settings.wr2012" /></h2>
+		<h3 id="{uid}-h">WR2012 check <HelpTip key="settings.wr2012" /></h3>
 		<!-- The action that fills the reference sits in the head, above the fields it fills (ui-playbook.md § 2). -->
 		<div class="head-actions">
 			{#if ref && projectId && !readonly && !proposing}
@@ -484,7 +484,11 @@
 		align-items: center;
 		margin: 0.75rem 0;
 	}
-	h2 :global(.helptip),
+	/* A panel under the Calibration page's "Set up the fit" (an h2, issue #586 round 3): an h3 at a panel heading's size. */
+	.panel-head > h3 {
+		font-size: 1.1rem;
+	}
+	h3 :global(.helptip),
 	legend :global(.helptip) {
 		margin-left: 0.15rem;
 	}

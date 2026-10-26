@@ -21,7 +21,7 @@ export async function openSettings(page: Page, projectId: string) {
 export async function openCalibration(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=calibration`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
-	await expect(page.getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 3, name: 'Fit the parameters' })).toBeVisible();
 }
 
 /**

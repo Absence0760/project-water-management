@@ -39,8 +39,9 @@ test('a run with every optional panel: Model quality’s panels in page order, e
 	await expect(page.locator('#res-plausibility')).toBeAttached();
 	expect(await panelOrder(page)).toEqual(PANELS.map(([a, h]) => `${a}: ${h}`));
 	// Two sub-headings of Calibration against observed flow have ids of their own, for the side index's lines (issue #586 D4).
-	await expect(page.locator('#res-calibration h3#res-calibration-check')).toHaveText('Calibration check: flow against use, per gauge');
-	await expect(page.locator('#res-calibration h3#res-fit-provenance')).toContainText('Where the parameters came from');
+	// Each an h4 under the panel's h3 (issue #586 R3-D: the page's parts are its h2s).
+	await expect(page.locator('#res-calibration h4#res-calibration-check')).toHaveText('Calibration check: flow against use, per gauge');
+	await expect(page.locator('#res-calibration h4#res-fit-provenance')).toContainText('Where the parameters came from');
 
 	for (const [anchor, heading] of PANELS) {
 		// From another tab, so each is a fresh load and the page's landing runs.

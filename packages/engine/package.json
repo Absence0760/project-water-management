@@ -21,8 +21,8 @@
 	},
 	"scripts": {
 		"check": "tsc -p tsconfig.json --noEmit",
-		"test": "vitest run --project unit",
-		"test:coverage": "vitest run --project unit --coverage",
+		"test": "vitest run --project unit --project fuzz",
+		"test:coverage": "vitest run --project unit --project fuzz --coverage",
 		"test:watch": "vitest",
 		"test:perf": "vitest run --project perf",
 		"gen:liability": "tsx scripts/gen-liability.ts"

@@ -107,14 +107,14 @@ const INDEX: [group: string | null, links: [label: string, id: string][]][] = [
 	['Automatic runs', [['Automatic runs', 'set-auto']]]
 ];
 
-/** A panel's own heading: the first h2 (h3 for a card) under its anchor, read as shown (its ⓘ tip adds no text). */
-const panelHeading = (page: Page, id: string) => page.locator(`#${id}`).locator('h2, h3').first();
+/** A panel's own heading: the first h2 (h3 for a card; on Calibration, under its parts' h2s, h3 and h4) under its anchor, read as shown (its ⓘ tip adds no text). */
+const panelHeading = (page: Page, id: string) => page.locator(`#${id}`).locator('h2, h3, h4').first();
 const sections = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const pageTitle = (page: Page) => page.getByRole('heading', { level: 1, name: 'Model settings', exact: true });
 const calTitle = (page: Page) => page.getByRole('heading', { level: 1, name: 'Calibration', exact: true });
 
 /** A panel's heading, whether the anchor is on the heading itself or on the panel around it. */
-const anchoredHeading = (page: Page, id: string) => page.locator(`:is(h2, h3)#${id}, #${id} :is(h2, h3)`).first();
+const anchoredHeading = (page: Page, id: string) => page.locator(`:is(h2, h3, h4)#${id}, #${id} :is(h2, h3, h4)`).first();
 
 test('the panels, their anchors and the side index, in page order', async ({ page, owner }) => {
 	void owner;
@@ -178,7 +178,7 @@ test('Calibration’s Set up the fit: the settings panels and their anchors, in 
 		above = y;
 	}
 	for (const [id, heading, panel] of INNER) {
-		await expect(page.locator(`#${panel} #${id}`).locator('h2, h3').first()).toHaveText(heading, { useInnerText: true });
+		await expect(page.locator(`#${panel} #${id}`).locator('h2, h3, h4').first()).toHaveText(heading, { useInnerText: true });
 	}
 	// The explanations switch is here too, and turns this page's explanations on as on Model settings.
 	const sw = page.getByRole('checkbox', { name: 'Explain each setting under its field' });

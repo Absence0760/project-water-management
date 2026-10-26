@@ -96,7 +96,7 @@ test('Calibration’s header says there is no fit record and jumps to Fit the pa
 	await jump.click();
 	await expect(page).toHaveURL(/\?tab=calibration#set-fit$/);
 	const fit = page.locator('#set-fit');
-	await expect(fit.getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeFocused();
+	await expect(fit.getByRole('heading', { level: 3, name: 'Fit the parameters' })).toBeFocused();
 	await expect(fit.getByRole('heading', { name: 'Fit automatically' })).toBeInViewport();
 	// Back returns to the page as it was.
 	await page.goBack();
@@ -242,7 +242,7 @@ test.describe('with a fitted example catchment', () => {
 		await page.locator('table.projects').getByRole('link', { name: KLEINBERG, exact: true }).click();
 		await expect(page.getByTestId('section-header')).toBeVisible();
 		await page.goto(`${page.url().split('?')[0]}?tab=calibration`);
-		await expect(page.getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeVisible();
+		await expect(page.getByRole('heading', { level: 3, name: 'Fit the parameters' })).toBeVisible();
 	}
 
 	test('the header names the fit and its score, and says when an edit leaves the fit behind; parameters show three decimals', async ({ page }) => {
@@ -251,7 +251,7 @@ test.describe('with a fitted example catchment', () => {
 		const fitted = /^GR4J · fitted \d{1,2} [A-Z][a-z]{2} \d{4} · KGE′ \d\.\d\d in calibration$/;
 		await expect(fitSummary(page)).toHaveText(fitted);
 		// The header, the menu and the first panel are on the first screen.
-		await expect(page.getByRole('heading', { level: 2, name: 'Flow calibration' })).toBeInViewport();
+		await expect(page.getByRole('heading', { level: 3, name: 'Flow calibration' })).toBeInViewport();
 
 		// A fit writes nine decimals; the field shows three and keeps the value (nothing to save).
 		const x1 = page.getByLabel(/^Production store capacity X1/);
@@ -395,10 +395,11 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	void owner;
 	const project = await createProject(page.request, 'Settings headings');
 	// The headings on the page: a closed notes drawer's title (a dialog, in the DOM while shut) is not one.
-	const names = (id: string) =>
+	// A panel and its cards: h2 and h3 on Model settings, h3 and h4 on Calibration, under its parts' h2s (issue #586 R3-D).
+	const names = (id: string, levels = 'h2, h3') =>
 		page
 			.locator(`#${id}`)
-			.locator('h2, h3')
+			.locator(levels)
 			.evaluateAll((els) => els.filter((e) => !e.closest('dialog:not([open])')).map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
 	// Calibration's panels (issue #586 round 3).
 	await openCalibration(page, project.id);
@@ -408,14 +409,14 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	await openFold(page.locator('#set-record'), 'record-flags');
 	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: /^Quality flags for Fit automatically/ })).toBeVisible();
-	// Its cards (issue #521), each an h3; the switches inside Rain into GR4J are h4s under it.
-	expect((await names('set-flow')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
-	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Areal rainfall correction' })).toBeVisible();
-	const record = await names('set-record');
+	// Its cards (issue #521), each an h4 under the panel's h3; the switches inside Rain into GR4J are h5s under it.
+	expect((await names('set-flow', 'h3, h4')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
+	await expect(page.locator('#set-flow').getByRole('heading', { level: 5, name: 'Areal rainfall correction' })).toBeVisible();
+	const record = await names('set-record', 'h3, h4');
 	expect(record[0]).toBe('Calibration record');
 	expect(record).toContain('Quality flags for Fit automatically');
 	expect(record).toContain('Flow gaps');
-	const fit = await names('set-fit');
+	const fit = await names('set-fit', 'h3, h4');
 	expect(fit[0]).toBe('Fit the parameters');
 	expect(fit[1]).toBe('Fit automatically');
 
@@ -435,7 +436,7 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	// A link from elsewhere (a fresh load: from this same page, a goto would only move to the fragment).
 	await page.goto('about:blank');
 	await page.goto(`/projects/${project.id}?tab=calibration#set-fit`);
-	await expect(page.locator('#set-fit').getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeFocused();
+	await expect(page.locator('#set-fit').getByRole('heading', { level: 3, name: 'Fit the parameters' })).toBeFocused();
 });
 
 test('every help tip on the page has its own name, and the annual assurance threshold isn’t part of the reporting window', async ({ page, owner }) => {

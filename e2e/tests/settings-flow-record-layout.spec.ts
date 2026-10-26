@@ -35,21 +35,20 @@ async function openProject(page: Page, name: string) {
 async function jump(page: Page, hash: string) {
 	await page.evaluate((h) => (location.hash = h), `#${hash}`);
 	await expect(page).toHaveURL(new RegExp(`#${hash}$`));
-	await expect(page.locator(`#${hash}`).getByRole('heading', { level: 2 }).first()).toBeFocused();
+	await expect(page.locator(`#${hash}`).getByRole('heading', { level: 3 }).first()).toBeFocused();
 	await layoutSettled(page);
 }
 
-test('at 1440×900 Flow calibration opens on its parameters with the jump to the fit in the card’s head, and its folds open in place', async ({ page, owner }) => {
+test('at 1440×900 Flow calibration opens on its parameters, and its folds open in place', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await openProject(page, 'Flow layout');
 	await jump(page, 'set-flow');
 	const gr4j = flow(page).getByTestId('flow-gr4j-card');
-	// The card's head: its name and its action on one row; the three parameters and the warm-up line on the first screen.
-	const link = gr4j.getByTestId('flow-fit-link');
-	await expect(link).toBeInViewport({ ratio: 1 });
-	const title = await box(gr4j.getByRole('heading', { name: 'GR4J parameters' }));
-	expect(Math.abs((await box(link)).y + (await box(link)).height / 2 - (title.y + title.height / 2))).toBeLessThan(12);
+	// The card's name, the three parameters and the warm-up line on the first screen. The jump to Fit the parameters is
+	// the page header's alone, not repeated in the card (issue #586, C19).
+	await expect(gr4j.getByRole('heading', { level: 4, name: 'GR4J parameters' })).toBeInViewport({ ratio: 1 });
+	await expect(flow(page).getByRole('link', { name: 'Fit the parameters', exact: true })).toHaveCount(0);
 	for (const l of [/^Production store capacity X1/, /^Routing store capacity X3/, /^Unit hydrograph time base X4/]) await expect(gr4j.getByLabel(l)).toBeInViewport();
 	await expect(gr4j.getByTestId('flow-more').locator('summary')).toBeInViewport({ ratio: 1 });
 
@@ -73,7 +72,7 @@ test('at 1440×900 Flow calibration opens on its parameters with the jump to the
 
 	// The cards in order, each with its heading.
 	await expect(flow(page).locator(':scope > .sub-card')).toHaveCount(4);
-	await expect(flow(page).getByTestId('flow-rain-card').getByRole('heading', { level: 3 })).toHaveText('Rain into GR4J');
+	await expect(flow(page).getByTestId('flow-rain-card').getByRole('heading', { level: 4 })).toHaveText('Rain into GR4J');
 	await expect(flow(page).getByTestId('flow-evaporation-card').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
 	expect(await squashedChecks(page)).toEqual([]);
 
@@ -223,9 +222,9 @@ test('a viewer sees no Exclude… or Use buttons, and can open the folds to read
 	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(record(viewer.page).getByRole('button', { name: 'Exclude a water year' })).toHaveCount(0);
 	await expect(viewer.page.getByRole('button', { name: 'Run the calibration rules' })).toHaveCount(0);
-	// No jump to a fit a viewer can't make, in the GR4J card's head as in Calibration's header (issue #586, C11).
+	// No jump to a fit a viewer can't make (issue #586, C11): the header's is an editor's, and the card has none (C19).
 	await expect(flow(viewer.page).getByTestId('flow-gr4j-card')).toBeVisible();
-	await expect(flow(viewer.page).getByTestId('flow-fit-link')).toHaveCount(0);
+	await expect(flow(viewer.page).getByRole('link', { name: 'Fit the parameters', exact: true })).toHaveCount(0);
 	// A fold offers a viewer "Show", never "Change", since nothing inside can be changed (issue #586, C10).
 	for (const [scope, id] of [
 		[record(viewer.page), 'record-flags'],

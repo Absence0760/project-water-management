@@ -16,7 +16,8 @@ const box = async (l: Locator) => (await l.boundingBox())!;
 async function openAt(page: Page, projectId: string, id: string) {
 	const tab = id === 'set-wr2012' ? 'calibration' : 'settings';
 	await page.goto(`/projects/${projectId}?tab=${tab}#${id}`);
-	await expect(page.locator(`#${id}`).getByRole('heading', { level: 2 }).first()).toBeInViewport();
+	// A panel is an h2 on Model settings, an h3 under Calibration's part headings.
+	await expect(page.locator(`#${id}`).getByRole('heading', { level: tab === 'calibration' ? 3 : 2 }).first()).toBeInViewport();
 	await layoutSettled(page);
 }
 

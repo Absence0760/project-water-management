@@ -84,7 +84,7 @@
 </script>
 
 <section class="auto" aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Automated calibration <HelpTip key="calibration-rules" label="About automated calibration" /></h3>
+	<h4 id="{uid}-h">Automated calibration <HelpTip key="calibration-rules" label="About automated calibration" /></h4>
 	{#if !hasObserved}
 		<p class="muted small" data-testid="auto-no-record">Add an observed or logger flow record on <a href="?tab=series">Data</a> to calibrate against it.</p>
 	{:else}
@@ -116,7 +116,7 @@
 
 		{#if latest && runState}
 			<div class="result" data-testid="auto-result">
-				<h4>Latest run</h4>
+				<h5>Latest run</h5>
 				<p class="small muted">
 					{triggerText(latest)} · rules revision {latest.rulesRevision} · kept by {selectionText(latest.rules)} · {latest.createdAt.slice(0, 16).replace('T', ' ')}
 				</p>
@@ -205,11 +205,14 @@
 		padding-top: 0.75rem;
 		margin: 0.75rem 0;
 	}
-	h3 {
-		margin: 0 0 0.25rem;
-	}
+	/* A card's heading in Fit the parameters (an h3 on the Calibration page, issue #586 round 3), at the sizes it had one level up. */
 	h4 {
+		margin: 0 0 0.25rem;
+		font-size: 0.95rem;
+	}
+	h5 {
 		margin: 0.75rem 0 0.25rem;
+		font-size: 1em;
 	}
 	.rules {
 		display: grid;

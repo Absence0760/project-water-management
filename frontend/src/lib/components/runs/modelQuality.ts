@@ -26,7 +26,11 @@ export { MODEL_QUALITY_ANCHORS, isModelQualityAnchor, type ModelQualityAnchor } 
  * The panels ModelQuality draws after the hydrograph has been painted (the hydrograph and the flow-duration curve
  * come first): a link to one of them (`#res-plausibility`) has them drawn at once, so it has somewhere to land.
  */
-export const isLowerAnchor = (id: string): boolean => isModelQualityAnchor(id) && id !== 'res-hydrograph' && id !== 'res-fdc';
+export const isLowerAnchor = (id: string): boolean =>
+	(isModelQualityAnchor(id) && id !== 'res-hydrograph' && id !== 'res-fdc') ||
+	// Calibration against observed flow's sub-headings with an index line (calibration/page.ts CAL_SUBSECTIONS).
+	id === 'res-calibration-check' ||
+	id === 'res-fit-provenance';
 
 /** The run checks a gauge inside the network that it doesn't score: GaugeCheckFlows draws it under the flow-duration curve (checkGauges.ts checksOnlyGauges, from the same summary fields). */
 const hasCheckGauges = (summary: SectionInput) => (summary.plausibility?.gauges ?? []).some((g) => g.nodeId !== (summary.calibration?.siteNodeId ?? null));
