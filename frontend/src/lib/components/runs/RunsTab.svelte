@@ -16,8 +16,7 @@
 	import { fmtDay, fmtNum, fmtStamp, fmtWhen } from '#lib/format/number.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { dataEnd, newDataSinceRun } from '#lib/components/series/freshness.js';
-	import { detailCache, forgetRun, prefetchSeries } from './cache';
-	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
+	import { detailCache, forgetRun, runDetail } from './cache';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
@@ -32,6 +31,7 @@
 	import { anchorMoved } from '#lib/nav/anchorMoves.js';
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { supplyHref } from '#lib/components/supply/links.js';
+	import { calibrationHref } from '#lib/components/calibration/links.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { historyDays, ranAgo } from '#lib/components/overview/latestRun.js';
 	import { focusAnchor, hashId, holdAnchor, landOnAnchor } from '#lib/help/anchor.js';
@@ -47,14 +47,13 @@
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
 	// with the other unit panels (issue #17).
-	// Model quality (ModelQuality.svelte, through RunCharts) is in this chunk too, the plausibility checks with it
-	// (tab chunks have their own ceiling, scripts/guards/check_web_bundle_budget.mjs).
+	// Model quality (ModelQuality.svelte) moved to the Calibration page's chunk (issue #586 Round 3); tab chunks
+	// have their own ceiling (scripts/guards/check_web_bundle_budget.mjs).
 	import EvidencePanel from './EvidencePanel.svelte';
 	import ReproducePanel from './ReproducePanel.svelte';
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '#lib/components/history/RunInputsPanel.svelte';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
-	// The WR2012 report and Rain for each unit are chunks of their own, loaded by ModelQuality.svelte.
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -109,7 +108,7 @@
 	/** The list failed to load and holds no run: the rail's alert is the page's one message, with no results column (#586 D3). */
 	const listFailed = $derived(!loading && !!loadError && runs.length === 0);
 	const RESULTS_SHOW =
-		"A run's results: flows at the outflow gauge, calibration against observed flow, EWR compliance and each hydrological unit's supply and dam storage.";
+		"A run's results: its summary and water balance, with the fit to observed flow on Calibration, EWR compliance on EWR and each hydrological unit's supply and dam storage on Hydrological units.";
 	let actionError = $state<string | null>(null);
 
 	let label = $state('');
@@ -257,10 +256,8 @@
 		detailError = null;
 		detailGone = false;
 		try {
-			const d = await api.runs.get(projectId, id);
-			// The first charts' flows go out now, before the results page renders (cache.ts prefetchSeries).
-			prefetchSeries(id, d.series, CATCHMENT_FLOW_KEYS.map(([, key]) => ({ key, nodeId: null })), (key, nodeId) => api.runs.series(projectId, id, key, nodeId));
-			detailCache.set(id, d);
+			// Shared with the Calibration page (cache.ts runDetail): one request for a run either page asks for.
+			const d = await runDetail(id, () => api.runs.get(projectId, id));
 			if (detailFor === id) detail = d;
 		} catch (e) {
 			if (detailFor === id) {
@@ -754,7 +751,7 @@
 			</div>
 		{:else if detail}
 			{@const summary = detail.run.summary}
-			<!-- The run's own settings: older cached details lack them (ModelQuality falls back to the project's for its calibration window). -->
+			<!-- The run's own settings: older cached details lack them. -->
 			{@const shownSettings = detail.run.settings}
 			{@const runSeries = detail.series}
 			{@const shownRunId = detail.run.id}
@@ -823,7 +820,7 @@
 				<section id="res-summary" aria-labelledby="summary-h">
 					<!-- Named as the side index and the bar name it (#586 D4). -->
 					<h3 id="summary-h" class="summary-h">Summary</h3>
-					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
+					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} calibrationHref={(hash) => calibrationHref(shownRunId, hash)} />
 					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
 						<Lazy load={loadRunScaledEwr}>
 							{#snippet children(RunScaledEwrTables)}
@@ -846,7 +843,7 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder} {runs} {series} projectSettings={project.settings}>
+			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder}>
 				{#snippet waterBalance()}
 					<!-- The water balance per water year (issue #137): the table a hydrologist hands a client first. -->
 					<div class="panel" id="res-water-balance">

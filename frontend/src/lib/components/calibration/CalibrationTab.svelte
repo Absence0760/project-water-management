@@ -2,45 +2,60 @@
 	The Calibration page (`?tab=calibration`, issue #586): fitting the runoff
 	parameters and judging the fit, on one page. Its two parts are "Set up the
 	fit" (Flow calibration, Calibration record, Fit the parameters, WR2012 check,
-	from Settings & calibration) and "How the shown run fits" (Model quality, from
-	Runs & results, for the run picked there). Until Round 3 moves those panels
-	in, each part links to them where they are, named by their headings, each
-	link landing on its heading; the links to Runs & results keep the run picked
-	(`run=`). A side index lists the two parts. `?tab=calibration` opened Settings
+	from Settings & calibration) and "How the shown run fits" (Model quality, moved
+	here from Runs & results in Round 3: CalibrationResults.svelte, a run picker
+	that follows `?run=` and Model quality for that run). A side index lists the
+	two parts. `?tab=calibration` opened Settings
 	until this page had its own, so an old `#set-…` link goes on there
 	(nav/anchorMoves.ts).
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
 	import type { Role, RunMeta } from '#lib/api/types.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { landOnAnchor } from '#lib/help/anchor.js';
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
-	import { fmtWhen } from '#lib/format/number.js';
-	import { calibrationNavGroups, isCalPart, RESULT_LINKS, runsHref, settingsHref, SETUP_LINKS, shownRun } from './page';
+	import { isModelQualityAnchor } from '#lib/components/runs/modelQuality.js';
+	import CalibrationResults from './CalibrationResults.svelte';
+	import { calibrationNavGroups, isCalPart, settingsHref, SETUP_LINKS } from './page';
 
-	let { runs, role }: { runs: RunMeta[] | null; role: Role | null | undefined } = $props();
+	let {
+		runs,
+		role,
+		projectId,
+		nodes = [],
+		series = null,
+		projectSettings = null
+	}: {
+		runs: RunMeta[] | null;
+		role: Role | null | undefined;
+		projectId: string;
+		/** The model's nodes (the editor's), for How the shown run fits' names and order. */
+		nodes?: readonly { id: string; name: string }[];
+		/** The project's input series: a checks-only gauge links to its record on Data. */
+		series?: readonly { id: string; kind: string; siteNodeId?: string | null }[] | null;
+		/** The project's settings: a run that kept no snapshot of its own is scored on their calibration window. */
+		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
+	} = $props();
 
-	const picked = $derived(page.url.searchParams.get('run'));
-	const run = $derived(shownRun(runs, picked, role));
-	// The links carry the run only when one was picked: without it Runs & results shows its default, as here.
-	const carried = $derived(run && picked === run.id ? run.id : null);
 	const navGroups = calibrationNavGroups();
+	/** How the shown run fits' landing (CalibrationResults.svelte): a Model quality anchor waits there for the run. */
+	let landResults: ((id: string) => (() => void) | void) | null = null;
 
 	$effect(() => fillHeader({ context: headerContext }));
 
 	// A link to one of the parts (`#cal-fit`), on load or followed while the page is open: the tab is a lazy
 	// chunk, so the browser's own jump found nothing. Land on it and focus its heading (landOnAnchor, as
 	// Settings, Runs and Project do). An old `?tab=calibration#set-ewr` (when this tab opened Settings) goes
-	// on to that panel there instead, replacing this entry so Back skips it (nav/anchorMoves.ts).
+	// on to that panel there instead, replacing this entry so Back skips it (nav/anchorMoves.ts). A link to a Model
+	// quality panel (`#res-plausibility`, an old `?tab=runs#res-…` sent on here) lands once the run is shown.
 	let body: HTMLDivElement | undefined = $state();
 	onMount(() =>
 		followAnchors({
 			page: 'calibration',
-			land: (id) => (isCalPart(id) && body ? landOnAnchor(id, body) : undefined),
+			land: (id) => (isCalPart(id) && body ? landOnAnchor(id, body) : isModelQualityAnchor(id) ? landResults?.(id) : undefined),
 			forward: (to) => void goto(to, { replace: true, reset: false })
 		})
 	);
@@ -53,8 +68,7 @@
 	<div class="cal-page" bind:this={body}>
 		<p class="lead" data-testid="calibration-lead">
 			The calibration panels are moving to this page. Until they arrive, set up the fit on
-			<a href="?tab=settings">Settings &amp; calibration</a> and read how a run fits on
-			<a href={carried ? `?tab=runs&run=${encodeURIComponent(carried)}` : '?tab=runs'}>Runs &amp; results</a>.
+			<a href="?tab=settings">Settings &amp; calibration</a>; how a run fits is below.
 		</p>
 		<div class="parts">
 			<section class="panel" id="cal-setup" aria-labelledby="cal-setup-h">
@@ -66,23 +80,10 @@
 					{/each}
 				</ul>
 			</section>
-			<section class="panel" id="cal-fit" aria-labelledby="cal-fit-h">
-				<div class="panel-head"><h2 id="cal-fit-h">How the shown run fits</h2></div>
-				{#if runs && !run}
-					<p class="where" data-testid="calibration-no-run">
-						No run yet. Once the model has run, its fit is on <a href="?tab=runs">Runs &amp; results</a>, under Model quality.
-					</p>
-				{:else}
-					<p class="where" data-testid="calibration-run">
-						On Runs &amp; results, under Model quality{#if run}, for <strong>{run.label || 'Untitled run'}</strong> (ran {fmtWhen(run.createdAt)}){/if}:
-					</p>
-					<ul class="links">
-						{#each RESULT_LINKS as l (l.id)}
-							<li><a href={runsHref(l.id, carried)}>{l.label}</a><span class="hint">{l.hint}</span></li>
-						{/each}
-					</ul>
-					<p class="muted more">The rest of Model quality follows them there, for the runs that have it: the runoff model, rain for each unit, the WR2012 check and the plausibility checks.</p>
-				{/if}
+			<!-- Model quality's panels are panels of their own, so this part is a heading over them, not a panel round them. -->
+			<section class="part" id="cal-fit" aria-labelledby="cal-fit-h">
+				<h2 id="cal-fit-h" class="part-h">How the shown run fits</h2>
+				<CalibrationResults {projectId} {runs} {role} {nodes} {series} {projectSettings} landing={(land) => (landResults = land)} />
 			</section>
 		</div>
 	</div>
@@ -105,6 +106,14 @@
 	}
 	.parts > .panel {
 		margin-bottom: 0;
+	}
+	/* How the shown run fits takes the page's width: its charts need it. */
+	.parts > #cal-fit {
+		grid-column: 1 / -1;
+		min-width: 0;
+	}
+	.part-h {
+		margin: 0 0 0.75rem;
 	}
 	@container cal-page (max-width: 760px) {
 		.parts {
@@ -140,10 +149,6 @@
 	}
 	.hint {
 		color: var(--text-muted);
-		font-size: 0.875rem;
-	}
-	.more {
-		margin: 0.75rem 0 0;
 		font-size: 0.875rem;
 	}
 </style>

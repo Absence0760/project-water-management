@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { RunSummary } from '@water-management/engine';
-import { resultSections } from '#lib/components/runs/sections.js';
 import { SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
 import { anchorForward } from '#lib/nav/anchorMoves.js';
-import { CAL_PARTS, calibrationNavGroups, isCalPart, RESULT_LINKS, runsHref, settingsHref, SETUP_LINKS, shownRun } from './page';
+import { CAL_PARTS, calibrationNavGroups, isCalPart, settingsHref, SETUP_LINKS, shownRun } from './page';
 
 const at = (href: string) => new URL(href, 'https://x.test');
 
@@ -26,20 +24,6 @@ describe('the links to where the panels are today', () => {
 		]);
 		for (const l of SETUP_LINKS) expect(SETTINGS_SECTIONS.find((s) => s.id === l.id)?.label).toBe(l.label);
 		expect(settingsHref('set-fit')).toBe('?tab=settings#set-fit');
-	});
-
-	it('names the Model quality panels every run has by the headings Runs & results gives them, in its order', () => {
-		// A run with none of the optional panels: what's listed is on every run's page.
-		const bare = { farms: [], runoff: null, wr2012: null, plausibility: null, forecast: null, unitRain: null, stations: null } as unknown as RunSummary;
-		const rail = resultSections(bare, true);
-		const order = rail.map((s) => s.id);
-		for (const l of RESULT_LINKS) expect(rail.find((s) => s.id === l.id)?.label, l.id).toBe(l.label);
-		expect(RESULT_LINKS.map((l) => order.indexOf(l.id))).toEqual([...RESULT_LINKS.map((l) => order.indexOf(l.id))].sort((a, b) => a - b));
-	});
-
-	it('keeps the picked run on a link to Runs & results', () => {
-		expect(runsHref('res-hydrograph', null)).toBe('?tab=runs#res-hydrograph');
-		expect(runsHref('res-fdc', 'r 1')).toBe('?tab=runs&run=r%201#res-fdc');
 	});
 });
 

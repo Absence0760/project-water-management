@@ -5,13 +5,13 @@ import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '#lib/co
 import { supplyAnchor } from '#lib/components/supply/links.js';
 import { anchorMoved } from '#lib/nav/anchorMoves.js';
 import { otherPageGroups, resultGroups, resultSections } from './sections';
+import { MODEL_QUALITY_ANCHORS } from './modelQuality';
 
 describe('resultGroups', () => {
 	it('groups the panels by the question they answer, in page order', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
-			[null, ['res-summary']],
-			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-water-balance', 'res-ewr-agreement']],
+			[null, ['res-summary', 'res-water-balance']],
 			['Record', ['res-notes', 'res-validation', 'res-publication']],
 			['Dig deeper', ['res-checks', 'res-explore']]
 		]);
@@ -29,64 +29,20 @@ describe('resultGroups', () => {
 		}
 	});
 
-	it('adds the optional model-quality panels in order: runoff model (GR4J) after the water balance, WR2012, then plausibility after EWR vs observed', () => {
-		const model = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
-		expect(model({ farms: [] })).not.toContain('res-runoff');
-		expect(model({ farms: [] })).not.toContain('res-wr2012');
-		expect(model({ farms: [] })).not.toContain('res-plausibility');
-		expect(
-			model({
-				farms: [],
-				runoff: { model: 'gr4j' } as RunSummary['runoff'],
-				wr2012: {} as RunSummary['wr2012'],
-				plausibility: {} as RunSummary['plausibility']
-			})
-		).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-water-balance', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
-	});
-
-	it('lists Rain for each unit after the runoff model, only for a run that ran per unit (issue #482)', () => {
-		const model = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
-		const runoff = { model: 'gr4j' } as RunSummary['runoff'];
-		expect(model({ farms: [], runoff })).not.toContain('res-unit-rain');
-		// A stored summary from another engine: read defensively, whatever its type says.
-		expect(model({ farms: [], runoff, unitRain: { mode: 'catchment', units: [] } as unknown as RunSummary['unitRain'] })).not.toContain('res-unit-rain');
-		const ids = model({ farms: [], runoff, unitRain: { mode: 'perUnit', gaugeMapMm: null, gaugeMapSource: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [] } });
-		expect(ids.indexOf('res-unit-rain')).toBe(ids.indexOf('res-runoff') + 1);
-	});
-
-	it('lists the same panel as Rain from rainfall stations for a run whose catchment ran on a station, without rain for each unit (issue #553)', () => {
-		const sections = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections;
-		const runoff = { model: 'gr4j' } as RunSummary['runoff'];
-		const catchment = { nodeId: null, name: 'Synthetic catchment' } as NonNullable<RunSummary['stations']>['catchment'];
-		const s = sections({ farms: [], runoff, stations: { pairings: [], catchment, units: [], catchmentMapMm: null, catchmentMapFromUnits: true } });
-		expect(s.find((x) => x.id === 'res-unit-rain')?.label).toBe('Rain from rainfall stations');
-		expect(sections({ farms: [], runoff, stations: { pairings: [], catchment: null, units: [], catchmentMapMm: null, catchmentMapFromUnits: true } }).map((x) => x.id)).not.toContain('res-unit-rain');
-	});
-
-	it('puts the flow-duration curve with the hydrograph', () => {
-		const groups = resultGroups({ farms: [] });
-		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
-		expect(model.slice(0, 2)).toEqual(['res-hydrograph', 'res-fdc']);
+	it('lists none of Model quality’s panels: they moved to Calibration (issue #586 Round 3), the water balance stays', () => {
+		const full = { farms: [], runoff: { model: 'gr4j' } as RunSummary['runoff'], wr2012: {} as RunSummary['wr2012'], plausibility: { gauges: [{ nodeId: 'g' }] } as RunSummary['plausibility'] };
+		for (const rail of [false, true]) {
+			const ids = resultSections(full, rail).map((s) => s.id);
+			for (const moved of MODEL_QUALITY_ANCHORS) expect(ids, moved).not.toContain(moved);
+			expect(ids).toContain('res-water-balance');
+		}
 		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Run notes & evidence');
-	});
-
-	it('lists the checks-only gauges after the flow-duration curve: a line on the side index, under Flow duration on the bar (issue #554)', () => {
-		const model = (summary: Parameters<typeof resultGroups>[0], rail = false) => resultGroups(summary, rail).find((g) => g.label === 'Model quality')!.sections;
-		const gauge = (nodeId: string) => ({ nodeId }) as NonNullable<NonNullable<RunSummary['plausibility']>['gauges']>[number];
-		const checked = { farms: [], plausibility: { gauges: [gauge('a')] } as RunSummary['plausibility'] };
-		expect(model(checked, true).map((s) => s.id).slice(0, 3)).toEqual(['res-hydrograph', 'res-fdc', 'res-gauges']);
-		expect(model(checked).find((s) => s.id === 'res-fdc')?.covers).toEqual(['res-gauges']);
-		expect(model(checked).map((s) => s.id)).not.toContain('res-gauges');
-		// The calibration site's gauge alone has its chart under the outlet's hydrograph, not here.
-		const siteOnly = { ...checked, calibration: { siteNodeId: 'a' } };
-		expect(model(siteOnly, true).map((s) => s.id)).not.toContain('res-gauges');
-		expect(model(siteOnly).find((s) => s.id === 'res-fdc')?.covers).toBeUndefined();
 	});
 
 	it('lists a forecast run’s forecast panel right after the summary, and only for a forecast run (WP-2.12)', () => {
 		const opening = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary)[0]!.sections.map((s) => s.id);
-		expect(opening({ farms: [] })).toEqual(['res-summary']);
-		expect(opening({ farms: [], forecast: {} as RunSummary['forecast'] })).toEqual(['res-summary', 'res-forecast']);
+		expect(opening({ farms: [] })).toEqual(['res-summary', 'res-water-balance']);
+		expect(opening({ farms: [], forecast: {} as RunSummary['forecast'] })).toEqual(['res-summary', 'res-forecast', 'res-water-balance']);
 	});
 
 	it('names each link as its panel’s heading, the long ones shorter on the bar, as they were (issue #462)', () => {
@@ -99,14 +55,7 @@ describe('resultGroups', () => {
 		const names = resultSections(summary).map((s) => [s.label, navText(s, 'bar')]);
 		expect(names).toEqual([
 			['Summary', 'Summary'],
-			['Hydrograph', 'Hydrograph'],
-			['Flow-duration curve', 'Flow duration'],
-			['Calibration against observed flow', 'Calibration'],
 			['Water balance by water year', 'Water balance'],
-			['Runoff model: GR4J', 'Runoff model'],
-			['WR2012 check: X11A', 'WR2012 check'],
-			['EWR test: model against observed flow', 'EWR vs observed'],
-			['Plausibility checks', 'Plausibility'],
 			['Run notes & evidence', 'Notes & evidence'],
 			['Validation statement', 'Validation'],
 			['Publication', 'Publication'],

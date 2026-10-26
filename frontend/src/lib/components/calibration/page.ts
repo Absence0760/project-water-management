@@ -51,29 +51,13 @@ export const SETUP_LINKS: readonly PanelLink[] = SETTINGS_SECTIONS.filter((s) =>
 	hint: SETUP_HINTS[s.id]!
 }));
 
-/**
- * "How the shown run fits": the Model quality panels every run has on Runs & results, by their headings
- * there (runs/sections.ts resultGroups; page.test.ts checks they agree). The ones only some runs have
- * (Runoff model, Rain for each unit, WR2012 check, Plausibility checks) follow them on that page.
- */
-export const RESULT_LINKS: readonly PanelLink[] = [
-	{ id: 'res-hydrograph', label: 'Hydrograph', hint: 'modelled against observed flow, day by day' },
-	{ id: 'res-fdc', label: 'Flow-duration curve', hint: 'how often each flow is reached, and flow at the gauges that are checks only' },
-	{ id: 'res-calibration', label: 'Calibration against observed flow', hint: 'the fit’s scores and the calibration check' },
-	{ id: 'res-ewr-agreement', label: 'EWR test: model against observed flow', hint: 'whether the model meets the EWR on the days the record does' }
-];
-
 /** A link to a Settings & calibration panel. */
 export const settingsHref = (id: string): string => `?tab=settings#${id}`;
 
-/** A link to a Runs & results panel, keeping the run picked (`run=`), so the panel opens on that run. */
-export function runsHref(id: string, run: string | null): string {
-	return run ? `?tab=runs&run=${encodeURIComponent(run)}#${id}` : `?tab=runs#${id}`;
-}
-
 /**
- * The run Runs & results shows: the one in the URL while it is still a run of the project, else its
- * default (the newest; a viewer's published baseline). Null with no runs, or before they load.
+ * The run Runs & results shows, and so How the shown run fits (CalibrationResults.svelte): the one in the URL
+ * while it is still a run of the project, else its default (the newest; a viewer's published baseline). Null
+ * with no runs, or before they load.
  */
 export function shownRun<T extends { id: string; published?: boolean }>(runs: readonly T[] | null, picked: string | null, role: Role | null | undefined): T | null {
 	if (!runs?.length) return null;
