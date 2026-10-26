@@ -1044,8 +1044,8 @@ describe('diffInputs', () => {
 			{
 				area: 'settings',
 				kind: 'removed',
-				subject: 'Calibration exclusion 2017-01-01 – 2017-02-01',
-				text: 'Calibration exclusion 2017-01-01 – 2017-02-01 removed (was: “gauge outage”)'
+				subject: 'Calibration exclusion 1 Jan 2017 – 1 Feb 2017',
+				text: 'Calibration exclusion 1 Jan 2017 – 1 Feb 2017 removed (was: “gauge outage”)'
 			},
 			{
 				area: 'settings',
@@ -1077,7 +1077,7 @@ describe('diffInputs', () => {
 		};
 		expect(texts(a, b)).toEqual([
 			'Flagged zero-rain runs: treated as missing (CHIRPS fills them) → run as recorded (dry)',
-			'Keep-dry period 2003-05-01 – 2003-08-31 added: “real drought”',
+			'Keep-dry period 1 May 2003 – 31 Aug 2003 added: “real drought”',
 			'Missing-rain period WY 1999/00 added: “gauge offline”'
 		]);
 		const old = snapshot();
@@ -1135,8 +1135,8 @@ describe('diffInputs', () => {
 		};
 		expect(texts(a, b)).toEqual([
 			'Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)',
-			'Keep-reading period 2003-06-10 – 2003-06-10 added: “thunderstorm”',
-			'Listed accumulation 2003-07-01 – 2003-07-09 added: “observer away”'
+			'Keep-reading period 10 Jun 2003 – 10 Jun 2003 added: “thunderstorm”',
+			'Listed accumulation 1 Jul 2003 – 9 Jul 2003 added: “observer away”'
 		]);
 		// A 0.15–0.19 run stored zeroRainRuns without the accumulation fields: it compares as "as recorded".
 		const old = snapshot();

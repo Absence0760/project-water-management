@@ -6544,8 +6544,37 @@ run made again at 1.99.0 has another results digest. `warningInCurrentWords`
 reads a 1.98.0 data check's dates day first (`seriesCheckInCurrentWords`,
 which touches only a warning that starts with a series' name), and
 auto-publish's "no new warning" masks a date in either form, whatever its
-month, so the older run's data checks aren't new. The engine's other
-warnings still write ISO dates.
+month, so the older run's data checks aren't new. From 1.100.0 every other
+warning does the same (below).
+
+**Every warning writes its days day first (engine ≥ 1.100.0, issue #586).**
+The rest of the engine's run warnings and notes write a calendar day as the
+data checks do (`dayText`): "Catchment rain treated as missing on 76 days:
+1 Jun 2019 to 15 Aug 2019 (76 days, flagged zero run)", "Catchment rain
+accumulations spread over the days they cover: … 5 Jun 2017 to 26 Jun 2017
+(21 days, 84 mm read on 26 Jun 2017, detected)", "3 days (8 Jan 2020 to
+10 Jan 2020) of this run use forecast rain", the blank-rain days (W2), the
+reporting window and the default run window, a resumed run, the dam storage
+reset, the drought restriction's in-service date, the sediment survey date,
+the uncapped licence days, the rain-source periods (their warnings, the
+fixed factors' fit dates, and `rainSourceText`/`rainSourceLines`), the
+kept-dry doubt, the series choice, the daily A-pan cover, the per-unit MAP
+period, the EWR split's MAR period, a dated demand factor or schedule window
+it can't use, the cumulative assessment's windows, the low-flow periods'
+calibration note, the ensemble's decision rule (its split date) and a
+calibration exclusion's label (`exclusionLabel`, "1 Jan 2015 – 31 Mar
+2015"). Up to 1.99.0 they wrote "2019-06-01 to 2019-08-15". A day that isn't
+a calendar day (an input the run refused, "2001-02-29") is echoed as it
+came. Machine fields stay ISO: the summary's `forecastRain.from`/`to`,
+`reportStart`/`reportEnd`, every period's `start`/`end`, examples' `date`.
+Only words changed: no figure moves, but a 1.99.0 run made again at 1.100.0
+has another results digest. `warningInCurrentWords` now writes every
+calendar day in any warning day first (`calendar.ts` `daysInText`, which
+replaces 1.99.0's `seriesCheckInCurrentWords`), a user's words inside a
+warning included (harmless: auto-publish, its one reader, masks a date in
+either form). The run comparison's own sentences (a series extended, the
+MAP period of per-unit rain), the evidence report's checks and the forecast
+disclaimer still write ISO days.
 
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`

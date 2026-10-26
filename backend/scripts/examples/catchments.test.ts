@@ -23,16 +23,17 @@ import { buildExamples, inputOf, type ExampleProject } from './catchments.js';
  * listed here is a failure (a stale field resolved with a warning, a missing
  * series, …), and so is a listed one that no longer appears.
  */
+// Engine ≥ 1.100.0 (issue #586 R4-O): every warning writes its days day first, as the data checks have since 1.99.0.
 const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 	'Example · Kleinberg (winter rainfall)': [
 		/^CHIRPS rain bias-corrected on \d+ days where catchment rain is blank/,
 		// Engine ≥ 1.81.0 (issue #507 item 3): only the flagged run's days CHIRPS reads more than 2 mm on are filled; the rest stay dry.
-		/^Catchment rain treated as missing on 61 days: 2019-06-01 to 2019-08-15 \(47 days, flagged zero run\); 2021-07-05 to 2021-07-18 \(14 days, listed: /,
+		/^Catchment rain treated as missing on 61 days: 1 Jun 2019 to 15 Aug 2019 \(47 days, flagged zero run\); 5 Jul 2021 to 18 Jul 2021 \(14 days, listed: /,
 		/^Flagged zero runs kept as recorded \(dry\) on 29 days where CHIRPS reads 2 mm or less/,
 		// Engine ≥ 1.99.0 (issue #586): a data check writes its dates day first.
 		/^Rainfall \(catchment\): 1 run of zero rain .*1 Jun 2019 to 15 Aug 2019/,
 		// A week read in one go (B4): 6 blank days and the reading day.
-		/^Catchment rain accumulations spread over the days they cover: 1 window, 7 run days: 2017-06-20 to 2017-06-26 /,
+		/^Catchment rain accumulations spread over the days they cover: 1 window, 7 run days: 20 Jun 2017 to 26 Jun 2017 /,
 		// The drowned weir's flat top in the excluded water year.
 		/^Observed flow: 1 flat stretch of more days than a slow recession holds one value at the record.s resolution .*\(\d{1,2} [A-Z][a-z]{2} 2014: /
 	],
@@ -47,7 +48,7 @@ const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 		// The plausibility check (engine 0.25.0): the fitted GR4J falls more than 10 % short of the invented weir record in two years.
 		/^Natural flow below observed \+ abstraction in 2 of 14 water years \(2014\/15, 2015\/16\)/,
 		// Its forecast feed runs 10 days past the recorded rain (engine 0.28.0 names those days).
-		/^10 days \(2025-01-01 to 2025-01-10\) of this run use forecast rain, not recorded rain/
+		/^10 days \(1 Jan 2025 to 10 Jan 2025\) of this run use forecast rain, not recorded rain/
 	]
 };
 

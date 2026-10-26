@@ -8,7 +8,7 @@ import {
 	rainAccumulations,
 	spreadAccumulations
 } from './accumulation';
-import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { defaultDataQualitySettings, defaultZeroRainSettings, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind, type ZeroRainSettings } from './project';
 import { zeroRainRuns } from './quality';
 import { runModel } from './run';
@@ -190,7 +190,7 @@ describe('rainAccumulations and spreadAccumulations', () => {
 		const listed = { start: fromEpochDay(day(1)), end: fromEpochDay(day(r)), reason: 'x' };
 		const both = rainAccumulations(series, zr({ missing: [period], addAccumulations: [listed] }), 'monthly')!;
 		expect(both.windows).toEqual([]);
-		expect(both.skipped).toEqual([`Listed accumulation ${listed.start} to ${listed.end} overlaps a period listed as missing or a rain-source period, so it is not spread: that period wins.`]);
+		expect(both.skipped).toEqual([`Listed accumulation ${dayText(listed.start)} to ${dayText(listed.end)} overlaps a period listed as missing or a rain-source period, so it is not spread: that period wins.`]);
 		expect(rainAccumulations(series, zr({ keepDry: [period] }), 'monthly')!.windows).toEqual([]);
 		// Keep-dry only means something in zero-run mode 'missing', as elsewhere.
 		expect(rainAccumulations(series, zr({ mode: 'asRecorded', keepDry: [period] }), 'monthly')!.windows).toHaveLength(1);
@@ -308,7 +308,7 @@ describe('a run with an accumulation after blank days', () => {
 		const spread = get(out, ACCUMULATION_COLUMN.key);
 		for (let i = from; i <= r; i++) expect(spread[i]).toBe(1);
 		expect(spread.reduce((x, v) => x + v, 0)).toBe(a.spreadDays);
-		expect(out.summary.warnings.find((x) => x.startsWith('Catchment rain accumulations spread'))).toContain(`${a.windows[0]!.start} to ${a.windows[0]!.end}`);
+		expect(out.summary.warnings.find((x) => x.startsWith('Catchment rain accumulations spread'))).toContain(`${dayText(a.windows[0]!.start)} to ${dayText(a.windows[0]!.end)}`);
 		// The window is left out of the CHIRPS factor fit, day by day: its blank days never were in it, so only the reading day counts.
 		expect(out.summary.chirpsCorrection!.accumulationDaysLeftOut).toBe(1);
 

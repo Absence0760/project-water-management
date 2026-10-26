@@ -2330,13 +2330,13 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 	it('W2: names the blank days’ dates and how many fall in the reporting window', () => {
 		const out = runModel(rainInput([0, null, 3, null, null, 0], '2021-01-01'));
 		expect(warns(out, /no rainfall value/)).toEqual([
-			'3 of 6 days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): 2021-01-02, 2021-01-04 to 2021-01-05'
+			'3 of 6 days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): 2 Jan 2021, 4 Jan 2021 to 5 Jan 2021'
 		]);
 		const windowed = runModel(rainInput([0, null, 3, null, null, 0], '2021-01-01', { reportStart: '2021-01-04', reportEnd: '2021-01-06' }));
-		expect(warns(windowed, /no rainfall value/)[0]).toMatch(/: 2021-01-02, 2021-01-04 to 2021-01-05; 2 of them fall in the reporting window \(2021-01-04 to 2021-01-06\)$/);
+		expect(warns(windowed, /no rainfall value/)[0]).toMatch(/: 2 Jan 2021, 4 Jan 2021 to 5 Jan 2021; 2 of them fall in the reporting window \(4 Jan 2021 to 6 Jan 2021\)$/);
 		// More periods than it lists: counted, not named.
 		const patchy = runModel(rainInput([1, null, 1, null, 1, null, 1, null, 1, null, 1], '2021-01-01'));
-		expect(warns(patchy, /no rainfall value/)[0]).toMatch(/^5 of 11 days .*: 2021-01-02, 2021-01-04, 2021-01-06 and 2 more periods$/);
+		expect(warns(patchy, /no rainfall value/)[0]).toMatch(/^5 of 11 days .*: 2 Jan 2021, 4 Jan 2021, 6 Jan 2021 and 2 more periods$/);
 	});
 
 	it('W3: hi/lo shares warn when a farm area differs from its hi + lo areas (rain volume uses the area)', () => {
@@ -2391,7 +2391,7 @@ describe('runModel — forecast rain days (engine 0.28.0)', () => {
 		// Days 6–7 have recorded rain, so their forecast values are not used.
 		expect(out.summary.forecastRain).toEqual({ days: 3, from: '2020-01-08', to: '2020-01-10', inReport: 3, lastRecorded: '2020-01-07' });
 		expect(out.summary.warnings).toContain(
-			'3 days (2020-01-08 to 2020-01-10) of this run use forecast rain, not recorded rain (catchment or CHIRPS); all of them fall in the reporting window (2020-01-01 to 2020-01-10), so curtailment and the EWR sites cover forecast days'
+			'3 days (8 Jan 2020 to 10 Jan 2020) of this run use forecast rain, not recorded rain (catchment or CHIRPS); all of them fall in the reporting window (1 Jan 2020 to 10 Jan 2020), so curtailment and the EWR sites cover forecast days'
 		);
 	});
 
@@ -2399,7 +2399,7 @@ describe('runModel — forecast rain days (engine 0.28.0)', () => {
 		expect(withForecast({ reportStart: '2020-01-04', reportEnd: '2020-01-08' }).summary.forecastRain?.inReport).toBe(1);
 		const before = withForecast({ reportStart: '2020-01-01', reportEnd: '2020-01-07' });
 		expect(before.summary.forecastRain?.inReport).toBe(0);
-		expect(before.summary.warnings.find((w) => w.includes('forecast rain'))).toBe('3 days (2020-01-08 to 2020-01-10) of this run use forecast rain, not recorded rain (catchment or CHIRPS)');
+		expect(before.summary.warnings.find((w) => w.includes('forecast rain'))).toBe('3 days (8 Jan 2020 to 10 Jan 2020) of this run use forecast rain, not recorded rain (catchment or CHIRPS)');
 	});
 
 	it('is null when a forecast series is never used, and absent without one (positive control: no warning)', () => {

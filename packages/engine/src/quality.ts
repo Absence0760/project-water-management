@@ -355,21 +355,6 @@ const SERIES_NAME: Record<SeriesKind, string> = {
 	flow_reference_m3s: 'Reference gauge (other catchment)',
 	evap_apan_mm: 'A-pan evaporation (daily)'
 };
-/** The names the data checks' warnings start with ("Observed flow: …"), longest first. */
-const CHECK_PREFIXES = Object.values(SERIES_NAME)
-	.map((n) => `${n}: `)
-	.sort((a, b) => b.length - a.length);
-
-/**
- * A data check's warning in the words engine 1.99.0 uses: its dates day first ("Observed flow: 1 negative value
- * (2020-10-06: -0.4 m³/s)" → "… (6 Oct 2020: -0.4 m³/s)"), as checkSeries now writes them. Only a warning that
- * starts with a series' name, as every data check does, is touched; any other text is returned unchanged. For
- * comparing an older run's warnings with a newer one's (places.ts warningInCurrentWords).
- */
-export function seriesCheckInCurrentWords(text: string): string {
-	if (!CHECK_PREFIXES.some((p) => text.startsWith(p))) return text;
-	return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (iso) => dayText(iso));
-}
 const unitOf = (k: SeriesKind) => (k.endsWith('_mm') ? 'mm' : 'm³/s');
 /**
  * The outlier factor for a kind: depths (rain, and daily A-pan evaporation,

@@ -49,6 +49,24 @@ describe('newWarnings', () => {
 		expect(newWarnings(at198, [...at199, added])).toEqual([added]);
 	});
 
+	it('reads any other warning from before engine 1.100.0, its dates year first, as the same warning (issue #586 R4-O)', () => {
+		const at199 = [
+			'3 days (2020-01-08 to 2020-01-10) of this run use forecast rain, not recorded rain (catchment or CHIRPS); all of them fall in the reporting window (2020-01-01 to 2020-01-10), so curtailment and the EWR sites cover forecast days',
+			'Catchment rain treated as missing on 76 days: 2019-06-01 to 2019-08-15 (76 days, flagged zero run). CHIRPS (bias-corrected) then forecast rain stand in, 120 mm in all. The stored series is unchanged.'
+		];
+		const at1100 = [
+			'3 days (8 Jan 2020 to 10 Jan 2020) of this run use forecast rain, not recorded rain (catchment or CHIRPS); all of them fall in the reporting window (1 Jan 2020 to 10 Jan 2020), so curtailment and the EWR sites cover forecast days',
+			'Catchment rain treated as missing on 76 days: 1 Jun 2019 to 15 Aug 2019 (76 days, flagged zero run). CHIRPS (bias-corrected) then forecast rain stand in, 120 mm in all. The stored series is unchanged.'
+		];
+		expect(newWarnings(at199, at1100)).toEqual([]);
+		// And back: a 1.100.0 run published, a 1.99.0 run made after it (an older worker) adds nothing either.
+		expect(newWarnings(at1100, at199)).toEqual([]);
+		// Positive control: a warning the published run didn't raise still counts, in either form.
+		const added = 'damStorageReset: 1 Mar 2021 is outside the run; ignored';
+		expect(newWarnings(at199, [...at1100, added])).toEqual([added]);
+		expect(newWarnings(at1100, [...at199, 'damStorageReset: 2021-03-01 is outside the run; ignored'])).toEqual(['damStorageReset: 2021-03-01 is outside the run; ignored']);
+	});
+
 	it('ignores warnings that went away', () => {
 		expect(newWarnings(['one thing', 'another'], ['one thing'])).toEqual([]);
 	});

@@ -44,7 +44,7 @@ import {
 } from './rain';
 import { apanDailyInfo, type ApanDailyInfo } from './evaporation/apanDaily';
 import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } from './doublemass';
-import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
@@ -350,7 +350,7 @@ export function defaultWindowWarning(series: ModelInput['series'], settings: Pic
 	const left = [before.length ? `${before.join(', ')} before it` : '', after.length ? `${after.join(', ')} after it` : ''].filter(Boolean);
 	const which = before.length && after.length ? 'start and end' : before.length ? 'start' : 'end';
 	return (
-		`the run covers the rain record, ${fromEpochDay(start)} to ${fromEpochDay(end)}, and leaves out ${left.join(', and ')} ` +
+		`the run covers the rain record, ${dayText(fromEpochDay(start))} to ${dayText(fromEpochDay(end))}, and leaves out ${left.join(', and ')} ` +
 		`(no rain there): set the simulation ${which} (Model settings → Simulation period) to include them`
 	);
 }
@@ -599,7 +599,7 @@ function flowFillsFor(
 		// with it (the ratio). Resumed without the history it read, it would fill other values: leave it out, and say so.
 		if (resumed?.kinds.includes(kind) && !hasReadingBefore(record, start) && !hasReadingBefore(donor, start)) {
 			warnings.push(
-				`Resumed from ${fromEpochDay(start)} without the ${gapFillRecordLabel(kind)} record's history: its gap fill is left out (the fill reads the whole record: the gaps' bounds, the highest reading and the donor ratio). Include the history in the input, or run from the start, to fill it.`
+				`Resumed from ${dayText(fromEpochDay(start))} without the ${gapFillRecordLabel(kind)} record's history: its gap fill is left out (the fill reads the whole record: the gaps' bounds, the highest reading and the donor ratio). Include the history in the input, or run from the start, to fill it.`
 			);
 			continue;
 		}
@@ -780,7 +780,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		}
 	}
 	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {
-		warnings.push(`calibration window ${s.calibrationStart} … ${s.calibrationEnd} ends before it starts; scoring the whole record`);
+		warnings.push(`calibration window ${dayText(s.calibrationStart)} … ${dayText(s.calibrationEnd)} ends before it starts; scoring the whole record`);
 		s.calibrationStart = null;
 		s.calibrationEnd = null;
 	}

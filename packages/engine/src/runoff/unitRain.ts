@@ -38,7 +38,7 @@
 // its own CHIRPS × the pairing's monthly factors (as is) on the others, then
 // its own forecast, then the catchment forcing (× 1). ./stationForcing.ts has
 // the rule; a unit without a station keeps the chain above, bit for bit.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import {
 	AREAL_RAIN_FACTOR_MAX,
 	AREAL_RAIN_FACTOR_MIN,
@@ -386,7 +386,7 @@ export function unitRainRecipes(
 			if (mean.inPeriod) return;
 			const span = `${mean.years[0]}–${mean.years[mean.years.length - 1]}`;
 			warnings.push(
-				`${unit}: its CHIRPS has fewer than ${UNIT_MAP_MIN_YEARS} complete calendar years in the MAP period ${period.start} to ${period.end}, so ${what} averages every complete year of the record (${mean.years.length}, ${span}${mean.years.length < UNIT_MAP_MIN_YEARS ? `, still fewer than ${UNIT_MAP_MIN_YEARS}` : ''})`
+				`${unit}: its CHIRPS has fewer than ${UNIT_MAP_MIN_YEARS} complete calendar years in the MAP period ${dayText(period.start)} to ${dayText(period.end)}, so ${what} averages every complete year of the record (${mean.years.length}, ${span}${mean.years.length < UNIT_MAP_MIN_YEARS ? `, still fewer than ${UNIT_MAP_MIN_YEARS}` : ''})`
 			);
 		};
 		if (hasReading(chirpsSeries)) {

@@ -2,7 +2,7 @@
 // End unset, the run covers the days with rain, not a rain series padded
 // with blanks to a longer flow record, and says what it left out.
 import { describe, expect, it } from 'vitest';
-import { fromEpochDay, toEpochDay } from './calendar';
+import { dayText, fromEpochDay, toEpochDay } from './calendar';
 import { prepareRun } from './prepare';
 import type { DailySeries, ModelInput, ModelOutput, NetworkNode, ProjectSettings } from './project';
 import { runModel } from './run';
@@ -75,7 +75,7 @@ describe('the default run window follows the rain (engine 0.45.0, issue #54)', (
 		const out = runModel(input(padded));
 		expect([out.startDate, out.endDate, out.days]).toEqual(['2003-01-01', '2005-12-31', total - pad]);
 		expect(windowWarnings(out)).toEqual([
-			`the run covers the rain record, 2003-01-01 to 2005-12-31, and leaves out ${pad} days of observed flow before it (no rain there): set the simulation start (Model settings → Simulation period) to include them`
+			`the run covers the rain record, 1 Jan 2003 to 31 Dec 2005, and leaves out ${pad} days of observed flow before it (no rain there): set the simulation start (Model settings → Simulation period) to include them`
 		]);
 		// No day of the run lacks rain any more (the W2 count is gone).
 		expect(out.summary.warnings.some((w) => /no rainfall value/.test(w))).toBe(false);
@@ -105,7 +105,7 @@ describe('the default run window follows the rain (engine 0.45.0, issue #54)', (
 		const out = runModel(input(series));
 		expect([out.startDate, out.days]).toEqual(['2003-01-01', 400]);
 		expect(windowWarnings(out)).toEqual([
-			`the run covers the rain record, 2003-01-01 to ${fromEpochDay(toEpochDay('2003-01-01') + 399)}, and leaves out ${tail} days of observed flow after it (no rain there): set the simulation end (Model settings → Simulation period) to include them`
+			`the run covers the rain record, 1 Jan 2003 to ${dayText(fromEpochDay(toEpochDay('2003-01-01') + 399))}, and leaves out ${tail} days of observed flow after it (no rain there): set the simulation end (Model settings → Simulation period) to include them`
 		]);
 		// An explicit start leaves the end to the default, and only the end is trimmed.
 		const started = runModel(input(series, { simulationStart: '2003-01-01' }));
@@ -131,7 +131,7 @@ describe('the default run window follows the rain (engine 0.45.0, issue #54)', (
 		const out = runModel(input(late));
 		expect(out.startDate).toBe('2003-01-01');
 		expect(windowWarnings(out)).toEqual([
-			`the run covers the rain record, 2003-01-01 to 2005-12-31, and leaves out ${pad} days of observed flow, 1 day of daily A-pan evaporation before it (no rain there): set the simulation start (Model settings → Simulation period) to include them`
+			`the run covers the rain record, 1 Jan 2003 to 31 Dec 2005, and leaves out ${pad} days of observed flow, 1 day of daily A-pan evaporation before it (no rain there): set the simulation start (Model settings → Simulation period) to include them`
 		]);
 		// Without the A-pan day it is the same run the padded record gives.
 		const { evap_apan_mm: _, ...noEvap } = late;

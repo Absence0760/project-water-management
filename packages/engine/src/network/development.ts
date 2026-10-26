@@ -19,7 +19,7 @@
 // Pure: runModel's plan (../run.ts buildNetworkPlan) reads these, the
 // simulation (./simulate.ts) scales by k, the self-checks read the run's
 // `dam_capacity` column.
-import { toEpochDay, isIsoDate as isRealDate } from '../calendar';
+import { dayText, toEpochDay, isIsoDate as isRealDate } from '../calendar';
 import type { NetworkNode } from '../project';
 
 /** Days per year for the sediment rate (a mean year, leap days included). */
@@ -140,7 +140,7 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 	const most = k.reduce((a, v) => Math.max(a, v), 0);
 	if (most > DAM_SEDIMENT_WARN_FACTOR)
 		warnings.push(
-			`unit "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date${n.damInServiceFrom ? '' : ', and enter the date it came into service (before it the dam holds nothing, so the rate runs back only that far)'}`
+			`unit "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${dayText(String(n.damSurveyDate))}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date${n.damInServiceFrom ? '' : ', and enter the date it came into service (before it the dam holds nothing, so the rate runs back only that far)'}`
 		);
 	return k;
 }
@@ -154,7 +154,7 @@ export function abstractionStartDay(n: NetworkNode, start: number, days: number,
 	const v = n.abstractionFrom;
 	if (v === null || v === undefined) return 0;
 	if (!isIso(v) || n.kind === 'gauge') {
-		warnings.push(`${n.kind} "${n.name}": abstraction start ${JSON.stringify(v)} ignored (${n.kind === 'gauge' ? 'a gauge takes no water' : 'not a date, YYYY-MM-DD'})`);
+		warnings.push(`${n.kind} "${n.name}": abstraction start ${JSON.stringify(isIso(v) ? dayText(v) : v)} ignored (${n.kind === 'gauge' ? 'a gauge takes no water' : 'not a date, YYYY-MM-DD'})`);
 		return 0;
 	}
 	return Math.min(Math.max(toEpochDay(v) - start, 0), days);

@@ -411,7 +411,7 @@ describe('low-flow periods (issue #557)', () => {
 		const high = names(flags).filter((f) => f === 'periodHigh').length;
 		expect(q.flow.periodHigh).toBe(high);
 		expect(q.leftOutDays).toBe(high);
-		expect(q.notes.some((n) => n.includes('only the logger record’s low flows are valid') && n.includes('2000-10-11 – 2000-10-20, 1.2 m³/s'))).toBe(true);
+		expect(q.notes.some((n) => n.includes('only the logger record’s low flows are valid') && n.includes('11 Oct 2000 – 20 Oct 2000, 1.2 m³/s'))).toBe(true);
 		expect('lowFlowPeriods' in q.use).toBe(false);
 	});
 

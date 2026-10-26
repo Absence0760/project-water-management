@@ -10,7 +10,7 @@
 //   notes, engine version, time). It describes the parameters only while they
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
-import { toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
+import { dayText, toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
 import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, type RainStationAssignment, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
@@ -55,9 +55,9 @@ export function exclusionRange(x: CalibrationExclusion): ExclusionRange {
 
 export const exclusionRanges = (list: readonly CalibrationExclusion[] | null | undefined): ExclusionRange[] => (list ?? []).map(exclusionRange);
 
-/** "WY 2015/16" or "2015-01-01 – 2015-03-31". */
+/** "WY 2015/16" or "1 Jan 2015 – 31 Mar 2015" (day first, engine ≥ 1.100.0). */
 export const exclusionLabel = (x: CalibrationExclusion): string =>
-	'waterYear' in x ? `WY ${waterYearLabel(x.waterYear)}` : `${x.start} – ${x.end}`;
+	'waterYear' in x ? `WY ${waterYearLabel(x.waterYear)}` : `${dayText(x.start)} – ${dayText(x.end)}`;
 
 /** Why an exclusion is invalid, or null. */
 export function exclusionError(x: unknown): string | null {

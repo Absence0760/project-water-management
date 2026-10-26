@@ -181,7 +181,7 @@ describe('the forcing rule (§2.4h)', () => {
 		expect(unitOf(nine, 'C').chirps).toMatchObject({ source: 'map', inPeriod: false });
 		expect((unitOf(nine, 'C').chirps as { years: number[] }).years).toHaveLength(16);
 		expect(nine.summary.warnings).toContain(
-			'unit rain: "Unit C": its CHIRPS has fewer than 10 complete calendar years in the MAP period 2006-01-01 to 2014-12-31, so its MAP factor averages every complete year of the record (16, 2005–2020)'
+			'unit rain: "Unit C": its CHIRPS has fewer than 10 complete calendar years in the MAP period 1 Jan 2006 to 31 Dec 2014, so its MAP factor averages every complete year of the record (16, 2005–2020)'
 		);
 	});
 
@@ -357,7 +357,7 @@ describe('the forcing rule (§2.4h)', () => {
 		const seriesChoice = { unitChirps: { C: { name: 'C short', others: [{ name: 'C long', firstDay: START, lastDay: fromEpochDay(toEpochDay(START) + DAYS - 1) }] } } };
 		const told = runModel({ ...x, seriesChoice });
 		const unitWarned = (o: ReturnType<typeof runModel>) => o.summary.warnings.filter((w) => w.startsWith('for the unit'));
-		expect(unitWarned(told)).toEqual([expect.stringMatching(/^for the unit “Unit C”, the run read the CHIRPS series “C short” \(2020-12-02 to 2020-12-31\), which spans 30 of its 2192 days, but “C long” \(2015-01-01 to 2020-12-31\) spans 2192:/)]);
+		expect(unitWarned(told)).toEqual([expect.stringMatching(/^for the unit “Unit C”, the run read the CHIRPS series “C short” \(2 Dec 2020 to 31 Dec 2020\), which spans 30 of its 2192 days, but “C long” \(1 Jan 2015 to 31 Dec 2020\) spans 2192:/)]);
 		const plain = runModel(x);
 		const strip = (o: ReturnType<typeof runModel>) => ({ ...o, summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !w.startsWith('for the unit')) } });
 		expect(sameOutput(strip(plain), strip(told))).toBe(true);

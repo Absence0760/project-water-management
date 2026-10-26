@@ -3,7 +3,7 @@
 //
 // The workbook rounds crop mm to 2 dp, farm demand to 0.1 m³/day and net demand
 // to whole m³; the engine keeps full precision (docs/engine-audit.md R1).
-import { daysPerMonth, isIsoDate, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
+import { dayText, daysPerMonth, isIsoDate, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_IRRIGATION_SYSTEMS, RETURN_FLOW_SLACK, returnFlowFromLossReturn, upgradeLegacyModel, type DemandPart, type IrrigationSystemDef, type ModelInput, type NetworkNode } from './project';
 
 export interface Crop {
@@ -456,7 +456,7 @@ export function datedDemandFactorOf(n: NetworkNode, part: DemandPart | undefined
 		}
 		if (w.part !== undefined && (n.kind !== 'farm' || w.part !== part)) continue;
 		if ((w.from !== undefined && !isIsoDate(w.from)) || (w.to !== undefined && !isIsoDate(w.to)) || (w.from !== undefined && w.to !== undefined && w.from > w.to)) {
-			warnings.push(`${n.kind} "${n.name}": a dated demand factor's dates (${String(w.from ?? '…')} – ${String(w.to ?? '…')}) aren't usable; it doesn't apply`);
+			warnings.push(`${n.kind} "${n.name}": a dated demand factor's dates (${dayText(String(w.from ?? '…'))} – ${dayText(String(w.to ?? '…'))}) aren't usable; it doesn't apply`);
 			continue;
 		}
 		const a = w.from === undefined ? 0 : Math.max(0, toEpochDay(w.from) - day0);

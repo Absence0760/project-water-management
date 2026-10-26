@@ -4,7 +4,10 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { placeName, placesIn, WARNING_PLACES, warningInCurrentWords, type WarningPlace } from './places';
+import { toEpochDay } from './calendar';
 import { checkSeries } from './quality';
+import { abstractionStartDay } from './network/development';
+import { resolveReportWindow } from './run';
 
 const named = (text: string) => placesIn(text).map((m) => [text.slice(m.start, m.end), m.place]);
 
@@ -107,9 +110,36 @@ describe('warningInCurrentWords', () => {
 		);
 	});
 
-	it('keeps the dates of a warning that isn’t a data check as they are', () => {
-		const w = 'Catchment rain accumulations spread over 2024-01-01 to 2024-01-03';
-		expect(warningInCurrentWords(w)).toBe(w);
+	it('reads any warning from before engine 1.100.0, its dates year first, in today’s words (issue #586 R4-O)', () => {
+		// Today's words, from the engine itself; the same text with its days year first is how 1.99.0 wrote it.
+		const today: string[] = [];
+		abstractionStartDay({ id: 'g', kind: 'gauge', name: 'Weir', abstractionFrom: '2021-01-01' } as never, 0, 10, today);
+		resolveReportWindow({ reportStart: '2019-12-01', reportEnd: '2020-02-29' }, toEpochDay('2020-01-01'), 31, today);
+		resolveReportWindow({ reportStart: '2020-03-01', reportEnd: '2020-02-01' }, toEpochDay('2020-01-01'), 31, today);
+		expect(today).toEqual([
+			'gauge "Weir": abstraction start "1 Jan 2021" ignored (a gauge takes no water)',
+			'reporting window 1 Dec 2019 … 29 Feb 2020 is clipped to the run (1 Jan 2020 … 31 Jan 2020)',
+			'reporting window 1 Mar 2020 … 1 Feb 2020 does not overlap the run (1 Jan 2020 … 31 Jan 2020); the curtailment report covers the whole run'
+		]);
+		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const iso = (d: string) => {
+			const [day, mon, year] = d.split(' ');
+			return `${year}-${String(months.indexOf(mon!) + 1).padStart(2, '0')}-${day!.padStart(2, '0')}`;
+		};
+		for (const w of today) {
+			const old = w.replace(/\d{1,2} [A-Z][a-z]{2} \d{4}/g, iso);
+			expect(old).toMatch(/\b20\d\d-\d\d-\d\d\b/);
+			expect(warningInCurrentWords(old)).toBe(w);
+		}
+		expect(warningInCurrentWords('Catchment rain accumulations spread over the days they cover: 1 window, 3 run days: 2024-01-01 to 2024-01-03 (3 days, 40 mm read on 2024-01-03, detected).')).toBe(
+			'Catchment rain accumulations spread over the days they cover: 1 window, 3 run days: 1 Jan 2024 to 3 Jan 2024 (3 days, 40 mm read on 3 Jan 2024, detected).'
+		);
+	});
+
+	it('leaves what isn’t a calendar day as it is', () => {
+		// 2001 is no leap year, and there is no month 13: the text is as the engine wrote it (an input it refused, say).
+		for (const w of ['rain-source period 2001-02-29 to 2001-13-01 needs a reason; ignored', 'reportStart "2020-1-5" is not a date (YYYY-MM-DD)', 'water years 2015/16–2017/18'])
+			expect(warningInCurrentWords(w)).toBe(w);
 	});
 
 	it('leaves a warning in today’s words as it is', () => {

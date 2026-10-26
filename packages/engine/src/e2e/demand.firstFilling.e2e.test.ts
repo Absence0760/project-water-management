@@ -296,7 +296,7 @@ describe('several new dams with different in-service dates, and one that never f
 			{ nodeId: 'B', inServiceFrom: '2021-10-03', joinedOn: '2021-10-13' },
 			{ nodeId: 'C', inServiceFrom: '2021-10-06', joinedOn: null }
 		]);
-		expect(out.summary.warnings.join('\n')).toMatch(/the dam of "Unit C" \(in service from 2021-10-06\) never reached 60 % of its capacity in the run/);
+		expect(out.summary.warnings.join('\n')).toMatch(/the dam of "Unit C" \(in service from 6 Oct 2021\) never reached 60 % of its capacity in the run/);
 		expect(out.summary.warnings.join('\n')).not.toMatch(/"Unit B"\) never/);
 		// A alone (50 %, level 1) to 12 Oct; 13 Oct (500 + 600) ÷ 2 000 = 55 %, 14 Oct 58 %: still level 1.
 		expect(get(out, null, 'restriction_level')).toEqual(new Array(14).fill(1));

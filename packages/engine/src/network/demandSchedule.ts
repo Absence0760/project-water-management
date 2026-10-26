@@ -9,6 +9,7 @@
 // Pure; the simulation (./demandObjects.ts planObjects) and the self-checks
 // (../verify/checks.ts) both read a schedule through scheduleFactors, so a
 // stored window means the same thing to each.
+import { dayText } from '../calendar';
 import type { DemandScheduleWindow } from '../project';
 
 /** At most this many windows per object (the backend refuses more). */
@@ -65,8 +66,8 @@ export function scheduleWindowProblem(w: DemandScheduleWindow): string | null {
 		case 'range': {
 			const a = isoEpochDay(w.from);
 			const b = isoEpochDay(w.to);
-			if (a === null || b === null) return `a date range needs its first and last day as YYYY-MM-DD (got ${String(w.from)} to ${String(w.to)})`;
-			if (b < a) return `its date range ends (${w.to}) before it starts (${w.from})`;
+			if (a === null || b === null) return `a date range needs its first and last day as YYYY-MM-DD (got ${dayText(String(w.from))} to ${dayText(String(w.to))})`;
+			if (b < a) return `its date range ends (${dayText(String(w.to))}) before it starts (${dayText(String(w.from))})`;
 			return null;
 		}
 		case 'easter': {

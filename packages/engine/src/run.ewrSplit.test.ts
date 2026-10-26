@@ -159,7 +159,7 @@ describe('each unit’s natural MAR (per unit)', () => {
 		expect(sum).toBeCloseTo(1, 12);
 		// A's MAP is the highest, so its share of the runoff (and now of the EWR) is above its share of the area.
 		expect(farm(out, 'A').ewrShare!).toBeGreaterThan(farm(out, 'A').flowShare!);
-		expect(out.summary.warnings.find((w) => w.startsWith('the EWR is split between the units by each unit’s natural MAR over the 5 complete water years 2015-10-01 – 2020-09-30'))).toBeDefined();
+		expect(out.summary.warnings.find((w) => w.startsWith('the EWR is split between the units by each unit’s natural MAR over the 5 complete water years 1 Oct 2015 – 30 Sep 2020'))).toBeDefined();
 		expect(checkEwrSplit(input(), out)).toBeNull();
 	});
 

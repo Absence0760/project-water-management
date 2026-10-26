@@ -24,7 +24,7 @@ import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind }
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags, withoutPeriodHighs } from './calibrate/dayFlags';
-import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
+import { dayText, daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
@@ -406,7 +406,7 @@ function runNetwork(
 	if (sim.restrictionJoined) {
 		const pct = `${Math.round(plan.restriction!.fillShare * 1000) / 10} %`;
 		const never = nodes.flatMap((n, i) => (sim.restrictionJoined![i] === -1 ? [n] : [])).sort((a, b) => cmpStr(a.id, b.id));
-		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${n.damInServiceFrom}) never reached ${pct} of its capacity in the run, so every review read the milder of the levels with and without it`);
+		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${dayText(String(n.damInServiceFrom))}) never reached ${pct} of its capacity in the run, so every review read the milder of the levels with and without it`);
 	}
 
 	// --- outputs -----------------------------------------------------------------
@@ -517,7 +517,7 @@ function runNetwork(
 		const noHistory = !!resume?.flowRecordHistory && !hasReadingBefore(record, start);
 		if (noHistory) {
 			warnings.push(
-				`Resumed from ${startDate} without the ${OBSERVED_SERIES_LABEL[calKind].toLowerCase()} record's history: its quality flags leave out the suspect class (outliers and flat stretches are judged over the whole record). Include the history in the input, or run from the start, for the full flags.`
+				`Resumed from ${dayText(startDate)} without the ${OBSERVED_SERIES_LABEL[calKind].toLowerCase()} record's history: its quality flags leave out the suspect class (outliers and flat stretches are judged over the whole record). Include the history in the input, or run from the start, for the full flags.`
 			);
 		}
 		const flags = recordFlowFlags({
@@ -2112,7 +2112,7 @@ function storageResetOf(
 	if (!reset) return null;
 	const day = toEpochDay(reset.date) - start;
 	if (day < 0 || day >= days) {
-		warnings.push(`damStorageReset: ${reset.date} is outside the run; ignored`);
+		warnings.push(`damStorageReset: ${dayText(reset.date)} is outside the run; ignored`);
 		return null;
 	}
 	const byNode = new Map<number, number>();
@@ -3016,10 +3016,10 @@ function forecastRainDays(
 	if (!count) return null;
 	const from = fromEpochDay(start + first);
 	const to = fromEpochDay(start + last);
-	const span = count === 1 ? `1 day (${from})` : `${count} days (${from} to ${to}${count < last - first + 1 ? ', not all consecutive' : ''})`;
+	const span = count === 1 ? `1 day (${dayText(from)})` : `${count} days (${dayText(from)} to ${dayText(to)}${count < last - first + 1 ? ', not all consecutive' : ''})`;
 	warnings.push(
 		`${span} of this run use forecast rain, not recorded rain (catchment or CHIRPS)` +
-			(inReport ? `; ${inReport === count ? 'all' : inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd}), so curtailment and the EWR sites cover forecast days` : '')
+			(inReport ? `; ${inReport === count ? 'all' : inReport} of them fall in the reporting window (${dayText(window.reportStart)} to ${dayText(window.reportEnd)}), so curtailment and the EWR sites cover forecast days` : '')
 	);
 	return { days: count, from, to, inReport, lastRecorded: lastRecorded >= 0 ? fromEpochDay(start + lastRecorded) : null };
 }
@@ -3059,7 +3059,7 @@ function missingRainWarning(
 		else ranges.push([t, t]);
 	}
 	if (!missing) return;
-	const day = (t: number) => fromEpochDay(start + t);
+	const day = (t: number) => dayText(fromEpochDay(start + t));
 	const named = ranges.slice(0, MISSING_RAIN_RANGES_LISTED).map(([a, b]) => (a === b ? day(a) : `${day(a)} to ${day(b)}`));
 	const more = ranges.length - named.length;
 	const whole = window.from === 0 && window.to === days - 1;
@@ -3067,7 +3067,7 @@ function missingRainWarning(
 		`${missing} of ${days} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): ` +
 			named.join(', ') +
 			(more ? ` and ${more} more period${more === 1 ? '' : 's'}` : '') +
-			(whole ? '' : `; ${inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd})`)
+			(whole ? '' : `; ${inReport} of them fall in the reporting window (${dayText(window.reportStart)} to ${dayText(window.reportEnd)})`)
 	);
 }
 
@@ -3101,13 +3101,13 @@ export function resolveReportWindow(
 	let b = parse(settings.reportEnd, 'reportEnd') ?? runEnd;
 	if (b < a || b < runStart || a > runEnd) {
 		warnings.push(
-			`reporting window ${fromEpochDay(a)} … ${fromEpochDay(b)} does not overlap the run (${fromEpochDay(runStart)} … ${fromEpochDay(runEnd)}); the curtailment report covers the whole run`
+			`reporting window ${dayText(fromEpochDay(a))} … ${dayText(fromEpochDay(b))} does not overlap the run (${dayText(fromEpochDay(runStart))} … ${dayText(fromEpochDay(runEnd))}); the curtailment report covers the whole run`
 		);
 		a = runStart;
 		b = runEnd;
 	} else if (a < runStart || b > runEnd) {
 		warnings.push(
-			`reporting window ${fromEpochDay(a)} … ${fromEpochDay(b)} is clipped to the run (${fromEpochDay(runStart)} … ${fromEpochDay(runEnd)})`
+			`reporting window ${dayText(fromEpochDay(a))} … ${dayText(fromEpochDay(b))} is clipped to the run (${dayText(fromEpochDay(runStart))} … ${dayText(fromEpochDay(runEnd))})`
 		);
 		a = Math.max(a, runStart);
 		b = Math.min(b, runEnd);

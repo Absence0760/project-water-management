@@ -52,7 +52,7 @@
 // or has no reading; at or below it the gauge's zero stays, a dry day. The
 // CHIRPS factor fit still leaves every flagged-run day out (suspectRainDays),
 // so the factors don't move.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
 import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX, exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
 import {
 	ACCUMULATION_MODES,
@@ -955,7 +955,7 @@ export function fitExclusionText(c: ChirpsCorrection): string {
 export function keepDryDoubtWarnings(c: ChirpsCorrection | null): string[] {
 	return (c?.doubtfulKeepDry ?? []).map(
 		(d) =>
-			`Kept-dry zero run ${d.start} to ${d.end} looks doubtful: ${c!.mode === 'monthly' ? 'bias-corrected ' : ''}CHIRPS reads ` +
+			`Kept-dry zero run ${dayText(d.start)} to ${dayText(d.end)} looks doubtful: ${c!.mode === 'monthly' ? 'bias-corrected ' : ''}CHIRPS reads ` +
 			`${Math.round(d.chirpsMm)} mm over its ${plural(d.days, 'kept-dry day')}, above the ${Math.round(d.limitMm)} mm limit ` +
 			`(the larger of ${KEEP_DRY_DOUBT_MIN_MM} mm and ${Math.round(KEEP_DRY_DOUBT_ANNUAL_SHARE * 100)} % of the catchment's usual annual rain). ` +
 			`Those days still run dry, but water year${d.waterYears.length === 1 ? '' : 's'} ${d.waterYears.map(waterYearLabel).join(', ')} ` +
@@ -1282,7 +1282,7 @@ export function blankMasked(catchment: readonly (number | null)[], m: ZeroRainMa
 
 const mm = (x: number) => `${Math.round(x)} mm`;
 const periodLabel = (p: ZeroRainPeriod) =>
-	`${p.start} to ${p.end} (${p.days} days, ${p.source === 'flagged' ? 'flagged zero run' : `listed: ${p.reason}`})`;
+	`${dayText(p.start)} to ${dayText(p.end)} (${p.days} days, ${p.source === 'flagged' ? 'flagged zero run' : `listed: ${p.reason}`})`;
 
 /** The run warnings for zeroRainInfill: what was set aside and filled, and what was kept dry. */
 export function zeroRainWarnings(z: ZeroRainInfill | null): string[] {
@@ -1303,7 +1303,7 @@ export function zeroRainWarnings(z: ZeroRainInfill | null): string[] {
 	if (z.keptDry.length) {
 		out.push(
 			`Flagged zero runs kept as recorded (dry) on ${z.keptDry.reduce((a, k) => a + k.days, 0)} days, as Model settings → Rain gaps → Flagged rain says: ` +
-				z.keptDry.map((k) => `${k.start} to ${k.end} (${k.days} days: ${k.reason})`).join('; ') +
+				z.keptDry.map((k) => `${dayText(k.start)} to ${dayText(k.end)} (${k.days} days: ${k.reason})`).join('; ') +
 				'.'
 		);
 	}

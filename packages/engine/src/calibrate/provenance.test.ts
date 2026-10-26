@@ -83,7 +83,7 @@ describe('calibration exclusions', () => {
 	it('a water year covers 1 October to 30 September', () => {
 		expect(exclusionRange({ waterYear: 2015, reason: 'suspect rain' })).toEqual({ start: '2015-10-01', end: '2016-09-30', reason: 'suspect rain' });
 		expect(exclusionLabel({ waterYear: 2015, reason: 'r' })).toBe('WY 2015/16');
-		expect(exclusionLabel({ start: '2015-01-01', end: '2015-03-31', reason: 'r' })).toBe('2015-01-01 – 2015-03-31');
+		expect(exclusionLabel({ start: '2015-01-01', end: '2015-03-31', reason: 'r' })).toBe('1 Jan 2015 – 31 Mar 2015');
 	});
 
 	it('needs a reason, whole years and real dates in order', () => {

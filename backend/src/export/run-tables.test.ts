@@ -951,7 +951,7 @@ describe('rain-source block (engine ≥ 0.30.0)', () => {
 		expect([...rainSourceCsvLines({ periods: [period] })]).toEqual([
 			'Rain-source periods',
 			'Start,End,Series,Reason,Run days,From the series,From CHIRPS,From reanalysis,From forecast,No value,Series rain (mm),Rain used from it (mm),Factors,Gaps from',
-			'2012-10-01,2019-09-30,alternative catchment gauge (SASSCAL AWS v1),"automatic station, gauges closed",2556,2500,50,0,0,6,5000,6000,"fixed, from hydrologist, fitted on 2012-10-01 to 2015-09-30 by overlap ratio",CHIRPS × the CHIRPS fit-period factors',
+			'2012-10-01,2019-09-30,alternative catchment gauge (SASSCAL AWS v1),"automatic station, gauges closed",2556,2500,50,0,0,6,5000,6000,"fixed, from hydrologist, fitted on 1 Oct 2012 to 30 Sep 2015 by overlap ratio",CHIRPS × the CHIRPS fit-period factors',
 			'Factor per month,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep',
 			'2012-10-01 to 2019-09-30,1.2,1.1,1.1,1.1,1.1,1.2,1.2,1.2,1.3,1.3,1.3,1.2'
 		]);

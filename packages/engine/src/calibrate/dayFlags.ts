@@ -47,7 +47,7 @@
 // The flags never change a stored series. They decide which days the fit's
 // objective scores (scoringDays) and what the data-quality panel (CR-22)
 // shows.
-import { monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
+import { dayText, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
 import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../project';
 import { seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
@@ -513,7 +513,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 	if (flow.periodHigh) {
 		const periods = (x.settings.lowFlowPeriods ?? []).filter((p) => p.kind === x.flowKind);
 		notes.push(
-			`${days(flow.periodHigh)} read above the threshold of a period in which only the ${rec}’s low flows are valid (${periods.map((p) => `${p.start} – ${p.end}, ${m3s(p.maxM3s)}`).join('; ')}), so they are left out: the fit says nothing about high flows in ${periods.length === 1 ? 'that period' : 'those periods'}.`
+			`${days(flow.periodHigh)} read above the threshold of a period in which only the ${rec}’s low flows are valid (${periods.map((p) => `${dayText(p.start)} – ${dayText(p.end)}, ${m3s(p.maxM3s)}`).join('; ')}), so they are left out: the fit says nothing about high flows in ${periods.length === 1 ? 'that period' : 'those periods'}.`
 		);
 	}
 	if (flow.infilled) {

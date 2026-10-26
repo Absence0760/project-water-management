@@ -61,6 +61,16 @@ export function dayText(iso: string): string {
 	return `${d} ${month} ${m[1]}`;
 }
 
+/**
+ * Every calendar day `YYYY-MM-DD` in a text written day first, as dayText writes it ("1 negative value
+ * (2020-10-06: …)" → "(6 Oct 2020: …)"); what isn't a calendar day (2001-02-29, month 13) stays as it is. For
+ * reading an older run's warnings in today's words: up to engine 1.98.0 the data checks, and up to 1.99.0 every
+ * other warning, wrote their days year first (places.ts warningInCurrentWords).
+ */
+export function daysInText(text: string): string {
+	return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, dayText);
+}
+
 /** Days in a Gregorian month (1–12), in integer arithmetic. */
 function daysInMonth(year: number, month: number): number {
 	if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;

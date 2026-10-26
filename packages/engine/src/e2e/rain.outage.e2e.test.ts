@@ -123,7 +123,7 @@ describe('the holiday gauge: unread for two weeks over Christmas, the total read
 
 	it('the run warns, naming the reading, the outage and what stood in for it', () => {
 		const w = out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'))!;
-		expect(w).toContain('2018-01-03 (90 mm read after a 14-day outage; 0 mm used instead)');
+		expect(w).toContain('3 Jan 2018 (90 mm read after a 14-day outage; 0 mm used instead)');
 		expect(w).toContain('more than 7 days blank, listed as missing or set aside as a flagged zero run');
 		// Nothing was spread, and no zero run was set aside: §2.4c is not involved.
 		expect(col(out, 'rain_catchment_spread')).toBeUndefined();
@@ -153,7 +153,7 @@ describe('the holiday gauge: unread for two weeks over Christmas, the total read
 		const rec = runModel(catchment(f.series, zrs({ accumulationMode: 'asRecorded' })));
 		expect(col(rec, 'rain_used')![f.t(f.r)]).toBe(90);
 		expect(col(rec, 'rain_used')![f.t(f.a)]).toBeCloseTo(f.fill(f.a), 12);
-		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (2018-01-03)');
+		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (3 Jan 2018)');
 	});
 
 	it('the stored series is never changed', () => {
@@ -383,7 +383,7 @@ describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)'
 		expect(out.summary.zeroRainInfill!.days).toBe(14);
 		// The reading is out of the fit: January's factor stays exactly 1.4.
 		expect(out.summary.chirpsCorrection!.months[0]!.factor).toBeCloseTo(ratio(1), 12);
-		expect(out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'))).toContain('2018-01-03 (90 mm read after a 14-day outage');
+		expect(out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'))).toContain('3 Jan 2018 (90 mm read after a 14-day outage');
 	});
 
 	it('the same with the listing blank and listed mixed (7 blank + 7 listed zeros): one 14-day outage', () => {

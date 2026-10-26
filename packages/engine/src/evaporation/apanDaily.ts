@@ -12,7 +12,7 @@
 // Without the series nothing here runs: `apanDailyMm` returns null and each
 // consumer keeps its original monthly expression, so a project without a
 // daily record gets byte-identical results.
-import { fromEpochDay } from '../calendar';
+import { dayText, fromEpochDay } from '../calendar';
 import type { DailySeries } from '../project';
 
 /** The series kind of a daily A-pan record. */
@@ -99,7 +99,7 @@ export function apanDailyInfo(
 		warnings.push(`the daily A-pan evaporation series has no value ≥ 0 inside the run, so every day uses the monthly A-pan means${negative}${zero}`);
 	} else if (fallbackDays > 0) {
 		warnings.push(
-			`daily A-pan evaporation covers ${dailyDays} of ${days} run days (${info.first} to ${info.last}); the other ${fallbackDays} use the monthly A-pan mean spread over the month${negative}${zero}`
+			`daily A-pan evaporation covers ${dailyDays} of ${days} run days (${dayText(info.first!)} to ${dayText(info.last!)}); the other ${fallbackDays} use the monthly A-pan mean spread over the month${negative}${zero}`
 		);
 	}
 	return info;

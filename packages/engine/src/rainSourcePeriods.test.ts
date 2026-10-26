@@ -146,9 +146,9 @@ describe('settings.rainSource: rain from another series over a period', () => {
 		expect(col.values[0]).toBe(RAIN_SOURCE_CODE.catchment);
 		expect(col.values.at(-1)).toBe(RAIN_SOURCE_CODE.series);
 		expect(out.summary.rainSource!.periods).toHaveLength(1);
-		const w = out.summary.warnings.find((x) => x.startsWith('Catchment rain from the alternative catchment gauge over 2005-10-01 to 2010-09-30'))!;
+		const w = out.summary.warnings.find((x) => x.startsWith('Catchment rain from the alternative catchment gauge over 1 Oct 2005 to 30 Sep 2010'))!;
 		expect(w).toContain('(automatic station replaces the gauge average)');
-		expect(w).toContain('fixed, from hydrologist, issue #12 study, fitted on 1995-10-01 to 2005-09-30 by catchment ÷ ERA5 over the reference era');
+		expect(w).toContain('fixed, from hydrologist, issue #12 study, fitted on 1 Oct 1995 to 30 Sep 2005 by catchment ÷ ERA5 over the reference era');
 		expect(w).toContain('Oct 1.25');
 		// Without periods (engine ≥ 1.27.0): the column is rain_final's own pick, never a period's code, and summary.rainSource is null.
 		const plain = runModel(input(toSeries(build())));
@@ -313,7 +313,7 @@ describe('resolveRainSource and rainSourcePeriodError (the API schema’s twin)'
 		}
 		const w: string[] = [];
 		expect(resolveRainSource([FIXED, { ...FIT, start: '2009-01-01', end: '2012-01-01' }], w)).toEqual([FIXED]);
-		expect(w[0]).toMatch(/overlaps 2005-10-01 to 2010-09-30; ignored/);
+		expect(w[0]).toMatch(/overlaps 1 Oct 2005 to 30 Sep 2010; ignored/);
 		expect(rainSourceError([FIXED, { ...FIT, start: '2009-01-01', end: '2012-01-01' }])).toBe('Rain-source period 2 overlaps period 1');
 		expect(rainSourceError([FIXED, FIT].map((p, i) => ({ ...p, start: `${2000 + i}-01-01`, end: `${2000 + i}-06-30` })))).toBeNull();
 	});
@@ -331,7 +331,7 @@ describe('resolveRainSource and rainSourcePeriodError (the API schema’s twin)'
 
 	it('reaches a run through its settings, with the warning', () => {
 		const out = runModel(input(toSeries(build()), [{ ...FIXED, reason: '' }]));
-		expect(out.summary.warnings).toContainEqual(expect.stringMatching(/^rain-source period 2005-10-01 to 2010-09-30 needs a reason/));
+		expect(out.summary.warnings).toContainEqual(expect.stringMatching(/^rain-source period 1 Oct 2005 to 30 Sep 2010 needs a reason/));
 		expect(out.summary.rainSource).toBeNull();
 	});
 });
@@ -349,11 +349,11 @@ describe('run comparison and words', () => {
 		const cmp = (x: typeof a, y: typeof a) => compareRuns({ ...x.output, label: 'A' }, { ...y.output, label: 'B' });
 		const diff = cmp(a, b);
 		expect(diff.rainSource!.changed).toBe(true);
-		expect(diff.rainSource!.periodsA[0]).toMatch(/^2005-10-01 to 2010-09-30 \(automatic station replaces the gauge average\): alternative catchment gauge × Oct 1.25/);
+		expect(diff.rainSource!.periodsA[0]).toMatch(/^1 Oct 2005 to 30 Sep 2010 \(automatic station replaces the gauge average\): alternative catchment gauge × Oct 1.25/);
 		expect(diff.rainSource!.periodsB[0]).toContain('reference era 1992/93–2004/05');
 		const snap = (x: typeof a) => ({ settings: x.settings, model: { nodes: [], crops: [], cropAreas: [], transfers: [] }, series: {} }) as never;
 		const change = diffInputs(snap(a), snap(b)).find((c) => c.subject === 'Rain-source periods')!;
-		expect(change.text).toMatch(/^Rain-source periods: 2005-10-01 to 2010-09-30: alternative catchment gauge, fixed factors 1.25\/1.25/);
+		expect(change.text).toMatch(/^Rain-source periods: 1 Oct 2005 to 30 Sep 2010: alternative catchment gauge, fixed factors 1.25\/1.25/);
 		// Positive control: the same run compares unchanged.
 		expect(cmp(a, a).rainSource!.changed).toBe(false);
 		expect(diffInputs(snap(a), snap(a))).toEqual([]);

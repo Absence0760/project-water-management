@@ -41,7 +41,7 @@
 // like the outage's, and it stays out of the CHIRPS fit. Spreading it would
 // put a season's CHIRPS fill under one reading's total; keeping it would
 // count an unread gauge's rain twice (CHIRPS on the outage, and the reading).
-import { fromEpochDay, toEpochDay } from './calendar';
+import { dayText, fromEpochDay, toEpochDay } from './calendar';
 import { exclusionRanges, type ExclusionRange } from './calibrate/provenance';
 import type { AccumulationMode, ChirpsBiasMode, DailySeries, SeriesKind, ZeroRainSettings } from './project';
 import { chirpsBiasFactors, chirpsFactorOn, type ChirpsCorrection, type ChirpsFitOptions } from './rain';
@@ -266,7 +266,7 @@ export function rainAccumulations(
 	const added = exclusionRanges(zr.addAccumulations).sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
 	for (const r of added) {
 		const [from, to] = spanOf(r);
-		const label = `${r.start} to ${r.end}`;
+		const label = `${dayText(r.start)} to ${dayText(r.end)}`;
 		if (overlaps(missing, from, to)) {
 			skipped.push(`Listed accumulation ${label} overlaps a period listed as missing or a rain-source period, so it is not spread: that period wins.`);
 			continue;
@@ -516,9 +516,9 @@ const listed = (parts: string[]) =>
 	parts.length > MAX_LISTED ? `${parts.slice(0, MAX_LISTED).join('; ')}; and ${parts.length - MAX_LISTED} more` : parts.join('; ');
 const windowLabel = (w: AccumulationWindowInfo) =>
 	w.outageDays
-		? `${w.end} (${mm(w.totalMm)} read after a ${w.outageDays}-day outage)`
-		: `${w.start} to ${w.end} (${plural(w.daysInRun, 'day')}, ${mm(w.totalMm)} ` +
-			(w.source === 'detected' ? `read on ${w.end}, detected` : `listed: ${w.reason}`) +
+		? `${dayText(w.end)} (${mm(w.totalMm)} read after a ${w.outageDays}-day outage)`
+		: `${dayText(w.start)} to ${dayText(w.end)} (${plural(w.daysInRun, 'day')}, ${mm(w.totalMm)} ` +
+			(w.source === 'detected' ? `read on ${dayText(w.end)}, detected` : `listed: ${w.reason}`) +
 			')';
 
 /**
@@ -553,7 +553,7 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 	if (aside.length) {
 		out.push(
 			`${plural(aside.length, 'catchment reading')} after an outage set aside as missing: ` +
-				`${listed(aside.map((w) => `${w.end} (${mm(w.readingMm)} read after a ${w.outageDays ?? 0}-day outage; ${mm(w.usedMm)} used instead)`))}. ` +
+				`${listed(aside.map((w) => `${dayText(w.end)} (${mm(w.readingMm)} read after a ${w.outageDays ?? 0}-day outage; ${mm(w.usedMm)} used instead)`))}. ` +
 				`Each is ${ACC_MIN_MM} mm or more on the first day after more than ${ACC_MAX_BLANK_DAYS} days blank, listed as missing or set aside as a flagged zero run, on a day CHIRPS was nearly dry after CHIRPS rained over the outage, ` +
 				"so it may hold the outage's rain (a gauge nobody read) rather than one day's. " +
 				'The run fills its day like the outage, from bias-corrected CHIRPS (then forecast rain), and leaves it out of the CHIRPS factor fit. The stored series is unchanged. ' +
@@ -564,7 +564,7 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 	if (kept.length) {
 		out.push(
 			`Detected accumulations kept as recorded, as Model settings → Rain gaps → Flagged rain → Multi-day accumulations says: ` +
-				`${listed(kept.map((w) => `${w.end} (${mm(w.readingMm)}: ${w.keptReason})`))}.`
+				`${listed(kept.map((w) => `${dayText(w.end)} (${mm(w.readingMm)}: ${w.keptReason})`))}.`
 		);
 	}
 	const asRec = by('asRecorded');
@@ -573,12 +573,12 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 			`${plural(asRec.length, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)": ` +
 				`${listed(asRec.map(windowLabel))}.` +
 				(doubleCounted.length
-					? ` ${plural(doubleCounted.length, 'of them ends', 'of them end')} blank days, a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (${doubleCounted.map((w) => w.end).join(', ')}).`
+					? ` ${plural(doubleCounted.length, 'of them ends', 'of them end')} blank days, a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (${doubleCounted.map((w) => dayText(w.end)).join(', ')}).`
 					: '')
 		);
 	}
 	const none = by('noReading');
-	if (none.length) out.push(`Listed accumulation ${none.map((w) => `${w.start} to ${w.end}`).join(', ')} has no catchment reading to spread; ignored.`);
+	if (none.length) out.push(`Listed accumulation ${none.map((w) => `${dayText(w.start)} to ${dayText(w.end)}`).join(', ')} has no catchment reading to spread; ignored.`);
 	out.push(...a.skipped);
 	return out;
 }

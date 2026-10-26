@@ -165,7 +165,7 @@ describe('caps: a licence that starts partway through the run (§2.12a, engine �
 	});
 
 	it('one warning names the unit, the source and the year', () => {
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Oct 2020 to 30 Sep 2021`]);
 		expect(capWarnings(plain)).toEqual([]);
 	});
 });
@@ -177,7 +177,7 @@ describe('caps: a licence that ends partway through the run', () => {
 		near(perYear(get(out, 'F', 'supplied')), [9_125, 36_500, 36_500]);
 		expect(get(out, 'F', 'allocation_room_surface').slice(YEAR).every((v) => Number.isNaN(v))).toBe(true);
 		expect(sourceOf(out, 'F', 'surface').capReached!.map((r) => r.waterYear)).toEqual([2020]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-10-01 to 2023-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Oct 2021 to 30 Sep 2023`]);
 		passes(out);
 	});
 });
@@ -189,14 +189,14 @@ describe('caps: several licences with staggered dates', () => {
 		const room = get(out, 'F', 'allocation_room_surface');
 		expect(room[YEAR]).toBe(7_300);
 		expect(room[2 * YEAR]).toBeCloseTo(10_950, 9);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Oct 2020 to 30 Sep 2021`]);
 		passes(out);
 	});
 
 	it('a gap year between two licences is uncapped; the years either side are capped', () => {
 		const out = run(build({ allocations: [surface('A', 7_300, null, '2021-09-30'), surface('B', 3_650, '2022-10-01')] }));
 		near(perYear(get(out, 'F', 'supplied')), [7_300, 36_500, 3_650]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-10-01 to 2022-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Oct 2021 to 30 Sep 2022`]);
 		passes(out);
 	});
 
@@ -216,7 +216,7 @@ describe('caps: several licences with staggered dates', () => {
 			[2021, 18_300],
 			[2022, 36_500]
 		]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2022-03-31`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Oct 2020 to 31 Mar 2022`]);
 		passes(out);
 	});
 
@@ -238,7 +238,7 @@ describe('caps: several licences with staggered dates', () => {
 		expect(src.capReached![0]).toEqual({ waterYear: 2020, budgetM3: expect.closeTo(1_500, 9), usedM3: expect.closeTo(1_500, 9) });
 		// 16–30 September: the room was all taken and F went short.
 		expect(src.limitBound![0]).toEqual({ waterYear: 2020, days: 15, volumeDays: 15, rateDays: 0, monthsDays: 0 });
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-08-31`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Oct 2020 to 31 Aug 2021`]);
 		passes(out);
 	});
 
@@ -256,7 +256,7 @@ describe('caps: several licences with staggered dates', () => {
 		const src = sourceOf(out, 'F', 'surface');
 		expect(src.capReached).toEqual([{ waterYear: 2020, budgetM3: 9_100, usedM3: expect.closeTo(9_100, 9) }]);
 		expect(src.limitBound).toEqual([{ waterYear: 2020, days: 91, volumeDays: 91, rateDays: 0, monthsDays: 0 }]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-04-01 to 2023-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Apr 2021 to 30 Sep 2023`]);
 		passes(out);
 	});
 
@@ -273,7 +273,7 @@ describe('caps: several licences with staggered dates', () => {
 		expect(room[92]).toBeNaN();
 		expect(room[jul1]).toBeCloseTo(0, 9);
 		expect(G[jul1]).toBe(0);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-01-01 to 2021-06-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Jan 2021 to 30 Jun 2021`]);
 		passes(out);
 	});
 
@@ -292,7 +292,7 @@ describe('caps: several licences with staggered dates', () => {
 		near(perYear(get(out, 'F', 'supplied')), [36_500, 36_500, 36_500]);
 		expect(get(out, 'F', 'allocation_room_surface')[YEAR]).toBeCloseTo(100, 9);
 		expect(get(out, 'F', 'allocation_room_surface')[YEAR + 1]).toBeNaN();
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-10-02 to 2023-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2 Oct 2021 to 30 Sep 2023`]);
 		passes(out);
 	});
 });
@@ -316,7 +316,7 @@ describe('caps: each source on its own', () => {
 		);
 		expect(get(out, 'F', 'allocation_room_groundwater').slice(0, YEAR).every((v) => Number.isNaN(v))).toBe(true);
 		expect(get(out, 'F', 'allocation_room_surface').every((v) => Number.isFinite(v))).toBe(true);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater 2020-10-01 to 2021-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater 1 Oct 2020 to 30 Sep 2021`]);
 		passes(out);
 	});
 
@@ -327,7 +327,7 @@ describe('caps: each source on its own', () => {
 		near(perYear(get(out, 'F', 'groundwater_used')), [36_500, 36_500, 36_500]);
 		expect(has(out, 'F', 'allocation_room_groundwater')).toBe(false);
 		expect(out.summary.warnings).toContain(`allocation cap: "Unit F" has no groundwater volume registered, so its boreholes aren't capped`);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 1 Oct 2020 to 30 Sep 2021`]);
 		passes(out);
 	});
 });
@@ -345,7 +345,7 @@ describe('caps: several units, one warning', () => {
 		near(perYear(get(out, 'A', 'supplied')), [36_500, 18_250, 18_250]);
 		near(perYear(get(out, 'B', 'supplied')), [36_500, 36_500, 18_250]);
 		near(perYear(get(out, 'C', 'supplied')), [36_500, 36_500, 36_500]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit A" surface water 2020-10-01 to 2021-09-30; "Unit B" surface water 2020-10-01 to 2022-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit A" surface water 1 Oct 2020 to 30 Sep 2021; "Unit B" surface water 1 Oct 2020 to 30 Sep 2022`]);
 		expect(out.summary.warnings.some((w) => w.includes('1 unit has no registered volume') && w.includes('Unit C'))).toBe(true);
 		passes(out);
 	});
@@ -448,7 +448,7 @@ describe('caps: invariants across licence dates on a rain-driven catchment', () 
 
 	it('the warning names both units and their uncapped years', () => {
 		expect(capWarnings(cap)).toEqual([
-			`${WARN}"${base.model.nodes.find((n) => n.id === 'a')!.name}" surface water 2001-10-01 to 2003-09-30; "${base.model.nodes.find((n) => n.id === 'b')!.name}" surface water 2001-10-01 to 2002-09-30, 2004-10-01 to 2006-09-30`
+			`${WARN}"${base.model.nodes.find((n) => n.id === 'a')!.name}" surface water 1 Oct 2001 to 30 Sep 2003; "${base.model.nodes.find((n) => n.id === 'b')!.name}" surface water 1 Oct 2001 to 30 Sep 2002, 1 Oct 2004 to 30 Sep 2006`
 		]);
 	});
 
@@ -479,7 +479,7 @@ describe('caps: a scenario that adds a licence (allocation.set)', () => {
 		const out = run(r.input);
 		const b = run(base);
 		expect(get(out, 'F', 'supplied')).toEqual(get(b, 'F', 'supplied'));
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater 2020-10-01 to 2022-09-30`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater 1 Oct 2020 to 30 Sep 2022`]);
 		passes(out);
 	});
 

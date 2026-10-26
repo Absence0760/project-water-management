@@ -287,8 +287,8 @@ describe('GR4J forcing edge cases', () => {
 		const used = col(out, 'rain_used')!;
 		expect(used).toEqual([3, 3, 0, 0, 0, 3, 3]);
 		const w = out.summary.warnings.join('\n');
-		expect(w).toMatch(/2023-03-01/);
-		expect(w).toMatch(/2023-03-03/);
+		expect(w).toMatch(/\b1 Mar 2023/);
+		expect(w).toMatch(/\b3 Mar 2023/);
 	});
 
 	it('a daily A-pan series covering only part of a month: covered days are k × A-pan, the rest the month mean share', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
+import { dayText, daysInText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
 
 describe('waterYearIndex', () => {
 	it('maps October to 0 and September to 11', () => {
@@ -74,5 +74,16 @@ describe('dayText (engine 1.99.0, issue #586)', () => {
 		expect(dayText('2000-02-29')).toBe('29 Feb 2000');
 		expect(dayText('1899-03-01')).toBe('1 Mar 1899');
 		for (const s of ['2021-02-29', '1900-02-29', '2020-01-00', '2020-01-32', '2020-04-31']) expect(dayText(s)).toBe(s);
+	});
+});
+
+describe('daysInText (engine 1.100.0, issue #586 R4-O)', () => {
+	it('writes every calendar day in a text day first', () => {
+		expect(daysInText('2 days (2020-01-08 to 2020-01-09) of this run use forecast rain')).toBe('2 days (8 Jan 2020 to 9 Jan 2020) of this run use forecast rain');
+		expect(daysInText('1 day (2020-02-29)')).toBe('1 day (29 Feb 2020)');
+	});
+
+	it('leaves the rest of the text, and what isn’t a calendar day, as it is', () => {
+		for (const s of ['no date here', '2021-02-29 to 2020-13-01', 'WY 2020/21', 'run 12020-01-0899', 'already 6 Oct 2020']) expect(daysInText(s)).toBe(s);
 	});
 });
